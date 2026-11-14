@@ -43,6 +43,7 @@ async function main(): Promise<void> {
 		previewManager,
 		dialogBroker,
 		webDistDir: resolve(rootDir, "web/dist"),
+		rolesDir: resolve(rootDir, "roles"),
 	});
 
 	await new Promise<void>((resolveListen) => {

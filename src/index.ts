@@ -4,6 +4,7 @@ export {
 	type DialogContext,
 	type DispatchMatterInput,
 	type DispatchMatterResult,
+	type DispatchProgressEvent,
 	type OrchestratorDialogHandler,
 	type RpcWorkerLike,
 	TeamOrchestrator,

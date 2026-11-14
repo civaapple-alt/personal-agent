@@ -13,9 +13,11 @@ import {
 	type PromptRunResult,
 	type RpcExtensionUIDialogRequest,
 	type RpcExtensionUIResponsePayload,
+	type RpcSessionEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../src/index.ts";
+import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
 	private dialogHandler:
@@ -229,4 +231,221 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
 	}
+});
+
+class ProgressTestWorker implements RpcWorkerLike {
+	private eventListeners: Array<(event: RpcSessionEvent) => void> = [];
+
+	async start(): Promise<void> {}
+	async stop(): Promise<void> {}
+	async getState(): Promise<{ sessionId: string; sessionFile?: string }> {
+		return { sessionId: "test-progress-session" };
+	}
+
+	onNotice(): () => void {
+		return () => {};
+	}
+
+	setDialogHandler(): void {}
+
+	onEvent(listener: (event: RpcSessionEvent) => void): () => void {
+		this.eventListeners.push(listener);
+		return () => {
+			this.eventListeners = this.eventListeners.filter((l) => l !== listener);
+		};
+	}
+
+	async runPromptAndWait(_message: string): Promise<PromptRunResult> {
+		for (const listener of this.eventListeners) {
+			listener({ type: "agent_start" });
+			listener({ type: "tool_execution_start", toolCallId: "tc-1", toolName: "read", args: {} });
+			listener({ type: "tool_execution_end", toolCallId: "tc-1", toolName: "read", result: {}, isError: false });
+		}
+		return {
+			disposition: "started",
+			aborted: false,
+			assistantText: "# 交付结果\n\n- 已完成结构梳理",
+			assistantMessages: [],
+			toolExecutions: [],
+			notices: [],
+			dialogs: [],
+			events: [],
+		};
+	}
+}
+
+test("Server emits matter_progress via SSE and supports team build, export/import, primary switch, and memory save", async () => {
+	const tempRolesDir = mkdtempSync(join(tmpdir(), "pa-roles-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
+		workerFactory: () => new ProgressTestWorker(),
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+		rolesDir: tempRolesDir,
+		webDistDir: resolve(process.cwd(), "web/dist"),
+	});
+
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	const sseController = new AbortController();
+	const sseChunks: string[] = [];
+
+	try {
+		// Connect SSE listener before dispatching matter
+		const ssePromise = (async () => {
+			const res = await fetch(`${baseUrl}/api/events`, { signal: sseController.signal });
+			assert.equal(res.status, 200);
+			const reader = res.body?.getReader();
+			if (!reader) return;
+			const decoder = new TextDecoder();
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				sseChunks.push(decoder.decode(value, { stream: true }));
+			}
+		})().catch(() => {});
+
+		await new Promise((r) => setTimeout(r, 40));
+
+		// 1. Bootstrap includes templates with responsibilities and keywords
+		const bootRes = await fetch(`${baseUrl}/api/bootstrap`);
+		assert.equal(bootRes.status, 200);
+		const boot = (await bootRes.json()) as {
+			templates: Array<{ id: string; responsibilities: string; keywords: string[] }>;
+		};
+		assert.equal(boot.templates.length, 4);
+		assert.ok(boot.templates.some((t) => t.id === "engineering-manager" && t.responsibilities.length > 0));
+
+		// 2. Dispatch matter and verify matter_progress SSE events
+		const matterRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ prompt: "帮我梳理工程结构" }),
+		});
+		assert.equal(matterRes.status, 202);
+		const created = (await matterRes.json()) as { matter: { id: string } };
+
+		for (let i = 0; i < 40; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				matter: { status: string };
+			};
+			if (detail.matter.status === "delivered") break;
+			await new Promise((r) => setTimeout(r, 20));
+		}
+
+		const sseJoined = sseChunks.join("");
+		assert.match(sseJoined, /event: matter_progress/);
+		assert.match(sseJoined, /"stage":"tool"/);
+		assert.match(sseJoined, /"stage":"finalizing"/);
+
+		// 3. Create custom member (writes only inside tempRolesDir)
+		const createMemberRes = await fetch(`${baseUrl}/api/members`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				name: "架构师",
+				title: "System Architect",
+				responsibilities: "负责系统架构设计与技术评审",
+				keywords: ["架构", "重构"],
+				skills: ["architecture-review"],
+			}),
+		});
+		assert.equal(createMemberRes.status, 201);
+		const newMemberPayload = (await createMemberRes.json()) as { member: { id: string; templateId: string } };
+		assert.equal(newMemberPayload.member.templateId, "system-architect");
+
+		// 4. Switch primary contact
+		const primaryRes = await fetch(`${baseUrl}/api/members/${newMemberPayload.member.id}/primary`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: "{}",
+		});
+		assert.equal(primaryRes.status, 200);
+		const primaryJson = (await primaryRes.json()) as { member: { isPrimaryContact: boolean } };
+		assert.equal(primaryJson.member.isPrimaryContact, true);
+
+		// 5. Save private & general memories, then export package -> private memories stay excluded
+		const memRes = await fetch(`${baseUrl}/api/memories`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				memberId: newMemberPayload.member.id,
+				scope: "company_private",
+				content: "内部秘密代号 PROJECT_OMEGA",
+			}),
+		});
+		assert.equal(memRes.status, 201);
+
+		const exportRes = await fetch(`${baseUrl}/api/members/${newMemberPayload.member.id}/export`);
+		assert.equal(exportRes.status, 200);
+		const exported = (await exportRes.json()) as { filename: string; markdown: string };
+		assert.match(exported.filename, /\.md$/);
+		assert.match(exported.markdown, /架构师/);
+		assert.doesNotMatch(exported.markdown, /PROJECT_OMEGA/);
+
+		// 6. Import role package as a separate role template
+		const importMarkdown = exported.markdown
+			.replace("id: system-architect", "id: imported-architect")
+			.replace("name: 架构师", "name: 资深架构师");
+		const importRes = await fetch(`${baseUrl}/api/members/import`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ markdown: importMarkdown }),
+		});
+		assert.equal(importRes.status, 201);
+		const importedJson = (await importRes.json()) as { member: { displayName: string } };
+		assert.equal(importedJson.member.displayName, "资深架构师");
+
+		sseController.abort();
+		await ssePromise;
+	} finally {
+		sseController.abort();
+		await previewManager.stopAll();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempRolesDir, { recursive: true, force: true });
+	}
+});
+
+test("hashRouter parses and formats deliverable, chat, team, and materials hash routes", () => {
+	assert.deepEqual(parseHashRoute(""), { tab: "deliverables" });
+	assert.deepEqual(parseHashRoute("#/unknown"), { tab: "deliverables" });
+	assert.deepEqual(parseHashRoute("#/deliverables/deliv-1"), {
+		tab: "deliverables",
+		deliverableId: "deliv-1",
+	});
+	assert.deepEqual(parseHashRoute("#/chats/matter%2042"), {
+		tab: "chats",
+		matterId: "matter 42",
+	});
+	assert.deepEqual(parseHashRoute("#/chats/new"), {
+		tab: "chats",
+		isNewMatter: true,
+	});
+	assert.deepEqual(parseHashRoute("#/team"), { tab: "team" });
+	assert.deepEqual(parseHashRoute("#/materials"), { tab: "materials" });
+
+	assert.equal(formatHashRoute({ tab: "deliverables" }), "#/deliverables");
+	assert.equal(formatHashRoute({ tab: "deliverables", deliverableId: "d1" }), "#/deliverables/d1");
+	assert.equal(formatHashRoute({ tab: "chats", matterId: "m1" }), "#/chats/m1");
+	assert.equal(formatHashRoute({ tab: "chats", isNewMatter: true }), "#/chats/new");
+	assert.equal(formatHashRoute({ tab: "team" }), "#/team");
+	assert.equal(formatHashRoute({ tab: "materials" }), "#/materials");
 });

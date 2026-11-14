@@ -2,6 +2,17 @@
 
 All notable changes to Personal Agent are documented in this file.
 
+## [0.3.1] - 2026-11-14
+
+### Added
+- **V4 UX Guidance, Team Management, Live Progress & Hash Router**:
+  - Replaced technical empty state in `交付给我` with a 3-step onboarding card featuring workspace selection and one-click starter prompts for `研发经理`, `产品经理`, and `测试经理` (`web/src/App.tsx`).
+  - Added `我的团队` tab and backend APIs (`POST /api/members`, `POST /api/members/:id/primary`, `GET /api/members/:id/export`, `POST /api/members/import`, `POST /api/memories`) for adding custom roles, switching the default primary contact, viewing/saving scoped memories, and importing/exporting sanitized role Markdown packages (`src/server/app.ts`, `src/storage/repositories.ts`).
+  - Added 5-stage live progress reporting (`DispatchProgressEvent` + `matter_progress` SSE events) across `TeamOrchestrator`, HTTP server, and top/right progress cards (`src/orchestrator/team-orchestrator.ts`).
+  - Added safe zero-`dangerouslySetInnerHTML` Markdown rendering (`web/src/MarkdownView.tsx`) and completion banners on deliverables.
+  - Added lightweight URL Hash Router (`web/src/hashRouter.ts`) supporting `#/deliverables/:id`, `#/chats/:id`, `#/chats/new`, `#/team`, and `#/materials` with refresh persistence and browser back/forward navigation.
+  - Added tests for `matter_progress` SSE, team/memory APIs, and `hashRouter` (`test/phase3-server.test.ts`).
+
 ## [0.3.0] - 2026-11-14
 
 ### Added

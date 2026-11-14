@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve } from "node:path";
 import type { DispatchMatterResult, TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
+import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
-import type { RpcExtensionUIResponsePayload } from "../rpc/types.ts";
+import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { DeliverableType } from "../storage/types.ts";
+import type { DeliverableType, MemoryScope } from "../storage/types.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 
@@ -17,6 +18,7 @@ export interface PersonalAgentServerOptions {
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
 	webDistDir?: string;
+	rolesDir?: string;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -70,7 +72,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	server: Server;
 	broadcast: (eventName: string, payload: unknown) => void;
 } {
-	const { store, orchestrator, templates, previewManager, dialogBroker, webDistDir } = options;
+	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir } = options;
 	const sseClients = new Set<ServerResponse>();
 
 	const broadcast = (eventName: string, payload: unknown) => {
@@ -109,6 +111,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				deliverableType: input.deliverableType,
 				onTextDelta: (delta) => {
 					broadcast("text_delta", { matterId: input.matterId, delta });
+				},
+				onProgress: (progress) => {
+					broadcast("matter_progress", { matterId: input.matterId, ...progress });
 				},
 			})
 			.then((result: DispatchMatterResult) => {
@@ -160,16 +165,19 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "GET" && pathname === "/api/bootstrap") {
+				const liveTemplates = orchestrator.listTemplates();
 				sendJson(res, 200, {
 					members: store.listMembers(),
-					templates: templates.map((t) => ({
+					templates: liveTemplates.map((t) => ({
 						id: t.id,
 						name: t.name,
 						title: t.title,
 						version: t.version,
 						skills: t.skills,
 						tools: t.tools,
+						keywords: t.keywords,
 						shareable: t.shareable,
+						responsibilities: t.sections.responsibilitiesAndBoundaries,
 					})),
 					workspaces: store.listWorkspaces(),
 					matters: store.listMatters(),
@@ -338,6 +346,162 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				});
 				broadcast("workspace_updated", ws);
 				sendJson(res, 201, { workspace: ws });
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/members") {
+				const body = await readJsonBody(req);
+				const name = typeof body.name === "string" ? body.name.trim() : "";
+				const title = typeof body.title === "string" ? body.title.trim() : "";
+				const responsibilities =
+					typeof body.responsibilities === "string" && body.responsibilities.trim().length > 0
+						? body.responsibilities.trim()
+						: `- 承担 ${name} 的核心岗位职责与交付产出。`;
+				if (!name || !title) {
+					sendError(res, 400, "name and title are required");
+					return;
+				}
+				const rawId =
+					typeof body.id === "string" && body.id.trim().length > 0
+						? body.id.trim()
+						: title
+								.toLowerCase()
+								.replace(/[^a-z0-9]+/g, "-")
+								.replace(/^-|-$/g, "") || `role-${Date.now()}`;
+				const keywords = Array.isArray(body.keywords)
+					? body.keywords.map(String).filter(Boolean)
+					: typeof body.keywords === "string"
+						? body.keywords
+								.split(/[,，\s]+/)
+								.map((s) => s.trim())
+								.filter(Boolean)
+						: [];
+				const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
+				const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
+				const provider =
+					typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
+				const thinkingLevel = (
+					typeof body.thinkingLevel === "string" ? body.thinkingLevel : "high"
+				) as ThinkingLevel;
+				const isPrimaryContact = body.isPrimaryContact === true;
+
+				const rawBody = [
+					"## 职责与边界",
+					responsibilities,
+					"",
+					"## 技能与工作方法",
+					"- 围绕明确问题开展调研或实现，交付可验证的结果。",
+					"",
+					"## 工具与环境依赖",
+					"- 按需调用文档读取与工作区工具。",
+					"",
+					"## 协作和沟通约定",
+					"- 平时静默推进，关键节点请用户确认，内部协作留痕。",
+					"",
+					"## 交付与验证方式",
+					"- 产出结构化说明或可执行验证结果。",
+				].join("\n");
+
+				const template: RoleTemplate = {
+					id: rawId,
+					name,
+					title,
+					version: "1.0.0",
+					shareable: true,
+					defaultProvider: provider,
+					defaultModel: model,
+					thinkingLevel,
+					isPrimaryContact,
+					keywords,
+					tools: ["read", "bash"],
+					skills,
+					mcpDependencies: [],
+					sections: {
+						responsibilitiesAndBoundaries: responsibilities,
+						skillsAndMethods: "- 围绕明确问题开展调研或实现，交付可验证的结果。",
+						toolsAndEnvironment: "- 按需调用文档读取与工作区工具。",
+						collaborationConventions: "- 平时静默推进，关键节点请用户确认，内部协作留痕。",
+						deliveryAndVerification: "- 产出结构化说明或可执行验证结果。",
+					},
+					rawBody,
+				};
+
+				if (rolesDir) {
+					await mkdir(rolesDir, { recursive: true });
+					await writeFile(join(rolesDir, `${rawId}.md`), serializeRoleTemplateMarkdown(template), "utf8");
+				}
+
+				const member = orchestrator.registerRoleTemplate(template);
+				broadcast("team_updated", { memberId: member.id });
+				sendJson(res, 201, { member });
+				return;
+			}
+
+			const memberPrimaryMatch = pathname.match(/^\/api\/members\/([^/]+)\/primary$/);
+			if (method === "POST" && memberPrimaryMatch) {
+				const memberId = decodeURIComponent(memberPrimaryMatch[1]!);
+				const member = store.setPrimaryContact(memberId);
+				broadcast("team_updated", { memberId: member.id });
+				sendJson(res, 200, { member });
+				return;
+			}
+
+			const memberExportMatch = pathname.match(/^\/api\/members\/([^/]+)\/export$/);
+			if (method === "GET" && memberExportMatch) {
+				const memberId = decodeURIComponent(memberExportMatch[1]!);
+				const member = store.getMember(memberId);
+				if (!member) {
+					sendError(res, 404, `Member not found: ${memberId}`);
+					return;
+				}
+				const template = orchestrator.getTemplateForMember(member);
+				if (!template) {
+					sendError(res, 404, `Role template not found for member: ${memberId}`);
+					return;
+				}
+				const markdown = serializeRoleTemplateMarkdown(template);
+				sendJson(res, 200, { id: template.id, filename: `${template.id}.md`, markdown });
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/members/import") {
+				const body = await readJsonBody(req);
+				const markdown = typeof body.markdown === "string" ? body.markdown : "";
+				if (!markdown.trim()) {
+					sendError(res, 400, "markdown is required");
+					return;
+				}
+				const parsed = parseRoleTemplateMarkdown(markdown);
+				if (rolesDir) {
+					await mkdir(rolesDir, { recursive: true });
+					await writeFile(join(rolesDir, `${parsed.id}.md`), serializeRoleTemplateMarkdown(parsed), "utf8");
+				}
+				const member = orchestrator.registerRoleTemplate(parsed);
+				broadcast("team_updated", { memberId: member.id });
+				sendJson(res, 201, { member });
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/memories") {
+				const body = await readJsonBody(req);
+				const memberId = typeof body.memberId === "string" ? body.memberId.trim() : "";
+				const content = typeof body.content === "string" ? body.content.trim() : "";
+				const scope = (typeof body.scope === "string" ? body.scope : "role_general") as MemoryScope;
+				if (!memberId || !content) {
+					sendError(res, 400, "memberId and content are required");
+					return;
+				}
+				const memory = store.addMemory({
+					memberId,
+					scope,
+					workspaceId: typeof body.workspaceId === "string" && body.workspaceId ? body.workspaceId : null,
+					content,
+					sourceMatterId:
+						typeof body.sourceMatterId === "string" && body.sourceMatterId ? body.sourceMatterId : null,
+					verified: true,
+				});
+				broadcast("memory_updated", { memberId, memory });
+				sendJson(res, 201, { memory });
 				return;
 			}
 

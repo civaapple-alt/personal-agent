@@ -22,11 +22,18 @@ export type OrchestratorDialogHandler = (
 	ctx: DialogContext,
 ) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload;
 
+export interface DispatchProgressEvent {
+	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
+	label: string;
+	toolName?: string;
+}
+
 export interface RpcWorkerLike {
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	getState(): Promise<{ sessionId: string; sessionFile?: string }>;
 	setThinkingLevel?(level: TeamMember["thinkingLevel"]): Promise<void>;
+	onEvent?(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
 	onNotice(listener: (notice: { method: string; [key: string]: unknown }) => void): () => void;
 	setDialogHandler(
 		handler:
@@ -63,6 +70,7 @@ export interface DispatchMatterInput {
 	deliverableTitle?: string;
 	timeoutMs?: number;
 	onTextDelta?: (delta: string) => void;
+	onProgress?: (progress: DispatchProgressEvent) => void;
 }
 
 export interface DispatchMatterResult {
@@ -148,6 +156,34 @@ export class TeamOrchestrator {
 
 	getTemplateForMember(member: TeamMember): RoleTemplate | undefined {
 		return this.templatesById.get(member.templateId);
+	}
+
+	listTemplates(): RoleTemplate[] {
+		return [...this.templatesById.values()];
+	}
+
+	registerRoleTemplate(template: RoleTemplate): TeamMember {
+		if (template.isPrimaryContact) {
+			for (const existing of this.templatesById.values()) {
+				existing.isPrimaryContact = existing.id === template.id;
+			}
+		}
+		this.templatesById.set(template.id, template);
+		const member = this.store.upsertMember({
+			id: template.id,
+			templateId: template.id,
+			displayName: template.name,
+			roleTitle: template.title,
+			isPrimaryContact: template.isPrimaryContact,
+			provider: template.defaultProvider,
+			model: template.defaultModel,
+			thinkingLevel: template.thinkingLevel,
+			keywords: template.keywords,
+		});
+		if (template.isPrimaryContact) {
+			return this.store.setPrimaryContact(member.id);
+		}
+		return member;
 	}
 
 	/**
@@ -274,6 +310,7 @@ export class TeamOrchestrator {
 			isInternalDelegation: false,
 			timeoutMs: input.timeoutMs,
 			onTextDelta: input.onTextDelta,
+			onProgress: input.onProgress,
 		});
 
 		const replyText = runResult.assistantText.trim();
@@ -374,6 +411,7 @@ export class TeamOrchestrator {
 		isInternalDelegation: boolean;
 		timeoutMs?: number;
 		onTextDelta?: (delta: string) => void;
+		onProgress?: (progress: DispatchProgressEvent) => void;
 	}): Promise<PromptRunResult> {
 		const template = this.getTemplateForMember(input.member);
 		const memories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null);
@@ -394,6 +432,21 @@ export class TeamOrchestrator {
 			noSession: this.noSession,
 		});
 
+		const offEvent = worker.onEvent?.((event) => {
+			if (event.type === "agent_start" || event.type === "turn_start") {
+				input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}正在分析与思考...` });
+			} else if (event.type === "tool_execution_start") {
+				const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
+				input.onProgress?.({
+					stage: "tool",
+					toolName,
+					label: `${input.member.displayName}正在执行 ${toolName}...`,
+				});
+			} else if (event.type === "tool_execution_end") {
+				input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}正在整理结果...` });
+			}
+		});
+
 		const offNotice = worker.onNotice((notice) => {
 			this.store.appendMessage({
 				matterId: input.matterId,
@@ -408,6 +461,10 @@ export class TeamOrchestrator {
 			if (!this.dialogHandler) {
 				return { cancelled: true };
 			}
+			input.onProgress?.({
+				stage: "waiting_user",
+				label: `${input.member.displayName}需要你确认：${request.title}`,
+			});
 			this.store.updateMatterStatus(input.matterId, "waiting_user");
 			try {
 				return await this.dialogHandler({
@@ -416,10 +473,15 @@ export class TeamOrchestrator {
 					request,
 				});
 			} finally {
+				input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}已收到确认，继续推进...` });
 				this.store.updateMatterStatus(input.matterId, "open");
 			}
 		});
 
+		input.onProgress?.({
+			stage: "starting",
+			label: `正在为${input.member.displayName}启动工作区${input.workspace ? `（${input.workspace.name}）` : ""}...`,
+		});
 		await worker.start();
 		try {
 			const state = await worker.getState();
@@ -435,11 +497,15 @@ export class TeamOrchestrator {
 				status: "active",
 			});
 
-			return await worker.runPromptAndWait(fullPrompt, {
+			input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}已接单，开始处理...` });
+			const result = await worker.runPromptAndWait(fullPrompt, {
 				timeoutMs: input.timeoutMs,
 				onTextDelta: input.onTextDelta,
 			});
+			input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}已完成，正在归拢交付...` });
+			return result;
 		} finally {
+			offEvent?.();
 			offNotice();
 			await worker.stop();
 		}

@@ -107,6 +107,19 @@ export class PersonalAgentStore {
 		return row ? this.mapMember(row) : null;
 	}
 
+	setPrimaryContact(memberId: string): TeamMember {
+		const existing = this.getMember(memberId);
+		if (!existing) {
+			throw new Error(`Member not found: ${memberId}`);
+		}
+		const timestamp = nowIso();
+		this.db.prepare("UPDATE team_members SET is_primary_contact = 0, updated_at = ?").run(timestamp);
+		this.db
+			.prepare("UPDATE team_members SET is_primary_contact = 1, updated_at = ? WHERE id = ?")
+			.run(timestamp, memberId);
+		return this.getMember(memberId)!;
+	}
+
 	addMemory(input: {
 		memberId: string;
 		scope: MemoryScope;

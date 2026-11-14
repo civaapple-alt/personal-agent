@@ -90,8 +90,28 @@ export interface MemberMemoryDto {
 	createdAt: string;
 }
 
+export interface RoleTemplateDto {
+	id: string;
+	name: string;
+	title: string;
+	version: string;
+	skills: string[];
+	tools: string[];
+	keywords: string[];
+	shareable: boolean;
+	responsibilities: string;
+}
+
+export interface MatterProgressDto {
+	matterId: string;
+	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
+	label: string;
+	toolName?: string;
+}
+
 export interface BootstrapPayload {
 	members: TeamMemberDto[];
+	templates: RoleTemplateDto[];
 	workspaces: WorkspaceDto[];
 	matters: MatterDto[];
 	deliverables: DeliverableDto[];
@@ -187,5 +207,57 @@ export function stopPreview(previewId: string): Promise<{ preview: PreviewServic
 	return requestJson(`/api/previews/${encodeURIComponent(previewId)}/stop`, {
 		method: "POST",
 		body: "{}",
+	});
+}
+
+export function createMember(input: {
+	name: string;
+	title: string;
+	responsibilities?: string;
+	keywords?: string[];
+	skills?: string[];
+	model?: string;
+	provider?: string;
+	thinkingLevel?: string;
+	isPrimaryContact?: boolean;
+}): Promise<{ member: TeamMemberDto }> {
+	return requestJson("/api/members", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function setPrimaryMember(memberId: string): Promise<{ member: TeamMemberDto }> {
+	return requestJson(`/api/members/${encodeURIComponent(memberId)}/primary`, {
+		method: "POST",
+		body: "{}",
+	});
+}
+
+export function exportMemberPackage(memberId: string): Promise<{
+	id: string;
+	filename: string;
+	markdown: string;
+}> {
+	return requestJson(`/api/members/${encodeURIComponent(memberId)}/export`);
+}
+
+export function importMemberPackage(markdown: string): Promise<{ member: TeamMemberDto }> {
+	return requestJson("/api/members/import", {
+		method: "POST",
+		body: JSON.stringify({ markdown }),
+	});
+}
+
+export function saveMemberMemory(input: {
+	memberId: string;
+	content: string;
+	scope?: "role_general" | "company_private" | "project_private";
+	workspaceId?: string;
+	sourceMatterId?: string;
+}): Promise<{ memory: MemberMemoryDto }> {
+	return requestJson("/api/memories", {
+		method: "POST",
+		body: JSON.stringify(input),
 	});
 }
