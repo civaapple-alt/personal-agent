@@ -1,5 +1,6 @@
 import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+	abortMatter,
 	addWorkspace,
 	type BootstrapPayload,
 	createMatter,
@@ -11,6 +12,7 @@ import {
 	importMemberPackage,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	type PreviewServiceDto,
 	postMatterMessage,
 	type RoleTemplateDto,
 	respondToDialog,
@@ -18,6 +20,8 @@ import {
 	setPrimaryMember,
 	stopPreview,
 	submitDeliverableFeedback,
+	type TeamMemberDto,
+	updateMatterWorkspace,
 } from "./api.ts";
 import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute } from "./hashRouter.ts";
 import { MarkdownView } from "./MarkdownView.tsx";
@@ -45,6 +49,18 @@ const MEMORY_SCOPE_LABELS: Record<string, string> = {
 	project_private: "当前项目规范",
 };
 
+const BOT_PALETTE = [
+	{ bg: "#35b49b", tilt: "0deg" },
+	{ bg: "#4e6df5", tilt: "-7deg" },
+	{ bg: "#8b5cf6", tilt: "6deg" },
+	{ bg: "#ec6a2c", tilt: "-4deg" },
+	{ bg: "#0891b2", tilt: "5deg" },
+];
+
+function getBotTheme(index: number): { bg: string; tilt: string } {
+	return BOT_PALETTE[index % BOT_PALETTE.length] ?? { bg: "#35b49b", tilt: "0deg" };
+}
+
 function splitTagsInput(raw: string): string[] {
 	return raw
 		.split(/[,，、\n]/)
@@ -58,42 +74,181 @@ function formatClockTime(iso: string): string {
 	return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
 }
 
-function ProgressCard(props: {
-	title: string;
-	progress: MatterProgressDto;
-	elapsedSeconds: number;
-	onOpenChat?: () => void;
-}) {
+function BotFaceIcon(props: { bg: string; tilt?: string; size?: "sm" | "md" | "lg" }) {
+	const sizeClass = props.size === "sm" ? "bot-avatar-sm" : props.size === "lg" ? "bot-avatar-lg" : "bot-avatar-md";
+	return (
+		<span
+			className={`bot-avatar ${sizeClass}`}
+			style={{ background: props.bg, transform: props.tilt ? `rotate(${props.tilt})` : undefined }}
+		>
+			<svg viewBox="0 0 24 24" className="bot-eyes" aria-hidden="true">
+				<rect x="7.5" y="7.5" width="3" height="9" rx="1.5" fill="currentColor" />
+				<rect x="13.5" y="7.5" width="3" height="9" rx="1.5" fill="currentColor" />
+			</svg>
+		</span>
+	);
+}
+
+function ExploringStatus(props: { progress: MatterProgressDto; elapsedSeconds: number; onAbort?: () => void }) {
 	const activeIndex = STAGE_ORDER.indexOf(props.progress.stage);
 	return (
-		<div className="progress-card">
-			<div className="progress-top">
-				<div className="progress-heading">
-					<span className="progress-dot" />
-					<strong>{props.title}</strong>
-				</div>
-				<div className="progress-meta">
-					<span>{STAGE_LABELS[props.progress.stage]}</span>
-					<span>·</span>
-					<span>已耗时 {props.elapsedSeconds}s</span>
-					{props.onOpenChat && (
-						<button type="button" className="btn-inline" onClick={props.onOpenChat}>
-							查看详情
-						</button>
-					)}
+		<div className="exploring-block">
+			<div className="exploring-row">
+				<span className="exploring-ring">
+					<span className="exploring-dot" />
+				</span>
+				<span className="exploring-stage">{STAGE_LABELS[props.progress.stage]}</span>
+				<span className="exploring-label">{props.progress.label}</span>
+				<span className="exploring-time">{props.elapsedSeconds}s</span>
+				{props.onAbort && (
+					<button type="button" className="btn-stop-pill" onClick={props.onAbort}>
+						停止
+					</button>
+				)}
+			</div>
+			<div className="exploring-bar">
+				{STAGE_ORDER.map((stage, idx) => (
+					<span
+						key={stage}
+						className={`exploring-seg ${idx < activeIndex ? "done" : idx === activeIndex ? "active" : ""}`}
+					/>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function DeliverableCard(props: {
+	deliverable: DeliverableDto;
+	siblingVersions: DeliverableDto[];
+	memberName: string;
+	workspaceName: string | null;
+	viewUrl: string | null;
+	feedbackText: string;
+	onFeedbackTextChange: (value: string) => void;
+	onSubmitFeedback: () => void;
+	onSelectVersion: (deliverableId: string) => void;
+	onRequestRevision: () => void;
+	onSaveMemory: (content: string, scope: "role_general" | "project_private") => Promise<void>;
+	compact?: boolean;
+}) {
+	const [memoryOpen, setMemoryOpen] = useState(false);
+	const [memoryText, setMemoryText] = useState("");
+	const [memoryScope, setMemoryScope] = useState<"role_general" | "project_private">("role_general");
+
+	return (
+		<div className={`deliverable-card ${props.compact ? "compact" : ""}`}>
+			<div className="success-banner">
+				<span>✓ 已完成交付 · 由【{props.memberName}】产出</span>
+				<div className="success-tags">
+					{props.workspaceName && <span className="pill">仓库：{props.workspaceName}</span>}
+					<span className="pill">{formatClockTime(props.deliverable.createdAt)}</span>
 				</div>
 			</div>
-			<div className="progress-label">{props.progress.label}</div>
-			<div className="progress-steps">
-				{STAGE_ORDER.map((stage, idx) => (
-					<div
-						key={stage}
-						className={`progress-step ${idx < activeIndex ? "done" : idx === activeIndex ? "active" : ""}`}
-					>
-						<span className="progress-step-bar" />
-						<span className="progress-step-text">{STAGE_LABELS[stage]}</span>
+
+			<div className="deliverable-head-row">
+				<div>
+					<h3 className="deliverable-title">{props.deliverable.title}</h3>
+					<div className="featured-meta">
+						<span>{props.memberName}</span>
+						<span>·</span>
+						<span>V{props.deliverable.version}</span>
+						<span>·</span>
+						<span className="pill">{props.deliverable.type}</span>
 					</div>
-				))}
+				</div>
+				{props.siblingVersions.length > 1 && (
+					<div className="version-bar" style={{ marginTop: 0 }}>
+						{props.siblingVersions.map((ver) => (
+							<button
+								key={ver.id}
+								type="button"
+								className={`version-chip ${ver.id === props.deliverable.id ? "active" : ""}`}
+								onClick={() => props.onSelectVersion(ver.id)}
+							>
+								V{ver.version}
+							</button>
+						))}
+					</div>
+				)}
+			</div>
+
+			<div className="deliverable-body">
+				<MarkdownView content={props.deliverable.contentOrPath} />
+			</div>
+
+			<div className="actions-row">
+				{props.viewUrl && (
+					<a className="btn-pill-dark" href={props.viewUrl} target="_blank" rel="noreferrer">
+						打开查看 →
+					</a>
+				)}
+				<button type="button" className="btn-pill-outline" onClick={props.onRequestRevision}>
+					继续修改
+				</button>
+				<button
+					type="button"
+					className="btn-pill-outline"
+					onClick={() => {
+						setMemoryOpen((prev) => !prev);
+						if (!memoryText) {
+							setMemoryText(`关于「${props.deliverable.title}」的做法总结：${props.deliverable.summary}`);
+						}
+					}}
+				>
+					{memoryOpen ? "收起经验沉淀" : "沉淀为角色经验"}
+				</button>
+			</div>
+
+			{memoryOpen && (
+				<div className="memory-draft-box">
+					<div className="memory-draft-head">
+						<strong>沉淀为「{props.memberName}」的工作习惯</strong>
+						<select
+							className="select-sm"
+							value={memoryScope}
+							onChange={(e) => setMemoryScope(e.target.value as "role_general" | "project_private")}
+						>
+							<option value="role_general">角色通用经验（跨项目可用）</option>
+							<option value="project_private">当前项目规范（仅当前仓库生效）</option>
+						</select>
+					</div>
+					<div className="feedback-row">
+						<input
+							className="input-field"
+							value={memoryText}
+							onChange={(e) => setMemoryText(e.target.value)}
+							placeholder="例如：交付工程文档时优先列出可直接执行的启动命令..."
+						/>
+						<button
+							type="button"
+							className="btn-primary btn-sm"
+							onClick={() => {
+								if (!memoryText.trim()) return;
+								void props.onSaveMemory(memoryText.trim(), memoryScope).then(() => {
+									setMemoryText("");
+									setMemoryOpen(false);
+								});
+							}}
+						>
+							保存经验
+						</button>
+					</div>
+				</div>
+			)}
+
+			<div className="feedback-row">
+				<input
+					className="input-field"
+					value={props.feedbackText}
+					onChange={(e) => props.onFeedbackTextChange(e.target.value)}
+					placeholder={
+						props.deliverable.feedback ? `上次反馈：${props.deliverable.feedback}` : "记录这条交付的验收反馈..."
+					}
+				/>
+				<button type="button" className="btn-secondary btn-sm" onClick={props.onSubmitFeedback}>
+					保存反馈
+				</button>
 			</div>
 		</div>
 	);
@@ -102,8 +257,10 @@ function ProgressCard(props: {
 export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
-	const [colleaguesOpen, setColleaguesOpen] = useState(true);
 	const [collabOpen, setCollabOpen] = useState(false);
+	const [searchOpen, setSearchOpen] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
 	const [selectedMatterId, setSelectedMatterId] = useState<string | null>(
 		initialRoute.isNewMatter ? null : (initialRoute.matterId ?? null),
@@ -112,9 +269,14 @@ export function App() {
 	const [selectedDeliverableId, setSelectedDeliverableId] = useState<string | null>(
 		initialRoute.deliverableId ?? null,
 	);
-	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
-	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
+	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() => {
+		try {
+			return window.localStorage.getItem("pa.defaultWorkspaceId") ?? "";
+		} catch {
+			return "";
+		}
+	});
 	const [composerText, setComposerText] = useState("");
 	const [feedbackText, setFeedbackText] = useState("");
 	const [dialogInput, setDialogInput] = useState("");
@@ -148,13 +310,13 @@ export function App() {
 	} | null>(null);
 	const [expandedMemoryMemberId, setExpandedMemoryMemberId] = useState<string | null>(null);
 
-	const [memoryDraftOpen, setMemoryDraftOpen] = useState(false);
-	const [memoryDraftText, setMemoryDraftText] = useState("");
-	const [memoryDraftScope, setMemoryDraftScope] = useState<"role_general" | "project_private">("role_general");
-
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
+	const messagesEndRef = useRef<HTMLDivElement | null>(null);
+	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
+	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
+	selectedMatterIdRef.current = selectedMatterId;
 
 	const navigateRoute = useCallback((next: HashRoute, options?: { replace?: boolean }) => {
 		setActiveTab(next.tab);
@@ -207,7 +369,18 @@ export function App() {
 		const data = await fetchBootstrap();
 		setBootstrap(data);
 		setSelectedMatterId((prev) => (explicitNewMatterRef.current ? null : (prev ?? data.matters[0]?.id ?? null)));
-		setSelectedWorkspaceId((prev) => prev || data.workspaces[0]?.id || "");
+		setSelectedWorkspaceId((prev) => {
+			if (prev && data.workspaces.some((w) => w.id === prev)) return prev;
+			try {
+				const saved = window.localStorage.getItem("pa.defaultWorkspaceId");
+				if (saved !== null) {
+					return saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
+				}
+			} catch {
+				// Ignore storage access errors.
+			}
+			return data.workspaces[0]?.id || "";
+		});
 		setSelectedDeliverableId((prev) => prev ?? data.deliverables[0]?.id ?? null);
 	}, []);
 
@@ -218,6 +391,7 @@ export function App() {
 		}
 		const detail = await fetchMatterDetail(matterId);
 		setMatterDetail(detail);
+		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
 	}, []);
 
 	useEffect(() => {
@@ -282,7 +456,11 @@ export function App() {
 						formatHashRoute({ tab: "deliverables", deliverableId: data.deliverable.id }),
 					);
 				}
-				setNoticeBanner(`✓ 交付已完成：「${data.deliverable.title ?? "新成果"}」已归拢到「交付给我」`);
+				const watchingThisChat = activeTabRef.current === "chats" && selectedMatterIdRef.current === data.matterId;
+				if (!watchingThisChat) {
+					const shortTitle = (data.deliverable.title ?? "新成果").slice(0, 28);
+					setNoticeBanner(`✓ 已完成交付：「${shortTitle}」`);
+				}
 			}
 			void refreshBootstrap();
 			if (selectedMatterId === data.matterId) {
@@ -310,6 +488,24 @@ export function App() {
 				void refreshDetail(data.matterId);
 			}
 		});
+		es.addEventListener("matter_aborted", (ev) => {
+			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string };
+			setStreamingDelta("");
+			setProgressByMatter((prev) => {
+				const next = { ...prev };
+				delete next[data.matterId];
+				return next;
+			});
+			setProgressStartedAt((prev) => {
+				const next = { ...prev };
+				delete next[data.matterId];
+				return next;
+			});
+			void refreshBootstrap();
+			if (selectedMatterId === data.matterId) {
+				void refreshDetail(data.matterId);
+			}
+		});
 		const handleSync = () => {
 			void refreshBootstrap();
 			if (selectedMatterId) {
@@ -332,30 +528,56 @@ export function App() {
 		return () => es.close();
 	}, [refreshBootstrap, refreshDetail, selectedMatterId]);
 
+	const messageCount = matterDetail?.userMessages.length ?? 0;
+	const streamLen = streamingDelta.length;
+	useEffect(() => {
+		if (activeTab === "chats" && (messageCount > 0 || streamLen > 0)) {
+			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		}
+	}, [activeTab, messageCount, streamLen]);
+
+	const memberThemeMap = useMemo(() => {
+		const map = new Map<string, { bg: string; tilt: string }>();
+		bootstrap?.members.forEach((member, index) => {
+			map.set(member.id, getBotTheme(index));
+		});
+		return map;
+	}, [bootstrap]);
+
 	const activeDeliverable: DeliverableDto | null = useMemo(() => {
 		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
 		return bootstrap.deliverables.find((d) => d.id === selectedDeliverableId) ?? bootstrap.deliverables[0] ?? null;
 	}, [bootstrap, selectedDeliverableId]);
 
-	const activeDeliverableWorkspaceId = useMemo(() => {
-		if (!bootstrap || !activeDeliverable) return null;
-		return bootstrap.matters.find((m) => m.id === activeDeliverable.matterId)?.workspaceId ?? null;
-	}, [bootstrap, activeDeliverable]);
+	const activeChatDeliverable: DeliverableDto | null = useMemo(() => {
+		if (!matterDetail || matterDetail.deliverables.length === 0) return null;
+		return (
+			matterDetail.deliverables.find((d) => d.id === selectedDeliverableId) ??
+			matterDetail.deliverables[matterDetail.deliverables.length - 1] ??
+			null
+		);
+	}, [matterDetail, selectedDeliverableId]);
 
-	const siblingVersions = useMemo(() => {
-		if (!bootstrap || !activeDeliverable) return [];
-		return bootstrap.deliverables
-			.filter((d) => d.matterId === activeDeliverable.matterId && d.title === activeDeliverable.title)
-			.sort((a, b) => a.version - b.version);
-	}, [bootstrap, activeDeliverable]);
+	const siblingVersionsFor = useCallback(
+		(deliv: DeliverableDto | null) => {
+			if (!bootstrap || !deliv) return [];
+			return bootstrap.deliverables
+				.filter((d) => d.matterId === deliv.matterId && d.title === deliv.title)
+				.sort((a, b) => a.version - b.version);
+		},
+		[bootstrap],
+	);
 
-	const primaryContact = useMemo(() => {
+	const headerContact: TeamMemberDto | null = useMemo(() => {
 		if (!bootstrap) return null;
+		if (selectedMemberId !== "auto") {
+			return bootstrap.members.find((m) => m.id === selectedMemberId) ?? null;
+		}
 		if (matterDetail?.matter.leadMemberId) {
 			return bootstrap.members.find((m) => m.id === matterDetail.matter.leadMemberId) ?? null;
 		}
 		return bootstrap.members.find((m) => m.isPrimaryContact) ?? bootstrap.members[0] ?? null;
-	}, [bootstrap, matterDetail]);
+	}, [bootstrap, matterDetail, selectedMemberId]);
 
 	const activeDialogs = useMemo(() => {
 		if (!bootstrap) return [];
@@ -378,10 +600,33 @@ export function App() {
 		[bootstrap, selectedWorkspaceId],
 	);
 
+	const filteredMatters = useMemo(() => {
+		const list = bootstrap?.matters ?? [];
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return list;
+		return list.filter((m) => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
+	}, [bootstrap, searchQuery]);
+
+	const filteredDeliverables = useMemo(() => {
+		const list = bootstrap?.deliverables ?? [];
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return list;
+		return list.filter((d) => d.title.toLowerCase().includes(q) || d.summary.toLowerCase().includes(q));
+	}, [bootstrap, searchQuery]);
+
 	const memberName = (id: string) => bootstrap?.members.find((m) => m.id === id)?.displayName ?? id;
 
 	const workspaceName = (id: string | null) =>
 		id ? (bootstrap?.workspaces.find((w) => w.id === id)?.name ?? id) : null;
+
+	const previewUrlFor = useCallback(
+		(deliv: DeliverableDto | null): string | null => {
+			if (!deliv) return null;
+			const linked: PreviewServiceDto | undefined = bootstrap?.previews.find((p) => p.deliverableId === deliv.id);
+			return deliv.serviceUrl ?? linked?.url ?? null;
+		},
+		[bootstrap],
+	);
 
 	const starterTasks = useMemo(() => {
 		const wsName = selectedWorkspace?.name;
@@ -432,6 +677,7 @@ export function App() {
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
+		setStarterMenuOpen(false);
 		try {
 			const preferredMemberId =
 				options?.preferredMemberId ?? (selectedMemberId === "auto" ? undefined : selectedMemberId);
@@ -452,10 +698,7 @@ export function App() {
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
-				setSelectedMatterId(created.matter.id);
-				if (activeTab === "chats") {
-					window.history.replaceState(null, "", formatHashRoute({ tab: "chats", matterId: created.matter.id }));
-				}
+				navigateRoute({ tab: "chats", matterId: created.matter.id });
 				setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
 			}
 			setComposerText("");
@@ -471,11 +714,21 @@ export function App() {
 	};
 
 	const handleSendPrompt = async () => {
-		const isModifyingDeliverable =
-			Boolean(selectedMatterId && activeDeliverable) && composerText.trim().startsWith("修改");
+		const targetDeliv = activeChatDeliverable ?? activeDeliverable;
+		const isModifyingDeliverable = Boolean(selectedMatterId && targetDeliv) && composerText.trim().startsWith("修改");
 		await dispatchPromptText(composerText, {
-			deliverableTitle: isModifyingDeliverable ? activeDeliverable?.title : undefined,
+			deliverableTitle: isModifyingDeliverable ? targetDeliv?.title : undefined,
 		});
+	};
+
+	const handleAbortMatter = (matterId: string) => {
+		void abortMatter(matterId)
+			.then(() => {
+				setNoticeBanner("已发送停止指令，正在中断当前执行");
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+			});
 	};
 
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -485,26 +738,31 @@ export function App() {
 		}
 	};
 
-	const handleDeliverableFeedback = async () => {
-		if (!activeDeliverable || !feedbackText.trim()) return;
-		await submitDeliverableFeedback(activeDeliverable.id, feedbackText.trim());
+	const handleDeliverableFeedback = async (deliverableId: string) => {
+		if (!feedbackText.trim()) return;
+		await submitDeliverableFeedback(deliverableId, feedbackText.trim());
 		setFeedbackText("");
 		setNoticeBanner("验收反馈已保存");
 		await refreshBootstrap();
+		if (selectedMatterId) {
+			await refreshDetail(selectedMatterId);
+		}
 	};
 
-	const handleSaveMemoryFromDeliverable = async () => {
-		if (!activeDeliverable || !memoryDraftText.trim()) return;
+	const handleSaveMemoryForDeliverable = async (
+		deliv: DeliverableDto,
+		content: string,
+		scope: "role_general" | "project_private",
+	) => {
+		const matterWsId = bootstrap?.matters.find((m) => m.id === deliv.matterId)?.workspaceId ?? null;
 		await saveMemberMemory({
-			memberId: activeDeliverable.memberId,
-			content: memoryDraftText.trim(),
-			scope: memoryDraftScope,
-			workspaceId: memoryDraftScope === "project_private" ? (activeDeliverableWorkspaceId ?? undefined) : undefined,
-			sourceMatterId: activeDeliverable.matterId,
+			memberId: deliv.memberId,
+			content,
+			scope,
+			workspaceId: scope === "project_private" ? (matterWsId ?? undefined) : undefined,
+			sourceMatterId: deliv.matterId,
 		});
-		setMemoryDraftText("");
-		setMemoryDraftOpen(false);
-		setNoticeBanner(`已沉淀为「${memberName(activeDeliverable.memberId)}」的经验记忆`);
+		setNoticeBanner(`已沉淀为「${memberName(deliv.memberId)}」的经验记忆`);
 		await refreshBootstrap();
 	};
 
@@ -596,402 +854,606 @@ export function App() {
 		URL.revokeObjectURL(url);
 	};
 
-	const linkedPreview = useMemo(() => {
-		if (!bootstrap || !activeDeliverable) return null;
-		return bootstrap.previews.find((p) => p.deliverableId === activeDeliverable.id) ?? null;
-	}, [bootstrap, activeDeliverable]);
-
-	const viewUrl = activeDeliverable?.serviceUrl ?? linkedPreview?.url ?? null;
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
-	const runningProgressList = Object.entries(progressByMatter);
+	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
 
 	return (
-		<div className="app-shell">
-			<header className="topbar">
-				<div className="brand">
-					<span className="brand-mark">PA</span>
-					<span>Personal Agent</span>
-				</div>
-				<div className="topbar-meta">
-					<span>Pi RPC · kimi-for-coding</span>
-					<span className={`pill ${sseConnected ? "live" : ""}`}>
-						{sseConnected ? "实时连接中" : "连接恢复中"}
-					</span>
-				</div>
-			</header>
-
-			<div className="workspace-grid">
-				<aside className="left-nav">
-					<div className="nav-items">
+		<div className="bot-shell">
+			<aside className="bot-sidebar">
+				<div className="sidebar-top">
+					<button
+						type="button"
+						className="brand-btn"
+						onClick={() => navigateRoute({ tab: "chats", matterId: selectedMatterId ?? undefined })}
+					>
+						<span className="brand-mark">PA</span>
+						<span>Personal Agent</span>
+					</button>
+					<div className="sidebar-tools">
 						<button
 							type="button"
-							className={`nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
-							onClick={() =>
-								navigateRoute({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })
-							}
+							className={`icon-btn ${searchOpen ? "active" : ""}`}
+							aria-label="搜索事项与交付"
+							onClick={() => {
+								setSearchOpen((v) => !v);
+								if (searchOpen) setSearchQuery("");
+							}}
 						>
-							<span>交付给我</span>
-							<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
+							<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+								<circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.7" />
+								<path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+							</svg>
 						</button>
 						<button
 							type="button"
-							className={`nav-btn ${activeTab === "chats" ? "active" : ""}`}
-							onClick={() =>
-								navigateRoute({
-									tab: "chats",
-									matterId: selectedMatterId ?? undefined,
-									isNewMatter: explicitNewMatterRef.current && selectedMatterId === null,
-								})
-							}
+							className="icon-btn"
+							aria-label="新建事项"
+							onClick={() => {
+								navigateRoute({ tab: "chats", isNewMatter: true });
+								composerRef.current?.focus();
+							}}
 						>
-							<span>和同事聊</span>
-							<span className="pill">{bootstrap?.matters.length ?? 0}</span>
-						</button>
-						<button
-							type="button"
-							className={`nav-btn ${activeTab === "team" ? "active" : ""}`}
-							onClick={() => navigateRoute({ tab: "team" })}
-						>
-							<span>我的团队</span>
-							<span className="pill">{bootstrap?.members.length ?? 0}</span>
-						</button>
-						<button
-							type="button"
-							className={`nav-btn ${activeTab === "materials" ? "active" : ""}`}
-							onClick={() => navigateRoute({ tab: "materials" })}
-						>
-							<span>已有资料</span>
-							<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+							<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+								<path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+							</svg>
 						</button>
 					</div>
+				</div>
 
-					<div className="colleagues-drawer">
-						<button type="button" className="colleagues-toggle" onClick={() => setColleaguesOpen((v) => !v)}>
-							<span>我的同事 · {bootstrap?.members.length ?? 0} 位</span>
-							<span>{colleaguesOpen ? "▾" : "▸"}</span>
-						</button>
-						{colleaguesOpen && bootstrap && (
-							<div className="colleague-list">
-								{bootstrap.members.map((member) => (
-									<button
-										key={member.id}
-										type="button"
-										className={`colleague-item ${selectedMemberId === member.id ? "active" : ""}`}
-										onClick={() => setSelectedMemberId(member.id)}
-									>
-										<div className="colleague-name">
-											{member.displayName} {member.isPrimaryContact ? "· 主联系" : ""}
-										</div>
-										<div className="colleague-sub">{member.model}</div>
-									</button>
-								))}
-							</div>
-						)}
+				{searchOpen && (
+					<div className="sidebar-search">
+						<input
+							className="input-field"
+							placeholder="搜索事项或交付标题..."
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+						/>
 					</div>
-				</aside>
+				)}
 
-				<main className="center-pane">
-					{errorBanner && (
-						<div className="approval-card banner-gap">
-							<div className="banner-row">
-								<span>
-									<strong>操作提示：</strong> {errorBanner}
+				<div className="roster-strip">
+					{bootstrap?.members.map((member, idx) => {
+						const theme = getBotTheme(idx);
+						const isSelected = selectedMemberId === member.id;
+						const isWorking = Object.entries(progressByMatter).some(([mId]) => {
+							const matter = bootstrap.matters.find((m) => m.id === mId);
+							return matter?.leadMemberId === member.id;
+						});
+						return (
+							<button
+								key={member.id}
+								type="button"
+								className={`roster-tile ${isSelected ? "active" : ""}`}
+								onClick={() => {
+									setSelectedMemberId((prev) => (prev === member.id ? "auto" : member.id));
+									if (activeTab !== "chats") {
+										navigateRoute({ tab: "chats", isNewMatter: true });
+									}
+									composerRef.current?.focus();
+								}}
+								title={`${member.displayName} · ${member.roleTitle}`}
+							>
+								<span className="roster-avatar-wrap">
+									<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" />
+									{isWorking && <span className="roster-working-dot" />}
 								</span>
-								<button type="button" className="btn-inline" onClick={() => setErrorBanner(null)}>
-									关闭
+								<span className="roster-name">{member.displayName}</span>
+							</button>
+						);
+					})}
+				</div>
+
+				<div className="matter-scroll">
+					<div className="sidebar-section-label">
+						<span>最近事项</span>
+						<span>{filteredMatters.length}</span>
+					</div>
+					{filteredMatters.length === 0 ? (
+						<div className="sidebar-empty">暂无事项，可在右侧直接布置任务</div>
+					) : (
+						filteredMatters.map((matter) => {
+							const prog = progressByMatter[matter.id];
+							const leadIdx = bootstrap?.members.findIndex((m) => m.id === matter.leadMemberId) ?? 0;
+							const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
+							const isActive = activeTab === "chats" && selectedMatterId === matter.id;
+							const previewLine = prog
+								? prog.label
+								: matter.status === "waiting_user"
+									? "等待你的确认"
+									: matter.summary || STATUS_LABELS[matter.status] || matter.status;
+
+							return (
+								<button
+									key={matter.id}
+									type="button"
+									className={`matter-item ${isActive ? "active" : ""}`}
+									onClick={() => navigateRoute({ tab: "chats", matterId: matter.id })}
+								>
+									<span className="matter-dot" style={{ background: theme.bg }}>
+										{prog && <span className="matter-dot-pulse" style={{ borderColor: theme.bg }} />}
+									</span>
+									<span className="matter-copy">
+										<span className="matter-title">{matter.title}</span>
+										<span className="matter-preview">{previewLine}</span>
+									</span>
+								</button>
+							);
+						})
+					)}
+				</div>
+
+				<div className="sidebar-footer">
+					<button
+						type="button"
+						className={`footer-nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
+						onClick={() =>
+							navigateRoute({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })
+						}
+					>
+						<span>交付成果库</span>
+						<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
+					</button>
+					<button
+						type="button"
+						className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
+						onClick={() => navigateRoute({ tab: "team" })}
+					>
+						<span>我的团队 · {bootstrap?.members.length ?? 0} 位</span>
+						<span className="pill">能力包</span>
+					</button>
+					<button
+						type="button"
+						className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
+						onClick={() => navigateRoute({ tab: "materials" })}
+					>
+						<span>项目仓库与资料</span>
+						<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+					</button>
+					<div className="sidebar-status-row">
+						<span className="muted-tiny">Pi RPC · kimi-for-coding</span>
+						<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>
+					</div>
+				</div>
+			</aside>
+
+			<main className="main-stage">
+				{activeTab === "chats" && (
+					<div className="chat-stage">
+						<header className="stage-header">
+							<div className="stage-header-left">
+								{selectedWorkspace ? (
+									<span className="pill">仓库：{selectedWorkspace.name}</span>
+								) : (
+									<span className="pill">通用工作区</span>
+								)}
+							</div>
+							<div className="stage-center-pill">
+								<BotFaceIcon bg={headerTheme.bg} size="sm" />
+								<span className="stage-center-name">
+									{headerContact ? headerContact.displayName : "AI 团队"}
+								</span>
+								{matterDetail && <span className="stage-center-matter">· {matterDetail.matter.title}</span>}
+							</div>
+							<div className="stage-header-right">
+								{matterDetail && (
+									<button
+										type="button"
+										className={`btn-pill-outline btn-xs ${collabOpen ? "active" : ""}`}
+										onClick={() => setCollabOpen((v) => !v)}
+									>
+										协作过程 (
+										{matterDetail.internalCollabMessages.length + matterDetail.noticeMessages.length})
+									</button>
+								)}
+								<button
+									type="button"
+									className="btn-pill-outline btn-xs"
+									onClick={() =>
+										navigateRoute({
+											tab: "deliverables",
+											deliverableId: activeChatDeliverable?.id ?? selectedDeliverableId ?? undefined,
+										})
+									}
+								>
+									成果库 ({bootstrap?.deliverables.length ?? 0})
 								</button>
 							</div>
-						</div>
-					)}
-					{noticeBanner && (
-						<div className="notice-card banner-gap">
-							<div className="banner-row">
-								<span>{noticeBanner}</span>
-								<button type="button" className="btn-inline" onClick={() => setNoticeBanner(null)}>
-									知道了
-								</button>
-							</div>
-						</div>
-					)}
+						</header>
 
-					{runningProgressList.length > 0 && (
-						<div className="progress-stack">
-							{runningProgressList.map(([mId, prog]) => {
-								const matterTitle = bootstrap?.matters.find((m) => m.id === mId)?.title ?? "正在推进的事项";
-								const started = progressStartedAt[mId] ?? nowMs;
-								const elapsed = Math.max(0, Math.floor((nowMs - started) / 1000));
-								return (
-									<ProgressCard
-										key={mId}
-										title={matterTitle}
-										progress={prog}
-										elapsedSeconds={elapsed}
-										onOpenChat={() => navigateRoute({ tab: "chats", matterId: mId })}
-									/>
-								);
-							})}
-						</div>
-					)}
-
-					{activeTab === "deliverables" && (
-						<>
-							<div className="pane-header">
-								<h1>交付给我</h1>
-								<p>成果和反馈留在一起，默认收起内部过程细节</p>
-							</div>
-
-							{activeDeliverable ? (
-								<div className="featured-card">
-									<div className="success-banner">
-										<span>✓ 已完成交付 · 由【{memberName(activeDeliverable.memberId)}】产出</span>
-										<div className="success-tags">
-											{workspaceName(activeDeliverableWorkspaceId) && (
-												<span className="pill">仓库：{workspaceName(activeDeliverableWorkspaceId)}</span>
-											)}
-											<span className="pill">{formatClockTime(activeDeliverable.createdAt)}</span>
-										</div>
-									</div>
-
-									<h2 className="featured-title">{activeDeliverable.title}</h2>
-									<div className="featured-meta">
-										<span>{memberName(activeDeliverable.memberId)} 交付</span>
-										<span>·</span>
-										<span>V{activeDeliverable.version}</span>
-										<span>·</span>
-										<span className="pill">{activeDeliverable.type}</span>
-									</div>
-
-									<div className="deliverable-body">
-										<MarkdownView content={activeDeliverable.contentOrPath} />
-									</div>
-
-									<div className="actions-row">
-										{viewUrl && (
-											<a className="btn-primary" href={viewUrl} target="_blank" rel="noreferrer">
-												打开查看 →
-											</a>
-										)}
-										<button
-											type="button"
-											className="btn-secondary"
-											onClick={() => {
-												setSelectedMatterId(activeDeliverable.matterId);
-												setComposerText(`修改「${activeDeliverable.title}」：`);
-												composerRef.current?.focus();
-											}}
-										>
-											继续修改
-										</button>
-										<button
-											type="button"
-											className="btn-secondary"
-											onClick={() => {
-												setMemoryDraftOpen((prev) => !prev);
-												if (!memoryDraftText) {
-													setMemoryDraftText(
-														`关于「${activeDeliverable.title}」的做法总结：${activeDeliverable.summary}`,
-													);
-												}
-											}}
-										>
-											{memoryDraftOpen ? "收起经验沉淀" : "沉淀为角色经验"}
-										</button>
-									</div>
-
-									{memoryDraftOpen && (
-										<div className="memory-draft-box">
-											<div className="memory-draft-head">
-												<strong>沉淀为「{memberName(activeDeliverable.memberId)}」的后续工作习惯</strong>
-												<select
-													className="select-sm"
-													value={memoryDraftScope}
-													onChange={(e) =>
-														setMemoryDraftScope(e.target.value as "role_general" | "project_private")
-													}
-												>
-													<option value="role_general">角色通用经验（跨项目可用）</option>
-													<option value="project_private">当前项目规范（仅当前仓库生效）</option>
-												</select>
-											</div>
-											<div className="feedback-row">
-												<input
-													className="input-field"
-													value={memoryDraftText}
-													onChange={(e) => setMemoryDraftText(e.target.value)}
-													placeholder="例如：交付工程文档时优先列出可直接执行的启动命令..."
-												/>
-												<button
-													type="button"
-													className="btn-primary"
-													onClick={() => void handleSaveMemoryFromDeliverable()}
-												>
-													保存经验
-												</button>
-											</div>
-										</div>
-									)}
-
-									{siblingVersions.length > 1 && (
-										<div className="version-bar">
-											<span>此前版本</span>
-											{siblingVersions.map((ver) => (
-												<button
-													key={ver.id}
-													type="button"
-													className={`version-chip ${ver.id === activeDeliverable.id ? "active" : ""}`}
-													onClick={() => navigateRoute({ tab: "deliverables", deliverableId: ver.id })}
-												>
-													V{ver.version}
-												</button>
-											))}
-										</div>
-									)}
-
-									<div className="feedback-row">
-										<input
-											className="input-field"
-											value={feedbackText}
-											onChange={(e) => setFeedbackText(e.target.value)}
-											placeholder={
-												activeDeliverable.feedback
-													? `上次反馈：${activeDeliverable.feedback}`
-													: "记录这条交付的验收反馈..."
-											}
-										/>
-										<button
-											type="button"
-											className="btn-secondary"
-											onClick={() => void handleDeliverableFeedback()}
-										>
-											保存反馈
-										</button>
-									</div>
-								</div>
-							) : (
-								<div className="featured-card onboarding-card">
-									<div className="onboarding-head">
-										<h2>3 步开始让 AI 团队为你工作</h2>
-										<p>
-											选好项目仓库后，点下面任意一个示范任务即可立即开始；或者在右下角用自然语言直接向团队布置工作。
-										</p>
-									</div>
-
-									<div className="onboarding-steps">
-										<div className="onboarding-step">
-											<div className="step-num">1</div>
-											<div className="step-body">
-												<div className="step-title">
-													团队已就绪（{bootstrap?.members.length ?? 0} 位成员）
-												</div>
-												<div className="step-desc">
-													默认主联系人：{primaryContact?.displayName ?? "产品经理"}
-													；发送任务时会自动按事找人，也可以随时调整团队成员。
-												</div>
-											</div>
-											<button
-												type="button"
-												className="btn-secondary"
-												onClick={() => navigateRoute({ tab: "team" })}
-											>
-												管理团队
+						<div className="chat-stream-scroll">
+							<div className="chat-stream-inner">
+								{errorBanner && (
+									<div className="approval-card banner-gap">
+										<div className="banner-row">
+											<span>
+												<strong>操作提示：</strong> {errorBanner}
+											</span>
+											<button type="button" className="btn-inline" onClick={() => setErrorBanner(null)}>
+												关闭
 											</button>
 										</div>
+									</div>
+								)}
+								{noticeBanner && (
+									<div className="notice-card banner-gap">
+										<div className="banner-row">
+											<span>{noticeBanner}</span>
+											<button type="button" className="btn-inline" onClick={() => setNoticeBanner(null)}>
+												知道了
+											</button>
+										</div>
+									</div>
+								)}
 
-										<div className="onboarding-step">
-											<div className="step-num">2</div>
-											<div className="step-body">
-												<div className="step-title">选择目标项目仓库</div>
-												<div className="step-desc">
-													{bootstrap && bootstrap.workspaces.length > 0
-														? "点选下方已绑定的仓库，任务会在对应目录中隔离执行："
-														: "当前还没有绑定项目仓库，可先绑定一个本地 Git 仓库，或不绑仓库直接对话。"}
+								{collabOpen && matterDetail && (
+									<div className="collab-drawer-card">
+										<div className="banner-row">
+											<strong>内部协作交接与过程通知</strong>
+											<button type="button" className="btn-inline" onClick={() => setCollabOpen(false)}>
+												收起
+											</button>
+										</div>
+										{matterDetail.internalCollabMessages.length + matterDetail.noticeMessages.length === 0 ? (
+											<p className="muted-hint">当前事项暂无内部协作记录。</p>
+										) : (
+											<div className="collab-log">
+												{[...matterDetail.internalCollabMessages, ...matterDetail.noticeMessages].map(
+													(entry) => (
+														<div key={entry.id}>
+															<strong>[{entry.channel}]</strong> {memberName(entry.senderId)}：
+															{entry.content}
+														</div>
+													),
+												)}
+											</div>
+										)}
+									</div>
+								)}
+
+								{!selectedMatterId || (!matterDetail && !activeMatterProgress) ? (
+									<div className="welcome-hero">
+										<BotFaceIcon bg={headerTheme.bg} size="lg" />
+										<h2>{selectedMemberId === "auto" ? "有什么可以帮你？" : memberName(selectedMemberId)}</h2>
+										<p>
+											{selectedMemberId === "auto"
+												? "直接描述目标，系统会自动分配最合适的同事推进"
+												: (templateByRoleId
+														.get(headerContact?.templateId ?? "")
+														?.responsibilities.split("\n")[0] ?? "直接输入任务开始协作")}
+										</p>
+									</div>
+								) : (
+									<>
+										{matterDetail?.userMessages.map((msg) => (
+											<div
+												key={msg.id}
+												className={`stream-msg ${msg.senderType === "user" ? "from-user" : "from-member"}`}
+											>
+												{msg.senderType === "member" && (
+													<div className="stream-sender">
+														{memberName(msg.senderId)} · {formatClockTime(msg.createdAt)}
+													</div>
+												)}
+												<div className={`stream-bubble ${msg.senderType === "user" ? "user" : "member"}`}>
+													{msg.senderType === "member" ? (
+														<MarkdownView content={msg.content} />
+													) : (
+														msg.content
+													)}
 												</div>
-												{bootstrap && bootstrap.workspaces.length > 0 && (
-													<div className="chip-row">
-														{bootstrap.workspaces.map((ws) => (
-															<button
-																key={ws.id}
-																type="button"
-																className={`choice-chip ${selectedWorkspaceId === ws.id ? "active" : ""}`}
-																onClick={() => setSelectedWorkspaceId(ws.id)}
-															>
-																{ws.name}
-															</button>
-														))}
+											</div>
+										))}
+
+										{activeDialogs.map((dlg) => (
+											<div key={dlg.id} className="inline-approval-card">
+												<div className="approval-eyebrow">需要你确认 · 来自【{dlg.memberName}】</div>
+												<h4>{dlg.request.title}</h4>
+												{dlg.request.message && <p>{dlg.request.message}</p>}
+												{dlg.request.method === "confirm" && (
+													<div className="approval-actions">
 														<button
 															type="button"
-															className={`choice-chip ${selectedWorkspaceId === "" ? "active" : ""}`}
-															onClick={() => setSelectedWorkspaceId("")}
+															className="btn-pill-dark"
+															onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
 														>
-															不绑定仓库
+															允许继续
+														</button>
+														<button
+															type="button"
+															className="btn-pill-outline"
+															onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
+														>
+															拒绝
+														</button>
+													</div>
+												)}
+												{dlg.request.method === "select" && dlg.request.options && (
+													<div className="approval-actions">
+														{dlg.request.options.map((opt) => (
+															<button
+																key={opt}
+																type="button"
+																className="btn-pill-outline"
+																onClick={() => void respondToDialog(dlg.id, { value: opt })}
+															>
+																{opt}
+															</button>
+														))}
+													</div>
+												)}
+												{(dlg.request.method === "input" || dlg.request.method === "editor") && (
+													<div className="feedback-row">
+														<input
+															className="input-field"
+															value={dialogInput}
+															onChange={(e) => setDialogInput(e.target.value)}
+															placeholder={dlg.request.placeholder ?? "输入答复..."}
+														/>
+														<button
+															type="button"
+															className="btn-pill-dark"
+															onClick={() => {
+																void respondToDialog(dlg.id, { value: dialogInput });
+																setDialogInput("");
+															}}
+														>
+															提交
 														</button>
 													</div>
 												)}
 											</div>
-											<button
-												type="button"
-												className="btn-secondary"
-												onClick={() => navigateRoute({ tab: "materials" })}
-											>
-												+ 绑定仓库
-											</button>
-										</div>
+										))}
 
-										<div className="onboarding-step onboarding-step-col">
-											<div className="onboarding-step-top">
-												<div className="step-num">3</div>
-												<div className="step-body">
-													<div className="step-title">一键试跑或填入需求</div>
-													<div className="step-desc">
-														任务派发后，页面顶部与右侧对话栏会实时展示执行进度；完成后成果会自动归拢到这里。
-													</div>
+										{activeChatDeliverable && (
+											<div className="deliverable-inline-pill">
+												<span className="deliverable-pill-info">
+													<span className="deliverable-pill-check">✓</span>
+													<span>
+														已归档至成果库 · <strong>V{activeChatDeliverable.version}</strong>
+													</span>
+												</span>
+												<span className="deliverable-pill-actions">
+													{previewUrlFor(activeChatDeliverable) && (
+														<a
+															className="btn-inline"
+															href={previewUrlFor(activeChatDeliverable)!}
+															target="_blank"
+															rel="noreferrer"
+														>
+															打开预览 →
+														</a>
+													)}
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() =>
+															navigateRoute({
+																tab: "deliverables",
+																deliverableId: activeChatDeliverable.id,
+															})
+														}
+													>
+														在成果库查看
+													</button>
+												</span>
+											</div>
+										)}
+
+										{streamingDelta && (
+											<div className="stream-msg from-member">
+												<div className="stream-sender">正在整理回复...</div>
+												<div className="stream-bubble member">
+													<MarkdownView content={streamingDelta} />
 												</div>
 											</div>
+										)}
 
-											<div className="starter-grid">
-												{starterTasks.map((task) => (
-													<div key={task.id} className="starter-card">
-														<div className="starter-role">{task.roleLabel}</div>
-														<div className="starter-title">{task.title}</div>
-														<div className="starter-desc">{task.desc}</div>
-														<div className="starter-actions">
-															<button
-																type="button"
-																className="btn-primary btn-sm"
-																disabled={submitting}
-																onClick={() =>
-																	void dispatchPromptText(task.prompt, {
-																		preferredMemberId: task.memberId,
-																		forceNewMatter: true,
-																	})
-																}
-															>
-																立即执行
-															</button>
-															<button
-																type="button"
-																className="btn-secondary btn-sm"
-																onClick={() => {
-																	if (task.memberId) setSelectedMemberId(task.memberId);
-																	setSelectedMatterId(null);
-																	setComposerText(task.prompt);
-																	composerRef.current?.focus();
-																}}
-															>
-																填入微调
-															</button>
-														</div>
-													</div>
-												))}
-											</div>
+										{activeMatterProgress && selectedMatterId && (
+											<ExploringStatus
+												progress={activeMatterProgress}
+												elapsedSeconds={Math.max(
+													0,
+													Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000),
+												)}
+												onAbort={() => handleAbortMatter(selectedMatterId)}
+											/>
+										)}
+									</>
+								)}
+								<div ref={messagesEndRef} />
+							</div>
+						</div>
+
+						<div className="composer-dock">
+							<div className="composer-dock-inner">
+								{starterMenuOpen && (
+									<div className="quick-prompts-popover">
+										<div className="banner-row">
+											<strong>快速插入示范需求</strong>
+											<button type="button" className="btn-inline" onClick={() => setStarterMenuOpen(false)}>
+												关闭
+											</button>
+										</div>
+										<div className="quick-prompts-list">
+											{starterTasks.map((task) => (
+												<button
+													key={task.id}
+													type="button"
+													className="quick-prompt-item"
+													onClick={() => {
+														if (task.memberId) setSelectedMemberId(task.memberId);
+														setComposerText(task.prompt);
+														setStarterMenuOpen(false);
+														composerRef.current?.focus();
+													}}
+												>
+													<span className="starter-role">{task.roleLabel}</span>
+													<span>{task.title}</span>
+												</button>
+											))}
 										</div>
 									</div>
+								)}
+
+								<div className="composer-meta-bar">
+									<select
+										className="select-pill"
+										value={selectedWorkspaceId}
+										onChange={(e) => {
+											const nextId = e.target.value;
+											setSelectedWorkspaceId(nextId);
+											try {
+												window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
+											} catch {
+												// Ignore storage access errors.
+											}
+											if (selectedMatterId) {
+												void updateMatterWorkspace(selectedMatterId, nextId || null)
+													.then(async () => {
+														const wsLabel = nextId ? (workspaceName(nextId) ?? nextId) : "不绑定仓库";
+														setNoticeBanner(`已切换当前事项仓库为「${wsLabel}」`);
+														await refreshBootstrap();
+														await refreshDetail(selectedMatterId);
+													})
+													.catch((err: unknown) => {
+														setErrorBanner(err instanceof Error ? err.message : String(err));
+													});
+											}
+										}}
+									>
+										<option value="">不绑定仓库</option>
+										{bootstrap?.workspaces.map((ws) => (
+											<option key={ws.id} value={ws.id}>
+												仓库：{ws.name}
+											</option>
+										))}
+									</select>
+									<select
+										className="select-pill"
+										value={selectedMemberId}
+										onChange={(e) => setSelectedMemberId(e.target.value)}
+									>
+										<option value="auto">按事找人（主联系：{headerContact?.displayName ?? "自动"}）</option>
+										{bootstrap?.members.map((m) => (
+											<option key={m.id} value={m.id}>
+												指定：{m.displayName}
+											</option>
+										))}
+									</select>
+									{selectedMatterId && (
+										<button
+											type="button"
+											className="select-pill action"
+											onClick={() => {
+												navigateRoute({ tab: "chats", isNewMatter: true });
+												composerRef.current?.focus();
+											}}
+										>
+											+ 切到新事项
+										</button>
+									)}
+								</div>
+
+								<div className="pill-composer">
+									<button
+										type="button"
+										className="pill-plus-btn"
+										aria-label="插入示范任务"
+										onClick={() => setStarterMenuOpen((v) => !v)}
+									>
+										+
+									</button>
+									<textarea
+										ref={composerRef}
+										rows={1}
+										className="pill-textarea"
+										value={composerText}
+										onChange={(e) => setComposerText(e.target.value)}
+										onKeyDown={handleComposerKeyDown}
+										placeholder={
+											selectedMatterId
+												? "继续对话，回答问题或提出修改（Enter 发送）..."
+												: "向你的 AI 团队布置任务（Enter 发送）..."
+										}
+									/>
+									{activeMatterProgress && selectedMatterId && (
+										<button
+											type="button"
+											className="pill-stop-btn"
+											aria-label="停止执行"
+											title="停止当前执行"
+											onClick={() => handleAbortMatter(selectedMatterId)}
+										>
+											■
+										</button>
+									)}
+									<button
+										type="button"
+										className="pill-send-btn"
+										aria-label="发送"
+										disabled={submitting || !composerText.trim()}
+										onClick={() => void handleSendPrompt()}
+									>
+										{submitting ? "…" : "↑"}
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
+
+				{activeTab === "deliverables" && (
+					<div className="subpage-scroll">
+						<div className="subpage-inner">
+							<div className="pane-header-row">
+								<div className="pane-header">
+									<h1>交付成果库</h1>
+									<p>按版本归拢完成的成果与反馈，也可随时回到对话继续修改</p>
+								</div>
+								<button
+									type="button"
+									className="btn-pill-dark"
+									onClick={() => {
+										navigateRoute({ tab: "chats", isNewMatter: true });
+										composerRef.current?.focus();
+									}}
+								>
+									+ 布置新任务
+								</button>
+							</div>
+
+							{activeDeliverable ? (
+								<DeliverableCard
+									deliverable={activeDeliverable}
+									siblingVersions={siblingVersionsFor(activeDeliverable)}
+									memberName={memberName(activeDeliverable.memberId)}
+									workspaceName={workspaceName(
+										bootstrap?.matters.find((m) => m.id === activeDeliverable.matterId)?.workspaceId ?? null,
+									)}
+									viewUrl={previewUrlFor(activeDeliverable)}
+									feedbackText={feedbackText}
+									onFeedbackTextChange={setFeedbackText}
+									onSubmitFeedback={() => void handleDeliverableFeedback(activeDeliverable.id)}
+									onSelectVersion={(id) => navigateRoute({ tab: "deliverables", deliverableId: id })}
+									onRequestRevision={() => {
+										navigateRoute({ tab: "chats", matterId: activeDeliverable.matterId });
+										setComposerText(`修改「${activeDeliverable.title}」：`);
+									}}
+									onSaveMemory={(content, scope) =>
+										handleSaveMemoryForDeliverable(activeDeliverable, content, scope)
+									}
+								/>
+							) : (
+								<div className="deliverable-card">
+									<p style={{ margin: 0, color: "var(--text-secondary)" }}>
+										暂无交付记录。回到对话工作台发送需求或点选示范任务，完成后成果会自动归拢到这里。
+									</p>
 								</div>
 							)}
 
-							{bootstrap && bootstrap.deliverables.length > 1 && (
+							{filteredDeliverables.length > 1 && (
 								<div className="list-section">
-									{bootstrap.deliverables
+									{filteredDeliverables
 										.filter((d) => d.id !== activeDeliverable?.id)
 										.map((item) => (
 											<button
@@ -1048,66 +1510,22 @@ export function App() {
 									))}
 								</div>
 							)}
-						</>
-					)}
+						</div>
+					</div>
+				)}
 
-					{activeTab === "chats" && (
-						<>
-							<div className="pane-header">
-								<h1>和同事聊</h1>
-								<p>按事项组织跨项目推进，不把微信式群聊信息直接堆给用户</p>
-							</div>
-							{bootstrap && bootstrap.matters.length === 0 ? (
-								<div className="featured-card">
-									<p style={{ margin: 0, color: "var(--text-secondary)" }}>
-										还没有正在推进的事项。在右侧输入框直接描述需求，或回到「交付给我」选择一个示范任务即可开始。
-									</p>
-								</div>
-							) : (
-								<div className="list-section">
-									{bootstrap?.matters.map((matter) => {
-										const prog = progressByMatter[matter.id];
-										return (
-											<button
-												type="button"
-												key={matter.id}
-												className="compact-row"
-												onClick={() => navigateRoute({ tab: "chats", matterId: matter.id })}
-												style={{
-													borderColor: matter.id === selectedMatterId ? "var(--accent)" : undefined,
-												}}
-											>
-												<div>
-													<div style={{ fontWeight: 600, fontSize: 14 }}>{matter.title}</div>
-													<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-														牵头：{matter.leadMemberId ? memberName(matter.leadMemberId) : "自动路由"}
-														{prog ? ` · ${prog.label}` : ""}
-													</div>
-												</div>
-												<span className="pill">
-													{prog
-														? STAGE_LABELS[prog.stage]
-														: (STATUS_LABELS[matter.status] ?? matter.status)}
-												</span>
-											</button>
-										);
-									})}
-								</div>
-							)}
-						</>
-					)}
-
-					{activeTab === "team" && (
-						<>
+				{activeTab === "team" && (
+					<div className="subpage-scroll">
+						<div className="subpage-inner wide">
 							<div className="pane-header-row">
 								<div className="pane-header">
 									<h1>我的团队</h1>
-									<p>查看角色分工与积累经验，也可以新增自定义角色，或导入导出脱敏角色能力包</p>
+									<p>查看角色分工与积累经验，支持新增自定义角色，或导入导出脱敏角色能力包</p>
 								</div>
 								<div className="actions-row" style={{ marginTop: 0 }}>
 									<button
 										type="button"
-										className="btn-primary"
+										className="btn-pill-dark"
 										onClick={() => {
 											setShowAddMember((v) => !v);
 											setShowImportMember(false);
@@ -1117,7 +1535,7 @@ export function App() {
 									</button>
 									<button
 										type="button"
-										className="btn-secondary"
+										className="btn-pill-outline"
 										onClick={() => {
 											setShowImportMember((v) => !v);
 											setShowAddMember(false);
@@ -1129,7 +1547,7 @@ export function App() {
 							</div>
 
 							{showAddMember && (
-								<div className="featured-card form-card">
+								<div className="deliverable-card form-card">
 									<h3 className="section-title">组建新角色</h3>
 									<div className="form-grid">
 										<input
@@ -1178,14 +1596,14 @@ export function App() {
 										<div style={{ display: "flex", gap: 8 }}>
 											<button
 												type="button"
-												className="btn-secondary"
+												className="btn-pill-outline"
 												onClick={() => setShowAddMember(false)}
 											>
 												取消
 											</button>
 											<button
 												type="button"
-												className="btn-primary"
+												className="btn-pill-dark"
 												onClick={() => void handleCreateMember()}
 											>
 												加入团队
@@ -1196,7 +1614,7 @@ export function App() {
 							)}
 
 							{showImportMember && (
-								<div className="featured-card form-card">
+								<div className="deliverable-card form-card">
 									<h3 className="section-title">导入团队成员能力包（.md）</h3>
 									<p className="muted-hint">
 										支持粘贴或选择导出的角色 Markdown 模板。导入后立即注册到当前团队，不包含他人私有项目记忆。
@@ -1213,12 +1631,12 @@ export function App() {
 										onChange={(e) => setImportMarkdown(e.target.value)}
 									/>
 									<div className="actions-row">
-										<button type="button" className="btn-primary" onClick={() => void handleImportMember()}>
+										<button type="button" className="btn-pill-dark" onClick={() => void handleImportMember()}>
 											确认导入
 										</button>
 										<button
 											type="button"
-											className="btn-secondary"
+											className="btn-pill-outline"
 											onClick={() => setShowImportMember(false)}
 										>
 											取消
@@ -1228,7 +1646,7 @@ export function App() {
 							)}
 
 							{exportedPackage && (
-								<div className="featured-card form-card">
+								<div className="deliverable-card form-card">
 									<div className="banner-row">
 										<h3 className="section-title">已导出脱敏能力包：{exportedPackage.filename}</h3>
 										<button type="button" className="btn-inline" onClick={() => setExportedPackage(null)}>
@@ -1245,12 +1663,12 @@ export function App() {
 										value={exportedPackage.markdown}
 									/>
 									<div className="actions-row">
-										<button type="button" className="btn-primary" onClick={handleDownloadExportedPackage}>
+										<button type="button" className="btn-pill-dark" onClick={handleDownloadExportedPackage}>
 											下载 .md 文件
 										</button>
 										<button
 											type="button"
-											className="btn-secondary"
+											className="btn-pill-outline"
 											onClick={() => {
 												void navigator.clipboard.writeText(exportedPackage.markdown);
 												setNoticeBanner("能力包 Markdown 已复制到剪贴板");
@@ -1263,15 +1681,16 @@ export function App() {
 							)}
 
 							<div className="team-grid">
-								{bootstrap?.members.map((member) => {
+								{bootstrap?.members.map((member, idx) => {
 									const tpl = templateByRoleId.get(member.templateId);
 									const memories = bootstrap.memoriesByMember[member.id] ?? [];
 									const isExpanded = expandedMemoryMemberId === member.id;
+									const theme = getBotTheme(idx);
 									return (
 										<div key={member.id} className="member-card">
 											<div className="member-card-top">
 												<div className="member-ident">
-													<div className="member-avatar">{member.displayName.slice(0, 1)}</div>
+													<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" />
 													<div>
 														<div className="member-name-row">
 															<strong>{member.displayName}</strong>
@@ -1307,11 +1726,10 @@ export function App() {
 											<div className="actions-row">
 												<button
 													type="button"
-													className="btn-primary btn-sm"
+													className="btn-pill-dark btn-xs"
 													onClick={() => {
 														setSelectedMemberId(member.id);
-														explicitNewMatterRef.current = true;
-														setSelectedMatterId(null);
+														navigateRoute({ tab: "chats", isNewMatter: true });
 														composerRef.current?.focus();
 													}}
 												>
@@ -1320,7 +1738,7 @@ export function App() {
 												{!member.isPrimaryContact && (
 													<button
 														type="button"
-														className="btn-secondary btn-sm"
+														className="btn-pill-outline btn-xs"
 														onClick={() => void handleSetPrimary(member.id)}
 													>
 														设为主联系
@@ -1328,7 +1746,7 @@ export function App() {
 												)}
 												<button
 													type="button"
-													className="btn-secondary btn-sm"
+													className="btn-pill-outline btn-xs"
 													onClick={() => void handleExportMember(member.id)}
 												>
 													导出能力包
@@ -1358,17 +1776,19 @@ export function App() {
 									);
 								})}
 							</div>
-						</>
-					)}
+						</div>
+					</div>
+				)}
 
-					{activeTab === "materials" && (
-						<>
+				{activeTab === "materials" && (
+					<div className="subpage-scroll">
+						<div className="subpage-inner">
 							<div className="pane-header">
-								<h1>已有资料与工作区</h1>
+								<h1>已有资料与项目仓库</h1>
 								<p>仓库自身维护的信息以仓库为准；角色私有记忆与可分享模板物理隔离</p>
 							</div>
 
-							<div className="featured-card">
+							<div className="deliverable-card">
 								<h3 style={{ margin: "0 0 10px", fontSize: 15 }}>登记项目 Git 工作区</h3>
 								<div className="feedback-row">
 									<input
@@ -1383,7 +1803,7 @@ export function App() {
 										value={newWsPath}
 										onChange={(e) => setNewWsPath(e.target.value)}
 									/>
-									<button type="button" className="btn-primary" onClick={() => void handleAddWorkspace()}>
+									<button type="button" className="btn-pill-dark" onClick={() => void handleAddWorkspace()}>
 										绑定
 									</button>
 								</div>
@@ -1402,226 +1822,21 @@ export function App() {
 										</div>
 										<button
 											type="button"
-											className="btn-secondary btn-sm"
+											className="btn-pill-outline btn-xs"
 											onClick={() => {
 												setSelectedWorkspaceId(ws.id);
-												setSelectedMatterId(null);
-												explicitNewMatterRef.current = true;
-												navigateRoute({
-													tab: "deliverables",
-													deliverableId: selectedDeliverableId ?? undefined,
-												});
-												composerRef.current?.focus();
+												navigateRoute({ tab: "chats", isNewMatter: true });
 											}}
 										>
-											{selectedWorkspaceId === ws.id ? "当前已选中" : "在此仓库派活"}
+											{selectedWorkspaceId === ws.id ? "当前已选 · 新建任务 →" : "在此仓库派活 →"}
 										</button>
 									</div>
 								))}
 							</div>
-						</>
-					)}
-				</main>
-
-				<aside className="right-pane">
-					<div className="contact-header">
-						<div>
-							<div className="contact-title">
-								{primaryContact ? `${primaryContact.displayName} · ${primaryContact.roleTitle}` : "主要联系人"}
-							</div>
-							<div className="contact-sub">
-								{matterDetail ? `当前事项：${matterDetail.matter.title}` : "新事项：发送后将自动按事找人"}
-							</div>
-						</div>
-						<select
-							className="select-sm"
-							value={selectedMemberId}
-							onChange={(e) => setSelectedMemberId(e.target.value)}
-						>
-							<option value="auto">按事找人</option>
-							{bootstrap?.members.map((m) => (
-								<option key={m.id} value={m.id}>
-									指定：{m.displayName}
-								</option>
-							))}
-						</select>
-					</div>
-
-					<div className="messages-scroll">
-						{activeMatterProgress && selectedMatterId && (
-							<ProgressCard
-								title="正在执行中"
-								progress={activeMatterProgress}
-								elapsedSeconds={Math.max(
-									0,
-									Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000),
-								)}
-							/>
-						)}
-
-						{activeDialogs.map((dlg) => (
-							<div key={dlg.id} className="approval-card">
-								<h4>
-									{dlg.memberName} 请求确认：{dlg.request.title}
-								</h4>
-								{dlg.request.message && <p style={{ margin: "0 0 8px" }}>{dlg.request.message}</p>}
-								{dlg.request.method === "confirm" && (
-									<div style={{ display: "flex", gap: 8 }}>
-										<button
-											type="button"
-											className="btn-primary"
-											onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
-										>
-											允许继续
-										</button>
-										<button
-											type="button"
-											className="btn-secondary"
-											onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
-										>
-											拒绝
-										</button>
-									</div>
-								)}
-								{dlg.request.method === "select" && dlg.request.options && (
-									<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-										{dlg.request.options.map((opt) => (
-											<button
-												key={opt}
-												type="button"
-												className="btn-secondary"
-												onClick={() => void respondToDialog(dlg.id, { value: opt })}
-											>
-												{opt}
-											</button>
-										))}
-									</div>
-								)}
-								{(dlg.request.method === "input" || dlg.request.method === "editor") && (
-									<div style={{ display: "flex", gap: 6 }}>
-										<input
-											className="input-field"
-											value={dialogInput}
-											onChange={(e) => setDialogInput(e.target.value)}
-											placeholder={dlg.request.placeholder ?? "输入答复..."}
-										/>
-										<button
-											type="button"
-											className="btn-primary"
-											onClick={() => {
-												void respondToDialog(dlg.id, { value: dialogInput });
-												setDialogInput("");
-											}}
-										>
-											提交
-										</button>
-									</div>
-								)}
-							</div>
-						))}
-
-						{(!matterDetail || matterDetail.userMessages.length === 0) && !activeMatterProgress && (
-							<div className="chat-empty-hint">
-								<div className="chat-empty-title">准备就绪</div>
-								<p>
-									在下方输入你的需求（支持 <strong>Enter 发送</strong>，Shift+Enter
-									换行）。系统会根据任务内容自动路由最合适的同事，在右侧实时汇报进度，并在完成后将最终结果归拢到左侧「交付给我」。
-								</p>
-							</div>
-						)}
-
-						{matterDetail?.userMessages.map((msg) => (
-							<div key={msg.id} className={`bubble ${msg.senderType === "user" ? "user" : "member"}`}>
-								<div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
-									{msg.senderType === "user" ? "我" : memberName(msg.senderId)} ·{" "}
-									{formatClockTime(msg.createdAt)}
-								</div>
-								{msg.senderType === "member" ? <MarkdownView content={msg.content} /> : msg.content}
-							</div>
-						))}
-
-						{streamingDelta && (
-							<div className="bubble member">
-								<div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>正在整理回复...</div>
-								<MarkdownView content={streamingDelta} />
-							</div>
-						)}
-					</div>
-
-					<div className="collab-collapse">
-						<button type="button" className="collab-toggle" onClick={() => setCollabOpen((v) => !v)}>
-							协作对话与过程通知（
-							{(matterDetail?.internalCollabMessages.length ?? 0) + (matterDetail?.noticeMessages.length ?? 0)}）{" "}
-							{collabOpen ? "▾" : "▸"}
-						</button>
-						{collabOpen && matterDetail && (
-							<div className="collab-log">
-								{[...matterDetail.internalCollabMessages, ...matterDetail.noticeMessages].map((entry) => (
-									<div key={entry.id}>
-										<strong>[{entry.channel}]</strong> {memberName(entry.senderId)}：{entry.content}
-									</div>
-								))}
-							</div>
-						)}
-					</div>
-
-					<div className="composer">
-						<div className="composer-controls">
-							<select
-								className="select-sm"
-								value={selectedWorkspaceId}
-								onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-							>
-								<option value="">不绑定仓库</option>
-								{bootstrap?.workspaces.map((ws) => (
-									<option key={ws.id} value={ws.id}>
-										仓库：{ws.name}
-									</option>
-								))}
-							</select>
-							<button
-								type="button"
-								className={`btn-secondary btn-sm ${selectedMatterId === null ? "btn-active" : ""}`}
-								onClick={() => {
-									explicitNewMatterRef.current = true;
-									setSelectedMatterId(null);
-									if (activeTab === "chats") {
-										navigateRoute({ tab: "chats", isNewMatter: true });
-									}
-								}}
-							>
-								{selectedMatterId === null ? "新事项模式" : "+ 切到新事项"}
-							</button>
-							<span className="composer-target">
-								{selectedMemberId === "auto" ? "自动找人" : `指定：${memberName(selectedMemberId)}`}
-							</span>
-						</div>
-						<div className="composer-row">
-							<textarea
-								ref={composerRef}
-								rows={2}
-								className="composer-input"
-								value={composerText}
-								onChange={(e) => setComposerText(e.target.value)}
-								onKeyDown={handleComposerKeyDown}
-								placeholder={
-									selectedMatterId
-										? "继续补充要求或修改意见（Enter 发送）..."
-										: "描述要交付的事，如：帮我梳理这个项目的模块结构（Enter 发送）..."
-								}
-							/>
-							<button
-								type="button"
-								className="btn-primary"
-								disabled={submitting || !composerText.trim()}
-								onClick={() => void handleSendPrompt()}
-							>
-								{submitting ? "派发中" : "发送"}
-							</button>
 						</div>
 					</div>
-				</aside>
-			</div>
+				)}
+			</main>
 		</div>
 	);
 }

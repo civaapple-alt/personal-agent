@@ -21,7 +21,7 @@
 | **TypeScript** | 严格模式（`strict: true`、`erasableSyntaxOnly: true`、`verbatimModuleSyntax: true`） | 支持 Node 原生 TS 运行及 `dist/` 编译输出 |
 | **Linter / Formatter** | `@biomejs/biome` `2.3.5` | 对齐 Pi 的 `biome.json`（Tab 缩进、120 列宽、`useConst`） |
 | **测试框架** | `node:test` + `node:assert/strict` | 零额外依赖，与 Pi 脚本及单元测试风格一致 |
-| **前端工作台（阶段三目标）** | `React 19.3.x` + `@earendil-works/elanor-react` / `design-tokens`（对齐 Pi `apps/p2`） | 配合 `marked` / `lowlight` / `grok-mermaid` 渲染交付预览与 V4 界面 |
+| **前端工作台（阶段三已实现）** | `React 19.3.0` + `esbuild` + 原生 CSS（Grok Bot 风格双栏布局） | 内置 `hashRouter.ts`、`MarkdownView.tsx` 与 SSE 实时流渲染 |
 
 ## 目录结构
 
@@ -52,7 +52,7 @@ personal-agent/
 │   │   └── pi-rpc-worker.ts        # PiRpcWorker（并发关联、agent_settled、双向 UI 确认）
 │   └── demo/
 │       └── rpc-smoke.ts            # 阶段一实机 RPC 冒烟脚本
-├── web/                            # 阶段三 React 19.3 V4 三栏工作台前端
+├── web/                            # 阶段三 React 19.3 Grok-Bot 风格双栏工作台前端（HashRouter + MarkdownView）
 ├── scripts/
 │   └── build-web.mjs               # 基于 esbuild 的前端构建脚本
 ├── test/
@@ -95,5 +95,5 @@ npm run demo:rpc
 - [x] 技术架构与四阶段规划落盘（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
 - [x] **阶段一**：`PiRpcWorker` 闭环实现、Biome + TS 严格基线、单元测试与实机 `kimi-for-coding` 冒烟验证
 - [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
-- [x] **阶段三**：V4 工作台前端（React 19）、HTTP/SSE 实时服务、阻塞审批卡片与独立服务预览链接
+- [x] **阶段三**：Grok-Bot 风格双栏工作台（React 19 + HashRouter + MarkdownView）、HTTP/SSE 实时流与任务中断、团队成员与能力包导入/导出、仓库热切换及独立服务预览链接
 - [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享

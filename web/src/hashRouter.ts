@@ -10,7 +10,7 @@ export interface HashRoute {
 export function parseHashRoute(rawHash: string): HashRoute {
 	const cleaned = rawHash.replace(/^#\/?/, "").trim();
 	if (!cleaned) {
-		return { tab: "deliverables" };
+		return { tab: "chats" };
 	}
 	const parts = cleaned.split("/");
 	const segment0 = parts[0] ? decodeURIComponent(parts[0]) : "";
@@ -31,7 +31,7 @@ export function parseHashRoute(rawHash: string): HashRoute {
 	if (segment0 === "materials") {
 		return { tab: "materials" };
 	}
-	return { tab: "deliverables" };
+	return { tab: "chats" };
 }
 
 export function formatHashRoute(route: HashRoute): string {

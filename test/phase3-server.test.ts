@@ -425,8 +425,8 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 });
 
 test("hashRouter parses and formats deliverable, chat, team, and materials hash routes", () => {
-	assert.deepEqual(parseHashRoute(""), { tab: "deliverables" });
-	assert.deepEqual(parseHashRoute("#/unknown"), { tab: "deliverables" });
+	assert.deepEqual(parseHashRoute(""), { tab: "chats" });
+	assert.deepEqual(parseHashRoute("#/unknown"), { tab: "chats" });
 	assert.deepEqual(parseHashRoute("#/deliverables/deliv-1"), {
 		tab: "deliverables",
 		deliverableId: "deliv-1",
@@ -448,4 +448,147 @@ test("hashRouter parses and formats deliverable, chat, team, and materials hash 
 	assert.equal(formatHashRoute({ tab: "chats", isNewMatter: true }), "#/chats/new");
 	assert.equal(formatHashRoute({ tab: "team" }), "#/team");
 	assert.equal(formatHashRoute({ tab: "materials" }), "#/materials");
+});
+
+class AbortableTestWorker implements RpcWorkerLike {
+	private resolveRun: ((res: PromptRunResult) => void) | null = null;
+	private settled = false;
+
+	async start(): Promise<void> {}
+	async stop(): Promise<void> {
+		this.finish(true);
+	}
+	async abort(): Promise<void> {
+		this.finish(true);
+	}
+	async getState(): Promise<{ sessionId: string; sessionFile?: string }> {
+		return { sessionId: "test-abort-session" };
+	}
+	onNotice(): () => void {
+		return () => {};
+	}
+	setDialogHandler(): void {}
+
+	private finish(aborted: boolean) {
+		if (this.settled) return;
+		this.settled = true;
+		this.resolveRun?.({
+			disposition: "started",
+			aborted,
+			assistantText: "",
+			assistantMessages: [],
+			toolExecutions: [],
+			notices: [],
+			dialogs: [],
+			events: [],
+		});
+	}
+
+	runPromptAndWait(): Promise<PromptRunResult> {
+		return new Promise<PromptRunResult>((resolvePromise) => {
+			this.resolveRun = resolvePromise;
+		});
+	}
+}
+
+test("Server supports aborting a running matter and updating its bound workspace", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
+		workerFactory: () => new AbortableTestWorker(),
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+		webDistDir: resolve(process.cwd(), "web/dist"),
+	});
+
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const ws1 = await (
+			await fetch(`${baseUrl}/api/workspaces`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "repo-a", repoPath: "/tmp/repo-a" }),
+			})
+		).json();
+		const ws2 = await (
+			await fetch(`${baseUrl}/api/workspaces`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "repo-b", repoPath: "/tmp/repo-b" }),
+			})
+		).json();
+
+		const created = (await (
+			await fetch(`${baseUrl}/api/matters`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					prompt: "帮我检查 repo-a 的结构",
+					workspaceId: (ws1 as { workspace: { id: string } }).workspace.id,
+				}),
+			})
+		).json()) as { matter: { id: string } };
+
+		// Allow worker to start
+		await new Promise((r) => setTimeout(r, 40));
+
+		// Abort running matter
+		const abortRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}/abort`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: "{}",
+		});
+		assert.equal(abortRes.status, 200);
+		const abortJson = (await abortRes.json()) as { ok: boolean; aborted: boolean };
+		assert.equal(abortJson.ok, true);
+		assert.equal(abortJson.aborted, true);
+
+		// Wait for orchestrator cleanup and confirm no bogus deliverable was recorded
+		for (let i = 0; i < 30; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				matter: { status: string };
+				userMessages: Array<{ content: string }>;
+				deliverables: unknown[];
+			};
+			if (detail.userMessages.length >= 2) {
+				assert.equal(detail.matter.status, "open");
+				assert.equal(detail.deliverables.length, 0);
+				assert.match(detail.userMessages[1]?.content ?? "", /停止本次执行/);
+				break;
+			}
+			await new Promise((r) => setTimeout(r, 20));
+		}
+
+		// Switch matter workspace from repo-a to repo-b
+		const targetWsId = (ws2 as { workspace: { id: string } }).workspace.id;
+		const patchRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ workspaceId: targetWsId }),
+		});
+		assert.equal(patchRes.status, 200);
+		const patched = (await patchRes.json()) as { matter: { workspaceId: string | null } };
+		assert.equal(patched.matter.workspaceId, targetWsId);
+	} finally {
+		await previewManager.stopAll();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+	}
 });

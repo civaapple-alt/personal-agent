@@ -77,6 +77,25 @@ export class DialogBroker {
 		return true;
 	}
 
+	cancelForMatter(matterId: string): number {
+		let cancelled = 0;
+		for (const [id, waiter] of this.pending.entries()) {
+			if (waiter.entry.matterId !== matterId) continue;
+			this.pending.delete(id);
+			waiter.resolve({ cancelled: true });
+			for (const listener of [...this.listeners]) {
+				listener({
+					type: "dialog_resolved",
+					dialogId: id,
+					matterId,
+					payload: { cancelled: true },
+				});
+			}
+			cancelled++;
+		}
+		return cancelled;
+	}
+
 	cancelAll(): void {
 		for (const [id, waiter] of this.pending.entries()) {
 			this.pending.delete(id);

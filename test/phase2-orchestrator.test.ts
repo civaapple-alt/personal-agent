@@ -205,6 +205,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	assert.equal(spawnedWorkers[0]?.options.cwd, "/tmp/personal-agent");
 	assert.deepEqual(seenStatusesDuringDialog, ["waiting_user"]);
 	assert.equal(engResult.matter.status, "delivered");
+	assert.ok(engResult.deliverable);
 	assert.equal(engResult.deliverable.version, 1);
 
 	// 2. Internal delegation from PM to QA stays in internal_collab channel, not user channel
@@ -230,6 +231,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 		deliverableTitle: "架构评估报告",
 	});
 	assert.equal(v2Result.assignedMember.id, "product-manager");
+	assert.ok(v2Result.deliverable);
 	assert.equal(v2Result.deliverable.version, 2);
 
 	db.close();

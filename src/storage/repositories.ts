@@ -294,6 +294,14 @@ export class PersonalAgentStore {
 		return this.getMatter(matterId)!;
 	}
 
+	updateMatterWorkspace(matterId: string, workspaceId: string | null): Matter {
+		const timestamp = nowIso();
+		this.db
+			.prepare("UPDATE matters SET workspace_id = ?, updated_at = ? WHERE id = ?")
+			.run(workspaceId, timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
 	appendMessage(input: {
 		matterId: string;
 		channel: MatterMessageChannel;

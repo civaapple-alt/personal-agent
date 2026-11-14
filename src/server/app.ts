@@ -117,6 +117,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				},
 			})
 			.then((result: DispatchMatterResult) => {
+				if (result.runResult.aborted) {
+					broadcast("matter_aborted", {
+						matterId: result.matter.id,
+						matter: result.matter,
+					});
+					return;
+				}
 				broadcast("matter_settled", {
 					matterId: result.matter.id,
 					matter: result.matter,
@@ -205,6 +212,43 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					deliverables: store.listDeliverables(matterId),
 					pendingDialogs: dialogBroker.listPending(matterId),
 				});
+				return;
+			}
+
+			const matterAbortMatch = pathname.match(/^\/api\/matters\/([^/]+)\/abort$/);
+			if (method === "POST" && matterAbortMatch) {
+				const matterId = decodeURIComponent(matterAbortMatch[1]!);
+				const matter = store.getMatter(matterId);
+				if (!matter) {
+					sendError(res, 404, `Matter not found: ${matterId}`);
+					return;
+				}
+				dialogBroker.cancelForMatter(matterId);
+				const aborted = await orchestrator.abortMatter(matterId);
+				broadcast("matter_aborted", { matterId, aborted });
+				sendJson(res, 200, { ok: true, aborted });
+				return;
+			}
+
+			if (method === "PATCH" && matterDetailMatch) {
+				const matterId = decodeURIComponent(matterDetailMatch[1]!);
+				const existing = store.getMatter(matterId);
+				if (!existing) {
+					sendError(res, 404, `Matter not found: ${matterId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const workspaceId =
+					typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0
+						? body.workspaceId.trim()
+						: null;
+				if (workspaceId && !store.getWorkspace(workspaceId)) {
+					sendError(res, 404, `Workspace not found: ${workspaceId}`);
+					return;
+				}
+				const updated = store.updateMatterWorkspace(matterId, workspaceId);
+				broadcast("workspace_updated", { matterId, workspaceId });
+				sendJson(res, 200, { matter: updated });
 				return;
 			}
 

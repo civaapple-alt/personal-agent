@@ -2,6 +2,29 @@
 
 All notable changes to Personal Agent are documented in this file.
 
+## [0.4.0] - 2026-11-14
+
+### Changed
+- **Grok-Bot-Inspired Two-Column Interactive Workspace (`web/src/App.tsx`, `web/src/styles.css`, `web/src/hashRouter.ts`)**:
+  - Replaced the constrained three-column layout with a `292px` left sidebar (`#f6f8f7`) and a spacious centered conversation canvas (`max-width: 820px`).
+  - Added tilted SVG bot avatars (`BotFaceIcon`) across the quick-roster strip, active header pill, and `#/chats/new` hero; added sidebar matter search toggle and recent-matter status previews.
+  - Changed the default landing hash route from `#/deliverables` to `#/chats` so the workbench opens directly into the conversation-first workspace.
+- **Streamlined Conversation Flow**:
+  - Removed duplicate message and full deliverable-card rendering inside `#/chats/:id`; replaced inline chat deliverable blocks and feedback forms with a compact one-line archive pill (`✓ 已归档至成果库 · V{n}` with quick links to `#/deliverables` and preview URLs), while keeping full deliverable inspection and acceptance feedback in `#/deliverables`.
+  - Suppressed redundant `matter_settled` top banners when already viewing the settled matter's conversation, and simplified `#/chats/new` to a clean centered hero without bulky 3-card onboarding clutter (keeping `+` starter prompts accessible from the floating bottom pill composer).
+
+### Added
+- **In-Flight Run Abort / Stop Controls**:
+  - Added `RpcWorkerLike.abort?()`, `TeamOrchestrator.abortMatter(matterId)` (sends Pi RPC `abort` with a `1500ms` fallback to `worker.stop()`, suppresses deliverable archival for aborted runs, and records `[已中断执行]` / stop confirmation), and `DialogBroker.cancelForMatter(matterId)`.
+  - Added `POST /api/matters/:id/abort` and the `matter_aborted` SSE event (`src/server/app.ts`, `web/src/api.ts`).
+  - Added immediate stop actions in the UI via `ExploringStatus` (`停止` button) and the bottom pill composer (`■` `.pill-stop-btn`).
+- **Matter Workspace Sync & Live Switching**:
+  - Added `PersonalAgentStore.updateMatterWorkspace(matterId, workspaceId)` and `PATCH /api/matters/:id` (`src/storage/repositories.ts`, `src/server/app.ts`, `web/src/api.ts`) so bound repositories can be corrected mid-thread.
+  - Synced `selectedWorkspaceId` to `matterDetail.matter.workspaceId` on matter load/refresh and persisted new-matter selection in `localStorage` (`pa.defaultWorkspaceId`).
+
+### Tests
+- Updated `test/phase2-orchestrator.test.ts` and `test/phase3-server.test.ts` (including HashRouter `#/chats` default route checks and a new server integration test for aborting a running matter and updating its bound workspace).
+
 ## [0.3.1] - 2026-11-14
 
 ### Added

@@ -261,3 +261,17 @@ export function saveMemberMemory(input: {
 		body: JSON.stringify(input),
 	});
 }
+
+export function abortMatter(matterId: string): Promise<{ ok: boolean; aborted: boolean }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/abort`, {
+		method: "POST",
+		body: "{}",
+	});
+}
+
+export function updateMatterWorkspace(matterId: string, workspaceId: string | null): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ workspaceId }),
+	});
+}

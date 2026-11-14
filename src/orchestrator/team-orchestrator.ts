@@ -31,6 +31,7 @@ export interface DispatchProgressEvent {
 export interface RpcWorkerLike {
 	start(): Promise<void>;
 	stop(): Promise<void>;
+	abort?(): Promise<void>;
 	getState(): Promise<{ sessionId: string; sessionFile?: string }>;
 	setThinkingLevel?(level: TeamMember["thinkingLevel"]): Promise<void>;
 	onEvent?(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
@@ -78,7 +79,7 @@ export interface DispatchMatterResult {
 	assignedMember: TeamMember;
 	workspace: WorkspaceLink | null;
 	replyText: string;
-	deliverable: Deliverable;
+	deliverable: Deliverable | null;
 	runResult: PromptRunResult;
 }
 
@@ -115,6 +116,8 @@ export class TeamOrchestrator {
 	private readonly noSession: boolean;
 	private readonly workerFactory: WorkerFactory;
 	private dialogHandler: OrchestratorDialogHandler | undefined;
+	private readonly activeWorkers = new Map<string, Set<RpcWorkerLike>>();
+	private readonly abortedMatters = new Set<string>();
 
 	constructor(options: TeamOrchestratorOptions) {
 		this.store = options.store;
@@ -294,6 +297,8 @@ export class TeamOrchestrator {
 					workspaceId: workspace?.id ?? null,
 				});
 
+		this.abortedMatters.delete(matter.id);
+
 		this.store.appendMessage({
 			matterId: matter.id,
 			channel: "user",
@@ -313,7 +318,13 @@ export class TeamOrchestrator {
 			onProgress: input.onProgress,
 		});
 
-		const replyText = runResult.assistantText.trim();
+		const rawReply = runResult.assistantText.trim();
+		const isAborted = runResult.aborted || this.abortedMatters.has(matter.id);
+		const replyText = isAborted
+			? rawReply
+				? `[已中断执行]\n\n${rawReply}`
+				: "已按你的要求停止本次执行。"
+			: rawReply;
 
 		this.store.appendMessage({
 			matterId: matter.id,
@@ -323,24 +334,29 @@ export class TeamOrchestrator {
 			content: replyText,
 			metadata: {
 				disposition: runResult.disposition,
+				aborted: isAborted,
 				toolsUsed: runResult.toolExecutions.map((t) => t.toolName),
 			},
 		});
 
-		const deliverable = this.store.recordDeliverable({
-			matterId: matter.id,
-			memberId: assignedMember.id,
-			type: input.deliverableType ?? "document",
-			title: input.deliverableTitle ?? `${matter.title} · 交付成果`,
-			summary: replyText.slice(0, 200),
-			contentOrPath: replyText,
-		});
+		const deliverable = isAborted
+			? null
+			: this.store.recordDeliverable({
+					matterId: matter.id,
+					memberId: assignedMember.id,
+					type: input.deliverableType ?? "document",
+					title: input.deliverableTitle ?? `${matter.title} · 交付成果`,
+					summary: replyText.slice(0, 200),
+					contentOrPath: replyText,
+				});
 
 		const updatedMatter = this.store.updateMatterStatus(
 			matter.id,
-			runResult.aborted ? "open" : "delivered",
+			isAborted ? "open" : "delivered",
 			replyText.slice(0, 200),
 		);
+
+		this.abortedMatters.delete(matter.id);
 
 		return {
 			matter: updatedMatter,
@@ -348,8 +364,32 @@ export class TeamOrchestrator {
 			workspace,
 			replyText,
 			deliverable,
-			runResult,
+			runResult: isAborted ? { ...runResult, aborted: true } : runResult,
 		};
+	}
+
+	async abortMatter(matterId: string): Promise<boolean> {
+		this.abortedMatters.add(matterId);
+		const workers = this.activeWorkers.get(matterId);
+		if (!workers || workers.size === 0) {
+			return false;
+		}
+		await Promise.all(
+			[...workers].map(async (worker) => {
+				try {
+					if (worker.abort) {
+						await Promise.race([
+							worker.abort(),
+							new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 1500)),
+						]);
+					}
+				} catch {
+					// Fall back to stopping the worker process directly.
+				}
+				await worker.stop().catch(() => {});
+			}),
+		);
+		return true;
 	}
 
 	/**
@@ -478,12 +518,31 @@ export class TeamOrchestrator {
 			}
 		});
 
+		let activeSet = this.activeWorkers.get(input.matterId);
+		if (!activeSet) {
+			activeSet = new Set();
+			this.activeWorkers.set(input.matterId, activeSet);
+		}
+		activeSet.add(worker);
+
 		input.onProgress?.({
 			stage: "starting",
 			label: `正在为${input.member.displayName}启动工作区${input.workspace ? `（${input.workspace.name}）` : ""}...`,
 		});
 		await worker.start();
 		try {
+			if (this.abortedMatters.has(input.matterId)) {
+				return {
+					disposition: "started",
+					aborted: true,
+					assistantText: "",
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				};
+			}
 			const state = await worker.getState();
 			if (worker.setThinkingLevel) {
 				await worker.setThinkingLevel(input.member.thinkingLevel);
@@ -502,9 +561,15 @@ export class TeamOrchestrator {
 				timeoutMs: input.timeoutMs,
 				onTextDelta: input.onTextDelta,
 			});
-			input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}已完成，正在归拢交付...` });
+			if (!result.aborted && !this.abortedMatters.has(input.matterId)) {
+				input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}已完成，正在归拢交付...` });
+			}
 			return result;
 		} finally {
+			activeSet.delete(worker);
+			if (activeSet.size === 0) {
+				this.activeWorkers.delete(input.matterId);
+			}
 			offEvent?.();
 			offNotice();
 			await worker.stop();
