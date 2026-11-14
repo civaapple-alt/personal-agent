@@ -2,6 +2,15 @@
 
 All notable changes to Personal Agent are documented in this file.
 
+## [0.3.0] - 2026-11-14
+
+### Added
+- **Phase 3 V4 Workbench, HTTP/SSE Server & Preview Runner**:
+  - Added Node HTTP + SSE backend (`src/server/app.ts`, `src/server/dialog-broker.ts`, `src/server/main.ts`) supporting real-time text streaming, matter dispatch, separated `user` vs collapsed `internal_collab`/`notice` channels, interactive `extension_ui_request` approval resolution, deliverable versioning & feedback, and workspace binding.
+  - Added `PreviewManager` (`src/server/preview-manager.ts`) to launch, monitor, and stop independent local preview services (`http://127.0.0.1:<port>`) for V4's "打开查看 →" links.
+  - Added React 19.3.0 V4 three-column workbench (`web/src/`, bundled via `esbuild` in `scripts/build-web.mjs`) with `交付给我`, `和同事聊`, `已有资料`, collapsible `我的同事`, interactive approval cards, and collapsed `协作对话`.
+  - Added Phase 3 server & preview integration tests (`test/phase3-server.test.ts`).
+
 ## [0.2.0] - 2026-11-14
 
 ### Added

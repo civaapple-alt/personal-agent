@@ -8,17 +8,26 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "lint": "biome check src test",
-    "format": "biome check --write src test",
-    "typecheck": "tsc --noEmit",
-    "check": "biome check src test && tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src test web/src scripts",
+    "format": "biome check --write src test web/src scripts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
+    "check": "biome check src test web/src scripts && npm run typecheck",
+    "build:web": "node scripts/build-web.mjs",
+    "build": "tsc -p tsconfig.build.json && npm run build:web",
+    "start:web": "npm run build:web && node src/server/main.ts",
     "test": "node --test test/**/*.test.ts",
     "demo:rpc": "node src/demo/rpc-smoke.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",
     "@types/node": "^26.6.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }

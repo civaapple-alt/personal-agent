@@ -45,15 +45,20 @@ personal-agent/
 │   ├── roles/                      # 角色模板解析与序列化
 │   ├── storage/                    # 基于 node:sqlite 的双轨状态存储
 │   ├── orchestrator/               # TeamOrchestrator（按事找人、内部委托、交付归拢）
+│   ├── server/                     # HTTP/SSE 服务、DialogBroker 与独立预览管理器
 │   ├── rpc/
 │   │   ├── jsonl.ts                # 严格按 LF (\n) 分帧的 JSONL 读写
 │   │   ├── types.ts                # Pi RPC 命令、事件与 Extension UI 协议类型
 │   │   └── pi-rpc-worker.ts        # PiRpcWorker（并发关联、agent_settled、双向 UI 确认）
 │   └── demo/
 │       └── rpc-smoke.ts            # 阶段一实机 RPC 冒烟脚本
+├── web/                            # 阶段三 React 19.3 V4 三栏工作台前端
+├── scripts/
+│   └── build-web.mjs               # 基于 esbuild 的前端构建脚本
 ├── test/
 │   ├── pi-rpc-worker.test.ts       # JSONL 拆帧与 PiRpcWorker 协议单元测试
-│   └── phase2-orchestrator.test.ts # 阶段二角色模板、记忆隔离与编排测试
+│   ├── phase2-orchestrator.test.ts # 阶段二角色模板、记忆隔离与编排测试
+│   └── phase3-server.test.ts       # 阶段三 HTTP/SSE、阻塞审批与独立预览服务测试
 ├── biome.json                      # Biome 2.3.5 Lint & Format 配置
 ├── tsconfig.json                   # TypeScript 类型检查配置
 └── tsconfig.build.json             # dist/ 构建配置
@@ -74,8 +79,11 @@ npm run format
 # 运行单元测试
 npm test
 
-# 构建 dist/
+# 构建后端 dist/ 与前端 web/dist/
 npm run build
+
+# 启动阶段三 V4 工作台服务（默认 http://127.0.0.1:4310）
+npm run start:web
 
 # 运行阶段一实机冒烟测试（调用本机 pi --mode rpc 与 kimi-for-coding）
 npm run demo:rpc
@@ -87,5 +95,5 @@ npm run demo:rpc
 - [x] 技术架构与四阶段规划落盘（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
 - [x] **阶段一**：`PiRpcWorker` 闭环实现、Biome + TS 严格基线、单元测试与实机 `kimi-for-coding` 冒烟验证
 - [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
-- [ ] **阶段三**：V4 工作台前端（React 19）、折叠内部协作与独立服务预览链接
+- [x] **阶段三**：V4 工作台前端（React 19）、HTTP/SSE 实时服务、阻塞审批卡片与独立服务预览链接
 - [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享

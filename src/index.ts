@@ -30,6 +30,20 @@ export {
 	type ToolExecutionRecord,
 } from "./rpc/pi-rpc-worker.ts";
 export type * from "./rpc/types.ts";
+export {
+	createPersonalAgentServer,
+	type PersonalAgentServerOptions,
+} from "./server/app.ts";
+export {
+	DialogBroker,
+	type DialogEventListener,
+	type PendingDialogEntry,
+} from "./server/dialog-broker.ts";
+export {
+	PreviewManager,
+	type PreviewServiceInfo,
+	type StartPreviewInput,
+} from "./server/preview-manager.ts";
 export { openPersonalAgentDatabase } from "./storage/database.ts";
 export { PersonalAgentStore } from "./storage/repositories.ts";
 export type * from "./storage/types.ts";
