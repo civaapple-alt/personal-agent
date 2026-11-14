@@ -24,12 +24,13 @@
 
 | 层级 | 选型方案 | 选用原因与依据 |
 | --- | --- | --- |
-| **运行环境与语言** | TypeScript / Node.js ≥ 22.19 | 与 Pi Monorepo 同构，前后端共享类型；Pi 要求 Node.js 22.19 或更高版本。 |
-| **Agent Core（一期执行底座）** | `pi --mode rpc`（`@earendil-works/pi-coding-agent`） | 以独立子进程按项目 `cwd` 隔离执行，自带工具循环、流式事件、会话树（`fork` / `clone` / `compact`）、模型切换与 `extension_ui_request` 人机确认子协议。 |
+| **运行环境与语言** | TypeScript（`strict` + `erasableSyntaxOnly`）/ Node.js ≥ 22.19 | 与 Pi Monorepo 同构，前后端共享类型；Pi 要求 Node.js 22.19 或更高版本。 |
+| **代码规范与构建** | `@biomejs/biome` `2.3.5` + `tsc` + `node:test` | 直接对齐 Pi 仓库的 `biome.json`（Tab 缩进、120 列宽、`recommended` 规则）与原生 `node:test` 测试模式。 |
+| **Agent Core（一期执行底座）** | `pi --mode rpc`（Pi CLI `1.5.2`，`@earendil-works/pi-coding-agent`） | 以独立子进程按项目 `cwd` 隔离执行，自带工具循环、流式事件、会话树（`fork` / `clone` / `compact`）、模型切换与 `extension_ui_request` 人机确认子协议。 |
 | **上层编排与路由核** | 自研轻量 Orchestrator（后续按需引入 `@earendil-works/pi-ai` / `pi-agent-core` / `pi-durable`） | `pi --mode rpc` 是单会话、单工作区执行器；跨项目角色路由、多角色异步协作、事项与交付物归拢、RSI 记忆提炼由上层编排核统筹。 |
 | **结构化状态存储** | 本地 SQLite | 保存事项（Matter）、多项目/仓库关联、角色实例私有记忆、交付物版本与预览服务状态。 |
 | **可分享角色资产** | Markdown + YAML Frontmatter + Git（对齐 Pi Packages 规范） | 角色定义、Skills、Prompt Templates 与扩展落盘为纯文本，天然支持版本控制与跨团队分享。 |
-| **前端工作台（V4）** | React + TypeScript（Web 优先，预留桌面端包装） | 通过 SSE / WebSocket 接收编排核推送的交付卡片状态、流式回复与审批请求。 |
+| **前端工作台（V4，阶段三）** | `React 19.3.x` + `@earendil-works/elanor-react` / `design-tokens`（对齐 Pi `apps/p2`） | 与 Pi 官方应用组件栈保持一致，配合 `marked`、`lowlight`、`grok-mermaid` 渲染交付成果与流式交互。 |
 
 > **演化预留**：Pi 仓库中的 `@earendil-works/pi-durable` 与 `@earendil-works/chord` 提供了持久对话、Task Graph 与跨进程对象运行时，但 `pi-durable` 目前明确标注为 **Experimental（API 可能随版本变更）**。一期先以稳定的 `pi --mode rpc` 跑通闭环，把业务模型沉淀在上层，后续可平滑切换或按模块引入。
 
