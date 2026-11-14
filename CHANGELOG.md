@@ -2,6 +2,15 @@
 
 All notable changes to Personal Agent are documented in this file.
 
+## [0.2.0] - 2026-11-14
+
+### Added
+- **Phase 2 Role Templates, SQLite Store & Orchestrator**:
+  - Added 4 shareable Markdown + YAML frontmatter role templates under `roles/` (`marketing-lead.md`, `product-manager.md`, `engineering-manager.md`, `qa-manager.md`) and loader/serializer (`src/roles/`).
+  - Added local SQLite storage built on Node's `node:sqlite` (`src/storage/database.ts`, `src/storage/repositories.ts`) separating shareable role templates from scoped private memories (`role_general`, `company_private`, `project_private`), `matters`, `matter_messages` (`user` / `internal_collab` / `notice` channels), versioned `deliverables`, `workspace_links`, and `worker_sessions`.
+  - Added `TeamOrchestrator` (`src/orchestrator/team-orchestrator.ts`) supporting keyword-based routing ("按事找人"), workspace `cwd` mounting, internal role-to-role delegation, `waiting_user` dialog handling, and auto-versioned deliverable recording.
+  - Added Phase 2 unit and orchestration tests (`test/phase2-orchestrator.test.ts`).
+
 ## [0.1.0] - 2026-11-14
 
 ### Added

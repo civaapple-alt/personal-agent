@@ -1,3 +1,21 @@
+export {
+	type DelegateInput,
+	type DelegateResult,
+	type DialogContext,
+	type DispatchMatterInput,
+	type DispatchMatterResult,
+	type OrchestratorDialogHandler,
+	type RpcWorkerLike,
+	TeamOrchestrator,
+	type TeamOrchestratorOptions,
+	type WorkerFactory,
+} from "./orchestrator/team-orchestrator.ts";
+export {
+	loadRoleTemplatesFromDir,
+	parseRoleTemplateMarkdown,
+	serializeRoleTemplateMarkdown,
+} from "./roles/template-loader.ts";
+export type { RoleTemplate, RoleTemplateSections } from "./roles/types.ts";
 export { attachJsonlLineReader, serializeJsonLine } from "./rpc/jsonl.ts";
 export {
 	type DialogInteractionRecord,
@@ -12,3 +30,6 @@ export {
 	type ToolExecutionRecord,
 } from "./rpc/pi-rpc-worker.ts";
 export type * from "./rpc/types.ts";
+export { openPersonalAgentDatabase } from "./storage/database.ts";
+export { PersonalAgentStore } from "./storage/repositories.ts";
+export type * from "./storage/types.ts";

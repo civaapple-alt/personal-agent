@@ -35,8 +35,16 @@ personal-agent/
 │   ├── architecture-and-plan.md    # 基于 Pi RPC 的架构设计与四阶段规划
 │   ├── prototypes/                 # V1–V4 交互原型图与演进反馈
 │   └── references/                 # Grok Bot 与人才市场调研
+├── roles/                          # 可分享的四角色 Markdown 能力模板
+│   ├── marketing-lead.md           # 市场与营销负责人
+│   ├── product-manager.md          # 产品经理（默认主要联系人）
+│   ├── engineering-manager.md      # 研发经理
+│   └── qa-manager.md               # 测试经理
 ├── src/
 │   ├── index.ts                    # 公开导出入口
+│   ├── roles/                      # 角色模板解析与序列化
+│   ├── storage/                    # 基于 node:sqlite 的双轨状态存储
+│   ├── orchestrator/               # TeamOrchestrator（按事找人、内部委托、交付归拢）
 │   ├── rpc/
 │   │   ├── jsonl.ts                # 严格按 LF (\n) 分帧的 JSONL 读写
 │   │   ├── types.ts                # Pi RPC 命令、事件与 Extension UI 协议类型
@@ -44,7 +52,8 @@ personal-agent/
 │   └── demo/
 │       └── rpc-smoke.ts            # 阶段一实机 RPC 冒烟脚本
 ├── test/
-│   └── pi-rpc-worker.test.ts       # JSONL 拆帧与 PiRpcWorker 协议单元测试
+│   ├── pi-rpc-worker.test.ts       # JSONL 拆帧与 PiRpcWorker 协议单元测试
+│   └── phase2-orchestrator.test.ts # 阶段二角色模板、记忆隔离与编排测试
 ├── biome.json                      # Biome 2.3.5 Lint & Format 配置
 ├── tsconfig.json                   # TypeScript 类型检查配置
 └── tsconfig.build.json             # dist/ 构建配置
@@ -77,6 +86,6 @@ npm run demo:rpc
 - [x] 产品方向确认、V1–V4 概念原型演进及 Grok Bot 调研（见 [docs/product-direction.md](docs/product-direction.md)）
 - [x] 技术架构与四阶段规划落盘（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
 - [x] **阶段一**：`PiRpcWorker` 闭环实现、Biome + TS 严格基线、单元测试与实机 `kimi-for-coding` 冒烟验证
-- [ ] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
+- [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
 - [ ] **阶段三**：V4 工作台前端（React 19）、折叠内部协作与独立服务预览链接
 - [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享
