@@ -1,4 +1,4 @@
-import type { MatterProgressDto, TeamMemberDto, WorkspaceDto } from "./api.ts";
+import type { DeliverableDto, MatterMessageDto, MatterProgressDto, TeamMemberDto, WorkspaceDto } from "./api.ts";
 
 export const STATUS_LABELS: Record<string, string> = {
 	open: "推进中",
@@ -98,4 +98,54 @@ export function buildStarterTasks(
 				: "请帮我制定一套精简可执行的功能上线验收清单，覆盖核心流程、异常恢复与自动化回归检查。",
 		},
 	];
+}
+
+export function mapDeliverablesToMessages(
+	userMessages: MatterMessageDto[],
+	deliverables: DeliverableDto[],
+): { byMessageId: Map<string, DeliverableDto[]>; unattached: DeliverableDto[] } {
+	const byMessageId = new Map<string, DeliverableDto[]>();
+	const unattached: DeliverableDto[] = [];
+	const memberMessages = userMessages.filter((m) => m.senderType === "member");
+	const orderedDeliverables = [...deliverables].sort(
+		(a, b) => a.createdAt.localeCompare(b.createdAt) || a.version - b.version,
+	);
+	const matchedMessageIds = new Set<string>();
+
+	const attach = (msgId: string, deliv: DeliverableDto) => {
+		const list = byMessageId.get(msgId);
+		if (list) {
+			list.push(deliv);
+		} else {
+			byMessageId.set(msgId, [deliv]);
+		}
+	};
+
+	for (const deliv of orderedDeliverables) {
+		const exactMatch = memberMessages.find(
+			(msg) =>
+				!matchedMessageIds.has(msg.id) && msg.senderId === deliv.memberId && msg.content === deliv.contentOrPath,
+		);
+		if (exactMatch) {
+			matchedMessageIds.add(exactMatch.id);
+			attach(exactMatch.id, deliv);
+			continue;
+		}
+
+		// Fall back to the nearest earlier member reply in the turn when contentOrPath differs (e.g. artifact path).
+		let fallbackMsg: MatterMessageDto | undefined;
+		for (const msg of memberMessages) {
+			if (!matchedMessageIds.has(msg.id) && msg.createdAt <= deliv.createdAt) {
+				fallbackMsg = msg;
+			}
+		}
+		if (fallbackMsg) {
+			matchedMessageIds.add(fallbackMsg.id);
+			attach(fallbackMsg.id, deliv);
+		} else {
+			unattached.push(deliv);
+		}
+	}
+
+	return { byMessageId, unattached };
 }

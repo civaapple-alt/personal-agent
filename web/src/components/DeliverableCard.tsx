@@ -12,6 +12,7 @@ interface DeliverableCardProps {
 	onSubmitFeedback: (deliverableId: string, feedback: string) => Promise<void>;
 	onSelectVersion: (deliverableId: string) => void;
 	onRequestRevision: () => void;
+	onOpenMatterChat?: () => void;
 	onSaveMemory: (content: string, scope: "role_general" | "project_private") => Promise<void>;
 	compact?: boolean;
 }
@@ -80,6 +81,11 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				<button type="button" className="btn-pill-outline" onClick={props.onRequestRevision}>
 					继续修改
 				</button>
+				{props.onOpenMatterChat && (
+					<button type="button" className="btn-pill-outline" onClick={props.onOpenMatterChat}>
+						查看原对话
+					</button>
+				)}
 				<button
 					type="button"
 					className="btn-pill-outline"

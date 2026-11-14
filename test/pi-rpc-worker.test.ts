@@ -202,6 +202,48 @@ test("PiRpcWorker handles bidirectional extension_ui_request, notices, streaming
 	}
 });
 
+test("PiRpcWorker resets idleTimeoutMs while active events keep arriving", async () => {
+	const mock = makeInlineMockScript(`
+		let buf = "";
+		process.stdin.setEncoding("utf8");
+		const send = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
+		process.stdin.on("data", (chunk) => {
+			buf += chunk;
+			while (true) {
+				const idx = buf.indexOf("\\n");
+				if (idx === -1) break;
+				const msg = JSON.parse(buf.slice(0, idx));
+				buf = buf.slice(idx + 1);
+				if (msg.type === "prompt") {
+					send({ id: msg.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+					setTimeout(() => send({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "step 1 " } }), 40);
+					setTimeout(() => send({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "step 2" } }), 85);
+					setTimeout(() => {
+						send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "step 1 step 2" }] } });
+						send({ type: "agent_settled", aborted: false });
+					}, 130);
+				}
+			}
+		});
+	`);
+
+	const worker = new PiRpcWorker({
+		executable: mock.executable,
+		leadingArgs: mock.leadingArgs,
+	});
+	await worker.start();
+	try {
+		// 130ms total > 75ms idleTimeoutMs, but each event keeps resetting the idle timer.
+		const result = await worker.runPromptAndWait("long task", {
+			idleTimeoutMs: 75,
+			timeoutMs: 1000,
+		});
+		assert.equal(result.assistantText, "step 1 step 2");
+	} finally {
+		await worker.stop();
+	}
+});
+
 test("serializeJsonLine produces strict single-line LF framing", () => {
 	const line = serializeJsonLine({ type: "get_state" });
 	assert.equal(line, '{"type":"get_state"}\n');

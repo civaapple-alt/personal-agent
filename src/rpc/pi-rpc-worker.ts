@@ -84,8 +84,10 @@ export interface PromptRunResult {
 export interface RunPromptOptions {
 	images?: ImageContent[];
 	streamingBehavior?: "steer" | "followUp";
-	/** Maximum wait for `agent_settled` in milliseconds (default: 180000). */
+	/** Hard overall timeout for `agent_settled` in milliseconds (default: 1800000 = 30 min). */
 	timeoutMs?: number;
+	/** Inactivity timeout with no RPC events or notices in milliseconds (default: min(timeoutMs, 300000)). */
+	idleTimeoutMs?: number;
 	/** Optional per-run streaming delta callback. */
 	onTextDelta?: (delta: string) => void;
 }
@@ -398,7 +400,10 @@ export class PiRpcWorker {
 	 * waiting for `agent_settled` as required by the Pi RPC specification.
 	 */
 	async runPromptAndWait(message: string, options: RunPromptOptions = {}): Promise<PromptRunResult> {
-		const timeoutMs = options.timeoutMs ?? 180_000;
+		const envTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
+		const defaultTimeout = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 1_800_000;
+		const timeoutMs = options.timeoutMs ?? defaultTimeout;
+		const idleTimeoutMs = options.idleTimeoutMs ?? Math.min(timeoutMs, 300_000);
 		const events: RpcSessionEvent[] = [];
 		const notices: RpcExtensionUINoticeRequest[] = [];
 		const dialogs: DialogInteractionRecord[] = [];
@@ -408,19 +413,42 @@ export class PiRpcWorker {
 
 		let resolveSettled!: (aborted: boolean) => void;
 		let rejectSettled!: (error: Error) => void;
+		let settledDone = false;
 		const settledPromise = new Promise<boolean>((resolve, reject) => {
-			resolveSettled = resolve;
-			rejectSettled = reject;
+			resolveSettled = (aborted) => {
+				if (settledDone) return;
+				settledDone = true;
+				resolve(aborted);
+			};
+			rejectSettled = (err) => {
+				if (settledDone) return;
+				settledDone = true;
+				reject(err);
+			};
 		});
 		// Prevent unhandled rejection if `prompt()` rejects before `settledPromise` is awaited.
 		settledPromise.catch(() => {});
 
-		const timer = setTimeout(() => {
+		let hardTimer: NodeJS.Timeout | undefined;
+		let idleTimer: NodeJS.Timeout | undefined;
+		let inDialog = false;
+
+		const resetIdleTimer = () => {
+			if (idleTimer) clearTimeout(idleTimer);
+			if (settledDone || inDialog || idleTimeoutMs >= timeoutMs) return;
+			idleTimer = setTimeout(() => {
+				rejectSettled(new Error(`Timed out after ${idleTimeoutMs}ms of inactivity waiting for agent_settled`));
+			}, idleTimeoutMs);
+		};
+
+		hardTimer = setTimeout(() => {
 			rejectSettled(new Error(`Timed out after ${timeoutMs}ms waiting for agent_settled`));
 		}, timeoutMs);
+		resetIdleTimer();
 
 		const offEvent = this.onEvent((event) => {
 			events.push(event);
+			resetIdleTimer();
 
 			if (
 				event.type === "message_update" &&
@@ -463,14 +491,22 @@ export class PiRpcWorker {
 
 		const offNotice = this.onNotice((notice) => {
 			notices.push(notice);
+			resetIdleTimer();
 		});
 
 		const previousHandler = this.dialogHandler;
 		if (previousHandler) {
 			this.dialogHandler = async (request) => {
-				const response = await previousHandler(request);
-				dialogs.push({ request, response });
-				return response;
+				inDialog = true;
+				if (idleTimer) clearTimeout(idleTimer);
+				try {
+					const response = await previousHandler(request);
+					dialogs.push({ request, response });
+					return response;
+				} finally {
+					inDialog = false;
+					resetIdleTimer();
+				}
 			};
 		}
 
@@ -497,11 +533,14 @@ export class PiRpcWorker {
 			}
 
 			const aborted = await settledPromise;
-			const lastAssistant = assistantMessages.at(-1);
+			const nonEmptyText = [...assistantMessages]
+				.reverse()
+				.map((msg) => extractMessageText(msg))
+				.find((txt) => txt.trim().length > 0);
 			return {
 				disposition,
 				aborted,
-				assistantText: lastAssistant ? extractMessageText(lastAssistant) : "",
+				assistantText: nonEmptyText ?? "",
 				assistantMessages,
 				toolExecutions,
 				notices,
@@ -509,7 +548,9 @@ export class PiRpcWorker {
 				events,
 			};
 		} finally {
-			clearTimeout(timer);
+			settledDone = true;
+			if (hardTimer) clearTimeout(hardTimer);
+			if (idleTimer) clearTimeout(idleTimer);
 			offEvent();
 			offNotice();
 			child?.off("exit", onChildExit);

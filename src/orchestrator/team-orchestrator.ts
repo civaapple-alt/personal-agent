@@ -320,11 +320,15 @@ export class TeamOrchestrator {
 
 		const rawReply = runResult.assistantText.trim();
 		const isAborted = runResult.aborted || this.abortedMatters.has(matter.id);
+		const emptyToolSummary =
+			runResult.toolExecutions.length > 0
+				? `（已执行 ${runResult.toolExecutions.map((t) => t.toolName).join("、")} 等工具，但本轮未生成正文总结，可在「协作过程」查看详情或直接追问。）`
+				: "（本轮执行已结束，但模型未返回正文内容，请直接追问或在「协作过程」查看日志。）";
 		const replyText = isAborted
 			? rawReply
 				? `[已中断执行]\n\n${rawReply}`
 				: "已按你的要求停止本次执行。"
-			: rawReply;
+			: rawReply || emptyToolSummary;
 
 		this.store.appendMessage({
 			matterId: matter.id,

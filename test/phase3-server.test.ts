@@ -592,3 +592,77 @@ test("Server supports aborting a running matter and updating its bound workspace
 		db.close();
 	}
 });
+
+test("Server persists partial streamed text and readable failure message in userMessages on error", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
+		workerFactory: () => ({
+			async start() {},
+			async getState() {
+				return { sessionId: "fail-session", isStreaming: false };
+			},
+			onEvent() {
+				return () => {};
+			},
+			onNotice() {
+				return () => {};
+			},
+			setDialogHandler() {},
+			async runPromptAndWait(_message, options) {
+				options?.onTextDelta?.("已分析部分上下文");
+				throw new Error("Timed out after 180000ms waiting for agent_settled");
+			},
+			async stop() {},
+		}),
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const created = (await (
+			await fetch(`${baseUrl}/api/matters`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ prompt: "分析超长任务" }),
+			})
+		).json()) as { matter: { id: string } };
+
+		let userMessages: Array<{ senderType: string; content: string }> = [];
+		for (let i = 0; i < 30; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				userMessages: Array<{ senderType: string; content: string }>;
+			};
+			userMessages = detail.userMessages;
+			if (userMessages.length >= 2) break;
+			await new Promise((r) => setTimeout(r, 20));
+		}
+
+		assert.equal(userMessages.length, 2);
+		assert.equal(userMessages[1]?.senderType, "system");
+		assert.match(userMessages[1]?.content ?? "", /已分析部分上下文/);
+		assert.match(userMessages[1]?.content ?? "", /本次执行未完成/);
+		assert.match(userMessages[1]?.content ?? "", /Timed out after 180000ms/);
+	} finally {
+		await previewManager.stopAll();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+	}
+});

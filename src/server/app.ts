@@ -100,6 +100,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		deliverableType?: DeliverableType;
 	}) => {
 		broadcast("matter_started", { matterId: input.matterId });
+		let accumulatedDelta = "";
 		void orchestrator
 			.dispatchMatter({
 				matterId: input.matterId,
@@ -110,6 +111,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,
 				onTextDelta: (delta) => {
+					accumulatedDelta += delta;
 					broadcast("text_delta", { matterId: input.matterId, delta });
 				},
 				onProgress: (progress) => {
@@ -139,6 +141,15 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					senderType: "system",
 					senderId: "orchestrator",
 					content: JSON.stringify({ method: "error", message }),
+				});
+				const partialNote = accumulatedDelta.trim() ? `${accumulatedDelta.trim()}\n\n---\n\n` : "";
+				store.appendMessage({
+					matterId: input.matterId,
+					channel: "user",
+					senderType: "system",
+					senderId: "orchestrator",
+					content: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
+					metadata: { failed: true, error: message },
 				});
 				store.updateMatterStatus(input.matterId, "open");
 				broadcast("matter_failed", { matterId: input.matterId, error: message });

@@ -545,6 +545,7 @@ export function App() {
 							navigateRoute({ tab: "chats", matterId: deliverable.matterId });
 							setComposerText(`修改「${deliverable.title}」：`);
 						}}
+						onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
 						onNewTask={startNewMatter}
 					/>
 				)}

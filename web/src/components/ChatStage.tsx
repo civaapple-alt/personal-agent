@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type DeliverableDto,
 	type MatterDetailPayload,
@@ -10,7 +10,7 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { formatClockTime, type StarterTask } from "../utils.ts";
+import { formatClockTime, mapDeliverablesToMessages, type StarterTask } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { ExploringStatus } from "./ExploringStatus.tsx";
 
@@ -107,7 +107,34 @@ export function ChatStage({
 		}
 	};
 
-	const activeChatPreviewUrl = previewUrlFor(activeChatDeliverable);
+	const deliverablesPlacement = useMemo(
+		() => mapDeliverablesToMessages(matterDetail?.userMessages ?? [], matterDetail?.deliverables ?? []),
+		[matterDetail],
+	);
+
+	const renderDeliverablePill = (deliv: DeliverableDto) => {
+		const url = previewUrlFor(deliv);
+		return (
+			<div key={deliv.id} className="deliverable-inline-pill">
+				<span className="deliverable-pill-info">
+					<span className="deliverable-pill-check">✓</span>
+					<span>
+						已归档至成果库 · <strong>V{deliv.version}</strong>
+					</span>
+				</span>
+				<span className="deliverable-pill-actions">
+					{url && (
+						<a className="btn-inline" href={url} target="_blank" rel="noreferrer">
+							打开预览 →
+						</a>
+					)}
+					<button type="button" className="btn-inline" onClick={() => onOpenDeliverables(deliv.id)}>
+						在成果库查看
+					</button>
+				</span>
+			</div>
+		);
+	};
 
 	return (
 		<div className="chat-stage">
@@ -204,21 +231,25 @@ export function ChatStage({
 						</div>
 					) : (
 						<>
-							{matterDetail?.userMessages.map((msg) => (
-								<div
-									key={msg.id}
-									className={`stream-msg ${msg.senderType === "user" ? "from-user" : "from-member"}`}
-								>
-									{msg.senderType === "member" && (
-										<div className="stream-sender">
-											{memberName(msg.senderId)} · {formatClockTime(msg.createdAt)}
+							{matterDetail?.userMessages.map((msg) => {
+								const isUser = msg.senderType === "user";
+								const isSystem = msg.senderType === "system";
+								const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
+								return (
+									<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
+										{!isUser && (
+											<div className="stream-sender">
+												{isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
+												{formatClockTime(msg.createdAt)}
+											</div>
+										)}
+										<div className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}`}>
+											{isUser ? msg.content : <MarkdownView content={msg.content} />}
 										</div>
-									)}
-									<div className={`stream-bubble ${msg.senderType === "user" ? "user" : "member"}`}>
-										{msg.senderType === "member" ? <MarkdownView content={msg.content} /> : msg.content}
+										{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 									</div>
-								</div>
-							))}
+								);
+							})}
 
 							{activeDialogs.map((dlg) => (
 								<div key={dlg.id} className="inline-approval-card">
@@ -280,30 +311,7 @@ export function ChatStage({
 								</div>
 							))}
 
-							{activeChatDeliverable && (
-								<div className="deliverable-inline-pill">
-									<span className="deliverable-pill-info">
-										<span className="deliverable-pill-check">✓</span>
-										<span>
-											已归档至成果库 · <strong>V{activeChatDeliverable.version}</strong>
-										</span>
-									</span>
-									<span className="deliverable-pill-actions">
-										{activeChatPreviewUrl && (
-											<a className="btn-inline" href={activeChatPreviewUrl} target="_blank" rel="noreferrer">
-												打开预览 →
-											</a>
-										)}
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => onOpenDeliverables(activeChatDeliverable.id)}
-										>
-											在成果库查看
-										</button>
-									</span>
-								</div>
-							)}
+							{deliverablesPlacement.unattached.map((deliv) => renderDeliverablePill(deliv))}
 
 							{streamingDelta && (
 								<div className="stream-msg from-member">
