@@ -73,6 +73,7 @@ export function App() {
 			if (next.isNewMatter) {
 				setSelectedMatterId(null);
 			} else if (next.matterId !== undefined) {
+				setSelectedMemberId("auto");
 				setSelectedMatterId(next.matterId || null);
 			}
 		}
@@ -146,6 +147,7 @@ export function App() {
 	}, [refreshBootstrap]);
 
 	useEffect(() => {
+		setStreamingDelta("");
 		void refreshDetail(selectedMatterId).catch(() => {});
 	}, [selectedMatterId, refreshDetail]);
 
@@ -158,7 +160,9 @@ export function App() {
 
 	useEffect(() => {
 		const clearMatterProgress = (matterId: string) => {
-			setStreamingDelta("");
+			if (selectedMatterIdRef.current === matterId) {
+				setStreamingDelta("");
+			}
 			setProgressByMatter((prev) => {
 				const next = { ...prev };
 				delete next[matterId];
@@ -170,7 +174,7 @@ export function App() {
 				return next;
 			});
 			void refreshBootstrap();
-			if (selectedMatterId === matterId) {
+			if (selectedMatterIdRef.current === matterId) {
 				void refreshDetail(matterId);
 			}
 		};
@@ -179,7 +183,7 @@ export function App() {
 		es.addEventListener("connected", () => setSseConnected(true));
 		es.addEventListener("text_delta", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; delta: string };
-			if (data.matterId === selectedMatterId) {
+			if (data.matterId === selectedMatterIdRef.current) {
 				setStreamingDelta((prev) => prev + data.delta);
 			}
 		});
@@ -189,7 +193,7 @@ export function App() {
 			setProgressStartedAt((prev) => (prev[data.matterId] ? prev : { ...prev, [data.matterId]: Date.now() }));
 			if (data.stage === "starting") {
 				void refreshBootstrap();
-				if (data.matterId === selectedMatterId) {
+				if (data.matterId === selectedMatterIdRef.current) {
 					void refreshDetail(data.matterId);
 				}
 			}
@@ -230,8 +234,8 @@ export function App() {
 
 		const handleSync = () => {
 			void refreshBootstrap();
-			if (selectedMatterId) {
-				void refreshDetail(selectedMatterId);
+			if (selectedMatterIdRef.current) {
+				void refreshDetail(selectedMatterIdRef.current);
 			}
 		};
 		for (const evtName of [
@@ -248,7 +252,7 @@ export function App() {
 		}
 		es.onerror = () => setSseConnected(false);
 		return () => es.close();
-	}, [refreshBootstrap, refreshDetail, selectedMatterId]);
+	}, [refreshBootstrap, refreshDetail]);
 
 	const activeDeliverable: DeliverableDto | null = useMemo(() => {
 		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
@@ -401,24 +405,33 @@ export function App() {
 	};
 
 	const handleSelectWorkspace = (nextId: string) => {
-		setSelectedWorkspaceId(nextId);
-		try {
-			window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
-		} catch {
-			// Ignore storage access errors.
+		if (!selectedMatterId) {
+			setSelectedWorkspaceId(nextId);
+			try {
+				window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
+			} catch {
+				// Ignore storage access errors.
+			}
+			return;
 		}
-		if (selectedMatterId) {
-			void updateMatterWorkspace(selectedMatterId, nextId || null)
-				.then(async () => {
-					const wsLabel = nextId ? (workspaceName(nextId) ?? nextId) : "不绑定仓库";
-					setNoticeBanner(`已切换当前事项仓库为「${wsLabel}」`);
-					await refreshBootstrap();
-					await refreshDetail(selectedMatterId);
-				})
-				.catch((err: unknown) => {
-					setErrorBanner(err instanceof Error ? err.message : String(err));
-				});
-		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterWorkspace(targetMatterId, nextId || null)
+			.then(async () => {
+				setSelectedWorkspaceId(nextId);
+				try {
+					window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
+				} catch {
+					// Ignore storage access errors.
+				}
+				const wsLabel = nextId ? (workspaceName(nextId) ?? nextId) : "不绑定仓库";
+				setNoticeBanner(`已切换当前事项仓库为「${wsLabel}」`);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
 	};
 
 	const handleDeliverableFeedback = async (deliverableId: string, feedback: string) => {
@@ -551,6 +564,7 @@ export function App() {
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						templateByRoleId={templateByRoleId}
 						memberName={memberName}
+						workspaceName={workspaceName}
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}

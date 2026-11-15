@@ -68,6 +68,8 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				)}
 			</div>
 
+			{props.deliverable.summary && <div className="deliverable-summary-note">{props.deliverable.summary}</div>}
+
 			<div className="deliverable-body">
 				<MarkdownView content={props.deliverable.contentOrPath} />
 			</div>

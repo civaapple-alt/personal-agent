@@ -16,6 +16,7 @@ interface TeamViewProps {
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memberName: (id: string) => string;
+	workspaceName: (id: string | null) => string | null;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -27,6 +28,7 @@ export function TeamView({
 	memoriesByMember,
 	templateByRoleId,
 	memberName,
+	workspaceName,
 	onRefresh,
 	onNotice,
 	onError,
@@ -346,12 +348,24 @@ export function TeamView({
 
 								{isExpanded && memories.length > 0 && (
 									<div className="memory-list">
-										{memories.map((mem) => (
-											<div key={mem.id} className="memory-item">
-												<span className="pill">{MEMORY_SCOPE_LABELS[mem.scope] ?? mem.scope}</span>
-												<span>{mem.content}</span>
-											</div>
-										))}
+										{memories.map((mem) => {
+											const scopeLabel = MEMORY_SCOPE_LABELS[mem.scope] ?? mem.scope;
+											const scopeSuffix =
+												mem.scope === "role_general"
+													? ""
+													: mem.workspaceId
+														? ` · ${workspaceName(mem.workspaceId) ?? mem.workspaceId}`
+														: " · 未绑定仓库（仅保留查看）";
+											return (
+												<div key={mem.id} className="memory-item">
+													<span className="pill">
+														{scopeLabel}
+														{scopeSuffix}
+													</span>
+													<span>{mem.content}</span>
+												</div>
+											);
+										})}
 									</div>
 								)}
 							</div>

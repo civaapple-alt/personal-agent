@@ -22,6 +22,7 @@ All notable changes to Personal Agent are documented in this file.
 - Company-private memories now require a workspace to be injected. Unscoped historical memories remain viewable. Imported role definitions do not install plugins or Skills automatically.
 - Removed the UI's `修改` prefix shortcut that implicitly exported any reply as a new version. Revision requests now use the same explicit milestone decision as other dialogue.
 - Active turns reject concurrent messages and workspace switches with HTTP 409. Saved session failures are reported instead of silently starting a new conversation.
+- Aligned frontend state with the backend turn & scope boundaries: prevented optimistic workspace changes from masking 409/errors, guarded active-turn sends/switches in `ChatStage`, kept SSE connections open across matter switches via refs, rendered deliverable `changeNote` summaries in `DeliverableCard`, and labeled memory workspace bindings in `TeamView`.
 - Marketing's declared tools now match the installed Pi baseline (`read`, `bash`), replacing the unimplemented `web_search` declaration. No claim of a dedicated search service is made.
 
 ## [0.4.0] - 2026-11-14

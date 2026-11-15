@@ -92,6 +92,7 @@ export function ChatStage({
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const messageCount = matterDetail?.userMessages.length ?? 0;
 	const streamLen = streamingDelta.length;
 	useEffect(() => {
@@ -103,7 +104,9 @@ export function ChatStage({
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 			e.preventDefault();
-			onSendPrompt();
+			if (!isTurnRunning && !submitting) {
+				onSendPrompt();
+			}
 		}
 	};
 
@@ -370,6 +373,8 @@ export function ChatStage({
 						<select
 							className="select-pill"
 							value={selectedWorkspaceId}
+							disabled={isTurnRunning}
+							title={isTurnRunning ? "当前回合正在执行，请先停止后再切换仓库" : undefined}
 							onChange={(e) => onSelectWorkspace(e.target.value)}
 						>
 							<option value="">不绑定仓库</option>
@@ -382,9 +387,14 @@ export function ChatStage({
 						<select
 							className="select-pill"
 							value={selectedMemberId}
+							disabled={isTurnRunning}
 							onChange={(e) => onSelectMember(e.target.value)}
 						>
-							<option value="auto">按事找人（主联系：{headerContact?.displayName ?? "自动"}）</option>
+							<option value="auto">
+								{selectedMatterId
+									? `继续由负责人跟进（${headerContact?.displayName ?? "自动"}）`
+									: `按事找人（主联系：${headerContact?.displayName ?? "自动"}）`}
+							</option>
 							{members.map((m) => (
 								<option key={m.id} value={m.id}>
 									指定：{m.displayName}
@@ -415,9 +425,11 @@ export function ChatStage({
 							onChange={(e) => onComposerTextChange(e.target.value)}
 							onKeyDown={handleComposerKeyDown}
 							placeholder={
-								selectedMatterId
-									? "继续对话，回答问题或提出修改（Enter 发送）..."
-									: "向你的 AI 团队布置任务（Enter 发送）..."
+								isTurnRunning
+									? "当前回合仍在推进，完成后可继续（或点击 ■ 停止）..."
+									: selectedMatterId
+										? "继续对话，回答问题或提出修改（Enter 发送）..."
+										: "向你的 AI 团队布置任务（Enter 发送）..."
 							}
 						/>
 						{activeMatterProgress && selectedMatterId && (
@@ -435,7 +447,7 @@ export function ChatStage({
 							type="button"
 							className="pill-send-btn"
 							aria-label="发送"
-							disabled={submitting || !composerText.trim()}
+							disabled={submitting || isTurnRunning || !composerText.trim()}
 							onClick={onSendPrompt}
 						>
 							{submitting ? "…" : "↑"}
