@@ -185,6 +185,7 @@ export function ChatStage({
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
 	const rosterRef = useRef<HTMLDivElement | null>(null);
+	const headerHumansBtnRef = useRef<HTMLButtonElement | null>(null);
 
 	const isOwner = currentUser?.permissionRole !== "collaborator";
 
@@ -196,12 +197,16 @@ export function ChatStage({
 			if (collabOpen && !collabPanelRef.current?.contains(target) && !collabTriggerRef.current?.contains(target)) {
 				setCollabOpen(false);
 			}
-			if ((starterMenuOpen || observerMenuOpen) && !composerDockRef.current?.contains(target)) {
+			if (starterMenuOpen && !composerDockRef.current?.contains(target)) {
 				setStarterMenuOpen(false);
-				setObserverMenuOpen(false);
 			}
-			if (collaboratorMenuOpen && !rosterRef.current?.contains(target)) {
+			if (
+				(collaboratorMenuOpen || observerMenuOpen) &&
+				!rosterRef.current?.contains(target) &&
+				!headerHumansBtnRef.current?.contains(target)
+			) {
 				setCollaboratorMenuOpen(false);
+				setObserverMenuOpen(false);
 			}
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -496,6 +501,50 @@ export function ChatStage({
 		[effectiveOrgId, workspaces],
 	);
 
+	const ownerCollab = collaborators.find((c) => c.permissionRole === "owner") ?? null;
+	const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
+	const assignedCollabIds = matterDetail?.matter.collaboratorIds ?? [];
+	const messageHumanAuthorIds = useMemo(() => {
+		const ids = new Set<string>();
+		for (const msg of matterDetail?.userMessages ?? []) {
+			if (msg.senderType === "user" && msg.senderId && msg.senderId !== "user") {
+				ids.add(msg.senderId);
+			}
+		}
+		return ids;
+	}, [matterDetail?.userMessages]);
+	const matterHumanParticipants = nonOwnerCollaborators.filter(
+		(c) => assignedCollabIds.includes(c.id) || messageHumanAuthorIds.has(c.id) || currentUser?.id === c.id,
+	);
+	const allActiveHumans = useMemo(() => {
+		const list: CollaboratorDto[] = [];
+		if (ownerCollab) list.push(ownerCollab);
+		for (const col of matterHumanParticipants) list.push(col);
+		return list;
+	}, [ownerCollab, matterHumanParticipants]);
+	const leadAi =
+		(matterDetail?.matter.leadMemberId ? members.find((m) => m.id === matterDetail.matter.leadMemberId) : null) ??
+		headerContact;
+	const observerAis = members.filter((m) => activeObserverIds.includes(m.id) && m.id !== leadAi?.id);
+	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
+		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
+	);
+	const specialistAis = members.filter((m) => specialistIds.includes(m.id));
+	const copyCollabInvite = async (col: CollaboratorDto) => {
+		if (!col.token) return;
+		const url = `${window.location.origin}/?invite=${encodeURIComponent(col.token)}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			const localWarn =
+				window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+					? "（提示：本机启动时需设置 PA_HOST=0.0.0.0 并替换为局域网 IP 给同事访问）"
+					: "";
+			onNotice(`已复制「${col.name}」的邀请链接${localWarn}`);
+		} catch {
+			onNotice(`邀请链接：${url}`);
+		}
+	};
+
 	return (
 		<div className="chat-stage">
 			<header className="stage-header">
@@ -536,6 +585,41 @@ export function ChatStage({
 					{matterDetail && <span className="stage-center-matter">· {matterDetail.matter.title}</span>}
 				</div>
 				<div className="stage-header-right">
+					<button
+						ref={headerHumansBtnRef}
+						type="button"
+						aria-expanded={collaboratorMenuOpen}
+						className={`btn-pill-outline btn-xs header-humans-btn ${collaboratorMenuOpen ? "active" : ""}`}
+						title={
+							allActiveHumans.length > 0
+								? `当前参与人类成员（${allActiveHumans.length}人）：${allActiveHumans.map((h) => `${h.name}·${h.permissionRole === "owner" ? "所有者" : h.roleTitle}`).join("、")}`
+								: "查看或邀请人类协同成员"
+						}
+						onClick={() => {
+							setObserverMenuOpen(false);
+							setCollabOpen(false);
+							setCollaboratorMenuOpen((open) => !open);
+						}}
+					>
+						<span className="header-humans-avatars" aria-hidden="true">
+							{allActiveHumans.slice(0, 3).map((person, idx) => (
+								<span
+									key={person.id}
+									className={`header-human-avatar ${person.permissionRole === "owner" ? "is-owner" : ""} idx-${idx}`}
+								>
+									{person.name.slice(0, 1).toUpperCase()}
+								</span>
+							))}
+						</span>
+						<span className="header-humans-text">
+							协作成员 ({allActiveHumans.length || 1})
+							{allActiveHumans.length > 0 &&
+								` · ${allActiveHumans
+									.slice(0, 2)
+									.map((h) => h.name)
+									.join("、")}${allActiveHumans.length > 2 ? ` +${allActiveHumans.length - 2}` : ""}`}
+						</span>
+					</button>
 					{matterDetail && (
 						<span ref={collabTriggerRef} className="collab-header-triggers">
 							<button
@@ -588,211 +672,250 @@ export function ChatStage({
 				</div>
 			</header>
 
-			{(() => {
-				const ownerCollab = collaborators.find((c) => c.permissionRole === "owner") ?? null;
-				const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
-				const assignedIds = matterDetail?.matter.collaboratorIds ?? [];
-				const matterHumanParticipants = nonOwnerCollaborators.filter(
-					(c) => assignedIds.includes(c.id) || currentUser?.id === c.id,
-				);
-				const leadAi =
-					(matterDetail?.matter.leadMemberId
-						? members.find((m) => m.id === matterDetail.matter.leadMemberId)
-						: null) ?? headerContact;
-				const observerAis = members.filter((m) => activeObserverIds.includes(m.id) && m.id !== leadAi?.id);
-				const specialistIds = Array.from(
-					new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean)),
-				).filter((id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id));
-				const specialistAis = members.filter((m) => specialistIds.includes(m.id));
-				const copyCollabInvite = async (col: CollaboratorDto) => {
-					if (!col.token) return;
-					const url = `${window.location.origin}/?invite=${encodeURIComponent(col.token)}`;
-					try {
-						await navigator.clipboard.writeText(url);
-						const localWarn =
-							window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-								? "（提示：本机启动时需设置 PA_HOST=0.0.0.0 并替换为局域网 IP 给同事访问）"
-								: "";
-						onNotice(`已复制「${col.name}」的邀请链接${localWarn}`);
-					} catch {
-						onNotice(`邀请链接：${url}`);
-					}
-				};
-				return (
-					<div ref={rosterRef} className="matter-roster-bar">
-						<div className="matter-roster-main">
-							<span className="roster-section-label">参与人员</span>
-							<div className="roster-chip-group" title="人类协同成员">
-								{ownerCollab ? (
-									<span
-										className={`roster-chip human owner ${currentUser?.id === ownerCollab.id ? "is-me" : ""}`}
-									>
-										<span className="roster-tag">所有者</span>
-										<span>{ownerCollab.name}</span>
-										{currentUser?.id === ownerCollab.id && <span className="roster-me">我</span>}
-									</span>
-								) : (
-									<span className="roster-chip human owner is-me">
-										<span className="roster-tag">所有者</span>
-										<span>我</span>
-									</span>
-								)}
-								{matterHumanParticipants.map((col) => (
-									<span
-										key={col.id}
-										className={`roster-chip human ${currentUser?.id === col.id ? "is-me" : ""}`}
-										title={`${col.name} · ${col.roleTitle}（协同权限）`}
-									>
-										<span>{col.name}</span>
-										<span className="roster-role-sub">· {col.roleTitle}</span>
-										{currentUser?.id === col.id && <span className="roster-me">我</span>}
-									</span>
-								))}
+			<div ref={rosterRef} className="matter-roster-bar">
+				<div className="matter-roster-main">
+					<span className="roster-section-label">参与人员</span>
+					<div className="roster-chip-group" title="人类协同成员">
+						{ownerCollab ? (
+							<span className={`roster-chip human owner ${currentUser?.id === ownerCollab.id ? "is-me" : ""}`}>
+								<span className="roster-tag">所有者</span>
+								<span>{ownerCollab.name}</span>
+								{currentUser?.id === ownerCollab.id && <span className="roster-me">我</span>}
+							</span>
+						) : (
+							<span className="roster-chip human owner is-me">
+								<span className="roster-tag">所有者</span>
+								<span>我</span>
+							</span>
+						)}
+						{matterHumanParticipants.map((col) => (
+							<span
+								key={col.id}
+								className={`roster-chip human ${currentUser?.id === col.id ? "is-me" : ""}`}
+								title={`${col.name} · ${col.roleTitle}（协同权限）`}
+							>
+								<span>{col.name}</span>
+								<span className="roster-role-sub">· {col.roleTitle}</span>
+								{currentUser?.id === col.id && <span className="roster-me">我</span>}
+							</span>
+						))}
+						{isOwner && (
+							<button
+								type="button"
+								className={`roster-manage-btn ${collaboratorMenuOpen ? "active" : ""}`}
+								onClick={() => {
+									setObserverMenuOpen(false);
+									setCollaboratorMenuOpen((open) => !open);
+								}}
+							>
+								+ 邀请/管理同事
+							</button>
+						)}
+					</div>
+
+					<span className="roster-divider" aria-hidden="true" />
+
+					<span className="roster-section-label">AI 团队</span>
+					<div className="roster-chip-group" title="当前事项参与推进的 AI 员工与分工">
+						{leadAi && (
+							<span className="roster-chip ai lead" title={`主责：${leadAi.displayName}（${leadAi.roleTitle}）`}>
+								<span
+									className="roster-ai-dot"
+									style={{ background: getMemberThemeById(members, leadAi.id).bg }}
+								/>
+								<span className="roster-tag">主责</span>
+								<span>{leadAi.displayName}</span>
+							</span>
+						)}
+						{observerAis.map((obs) => (
+							<span
+								key={obs.id}
+								className="roster-chip ai observer"
+								title={`旁听：${obs.displayName}（${obs.roleTitle}）`}
+							>
+								<span
+									className="roster-ai-dot"
+									style={{ background: getMemberThemeById(members, obs.id).bg }}
+								/>
+								<span className="roster-tag">旁听</span>
+								<span>{obs.displayName}</span>
+							</span>
+						))}
+						{specialistAis.map((spec) => (
+							<span
+								key={spec.id}
+								className="roster-chip ai specialist"
+								title={`内部委托协同：${spec.displayName}（${spec.roleTitle}）`}
+							>
+								<span
+									className="roster-ai-dot"
+									style={{ background: getMemberThemeById(members, spec.id).bg }}
+								/>
+								<span className="roster-tag">协同</span>
+								<span>{spec.displayName}</span>
+							</span>
+						))}
+						{isOwner && (
+							<button
+								type="button"
+								aria-expanded={observerMenuOpen}
+								className={`roster-manage-btn ${observerMenuOpen || observerAis.length > 0 ? "active" : ""}`}
+								title="直接在当前事项团队成员中增减旁听 AI 角色（支持运行中实时调整）"
+								onClick={() => {
+									setCollaboratorMenuOpen(false);
+									setObserverMenuOpen((open) => !open);
+								}}
+							>
+								{observerAis.length > 0 ? `旁听配置 (${observerAis.length})` : "+ 配置旁听"}
+							</button>
+						)}
+					</div>
+				</div>
+
+				{!isOwner && (
+					<span
+						className="pill roster-permission-pill"
+						title="协同成员可自由聊天讨论、提交 AI 提请单与评价成果，执行权限由所有者掌握"
+					>
+						协同成员模式 · AI 执行需所有者确认
+					</span>
+				)}
+
+				{collaboratorMenuOpen && (
+					<div className="collaborator-roster-popover">
+						<div className="banner-row">
+							<div>
+								<strong>{isOwner ? "同事参与与邀请链接" : "当前事项参与同事"}</strong>
+								<span className="observer-hint">
+									{isOwner
+										? "勾选同事加入当前事项名单，或直接复制其专属邀请链接在局域网浏览器打开"
+										: "查看共同参与当前事项的团队成员与分工"}
+								</span>
+							</div>
+							<div style={{ display: "flex", gap: 6 }}>
 								{isOwner && (
 									<button
 										type="button"
-										className={`roster-manage-btn ${collaboratorMenuOpen ? "active" : ""}`}
-										onClick={() => setCollaboratorMenuOpen((open) => !open)}
+										className="btn-inline"
+										onClick={() => {
+											setCollaboratorMenuOpen(false);
+											onOpenTeam();
+										}}
 									>
-										+ 邀请/管理同事
+										去团队页新增同事
 									</button>
 								)}
-							</div>
-
-							<span className="roster-divider" aria-hidden="true" />
-
-							<span className="roster-section-label">AI 团队</span>
-							<div className="roster-chip-group" title="当前事项参与推进的 AI 员工与分工">
-								{leadAi && (
-									<span
-										className="roster-chip ai lead"
-										title={`主责：${leadAi.displayName}（${leadAi.roleTitle}）`}
-									>
-										<span
-											className="roster-ai-dot"
-											style={{ background: getMemberThemeById(members, leadAi.id).bg }}
-										/>
-										<span className="roster-tag">主责</span>
-										<span>{leadAi.displayName}</span>
-									</span>
-								)}
-								{observerAis.map((obs) => (
-									<span
-										key={obs.id}
-										className="roster-chip ai observer"
-										title={`旁听：${obs.displayName}（${obs.roleTitle}）`}
-									>
-										<span
-											className="roster-ai-dot"
-											style={{ background: getMemberThemeById(members, obs.id).bg }}
-										/>
-										<span className="roster-tag">旁听</span>
-										<span>{obs.displayName}</span>
-									</span>
-								))}
-								{specialistAis.map((spec) => (
-									<span
-										key={spec.id}
-										className="roster-chip ai specialist"
-										title={`内部委托协同：${spec.displayName}（${spec.roleTitle}）`}
-									>
-										<span
-											className="roster-ai-dot"
-											style={{ background: getMemberThemeById(members, spec.id).bg }}
-										/>
-										<span className="roster-tag">协同</span>
-										<span>{spec.displayName}</span>
-									</span>
-								))}
+								<button type="button" className="btn-inline" onClick={() => setCollaboratorMenuOpen(false)}>
+									关闭
+								</button>
 							</div>
 						</div>
-
-						{!isOwner && (
-							<span
-								className="pill roster-permission-pill"
-								title="协同成员可自由聊天讨论、提交 AI 提请单与评价成果，执行权限由所有者掌握"
-							>
-								协同成员模式 · AI 执行需所有者确认
-							</span>
-						)}
-
-						{collaboratorMenuOpen && isOwner && (
-							<div className="collaborator-roster-popover">
-								<div className="banner-row">
-									<div>
-										<strong>同事参与与邀请链接</strong>
-										<span className="observer-hint">
-											勾选同事加入当前事项名单，或直接复制其专属邀请链接在局域网浏览器打开
-										</span>
-									</div>
-									<div style={{ display: "flex", gap: 6 }}>
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => {
-												setCollaboratorMenuOpen(false);
-												onOpenTeam();
-											}}
-										>
-											去团队页新增同事
-										</button>
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => setCollaboratorMenuOpen(false)}
-										>
-											关闭
-										</button>
-									</div>
-								</div>
-								{nonOwnerCollaborators.length === 0 ? (
-									<p className="muted-hint" style={{ margin: "6px 0 0" }}>
-										还没有登记协同同事。点击右上角「去团队页新增同事」即可生成专属邀请链接。
-									</p>
-								) : (
-									<div className="collaborator-popover-list">
-										{nonOwnerCollaborators.map((col) => {
-											const inMatter = assignedIds.includes(col.id);
-											return (
-												<div key={col.id} className="collaborator-popover-row">
-													<div className="collaborator-popover-ident">
-														{selectedMatterId && onUpdateMatterCollaborators && (
-															<input
-																type="checkbox"
-																checked={inMatter}
-																aria-label={`邀请 ${col.name} 参与本事项`}
-																onChange={() => {
-																	const nextIds = inMatter
-																		? assignedIds.filter((id) => id !== col.id)
-																		: [...assignedIds, col.id];
-																	onUpdateMatterCollaborators(nextIds);
-																}}
-															/>
-														)}
-														<strong>{col.name}</strong>
-														<span className="roster-role-sub">{col.roleTitle}</span>
-													</div>
-													<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-														{col.token && (
-															<button
-																type="button"
-																className="btn-pill-outline btn-xs"
-																onClick={() => void copyCollabInvite(col)}
-															>
-																复制邀请链接
-															</button>
-														)}
-													</div>
-												</div>
-											);
-										})}
-									</div>
-								)}
+						{isOwner && nonOwnerCollaborators.length === 0 ? (
+							<p className="muted-hint" style={{ margin: "6px 0 0" }}>
+								还没有登记协同同事。点击右上角「去团队页新增同事」即可生成专属邀请链接。
+							</p>
+						) : (
+							<div className="collaborator-popover-list">
+								{(isOwner ? nonOwnerCollaborators : allActiveHumans).map((col) => {
+									const inMatter = assignedCollabIds.includes(col.id);
+									return (
+										<div key={col.id} className="collaborator-popover-row">
+											<div className="collaborator-popover-ident">
+												{isOwner && selectedMatterId && onUpdateMatterCollaborators && (
+													<input
+														type="checkbox"
+														checked={inMatter}
+														aria-label={`邀请 ${col.name} 参与本事项`}
+														onChange={() => {
+															const nextIds = inMatter
+																? assignedCollabIds.filter((id) => id !== col.id)
+																: [...assignedCollabIds, col.id];
+															onUpdateMatterCollaborators(nextIds);
+														}}
+													/>
+												)}
+												<strong>{col.name}</strong>
+												<span className="roster-role-sub">
+													{col.permissionRole === "owner" ? "所有者" : col.roleTitle}
+												</span>
+											</div>
+											<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+												{isOwner && col.token && (
+													<button
+														type="button"
+														className="btn-pill-outline btn-xs"
+														onClick={() => void copyCollabInvite(col)}
+													>
+														复制邀请链接
+													</button>
+												)}
+											</div>
+										</div>
+									);
+								})}
 							</div>
 						)}
 					</div>
-				);
-			})()}
+				)}
+
+				{observerMenuOpen && isOwner && (
+					<div className="collaborator-roster-popover roster-observer-popover">
+						<div className="banner-row">
+							<div>
+								<strong>AI 旁听成员配置</strong>
+								<span className="observer-hint">
+									主负责人答复后，旁听成员从各自专业视角审视（运行中调整也会对即将评估的旁听/下一轮生效）
+								</span>
+							</div>
+							<div className="observer-quick-actions">
+								<button
+									type="button"
+									className="btn-inline"
+									onClick={() => {
+										onUpdateObservers(members.filter((m) => m.id !== headerContact?.id).map((m) => m.id));
+									}}
+								>
+									全员旁听
+								</button>
+								<button type="button" className="btn-inline" onClick={() => onUpdateObservers([])}>
+									清空
+								</button>
+								<button type="button" className="btn-inline" onClick={() => setObserverMenuOpen(false)}>
+									完成
+								</button>
+							</div>
+						</div>
+						<div className="observer-peer-list">
+							{members
+								.filter((m) => m.id !== headerContact?.id)
+								.map((peer) => {
+									const checked = activeObserverIds.includes(peer.id);
+									const theme = getMemberThemeById(members, peer.id);
+									return (
+										<button
+											key={peer.id}
+											type="button"
+											className={`observer-peer-chip ${checked ? "active" : ""}`}
+											onClick={() => {
+												const next = checked
+													? activeObserverIds.filter((id) => id !== peer.id)
+													: [...activeObserverIds, peer.id];
+												onUpdateObservers(next);
+											}}
+										>
+											<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
+											<span className="observer-peer-text">
+												<strong>{peer.displayName}</strong>
+												<small>{peer.roleTitle}</small>
+											</span>
+											<span className="observer-peer-check">{checked ? "✓" : "+"}</span>
+										</button>
+									);
+								})}
+						</div>
+					</div>
+				)}
+			</div>
 
 			{collabOpen && matterDetail && (
 				<div ref={collabPanelRef} role="dialog" aria-label="团队委托与过程事件" className="collab-dock-panel">
@@ -1296,64 +1419,6 @@ export function ChatStage({
 						</div>
 					)}
 
-					{observerMenuOpen && (
-						<div className="quick-prompts-popover observer-popover">
-							<div className="banner-row">
-								<div>
-									<strong>会议旁听成员</strong>
-									<span className="observer-hint">
-										主负责人答复后，旁听同事从本职角度审视（运行中调整也会对即将评估的旁听/下一轮生效）
-									</span>
-								</div>
-								<div className="observer-quick-actions">
-									<button
-										type="button"
-										className="btn-inline"
-										onClick={() => {
-											onUpdateObservers(members.filter((m) => m.id !== headerContact?.id).map((m) => m.id));
-										}}
-									>
-										全员旁听
-									</button>
-									<button type="button" className="btn-inline" onClick={() => onUpdateObservers([])}>
-										清空
-									</button>
-									<button type="button" className="btn-inline" onClick={() => setObserverMenuOpen(false)}>
-										完成
-									</button>
-								</div>
-							</div>
-							<div className="observer-peer-list">
-								{members
-									.filter((m) => m.id !== headerContact?.id)
-									.map((peer) => {
-										const checked = activeObserverIds.includes(peer.id);
-										const theme = getMemberThemeById(members, peer.id);
-										return (
-											<button
-												key={peer.id}
-												type="button"
-												className={`observer-peer-chip ${checked ? "active" : ""}`}
-												onClick={() => {
-													const next = checked
-														? activeObserverIds.filter((id) => id !== peer.id)
-														: [...activeObserverIds, peer.id];
-													onUpdateObservers(next);
-												}}
-											>
-												<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-												<span className="observer-peer-text">
-													<strong>{peer.displayName}</strong>
-													<small>{peer.roleTitle}</small>
-												</span>
-												<span className="observer-peer-check">{checked ? "✓" : "+"}</span>
-											</button>
-										);
-									})}
-							</div>
-						</div>
-					)}
-
 					<div className="composer-mode-bar">
 						<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
 							<button
@@ -1450,21 +1515,6 @@ export function ChatStage({
 								</option>
 							))}
 						</select>
-						{isOwner && (
-							<button
-								type="button"
-								aria-expanded={observerMenuOpen}
-								className={`select-pill action ${activeObserverIds.length > 0 ? "observer-active" : ""}`}
-								onClick={() => {
-									setStarterMenuOpen(false);
-									setObserverMenuOpen((v) => !v);
-								}}
-							>
-								{activeObserverIds.length > 0
-									? `旁听：${activeObserverIds.map((id) => memberName(id)).join("、")}`
-									: "旁听：仅主负责人"}
-							</button>
-						)}
 						{selectedMatterId && (
 							<button type="button" className="select-pill action" onClick={onNewMatter}>
 								+ 切到新事项

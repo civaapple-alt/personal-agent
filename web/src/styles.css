@@ -3754,3 +3754,47 @@ body {
 .btn-inline.danger {
 	color: #b42318;
 }
+
+.header-humans-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.header-humans-avatars {
+	display: inline-flex;
+	align-items: center;
+}
+
+.header-human-avatar {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 10px;
+	font-weight: 700;
+	color: #0f172a;
+	background: #e0f2fe;
+	border: 1.5px solid #fff;
+	margin-left: -5px;
+}
+
+.header-human-avatar:first-child {
+	margin-left: 0;
+}
+
+.header-human-avatar.is-owner {
+	background: #0f172a;
+	color: #fff;
+}
+
+.header-humans-text {
+	white-space: nowrap;
+}
+
+.roster-observer-popover {
+	left: auto;
+	right: 20px;
+}
