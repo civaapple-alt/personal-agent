@@ -190,6 +190,7 @@ export function ChatStage({
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const chatScrollRef = useRef<HTMLDivElement | null>(null);
+	const chatStreamInnerRef = useRef<HTMLDivElement | null>(null);
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 	const lastScrolledMatterIdRef = useRef<string | null>(null);
 	const prevMessageCountRef = useRef(0);
@@ -292,23 +293,27 @@ export function ChatStage({
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const sendBlockedByTurn = isTurnRunning && isOwner && composerMode === "dispatch";
 	const loadedMatterId = matterDetail?.matter.id ?? null;
+	const activeLoadedId = selectedMatterId && loadedMatterId === selectedMatterId ? loadedMatterId : null;
 	const messageCount = matterDetail?.userMessages.length ?? 0;
 	const streamLen = streamingDelta.length;
 	useLayoutEffect(() => {
 		const el = chatScrollRef.current;
-		if (!el || !loadedMatterId || (selectedMatterId && loadedMatterId !== selectedMatterId)) {
+		if (!el || !activeLoadedId) {
+			lastScrolledMatterIdRef.current = null;
+			prevMessageCountRef.current = 0;
+			prevStreamLenRef.current = 0;
 			return;
 		}
-		if (lastScrolledMatterIdRef.current !== loadedMatterId) {
-			lastScrolledMatterIdRef.current = loadedMatterId;
+		if (lastScrolledMatterIdRef.current !== activeLoadedId) {
+			lastScrolledMatterIdRef.current = activeLoadedId;
 			prevMessageCountRef.current = messageCount;
 			prevStreamLenRef.current = streamLen;
-			const saved = chatScrollMemory.get(loadedMatterId);
+			const saved = chatScrollMemory.get(activeLoadedId);
 			if (saved && !saved.atBottom) {
 				el.scrollTop = saved.scrollTop;
 			} else {
 				el.scrollTop = el.scrollHeight;
-				chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom: true });
+				chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
 			}
 			return;
 		}
@@ -317,16 +322,31 @@ export function ChatStage({
 		prevMessageCountRef.current = messageCount;
 		prevStreamLenRef.current = streamLen;
 		if (!hadNewMessage && !hadStreamGrowth) return;
-		const saved = chatScrollMemory.get(loadedMatterId);
+		const saved = chatScrollMemory.get(activeLoadedId);
 		if (saved && !saved.atBottom) return;
 		if (hadNewMessage) {
 			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-			chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollHeight, atBottom: true });
+			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollHeight, atBottom: true });
 		} else if (hadStreamGrowth) {
 			el.scrollTop = el.scrollHeight;
-			chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom: true });
+			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
 		}
-	}, [loadedMatterId, selectedMatterId, messageCount, streamLen]);
+	}, [activeLoadedId, messageCount, streamLen]);
+
+	useEffect(() => {
+		const el = chatScrollRef.current;
+		const inner = chatStreamInnerRef.current;
+		if (!el || !inner || !activeLoadedId || typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(() => {
+			if (lastScrolledMatterIdRef.current !== activeLoadedId) return;
+			const saved = chatScrollMemory.get(activeLoadedId);
+			if (saved && !saved.atBottom) return;
+			el.scrollTop = el.scrollHeight;
+			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
+		});
+		observer.observe(inner);
+		return () => observer.disconnect();
+	}, [activeLoadedId]);
 
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -1339,13 +1359,13 @@ export function ChatStage({
 				ref={chatScrollRef}
 				className="chat-stream-scroll"
 				onScroll={(e) => {
-					if (!loadedMatterId || (selectedMatterId && loadedMatterId !== selectedMatterId)) return;
+					if (!activeLoadedId || lastScrolledMatterIdRef.current !== activeLoadedId) return;
 					const el = e.currentTarget;
 					const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 100;
-					chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom });
+					chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom });
 				}}
 			>
-				<div className="chat-stream-inner">
+				<div ref={chatStreamInnerRef} className="chat-stream-inner">
 					{errorBanner && (
 						<div className="approval-card banner-gap">
 							<div className="banner-row">
