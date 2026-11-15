@@ -35,6 +35,25 @@ export function getBotTheme(index: number): { bg: string; tilt: string } {
 	return BOT_PALETTE[index % BOT_PALETTE.length] ?? { bg: "#35b49b", tilt: "0deg" };
 }
 
+export function getMemberThemeById(
+	members: TeamMemberDto[] | undefined,
+	memberId: string | null | undefined,
+): { bg: string; tilt: string } {
+	if (!members || !memberId) return getBotTheme(0);
+	const idx = members.findIndex((m) => m.id === memberId);
+	return idx >= 0 ? getBotTheme(idx) : getBotTheme(0);
+}
+
+export type RoleMood = MatterProgressDto["stage"] | "idle";
+
+export function inferDelegationMood(stageLabel: string): RoleMood {
+	if (/撰写|整理|完成/.test(stageLabel)) return "finalizing";
+	if (/确认|等待/.test(stageLabel)) return "waiting_user";
+	if (/读取|执行|修改|写入|调用|处理/.test(stageLabel)) return "tool";
+	if (/启动|接入/.test(stageLabel)) return "starting";
+	return "thinking";
+}
+
 export function splitTagsInput(raw: string): string[] {
 	return raw
 		.split(/[,，、\n]/)

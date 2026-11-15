@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { BootstrapPayload, MatterDto, MatterProgressDto } from "../api.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
-import { getBotTheme, STATUS_LABELS } from "../utils.ts";
+import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 
 interface SidebarProps {
@@ -87,10 +87,20 @@ export function Sidebar({
 				{bootstrap?.members.map((member, idx) => {
 					const theme = getBotTheme(idx);
 					const isSelected = selectedMemberId === member.id;
-					const isWorking = Object.entries(progressByMatter).some(([mId]) => {
+					let workingMood: RoleMood = "idle";
+					for (const [mId, prog] of Object.entries(progressByMatter)) {
+						const delegated = prog.activeDelegations?.find((entry) => entry.memberId === member.id);
+						if (delegated) {
+							workingMood = inferDelegationMood(delegated.stageLabel);
+							break;
+						}
 						const matter = bootstrap.matters.find((m) => m.id === mId);
-						return matter?.leadMemberId === member.id;
-					});
+						if (matter?.leadMemberId === member.id) {
+							workingMood = prog.stage;
+							break;
+						}
+					}
+					const isWorking = workingMood !== "idle";
 					return (
 						<button
 							key={member.id}
@@ -100,7 +110,7 @@ export function Sidebar({
 							title={`${member.displayName} · ${member.roleTitle}`}
 						>
 							<span className="roster-avatar-wrap">
-								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" />
+								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
 								{isWorking && <span className="roster-working-dot" />}
 							</span>
 							<span className="roster-name">{member.displayName}</span>

@@ -222,7 +222,11 @@ export function ChatStage({
 					)}
 				</div>
 				<div className="stage-center-pill">
-					<BotFaceIcon bg={headerTheme.bg} size="sm" />
+					<BotFaceIcon
+						bg={headerTheme.bg}
+						size="sm"
+						mood={isTurnRunning && activeMatterProgress ? activeMatterProgress.stage : "idle"}
+					/>
 					<span className="stage-center-name">{headerContact ? headerContact.displayName : "AI 团队"}</span>
 					{matterDetail && <span className="stage-center-matter">· {matterDetail.matter.title}</span>}
 				</div>
@@ -439,6 +443,13 @@ export function ChatStage({
 								<ExploringStatus
 									progress={activeMatterProgress}
 									elapsedSeconds={elapsedSeconds}
+									members={members}
+									leadMemberId={matterDetail?.matter.leadMemberId ?? headerContact?.id}
+									leadDisplayName={
+										matterDetail?.matter.leadMemberId
+											? memberName(matterDetail.matter.leadMemberId)
+											: headerContact?.displayName
+									}
 									onAbort={() => onAbortMatter(selectedMatterId)}
 								/>
 							)}

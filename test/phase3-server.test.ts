@@ -19,7 +19,12 @@ import {
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
-import { formatNoticeEventLine, mapDelegationsToMessages } from "../web/src/utils.ts";
+import {
+	formatNoticeEventLine,
+	getMemberThemeById,
+	inferDelegationMood,
+	mapDelegationsToMessages,
+} from "../web/src/utils.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
@@ -802,4 +807,10 @@ test("mapDelegationsToMessages pairs turn delegations for running, completed, an
 		),
 		"开始工具 read (docs/prd.md)",
 	);
+	assert.equal(inferDelegationMood("读取文件 docs/prd.md"), "tool");
+	assert.equal(inferDelegationMood("撰写结论：已完成评估"), "finalizing");
+	assert.equal(inferDelegationMood("待你确认方案取舍"), "waiting_user");
+	assert.equal(inferDelegationMood("已接入任务"), "starting");
+	assert.equal(inferDelegationMood("思考分析"), "thinking");
+	assert.equal(getMemberThemeById([{ id: "pm" } as never, { id: "eng" } as never], "eng").bg, "#4e6df5");
 });
