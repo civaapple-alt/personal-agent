@@ -28,7 +28,8 @@
 ## 对话、旁听、图片与运行快照
 
 - [BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作。
-- [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`。
+- [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`；
+  点击左上角 AI 头像仅用于按该角色发起新事项，已有事项顶栏始终显示该事项真实负责人且不随左上角选择切换。
 - [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费失败/中止消息的 `metadata.progressSnapshot`：
   - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，

@@ -160,6 +160,7 @@ export function App() {
 				if (route.isNewMatter) {
 					setSelectedMatterId(null);
 				} else if (route.matterId) {
+					setSelectedMemberId("auto");
 					setSelectedMatterId(route.matterId);
 				}
 			}
@@ -474,14 +475,15 @@ export function App() {
 
 	const headerContact: TeamMemberDto | null = useMemo(() => {
 		if (!bootstrap) return null;
+		// In an existing matter, the top-center pill always reflects the matter's actual lead AI.
+		if (selectedMatterId && matterDetail?.matter.leadMemberId) {
+			return bootstrap.members.find((m) => m.id === matterDetail.matter.leadMemberId) ?? null;
+		}
 		if (selectedMemberId !== "auto") {
 			return bootstrap.members.find((m) => m.id === selectedMemberId) ?? null;
 		}
-		if (matterDetail?.matter.leadMemberId) {
-			return bootstrap.members.find((m) => m.id === matterDetail.matter.leadMemberId) ?? null;
-		}
 		return bootstrap.members.find((m) => m.isPrimaryContact) ?? bootstrap.members[0] ?? null;
-	}, [bootstrap, matterDetail, selectedMemberId]);
+	}, [bootstrap, matterDetail, selectedMatterId, selectedMemberId]);
 
 	const memberThemeMap = useMemo(() => {
 		const map = new Map<string, { bg: string; tilt: string }>();
@@ -610,7 +612,6 @@ export function App() {
 		setErrorBanner(null);
 		setNoticeBanner(null);
 		try {
-			const preferredMemberId = selectedMemberId === "auto" ? undefined : selectedMemberId;
 			let targetMatterId = selectedMatterId;
 
 			if (targetMatterId) {
@@ -618,13 +619,12 @@ export function App() {
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
-					preferredMemberId,
 				});
 				if (effectiveMode === "ai_request") {
 					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
 				}
 			} else {
-				const preferredForCreate = selectedMemberId === "auto" ? headerContact?.id : selectedMemberId;
+				const preferredForCreate = selectedMemberId === "auto" ? undefined : selectedMemberId;
 				const created = await createMatter({
 					mode: effectiveMode,
 					prompt: text,
@@ -637,6 +637,7 @@ export function App() {
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
+				setSelectedMemberId("auto");
 				navigateRoute({ tab: "chats", matterId: created.matter.id });
 				if (effectiveMode === "discussion") {
 					setNoticeBanner("已创建事项并发送首条团队讨论");
@@ -1077,9 +1078,12 @@ export function App() {
 				onSearchQueryChange={setSearchQuery}
 				onNavigate={(route) => navigateRoute(route)}
 				onToggleMember={(memberId) => {
-					setSelectedMemberId((prev) => (prev === memberId ? "auto" : memberId));
-					if (activeTab !== "chats") {
+					if (activeTab !== "chats" || selectedMatterId !== null) {
+						setDraftAiMemberIds(null);
+						setSelectedMemberId(memberId);
 						navigateRoute({ tab: "chats", isNewMatter: true });
+					} else {
+						setSelectedMemberId((prev) => (prev === memberId ? "auto" : memberId));
 					}
 					composerRef.current?.focus();
 				}}

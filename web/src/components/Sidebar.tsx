@@ -90,7 +90,7 @@ export function Sidebar({
 			<div className="roster-strip">
 				{bootstrap?.members.map((member, idx) => {
 					const theme = getBotTheme(idx);
-					const isSelected = selectedMemberId === member.id;
+					const isSelected = activeTab === "chats" && !selectedMatterId && selectedMemberId === member.id;
 					let workingMood: RoleMood = "idle";
 					for (const [mId, prog] of Object.entries(progressByMatter)) {
 						const delegated = prog.activeDelegations?.find((entry) => entry.memberId === member.id);
@@ -111,7 +111,7 @@ export function Sidebar({
 							type="button"
 							className={`roster-tile ${isSelected ? "active" : ""}`}
 							onClick={() => onToggleMember(member.id)}
-							title={`${member.displayName} · ${member.roleTitle}`}
+							title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
 						>
 							<span className="roster-avatar-wrap">
 								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
