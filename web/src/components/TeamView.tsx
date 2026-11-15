@@ -518,34 +518,43 @@ export function TeamView({
 					)}
 
 					{showOrgForm && (
-						<div className="memory-draft-box">
+						<div className="memory-draft-box identity-form-box">
 							<div className="memory-draft-head">
 								<strong>{editingOrgId ? "编辑组织身份" : "新建组织身份"}</strong>
 							</div>
 							<div className="form-grid">
-								<input
-									className="input-field"
-									aria-label="组织名称"
-									placeholder="组织名称（如：Acme Engineering）"
-									value={orgNameInput}
-									onChange={(e) => setOrgNameInput(e.target.value)}
-								/>
-								<input
-									className="input-field"
-									aria-label="组织 Git 邮箱域名"
-									placeholder="默认 Git 邮箱域名（可选，如：acme.dev）"
-									value={orgDomainInput}
-									onChange={(e) => setOrgDomainInput(e.target.value)}
-								/>
+								<label className="identity-field">
+									<span className="identity-field-label">组织名称</span>
+									<input
+										className="input-field"
+										aria-label="组织名称"
+										placeholder="如：Acme Engineering"
+										value={orgNameInput}
+										onChange={(e) => setOrgNameInput(e.target.value)}
+									/>
+								</label>
+								<label className="identity-field">
+									<span className="identity-field-label">默认 Git 邮箱域名（可选）</span>
+									<input
+										className="input-field"
+										aria-label="组织 Git 邮箱域名"
+										placeholder="如：acme.dev"
+										value={orgDomainInput}
+										onChange={(e) => setOrgDomainInput(e.target.value)}
+									/>
+								</label>
 							</div>
-							<div className="feedback-row">
+							<label className="identity-field">
+								<span className="identity-field-label">组织背景与共同准则（可选，执行时自动注入上下文）</span>
 								<input
 									className="input-field"
 									aria-label="组织简介"
-									placeholder="组织背景或共同准则摘要（可选，执行时自动注入上下文）"
+									placeholder="简要描述组织规范、协作边界或业务背景"
 									value={orgDescInput}
 									onChange={(e) => setOrgDescInput(e.target.value)}
 								/>
+							</label>
+							<div className="actions-row">
 								<button
 									type="button"
 									className="btn-pill-dark btn-xs"
@@ -658,46 +667,72 @@ export function TeamView({
 								</div>
 
 								{editingIdentityMemberId === member.id && (
-									<div className="memory-draft-box" style={{ marginBottom: 10 }}>
-										<div className="form-grid">
-											<input
-												className="input-field"
-												aria-label="显示名称"
-												placeholder="显示名称"
-												value={editDisplayName}
-												onChange={(e) => setEditDisplayName(e.target.value)}
-											/>
-											<input
-												className="input-field"
-												aria-label="职位头衔"
-												placeholder="职位头衔"
-												value={editRoleTitle}
-												onChange={(e) => setEditRoleTitle(e.target.value)}
-											/>
+									<div className="memory-draft-box identity-form-box" style={{ marginBottom: 10 }}>
+										<div className="identity-form-hint">
+											Git 提交区分 Author（下列角色署名）与 Committer（自动沿用当前仓库真实用户）。
 										</div>
 										<div className="form-grid">
-											<input
-												className="input-field"
-												aria-label="Git Author/Committer Name"
-												placeholder="Git Name（如：R&D Lead）"
-												value={editGitName}
-												onChange={(e) => setEditGitName(e.target.value)}
-											/>
-											<input
-												className="input-field"
-												aria-label="Git Author/Committer Email"
-												placeholder="Git Email（如：rd@acme.dev）"
-												value={editGitEmail}
-												onChange={(e) => setEditGitEmail(e.target.value)}
-											/>
+											<label className="identity-field">
+												<span className="identity-field-label">Git Author 名称</span>
+												<input
+													className="input-field"
+													aria-label="Git Author 名称"
+													placeholder="如：R&D Lead"
+													value={editGitName}
+													onChange={(e) => setEditGitName(e.target.value)}
+												/>
+											</label>
+											<label className="identity-field">
+												<span className="identity-field-label">Git Author 邮箱</span>
+												<input
+													className="input-field"
+													aria-label="Git Author 邮箱"
+													placeholder="如：rd@acme.dev"
+													value={editGitEmail}
+													onChange={(e) => setEditGitEmail(e.target.value)}
+												/>
+											</label>
 										</div>
-										<input
-											className="input-field"
-											aria-label="角色背景与专长补充"
-											placeholder="身份定位与组织专长补充（不随公开模板导出）"
-											value={editIdentitySummary}
-											onChange={(e) => setEditIdentitySummary(e.target.value)}
-										/>
+										<label className="identity-field">
+											<span className="identity-field-label">
+												角色定位与专长补充（私有，不随公开模板导出）
+											</span>
+											<textarea
+												rows={2}
+												className="input-field identity-textarea"
+												aria-label="角色背景与专长补充"
+												placeholder="补充该角色在当前团队/项目中的分工偏好、关注重点或边界说明"
+												value={editIdentitySummary}
+												onChange={(e) => setEditIdentitySummary(e.target.value)}
+											/>
+										</label>
+										<details className="identity-rename-details">
+											<summary>
+												修改显示名称与头衔（当前：{member.displayName} · {member.roleTitle}）
+											</summary>
+											<div className="form-grid" style={{ marginTop: 8 }}>
+												<label className="identity-field">
+													<span className="identity-field-label">团队显示名</span>
+													<input
+														className="input-field"
+														aria-label="显示名称"
+														placeholder="如：产品经理"
+														value={editDisplayName}
+														onChange={(e) => setEditDisplayName(e.target.value)}
+													/>
+												</label>
+												<label className="identity-field">
+													<span className="identity-field-label">职位头衔</span>
+													<input
+														className="input-field"
+														aria-label="职位头衔"
+														placeholder="如：Product Manager"
+														value={editRoleTitle}
+														onChange={(e) => setEditRoleTitle(e.target.value)}
+													/>
+												</label>
+											</div>
+										</details>
 										<div className="actions-row" style={{ marginTop: 4 }}>
 											<button
 												type="button"

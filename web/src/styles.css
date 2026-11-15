@@ -3335,3 +3335,54 @@ body {
 	font-size: 11px;
 	color: var(--text-muted);
 }
+
+.identity-form-box {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.identity-form-hint {
+	font-size: 11px;
+	color: var(--text-muted);
+	line-height: 1.45;
+}
+
+.identity-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.identity-field .input-field {
+	width: 100%;
+	box-sizing: border-box;
+	min-width: 0;
+}
+
+.identity-field-label {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-secondary);
+}
+
+.identity-textarea {
+	resize: vertical;
+	font-family: inherit;
+	line-height: 1.45;
+}
+
+.identity-rename-details {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.identity-rename-details > summary {
+	cursor: pointer;
+	user-select: none;
+}
+
+.identity-rename-details > summary:hover {
+	color: var(--text-primary);
+}
