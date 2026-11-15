@@ -178,6 +178,8 @@ export function ChatStage({
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [rosterOpen, setRosterOpen] = useState(false);
+	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
+	const [rosterSearch, setRosterSearch] = useState("");
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 	const collabTriggerRef = useRef<HTMLSpanElement | null>(null);
@@ -187,6 +189,12 @@ export function ChatStage({
 	const headerHumansBtnRef = useRef<HTMLButtonElement | null>(null);
 
 	const isOwner = currentUser?.permissionRole !== "collaborator";
+
+	const closeRoster = () => {
+		setRosterOpen(false);
+		setRosterMode("view");
+		setRosterSearch("");
+	};
 
 	useEffect(() => {
 		if (!collabOpen && !starterMenuOpen && !rosterOpen) return;
@@ -201,6 +209,8 @@ export function ChatStage({
 			}
 			if (rosterOpen && !rosterPanelRef.current?.contains(target) && !headerHumansBtnRef.current?.contains(target)) {
 				setRosterOpen(false);
+				setRosterMode("view");
+				setRosterSearch("");
 			}
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -208,6 +218,8 @@ export function ChatStage({
 				setCollabOpen(false);
 				setStarterMenuOpen(false);
 				setRosterOpen(false);
+				setRosterMode("view");
+				setRosterSearch("");
 				setLightboxImage(null);
 			}
 		};
@@ -518,7 +530,8 @@ export function ChatStage({
 	const leadAi =
 		(matterDetail?.matter.leadMemberId ? members.find((m) => m.id === matterDetail.matter.leadMemberId) : null) ??
 		headerContact;
-	const observerAis = members.filter((m) => activeObserverIds.includes(m.id) && m.id !== leadAi?.id);
+	const eligibleObserverPeers = members.filter((m) => m.id !== leadAi?.id);
+	const observerAis = eligibleObserverPeers.filter((m) => activeObserverIds.includes(m.id));
 	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
 		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
 	);
@@ -597,7 +610,13 @@ export function ChatStage({
 							.join("\n")}
 						onClick={() => {
 							setCollabOpen(false);
-							setRosterOpen((open) => !open);
+							if (rosterOpen) {
+								closeRoster();
+							} else {
+								setRosterMode("view");
+								setRosterSearch("");
+								setRosterOpen(true);
+							}
 						}}
 					>
 						<span className="header-humans-avatars" aria-hidden="true">
@@ -628,7 +647,7 @@ export function ChatStage({
 								className={`btn-pill-outline btn-xs ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
 								title="查看团队内部委托记录及底层工具调用事件"
 								onClick={() => {
-									setRosterOpen(false);
+									closeRoster();
 									setCollabOpen((open) => {
 										const next = !open || collabTab === "experiences";
 										if (
@@ -654,7 +673,7 @@ export function ChatStage({
 								className={`btn-pill-outline btn-xs ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
 								title="在本事项上下文中提炼、查看并核验各岗位协同经验"
 								onClick={() => {
-									setRosterOpen(false);
+									closeRoster();
 									setCollabOpen((open) => !(open && collabTab === "experiences"));
 									setCollabTab("experiences");
 								}}
@@ -674,208 +693,415 @@ export function ChatStage({
 				</div>
 			</header>
 
-			{rosterOpen && (
-				<div
-					ref={rosterPanelRef}
-					role="dialog"
-					aria-label="当前事项协作成员与 AI 旁听配置"
-					className="collab-dock-panel unified-roster-panel"
-				>
-					<div className="unified-roster-head">
-						<div>
-							<strong>当前事项协作成员</strong>
-							<span className="observer-hint">
-								统一查看和管理参与本事项的人类同事，以及 AI 主责、内部协同与旁听角色
-							</span>
-						</div>
-						<div className="unified-roster-head-actions">
-							{!isOwner && (
-								<span
-									className="pill roster-permission-pill"
-									title="协同成员可自由聊天讨论、提交 AI 提请单与评价成果，执行权限由所有者掌握"
-								>
-									协同成员模式 · AI 执行需所有者确认
-								</span>
-							)}
-							{isOwner && (
-								<button
-									type="button"
-									className="btn-inline"
-									onClick={() => {
-										setRosterOpen(false);
-										onOpenTeam();
-									}}
-								>
-									去团队页管理同事
-								</button>
-							)}
-							<button type="button" className="btn-inline" onClick={() => setRosterOpen(false)}>
-								关闭
-							</button>
-						</div>
-					</div>
+			{rosterOpen &&
+				(() => {
+					const query = rosterSearch.trim().toLowerCase();
+					const matchesQuery = (...parts: Array<string | undefined>) =>
+						!query || parts.some((part) => (part ?? "").toLowerCase().includes(query));
+					const ownerLabel = ownerCollab?.name ?? "我";
+					const showOwnerTile = matchesQuery(ownerLabel, "所有者");
+					const filteredHumanTiles = matterHumanParticipants.filter((col) =>
+						matchesQuery(col.name, col.roleTitle, "同事"),
+					);
+					const showLeadAiTile = leadAi && matchesQuery(leadAi.displayName, leadAi.roleTitle, "主责");
+					const filteredSpecialistTiles = specialistAis.filter((spec) =>
+						matchesQuery(spec.displayName, spec.roleTitle, "协同"),
+					);
+					const filteredObserverTiles = observerAis.filter((obs) =>
+						matchesQuery(obs.displayName, obs.roleTitle, "旁听"),
+					);
+					const hasRemovable =
+						(selectedMatterId && onUpdateMatterCollaborators && matterHumanParticipants.length > 0) ||
+						observerAis.length > 0;
+					const filteredCollabCandidates = nonOwnerCollaborators.filter((col) =>
+						matchesQuery(col.name, col.roleTitle),
+					);
+					const filteredObserverCandidates = eligibleObserverPeers.filter((peer) =>
+						matchesQuery(peer.displayName, peer.roleTitle),
+					);
+					return (
+						<div
+							ref={rosterPanelRef}
+							role="dialog"
+							aria-label="协作成员"
+							className="collab-dock-panel unified-roster-panel wechat-roster-panel"
+						>
+							{rosterMode === "add" && isOwner ? (
+								<>
+									<div className="wechat-roster-nav">
+										<button
+											type="button"
+											className="wechat-nav-btn"
+											onClick={() => {
+												setRosterMode("view");
+												setRosterSearch("");
+											}}
+										>
+											‹ 返回
+										</button>
+										<strong className="wechat-nav-title">添加成员</strong>
+										<button
+											type="button"
+											className="wechat-nav-btn primary"
+											onClick={() => {
+												setRosterMode("view");
+												setRosterSearch("");
+											}}
+										>
+											完成
+										</button>
+									</div>
 
-					<section className="unified-roster-section">
-						<div className="unified-roster-section-head">
-							<span className="unified-roster-title">人类协作成员 ({allActiveHumans.length || 1})</span>
-							<span className="muted-tiny">
-								{isOwner ? "勾选加入当前事项讨论，或复制专属邀请链接给同事" : "共同参与本事项的团队成员"}
-							</span>
-						</div>
-						<div className="collaborator-popover-list">
-							<div className="collaborator-popover-row">
-								<div className="collaborator-popover-ident">
-									<span className="roster-tag">所有者</span>
-									<strong>{ownerCollab ? ownerCollab.name : "团队所有者"}</strong>
-									{(!ownerCollab || currentUser?.id === ownerCollab.id) && (
-										<span className="roster-me">我</span>
-									)}
-									<span className="roster-role-sub">完全控制（可直接向 AI 派活、确认提请与配置旁听）</span>
-								</div>
-							</div>
-							{isOwner && nonOwnerCollaborators.length === 0 ? (
-								<p className="muted-hint" style={{ margin: "2px 0 0" }}>
-									还没有登记协同同事。点击右上角「去团队页管理同事」即可新增成员并生成专属邀请链接。
-								</p>
-							) : (
-								(isOwner ? nonOwnerCollaborators : matterHumanParticipants).map((col) => {
-									const inMatter = assignedCollabIds.includes(col.id);
-									return (
-										<div key={col.id} className="collaborator-popover-row">
-											<div className="collaborator-popover-ident">
-												{isOwner && selectedMatterId && onUpdateMatterCollaborators && (
-													<input
-														type="checkbox"
-														checked={inMatter}
-														aria-label={`邀请 ${col.name} 参与本事项`}
-														onChange={() => {
-															const nextIds = inMatter
-																? assignedCollabIds.filter((id) => id !== col.id)
-																: [...assignedCollabIds, col.id];
-															onUpdateMatterCollaborators(nextIds);
-														}}
-													/>
-												)}
-												<strong>{col.name}</strong>
-												<span className="roster-role-sub">{col.roleTitle}</span>
-												{currentUser?.id === col.id && <span className="roster-me">我</span>}
+									<input
+										type="search"
+										className="wechat-roster-search"
+										placeholder="搜索同事或 AI 角色"
+										value={rosterSearch}
+										onChange={(e) => setRosterSearch(e.target.value)}
+									/>
+
+									<div className="wechat-add-scroll">
+										<div className="wechat-add-group">
+											<div className="wechat-add-head">
+												<span>人类同事</span>
+												<button
+													type="button"
+													className="btn-inline"
+													onClick={() => {
+														closeRoster();
+														onOpenTeam();
+													}}
+												>
+													团队页新增 ›
+												</button>
 											</div>
-											<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-												{isOwner && col.token && (
+											{filteredCollabCandidates.length === 0 ? (
+												<div className="wechat-empty-row">
+													{nonOwnerCollaborators.length === 0
+														? "暂无协同同事，可在团队页新增"
+														: "无匹配同事"}
+												</div>
+											) : (
+												filteredCollabCandidates.map((col) => {
+													const inMatter = assignedCollabIds.includes(col.id);
+													const canToggle = Boolean(selectedMatterId && onUpdateMatterCollaborators);
+													return (
+														<div key={col.id} className="wechat-pick-row">
+															{canToggle ? (
+																<button
+																	type="button"
+																	className="wechat-pick-main wechat-pick-toggle"
+																	aria-pressed={inMatter}
+																	aria-label={`邀请 ${col.name} 参与本事项`}
+																	onClick={() => {
+																		if (!onUpdateMatterCollaborators) return;
+																		const nextIds = inMatter
+																			? assignedCollabIds.filter((id) => id !== col.id)
+																			: [...assignedCollabIds, col.id];
+																		onUpdateMatterCollaborators(nextIds);
+																	}}
+																>
+																	<span className={`wechat-check-box ${inMatter ? "checked" : ""}`}>
+																		{inMatter ? "✓" : ""}
+																	</span>
+																	<span className="wechat-mini-avatar human">
+																		{col.name.slice(0, 1).toUpperCase()}
+																	</span>
+																	<span className="wechat-pick-text">
+																		<strong>{col.name}</strong>
+																		<small>{col.roleTitle}</small>
+																	</span>
+																</button>
+															) : (
+																<div className="wechat-pick-main">
+																	<span className="wechat-mini-avatar human">
+																		{col.name.slice(0, 1).toUpperCase()}
+																	</span>
+																	<span className="wechat-pick-text">
+																		<strong>{col.name}</strong>
+																		<small>{col.roleTitle}</small>
+																	</span>
+																</div>
+															)}
+															{col.token && (
+																<button
+																	type="button"
+																	className="wechat-copy-link"
+																	onClick={() => void copyCollabInvite(col)}
+																>
+																	复制链接
+																</button>
+															)}
+														</div>
+													);
+												})
+											)}
+										</div>
+
+										<div className="wechat-add-group">
+											<div className="wechat-add-head">
+												<span>AI 旁听</span>
+												<div className="observer-quick-actions">
 													<button
 														type="button"
-														className="btn-pill-outline btn-xs"
-														onClick={() => void copyCollabInvite(col)}
+														className="btn-inline"
+														onClick={() => onUpdateObservers(eligibleObserverPeers.map((m) => m.id))}
 													>
-														复制邀请链接
+														全选
 													</button>
-												)}
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => onUpdateObservers([])}
+													>
+														清空
+													</button>
+												</div>
 											</div>
+											{filteredObserverCandidates.map((peer) => {
+												const checked = activeObserverIds.includes(peer.id);
+												const theme = getMemberThemeById(members, peer.id);
+												return (
+													<button
+														key={peer.id}
+														type="button"
+														className={`wechat-pick-row clickable ${checked ? "active" : ""}`}
+														onClick={() => {
+															const next = checked
+																? activeObserverIds.filter((id) => id !== peer.id)
+																: [...activeObserverIds, peer.id];
+															onUpdateObservers(next);
+														}}
+													>
+														<span className="wechat-pick-main">
+															<span className={`wechat-check-box ${checked ? "checked" : ""}`}>
+																{checked ? "✓" : ""}
+															</span>
+															<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
+															<span className="wechat-pick-text">
+																<strong>{peer.displayName}</strong>
+																<small>{peer.roleTitle}</small>
+															</span>
+														</span>
+													</button>
+												);
+											})}
 										</div>
-									);
-								})
-							)}
-						</div>
-					</section>
+									</div>
+								</>
+							) : (
+								<>
+									<input
+										type="search"
+										className="wechat-roster-search"
+										placeholder="搜索群成员 / AI"
+										value={rosterSearch}
+										onChange={(e) => setRosterSearch(e.target.value)}
+									/>
 
-					<section className="unified-roster-section">
-						<div className="unified-roster-section-head">
-							<div className="unified-roster-ai-summary">
-								<span className="unified-roster-title">AI 协作角色与旁听配置</span>
-								{leadAi && (
-									<span className="roster-chip ai lead">
-										<span
-											className="roster-ai-dot"
-											style={{ background: getMemberThemeById(members, leadAi.id).bg }}
-										/>
-										<span className="roster-tag">主责</span>
-										<span>{leadAi.displayName}</span>
-									</span>
-								)}
-								{specialistAis.map((spec) => (
-									<span key={spec.id} className="roster-chip ai specialist">
-										<span
-											className="roster-ai-dot"
-											style={{ background: getMemberThemeById(members, spec.id).bg }}
-										/>
-										<span className="roster-tag">协同</span>
-										<span>{spec.displayName}</span>
-									</span>
-								))}
-							</div>
-							{isOwner && (
-								<div className="observer-quick-actions">
-									<button
-										type="button"
-										className="btn-inline"
-										onClick={() => {
-											onUpdateObservers(members.filter((m) => m.id !== headerContact?.id).map((m) => m.id));
-										}}
-									>
-										全员旁听
-									</button>
-									<button type="button" className="btn-inline" onClick={() => onUpdateObservers([])}>
-										清空
-									</button>
-								</div>
-							)}
-						</div>
-						<span className="observer-hint">
-							旁听 AI 会在主负责人答复后从各自专业视角审视并补充建议；运行中增减立即对下一轮及待评估旁听生效
-						</span>
-						{isOwner ? (
-							<div className="observer-peer-list">
-								{members
-									.filter((m) => m.id !== headerContact?.id)
-									.map((peer) => {
-										const checked = activeObserverIds.includes(peer.id);
-										const theme = getMemberThemeById(members, peer.id);
-										return (
+									<div className="wechat-member-grid">
+										{showOwnerTile && (
+											<div className="wechat-member-tile" title={`${ownerLabel} · 所有者`}>
+												<div className="wechat-avatar-box owner">
+													{ownerLabel.slice(0, 1).toUpperCase()}
+												</div>
+												<span className="wechat-tile-name">{ownerLabel}</span>
+												<span className="wechat-tile-tag">
+													所有者{!ownerCollab || currentUser?.id === ownerCollab.id ? " · 我" : ""}
+												</span>
+											</div>
+										)}
+
+										{filteredHumanTiles.map((col) => {
+											const canRemoveHuman =
+												rosterMode === "remove" &&
+												isOwner &&
+												Boolean(selectedMatterId && onUpdateMatterCollaborators);
+											return (
+												<button
+													key={`human-${col.id}`}
+													type="button"
+													className={`wechat-member-tile ${canRemoveHuman || (isOwner && col.token) ? "interactive" : ""}`}
+													title={
+														canRemoveHuman
+															? `移出 ${col.name}`
+															: isOwner && col.token
+																? `${col.name} · ${col.roleTitle}（点击复制邀请链接）`
+																: `${col.name} · ${col.roleTitle}`
+													}
+													onClick={() => {
+														if (canRemoveHuman && onUpdateMatterCollaborators) {
+															onUpdateMatterCollaborators(
+																assignedCollabIds.filter((id) => id !== col.id),
+															);
+														} else if (isOwner && col.token) {
+															void copyCollabInvite(col);
+														}
+													}}
+												>
+													<div className="wechat-avatar-box human">
+														{col.name.slice(0, 1).toUpperCase()}
+														{canRemoveHuman && <span className="wechat-remove-badge">−</span>}
+													</div>
+													<span className="wechat-tile-name">{col.name}</span>
+													<span className="wechat-tile-tag">
+														{currentUser?.id === col.id ? "我" : col.roleTitle}
+													</span>
+												</button>
+											);
+										})}
+
+										{showLeadAiTile &&
+											leadAi &&
+											(() => {
+												const theme = getMemberThemeById(members, leadAi.id);
+												return (
+													<div
+														key={`ai-lead-${leadAi.id}`}
+														className="wechat-member-tile"
+														title={`${leadAi.displayName} · 主责`}
+													>
+														<div className="wechat-avatar-box ai">
+															<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
+														</div>
+														<span className="wechat-tile-name">{leadAi.displayName}</span>
+														<span className="wechat-tile-tag lead">主责</span>
+													</div>
+												);
+											})()}
+
+										{filteredSpecialistTiles.map((spec) => {
+											const theme = getMemberThemeById(members, spec.id);
+											return (
+												<div
+													key={`ai-spec-${spec.id}`}
+													className="wechat-member-tile"
+													title={`${spec.displayName} · 内部协同`}
+												>
+													<div className="wechat-avatar-box ai">
+														<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
+													</div>
+													<span className="wechat-tile-name">{spec.displayName}</span>
+													<span className="wechat-tile-tag">协同</span>
+												</div>
+											);
+										})}
+
+										{filteredObserverTiles.map((obs) => {
+											const theme = getMemberThemeById(members, obs.id);
+											const canRemoveObs = rosterMode === "remove" && isOwner;
+											return (
+												<button
+													key={`ai-obs-${obs.id}`}
+													type="button"
+													className={`wechat-member-tile ${canRemoveObs ? "interactive" : ""}`}
+													title={
+														canRemoveObs ? `取消 ${obs.displayName} 旁听` : `${obs.displayName} · 旁听`
+													}
+													onClick={() => {
+														if (canRemoveObs) {
+															onUpdateObservers(activeObserverIds.filter((id) => id !== obs.id));
+														}
+													}}
+												>
+													<div className="wechat-avatar-box ai">
+														<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
+														{canRemoveObs && <span className="wechat-remove-badge">−</span>}
+													</div>
+													<span className="wechat-tile-name">{obs.displayName}</span>
+													<span className="wechat-tile-tag observer">旁听</span>
+												</button>
+											);
+										})}
+
+										{isOwner && !query && (
 											<button
-												key={peer.id}
 												type="button"
-												className={`observer-peer-chip ${checked ? "active" : ""}`}
+												className="wechat-member-tile interactive"
+												title="添加同事或 AI 旁听"
 												onClick={() => {
-													const next = checked
-														? activeObserverIds.filter((id) => id !== peer.id)
-														: [...activeObserverIds, peer.id];
-													onUpdateObservers(next);
+													setRosterSearch("");
+													setRosterMode("add");
 												}}
 											>
-												<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-												<span className="observer-peer-text">
-													<strong>{peer.displayName}</strong>
-													<small>{peer.roleTitle}</small>
-												</span>
-												<span className="observer-peer-check">{checked ? "✓" : "+"}</span>
+												<div className="wechat-avatar-box action">+</div>
+												<span className="wechat-tile-name">添加</span>
 											</button>
-										);
-									})}
-							</div>
-						) : observerAis.length > 0 ? (
-							<div className="observer-peer-list">
-								{observerAis.map((obs) => {
-									const theme = getMemberThemeById(members, obs.id);
-									return (
-										<span key={obs.id} className="observer-peer-chip active" style={{ cursor: "default" }}>
-											<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-											<span className="observer-peer-text">
-												<strong>{obs.displayName}</strong>
-												<small>{obs.roleTitle}</small>
-											</span>
-											<span className="observer-peer-check">旁听</span>
-										</span>
-									);
-								})}
-							</div>
-						) : (
-							<p className="muted-hint" style={{ margin: "2px 0 0" }}>
-								当前暂无旁听 AI 成员
-							</p>
-						)}
-					</section>
-				</div>
-			)}
+										)}
+
+										{isOwner && !query && hasRemovable && (
+											<button
+												type="button"
+												className="wechat-member-tile interactive"
+												title={rosterMode === "remove" ? "完成移出" : "移出成员或取消旁听"}
+												onClick={() => setRosterMode((mode) => (mode === "remove" ? "view" : "remove"))}
+											>
+												<div
+													className={`wechat-avatar-box action ${rosterMode === "remove" ? "active" : ""}`}
+												>
+													−
+												</div>
+												<span className="wechat-tile-name">
+													{rosterMode === "remove" ? "完成" : "移出"}
+												</span>
+											</button>
+										)}
+									</div>
+
+									<div className="wechat-roster-rows">
+										<div className="wechat-roster-row">
+											<span>AI 旁听</span>
+											{isOwner ? (
+												<button
+													type="button"
+													className="wechat-row-action"
+													onClick={() => {
+														setRosterSearch("");
+														setRosterMode("add");
+													}}
+												>
+													{observerAis.length > 0 ? `${observerAis.length} 位` : "未开启"} ›
+												</button>
+											) : (
+												<span className="wechat-row-val">
+													{observerAis.length > 0 ? `${observerAis.length} 位` : "无"}
+												</span>
+											)}
+										</div>
+										{isOwner ? (
+											<div className="wechat-roster-row">
+												<span>团队同事</span>
+												<button
+													type="button"
+													className="wechat-row-action"
+													onClick={() => {
+														if (nonOwnerCollaborators.length > 0) {
+															setRosterSearch("");
+															setRosterMode("add");
+														} else {
+															closeRoster();
+															onOpenTeam();
+														}
+													}}
+												>
+													{nonOwnerCollaborators.length > 0
+														? `${matterHumanParticipants.length}/${nonOwnerCollaborators.length} 人`
+														: "去团队页新增"}{" "}
+													›
+												</button>
+											</div>
+										) : (
+											<div className="wechat-roster-row">
+												<span>协同权限</span>
+												<span className="wechat-row-val">AI 执行需所有者确认</span>
+											</div>
+										)}
+									</div>
+								</>
+							)}
+						</div>
+					);
+				})()}
 
 			{collabOpen && matterDetail && (
 				<div ref={collabPanelRef} role="dialog" aria-label="团队委托与过程事件" className="collab-dock-panel">
@@ -1533,7 +1759,7 @@ export function ChatStage({
 							aria-label="插入示范任务"
 							title="插入示范任务"
 							onClick={() => {
-								setRosterOpen(false);
+								closeRoster();
 								setStarterMenuOpen((v) => !v);
 							}}
 						>
