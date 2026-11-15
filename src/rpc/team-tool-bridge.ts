@@ -82,6 +82,8 @@ export async function createTeamToolBridge(
 		readyResolve = resolve;
 	});
 	const server = createServer((req, res) => {
+		req.setTimeout(0);
+		res.setTimeout(0);
 		const operation = (async () => {
 			const controller = new AbortController();
 			res.on("close", () => {
@@ -130,6 +132,9 @@ export async function createTeamToolBridge(
 		operations.add(operation);
 		void operation.finally(() => operations.delete(operation));
 	});
+	server.requestTimeout = 0;
+	server.headersTimeout = 0;
+	server.keepAliveTimeout = 0;
 	await new Promise<void>((resolve, reject) => {
 		server.once("error", reject);
 		server.listen(0, "127.0.0.1", () => {

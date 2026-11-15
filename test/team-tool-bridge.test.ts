@@ -76,3 +76,62 @@ test("capability handshake waits for asynchronously registered MCP tools and exp
 		await bridge.close();
 	}
 });
+
+test("teamExtension bridge transport disables request timeouts, returns errors, and propagates AbortSignal", async () => {
+	const controller = new AbortController();
+	let abortedInHandler = false;
+	const bridge = await createTeamToolBridge(async (call, toolSignal) => {
+		if (call.tool === "delegate_to_member" && call.task === "fail-once") {
+			throw new Error("transient failure");
+		}
+		if (call.tool === "delegate_to_member" && call.task === "wait-abort") {
+			await new Promise<void>((resolve) => {
+				toolSignal.addEventListener(
+					"abort",
+					() => {
+						abortedInHandler = true;
+						resolve();
+					},
+					{ once: true },
+				);
+			});
+			return { aborted: true };
+		}
+		return { ok: true };
+	}, controller.signal);
+	const envBefore = { ...process.env };
+	const tools = new Map<string, Parameters<PiExtensionApi["registerTool"]>[0]>();
+	Object.assign(process.env, bridge.env);
+	try {
+		teamExtension({
+			registerTool: (tool) => tools.set(tool.name, tool),
+			on: () => {},
+			getActiveTools: () => [],
+			getAllTools: () => [],
+			setActiveTools: () => {},
+		});
+	} finally {
+		for (const key of Object.keys(bridge.env)) {
+			if (envBefore[key] === undefined) delete process.env[key];
+			else process.env[key] = envBefore[key];
+		}
+	}
+	try {
+		const delegateTool = tools.get("delegate_to_member");
+		assert.ok(delegateTool);
+		await assert.rejects(
+			delegateTool.execute("c-err", { memberId: "qa-manager", task: "fail-once" }),
+			/transient failure/,
+		);
+		const callAbort = new AbortController();
+		const pending = delegateTool.execute("c-abort", { memberId: "qa-manager", task: "wait-abort" }, callAbort.signal);
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		callAbort.abort(new Error("Caller stopped"));
+		await assert.rejects(pending, /Caller stopped/);
+		await new Promise((resolve) => setTimeout(resolve, 25));
+		assert.equal(abortedInHandler, true);
+	} finally {
+		controller.abort();
+		await bridge.close();
+	}
+});

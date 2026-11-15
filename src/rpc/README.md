@@ -7,8 +7,8 @@
 | [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾；支持 `suspendIdleTimeout()` 在宿主桥接耗时期间暂停空闲看门狗。`sessionFile` 必须是编排核选定的文件 |
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果工具，核查动态工具装配并加入当前岗位系统上下文；内部模式不注册发布工具 |
-| [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、bearer token、参数校验、调用 ID 去重和取消。宿主再次拒绝内部成员发布 |
+| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果工具，核查动态工具装配并加入当前岗位系统上下文；通过 `node:http` 无超时长连接调用桥接（规避 `fetch()` 默认 300s `headersTimeout`），内部模式不注册发布工具 |
+| [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验、调用 ID 去重和取消。宿主再次拒绝内部成员发布 |
 
 `agent_settled` 表示执行收尾，不能据此自动生成交付；`disposition: handled` 不等待 settled。RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误不能伪装为空正文成功。
 

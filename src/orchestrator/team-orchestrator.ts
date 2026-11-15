@@ -822,6 +822,7 @@ ${this.store
 				});
 				return { fromMember, toMember, requestMessage, responseMessage, answerText };
 			} catch (error) {
+				run.delegations.delete(key);
 				this.store.appendMessage({
 					matterId: input.matterId,
 					channel: "internal_collab",

@@ -627,3 +627,26 @@ test("delegation suspends parent idle watchdog and forwards colleague progress a
 	assert.ok(events.some((evt) => evt.recentSummaries.some((line) => /研发经理:读取文件：docs\/prd\.md/.test(line))));
 	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.length === 0));
 });
+
+test("failed delegation is not permanently cached so same-task retry runs a fresh worker", async (t) => {
+	let engineerAttempts = 0;
+	const f = await fixture(t, async (worker) => {
+		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+			engineerAttempts += 1;
+			if (engineerAttempts === 1) throw new Error("temporary network interruption");
+			return "重试后已完成评估。";
+		}
+		const args = { memberId: "engineering-manager", task: "核查可行性与工作量" };
+		await assert.rejects(worker.call("delegate_to_member", args, "attempt-1"), /temporary network interruption/);
+		const retryResult = await worker.call("delegate_to_member", args, "attempt-2");
+		assert.match(JSON.stringify(retryResult), /重试后已完成评估/);
+		return "已通过重试拿到研发经理评估。";
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "请让研发经理核查评估",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+	});
+	assert.equal(engineerAttempts, 2);
+	assert.match(result.replyText, /已通过重试拿到研发经理评估/);
+});
