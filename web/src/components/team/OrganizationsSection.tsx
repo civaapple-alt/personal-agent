@@ -1,0 +1,207 @@
+import { useState } from "react";
+import {
+	createOrganization,
+	type OrganizationDto,
+	setDefaultOrganization,
+	updateOrganization,
+	type WorkspaceDto,
+} from "../../api.ts";
+
+interface OrganizationsSectionProps {
+	isOwner: boolean;
+	organizations: OrganizationDto[];
+	workspaces: WorkspaceDto[];
+	onRefresh: () => Promise<void>;
+	onNotice: (message: string) => void;
+	onError: (message: string) => void;
+}
+
+/** Manages organization profiles, default org selection, Git email domain hints, and workspace groupings. */
+export function OrganizationsSection({
+	isOwner,
+	organizations,
+	workspaces,
+	onRefresh,
+	onNotice,
+	onError,
+}: OrganizationsSectionProps) {
+	const [showOrgForm, setShowOrgForm] = useState(false);
+	const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+	const [orgNameInput, setOrgNameInput] = useState("");
+	const [orgDomainInput, setOrgDomainInput] = useState("");
+	const [orgDescInput, setOrgDescInput] = useState("");
+
+	const openCreateOrgForm = () => {
+		setEditingOrgId(null);
+		setOrgNameInput("");
+		setOrgDomainInput("");
+		setOrgDescInput("");
+		setShowOrgForm(true);
+	};
+
+	const openEditOrgForm = (org: OrganizationDto) => {
+		setEditingOrgId(org.id);
+		setOrgNameInput(org.name);
+		setOrgDomainInput(org.gitEmailDomain);
+		setOrgDescInput(org.description);
+		setShowOrgForm(true);
+	};
+
+	const handleSaveOrg = async () => {
+		if (!orgNameInput.trim()) return;
+		try {
+			if (editingOrgId) {
+				await updateOrganization(editingOrgId, {
+					name: orgNameInput.trim(),
+					gitEmailDomain: orgDomainInput.trim(),
+					description: orgDescInput.trim(),
+				});
+				onNotice(`组织「${orgNameInput.trim()}」已更新`);
+			} else {
+				await createOrganization({
+					name: orgNameInput.trim(),
+					gitEmailDomain: orgDomainInput.trim(),
+					description: orgDescInput.trim(),
+				});
+				onNotice(`已创建组织「${orgNameInput.trim()}」`);
+			}
+			setShowOrgForm(false);
+			setEditingOrgId(null);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleSetDefaultOrg = async (org: OrganizationDto) => {
+		try {
+			await setDefaultOrganization(org.id);
+			onNotice(`已将「${org.name}」设为默认组织，新创建的仓库与组织记忆将默认归入此组织`);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	return (
+		<div className="org-strip-card">
+			<div className="banner-row">
+				<div>
+					<strong className="ui-inline-head-title">组织身份与多仓库分组</strong>
+					<span className="ui-inline-sub">
+						同一支全局团队成员跨组织与多仓库工作；新建仓库默认归入「默认组织」，同组织仓库共享「组织记忆」与邮箱域名
+					</span>
+				</div>
+				{isOwner && (
+					<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
+						+ 新建组织
+					</button>
+				)}
+			</div>
+
+			{organizations.length === 0 ? (
+				<div className="muted-hint">
+					尚未建立组织（新建仓库时会自动创建「默认组织」）。成员按「角色 Author + 仓库真实用户
+					Committer」双署名提交 Git；创建组织并在「资料与仓库」绑定后，同组织仓库共享组织记忆。
+				</div>
+			) : (
+				<div className="org-chip-list">
+					{organizations.map((org) => {
+						const boundWs = workspaces.filter((ws) => ws.orgId === org.id);
+						return (
+							<div key={org.id} className="org-chip-card">
+								<div className="org-chip-head">
+									<div className="ui-inline-head">
+										<strong className="ui-chip-title">{org.name}</strong>
+										{org.isDefault && <span className="pill live">默认组织</span>}
+									</div>
+									<div className="ui-row-actions">
+										{!org.isDefault && (
+											<button
+												type="button"
+												className="btn-inline btn-xs"
+												onClick={() => void handleSetDefaultOrg(org)}
+											>
+												设为默认
+											</button>
+										)}
+										<button type="button" className="btn-inline btn-xs" onClick={() => openEditOrgForm(org)}>
+											编辑
+										</button>
+									</div>
+								</div>
+								<div className="org-chip-meta">
+									{org.gitEmailDomain ? `Git 域名：@${org.gitEmailDomain} · ` : ""}
+									{boundWs.length > 0
+										? `已关联仓库：${boundWs.map((w) => w.name).join("、")}`
+										: "尚未关联仓库（可在「资料与仓库」选择归属）"}
+								</div>
+								{org.description && <div className="org-chip-meta">{org.description}</div>}
+							</div>
+						);
+					})}
+				</div>
+			)}
+
+			{showOrgForm && (
+				<div className="memory-draft-box identity-form-box">
+					<div className="memory-draft-head">
+						<strong>{editingOrgId ? "编辑组织身份" : "新建组织身份"}</strong>
+					</div>
+					<div className="form-grid">
+						<label className="identity-field">
+							<span className="identity-field-label">组织名称</span>
+							<input
+								className="input-field"
+								aria-label="组织名称"
+								placeholder="如：Acme Engineering"
+								value={orgNameInput}
+								onChange={(e) => setOrgNameInput(e.target.value)}
+							/>
+						</label>
+						<label className="identity-field">
+							<span className="identity-field-label">默认 Git 邮箱域名（可选）</span>
+							<input
+								className="input-field"
+								aria-label="组织 Git 邮箱域名"
+								placeholder="如：acme.dev"
+								value={orgDomainInput}
+								onChange={(e) => setOrgDomainInput(e.target.value)}
+							/>
+						</label>
+					</div>
+					<label className="identity-field">
+						<span className="identity-field-label">组织背景与共同准则（可选，执行时自动注入上下文）</span>
+						<input
+							className="input-field"
+							aria-label="组织简介"
+							placeholder="简要描述组织规范、协作边界或业务背景"
+							value={orgDescInput}
+							onChange={(e) => setOrgDescInput(e.target.value)}
+						/>
+					</label>
+					<div className="actions-row">
+						<button
+							type="button"
+							className="btn-pill-dark btn-xs"
+							disabled={!orgNameInput.trim()}
+							onClick={() => void handleSaveOrg()}
+						>
+							保存组织
+						</button>
+						<button
+							type="button"
+							className="btn-pill-outline btn-xs"
+							onClick={() => {
+								setShowOrgForm(false);
+								setEditingOrgId(null);
+							}}
+						>
+							取消
+						</button>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}

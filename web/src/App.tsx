@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-	abortMatter,
-	abortRsiDistillation,
-	approveAiRequest,
 	type BootstrapPayload,
 	type CollaboratorDto,
 	type ComposerImageAttachment,
-	createMatter,
 	type DeliverableDto,
-	type DistillRsiResult,
-	dismissAiRequest,
-	distillRsiExperiences,
 	type FeedbackRating,
 	fetchAuthSession,
 	fetchBootstrap,
@@ -19,27 +12,23 @@ import {
 	logoutAuthSession,
 	type MatterDetailPayload,
 	type MatterProgressDto,
-	type MatterSendMode,
 	type PreviewServiceDto,
-	postMatterMessage,
 	type RoleTemplateDto,
 	setAuthRevokedHandler,
 	stopPreview,
-	submitDeliverableFeedback,
 	type TeamMemberDto,
-	updateMatterAiMembers,
-	updateMatterCollaborators,
-	updateMatterLead,
-	updateMatterObserversEnabled,
-	updateMatterOrganization,
-	updateMatterWorkspace,
 } from "./api.ts";
+import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
-import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute } from "./hashRouter.ts";
+import { type NavTab, parseHashRoute } from "./hashRouter.ts";
+import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
+import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts";
+import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
+import { useRsiDistill } from "./hooks/useRsiDistill.ts";
 import { MAX_COMPOSER_IMAGES, prepareComposerImages } from "./imageAttachments.ts";
 import { buildStarterTasks, getBotTheme } from "./utils.ts";
 
@@ -56,6 +45,7 @@ function extractInitialInviteToken(): string {
 	return "";
 }
 
+/** Root application shell coordinating authentication, SSE state sync, hash routing, and workspace tabs. */
 export function App() {
 	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
@@ -76,28 +66,14 @@ export function App() {
 		initialRoute.deliverableId ?? null,
 	);
 	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
-	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => {
-		try {
-			return window.localStorage.getItem("pa.defaultOrgId") ?? "";
-		} catch {
-			return "";
-		}
-	});
-	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() => {
-		try {
-			return window.localStorage.getItem("pa.defaultWorkspaceId") ?? "";
-		} catch {
-			return "";
-		}
-	});
+	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => readStoredSetting("pa.defaultOrgId"));
+	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
+		readStoredSetting("pa.defaultWorkspaceId"),
+	);
 	const [draftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
-	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(() => {
-		try {
-			return window.localStorage.getItem("pa.defaultObserversEnabled") === "true";
-		} catch {
-			return false;
-		}
-	});
+	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(
+		() => readStoredSetting("pa.defaultObserversEnabled") === "true",
+	);
 	const [composerText, setComposerText] = useState("");
 	const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
 	const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
@@ -107,67 +83,24 @@ export function App() {
 	const [submitting, setSubmitting] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
-
 	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
-	const [nowMs, setNowMs] = useState(() => Date.now());
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
-	const distillAbortRef = useRef<Map<string, AbortController>>(new Map());
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
 	selectedMatterIdRef.current = selectedMatterId;
 
-	const navigateRoute = useCallback((next: HashRoute, options?: { replace?: boolean }) => {
-		setActiveTab(next.tab);
-		explicitNewMatterRef.current = Boolean(next.isNewMatter);
-		if (next.tab === "deliverables" && next.deliverableId !== undefined) {
-			setSelectedDeliverableId(next.deliverableId || null);
-		}
-		if (next.tab === "chats") {
-			if (next.isNewMatter) {
-				setSelectedMatterId(null);
-			} else if (next.matterId !== undefined) {
-				setSelectedMemberId("auto");
-				setSelectedMatterId(next.matterId || null);
-			}
-		}
-		const targetHash = formatHashRoute(next);
-		if (options?.replace) {
-			window.history.replaceState(null, "", targetHash);
-		} else if (window.location.hash !== targetHash) {
-			window.location.hash = targetHash;
-		}
-	}, []);
-
-	useEffect(() => {
-		const normalized = formatHashRoute(initialRoute);
-		if (!window.location.hash || window.location.hash !== normalized) {
-			window.history.replaceState(null, "", normalized);
-		}
-	}, [initialRoute]);
-
-	useEffect(() => {
-		const handleHashChange = () => {
-			const route = parseHashRoute(window.location.hash);
-			setActiveTab(route.tab);
-			explicitNewMatterRef.current = Boolean(route.isNewMatter);
-			if (route.tab === "deliverables" && route.deliverableId) {
-				setSelectedDeliverableId(route.deliverableId);
-			} else if (route.tab === "chats") {
-				if (route.isNewMatter) {
-					setSelectedMatterId(null);
-				} else if (route.matterId) {
-					setSelectedMemberId("auto");
-					setSelectedMatterId(route.matterId);
-				}
-			}
-		};
-		window.addEventListener("hashchange", handleHashChange);
-		return () => window.removeEventListener("hashchange", handleHashChange);
-	}, []);
+	const navigateRoute = useHashRouteNav({
+		initialRoute,
+		explicitNewMatterRef,
+		setActiveTab,
+		setSelectedDeliverableId,
+		setSelectedMatterId,
+		setSelectedMemberId,
+	});
 
 	const refreshBootstrap = useCallback(async () => {
 		const data = await fetchBootstrap();
@@ -189,14 +122,10 @@ export function App() {
 				resolvedWorkspaceId = prev;
 				return prev;
 			}
-			try {
-				const saved = window.localStorage.getItem("pa.defaultWorkspaceId");
-				if (saved !== null) {
-					resolvedWorkspaceId = saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
-					return resolvedWorkspaceId;
-				}
-			} catch {
-				// Ignore storage access errors.
+			const saved = readStoredSetting("pa.defaultWorkspaceId", "__unset__");
+			if (saved !== "__unset__") {
+				resolvedWorkspaceId = saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
+				return resolvedWorkspaceId;
 			}
 			resolvedWorkspaceId = data.workspaces[0]?.id || "";
 			return resolvedWorkspaceId;
@@ -207,13 +136,9 @@ export function App() {
 		setSelectedOrgId((prev) => {
 			if (prev && data.organizations.some((o) => o.id === prev)) return prev;
 			if (resolvedWs?.orgId) return resolvedWs.orgId;
-			try {
-				const savedOrg = window.localStorage.getItem("pa.defaultOrgId");
-				if (savedOrg !== null) {
-					return savedOrg && data.organizations.some((o) => o.id === savedOrg) ? savedOrg : "";
-				}
-			} catch {
-				// Ignore storage access errors.
+			const savedOrg = readStoredSetting("pa.defaultOrgId", "__unset__");
+			if (savedOrg !== "__unset__") {
+				return savedOrg && data.organizations.some((o) => o.id === savedOrg) ? savedOrg : "";
 			}
 			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
 		});
@@ -248,16 +173,12 @@ export function App() {
 		setAuthError(message ?? "当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
 		setAuthStatus("unauthenticated");
 		void fetchAuthSession()
-			.then((s) => {
-				setPermissionRequired(s.permissionRequired);
-			})
+			.then((s) => setPermissionRequired(s.permissionRequired))
 			.catch(() => {});
 	}, []);
 
 	useEffect(() => {
-		setAuthRevokedHandler((message) => {
-			applyRevokedSession(message);
-		});
+		setAuthRevokedHandler((message) => applyRevokedSession(message));
 		return () => setAuthRevokedHandler(null);
 	}, [applyRevokedSession]);
 
@@ -323,131 +244,23 @@ export function App() {
 		void refreshDetail(selectedMatterId).catch(() => {});
 	}, [authStatus, selectedMatterId, refreshDetail]);
 
-	const activeProgressKeys = Object.keys(progressByMatter);
-	useEffect(() => {
-		if (activeProgressKeys.length === 0) return;
-		const timer = setInterval(() => setNowMs(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, [activeProgressKeys.length]);
-
-	useEffect(() => {
-		if (authStatus !== "authenticated") return;
-		const clearMatterProgress = (matterId: string) => {
-			if (selectedMatterIdRef.current === matterId) {
-				setStreamingDelta("");
-			}
-			setProgressByMatter((prev) => {
-				const next = { ...prev };
-				delete next[matterId];
-				return next;
-			});
-			setProgressStartedAt((prev) => {
-				const next = { ...prev };
-				delete next[matterId];
-				return next;
-			});
-			void refreshBootstrap();
-			if (selectedMatterIdRef.current === matterId) {
-				void refreshDetail(matterId);
-			}
-		};
-
-		const es = new EventSource("/api/events");
-		es.addEventListener("connected", () => setSseConnected(true));
-		es.addEventListener("text_delta", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; delta: string };
-			if (data.matterId === selectedMatterIdRef.current) {
-				setStreamingDelta((prev) => prev + data.delta);
-			}
-		});
-		es.addEventListener("matter_progress", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as MatterProgressDto;
-			setProgressByMatter((prev) => ({ ...prev, [data.matterId]: data }));
-			setProgressStartedAt((prev) => (prev[data.matterId] ? prev : { ...prev, [data.matterId]: Date.now() }));
-			if (data.stage === "starting" || data.collabUpdated) {
-				if (data.stage === "starting") {
-					void refreshBootstrap();
-				}
-				if (data.matterId === selectedMatterIdRef.current) {
-					void refreshDetail(data.matterId);
-				}
-			}
-		});
-		es.addEventListener("matter_settled", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as {
-				matterId: string;
-				deliverable?: { id?: string; title?: string } | null;
-			};
-			if (data.deliverable?.id) {
-				setSelectedDeliverableId(data.deliverable.id);
-				if (activeTabRef.current === "deliverables") {
-					window.history.replaceState(
-						null,
-						"",
-						formatHashRoute({ tab: "deliverables", deliverableId: data.deliverable.id }),
-					);
-				}
-				const watchingThisChat = activeTabRef.current === "chats" && selectedMatterIdRef.current === data.matterId;
-				if (!watchingThisChat) {
-					const shortTitle = (data.deliverable.title ?? "新成果").slice(0, 28);
-					setNoticeBanner(`✓ 已完成交付：「${shortTitle}」`);
-				}
-			}
-			clearMatterProgress(data.matterId);
-		});
-		es.addEventListener("matter_failed", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; error?: string };
-			if (data.error) {
-				setErrorBanner(`执行未完成：${data.error}`);
-			}
-			clearMatterProgress(data.matterId);
-		});
-		es.addEventListener("matter_aborted", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string };
-			clearMatterProgress(data.matterId);
-		});
-
-		const handleSync = () => {
-			void refreshBootstrap();
-			if (selectedMatterIdRef.current) {
-				void refreshDetail(selectedMatterIdRef.current);
-			}
-		};
-		for (const evtName of [
-			"matter_started",
-			"matter_message",
-			"matter_updated",
-			"collaborator_updated",
-			"dialog_requested",
-			"dialog_resolved",
-			"deliverable_updated",
-			"workspace_updated",
-			"organization_updated",
-			"preview_updated",
-			"team_updated",
-			"memory_updated",
-		]) {
-			es.addEventListener(evtName, handleSync);
-		}
-		es.addEventListener("auth_revoked", () => {
-			es.close();
-			applyRevokedSession("当前邀请口令已被重置或已移出协同团队，请向所有者获取新的邀请链接");
-		});
-		es.onerror = () => {
-			setSseConnected(false);
-			if (es.readyState === EventSource.CLOSED) {
-				void fetchAuthSession()
-					.then((session) => {
-						setPermissionRequired(session.permissionRequired);
-						if (!session.authenticated) {
-							applyRevokedSession("当前访问凭证已失效，请使用新的邀请链接或口令重新进入");
-						}
-					})
-					.catch(() => {});
-			}
-		};
-		return () => es.close();
-	}, [authStatus, refreshBootstrap, refreshDetail, applyRevokedSession]);
+	const nowMs = useMatterEventSync({
+		authStatus,
+		activeTabRef,
+		selectedMatterIdRef,
+		progressByMatter,
+		setProgressByMatter,
+		setProgressStartedAt,
+		setStreamingDelta,
+		setSseConnected,
+		setSelectedDeliverableId,
+		setPermissionRequired,
+		setNoticeBanner,
+		setErrorBanner,
+		refreshBootstrap,
+		refreshDetail,
+		applyRevokedSession,
+	});
 
 	const activeDeliverable: DeliverableDto | null = useMemo(() => {
 		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
@@ -475,7 +288,6 @@ export function App() {
 
 	const headerContact: TeamMemberDto | null = useMemo(() => {
 		if (!bootstrap) return null;
-		// In an existing matter, the top-center pill always reflects the matter's actual lead AI.
 		if (selectedMatterId && matterDetail?.matter.leadMemberId) {
 			return bootstrap.members.find((m) => m.id === matterDetail.matter.leadMemberId) ?? null;
 		}
@@ -495,10 +307,9 @@ export function App() {
 
 	const activeDialogs = useMemo(() => {
 		if (!bootstrap) return [];
-		if (selectedMatterId) {
-			return bootstrap.pendingDialogs.filter((d) => d.matterId === selectedMatterId);
-		}
-		return bootstrap.pendingDialogs;
+		return selectedMatterId
+			? bootstrap.pendingDialogs.filter((d) => d.matterId === selectedMatterId)
+			: bootstrap.pendingDialogs;
 	}, [bootstrap, selectedMatterId]);
 
 	const templateByRoleId = useMemo(() => {
@@ -529,10 +340,8 @@ export function App() {
 	}, [bootstrap, searchQuery]);
 
 	const memberName = (id: string) => bootstrap?.members.find((m) => m.id === id)?.displayName ?? id;
-
 	const workspaceName = (id: string | null) =>
 		id ? (bootstrap?.workspaces.find((w) => w.id === id)?.name ?? id) : null;
-
 	const organizationName = (id: string | null) =>
 		id ? (bootstrap?.organizations.find((o) => o.id === id)?.name ?? id) : null;
 
@@ -602,101 +411,6 @@ export function App() {
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
 	const isOwner = currentUser?.permissionRole !== "collaborator";
 
-	const handleSendPrompt = async () => {
-		const text = composerText.trim();
-		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
-		if ((!text && imagesPayload.length === 0) || submitting) return;
-		const effectiveMode: MatterSendMode =
-			composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
-		setSubmitting(true);
-		setErrorBanner(null);
-		setNoticeBanner(null);
-		try {
-			let targetMatterId = selectedMatterId;
-
-			if (targetMatterId) {
-				await postMatterMessage(targetMatterId, {
-					mode: effectiveMode,
-					prompt: text,
-					images: imagesPayload.length > 0 ? imagesPayload : undefined,
-				});
-				if (effectiveMode === "ai_request") {
-					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
-				}
-			} else {
-				const preferredForCreate = selectedMemberId === "auto" ? undefined : selectedMemberId;
-				const created = await createMatter({
-					mode: effectiveMode,
-					prompt: text,
-					images: imagesPayload.length > 0 ? imagesPayload : undefined,
-					preferredMemberId: preferredForCreate,
-					workspaceId: selectedWorkspaceId || undefined,
-					orgId: selectedOrgId || null,
-					aiMemberIds: draftAiMemberIds,
-					observersEnabled: draftObserversEnabled,
-				});
-				targetMatterId = created.matter.id;
-				explicitNewMatterRef.current = false;
-				setSelectedMemberId("auto");
-				navigateRoute({ tab: "chats", matterId: created.matter.id });
-				if (effectiveMode === "discussion") {
-					setNoticeBanner("已创建事项并发送首条团队讨论");
-				} else if (effectiveMode === "ai_request") {
-					setNoticeBanner("已创建事项并提交 AI 提请，待团队所有者确认后派发");
-				} else {
-					setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
-				}
-			}
-			setComposerText("");
-			setComposerImages([]);
-			await refreshBootstrap();
-			if (targetMatterId) {
-				await refreshDetail(targetMatterId);
-			}
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		} finally {
-			setSubmitting(false);
-		}
-	};
-
-	const handleApproveAiRequest = async (matterId: string, messageId: string) => {
-		setErrorBanner(null);
-		try {
-			await approveAiRequest(matterId, messageId);
-			setNoticeBanner("已确认同事提请并派发给 AI 团队执行");
-			await refreshBootstrap();
-			await refreshDetail(matterId);
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
-
-	const handleDismissAiRequest = async (matterId: string, messageId: string) => {
-		setErrorBanner(null);
-		try {
-			await dismissAiRequest(matterId, messageId);
-			setNoticeBanner("已忽略该条 AI 提请");
-			await refreshDetail(matterId);
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
-
-	const handleUpdateMatterCollaborators = (collaboratorIds: string[]) => {
-		if (!selectedMatterId) return;
-		const targetMatterId = selectedMatterId;
-		void updateMatterCollaborators(targetMatterId, collaboratorIds)
-			.then(async () => {
-				setNoticeBanner("已更新本事项参与同事");
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-			});
-	};
-
 	const handleInviteLogin = async (tokenValue: string) => {
 		const token = tokenValue.trim();
 		if (!token) return;
@@ -732,268 +446,48 @@ export function App() {
 		}
 	};
 
-	const handleAbortMatter = (matterId: string) => {
-		void abortMatter(matterId)
-			.then(() => {
-				setNoticeBanner("已发送停止指令，正在中断当前执行");
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-			});
-	};
+	const actions = useMatterActions({
+		bootstrap,
+		isOwner,
+		composerMode,
+		composerText,
+		composerImages,
+		submitting,
+		selectedMatterId,
+		selectedMemberId,
+		selectedWorkspaceId,
+		selectedWorkspace,
+		selectedOrgId,
+		draftAiMemberIds,
+		draftObserversEnabled,
+		headerContact,
+		explicitNewMatterRef,
+		memberName,
+		workspaceName,
+		organizationName,
+		setSubmitting,
+		setComposerText,
+		setComposerImages,
+		setSelectedMemberId,
+		setSelectedWorkspaceId,
+		setSelectedOrgId,
+		setDraftAiMemberIds,
+		setDraftObserversEnabled,
+		setErrorBanner,
+		setNoticeBanner,
+		navigateRoute,
+		refreshBootstrap,
+		refreshDetail,
+	});
 
-	const handleSelectOrganization = (nextOrgId: string) => {
-		const targetOrgId = nextOrgId || "";
-		const orgWorkspaces = (bootstrap?.workspaces ?? []).filter((w) =>
-			targetOrgId ? w.orgId === targetOrgId : !w.orgId,
-		);
-		if (!selectedMatterId) {
-			setSelectedOrgId(targetOrgId);
-			try {
-				window.localStorage.setItem("pa.defaultOrgId", targetOrgId);
-			} catch {
-				// Ignore storage access errors.
-			}
-			const currentStillMatches = selectedWorkspace
-				? targetOrgId
-					? selectedWorkspace.orgId === targetOrgId
-					: !selectedWorkspace.orgId
-				: false;
-			if (!currentStillMatches) {
-				const fallbackWsId = targetOrgId ? (orgWorkspaces[0]?.id ?? "") : "";
-				setSelectedWorkspaceId(fallbackWsId);
-				try {
-					window.localStorage.setItem("pa.defaultWorkspaceId", fallbackWsId);
-				} catch {
-					// Ignore storage access errors.
-				}
-			}
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterOrganization(targetMatterId, targetOrgId || null)
-			.then(async (res) => {
-				setSelectedOrgId(res.matter.orgId ?? "");
-				setSelectedWorkspaceId(res.matter.workspaceId ?? "");
-				const orgLabel = res.matter.orgId ? (organizationName(res.matter.orgId) ?? res.matter.orgId) : "不归属组织";
-				setNoticeBanner(`已切换当前事项组织为「${orgLabel}」`);
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
-	const handleSelectWorkspace = (nextId: string) => {
-		const nextWs = nextId ? (bootstrap?.workspaces.find((w) => w.id === nextId) ?? null) : null;
-		if (!selectedMatterId) {
-			setSelectedWorkspaceId(nextId);
-			try {
-				window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
-			} catch {
-				// Ignore storage access errors.
-			}
-			if (nextWs) {
-				const nextOrgId = nextWs.orgId ?? "";
-				setSelectedOrgId(nextOrgId);
-				try {
-					window.localStorage.setItem("pa.defaultOrgId", nextOrgId);
-				} catch {
-					// Ignore storage access errors.
-				}
-			}
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterWorkspace(targetMatterId, nextId || null)
-			.then(async (res) => {
-				setSelectedWorkspaceId(res.matter.workspaceId ?? "");
-				setSelectedOrgId(res.matter.orgId ?? "");
-				try {
-					window.localStorage.setItem("pa.defaultWorkspaceId", res.matter.workspaceId ?? "");
-				} catch {
-					// Ignore storage access errors.
-				}
-				const wsLabel = nextId ? (workspaceName(nextId) ?? nextId) : "不绑定仓库";
-				setNoticeBanner(`已切换当前事项仓库为「${wsLabel}」`);
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
-	const handleChangeLeadMember = (memberId: string) => {
-		if (!memberId) return;
-		if (!selectedMatterId) {
-			setSelectedMemberId(memberId);
-			if (draftAiMemberIds !== null && !draftAiMemberIds.includes(memberId)) {
-				setDraftAiMemberIds([memberId, ...draftAiMemberIds]);
-			}
-			setNoticeBanner(`已将「${memberName(memberId)}」设为新事项负责人`);
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterLead(targetMatterId, memberId)
-			.then(async () => {
-				setSelectedMemberId("auto");
-				setNoticeBanner(`已将「${memberName(memberId)}」设为当前事项负责人`);
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
-	const handleUpdateMatterAiMembers = (nextIds: string[]) => {
-		const leadId = headerContact?.id;
-		const deduped = [...new Set(nextIds)];
-		const ensured = leadId && !deduped.includes(leadId) ? [leadId, ...deduped] : deduped;
-		if (ensured.length === 0) return;
-		if (!selectedMatterId) {
-			const allCount = bootstrap?.members.length ?? 0;
-			setDraftAiMemberIds(ensured.length >= allCount ? null : ensured);
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterAiMembers(targetMatterId, ensured)
-			.then(async () => {
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
-	const handleToggleObserversEnabled = (enabled: boolean) => {
-		try {
-			window.localStorage.setItem("pa.defaultObserversEnabled", enabled ? "true" : "false");
-		} catch {
-			// Ignore storage access errors.
-		}
-		if (!selectedMatterId) {
-			setDraftObserversEnabled(enabled);
-			setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterObserversEnabled(targetMatterId, enabled)
-			.then(async () => {
-				setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
-	const handleDeliverableFeedback = async (
-		deliverableId: string,
-		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
-	) => {
-		try {
-			const res = await submitDeliverableFeedback(deliverableId, payload);
-			if (res.distillationError) setErrorBanner(`验收已保存，经验复盘未完成：${res.distillationError}`);
-			const parts = ["验收记录已保存"];
-			if (res.evaluatedMemoryIds.length > 0) {
-				parts.push(`已回写 ${res.evaluatedMemoryIds.length} 条关联经验评估`);
-			}
-			if (res.distilledMemories.length > 0) {
-				parts.push(`AI 新提炼 ${res.distilledMemories.length} 条待核验经验`);
-			}
-			setNoticeBanner(parts.join(" · "));
-			await refreshBootstrap();
-			if (selectedMatterId) {
-				await refreshDetail(selectedMatterId);
-			}
-		} catch (err) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
-
-	const cancelRsiDistill = (matterId: string) => {
-		const controller = distillAbortRef.current.get(matterId);
-		if (controller) {
-			controller.abort();
-			distillAbortRef.current.delete(matterId);
-		}
-		setNoticeBanner("已取消本次 AI 经验复盘");
-		void abortRsiDistillation(matterId).catch(() => {});
-	};
-
-	const runRsiDistill = async (input: {
-		matterId: string;
-		deliverableId?: string;
-		feedback?: string;
-		rating?: FeedbackRating;
-	}): Promise<DistillRsiResult | undefined> => {
-		const prevController = distillAbortRef.current.get(input.matterId);
-		if (prevController) {
-			prevController.abort();
-		}
-		const controller = new AbortController();
-		distillAbortRef.current.set(input.matterId, controller);
-		try {
-			const res = await distillRsiExperiences(
-				{
-					matterId: input.matterId,
-					deliverableId: input.deliverableId,
-					feedback: input.feedback,
-					rating: input.rating,
-					scopeMode: "team",
-				},
-				controller.signal,
-			);
-			if (res.aborted || controller.signal.aborted) {
-				setNoticeBanner("已取消本次 AI 经验复盘");
-				return { ...res, aborted: true };
-			}
-			if (res.createdMemories.length > 0) {
-				const roleNames = Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId))));
-				setNoticeBanner(
-					`已为 ${roleNames.join("、")} 提炼 ${res.createdMemories.length} 条经验，可在当前界面直接核验通过或修改归属`,
-				);
-			} else {
-				setNoticeBanner(
-					res.skippedDuplicates > 0
-						? `AI 复盘未新增重复经验（跳过 ${res.skippedDuplicates} 条相似经验）`
-						: `AI 复盘完成：${res.summary}`,
-				);
-			}
-			await refreshBootstrap();
-			if (selectedMatterId) {
-				await refreshDetail(selectedMatterId);
-			}
-			return res;
-		} catch (err) {
-			if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
-				setNoticeBanner("已取消本次 AI 经验复盘");
-				return {
-					ok: false,
-					aborted: true,
-					createdMemories: [],
-					skippedDuplicates: 0,
-					summary: "已取消 AI 经验复盘",
-				};
-			}
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-			return undefined;
-		} finally {
-			if (distillAbortRef.current.get(input.matterId) === controller) {
-				distillAbortRef.current.delete(input.matterId);
-			}
-		}
-	};
+	const { cancelRsiDistill, runRsiDistill } = useRsiDistill({
+		selectedMatterId,
+		memberName,
+		refreshBootstrap,
+		refreshDetail,
+		setNoticeBanner,
+		setErrorBanner,
+	});
 
 	const handleDistillExperiences = (deliv: DeliverableDto, feedback?: string, rating?: FeedbackRating) =>
 		runRsiDistill({
@@ -1009,56 +503,17 @@ export function App() {
 		? Math.max(0, Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000))
 		: 0;
 
-	if (authStatus === "checking") {
+	if (authStatus === "checking" || authStatus === "unauthenticated") {
 		return (
-			<div className="auth-gate-shell">
-				<div className="auth-gate-card">
-					<div className="brand-mark">PA</div>
-					<h1>正在连接团队协同工作台...</h1>
-					<p className="muted-hint">正在校验访问身份与工作台状态</p>
-				</div>
-			</div>
-		);
-	}
-
-	if (authStatus === "unauthenticated") {
-		return (
-			<div className="auth-gate-shell">
-				<div className="auth-gate-card">
-					<div className="auth-gate-head">
-						<span className="brand-mark">PA</span>
-						<div>
-							<h1>加入受限协同工作台</h1>
-							<p className="muted-hint">
-								当前服务运行在内网协同模式，需要团队所有者分享的个人邀请链接或口令方可加入讨论。
-							</p>
-						</div>
-					</div>
-					{authError && <div className="approval-card">{authError}</div>}
-					<form
-						className="auth-gate-form"
-						onSubmit={(e) => {
-							e.preventDefault();
-							void handleInviteLogin(authTokenInput);
-						}}
-					>
-						<input
-							className="input-field"
-							value={authTokenInput}
-							onChange={(e) => setAuthTokenInput(e.target.value)}
-							placeholder="粘贴邀请口令（如 inv_xxx）..."
-						/>
-						<button type="submit" className="btn-pill-dark" disabled={!authTokenInput.trim()}>
-							进入协同房间
-						</button>
-					</form>
-					{!permissionRequired && (
-						<button type="button" className="btn-inline" onClick={() => void handleLogoutOrRestore()}>
-							退出失效的协同体验，返回本机所有者视图
-						</button>
-					)}
-				</div>
-			</div>
+			<AuthGateView
+				status={authStatus}
+				permissionRequired={permissionRequired}
+				authError={authError}
+				authTokenInput={authTokenInput}
+				onTokenInputChange={setAuthTokenInput}
+				onSubmitInvite={(token) => void handleInviteLogin(token)}
+				onRestoreOwner={() => void handleLogoutOrRestore()}
+			/>
 		);
 	}
 
@@ -1132,18 +587,18 @@ export function App() {
 						onComposerTextChange={setComposerText}
 						onAddImages={(files) => void handleAddComposerImages(files)}
 						onRemoveImage={handleRemoveComposerImage}
-						onSelectOrganization={handleSelectOrganization}
-						onSelectWorkspace={handleSelectWorkspace}
+						onSelectOrganization={actions.handleSelectOrganization}
+						onSelectWorkspace={actions.handleSelectWorkspace}
 						matterAiMemberIds={matterAiMemberIds}
 						observersEnabled={observersEnabled}
-						onChangeLeadMember={handleChangeLeadMember}
-						onUpdateMatterAiMembers={handleUpdateMatterAiMembers}
-						onToggleObserversEnabled={handleToggleObserversEnabled}
-						onUpdateMatterCollaborators={handleUpdateMatterCollaborators}
-						onApproveAiRequest={(matterId, messageId) => void handleApproveAiRequest(matterId, messageId)}
-						onDismissAiRequest={(matterId, messageId) => void handleDismissAiRequest(matterId, messageId)}
-						onSendPrompt={() => void handleSendPrompt()}
-						onAbortMatter={handleAbortMatter}
+						onChangeLeadMember={actions.handleChangeLeadMember}
+						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
+						onToggleObserversEnabled={actions.handleToggleObserversEnabled}
+						onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
+						onApproveAiRequest={(matterId, messageId) => void actions.handleApproveAiRequest(matterId, messageId)}
+						onDismissAiRequest={(matterId, messageId) => void actions.handleDismissAiRequest(matterId, messageId)}
+						onSendPrompt={() => void actions.handleSendPrompt()}
+						onAbortMatter={actions.handleAbortMatter}
 						onNewMatter={startNewMatter}
 						onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 						onOpenTeam={() => navigateRoute({ tab: "team" })}
@@ -1168,7 +623,7 @@ export function App() {
 						memberName={memberName}
 						workspaceName={workspaceName}
 						organizationName={organizationName}
-						onSubmitFeedback={handleDeliverableFeedback}
+						onSubmitFeedback={actions.handleDeliverableFeedback}
 						onDistillExperiences={handleDistillExperiences}
 						onCancelDistill={cancelRsiDistill}
 						onStopPreview={async (previewId) => {
