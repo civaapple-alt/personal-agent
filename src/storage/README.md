@@ -3,7 +3,7 @@
 模块文件分工：
 
 - [database.ts](database.ts) 打开数据库并做兼容初始化，[types.ts](types.ts) 定义领域记录。
-- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore`，供编排核和服务 API 调用。
+- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的成员、组织、协作成员、经验、成果、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 
 需要核对的存储边界：
