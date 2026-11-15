@@ -95,6 +95,7 @@ export function ChatStage({
 	onDismissNotice,
 }: ChatStageProps) {
 	const [collabOpen, setCollabOpen] = useState(false);
+	const [collabTab, setCollabTab] = useState<"delegations" | "events">("delegations");
 	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
@@ -235,9 +236,26 @@ export function ChatStage({
 						<button
 							type="button"
 							className={`btn-pill-outline btn-xs ${collabOpen ? "active" : ""}`}
-							onClick={() => setCollabOpen((v) => !v)}
+							title="查看团队内部委托记录及底层工具调用事件"
+							onClick={() => {
+								setCollabOpen((open) => {
+									const next = !open;
+									if (
+										next &&
+										delegationsPlacement.all.length === 0 &&
+										matterDetail.noticeMessages.length > 0
+									) {
+										setCollabTab("events");
+									} else if (next) {
+										setCollabTab("delegations");
+									}
+									return next;
+								});
+							}}
 						>
-							协作过程 ({matterDetail.internalCollabMessages.length + matterDetail.noticeMessages.length})
+							{delegationsPlacement.all.length > 0
+								? `团队委托 (${delegationsPlacement.all.length}) · 事件 ${matterDetail.noticeMessages.length}`
+								: `过程事件 (${matterDetail.noticeMessages.length})`}
 						</button>
 					)}
 					<button
@@ -249,6 +267,75 @@ export function ChatStage({
 					</button>
 				</div>
 			</header>
+
+			{collabOpen && matterDetail && (
+				<div className="collab-dock-panel">
+					<div className="collab-dock-inner">
+						<div className="collab-dock-head">
+							<div className="collab-tabs">
+								<button
+									type="button"
+									className={`collab-tab-btn ${collabTab === "delegations" ? "active" : ""}`}
+									onClick={() => setCollabTab("delegations")}
+								>
+									团队内部委托 ({delegationsPlacement.all.length})
+								</button>
+								<button
+									type="button"
+									className={`collab-tab-btn ${collabTab === "events" ? "active" : ""}`}
+									onClick={() => setCollabTab("events")}
+								>
+									过程与工具事件 ({matterDetail.noticeMessages.length})
+								</button>
+							</div>
+							<button type="button" className="btn-inline" onClick={() => setCollabOpen(false)}>
+								收起
+							</button>
+						</div>
+						<div className="collab-log">
+							{collabTab === "delegations" ? (
+								delegationsPlacement.all.length === 0 ? (
+									<p className="muted-hint">当前事项暂无团队内部委托记录。</p>
+								) : (
+									<div className="collab-section">
+										{delegationsPlacement.all.map((item) => (
+											<div key={item.id} className="delegation-detail-item">
+												<div className="delegation-detail-head">
+													<span>
+														{memberName(item.fromMemberId)} →{" "}
+														<strong>{resolveDelegationTarget(item)}</strong> ·{" "}
+														{formatClockTime(item.createdAt)}
+													</span>
+													<span className={`delegation-status-tag ${item.status}`}>
+														{item.status === "running"
+															? "协同中"
+															: item.status === "completed"
+																? "已完成"
+																: "未完成"}
+													</span>
+												</div>
+												<div className="delegation-detail-question">{item.question}</div>
+												{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
+											</div>
+										))}
+									</div>
+								)
+							) : matterDetail.noticeMessages.length === 0 ? (
+								<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
+							) : (
+								<div className="collab-events-list">
+									{matterDetail.noticeMessages.map((entry) => (
+										<div key={entry.id}>
+											<strong>{memberName(entry.senderId)}</strong> · {formatClockTime(entry.createdAt)}：
+											{formatNoticeEventLine(entry.content)}
+										</div>
+									))}
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
 
 			<div className="chat-stream-scroll">
 				<div className="chat-stream-inner">
@@ -272,63 +359,6 @@ export function ChatStage({
 									知道了
 								</button>
 							</div>
-						</div>
-					)}
-
-					{collabOpen && matterDetail && (
-						<div className="collab-drawer-card">
-							<div className="banner-row">
-								<strong>内部协作交接与过程通知</strong>
-								<button type="button" className="btn-inline" onClick={() => setCollabOpen(false)}>
-									收起
-								</button>
-							</div>
-							{delegationsPlacement.all.length === 0 && matterDetail.noticeMessages.length === 0 ? (
-								<p className="muted-hint">当前事项暂无内部协作记录。</p>
-							) : (
-								<div className="collab-log">
-									{delegationsPlacement.all.length > 0 && (
-										<div className="collab-section">
-											<div className="collab-section-title">
-												团队内部委托（{delegationsPlacement.all.length} 项）
-											</div>
-											{delegationsPlacement.all.map((item) => (
-												<div key={item.id} className="delegation-detail-item">
-													<div className="delegation-detail-head">
-														<span>
-															{memberName(item.fromMemberId)} →{" "}
-															<strong>{resolveDelegationTarget(item)}</strong> ·{" "}
-															{formatClockTime(item.createdAt)}
-														</span>
-														<span className={`delegation-status-tag ${item.status}`}>
-															{item.status === "running"
-																? "协同中"
-																: item.status === "completed"
-																	? "已完成"
-																	: "未完成"}
-														</span>
-													</div>
-													<div className="delegation-detail-question">{item.question}</div>
-													{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
-												</div>
-											))}
-										</div>
-									)}
-									{matterDetail.noticeMessages.length > 0 && (
-										<details className="collab-events-details" open={delegationsPlacement.all.length === 0}>
-											<summary>过程与工具事件（{matterDetail.noticeMessages.length} 条）</summary>
-											<div className="collab-events-list">
-												{matterDetail.noticeMessages.map((entry) => (
-													<div key={entry.id}>
-														<strong>{memberName(entry.senderId)}</strong> ·{" "}
-														{formatClockTime(entry.createdAt)}：{formatNoticeEventLine(entry.content)}
-													</div>
-												))}
-											</div>
-										</details>
-									)}
-								</div>
-							)}
 						</div>
 					)}
 
