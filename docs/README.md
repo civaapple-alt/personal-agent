@@ -7,6 +7,7 @@
 | 产品定位、用户约束与交付原则 | [产品方向确认稿](product-direction.md) |
 | 当前模块关系、技术栈、限制与下一阶段建议 | [当前架构与后续计划](architecture-and-plan.md) |
 | 会话、真实工具委托、能力装配、取消、归档和迁移细节 | [连续上下文与内部角色协作](runtime-collaboration.md) |
+| 环境变量、超时阈值、角色字段与旁听/运行默认参数 | [配置参考](configuration.md) |
 | 具体代码属于哪个模块 | [后端地图](../src/README.md)、[网页入口](../web/README.md) |
 | 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md)、[原型演进](prototypes/README.md) |
 | 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前确认稿和运行实现为准 |

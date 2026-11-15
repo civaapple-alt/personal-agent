@@ -33,6 +33,7 @@
 | 修改网页 | [web/README.md](web/README.md) → [前端源码](web/src/README.md) |
 | 调整可分享岗位定义 | [roles/README.md](roles/README.md)；解析代码另见 [src/roles](src/roles/README.md) |
 | 编辑具体工作方法 | [skills/README.md](skills/README.md)，按需打开对应 `SKILL.md` |
+| 查阅环境变量、超时与运行参数 | [docs/configuration.md](docs/configuration.md) |
 | 了解当前产品、架构或历史 | [docs/README.md](docs/README.md) |
 | 选择离线或真实模型验证 | [test/README.md](test/README.md)、[demo](src/demo/README.md) |
 | 构建、启动或检查文档 | [scripts/README.md](scripts/README.md)、[package.json](package.json) |
