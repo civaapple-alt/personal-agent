@@ -64,7 +64,7 @@ npm run start:web
 - [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
 - [x] **阶段三**：Grok-Bot 风格双栏工作台（React 19 + HashRouter + MarkdownView）、HTTP/SSE 实时流与任务中断、团队成员与能力包导入/导出、空闲时工作区切换及独立服务预览链接
 - [x] **运行闭环补齐**：按事项、成员、工作区恢复 Pi 会话，内部委托工具、运行能力核查与显式成果归档
-- [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享
+- [ ] **阶段四**：已完成基础 RSI 经验提炼、核验与验收评估闭环（`propose_experience`、`distillExperiences`、候选/验证/替代生命周期与 UI 审核回写）；夜间后台自主复盘调度与公开人才市场角色分享仍在后续计划中
 
 ## 连续工作与正式成果
 

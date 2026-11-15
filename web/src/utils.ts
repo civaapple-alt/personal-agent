@@ -23,6 +23,19 @@ export const MEMORY_SCOPE_LABELS: Record<string, string> = {
 	project_private: "当前项目规范",
 };
 
+export const MEMORY_STATUS_LABELS: Record<string, string> = {
+	candidate: "待核验",
+	verified: "已验证",
+	superseded: "已替代",
+	rejected: "已忽略",
+};
+
+export const FEEDBACK_RATING_LABELS: Record<string, string> = {
+	positive: "认可采纳",
+	neutral: "一般 / 补充说明",
+	negative: "需修订 / 未达预期",
+};
+
 export const BOT_PALETTE = [
 	{ bg: "#35b49b", tilt: "0deg" },
 	{ bg: "#4e6df5", tilt: "-7deg" },
@@ -308,6 +321,9 @@ export function formatNoticeEventLine(rawContent: string): string {
 			isError?: boolean;
 			message?: string;
 			tools?: string[];
+			scope?: string;
+			content?: string;
+			createdCount?: number;
 		};
 		const detail = parsed.args?.path
 			? ` (${parsed.args.path})`
@@ -324,6 +340,13 @@ export function formatNoticeEventLine(rawContent: string): string {
 		}
 		if (parsed.method === "runtime_ready") {
 			return `工作进程就绪（${parsed.tools?.join(", ") ?? "标准工具"}）`;
+		}
+		if (parsed.method === "rsi_candidate_proposed") {
+			const snippet = (parsed.content ?? "").slice(0, 48);
+			return `提出待核验经验（${parsed.scope ?? "role_general"}）：${snippet}`;
+		}
+		if (parsed.method === "rsi_distilled") {
+			return `AI 经验提炼完成（新增 ${parsed.createdCount ?? 0} 条待核验候选）`;
 		}
 		if (parsed.method === "error" && parsed.message) {
 			return `执行异常：${parsed.message}`;

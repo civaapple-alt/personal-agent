@@ -1,34 +1,75 @@
-import { useState } from "react";
-import type { DeliverableDto } from "../api.ts";
+import { useEffect, useState } from "react";
+import type { DeliverableDto, FeedbackRating, MemoryScope } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { formatClockTime } from "../utils.ts";
+import { FEEDBACK_RATING_LABELS, formatClockTime } from "../utils.ts";
 
 interface DeliverableCardProps {
 	deliverable: DeliverableDto;
 	siblingVersions: DeliverableDto[];
 	memberName: string;
 	workspaceName: string | null;
+	hasWorkspace: boolean;
 	viewUrl: string | null;
-	onSubmitFeedback: (deliverableId: string, feedback: string) => Promise<void>;
+	onSubmitFeedback: (
+		deliverableId: string,
+		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
+	) => Promise<void>;
+	onDistillExperiences: (deliverable: DeliverableDto, feedback?: string, rating?: FeedbackRating) => Promise<void>;
 	onSelectVersion: (deliverableId: string) => void;
 	onRequestRevision: () => void;
 	onOpenMatterChat?: () => void;
-	onSaveMemory: (content: string, scope: "role_general" | "project_private") => Promise<void>;
+	onSaveMemory: (input: {
+		content: string;
+		scope: MemoryScope;
+		rationale?: string;
+		status: "candidate" | "verified";
+	}) => Promise<void>;
 	compact?: boolean;
 }
 
 export function DeliverableCard(props: DeliverableCardProps) {
 	const [memoryOpen, setMemoryOpen] = useState(false);
 	const [memoryText, setMemoryText] = useState("");
-	const [memoryScope, setMemoryScope] = useState<"role_general" | "project_private">("role_general");
+	const [memoryRationale, setMemoryRationale] = useState("");
+	const [memoryScope, setMemoryScope] = useState<MemoryScope>("role_general");
+	const [memoryStatus, setMemoryStatus] = useState<"candidate" | "verified">("verified");
 	const [feedbackText, setFeedbackText] = useState("");
+	const [selectedRating, setSelectedRating] = useState<FeedbackRating | undefined>(
+		props.deliverable.feedbackRating ?? undefined,
+	);
+	const [autoDistill, setAutoDistill] = useState(false);
+	const [submittingFeedback, setSubmittingFeedback] = useState(false);
+	const [distilling, setDistilling] = useState(false);
+
+	useEffect(() => {
+		setSelectedRating(props.deliverable.feedbackRating ?? undefined);
+	}, [props.deliverable.feedbackRating]);
 
 	const handleFeedbackSubmit = () => {
 		const trimmed = feedbackText.trim();
-		if (!trimmed) return;
-		void props.onSubmitFeedback(props.deliverable.id, trimmed).then(() => {
-			setFeedbackText("");
-		});
+		if (!trimmed && !selectedRating) return;
+		setSubmittingFeedback(true);
+		void props
+			.onSubmitFeedback(props.deliverable.id, {
+				feedback: trimmed || undefined,
+				rating: selectedRating,
+				autoDistill,
+			})
+			.then(() => {
+				setFeedbackText("");
+			})
+			.finally(() => {
+				setSubmittingFeedback(false);
+			});
+	};
+
+	const handleDistillClick = () => {
+		setDistilling(true);
+		void props
+			.onDistillExperiences(props.deliverable, feedbackText.trim() || undefined, selectedRating)
+			.finally(() => {
+				setDistilling(false);
+			});
 	};
 
 	return (
@@ -100,21 +141,45 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				>
 					{memoryOpen ? "收起经验沉淀" : "沉淀为角色经验"}
 				</button>
+				<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
+					{distilling ? "提炼中..." : "AI 提炼候选经验"}
+				</button>
 			</div>
 
 			{memoryOpen && (
 				<div className="memory-draft-box">
 					<div className="memory-draft-head">
 						<strong>沉淀为「{props.memberName}」的工作习惯</strong>
-						<select
-							className="select-sm"
-							value={memoryScope}
-							onChange={(e) => setMemoryScope(e.target.value as "role_general" | "project_private")}
-						>
-							<option value="role_general">角色通用经验（跨项目可用）</option>
-							<option value="project_private">当前项目规范（仅当前仓库生效）</option>
-						</select>
+						<div className="memory-draft-controls">
+							<select
+								className="select-sm"
+								value={memoryScope}
+								onChange={(e) => setMemoryScope(e.target.value as MemoryScope)}
+							>
+								<option value="role_general">角色通用经验（跨项目可用）</option>
+								<option value="company_private" disabled={!props.hasWorkspace}>
+									个人私有经验{props.hasWorkspace ? "（仅当前工作区）" : "（需先关联仓库）"}
+								</option>
+								<option value="project_private" disabled={!props.hasWorkspace}>
+									当前项目规范{props.hasWorkspace ? "（仅当前仓库生效）" : "（需先关联仓库）"}
+								</option>
+							</select>
+							<select
+								className="select-sm"
+								value={memoryStatus}
+								onChange={(e) => setMemoryStatus(e.target.value as "candidate" | "verified")}
+							>
+								<option value="verified">直接设为已验证</option>
+								<option value="candidate">先存为待核验候选</option>
+							</select>
+						</div>
 					</div>
+					<input
+						className="input-field input-field-spaced"
+						value={memoryRationale}
+						onChange={(e) => setMemoryRationale(e.target.value)}
+						placeholder="沉淀依据/适用场景（可选，例如：用户验收时明确要求提供可运行验证命令）"
+					/>
 					<div className="feedback-row">
 						<input
 							className="input-field"
@@ -127,10 +192,18 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							className="btn-primary btn-sm"
 							onClick={() => {
 								if (!memoryText.trim()) return;
-								void props.onSaveMemory(memoryText.trim(), memoryScope).then(() => {
-									setMemoryText("");
-									setMemoryOpen(false);
-								});
+								void props
+									.onSaveMemory({
+										content: memoryText.trim(),
+										scope: memoryScope,
+										rationale: memoryRationale.trim() || undefined,
+										status: memoryStatus,
+									})
+									.then(() => {
+										setMemoryText("");
+										setMemoryRationale("");
+										setMemoryOpen(false);
+									});
 							}}
 						>
 							保存经验
@@ -139,18 +212,56 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				</div>
 			)}
 
-			<div className="feedback-row">
-				<input
-					className="input-field"
-					value={feedbackText}
-					onChange={(e) => setFeedbackText(e.target.value)}
-					placeholder={
-						props.deliverable.feedback ? `上次反馈：${props.deliverable.feedback}` : "记录这条交付的验收反馈..."
-					}
-				/>
-				<button type="button" className="btn-secondary btn-sm" onClick={handleFeedbackSubmit}>
-					保存反馈
-				</button>
+			<div className="feedback-panel">
+				{(props.deliverable.feedbackRating || props.deliverable.feedback) && (
+					<div className="feedback-summary-line">
+						{props.deliverable.feedbackRating && (
+							<span className={`rsi-badge rsi-rating-${props.deliverable.feedbackRating}`}>
+								{FEEDBACK_RATING_LABELS[props.deliverable.feedbackRating] ?? props.deliverable.feedbackRating}
+							</span>
+						)}
+						{props.deliverable.feedback && (
+							<span className="feedback-summary-text">验收记录：{props.deliverable.feedback}</span>
+						)}
+					</div>
+				)}
+				<div className="feedback-rating-row">
+					<span className="feedback-rating-label">验收结论：</span>
+					{(["positive", "neutral", "negative"] as const).map((rating) => (
+						<button
+							key={rating}
+							type="button"
+							className={`choice-chip ${selectedRating === rating ? "active" : ""}`}
+							onClick={() => setSelectedRating((prev) => (prev === rating ? undefined : rating))}
+						>
+							{FEEDBACK_RATING_LABELS[rating]}
+						</button>
+					))}
+					<label className="feedback-distill-toggle">
+						<input type="checkbox" checked={autoDistill} onChange={(e) => setAutoDistill(e.target.checked)} />
+						<span>保存后自动 AI 提炼经验</span>
+					</label>
+				</div>
+				<div className="feedback-row">
+					<input
+						className="input-field"
+						value={feedbackText}
+						onChange={(e) => setFeedbackText(e.target.value)}
+						placeholder={
+							props.deliverable.feedback
+								? `补充或更新反馈：${props.deliverable.feedback}`
+								: "记录这条交付的验收反馈..."
+						}
+					/>
+					<button
+						type="button"
+						className="btn-secondary btn-sm"
+						disabled={submittingFeedback || (!feedbackText.trim() && !selectedRating)}
+						onClick={handleFeedbackSubmit}
+					>
+						{submittingFeedback ? "保存中..." : "保存验收"}
+					</button>
+				</div>
 			</div>
 		</div>
 	);

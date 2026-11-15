@@ -79,6 +79,20 @@ HTTP 对同事项重叠消息以及执行中切换工作区返回 409，当前�
 
 本轮成功且有正式成果时才标记 `delivered`，只有聊天、澄清或空正文时保持 `open`。这是归档状态，不代表用户已经验收。文档是否达到专业质量、实际文件是否正确、服务是否符合需求，仍需要具体证据和用户反馈。
 
+## RSI 经验提炼与生命周期
+
+成员经验分为三类范围：`role_general`（跨工作区通用的工作习惯，`workspaceId = null`）、`company_private` 与 `project_private`（必须绑定实际 `workspaceId` 才会被注入，且都不随 `roles/*.md` 导出）。
+
+1. **产生候选经验（`candidate`）**：
+   - 执行期：主成员或内部委托成员可调用 `propose_experience`（旁听模式显式禁权）；提案在本轮内存中暂存并校验范围合法性与主动去重，仅在整轮未被取消/中止正常完成时写入 `member_memories`（`status = "candidate"`、`verified = false`）并在 `notice` 频道记录 `rsi_candidate_proposed`。
+   - 交付后复盘：`TeamOrchestrator.distillExperiences`（HTTP `POST /api/rsi/distill` 或反馈接口传入 `autoDistill: true`）以无状态 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思执行，基于事项对话、交付正文、既有经验与验收反馈提炼最多 5 条去重后的候选经验（含可选 `supersedesMemoryId`）。
+2. **核验、编辑与旧规替代（`verified` / `superseded` / `rejected`）**：
+   - 提示词按 `[memoryId | 已验证 · scope]` 与 `[memoryId | 待验证 · scope]` 区分注入，并在团队视图提供筛查、核验通过、修改内容与范围、忽略（`rejected`）或手工录入。
+   - 当一条携带 `supersedesMemoryId` 的候选经验被核验通过为 `verified` 时，存储层在同一操作中将所指旧规则置为 `superseded`、`verified = false` 并双向关联 `superseded_by`，后续不再注入提示词。
+3. **应用追踪与验收回写（`memory_applications`）**：
+   - 每次执行注入记忆时幂等累计 `applied_count` 并写入 `applied` 记录，普通对话本身不自评正负分。
+   - 当用户对交付给出 `positive` 或 `negative` 验收结论（`POST /api/deliverables/:id/feedback`）或在团队卡片手动标记 `+1 有效` / `-1 存疑`（`POST /api/memories/:id/evaluate`）时，按 `(memory_id, deliverable_id, outcome)` 去重更新 `positive_count` / `negative_count`，负向多于正向时标示「待复核」。
+
 ## 可重复验证
 
 运行以下命令验证代码、协议与构建：
@@ -90,7 +104,7 @@ npm run build
 npm run check:startup
 ```
 
-当前 37 项回归包括确切会话恢复、工作区与事项隔离、失败后接续、真实扩展到桥接的调用、长耗时桥接免受 HTTP 300s `headersTimeout`/`requestTimeout` 中断、同轮失败可重新委托、重复调用与委托边界、宿主桥接期间暂停空闲超时、子成员进度转发与轮次委托展示、取消子树、阻塞对话关闭、连续多轮过程交流不归档、带变化依据的正式版本、内部成员发布权限、失败草稿丢弃、能力缺失和 HTTP 409。测试中的模型响应是受控 fixture，不据此宣称岗位能力已经得到真实模型验证。
+当前 44 项回归包括确切会话恢复、工作区与事项隔离、失败后接续、真实扩展到桥接的调用、长耗时桥接免受 HTTP 300s `headersTimeout`/`requestTimeout` 中断、同轮失败可重新委托、重复调用与委托边界、宿主桥接期间暂停空闲超时、子成员进度转发与轮次委托展示、取消子树、阻塞对话关闭、连续多轮过程交流不归档、带变化依据的正式版本、内部成员发布权限、失败草稿丢弃、能力缺失、HTTP 409，以及 Phase 4 RSI 闭环（`propose_experience` 暂存与异常丢弃、旁听禁权、`distillExperiences` 只读提炼与去重、验收评估幂等回写、`supersedesMemoryId` 自动替代及对应 HTTP/SSE 路由）。测试中的模型响应是受控 fixture，不据此宣称岗位能力或长期成长效果已经得到真实模型验证。
 
 实机脚本另行使用现有 Pi 配置调用模型，默认 `kimi-coding / kimi-for-coding`，不会输出密钥：
 

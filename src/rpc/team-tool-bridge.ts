@@ -11,6 +11,14 @@ export type TeamToolCall =
 			content: string;
 			summary: string;
 			changeNote: string;
+	  }
+	| {
+			tool: "propose_experience";
+			callId: string;
+			scope: "role_general" | "company_private" | "project_private";
+			content: string;
+			rationale: string;
+			supersedesMemoryId?: string;
 	  };
 
 function requiredString(value: unknown, name: string, max = 64_000): string {
@@ -51,6 +59,24 @@ function parseCall(value: unknown): TeamToolCall {
 			content: requiredString(args.content, "content"),
 			changeNote,
 			summary: "summary" in args && typeof args.summary === "string" ? args.summary.slice(0, 1000) : "",
+		};
+	}
+	if (value.tool === "propose_experience" && "scope" in args && "content" in args && "rationale" in args) {
+		const scope = args.scope;
+		if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
+			throw new Error("Unsupported experience scope");
+		}
+		const supersedesMemoryId =
+			"supersedesMemoryId" in args && typeof args.supersedesMemoryId === "string" && args.supersedesMemoryId.trim()
+				? requiredString(args.supersedesMemoryId, "supersedesMemoryId", 256)
+				: undefined;
+		return {
+			tool: value.tool,
+			callId,
+			scope,
+			content: requiredString(args.content, "content", 2000),
+			rationale: requiredString(args.rationale, "rationale", 2000),
+			supersedesMemoryId,
 		};
 	}
 	throw new Error("Unsupported tool or invalid arguments");

@@ -5,6 +5,8 @@ export {
 	type DispatchMatterInput,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
+	type DistillExperiencesInput,
+	type DistillExperiencesResult,
 	type OrchestratorDialogHandler,
 	type RpcWorkerLike,
 	TeamOrchestrator,

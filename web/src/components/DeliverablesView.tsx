@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { BootstrapPayload, DeliverableDto } from "../api.ts";
+import type { BootstrapPayload, DeliverableDto, FeedbackRating, MemoryScope } from "../api.ts";
 import { formatClockTime } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
 
@@ -21,11 +21,14 @@ interface DeliverablesViewProps {
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
-	onSubmitFeedback: (deliverableId: string, feedback: string) => Promise<void>;
+	onSubmitFeedback: (
+		deliverableId: string,
+		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
+	) => Promise<void>;
+	onDistillExperiences: (deliverable: DeliverableDto, feedback?: string, rating?: FeedbackRating) => Promise<void>;
 	onSaveMemory: (
 		deliverable: DeliverableDto,
-		content: string,
-		scope: "role_general" | "project_private",
+		input: { content: string; scope: MemoryScope; rationale?: string; status: "candidate" | "verified" },
 	) => Promise<void>;
 	onStopPreview: (previewId: string) => Promise<void>;
 	onSelectDeliverable: (deliverableId: string, matterId?: string) => void;
@@ -43,6 +46,7 @@ export function DeliverablesView({
 	memberName,
 	workspaceName,
 	onSubmitFeedback,
+	onDistillExperiences,
 	onSaveMemory,
 	onStopPreview,
 	onSelectDeliverable,
@@ -86,7 +90,7 @@ export function DeliverablesView({
 				workspaceId: matterWorkspaceMap.get(latest.matterId) ?? null,
 				versions,
 				latest,
-				hasFeedback: versions.some((v) => Boolean(v.feedback)),
+				hasFeedback: versions.some((v) => Boolean(v.feedback || v.feedbackRating)),
 			});
 		}
 
@@ -254,7 +258,13 @@ export function DeliverablesView({
 																{memberName(fam.latest.memberId)} ·{" "}
 																{formatClockTime(fam.latest.createdAt)}
 															</span>
-															{fam.hasFeedback && <span className="feedback-badge">✓ 已验收</span>}
+															{fam.latest.feedbackRating === "positive" ? (
+																<span className="feedback-badge">✓ 认可采纳</span>
+															) : fam.latest.feedbackRating === "negative" ? (
+																<span className="feedback-badge negative">↻ 需修订</span>
+															) : fam.hasFeedback ? (
+																<span className="feedback-badge">✓ 已验收</span>
+															) : null}
 														</div>
 													</button>
 												);
@@ -268,16 +278,19 @@ export function DeliverablesView({
 						<div className="deliverables-detail-col">
 							{activeDeliverable ? (
 								<DeliverableCard
+									key={activeDeliverable.id}
 									deliverable={activeDeliverable}
 									siblingVersions={siblingVersions}
 									memberName={memberName(activeDeliverable.memberId)}
 									workspaceName={workspaceName(matterWorkspaceMap.get(activeDeliverable.matterId) ?? null)}
+									hasWorkspace={Boolean(matterWorkspaceMap.get(activeDeliverable.matterId))}
 									viewUrl={previewUrlFor(activeDeliverable)}
 									onSubmitFeedback={onSubmitFeedback}
+									onDistillExperiences={onDistillExperiences}
 									onSelectVersion={(id) => onSelectDeliverable(id)}
 									onRequestRevision={() => onRequestRevision(activeDeliverable)}
 									onOpenMatterChat={() => onOpenMatterChat(activeDeliverable.matterId)}
-									onSaveMemory={(content, scope) => onSaveMemory(activeDeliverable, content, scope)}
+									onSaveMemory={(input) => onSaveMemory(activeDeliverable, input)}
 								/>
 							) : (
 								<div className="deliverable-card">

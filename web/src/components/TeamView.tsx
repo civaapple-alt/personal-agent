@@ -1,18 +1,25 @@
 import { type ChangeEvent, useState } from "react";
 import {
 	createMember,
+	evaluateMemberMemory,
 	exportMemberPackage,
 	importMemberPackage,
 	type MemberMemoryDto,
+	type MemoryScope,
+	type MemoryStatus,
 	type RoleTemplateDto,
+	saveMemberMemory,
 	setPrimaryMember,
 	type TeamMemberDto,
+	updateMemberMemory,
+	type WorkspaceDto,
 } from "../api.ts";
-import { getBotTheme, MEMORY_SCOPE_LABELS, splitTagsInput } from "../utils.ts";
+import { getBotTheme, MEMORY_SCOPE_LABELS, MEMORY_STATUS_LABELS, splitTagsInput } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 
 interface TeamViewProps {
 	members: TeamMemberDto[];
+	workspaces: WorkspaceDto[];
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memberName: (id: string) => string;
@@ -23,8 +30,11 @@ interface TeamViewProps {
 	onAssignTask: (memberId: string) => void;
 }
 
+type MemoryFilterTab = "all" | "candidate" | "verified" | "archived";
+
 export function TeamView({
 	members,
+	workspaces,
 	memoriesByMember,
 	templateByRoleId,
 	memberName,
@@ -50,6 +60,93 @@ export function TeamView({
 		markdown: string;
 	} | null>(null);
 	const [expandedMemoryMemberId, setExpandedMemoryMemberId] = useState<string | null>(null);
+	const [memoryFilter, setMemoryFilter] = useState<MemoryFilterTab>("all");
+	const [showAddMemoryFor, setShowAddMemoryFor] = useState<string | null>(null);
+	const [draftMemContent, setDraftMemContent] = useState("");
+	const [draftMemRationale, setDraftMemRationale] = useState("");
+	const [draftMemScope, setDraftMemScope] = useState<MemoryScope>("role_general");
+	const [draftMemWorkspaceId, setDraftMemWorkspaceId] = useState<string>("");
+	const [draftMemStatus, setDraftMemStatus] = useState<"verified" | "candidate">("verified");
+
+	const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+	const [editContent, setEditContent] = useState("");
+	const [editRationale, setEditRationale] = useState("");
+	const [editScope, setEditScope] = useState<MemoryScope>("role_general");
+	const [editWorkspaceId, setEditWorkspaceId] = useState<string>("");
+	const [busyMemoryId, setBusyMemoryId] = useState<string | null>(null);
+
+	const runMemoryAction = async (memoryId: string, fn: () => Promise<void>, successMessage: string) => {
+		setBusyMemoryId(memoryId);
+		try {
+			await fn();
+			onNotice(successMessage);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusyMemoryId(null);
+		}
+	};
+
+	const handleAddMemberMemory = async (memberId: string) => {
+		const content = draftMemContent.trim();
+		if (!content) return;
+		const resolvedWsId =
+			draftMemScope === "role_general" ? undefined : draftMemWorkspaceId || workspaces[0]?.id || undefined;
+		if (draftMemScope !== "role_general" && !resolvedWsId) {
+			onError("个人私有经验或项目规范需要至少一个已关联的工作区仓库");
+			return;
+		}
+		try {
+			await saveMemberMemory({
+				memberId,
+				content,
+				scope: draftMemScope,
+				workspaceId: resolvedWsId,
+				rationale: draftMemRationale.trim() || undefined,
+				status: draftMemStatus,
+				verified: draftMemStatus === "verified",
+			});
+			setDraftMemContent("");
+			setDraftMemRationale("");
+			setShowAddMemoryFor(null);
+			onNotice("已新增角色经验");
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const startEditMemory = (mem: MemberMemoryDto) => {
+		setEditingMemoryId(mem.id);
+		setEditContent(mem.content);
+		setEditRationale(mem.rationale ?? "");
+		setEditScope(mem.scope);
+		setEditWorkspaceId(mem.workspaceId ?? workspaces[0]?.id ?? "");
+	};
+
+	const handleSaveEditMemory = async (mem: MemberMemoryDto) => {
+		const content = editContent.trim();
+		if (!content) return;
+		const resolvedWsId = editScope === "role_general" ? null : editWorkspaceId || workspaces[0]?.id || null;
+		if (editScope !== "role_general" && !resolvedWsId) {
+			onError("私有经验或项目规范需要绑定一个工作区仓库");
+			return;
+		}
+		await runMemoryAction(
+			mem.id,
+			async () => {
+				await updateMemberMemory(mem.id, {
+					content,
+					rationale: editRationale.trim(),
+					scope: editScope,
+					workspaceId: resolvedWsId,
+				});
+				setEditingMemoryId(null);
+			},
+			"经验内容与范围已更新",
+		);
+	};
 
 	const handleCreateMember = async () => {
 		if (!newMemberName.trim() || !newMemberTitle.trim()) return;
@@ -276,6 +373,19 @@ export function TeamView({
 						const memories = memoriesByMember[member.id] ?? [];
 						const isExpanded = expandedMemoryMemberId === member.id;
 						const theme = getBotTheme(idx);
+						const verifiedCount = memories.filter(
+							(m) => m.status === "verified" || (!m.status && m.verified),
+						).length;
+						const candidateCount = memories.filter(
+							(m) => m.status === "candidate" || (!m.status && !m.verified),
+						).length;
+						const filteredMemories = memories.filter((m) => {
+							const st: MemoryStatus = m.status ?? (m.verified ? "verified" : "candidate");
+							if (memoryFilter === "candidate") return st === "candidate";
+							if (memoryFilter === "verified") return st === "verified";
+							if (memoryFilter === "archived") return st === "rejected" || st === "superseded";
+							return true;
+						});
 						return (
 							<div key={member.id} className="member-card">
 								<div className="member-card-top">
@@ -291,7 +401,12 @@ export function TeamView({
 											</div>
 										</div>
 									</div>
-									<span className="pill">{memories.length} 条经验</span>
+									<div className="member-memory-badges">
+										{candidateCount > 0 && (
+											<span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>
+										)}
+										<span className="pill">{verifiedCount} 已验证</span>
+									</div>
 								</div>
 
 								{tpl?.responsibilities && <p className="member-resp">{tpl.responsibilities.split("\n")[0]}</p>}
@@ -335,37 +450,333 @@ export function TeamView({
 									>
 										导出能力包
 									</button>
-									{memories.length > 0 && (
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => setExpandedMemoryMemberId(isExpanded ? null : member.id)}
-										>
-											{isExpanded ? "收起经验" : `查看经验 (${memories.length})`}
-										</button>
-									)}
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => setExpandedMemoryMemberId(isExpanded ? null : member.id)}
+									>
+										{isExpanded ? "收起经验" : `管理经验 (${memories.length})`}
+									</button>
 								</div>
 
-								{isExpanded && memories.length > 0 && (
+								{isExpanded && (
 									<div className="memory-list">
-										{memories.map((mem) => {
-											const scopeLabel = MEMORY_SCOPE_LABELS[mem.scope] ?? mem.scope;
-											const scopeSuffix =
-												mem.scope === "role_general"
-													? ""
-													: mem.workspaceId
-														? ` · ${workspaceName(mem.workspaceId) ?? mem.workspaceId}`
-														: " · 未绑定仓库（仅保留查看）";
-											return (
-												<div key={mem.id} className="memory-item">
-													<span className="pill">
-														{scopeLabel}
-														{scopeSuffix}
-													</span>
-													<span>{mem.content}</span>
+										<div className="memory-toolbar">
+											<div className="memory-filter-tabs">
+												{(
+													[
+														["all", `全部 (${memories.length})`],
+														["candidate", `待核验 (${candidateCount})`],
+														["verified", `已验证 (${verifiedCount})`],
+														["archived", "已替代/忽略"],
+													] as const
+												).map(([key, label]) => (
+													<button
+														key={key}
+														type="button"
+														className={`choice-chip ${memoryFilter === key ? "active" : ""}`}
+														onClick={() => setMemoryFilter(key)}
+													>
+														{label}
+													</button>
+												))}
+											</div>
+											<button
+												type="button"
+												className="btn-pill-outline btn-xs"
+												onClick={() => {
+													setShowAddMemoryFor((prev) => (prev === member.id ? null : member.id));
+													if (!draftMemWorkspaceId && workspaces[0]) {
+														setDraftMemWorkspaceId(workspaces[0].id);
+													}
+												}}
+											>
+												{showAddMemoryFor === member.id ? "取消录入" : "+ 录入经验"}
+											</button>
+										</div>
+
+										{showAddMemoryFor === member.id && (
+											<div className="memory-draft-box">
+												<div className="memory-draft-head">
+													<strong>新增经验规则</strong>
+													<div className="memory-draft-controls">
+														<select
+															className="select-sm"
+															value={draftMemScope}
+															onChange={(e) => setDraftMemScope(e.target.value as MemoryScope)}
+														>
+															<option value="role_general">角色通用经验</option>
+															<option value="company_private" disabled={workspaces.length === 0}>
+																个人私有经验{workspaces.length === 0 ? "（无仓库）" : ""}
+															</option>
+															<option value="project_private" disabled={workspaces.length === 0}>
+																当前项目规范{workspaces.length === 0 ? "（无仓库）" : ""}
+															</option>
+														</select>
+														{draftMemScope !== "role_general" && workspaces.length > 0 && (
+															<select
+																className="select-sm"
+																value={draftMemWorkspaceId || workspaces[0]!.id}
+																onChange={(e) => setDraftMemWorkspaceId(e.target.value)}
+															>
+																{workspaces.map((ws) => (
+																	<option key={ws.id} value={ws.id}>
+																		{ws.name}
+																	</option>
+																))}
+															</select>
+														)}
+														<select
+															className="select-sm"
+															value={draftMemStatus}
+															onChange={(e) =>
+																setDraftMemStatus(e.target.value as "verified" | "candidate")
+															}
+														>
+															<option value="verified">已验证</option>
+															<option value="candidate">待核验候选</option>
+														</select>
+													</div>
 												</div>
-											);
-										})}
+												<input
+													className="input-field input-field-spaced"
+													value={draftMemRationale}
+													onChange={(e) => setDraftMemRationale(e.target.value)}
+													placeholder="适用条件或沉淀依据（可选）"
+												/>
+												<div className="feedback-row">
+													<input
+														className="input-field"
+														value={draftMemContent}
+														onChange={(e) => setDraftMemContent(e.target.value)}
+														placeholder="输入具体经验或规范规则..."
+													/>
+													<button
+														type="button"
+														className="btn-primary btn-sm"
+														onClick={() => void handleAddMemberMemory(member.id)}
+													>
+														保存
+													</button>
+												</div>
+											</div>
+										)}
+
+										{filteredMemories.length === 0 ? (
+											<div className="memory-empty-note">当前筛选条件下暂无经验条目。</div>
+										) : (
+											filteredMemories.map((mem) => {
+												const status: MemoryStatus =
+													mem.status ?? (mem.verified ? "verified" : "candidate");
+												const scopeLabel = MEMORY_SCOPE_LABELS[mem.scope] ?? mem.scope;
+												const scopeSuffix =
+													mem.scope === "role_general"
+														? ""
+														: mem.workspaceId
+															? ` · ${workspaceName(mem.workspaceId) ?? mem.workspaceId}`
+															: " · 未绑定仓库（仅保留查看）";
+												const needsReview = (mem.negativeCount ?? 0) > (mem.positiveCount ?? 0);
+												const isEditing = editingMemoryId === mem.id;
+												const isBusy = busyMemoryId === mem.id;
+
+												return (
+													<div key={mem.id} className={`memory-item memory-item-${status}`}>
+														<div className="memory-item-head">
+															<div className="memory-item-badges">
+																<span className={`rsi-badge rsi-status-${status}`}>
+																	{MEMORY_STATUS_LABELS[status] ?? status}
+																</span>
+																<span className="pill">
+																	{scopeLabel}
+																	{scopeSuffix}
+																</span>
+																{needsReview && <span className="rsi-badge rsi-alert">待复核</span>}
+															</div>
+															<span className="memory-telemetry">
+																命中 {mem.appliedCount ?? 0} · +{mem.positiveCount ?? 0} / -
+																{mem.negativeCount ?? 0}
+															</span>
+														</div>
+
+														{isEditing ? (
+															<div className="memory-edit-form">
+																<div className="memory-draft-controls">
+																	<select
+																		className="select-sm"
+																		value={editScope}
+																		onChange={(e) => setEditScope(e.target.value as MemoryScope)}
+																	>
+																		<option value="role_general">角色通用经验</option>
+																		<option
+																			value="company_private"
+																			disabled={workspaces.length === 0}
+																		>
+																			个人私有经验
+																		</option>
+																		<option
+																			value="project_private"
+																			disabled={workspaces.length === 0}
+																		>
+																			当前项目规范
+																		</option>
+																	</select>
+																	{editScope !== "role_general" && workspaces.length > 0 && (
+																		<select
+																			className="select-sm"
+																			value={editWorkspaceId || workspaces[0]!.id}
+																			onChange={(e) => setEditWorkspaceId(e.target.value)}
+																		>
+																			{workspaces.map((ws) => (
+																				<option key={ws.id} value={ws.id}>
+																					{ws.name}
+																				</option>
+																			))}
+																		</select>
+																	)}
+																</div>
+																<input
+																	className="input-field"
+																	value={editContent}
+																	onChange={(e) => setEditContent(e.target.value)}
+																	placeholder="经验内容"
+																/>
+																<input
+																	className="input-field"
+																	value={editRationale}
+																	onChange={(e) => setEditRationale(e.target.value)}
+																	placeholder="沉淀依据（可选）"
+																/>
+																<div className="memory-item-actions">
+																	<button
+																		type="button"
+																		className="btn-primary btn-xs"
+																		disabled={isBusy}
+																		onClick={() => void handleSaveEditMemory(mem)}
+																	>
+																		保存修改
+																	</button>
+																	<button
+																		type="button"
+																		className="btn-secondary btn-xs"
+																		onClick={() => setEditingMemoryId(null)}
+																	>
+																		取消
+																	</button>
+																</div>
+															</div>
+														) : (
+															<>
+																<div className="memory-item-content">{mem.content}</div>
+																{mem.rationale && (
+																	<div className="memory-rationale">依据：{mem.rationale}</div>
+																)}
+																{(mem.supersedesMemoryId || mem.supersededBy) && (
+																	<div className="memory-rationale">
+																		{mem.supersedesMemoryId && (
+																			<span>替代旧规则 {mem.supersedesMemoryId} </span>
+																		)}
+																		{mem.supersededBy && (
+																			<span>已被新规则 {mem.supersededBy} 替代</span>
+																		)}
+																	</div>
+																)}
+															</>
+														)}
+
+														{!isEditing && (
+															<div className="memory-item-actions">
+																{(status === "candidate" || status === "rejected") && (
+																	<button
+																		type="button"
+																		className="btn-pill-dark btn-xs"
+																		disabled={isBusy}
+																		onClick={() =>
+																			void runMemoryAction(
+																				mem.id,
+																				() =>
+																					updateMemberMemory(mem.id, { status: "verified" }).then(
+																						() => {},
+																					),
+																				"已核验为正式经验",
+																			)
+																		}
+																	>
+																		核验通过
+																	</button>
+																)}
+																{(status === "verified" || status === "candidate") && (
+																	<>
+																		<button
+																			type="button"
+																			className="btn-pill-outline btn-xs"
+																			disabled={isBusy}
+																			onClick={() =>
+																				void runMemoryAction(
+																					mem.id,
+																					() =>
+																						evaluateMemberMemory(mem.id, {
+																							outcome: "positive",
+																						}).then(() => {}),
+																					"已记录 1 次有效验证",
+																				)
+																			}
+																		>
+																			+1 有效
+																		</button>
+																		<button
+																			type="button"
+																			className="btn-pill-outline btn-xs"
+																			disabled={isBusy}
+																			onClick={() =>
+																				void runMemoryAction(
+																					mem.id,
+																					() =>
+																						evaluateMemberMemory(mem.id, {
+																							outcome: "negative",
+																						}).then(() => {}),
+																					"已记录 1 次存疑反馈",
+																				)
+																			}
+																		>
+																			-1 存疑
+																		</button>
+																	</>
+																)}
+																{status !== "superseded" && (
+																	<button
+																		type="button"
+																		className="btn-inline btn-xs"
+																		disabled={isBusy}
+																		onClick={() => startEditMemory(mem)}
+																	>
+																		编辑
+																	</button>
+																)}
+																{status !== "rejected" && status !== "superseded" && (
+																	<button
+																		type="button"
+																		className="btn-inline btn-xs"
+																		disabled={isBusy}
+																		onClick={() =>
+																			void runMemoryAction(
+																				mem.id,
+																				() =>
+																					updateMemberMemory(mem.id, { status: "rejected" }).then(
+																						() => {},
+																					),
+																				"已忽略该经验（不再注入）",
+																			)
+																		}
+																	>
+																		忽略
+																	</button>
+																)}
+															</div>
+														)}
+													</div>
+												);
+											})
+										)}
 									</div>
 								)}
 							</div>

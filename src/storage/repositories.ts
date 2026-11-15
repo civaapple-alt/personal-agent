@@ -4,13 +4,17 @@ import type { ThinkingLevel } from "../rpc/types.ts";
 import type {
 	Deliverable,
 	DeliverableType,
+	FeedbackRating,
 	Matter,
 	MatterMessage,
 	MatterMessageChannel,
 	MatterMessageSenderType,
 	MatterStatus,
 	MemberMemory,
+	MemoryApplicationOutcome,
+	MemoryApplicationRecord,
 	MemoryScope,
+	MemoryStatus,
 	TeamMember,
 	WorkerSessionRecord,
 	WorkspaceLink,
@@ -150,58 +154,320 @@ export class PersonalAgentStore {
 		scope: MemoryScope;
 		workspaceId?: string | null;
 		content: string;
+		rationale?: string;
 		sourceMatterId?: string | null;
+		sourceDeliverableId?: string | null;
+		status?: MemoryStatus;
 		verified?: boolean;
+		supersedesMemoryId?: string | null;
+		supersededBy?: string | null;
 	}): MemberMemory {
 		const id = `mem_${randomUUID()}`;
 		const timestamp = nowIso();
+		const status: MemoryStatus = input.status ?? (input.verified ? "verified" : "candidate");
+		const verified = status === "verified";
+		const workspaceId = input.scope === "role_general" ? null : (input.workspaceId ?? null);
+		const supersedesId = input.supersedesMemoryId ?? null;
 		this.db
 			.prepare(
 				`INSERT INTO member_memories (
-					id, member_id, scope, workspace_id, content, source_matter_id, verified, created_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+					id, member_id, scope, workspace_id, content, rationale,
+					source_matter_id, source_deliverable_id, status, verified,
+					superseded_by, supersedes_memory_id,
+					applied_count, positive_count, negative_count, last_applied_at,
+					created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
 			)
 			.run(
 				id,
 				input.memberId,
 				input.scope,
-				input.workspaceId ?? null,
+				workspaceId,
 				input.content,
+				input.rationale ?? "",
 				input.sourceMatterId ?? null,
-				input.verified ? 1 : 0,
+				input.sourceDeliverableId ?? null,
+				status,
+				verified ? 1 : 0,
+				input.supersededBy ?? null,
+				supersedesId,
+				timestamp,
 				timestamp,
 			);
-		return {
-			id,
-			memberId: input.memberId,
-			scope: input.scope,
-			workspaceId: input.workspaceId ?? null,
-			content: input.content,
-			sourceMatterId: input.sourceMatterId ?? null,
-			verified: Boolean(input.verified),
-			createdAt: timestamp,
-		};
+		if (verified && supersedesId && supersedesId !== id) {
+			this.markMemorySuperseded(supersedesId, id, timestamp);
+		}
+		return this.getMemory(id)!;
+	}
+
+	getMemory(id: string): MemberMemory | null {
+		const row = this.db.prepare("SELECT * FROM member_memories WHERE id = ?").get(id) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapMemory(row) : null;
+	}
+
+	findActiveDuplicateMemory(
+		memberId: string,
+		scope: MemoryScope,
+		workspaceId: string | null,
+		content: string,
+	): MemberMemory | null {
+		const normalized = content.replace(/\s+/g, " ").trim().toLowerCase();
+		if (!normalized) return null;
+		const effectiveWs = scope === "role_general" ? null : workspaceId;
+		return (
+			this.listMemberMemories(memberId).find(
+				(memory) =>
+					(memory.status === "candidate" || memory.status === "verified") &&
+					memory.scope === scope &&
+					memory.workspaceId === effectiveWs &&
+					memory.content.replace(/\s+/g, " ").trim().toLowerCase() === normalized,
+			) ?? null
+		);
+	}
+
+	updateMemory(
+		id: string,
+		patch: {
+			content?: string;
+			scope?: MemoryScope;
+			workspaceId?: string | null;
+			status?: MemoryStatus;
+			rationale?: string;
+			supersededBy?: string | null;
+			supersedesMemoryId?: string | null;
+		},
+	): MemberMemory {
+		const existing = this.getMemory(id);
+		if (!existing) throw new Error(`Memory not found: ${id}`);
+		const timestamp = nowIso();
+		const nextScope = patch.scope ?? existing.scope;
+		const nextWorkspaceId =
+			nextScope === "role_general"
+				? null
+				: patch.workspaceId !== undefined
+					? patch.workspaceId
+					: existing.workspaceId;
+		const nextContent = patch.content !== undefined ? patch.content.trim() : existing.content;
+		if (!nextContent) throw new Error("Memory content cannot be empty");
+		const nextStatus = patch.status ?? existing.status;
+		const nextVerified = nextStatus === "verified";
+		const nextRationale = patch.rationale !== undefined ? patch.rationale : existing.rationale;
+		const nextSupersededBy = patch.supersededBy !== undefined ? patch.supersededBy : existing.supersededBy;
+		const nextSupersedesId =
+			patch.supersedesMemoryId !== undefined ? patch.supersedesMemoryId : existing.supersedesMemoryId;
+
+		this.db
+			.prepare(
+				`UPDATE member_memories
+				 SET scope = ?, workspace_id = ?, content = ?, rationale = ?,
+				     status = ?, verified = ?, superseded_by = ?, supersedes_memory_id = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(
+				nextScope,
+				nextWorkspaceId,
+				nextContent,
+				nextRationale,
+				nextStatus,
+				nextVerified ? 1 : 0,
+				nextSupersededBy,
+				nextSupersedesId,
+				timestamp,
+				id,
+			);
+
+		if (nextVerified && nextSupersedesId && nextSupersedesId !== id) {
+			this.markMemorySuperseded(nextSupersedesId, id, timestamp);
+		}
+		return this.getMemory(id)!;
+	}
+
+	private markMemorySuperseded(targetMemoryId: string, replacementId: string, timestamp: string): void {
+		this.db
+			.prepare(
+				`UPDATE member_memories
+				 SET status = 'superseded', verified = 0, superseded_by = ?, updated_at = ?
+				 WHERE id = ? AND status IN ('candidate', 'verified')`,
+			)
+			.run(replacementId, timestamp, targetMemoryId);
 	}
 
 	/** Private organization facts require an explicit workspace until organization identity exists. */
-	listRelevantMemories(memberId: string, workspaceId: string | null): MemberMemory[] {
-		return this.listMemberMemories(memberId).filter(
-			(memory) => memory.scope === "role_general" || (workspaceId !== null && memory.workspaceId === workspaceId),
-		);
+	listRelevantMemories(
+		memberId: string,
+		workspaceId: string | null,
+		options?: { includeCandidates?: boolean },
+	): MemberMemory[] {
+		const includeCandidates = options?.includeCandidates ?? true;
+		return this.listMemberMemories(memberId)
+			.filter((memory) => {
+				if (memory.status === "rejected" || memory.status === "superseded") return false;
+				if (!includeCandidates && memory.status !== "verified") return false;
+				return memory.scope === "role_general" || (workspaceId !== null && memory.workspaceId === workspaceId);
+			})
+			.sort((a, b) => {
+				const rankA = a.status === "verified" ? 0 : 1;
+				const rankB = b.status === "verified" ? 0 : 1;
+				if (rankA !== rankB) return rankA - rankB;
+				return 0;
+			});
 	}
 
 	listMemberMemories(memberId: string): MemberMemory[] {
 		const rows = this.db
 			.prepare("SELECT * FROM member_memories WHERE member_id = ? ORDER BY created_at, rowid")
-			.all(memberId);
+			.all(memberId) as Record<string, unknown>[];
+		return rows.map((row) => this.mapMemory(row));
+	}
+
+	recordMemoryApplications(input: {
+		memoryIds: string[];
+		matterId: string;
+		memberId: string;
+		deliverableId?: string | null;
+		note?: string;
+	}): void {
+		const uniqueIds = normalizeUniqueIds(input.memoryIds);
+		if (uniqueIds.length === 0) return;
+		const timestamp = nowIso();
+		const insert = this.db.prepare(
+			`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, deliverable_id, outcome, note, created_at)
+			 VALUES (?, ?, ?, ?, ?, 'applied', ?, ?)`,
+		);
+		const updateCount = this.db.prepare(
+			`UPDATE member_memories
+			 SET applied_count = applied_count + 1, last_applied_at = ?, updated_at = ?
+			 WHERE id = ?`,
+		);
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			for (const memoryId of uniqueIds) {
+				insert.run(
+					`mapp_${randomUUID()}`,
+					memoryId,
+					input.matterId,
+					input.memberId,
+					input.deliverableId ?? null,
+					input.note ?? "",
+					timestamp,
+				);
+				updateCount.run(timestamp, timestamp, memoryId);
+			}
+			this.db.exec("COMMIT");
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
+	}
+
+	evaluateMemory(input: {
+		memoryId: string;
+		outcome: Exclude<MemoryApplicationOutcome, "applied">;
+		matterId?: string | null;
+		memberId?: string | null;
+		deliverableId?: string | null;
+		note?: string;
+	}): MemberMemory {
+		const existing = this.getMemory(input.memoryId);
+		if (!existing) throw new Error(`Memory not found: ${input.memoryId}`);
+		if (input.deliverableId && input.matterId) {
+			const duplicate = this.db
+				.prepare(
+					`SELECT 1 FROM memory_applications
+					 WHERE memory_id = ? AND deliverable_id = ? AND outcome = ? LIMIT 1`,
+				)
+				.get(input.memoryId, input.deliverableId, input.outcome);
+			if (duplicate) return existing;
+		}
+		const timestamp = nowIso();
+		const isPositive = input.outcome === "feedback_positive" || input.outcome === "turn_succeeded";
+		const isNegative = input.outcome === "feedback_negative" || input.outcome === "turn_failed";
+		if (input.matterId) {
+			this.db
+				.prepare(
+					`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, deliverable_id, outcome, note, created_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				)
+				.run(
+					`mapp_${randomUUID()}`,
+					input.memoryId,
+					input.matterId,
+					input.memberId ?? existing.memberId,
+					input.deliverableId ?? null,
+					input.outcome,
+					input.note ?? "",
+					timestamp,
+				);
+		}
+		if (isPositive) {
+			this.db
+				.prepare("UPDATE member_memories SET positive_count = positive_count + 1, updated_at = ? WHERE id = ?")
+				.run(timestamp, input.memoryId);
+		} else if (isNegative) {
+			this.db
+				.prepare("UPDATE member_memories SET negative_count = negative_count + 1, updated_at = ? WHERE id = ?")
+				.run(timestamp, input.memoryId);
+		}
+		return this.getMemory(input.memoryId)!;
+	}
+
+	evaluateMatterMemories(input: {
+		matterId: string;
+		memberId?: string | null;
+		deliverableId?: string | null;
+		outcome: Exclude<MemoryApplicationOutcome, "applied">;
+		note?: string;
+	}): MemberMemory[] {
+		const rows = (
+			input.memberId
+				? this.db
+						.prepare(
+							`SELECT DISTINCT memory_id FROM memory_applications
+							 WHERE matter_id = ? AND member_id = ? AND outcome = 'applied'`,
+						)
+						.all(input.matterId, input.memberId)
+				: this.db
+						.prepare(
+							`SELECT DISTINCT memory_id FROM memory_applications
+							 WHERE matter_id = ? AND outcome = 'applied'`,
+						)
+						.all(input.matterId)
+		) as Array<{ memory_id: string }>;
+		const updated: MemberMemory[] = [];
+		for (const row of rows) {
+			updated.push(
+				this.evaluateMemory({
+					memoryId: String(row.memory_id),
+					outcome: input.outcome,
+					matterId: input.matterId,
+					memberId: input.memberId,
+					deliverableId: input.deliverableId,
+					note: input.note,
+				}),
+			);
+		}
+		return updated;
+	}
+
+	listMemoryApplications(memoryId: string, limit = 20): MemoryApplicationRecord[] {
+		const rows = this.db
+			.prepare(
+				`SELECT * FROM memory_applications
+				 WHERE memory_id = ?
+				 ORDER BY created_at DESC, rowid DESC
+				 LIMIT ?`,
+			)
+			.all(memoryId, limit) as Record<string, unknown>[];
 		return rows.map((row) => ({
 			id: String(row.id),
+			memoryId: String(row.memory_id),
+			matterId: String(row.matter_id),
 			memberId: String(row.member_id),
-			scope: row.scope as MemoryScope,
-			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
-			content: String(row.content),
-			sourceMatterId: row.source_matter_id ? String(row.source_matter_id) : null,
-			verified: Boolean(row.verified),
+			deliverableId: row.deliverable_id ? String(row.deliverable_id) : null,
+			outcome: row.outcome as MemoryApplicationOutcome,
+			note: String(row.note ?? ""),
 			createdAt: String(row.created_at),
 		}));
 	}
@@ -438,6 +704,7 @@ export class PersonalAgentStore {
 			serviceUrl: input.serviceUrl ?? null,
 			version,
 			feedback: null,
+			feedbackRating: null,
 			createdAt: timestamp,
 		};
 	}
@@ -455,6 +722,13 @@ export class PersonalAgentStore {
 		}
 	}
 
+	getDeliverable(id: string): Deliverable | null {
+		const row = this.db.prepare("SELECT * FROM deliverables WHERE id = ?").get(id) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapDeliverable(row) : null;
+	}
+
 	listDeliverables(matterId?: string): Deliverable[] {
 		const rows = (
 			matterId
@@ -464,23 +738,18 @@ export class PersonalAgentStore {
 				: this.db.prepare("SELECT * FROM deliverables ORDER BY created_at DESC, version DESC").all()
 		) as Record<string, unknown>[];
 
-		return rows.map((row) => ({
-			id: String(row.id),
-			matterId: String(row.matter_id),
-			memberId: String(row.member_id),
-			type: row.type as DeliverableType,
-			title: String(row.title),
-			summary: String(row.summary),
-			contentOrPath: String(row.content_or_path),
-			serviceUrl: row.service_url ? String(row.service_url) : null,
-			version: Number(row.version),
-			feedback: row.feedback ? String(row.feedback) : null,
-			createdAt: String(row.created_at),
-		}));
+		return rows.map((row) => this.mapDeliverable(row));
 	}
 
-	addDeliverableFeedback(deliverableId: string, feedback: string): void {
-		this.db.prepare("UPDATE deliverables SET feedback = ? WHERE id = ?").run(feedback, deliverableId);
+	addDeliverableFeedback(deliverableId: string, feedback: string, rating?: FeedbackRating | null): Deliverable | null {
+		if (rating !== undefined) {
+			this.db
+				.prepare("UPDATE deliverables SET feedback = ?, feedback_rating = ? WHERE id = ?")
+				.run(feedback, rating, deliverableId);
+		} else {
+			this.db.prepare("UPDATE deliverables SET feedback = ? WHERE id = ?").run(feedback, deliverableId);
+		}
+		return this.getDeliverable(deliverableId);
 	}
 
 	recordWorkerSession(input: {
@@ -622,6 +891,56 @@ export class PersonalAgentStore {
 			repoPath: String(row.repo_path),
 			defaultBranch: String(row.default_branch),
 			description: String(row.description),
+			createdAt: String(row.created_at),
+		};
+	}
+
+	private mapMemory(row: Record<string, unknown>): MemberMemory {
+		const rawStatus = typeof row.status === "string" && row.status ? row.status : null;
+		const status: MemoryStatus =
+			rawStatus === "candidate" || rawStatus === "verified" || rawStatus === "rejected" || rawStatus === "superseded"
+				? rawStatus
+				: row.verified
+					? "verified"
+					: "candidate";
+		return {
+			id: String(row.id),
+			memberId: String(row.member_id),
+			scope: row.scope as MemoryScope,
+			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+			content: String(row.content),
+			rationale: typeof row.rationale === "string" ? row.rationale : "",
+			sourceMatterId: row.source_matter_id ? String(row.source_matter_id) : null,
+			sourceDeliverableId: row.source_deliverable_id ? String(row.source_deliverable_id) : null,
+			status,
+			verified: status === "verified",
+			supersededBy: row.superseded_by ? String(row.superseded_by) : null,
+			supersedesMemoryId: row.supersedes_memory_id ? String(row.supersedes_memory_id) : null,
+			appliedCount: Number(row.applied_count ?? 0),
+			positiveCount: Number(row.positive_count ?? 0),
+			negativeCount: Number(row.negative_count ?? 0),
+			lastAppliedAt: row.last_applied_at ? String(row.last_applied_at) : null,
+			createdAt: String(row.created_at),
+			updatedAt: row.updated_at ? String(row.updated_at) : String(row.created_at),
+		};
+	}
+
+	private mapDeliverable(row: Record<string, unknown>): Deliverable {
+		const rawRating = row.feedback_rating;
+		const feedbackRating: FeedbackRating | null =
+			rawRating === "positive" || rawRating === "negative" || rawRating === "neutral" ? rawRating : null;
+		return {
+			id: String(row.id),
+			matterId: String(row.matter_id),
+			memberId: String(row.member_id),
+			type: row.type as DeliverableType,
+			title: String(row.title),
+			summary: String(row.summary),
+			contentOrPath: String(row.content_or_path),
+			serviceUrl: row.service_url ? String(row.service_url) : null,
+			version: Number(row.version),
+			feedback: row.feedback ? String(row.feedback) : null,
+			feedbackRating,
 			createdAt: String(row.created_at),
 		};
 	}

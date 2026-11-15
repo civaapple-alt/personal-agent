@@ -21,7 +21,7 @@
 
 以下变量由编排核或预览管理器在拉起子进程时自动注入，用于工具桥接鉴权与端口隔离：
 
-- **Pi 子进程注入**（[编排核](../src/orchestrator/team-orchestrator.ts) / [工具桥接](../src/rpc/team-tool-bridge.ts) / [团队扩展](../src/rpc/team-extension.ts)）：`PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_PUBLISH`、`PA_CAN_DELEGATE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
+- **Pi 子进程注入**（[编排核](../src/orchestrator/team-orchestrator.ts) / [工具桥接](../src/rpc/team-tool-bridge.ts) / [团队扩展](../src/rpc/team-extension.ts)）：`PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_PUBLISH`、`PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
 - **本地预览子进程注入**（[PreviewManager](../src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
 
 ---
@@ -40,7 +40,7 @@
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。
-- 若数据库中存在旧表结构，[database.ts](../src/storage/database.ts) 仅做幂等增量迁移（如 `worker_sessions.context_key`、`message_cursor`、`matters.observer_ids_json`、`matter_execution_leases`），不改写历史消息或成果。
+- 若数据库中存在旧表结构，[database.ts](../src/storage/database.ts) 仅做幂等增量迁移（如 `worker_sessions.context_key`、`message_cursor`、`matters.observer_ids_json`、`matter_execution_leases`、`deliverables.feedback_rating`、`member_memories` 生命周期与评估计数字段及 `memory_applications` 表），不改写历史消息或成果。
 
 ---
 
@@ -127,6 +127,13 @@
 - **旁听提示与摘要窗口**：
   - 当前轮输入：用户发言最多截取 `2000` 字符，主负责人回复最多截取 `6000` 字符。
   - 首次接入背景摘要（`buildObserverContextDigest`）：保留事项标题/最新摘要/已归档成果标题，并从最新往前取最多 **`16` 条** `user` 频道历史消息（单条最多 `400` 字符），整体控制在 **`6000` 字符**总预算内（并至少为消息摘录保留 `1200` 字符）；后续轮次仅按 `messageCursor` 增量传入新增交流，不回放 `internal_collab` 或 `notice` 全量日志。
+
+### 私有记忆与 RSI 经验提炼边界
+
+- **状态流转与范围隔离**：`member_memories.status` 区分 `candidate`（待核验，不视为已确认定稿）、`verified`（已验证）、`superseded`（被后续已验证新规 `supersedes_memory_id` 自动替代并退出注入）、`rejected`（人工忽略并退出注入）。`role_general` 强制保持 `workspaceId = null` 跨项目注入；`company_private` 与 `project_private` 仅匹配当前 `workspaceId` 时注入，且永不导出至 `roles/*.md`。
+- **执行期经验提案**：非旁听成员可调用 `propose_experience`，单条 `content` 与 `rationale` 各自上限 `1200` 字符（暂存后仅在整轮无中止正常完成时写入 `"candidate"`）；旁听成员固定注入 `PA_CAN_EXPERIENCE="false"` 禁止提案。
+- **只读 AI 复盘提炼**（`TeamOrchestrator.distillExperiences`）：以 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思 worker，单次默认超时 `120000` ms（2 分钟），每次最多采纳 `5` 条去重后的候选经验（含可选 `supersedesMemoryId` 指向同成员旧规则）。
+- **应用与验收评估幂等计数**（`memory_applications`）：每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；用户对交付执行验收评价（`positive` / `negative`）或显式调用评估接口后，同一 `(memory_id, deliverable_id, outcome)` 仅幂等累计 `positive_count` / `negative_count` 一次。
 
 ### 工具载荷、日志、SSE 与预览管理限制
 

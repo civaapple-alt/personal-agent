@@ -41,6 +41,16 @@ export interface MatterMessageDto {
 	createdAt: string;
 }
 
+export type FeedbackRating = "positive" | "negative" | "neutral";
+export type MemoryScope = "role_general" | "company_private" | "project_private";
+export type MemoryStatus = "candidate" | "verified" | "superseded" | "rejected";
+export type MemoryApplicationOutcome =
+	| "applied"
+	| "turn_succeeded"
+	| "turn_failed"
+	| "feedback_positive"
+	| "feedback_negative";
+
 export interface DeliverableDto {
 	id: string;
 	matterId: string;
@@ -52,6 +62,7 @@ export interface DeliverableDto {
 	serviceUrl: string | null;
 	version: number;
 	feedback: string | null;
+	feedbackRating?: FeedbackRating | null;
 	createdAt: string;
 }
 
@@ -85,10 +96,32 @@ export interface PreviewServiceDto {
 export interface MemberMemoryDto {
 	id: string;
 	memberId: string;
-	scope: "role_general" | "company_private" | "project_private";
+	scope: MemoryScope;
 	workspaceId: string | null;
 	content: string;
+	rationale?: string;
+	sourceMatterId?: string | null;
+	sourceDeliverableId?: string | null;
+	status: MemoryStatus;
 	verified: boolean;
+	supersededBy?: string | null;
+	supersedesMemoryId?: string | null;
+	appliedCount: number;
+	positiveCount: number;
+	negativeCount: number;
+	lastAppliedAt?: string | null;
+	createdAt: string;
+	updatedAt?: string;
+}
+
+export interface MemoryApplicationDto {
+	id: string;
+	memoryId: string;
+	matterId: string;
+	memberId: string;
+	deliverableId: string | null;
+	outcome: MemoryApplicationOutcome;
+	note: string;
 	createdAt: string;
 }
 
@@ -210,10 +243,29 @@ export function respondToDialog(
 	});
 }
 
-export function submitDeliverableFeedback(deliverableId: string, feedback: string): Promise<{ ok: boolean }> {
+export interface DeliverableFeedbackResult {
+	ok: boolean;
+	deliverableId: string;
+	feedback: string;
+	rating: FeedbackRating | null;
+	evaluatedMemoryIds: string[];
+	distilledMemories: MemberMemoryDto[];
+}
+
+export function submitDeliverableFeedback(
+	deliverableId: string,
+	payload:
+		| string
+		| {
+				feedback?: string;
+				rating?: FeedbackRating;
+				autoDistill?: boolean;
+		  },
+): Promise<DeliverableFeedbackResult> {
+	const body = typeof payload === "string" ? { feedback: payload } : payload;
 	return requestJson(`/api/deliverables/${encodeURIComponent(deliverableId)}/feedback`, {
 		method: "POST",
-		body: JSON.stringify({ feedback }),
+		body: JSON.stringify(body),
 	});
 }
 
@@ -278,11 +330,77 @@ export function importMemberPackage(markdown: string): Promise<{ member: TeamMem
 export function saveMemberMemory(input: {
 	memberId: string;
 	content: string;
-	scope?: "role_general" | "company_private" | "project_private";
+	scope?: MemoryScope;
 	workspaceId?: string;
 	sourceMatterId?: string;
+	sourceDeliverableId?: string;
+	rationale?: string;
+	status?: MemoryStatus;
+	verified?: boolean;
+	supersedesMemoryId?: string;
 }): Promise<{ memory: MemberMemoryDto }> {
 	return requestJson("/api/memories", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateMemberMemory(
+	memoryId: string,
+	input: {
+		content?: string;
+		scope?: MemoryScope;
+		workspaceId?: string | null;
+		status?: MemoryStatus;
+		rationale?: string;
+		supersedesMemoryId?: string | null;
+	},
+): Promise<{ memory: MemberMemoryDto }> {
+	return requestJson(`/api/memories/${encodeURIComponent(memoryId)}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function evaluateMemberMemory(
+	memoryId: string,
+	input: {
+		outcome: "positive" | "negative";
+		note?: string;
+		matterId?: string;
+	},
+): Promise<{ memory: MemberMemoryDto }> {
+	return requestJson(`/api/memories/${encodeURIComponent(memoryId)}/evaluate`, {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function fetchMemoryApplications(memoryId: string): Promise<{
+	memory: MemberMemoryDto;
+	applications: MemoryApplicationDto[];
+}> {
+	return requestJson(`/api/memories/${encodeURIComponent(memoryId)}/applications`);
+}
+
+export interface DistillRsiResult {
+	ok: boolean;
+	matter: MatterDto;
+	member: TeamMemberDto;
+	deliverable: DeliverableDto | null;
+	createdMemories: MemberMemoryDto[];
+	skippedDuplicates: number;
+	summary: string;
+}
+
+export function distillRsiExperiences(input: {
+	matterId: string;
+	deliverableId?: string;
+	memberId?: string;
+	feedback?: string;
+	rating?: FeedbackRating;
+}): Promise<DistillRsiResult> {
+	return requestJson("/api/rsi/distill", {
 		method: "POST",
 		body: JSON.stringify(input),
 	});

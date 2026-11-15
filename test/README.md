@@ -8,6 +8,7 @@
 | 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |
 | 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
+| Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
 | HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |
 | 测试 Worker 的能力握手/工具请求 | [worker-helpers.ts](worker-helpers.ts)，供上述测试复用 |
 

@@ -25,7 +25,7 @@ import {
 	inferDelegationMood,
 	mapDelegationsToMessages,
 } from "../web/src/utils.ts";
-import { reportReady } from "./worker-helpers.ts";
+import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
@@ -936,6 +936,204 @@ test("HTTP API persists observerMemberIds and broadcasts proactive observer mess
 		};
 		assert.equal(patched.matter.workspaceId, workspace.id);
 		assert.deepEqual(patched.matter.observerMemberIds, ["qa-manager"]);
+	} finally {
+		await previewManager.stopAll();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});
+
+test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memory lifecycle API", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-server-rsi-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const previewManager = new PreviewManager();
+	const dialogBroker = new DialogBroker();
+	const workspace = store.upsertWorkspace({ name: "rsi-repo", repoPath: tempRoot });
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		sessionDir: join(tempRoot, "sessions"),
+		workerFactory: (options) => ({
+			async start() {
+				if (options.env?.PA_TEAM_BRIDGE_URL) {
+					await reportReady(options);
+				}
+			},
+			async getState() {
+				return { sessionId: "rsi-http-session", sessionFile: options.sessionFile };
+			},
+			onNotice() {
+				return () => {};
+			},
+			setDialogHandler() {},
+			async runPromptAndWait() {
+				if (!options.env?.PA_TEAM_BRIDGE_URL) {
+					return {
+						disposition: "started",
+						aborted: false,
+						assistantText: JSON.stringify({
+							summary: "总结了一条新的工程发布规范",
+							candidates: [
+								{
+									scope: "role_general",
+									content: "接口变更需同时说明兼容与回滚方案",
+									rationale: "线上验收关注可回滚性",
+								},
+							],
+						}),
+						assistantMessages: [],
+						toolExecutions: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+					};
+				}
+
+				await invokeTool(options, "publish_deliverable", {
+					type: "document",
+					title: "服务重构方案",
+					summary: "包含启动验证命令",
+					content: "# 重构方案\n\n`npm test` 通过。",
+					changeNote: "初稿",
+				});
+				return {
+					disposition: "started",
+					aborted: false,
+					assistantText: "已交付重构方案。",
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				};
+			},
+			async stop() {},
+		}),
+	});
+
+	const seedMemory = store.addMemory({
+		memberId: "engineering-manager",
+		scope: "project_private",
+		workspaceId: workspace.id,
+		content: "交付工程设计前必须附上可运行验证命令",
+		verified: true,
+		status: "verified",
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const created = (await (
+			await fetch(`${baseUrl}/api/matters`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					prompt: "输出服务重构方案",
+					preferredMemberId: "engineering-manager",
+					workspaceId: workspace.id,
+				}),
+			})
+		).json()) as { matter: { id: string } };
+
+		let deliverableId = "";
+		for (let i = 0; i < 40; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				deliverables: Array<{ id: string }>;
+			};
+			if (detail.deliverables.length > 0) {
+				deliverableId = detail.deliverables[0]!.id;
+				break;
+			}
+			await new Promise((r) => setTimeout(r, 20));
+		}
+		assert.ok(deliverableId);
+
+		// Submit positive acceptance rating -> links to applied seedMemory
+		const fbRes = await fetch(`${baseUrl}/api/deliverables/${deliverableId}/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				feedback: "验证命令很实用",
+				rating: "positive",
+			}),
+		});
+		assert.equal(fbRes.status, 200);
+		const fbJson = (await fbRes.json()) as {
+			ok: boolean;
+			rating: string;
+			evaluatedMemoryIds: string[];
+		};
+		assert.equal(fbJson.ok, true);
+		assert.equal(fbJson.rating, "positive");
+		assert.deepEqual(fbJson.evaluatedMemoryIds, [seedMemory.id]);
+
+		// Check memory applications telemetry
+		const appsRes = await fetch(`${baseUrl}/api/memories/${seedMemory.id}/applications`);
+		assert.equal(appsRes.status, 200);
+		const appsJson = (await appsRes.json()) as {
+			memory: { appliedCount: number; positiveCount: number };
+			applications: Array<{ outcome: string }>;
+		};
+		assert.equal(appsJson.memory.appliedCount, 1);
+		assert.equal(appsJson.memory.positiveCount, 1);
+		assert.ok(appsJson.applications.some((a) => a.outcome === "applied"));
+		assert.ok(appsJson.applications.some((a) => a.outcome === "feedback_positive"));
+
+		// Trigger AI experience distillation via HTTP API
+		const distillRes = await fetch(`${baseUrl}/api/rsi/distill`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				matterId: created.matter.id,
+				deliverableId,
+				feedback: "需要同时考虑回滚",
+				rating: "positive",
+			}),
+		});
+		assert.equal(distillRes.status, 200);
+		const distillJson = (await distillRes.json()) as {
+			ok: boolean;
+			createdMemories: Array<{ id: string; status: string; verified: boolean }>;
+		};
+		assert.equal(distillJson.ok, true);
+		assert.equal(distillJson.createdMemories.length, 1);
+		const candidateId = distillJson.createdMemories[0]!.id;
+		assert.equal(distillJson.createdMemories[0]!.status, "candidate");
+		assert.equal(distillJson.createdMemories[0]!.verified, false);
+
+		// Verify candidate -> verified, and evaluate manually
+		const patchRes = await fetch(`${baseUrl}/api/memories/${candidateId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ status: "verified" }),
+		});
+		assert.equal(patchRes.status, 200);
+		const patchJson = (await patchRes.json()) as { memory: { status: string; verified: boolean } };
+		assert.equal(patchJson.memory.status, "verified");
+		assert.equal(patchJson.memory.verified, true);
+
+		const evalRes = await fetch(`${baseUrl}/api/memories/${candidateId}/evaluate`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ outcome: "negative", note: "补充更多案例" }),
+		});
+		assert.equal(evalRes.status, 200);
+		const evalJson = (await evalRes.json()) as { memory: { negativeCount: number } };
+		assert.equal(evalJson.memory.negativeCount, 1);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

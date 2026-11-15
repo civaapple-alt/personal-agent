@@ -4,10 +4,13 @@ import {
 	type BootstrapPayload,
 	createMatter,
 	type DeliverableDto,
+	distillRsiExperiences,
+	type FeedbackRating,
 	fetchBootstrap,
 	fetchMatterDetail,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	type MemoryScope,
 	type PreviewServiceDto,
 	postMatterMessage,
 	type RoleTemplateDto,
@@ -505,30 +508,81 @@ export function App() {
 			});
 	};
 
-	const handleDeliverableFeedback = async (deliverableId: string, feedback: string) => {
-		await submitDeliverableFeedback(deliverableId, feedback);
-		setNoticeBanner("验收反馈已保存");
-		await refreshBootstrap();
-		if (selectedMatterId) {
-			await refreshDetail(selectedMatterId);
+	const handleDeliverableFeedback = async (
+		deliverableId: string,
+		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
+	) => {
+		try {
+			const res = await submitDeliverableFeedback(deliverableId, payload);
+			const parts = ["验收记录已保存"];
+			if (res.evaluatedMemoryIds.length > 0) {
+				parts.push(`已回写 ${res.evaluatedMemoryIds.length} 条关联经验评估`);
+			}
+			if (res.distilledMemories.length > 0) {
+				parts.push(`AI 新提炼 ${res.distilledMemories.length} 条待核验经验`);
+			}
+			setNoticeBanner(parts.join(" · "));
+			await refreshBootstrap();
+			if (selectedMatterId) {
+				await refreshDetail(selectedMatterId);
+			}
+		} catch (err) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleDistillExperiences = async (deliv: DeliverableDto, feedback?: string, rating?: FeedbackRating) => {
+		try {
+			const res = await distillRsiExperiences({
+				matterId: deliv.matterId,
+				deliverableId: deliv.id,
+				memberId: deliv.memberId,
+				feedback,
+				rating,
+			});
+			if (res.createdMemories.length > 0) {
+				setNoticeBanner(
+					`已为「${res.member.displayName}」提炼 ${res.createdMemories.length} 条候选经验，可在「团队岗位」中核验`,
+				);
+			} else {
+				setNoticeBanner(
+					res.skippedDuplicates > 0
+						? `AI 复盘未新增重复经验（跳过 ${res.skippedDuplicates} 条相似经验）`
+						: `AI 复盘完成：${res.summary}`,
+				);
+			}
+			await refreshBootstrap();
+			if (selectedMatterId) {
+				await refreshDetail(selectedMatterId);
+			}
+		} catch (err) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
 		}
 	};
 
 	const handleSaveMemoryForDeliverable = async (
 		deliv: DeliverableDto,
-		content: string,
-		scope: "role_general" | "project_private",
+		input: { content: string; scope: MemoryScope; rationale?: string; status: "candidate" | "verified" },
 	) => {
-		const matterWsId = bootstrap?.matters.find((m) => m.id === deliv.matterId)?.workspaceId ?? null;
-		await saveMemberMemory({
-			memberId: deliv.memberId,
-			content,
-			scope,
-			workspaceId: scope === "project_private" ? (matterWsId ?? undefined) : undefined,
-			sourceMatterId: deliv.matterId,
-		});
-		setNoticeBanner(`已沉淀为「${memberName(deliv.memberId)}」的经验记忆`);
-		await refreshBootstrap();
+		try {
+			const matterWsId = bootstrap?.matters.find((m) => m.id === deliv.matterId)?.workspaceId ?? null;
+			await saveMemberMemory({
+				memberId: deliv.memberId,
+				content: input.content,
+				scope: input.scope,
+				workspaceId: input.scope === "role_general" ? undefined : (matterWsId ?? undefined),
+				sourceMatterId: deliv.matterId,
+				sourceDeliverableId: deliv.id,
+				rationale: input.rationale,
+				status: input.status,
+				verified: input.status === "verified",
+			});
+			const label = input.status === "candidate" ? "待核验候选经验" : "已验证经验";
+			setNoticeBanner(`已沉淀为「${memberName(deliv.memberId)}」的${label}`);
+			await refreshBootstrap();
+		} catch (err) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
 	};
 
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
@@ -613,6 +667,7 @@ export function App() {
 						memberName={memberName}
 						workspaceName={workspaceName}
 						onSubmitFeedback={handleDeliverableFeedback}
+						onDistillExperiences={handleDistillExperiences}
 						onSaveMemory={handleSaveMemoryForDeliverable}
 						onStopPreview={async (previewId) => {
 							await stopPreview(previewId);
@@ -634,6 +689,7 @@ export function App() {
 				{activeTab === "team" && (
 					<TeamView
 						members={bootstrap?.members ?? []}
+						workspaces={bootstrap?.workspaces ?? []}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						templateByRoleId={templateByRoleId}
 						memberName={memberName}

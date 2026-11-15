@@ -9,8 +9,8 @@
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
 | 布局与共用样式/格式 | [styles.css](styles.css)、[utils.ts](utils.ts) |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx)、[ExploringStatus](components/ExploringStatus.tsx) |
-| 成果系列、版本、反馈 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
-| 团队、资料及头像 | [TeamView](components/TeamView.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
+| 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
+| 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 
 组件数量尚小，本页直接定位文件，`components/` 不再加一层重复目录说明。
 

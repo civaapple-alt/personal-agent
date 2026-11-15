@@ -10,9 +10,11 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	Deliverable,
 	DeliverableType,
+	FeedbackRating,
 	Matter,
 	MatterMessage,
 	MemberMemory,
+	MemoryScope,
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
@@ -127,6 +129,24 @@ export interface DelegateResult {
 	answerText: string;
 }
 
+export interface DistillExperiencesInput {
+	matterId: string;
+	deliverableId?: string;
+	memberId?: string;
+	feedback?: string;
+	rating?: FeedbackRating | null;
+	timeoutMs?: number;
+}
+
+export interface DistillExperiencesResult {
+	matter: Matter;
+	member: TeamMember;
+	deliverable: Deliverable | null;
+	createdMemories: MemberMemory[];
+	skippedDuplicates: number;
+	summary: string;
+}
+
 interface MatterRun {
 	settled: Promise<void>;
 	finish(): void;
@@ -151,6 +171,7 @@ const TOOL_LABELS: Record<string, string> = {
 	write: "写入文件",
 	delegate_to_member: "委托团队成员",
 	publish_deliverable: "提交成果",
+	propose_experience: "提炼候选经验",
 };
 
 function formatToolAction(toolName?: string): string {
@@ -177,6 +198,9 @@ function summarizeToolArgs(args: unknown): string {
 	}
 	if (typeof record.title === "string" && record.title.trim()) {
 		return truncateInline(record.title, 44);
+	}
+	if (typeof record.content === "string" && record.content.trim()) {
+		return truncateInline(record.content, 44);
 	}
 	if (typeof record.task === "string" && record.task.trim()) {
 		return truncateInline(record.task, 40);
@@ -320,6 +344,57 @@ function formatAbortedReply(rawReply: string, cancelReason?: "user" | "shutdown"
 
 function defaultWorkerFactory(options: PiRpcWorkerOptions): RpcWorkerLike {
 	return new PiRpcWorker(options);
+}
+
+interface ParsedDistillationPayload {
+	summary: string;
+	candidates: Array<{
+		scope: MemoryScope;
+		content: string;
+		rationale: string;
+		supersedesMemoryId?: string;
+	}>;
+}
+
+function parseDistillationPayload(rawText: string): ParsedDistillationPayload {
+	const cleaned = rawText
+		.trim()
+		.replace(/^```(?:json)?\s*/i, "")
+		.replace(/\s*```$/i, "")
+		.trim();
+	const start = cleaned.indexOf("{");
+	const end = cleaned.lastIndexOf("}");
+	if (start === -1 || end <= start) {
+		throw new Error("Distillation response did not contain a JSON object");
+	}
+	const parsed: unknown = JSON.parse(cleaned.slice(start, end + 1));
+	if (!parsed || typeof parsed !== "object") {
+		throw new Error("Invalid distillation JSON payload");
+	}
+	const record = parsed as Record<string, unknown>;
+	const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+	const rawCandidates = Array.isArray(record.candidates) ? record.candidates : [];
+	const candidates: ParsedDistillationPayload["candidates"] = [];
+	for (const item of rawCandidates.slice(0, 5)) {
+		if (!item || typeof item !== "object") continue;
+		const entry = item as Record<string, unknown>;
+		const scope = entry.scope;
+		const content = typeof entry.content === "string" ? entry.content.trim() : "";
+		const rationale = typeof entry.rationale === "string" ? entry.rationale.trim() : "";
+		const supersedesMemoryId =
+			typeof entry.supersedesMemoryId === "string" && entry.supersedesMemoryId.trim()
+				? entry.supersedesMemoryId.trim()
+				: undefined;
+		if ((scope === "role_general" || scope === "company_private" || scope === "project_private") && content) {
+			candidates.push({
+				scope,
+				content: content.slice(0, 1200),
+				rationale: rationale.slice(0, 1200),
+				supersedesMemoryId,
+			});
+		}
+	}
+	return { summary, candidates };
 }
 
 /**
@@ -488,7 +563,16 @@ export class TeamOrchestrator {
 		}
 
 		if (input.memories.length > 0) {
-			const memoryLines = input.memories.map((m) => `- [${m.scope}] ${m.content}`).join("\n");
+			const memoryLines = input.memories
+				.map((m) => {
+					const tag = m.status === "verified" ? `已验证 · ${m.scope}` : `待验证 · ${m.scope}`;
+					const suffix =
+						m.status === "candidate"
+							? "（待核实：若在当前工作中发现不成立或需修正，可调用 propose_experience 提出替代）"
+							: "";
+					return `- [${m.id} | ${tag}] ${m.content}${suffix}`;
+				})
+				.join("\n");
 			sections.push(`## 个人与组织积累经验（私有记忆）\n${memoryLines}`);
 		}
 
@@ -515,7 +599,7 @@ ${this.store
 	.join("\n")}`);
 		if (mode !== "observer")
 			sections.push(
-				"## 自主协作与真实成果\n你负责持续推进本轮任务。需要其他岗位的专业工作时调用 delegate_to_member，提供目标、必要事实与约束，并将同事的依据整合为用户需要的结论。内部过程不向用户逐条汇报。只有缺少信息或业务判断时询问用户。不要仅声称已咨询。\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本，用 changeNote 说明本次版本的变化及依据。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。",
+				"## 自主协作与真实成果\n你负责持续推进本轮任务。需要其他岗位的专业工作时调用 delegate_to_member，提供目标、必要事实与约束，并将同事的依据整合为用户需要的结论。内部过程不向用户逐条汇报。只有缺少信息或业务判断时询问用户。不要仅声称已咨询。\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本，用 changeNote 说明本次版本的变化及依据。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。\n若在执行或根据用户反馈修订过程中沉淀出明确、可复用的工作方法或项目硬约束（而非一次性流水账），可调用 propose_experience 记录为待验证候选经验（区分 role_general 与绑定工作区的 project_private/company_private）。",
 			);
 		if (input.taskPrompt) sections.push(`## 当前任务\n${input.taskPrompt}`);
 		return sections.join("\n\n");
@@ -1170,8 +1254,14 @@ ${this.store
 				sessionMode === "observer"
 					? []
 					: sessionMode === "internal"
-						? ["delegate_to_member"]
-						: ["delegate_to_member", "publish_deliverable"];
+						? ["delegate_to_member", "propose_experience"]
+						: ["delegate_to_member", "publish_deliverable", "propose_experience"];
+			const stagedExperiences: Array<{
+				scope: MemoryScope;
+				content: string;
+				rationale: string;
+				supersedesMemoryId?: string;
+			}> = [];
 			bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 				toolSignal.throwIfAborted();
 				const releaseIdle = worker?.suspendIdleTimeout?.();
@@ -1195,6 +1285,38 @@ ${this.store
 							input.onProgress,
 						);
 						return { memberId: result.toMember.id, answer: result.answerText };
+					}
+					if (call.tool === "propose_experience") {
+						if (sessionMode === "observer") {
+							throw new Error("Observing specialists cannot propose experiences during peer review");
+						}
+						if ((call.scope === "company_private" || call.scope === "project_private") && !input.workspace) {
+							throw new Error(
+								"Private company or project experiences require a bound workspace; use role_general instead",
+							);
+						}
+						if (call.supersedesMemoryId) {
+							const target = this.store.getMemory(call.supersedesMemoryId);
+							if (!target || target.memberId !== input.member.id) {
+								throw new Error("Cannot supersede missing or foreign member memory");
+							}
+						}
+						const normContent = call.content.replace(/\s+/g, " ").trim().toLowerCase();
+						if (
+							!stagedExperiences.some(
+								(item) =>
+									item.scope === call.scope &&
+									item.content.replace(/\s+/g, " ").trim().toLowerCase() === normContent,
+							)
+						) {
+							stagedExperiences.push({
+								scope: call.scope,
+								content: call.content,
+								rationale: call.rationale,
+								supersedesMemoryId: call.supersedesMemoryId,
+							});
+						}
+						return { staged: true, status: "candidate", scope: call.scope, note: "本轮完成后记为待验证经验" };
 					}
 					if (!canPublish)
 						throw new Error(
@@ -1235,6 +1357,7 @@ ${this.store
 				"--tools",
 				[...requestedTools, ...teamTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(","),
 			);
+			const relevantMemories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null);
 			worker = this.workerFactory({
 				cwd,
 				provider: input.member.provider,
@@ -1247,6 +1370,7 @@ ${this.store
 					...bridge.env,
 					PA_CAN_PUBLISH: String(canPublish),
 					PA_CAN_DELEGATE: String(canDelegate),
+					PA_CAN_EXPERIENCE: String(sessionMode !== "observer"),
 					PA_REQUIRED_TOOLS: JSON.stringify([
 						...requestedTools,
 						...teamTools,
@@ -1255,7 +1379,7 @@ ${this.store
 					PA_MEMBER_CONTEXT: this.buildMemberPrompt({
 						member: input.member,
 						template,
-						memories: this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null),
+						memories: relevantMemories,
 						workspace: input.workspace,
 						sessionMode,
 					}),
@@ -1404,12 +1528,53 @@ ${this.store
 				contextKey,
 				messageCursor: messages.at(-1)?.id,
 			});
+			if (relevantMemories.length > 0) {
+				this.store.recordMemoryApplications({
+					memoryIds: relevantMemories.map((memory) => memory.id),
+					matterId: input.matterId,
+					memberId: input.member.id,
+				});
+			}
 			const result = await worker.runPromptAndWait(prompt, {
 				timeoutMs: input.run.timeoutMs,
 				signal,
 				onTextDelta: input.onTextDelta,
 			});
 			if (!result.aborted && !input.run.cancelled) input.deliveryTarget.push(...deliveries);
+			if (!result.aborted && !input.run.cancelled && stagedExperiences.length > 0) {
+				for (const item of stagedExperiences) {
+					const existingDup = this.store.findActiveDuplicateMemory(
+						input.member.id,
+						item.scope,
+						input.workspace?.id ?? null,
+						item.content,
+					);
+					if (existingDup) continue;
+					const saved = this.store.addMemory({
+						memberId: input.member.id,
+						scope: item.scope,
+						workspaceId: item.scope === "role_general" ? null : (input.workspace?.id ?? null),
+						content: item.content,
+						rationale: item.rationale,
+						sourceMatterId: input.matterId,
+						status: "candidate",
+						verified: false,
+						supersedesMemoryId: item.supersedesMemoryId ?? null,
+					});
+					this.store.appendMessage({
+						matterId: input.matterId,
+						channel: "notice",
+						senderType: "system",
+						senderId: input.member.id,
+						content: JSON.stringify({
+							method: "rsi_candidate_proposed",
+							memoryId: saved.id,
+							scope: saved.scope,
+							content: saved.content,
+						}),
+					});
+				}
+			}
 			if (!result.aborted && !input.run.cancelled)
 				input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}正在整理结果` });
 			return result;
@@ -1432,5 +1597,152 @@ ${this.store
 		const matter = this.store.getMatter(matterId);
 		if (!matter) throw new Error(`Matter not found: ${matterId}`);
 		return matter;
+	}
+
+	/**
+	 * Run an isolated RSI reflection pass over a matter / deliverable / feedback
+	 * to extract bounded candidate experiences separated by scope.
+	 */
+	async distillExperiences(input: DistillExperiencesInput): Promise<DistillExperiencesResult> {
+		const matter = this.requireMatter(input.matterId);
+		const deliverable = input.deliverableId
+			? this.store.getDeliverable(input.deliverableId)
+			: (this.store.listDeliverables(matter.id)[0] ?? null);
+		if (input.deliverableId && (!deliverable || deliverable.matterId !== matter.id)) {
+			throw new Error(`Deliverable not found in matter: ${input.deliverableId}`);
+		}
+		const targetMemberId = input.memberId ?? deliverable?.memberId ?? matter.leadMemberId ?? undefined;
+		const member = this.routeMemberForRequest(matter.title, targetMemberId);
+		const workspace = matter.workspaceId ? this.store.getWorkspace(matter.workspaceId) : null;
+		const cwd = resolve(workspace?.repoPath ?? this.defaultCwd);
+		const activeMemories = this.store.listRelevantMemories(member.id, workspace?.id ?? null);
+		const recentMessages = this.store
+			.listMessages(matter.id, "user")
+			.slice(-10)
+			.map((msg) => `- ${msg.senderType}/${msg.senderId}: ${truncateInline(msg.content, 500)}`)
+			.join("\n");
+
+		const feedbackText = (input.feedback ?? deliverable?.feedback ?? "").trim();
+		const feedbackRating = input.rating ?? deliverable?.feedbackRating ?? null;
+		const prompt = [
+			`你当前担任【${member.displayName} (${member.roleTitle})】，请对刚完成的工作与用户反馈执行一次简洁的 RSI 经验提炼反思。`,
+			"",
+			"## 反思原则",
+			"1. 仅提炼确有依据、在未来同类任务或当前项目可复用的规律或约束（0~3 条）；如果没有值得沉淀的新经验，candidates 返回空数组 []。",
+			"2. 严格区分作用域：",
+			"   - `role_general`：跨项目通用的岗位方法、分析清单或避坑习惯（不含某仓库私有路径/密钥）。",
+			workspace
+				? `   - \`project_private\` 或 \`company_private\`：绑定当前仓库「${workspace.name}」的具体业务规则、架构约束或团队习惯。`
+				: "   - 当前事项未绑定项目工作区，请仅输出 `role_general`。",
+			"3. 若当前证据明确推翻或修正了下方已有经验，请填写 `supersedesMemoryId`。",
+			"4. 仅返回严格 JSON（不要附加解释文字），格式：",
+			'{"summary":"一句话说明提炼依据","candidates":[{"scope":"role_general","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}',
+			"",
+			`## 当前事项\n- 标题：${matter.title}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
+			deliverable
+				? [
+						"## 关联交付成果",
+						`- 标题：${deliverable.title} (V${deliverable.version}, ${deliverable.type})`,
+						deliverable.summary ? `- 变更摘要：${deliverable.summary}` : "",
+						`- 内容摘录：${deliverable.contentOrPath.slice(0, 3000)}`,
+					]
+						.filter(Boolean)
+						.join("\n")
+				: "",
+			feedbackText || feedbackRating
+				? `## 用户验收反馈\n- 评价：${feedbackRating ?? "未评级"}\n- 意见：${feedbackText || "（无文字意见）"}`
+				: "",
+			activeMemories.length > 0
+				? `## 当前已存在经验（供去重或推翻修正）\n${activeMemories
+						.map((mem) => `- [${mem.id} | ${mem.status} | ${mem.scope}] ${mem.content}`)
+						.join("\n")}`
+				: "## 当前已存在经验\n（暂无）",
+			recentMessages ? `## 最近对话摘录\n${recentMessages}` : "",
+		]
+			.filter(Boolean)
+			.join("\n\n");
+
+		const worker = this.workerFactory({
+			cwd,
+			provider: member.provider,
+			model: member.model,
+			noSession: true,
+			args: ["--no-extensions", "--no-skills", "--no-mcp", "--tools", ""],
+		});
+		let result: PromptRunResult;
+		try {
+			await worker.start();
+			result = await worker.runPromptAndWait(prompt, {
+				timeoutMs: input.timeoutMs ?? 120_000,
+			});
+		} finally {
+			await worker.stop().catch(() => {});
+		}
+		if (result.aborted) {
+			throw new Error("Experience distillation was aborted");
+		}
+		const payload = parseDistillationPayload(result.assistantText);
+		const createdMemories: MemberMemory[] = [];
+		let skippedDuplicates = 0;
+
+		for (const candidate of payload.candidates) {
+			if ((candidate.scope === "company_private" || candidate.scope === "project_private") && !workspace) {
+				continue;
+			}
+			const dup = this.store.findActiveDuplicateMemory(
+				member.id,
+				candidate.scope,
+				workspace?.id ?? null,
+				candidate.content,
+			);
+			if (dup) {
+				skippedDuplicates += 1;
+				continue;
+			}
+			let validSupersedes: string | null = null;
+			if (candidate.supersedesMemoryId) {
+				const oldMem = this.store.getMemory(candidate.supersedesMemoryId);
+				if (oldMem && oldMem.memberId === member.id) {
+					validSupersedes = oldMem.id;
+				}
+			}
+			const saved = this.store.addMemory({
+				memberId: member.id,
+				scope: candidate.scope,
+				workspaceId: candidate.scope === "role_general" ? null : (workspace?.id ?? null),
+				content: candidate.content,
+				rationale: candidate.rationale || payload.summary,
+				sourceMatterId: matter.id,
+				sourceDeliverableId: deliverable?.id ?? null,
+				status: "candidate",
+				verified: false,
+				supersedesMemoryId: validSupersedes,
+			});
+			createdMemories.push(saved);
+		}
+
+		this.store.appendMessage({
+			matterId: matter.id,
+			channel: "notice",
+			senderType: "system",
+			senderId: member.id,
+			content: JSON.stringify({
+				method: "rsi_distilled",
+				deliverableId: deliverable?.id ?? null,
+				createdCount: createdMemories.length,
+				skippedDuplicates,
+				summary: payload.summary,
+				memoryIds: createdMemories.map((m) => m.id),
+			}),
+		});
+
+		return {
+			matter,
+			member,
+			deliverable,
+			createdMemories,
+			skippedDuplicates,
+			summary: payload.summary,
+		};
 	}
 }

@@ -44,9 +44,19 @@ CREATE TABLE IF NOT EXISTS member_memories (
 	scope TEXT NOT NULL,
 	workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
 	content TEXT NOT NULL,
+	rationale TEXT NOT NULL DEFAULT '',
 	source_matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
+	source_deliverable_id TEXT REFERENCES deliverables(id) ON DELETE SET NULL,
+	status TEXT NOT NULL DEFAULT 'candidate',
 	verified INTEGER NOT NULL DEFAULT 0,
-	created_at TEXT NOT NULL
+	superseded_by TEXT,
+	supersedes_memory_id TEXT,
+	applied_count INTEGER NOT NULL DEFAULT 0,
+	positive_count INTEGER NOT NULL DEFAULT 0,
+	negative_count INTEGER NOT NULL DEFAULT 0,
+	last_applied_at TEXT,
+	created_at TEXT NOT NULL,
+	updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS matter_messages (
@@ -71,6 +81,18 @@ CREATE TABLE IF NOT EXISTS deliverables (
 	service_url TEXT,
 	version INTEGER NOT NULL,
 	feedback TEXT,
+	feedback_rating TEXT,
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_applications (
+	id TEXT PRIMARY KEY,
+	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
+	deliverable_id TEXT REFERENCES deliverables(id) ON DELETE SET NULL,
+	outcome TEXT NOT NULL DEFAULT 'applied',
+	note TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL
 );
 
@@ -94,6 +116,8 @@ CREATE TABLE IF NOT EXISTS worker_sessions (
 CREATE INDEX IF NOT EXISTS idx_member_memories_lookup ON member_memories(member_id, scope, workspace_id);
 CREATE INDEX IF NOT EXISTS idx_matter_messages_matter ON matter_messages(matter_id, channel, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliverables_matter ON deliverables(matter_id, version);
+CREATE INDEX IF NOT EXISTS idx_memory_applications_lookup ON memory_applications(memory_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memory_applications_matter ON memory_applications(matter_id, member_id);
 `;
 
 /**
@@ -120,6 +144,32 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	}
 	if (!columns.some((column) => column.name === "message_cursor")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN message_cursor TEXT");
+	}
+	const memoryColumns = db.prepare("PRAGMA table_info(member_memories)").all();
+	const ensureMemoryCol = (name: string, ddl: string) => {
+		if (!memoryColumns.some((column) => column.name === name)) {
+			db.exec(`ALTER TABLE member_memories ADD COLUMN ${ddl}`);
+		}
+	};
+	ensureMemoryCol("rationale", "rationale TEXT NOT NULL DEFAULT ''");
+	ensureMemoryCol("source_deliverable_id", "source_deliverable_id TEXT");
+	ensureMemoryCol("status", "status TEXT");
+	ensureMemoryCol("superseded_by", "superseded_by TEXT");
+	ensureMemoryCol("supersedes_memory_id", "supersedes_memory_id TEXT");
+	ensureMemoryCol("applied_count", "applied_count INTEGER NOT NULL DEFAULT 0");
+	ensureMemoryCol("positive_count", "positive_count INTEGER NOT NULL DEFAULT 0");
+	ensureMemoryCol("negative_count", "negative_count INTEGER NOT NULL DEFAULT 0");
+	ensureMemoryCol("last_applied_at", "last_applied_at TEXT");
+	ensureMemoryCol("updated_at", "updated_at TEXT");
+	db.exec(`
+		UPDATE member_memories
+		SET status = CASE WHEN verified = 1 THEN 'verified' ELSE 'candidate' END
+		WHERE status IS NULL OR status = '';
+		UPDATE member_memories SET updated_at = created_at WHERE updated_at IS NULL;
+	`);
+	const deliverableColumns = db.prepare("PRAGMA table_info(deliverables)").all();
+	if (!deliverableColumns.some((column) => column.name === "feedback_rating")) {
+		db.exec("ALTER TABLE deliverables ADD COLUMN feedback_rating TEXT");
 	}
 	db.exec("CREATE INDEX IF NOT EXISTS idx_worker_context ON worker_sessions(matter_id, member_id, context_key)");
 	return db;

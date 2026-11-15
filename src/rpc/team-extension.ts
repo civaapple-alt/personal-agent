@@ -118,9 +118,27 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				additionalProperties: false,
 			},
 		},
+		{
+			name: "propose_experience",
+			label: "提炼候选经验",
+			description:
+				"Record a candidate lesson learned or reusable habit discovered during execution or revision so it can be verified and reused later. Distinguish role_general (cross-project method) from project_private/company_private (workspace-specific facts). Only use supersedesMemoryId when concrete evidence disproves an older memory.",
+			parameters: {
+				type: "object",
+				properties: {
+					scope: { type: "string", enum: ["role_general", "company_private", "project_private"] },
+					content: { type: "string" },
+					rationale: { type: "string" },
+					supersedesMemoryId: { type: "string" },
+				},
+				required: ["scope", "content", "rationale"],
+				additionalProperties: false,
+			},
+		},
 	]) {
 		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
 		if (tool.name === "publish_deliverable" && env.PA_CAN_PUBLISH === "false") continue;
+		if (tool.name === "propose_experience" && env.PA_CAN_EXPERIENCE === "false") continue;
 		pi.registerTool({
 			...tool,
 			async execute(callId, args, signal) {

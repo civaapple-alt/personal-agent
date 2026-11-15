@@ -11,7 +11,7 @@ import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../rol
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { DeliverableType, MemoryScope } from "../storage/types.ts";
+import type { DeliverableType, FeedbackRating, MemoryScope, MemoryStatus } from "../storage/types.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 
@@ -462,15 +462,68 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			const feedbackMatch = pathname.match(/^\/api\/deliverables\/([^/]+)\/feedback$/);
 			if (method === "POST" && feedbackMatch) {
 				const deliverableId = decodeURIComponent(feedbackMatch[1]!);
-				const body = await readJsonBody(req);
-				const feedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
-				if (!feedback) {
-					sendError(res, 400, "feedback is required");
+				const existing = store.getDeliverable(deliverableId);
+				if (!existing) {
+					sendError(res, 404, `Deliverable not found: ${deliverableId}`);
 					return;
 				}
-				store.addDeliverableFeedback(deliverableId, feedback);
-				broadcast("deliverable_updated", { deliverableId, feedback });
-				sendJson(res, 200, { ok: true, deliverableId, feedback });
+				const body = await readJsonBody(req);
+				const feedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
+				const rawRating = body.rating;
+				const rating: FeedbackRating | undefined =
+					rawRating === "positive" || rawRating === "negative" || rawRating === "neutral" ? rawRating : undefined;
+				if (!feedback && !rating) {
+					sendError(res, 400, "feedback or rating is required");
+					return;
+				}
+				const updatedDeliverable = store.addDeliverableFeedback(
+					deliverableId,
+					feedback || existing.feedback || "",
+					rating,
+				);
+				let evaluatedMemoryIds: string[] = [];
+				if (rating === "positive" || rating === "negative") {
+					const evaluated = store.evaluateMatterMemories({
+						matterId: existing.matterId,
+						memberId: existing.memberId,
+						deliverableId: existing.id,
+						outcome: rating === "positive" ? "feedback_positive" : "feedback_negative",
+						note: feedback,
+					});
+					evaluatedMemoryIds = evaluated.map((m) => m.id);
+					if (evaluatedMemoryIds.length > 0) {
+						broadcast("memory_updated", { memberId: existing.memberId, evaluatedMemoryIds });
+					}
+				}
+				let distilledMemories: unknown[] = [];
+				if (body.autoDistill === true) {
+					const distilled = await orchestrator.distillExperiences({
+						matterId: existing.matterId,
+						deliverableId: existing.id,
+						feedback,
+						rating: rating ?? null,
+					});
+					distilledMemories = distilled.createdMemories;
+					if (distilled.createdMemories.length > 0) {
+						broadcast("memory_updated", {
+							memberId: distilled.member.id,
+							createdMemories: distilled.createdMemories,
+						});
+					}
+				}
+				broadcast("deliverable_updated", {
+					deliverableId,
+					feedback: updatedDeliverable?.feedback ?? feedback,
+					rating: updatedDeliverable?.feedbackRating ?? null,
+				});
+				sendJson(res, 200, {
+					ok: true,
+					deliverableId,
+					feedback: updatedDeliverable?.feedback ?? feedback,
+					rating: updatedDeliverable?.feedbackRating ?? null,
+					evaluatedMemoryIds,
+					distilledMemories,
+				});
 				return;
 			}
 
@@ -635,17 +688,177 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "memberId and content are required");
 					return;
 				}
+				if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
+					sendError(res, 400, `Unsupported memory scope: ${scope}`);
+					return;
+				}
+				const workspaceId =
+					scope === "role_general"
+						? null
+						: typeof body.workspaceId === "string" && body.workspaceId
+							? body.workspaceId
+							: null;
+				if (workspaceId && !store.getWorkspace(workspaceId)) {
+					sendError(res, 404, `Workspace not found: ${workspaceId}`);
+					return;
+				}
+				const rawStatus = body.status;
+				const status: MemoryStatus =
+					rawStatus === "candidate" ||
+					rawStatus === "verified" ||
+					rawStatus === "rejected" ||
+					rawStatus === "superseded"
+						? rawStatus
+						: body.verified === false
+							? "candidate"
+							: "verified";
 				const memory = store.addMemory({
 					memberId,
 					scope,
-					workspaceId: typeof body.workspaceId === "string" && body.workspaceId ? body.workspaceId : null,
+					workspaceId,
 					content,
+					rationale: typeof body.rationale === "string" ? body.rationale.trim() : "",
 					sourceMatterId:
 						typeof body.sourceMatterId === "string" && body.sourceMatterId ? body.sourceMatterId : null,
-					verified: true,
+					sourceDeliverableId:
+						typeof body.sourceDeliverableId === "string" && body.sourceDeliverableId
+							? body.sourceDeliverableId
+							: null,
+					status,
+					verified: status === "verified",
+					supersedesMemoryId:
+						typeof body.supersedesMemoryId === "string" && body.supersedesMemoryId
+							? body.supersedesMemoryId
+							: null,
 				});
 				broadcast("memory_updated", { memberId, memory });
 				sendJson(res, 201, { memory });
+				return;
+			}
+
+			const memoryAppsMatch = pathname.match(/^\/api\/memories\/([^/]+)\/applications$/);
+			if (method === "GET" && memoryAppsMatch) {
+				const memoryId = decodeURIComponent(memoryAppsMatch[1]!);
+				const memory = store.getMemory(memoryId);
+				if (!memory) {
+					sendError(res, 404, `Memory not found: ${memoryId}`);
+					return;
+				}
+				sendJson(res, 200, { memory, applications: store.listMemoryApplications(memoryId) });
+				return;
+			}
+
+			const memoryEvalMatch = pathname.match(/^\/api\/memories\/([^/]+)\/evaluate$/);
+			if (method === "POST" && memoryEvalMatch) {
+				const memoryId = decodeURIComponent(memoryEvalMatch[1]!);
+				const existing = store.getMemory(memoryId);
+				if (!existing) {
+					sendError(res, 404, `Memory not found: ${memoryId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				if (body.outcome !== "positive" && body.outcome !== "negative") {
+					sendError(res, 400, "outcome must be positive or negative");
+					return;
+				}
+				const memory = store.evaluateMemory({
+					memoryId,
+					outcome: body.outcome === "positive" ? "feedback_positive" : "feedback_negative",
+					matterId: typeof body.matterId === "string" && body.matterId ? body.matterId : existing.sourceMatterId,
+					memberId: existing.memberId,
+					note: typeof body.note === "string" ? body.note.trim() : "",
+				});
+				broadcast("memory_updated", { memberId: memory.memberId, memory });
+				sendJson(res, 200, { memory });
+				return;
+			}
+
+			const memoryPatchMatch = pathname.match(/^\/api\/memories\/([^/]+)$/);
+			if (method === "PATCH" && memoryPatchMatch) {
+				const memoryId = decodeURIComponent(memoryPatchMatch[1]!);
+				const existing = store.getMemory(memoryId);
+				if (!existing) {
+					sendError(res, 404, `Memory not found: ${memoryId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const scope = typeof body.scope === "string" ? (body.scope as MemoryScope) : undefined;
+				if (scope && scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
+					sendError(res, 400, `Unsupported memory scope: ${scope}`);
+					return;
+				}
+				const workspaceId =
+					body.workspaceId === null
+						? null
+						: typeof body.workspaceId === "string" && body.workspaceId
+							? body.workspaceId
+							: undefined;
+				if (workspaceId && !store.getWorkspace(workspaceId)) {
+					sendError(res, 404, `Workspace not found: ${workspaceId}`);
+					return;
+				}
+				const status = typeof body.status === "string" ? (body.status as MemoryStatus) : undefined;
+				if (
+					status &&
+					status !== "candidate" &&
+					status !== "verified" &&
+					status !== "rejected" &&
+					status !== "superseded"
+				) {
+					sendError(res, 400, `Unsupported memory status: ${status}`);
+					return;
+				}
+				const memory = store.updateMemory(memoryId, {
+					content: typeof body.content === "string" ? body.content : undefined,
+					scope,
+					workspaceId,
+					status,
+					rationale: typeof body.rationale === "string" ? body.rationale : undefined,
+					supersedesMemoryId:
+						body.supersedesMemoryId === null
+							? null
+							: typeof body.supersedesMemoryId === "string"
+								? body.supersedesMemoryId
+								: undefined,
+				});
+				broadcast("memory_updated", { memberId: memory.memberId, memory });
+				sendJson(res, 200, { memory });
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/rsi/distill") {
+				const body = await readJsonBody(req);
+				const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
+				if (!matterId) {
+					sendError(res, 400, "matterId is required");
+					return;
+				}
+				const deliverableId =
+					typeof body.deliverableId === "string" && body.deliverableId.trim()
+						? body.deliverableId.trim()
+						: undefined;
+				const memberId =
+					typeof body.memberId === "string" && body.memberId.trim() ? body.memberId.trim() : undefined;
+				const feedback =
+					typeof body.feedback === "string" && body.feedback.trim() ? body.feedback.trim() : undefined;
+				const rating: FeedbackRating | undefined =
+					body.rating === "positive" || body.rating === "negative" || body.rating === "neutral"
+						? body.rating
+						: undefined;
+				const result = await orchestrator.distillExperiences({
+					matterId,
+					deliverableId,
+					memberId,
+					feedback,
+					rating,
+				});
+				if (result.createdMemories.length > 0) {
+					broadcast("memory_updated", {
+						memberId: result.member.id,
+						createdMemories: result.createdMemories,
+					});
+				}
+				sendJson(res, 200, { ok: true, ...result });
 				return;
 			}
 

@@ -1,6 +1,14 @@
 import type { ThinkingLevel } from "../rpc/types.ts";
 
 export type MemoryScope = "role_general" | "company_private" | "project_private";
+export type MemoryStatus = "candidate" | "verified" | "rejected" | "superseded";
+export type FeedbackRating = "positive" | "negative" | "neutral";
+export type MemoryApplicationOutcome =
+	| "applied"
+	| "turn_succeeded"
+	| "turn_failed"
+	| "feedback_positive"
+	| "feedback_negative";
 export type MatterStatus = "open" | "waiting_user" | "delivered" | "archived";
 export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
@@ -26,8 +34,29 @@ export interface MemberMemory {
 	scope: MemoryScope;
 	workspaceId: string | null;
 	content: string;
+	rationale: string;
 	sourceMatterId: string | null;
+	sourceDeliverableId: string | null;
+	status: MemoryStatus;
 	verified: boolean;
+	supersededBy: string | null;
+	supersedesMemoryId: string | null;
+	appliedCount: number;
+	positiveCount: number;
+	negativeCount: number;
+	lastAppliedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface MemoryApplicationRecord {
+	id: string;
+	memoryId: string;
+	matterId: string;
+	memberId: string;
+	deliverableId: string | null;
+	outcome: MemoryApplicationOutcome;
+	note: string;
 	createdAt: string;
 }
 
@@ -74,6 +103,7 @@ export interface Deliverable {
 	serviceUrl: string | null;
 	version: number;
 	feedback: string | null;
+	feedbackRating: FeedbackRating | null;
 	createdAt: string;
 }
 
