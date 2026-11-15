@@ -4,6 +4,7 @@ import {
 	type KeyboardEvent,
 	type RefObject,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -105,6 +106,8 @@ interface ChatStageProps {
 	onDismissNotice: () => void;
 }
 
+const chatScrollMemory = new Map<string, { scrollTop: number; atBottom: boolean }>();
+
 export function ChatStage({
 	composerRef,
 	currentUser,
@@ -186,7 +189,11 @@ export function ChatStage({
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
+	const chatScrollRef = useRef<HTMLDivElement | null>(null);
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
+	const lastScrolledMatterIdRef = useRef<string | null>(null);
+	const prevMessageCountRef = useRef(0);
+	const prevStreamLenRef = useRef(0);
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
@@ -284,13 +291,42 @@ export function ChatStage({
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const sendBlockedByTurn = isTurnRunning && isOwner && composerMode === "dispatch";
+	const loadedMatterId = matterDetail?.matter.id ?? null;
 	const messageCount = matterDetail?.userMessages.length ?? 0;
 	const streamLen = streamingDelta.length;
-	useEffect(() => {
-		if (messageCount > 0 || streamLen > 0) {
-			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	useLayoutEffect(() => {
+		const el = chatScrollRef.current;
+		if (!el || !loadedMatterId || (selectedMatterId && loadedMatterId !== selectedMatterId)) {
+			return;
 		}
-	}, [messageCount, streamLen]);
+		if (lastScrolledMatterIdRef.current !== loadedMatterId) {
+			lastScrolledMatterIdRef.current = loadedMatterId;
+			prevMessageCountRef.current = messageCount;
+			prevStreamLenRef.current = streamLen;
+			const saved = chatScrollMemory.get(loadedMatterId);
+			if (saved && !saved.atBottom) {
+				el.scrollTop = saved.scrollTop;
+			} else {
+				el.scrollTop = el.scrollHeight;
+				chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom: true });
+			}
+			return;
+		}
+		const hadNewMessage = messageCount > prevMessageCountRef.current;
+		const hadStreamGrowth = streamLen > prevStreamLenRef.current;
+		prevMessageCountRef.current = messageCount;
+		prevStreamLenRef.current = streamLen;
+		if (!hadNewMessage && !hadStreamGrowth) return;
+		const saved = chatScrollMemory.get(loadedMatterId);
+		if (saved && !saved.atBottom) return;
+		if (hadNewMessage) {
+			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+			chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollHeight, atBottom: true });
+		} else if (hadStreamGrowth) {
+			el.scrollTop = el.scrollHeight;
+			chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom: true });
+		}
+	}, [loadedMatterId, selectedMatterId, messageCount, streamLen]);
 
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -1299,7 +1335,16 @@ export function ChatStage({
 				</div>
 			)}
 
-			<div className="chat-stream-scroll">
+			<div
+				ref={chatScrollRef}
+				className="chat-stream-scroll"
+				onScroll={(e) => {
+					if (!loadedMatterId || (selectedMatterId && loadedMatterId !== selectedMatterId)) return;
+					const el = e.currentTarget;
+					const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 100;
+					chatScrollMemory.set(loadedMatterId, { scrollTop: el.scrollTop, atBottom });
+				}}
+			>
 				<div className="chat-stream-inner">
 					{errorBanner && (
 						<div className="approval-card banner-gap">
