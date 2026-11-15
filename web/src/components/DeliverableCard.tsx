@@ -170,7 +170,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					</button>
 				)}
 				<button type="button" className="btn-pill-outline" onClick={() => setMemoryOpen((prev) => !prev)}>
-					{memoryOpen ? "收起经验沉淀" : "沉淀为角色经验"}
+					{memoryOpen ? "收起手动沉淀" : "手动沉淀经验"}
 				</button>
 				<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
 					{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
@@ -195,12 +195,10 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					memberName={props.resolveMemberName}
 					workspaceName={props.resolveWorkspaceName}
 					lastDistillNote={lastDistillNote}
-					distilling={distilling}
-					onDistill={handleDistillClick}
-					onCancelDistill={props.onCancelDistill}
 					onOpenTeam={props.onOpenTeam}
 					manualOpen={memoryOpen}
 					onToggleManual={() => setMemoryOpen((prev) => !prev)}
+					showManualToggle={false}
 					defaultManualContent={`关于「${props.deliverable.title}」的可复用经验：${props.deliverable.summary}`}
 					hideEmptyPlaceholder={true}
 					onRefresh={props.onRefresh}

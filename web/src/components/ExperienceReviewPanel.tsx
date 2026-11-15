@@ -519,6 +519,7 @@ interface InlineExperienceReviewSectionProps {
 	onOpenTeam?: () => void;
 	manualOpen?: boolean;
 	onToggleManual?: () => void;
+	showManualToggle?: boolean;
 	defaultManualContent?: string;
 	hideEmptyPlaceholder?: boolean;
 	onRefresh: () => Promise<void>;
@@ -545,6 +546,7 @@ export function InlineExperienceReviewSection({
 	onOpenTeam,
 	manualOpen,
 	onToggleManual,
+	showManualToggle = true,
 	defaultManualContent = "",
 	hideEmptyPlaceholder = false,
 	onRefresh,
@@ -607,9 +609,11 @@ export function InlineExperienceReviewSection({
 							)}
 						</>
 					)}
-					<button type="button" className="btn-pill-outline btn-xs" onClick={toggleManual}>
-						{isManualOpen ? "收起手动录入" : "+ 手动录入"}
-					</button>
+					{showManualToggle && (
+						<button type="button" className="btn-pill-outline btn-xs" onClick={toggleManual}>
+							{isManualOpen ? "收起手动录入" : "+ 手动录入"}
+						</button>
+					)}
 					{pendingMemories.length > 0 && (
 						<button
 							type="button"
