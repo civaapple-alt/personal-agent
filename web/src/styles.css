@@ -3306,6 +3306,27 @@ body {
 	line-height: 1.45;
 }
 
+.member-committer-line {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.pill.org-pill {
+	background: #edf9f5;
+	color: #0b574e;
+	border-color: rgba(15, 107, 96, 0.25);
+}
+
+.hero-context-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 12px;
+}
+
 .member-memory-tiers {
 	display: flex;
 	align-items: center;

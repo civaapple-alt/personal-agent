@@ -14,8 +14,10 @@
   - 主成员正常回复后，旁听成员在 `runObservers` 中并行快速评估本轮讨论；无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
-  - 根据工作区所属 `Organization` 与 `resolveEffectiveGitIdentity` 解析成员 Git 署名。
-  - 向 `PiRpcWorker` 注入 `GIT_AUTHOR_*` / `GIT_COMMITTER_*` 与 `PA_MEMBER_*` / `PA_ORG_*` 环境变量（不改写目标仓库 `.git/config`）。
+  - 依据工作区 `Organization` 与 `resolveEffectiveGitIdentity` 解析角色署名，并用 `resolveRepoGitUserIdentity(cwd)`
+    读取目标仓库当前有效 `user.name` / `user.email`。
+  - 向 `PiRpcWorker` 注入角色 `GIT_AUTHOR_*` 与真实用户 `GIT_COMMITTER_*`（未配置真实用户时回退至角色身份），
+    同时注入 `PA_MEMBER_*` / `PA_ORG_*` 环境变量（不改写目标仓库 `.git/config`）。
   - 在 `buildMemberPrompt` 中注入「角色与组织身份」及分三层组织的「岗位通用 / 组织记忆 / 仓库记忆」清单。
   - 工具事件（`tool_execution_start` / `tool_execution_end`）只写入精简合法 JSON（工具名、截断后关键参数、`isError`）到 `notice` 通道。
   - 注入的经验记入 `memory_applications`；成果草稿、经验提案（工作区属组织时 `company_private` 自动归入对应 `orgId`）与应用 ID 先暂存，主执行成功后再事务提交，失败或取消分支不保留候选。

@@ -22,6 +22,9 @@ import type {
 	WorkspaceLink,
 } from "./types.ts";
 
+export const DEFAULT_ORGANIZATION_ID = "org-default";
+export const DEFAULT_ORGANIZATION_NAME = "默认组织";
+
 function nowIso(): string {
 	return new Date().toISOString();
 }
@@ -735,6 +738,7 @@ export class PersonalAgentStore {
 		name: string;
 		gitEmailDomain?: string;
 		description?: string;
+		isDefault?: boolean;
 	}): Organization {
 		const name = input.name.trim();
 		if (!name) throw new Error("Organization name is required");
@@ -744,29 +748,53 @@ export class PersonalAgentStore {
 		if (input.id) {
 			const existing = this.getOrganization(input.id);
 			if (existing) {
-				this.db
-					.prepare(
-						`UPDATE organizations
-						 SET name = ?, git_email_domain = ?, description = ?, updated_at = ?
-						 WHERE id = ?`,
-					)
-					.run(name, gitEmailDomain, description, timestamp, existing.id);
+				this.db.exec("BEGIN IMMEDIATE");
+				try {
+					if (input.isDefault === true) {
+						this.db.prepare("UPDATE organizations SET is_default = 0").run();
+					}
+					const nextDefault =
+						input.isDefault !== undefined ? (input.isDefault ? 1 : 0) : existing.isDefault ? 1 : 0;
+					this.db
+						.prepare(
+							`UPDATE organizations
+							 SET name = ?, git_email_domain = ?, description = ?, is_default = ?, updated_at = ?
+							 WHERE id = ?`,
+						)
+						.run(name, gitEmailDomain, description, nextDefault, timestamp, existing.id);
+					this.db.exec("COMMIT");
+				} catch (err) {
+					this.db.exec("ROLLBACK");
+					throw err;
+				}
 				return this.getOrganization(existing.id)!;
 			}
 		}
 		const id = input.id?.trim() || `org_${randomUUID()}`;
-		this.db
-			.prepare(
-				`INSERT INTO organizations (id, name, git_email_domain, description, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?)`,
-			)
-			.run(id, name, gitEmailDomain, description, timestamp, timestamp);
+		const hasDefault = Boolean(this.db.prepare("SELECT 1 FROM organizations WHERE is_default = 1 LIMIT 1").get());
+		const shouldBeDefault = input.isDefault !== undefined ? input.isDefault : !hasDefault;
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			if (shouldBeDefault) {
+				this.db.prepare("UPDATE organizations SET is_default = 0").run();
+			}
+			this.db
+				.prepare(
+					`INSERT INTO organizations (id, name, git_email_domain, description, is_default, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				)
+				.run(id, name, gitEmailDomain, description, shouldBeDefault ? 1 : 0, timestamp, timestamp);
+			this.db.exec("COMMIT");
+		} catch (err) {
+			this.db.exec("ROLLBACK");
+			throw err;
+		}
 		return this.getOrganization(id)!;
 	}
 
 	updateOrganization(
 		id: string,
-		patch: { name?: string; gitEmailDomain?: string; description?: string },
+		patch: { name?: string; gitEmailDomain?: string; description?: string; isDefault?: boolean },
 	): Organization {
 		const existing = this.getOrganization(id);
 		if (!existing) throw new Error(`Organization not found: ${id}`);
@@ -775,14 +803,63 @@ export class PersonalAgentStore {
 		const gitEmailDomain =
 			patch.gitEmailDomain !== undefined ? patch.gitEmailDomain.trim().replace(/^@+/, "") : existing.gitEmailDomain;
 		const description = patch.description !== undefined ? patch.description.trim() : existing.description;
-		this.db
-			.prepare(
-				`UPDATE organizations
-				 SET name = ?, git_email_domain = ?, description = ?, updated_at = ?
-				 WHERE id = ?`,
-			)
-			.run(name, gitEmailDomain, description, timestamp, id);
+		const nextDefault = patch.isDefault !== undefined ? patch.isDefault : existing.isDefault;
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			if (patch.isDefault === true) {
+				this.db.prepare("UPDATE organizations SET is_default = 0").run();
+			}
+			this.db
+				.prepare(
+					`UPDATE organizations
+					 SET name = ?, git_email_domain = ?, description = ?, is_default = ?, updated_at = ?
+					 WHERE id = ?`,
+				)
+				.run(name, gitEmailDomain, description, nextDefault ? 1 : 0, timestamp, id);
+			this.db.exec("COMMIT");
+		} catch (err) {
+			this.db.exec("ROLLBACK");
+			throw err;
+		}
 		return this.getOrganization(id)!;
+	}
+
+	setDefaultOrganization(id: string): Organization {
+		return this.updateOrganization(id, { isDefault: true });
+	}
+
+	getDefaultOrganization(): Organization | null {
+		const defaultRow = this.db
+			.prepare("SELECT * FROM organizations WHERE is_default = 1 ORDER BY created_at ASC LIMIT 1")
+			.get() as Record<string, unknown> | undefined;
+		if (defaultRow) return this.mapOrganization(defaultRow);
+		const firstRow = this.db.prepare("SELECT * FROM organizations ORDER BY created_at ASC LIMIT 1").get() as
+			| Record<string, unknown>
+			| undefined;
+		return firstRow ? this.mapOrganization(firstRow) : null;
+	}
+
+	ensureDefaultOrganization(): Organization {
+		const existing = this.getDefaultOrganization();
+		if (existing) {
+			if (!existing.isDefault) {
+				return this.setDefaultOrganization(existing.id);
+			}
+			return existing;
+		}
+		return this.upsertOrganization({
+			id: DEFAULT_ORGANIZATION_ID,
+			name: DEFAULT_ORGANIZATION_NAME,
+			gitEmailDomain: "",
+			description: "未单独指定组织时自动归入的默认组织",
+			isDefault: true,
+		});
+	}
+
+	assignOrphanWorkspacesToDefaultOrganization(): number {
+		const defaultOrg = this.ensureDefaultOrganization();
+		const res = this.db.prepare("UPDATE workspace_links SET org_id = ? WHERE org_id IS NULL").run(defaultOrg.id);
+		return Number(res.changes ?? 0);
 	}
 
 	getOrganization(id: string): Organization | null {
@@ -1302,6 +1379,7 @@ export class PersonalAgentStore {
 			name: String(row.name),
 			gitEmailDomain: typeof row.git_email_domain === "string" ? row.git_email_domain : "",
 			description: typeof row.description === "string" ? row.description : "",
+			isDefault: Boolean(row.is_default),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};

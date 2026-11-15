@@ -3,6 +3,7 @@ export interface OrganizationDto {
 	name: string;
 	gitEmailDomain: string;
 	description: string;
+	isDefault?: boolean;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -29,6 +30,7 @@ export interface WorkspaceDto {
 	repoPath: string;
 	defaultBranch: string;
 	description: string;
+	repoGitUser?: { name: string; email: string } | null;
 }
 
 export interface MatterDto {
@@ -343,11 +345,17 @@ export function createOrganization(input: {
 
 export function updateOrganization(
 	orgId: string,
-	input: { name?: string; gitEmailDomain?: string; description?: string },
+	input: { name?: string; gitEmailDomain?: string; description?: string; isDefault?: boolean },
 ): Promise<{ organization: OrganizationDto }> {
 	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}`, {
 		method: "PATCH",
 		body: JSON.stringify(input),
+	});
+}
+
+export function setDefaultOrganization(orgId: string): Promise<{ organization: OrganizationDto }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/default`, {
+		method: "POST",
 	});
 }
 

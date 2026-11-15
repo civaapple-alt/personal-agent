@@ -299,8 +299,8 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 	for (const repo of [repoA, repoB, repoC]) {
 		mkdirSync(repo, { recursive: true });
 		execFileSync("git", ["init"], { cwd: repo });
-		execFileSync("git", ["config", "user.name", "Wrong Local User"], { cwd: repo });
-		execFileSync("git", ["config", "user.email", "wrong-local@example.com"], { cwd: repo });
+		execFileSync("git", ["config", "user.name", "Real Repo Owner"], { cwd: repo });
+		execFileSync("git", ["config", "user.email", "owner@company.com"], { cwd: repo });
 	}
 
 	const db = openPersonalAgentDatabase(":memory:");
@@ -408,7 +408,8 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		const pmWorkerA = workers[0]!;
 		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_NAME, "PM Alice");
 		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_EMAIL, "product-manager@acme.dev");
-		assert.equal(pmWorkerA.options.env?.GIT_COMMITTER_EMAIL, "product-manager@acme.dev");
+		assert.equal(pmWorkerA.options.env?.GIT_COMMITTER_NAME, "Real Repo Owner");
+		assert.equal(pmWorkerA.options.env?.GIT_COMMITTER_EMAIL, "owner@company.com");
 		assert.equal(pmWorkerA.options.env?.PA_ORG_ID, "org-acme");
 		assert.equal(pmWorkerA.options.env?.PA_ORG_NAME, "Acme Engineering");
 
@@ -416,6 +417,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.match(ctxA, /## 角色与组织身份（Role & Organization Identity）/);
 		assert.match(ctxA, /Acme Engineering/);
 		assert.match(ctxA, /PM Alice <product-manager@acme\.dev>/);
+		assert.match(ctxA, /Git Committer（真实用户保留）：Real Repo Owner <owner@company\.com>/);
 		assert.match(ctxA, /Owns checkout product metrics across Acme/);
 		assert.match(ctxA, /GLOBAL_RULE/);
 		assert.match(ctxA, /ACME_ORG_MEM/);
@@ -444,12 +446,13 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		});
 		const ctxC = workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "";
 		assert.equal(workers[2]?.options.env?.GIT_AUTHOR_EMAIL, "product-manager@team.local");
+		assert.equal(workers[2]?.options.env?.GIT_COMMITTER_EMAIL, "owner@company.com");
 		assert.match(ctxC, /GLOBAL_RULE/);
 		assert.doesNotMatch(ctxC, /ACME_ORG_MEM/);
 		assert.doesNotMatch(ctxC, /BETA_ORG_MEM/);
 		assert.doesNotMatch(ctxC, /REPO_A_MEM/);
 
-		// Dispatch engineering-manager in wsA: executes real git commit and proves custom email overrides repo config + org domain
+		// Dispatch engineering-manager in wsA: executes real git commit and proves role Author + real user Committer
 		await orchestrator.dispatchMatter({
 			prompt: "提交一笔研发变更",
 			preferredMemberId: "engineering-manager",
@@ -459,10 +462,34 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			cwd: repoA,
 			encoding: "utf8",
 		}).trim();
-		assert.equal(gitLog, "Eng Bob|bob@custom.org|Eng Bob|bob@custom.org");
+		assert.equal(gitLog, "Eng Bob|bob@custom.org|Real Repo Owner|owner@company.com");
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});
+
+test("default organization seeding, switching default, and assigning orphan workspaces", () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	try {
+		const store = new PersonalAgentStore(db);
+		assert.equal(store.getDefaultOrganization(), null);
+		const orphanWs = store.upsertWorkspace({ name: "orphan", repoPath: "/tmp/orphan-ws" });
+		assert.equal(orphanWs.orgId, null);
+
+		const defaultOrg = store.ensureDefaultOrganization();
+		assert.equal(defaultOrg.isDefault, true);
+		assert.equal(store.assignOrphanWorkspacesToDefaultOrganization(), 1);
+		assert.equal(store.getWorkspace(orphanWs.id)?.orgId, defaultOrg.id);
+
+		const customOrg = store.upsertOrganization({ name: "civa team", gitEmailDomain: "civa.dev" });
+		assert.equal(customOrg.isDefault, false);
+		const promoted = store.setDefaultOrganization(customOrg.id);
+		assert.equal(promoted.isDefault, true);
+		assert.equal(store.getOrganization(defaultOrg.id)?.isDefault, false);
+		assert.equal(store.getDefaultOrganization()?.id, customOrg.id);
+	} finally {
+		db.close();
 	}
 });
 

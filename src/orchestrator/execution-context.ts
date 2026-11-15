@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { open, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,4 +70,34 @@ export async function validateDelivery(draft: DeliveryDraft, cwd: string): Promi
 		throw new Error("Deliverable file must be inside the current workspace");
 	if (!(await stat(path)).isFile()) throw new Error("Deliverable path must be an existing file");
 	return { ...draft, content: path };
+}
+
+/**
+ * Read effective Git user identity (`user.name` and `user.email`) from a repository or
+ * host Git config so commits can preserve the real user as Committer alongside per-role Author.
+ */
+export function resolveRepoGitUserIdentity(cwd?: string | null): { name: string; email: string } | null {
+	if (!cwd || !existsSync(cwd)) return null;
+	try {
+		const raw = execFileSync("git", ["config", "--get-regexp", "^user\\.(name|email)$"], {
+			cwd,
+			encoding: "utf8",
+			timeout: 1500,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		let name = "";
+		let email = "";
+		for (const line of raw.split(/\r?\n/)) {
+			const spaceIdx = line.search(/\s/);
+			if (spaceIdx <= 0) continue;
+			const key = line.slice(0, spaceIdx);
+			const value = line.slice(spaceIdx + 1).trim();
+			if (key === "user.name" && value) name = value;
+			else if (key === "user.email" && value) email = value;
+		}
+		if (name && email) return { name, email };
+		return null;
+	} catch {
+		return null;
+	}
 }

@@ -11,6 +11,7 @@ import {
 	type MemoryStatus,
 	type OrganizationDto,
 	type RoleTemplateDto,
+	setDefaultOrganization,
 	setPrimaryMember,
 	type TeamMemberDto,
 	updateMemberIdentity,
@@ -225,6 +226,16 @@ export function TeamView({
 			});
 			setEditingIdentityMemberId(null);
 			onNotice(`已更新「${res.member.displayName}」的角色身份与 Git 署名`);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleSetDefaultOrg = async (org: OrganizationDto) => {
+		try {
+			await setDefaultOrganization(org.id);
+			onNotice(`已将「${org.name}」设为默认组织，新创建的仓库与组织记忆将默认归入此组织`);
 			await onRefresh();
 		} catch (err: unknown) {
 			onError(err instanceof Error ? err.message : String(err));
@@ -450,7 +461,7 @@ export function TeamView({
 						<div>
 							<strong style={{ fontSize: 14 }}>组织身份与多仓库分组</strong>
 							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
-								归属同一组织的仓库可共享「组织记忆」，并可为团队成员统一后缀默认 Git 邮箱域名
+								同一支全局团队成员跨组织与多仓库工作；新建仓库默认归入「默认组织」，同组织仓库共享「组织记忆」与邮箱域名
 							</span>
 						</div>
 						<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
@@ -460,8 +471,8 @@ export function TeamView({
 
 					{organizations.length === 0 ? (
 						<div className="muted-hint" style={{ margin: 0 }}>
-							尚未建立组织。成员当前使用默认 Git
-							署名（可通过下方卡片「编辑身份」单独配置）；创建组织并在「资料与仓库」绑定项目后，同一组织的仓库可共享组织经验与记忆。
+							尚未建立组织（新建仓库时会自动创建「默认组织」）。成员按「角色 Author + 仓库真实用户
+							Committer」双署名提交 Git；创建组织并在「资料与仓库」绑定后，同组织仓库共享组织记忆。
 						</div>
 					) : (
 						<div className="org-chip-list">
@@ -470,14 +481,28 @@ export function TeamView({
 								return (
 									<div key={org.id} className="org-chip-card">
 										<div className="org-chip-head">
-											<strong style={{ fontSize: 13 }}>{org.name}</strong>
-											<button
-												type="button"
-												className="btn-inline btn-xs"
-												onClick={() => openEditOrgForm(org)}
-											>
-												编辑
-											</button>
+											<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+												<strong style={{ fontSize: 13 }}>{org.name}</strong>
+												{org.isDefault && <span className="pill live">默认组织</span>}
+											</div>
+											<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+												{!org.isDefault && (
+													<button
+														type="button"
+														className="btn-inline btn-xs"
+														onClick={() => void handleSetDefaultOrg(org)}
+													>
+														设为默认
+													</button>
+												)}
+												<button
+													type="button"
+													className="btn-inline btn-xs"
+													onClick={() => openEditOrgForm(org)}
+												>
+													编辑
+												</button>
+											</div>
 										</div>
 										<div className="org-chip-meta">
 											{org.gitEmailDomain ? `Git 域名：@${org.gitEmailDomain} · ` : ""}
@@ -594,8 +619,11 @@ export function TeamView({
 
 								<div className="member-identity-box">
 									<div className="member-identity-row">
-										<span className="member-git-pill" title="执行 Git 提交时自动注入 Author / Committer 身份">
-											Git: {gitIdentity.formatted}
+										<span
+											className="member-git-pill"
+											title="提交代码时以此成员身份作为 Git Author 区分不同角色工作"
+										>
+											Git Author（角色）：{gitIdentity.formatted}
 										</span>
 										<button
 											type="button"
@@ -609,6 +637,15 @@ export function TeamView({
 											{editingIdentityMemberId === member.id ? "收起身份编辑" : "编辑身份"}
 										</button>
 									</div>
+									{activeWorkspace?.repoGitUser && (
+										<div
+											className="member-committer-line"
+											title="提交代码时从当前仓库 git config 读取真实用户作为 Git Committer 保留"
+										>
+											Git Committer（真实用户）：{activeWorkspace.repoGitUser.name} &lt;
+											{activeWorkspace.repoGitUser.email}&gt;
+										</div>
+									)}
 									{member.identitySummary && (
 										<div className="member-summary-line">{member.identitySummary}</div>
 									)}

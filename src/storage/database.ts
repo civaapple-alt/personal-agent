@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 	name TEXT NOT NULL,
 	git_email_domain TEXT NOT NULL DEFAULT '',
 	description TEXT NOT NULL DEFAULT '',
+	is_default INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
 );
@@ -184,6 +185,10 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		UPDATE team_members SET git_name = display_name WHERE TRIM(git_name) = '';
 		UPDATE team_members SET git_email = id || '@team.local' WHERE TRIM(git_email) = '';
 	`);
+	const orgColumns = db.prepare("PRAGMA table_info(organizations)").all();
+	if (!orgColumns.some((column) => column.name === "is_default")) {
+		db.exec("ALTER TABLE organizations ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0");
+	}
 	const workspaceColumns = db.prepare("PRAGMA table_info(workspace_links)").all();
 	if (!workspaceColumns.some((column) => column.name === "org_id")) {
 		db.exec("ALTER TABLE workspace_links ADD COLUMN org_id TEXT");

@@ -55,8 +55,9 @@ export function ExperienceItemCard({
 	onError,
 }: ExperienceItemCardProps) {
 	const fallbackWorkspaceId = pickDefaultWorkspaceId(workspaces, memory.workspaceId, defaultWorkspaceId);
+	const defaultOrgFallbackId = organizations.find((org) => org.isDefault)?.id ?? organizations[0]?.id ?? "";
 	const fallbackOrgId =
-		memory.orgId ?? workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? organizations[0]?.id ?? "";
+		memory.orgId ?? workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? defaultOrgFallbackId;
 	const [editing, setEditing] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [editMemberId, setEditMemberId] = useState(memory.memberId);
@@ -420,7 +421,8 @@ export function ManualExperienceForm({
 	onError,
 }: ManualExperienceFormProps) {
 	const fallbackWorkspaceId = pickDefaultWorkspaceId(workspaces, defaultWorkspaceId);
-	const defaultWsOrgId = workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? organizations[0]?.id ?? "";
+	const defaultOrgFallbackId = organizations.find((org) => org.isDefault)?.id ?? organizations[0]?.id ?? "";
+	const defaultWsOrgId = workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? defaultOrgFallbackId;
 	const [memberId, setMemberId] = useState(defaultMemberId);
 	const [category, setCategory] = useState<MemoryCategory>("efficiency");
 	const [scope, setScope] = useState<MemoryScope>(defaultWorkspaceId ? "project_private" : "role_general");

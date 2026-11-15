@@ -1,3 +1,4 @@
+export { resolveRepoGitUserIdentity } from "./orchestrator/execution-context.ts";
 export {
 	buildProgressSnapshot,
 	type DelegateInput,
@@ -52,6 +53,8 @@ export {
 } from "./server/preview-manager.ts";
 export { openPersonalAgentDatabase } from "./storage/database.ts";
 export {
+	DEFAULT_ORGANIZATION_ID,
+	DEFAULT_ORGANIZATION_NAME,
 	normalizeMemoryCategory,
 	PersonalAgentStore,
 	resolveEffectiveGitIdentity,

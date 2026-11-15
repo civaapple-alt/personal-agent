@@ -12,9 +12,12 @@
 - `matter_execution_leases` 保存单机宿主 PID 与占用者；不是分布式租约，也不是外部动作 exactly-once 保证。
 - `recordTurnOutcome` 在同一事务中写入成果、候选经验和本轮成功执行的应用关联；`recordDeliverables` 是不含经验的调用入口。版本按事项与标题形成系列。回复与事项状态在事务之后记录，不能声称整个外部执行可回滚。
 - 组织与成员私有身份：
-  - `organizations`、`team_members` 与 `workspace_links` 维护组织名、`git_email_domain`、简介与 `workspace_links.org_id`。
+  - `organizations`、`team_members` 与 `workspace_links` 维护组织名、`git_email_domain`、简介、`is_default` 与 `workspace_links.org_id`。
+  - 默认组织 `DEFAULT_ORGANIZATION_ID`（`org-default`）及 `ensureDefaultOrganization`、`setDefaultOrganization`、
+    `assignOrphanWorkspacesToDefaultOrganization` 保证未手动建组织时仍有一致归属（底层显式传 `null` 保留独立仓库）。
   - 同时保存成员私有 `git_name`、`git_email`、`identity_summary`。
-  - 兼容迁移旧库并按 `display_name` 与 `<id>@team.local` 补齐默认值，模板同步时保留用户已改写的私有身份；由 `resolveEffectiveGitIdentity(member, organization)` 计算最终 Git 提交署名。
+  - 兼容迁移旧库并按 `display_name` 与 `<id>@team.local` 补齐默认值，同步模板时保留用户已改写的私有身份；
+    由 `resolveEffectiveGitIdentity(member, organization)` 计算最终 Git Author 署名，成员池跨组织全局共享。
 - 三层记忆查询与替代边界：
   - `listRelevantMemories` 按 `verified` 优先于 `candidate`、排除 `rejected` 与 `superseded` 的顺序注入：
     - `role_general`：跨组织跨仓库通用。

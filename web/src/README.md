@@ -30,14 +30,17 @@
 - [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`。
 - [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费失败/中止消息的 `metadata.progressSnapshot`：
   - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
-- [ChatStage](components/ChatStage.tsx) 在每条 AI 回复上方显示对应角色头像、名称及「旁听补充」徽章，底部工具栏提供「旁听席」选择器增减列席角色。
+- [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
+  输入栏仓库下拉标出「组织 / 仓库」；每条 AI 回复显示角色头像与「旁听补充」徽章，底部「旁听席」可增减列席角色。
 - 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及 [utils.ts](utils.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
 - [ChatStage](components/ChatStage.tsx) 支持在输入框点击图片按钮、拖拽图片到输入区或通过 `Ctrl/Cmd+V` 粘贴截图（最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）。
 
 ## 组织身份、团队记忆与成果阅读
 
 - [TeamView](components/TeamView.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖组织与成员身份视图：
-  - 支持组织创建/编辑、仓库与组织绑定、成员私有 Git 署名（`gitName <gitEmail>`）与个人背景编辑、三层记忆统计与层级筛选。
+  - 支持默认组织徽标与「设为默认」切换、组织创建/编辑、新仓库默认选定默认组织（可选独立无组织）、
+    仓库 `Git Committer` 真实用户展示、成员 `Git Author（角色）` vs `Git Committer（真实用户）` 与三层记忆筛选；
+    经验表单与卡片亦优先预选默认组织。
 - 团队复盘共用组件 [ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)：
   - 供 [DeliverableCard](components/DeliverableCard.tsx)、[ChatStage](components/ChatStage.tsx) 与 [TeamView](components/TeamView.tsx) 调用。
   - 导出 `InlineExperienceReviewSection`、`ExperienceItemCard`、`ManualExperienceForm` 等组件。

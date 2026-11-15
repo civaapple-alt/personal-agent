@@ -75,8 +75,11 @@
 - `project_private` 无论是否同属一个组织，都严格绑定当前工作区 `workspaceId`。
 - 无工作区与无组织的旧私有记忆继续保存并可查看，但不会在所有项目执行中加载。
 - `role_general` 用于跨组织、跨工作区通用的岗位经验与方法论。
-- 每次执行通过环境变量向 Pi Worker 注入对应岗位的 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`、`GIT_COMMITTER_NAME` 与 `GIT_COMMITTER_EMAIL`。
-  - 从而在同一本地仓库内区分不同角色产生的 Git 提交，而无需改写 `.git/config`。
+- 每次执行向 Pi Worker 注入对应岗位的 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`，并将当前仓库有效
+  `git config user.name/email` 作为 `GIT_COMMITTER_NAME`、`GIT_COMMITTER_EMAIL`（未配置真实用户时回退至岗位身份）。
+  - 从而在同一本地仓库内既保留真实用户提交者留痕，又区分不同角色产生的 Git Author 归属，而无需改写 `.git/config`。
+- 启动时保证存在默认组织（`org-default` / `默认组织`），通过 API 省略 `orgId` 新建的项目仓库默认归入当前默认组织；
+  团队成员池保持全局跨组织协作。
 
 切换工作区后使用另一条会话，切回原工作区时恢复其原会话。即使同一个工作区登记后来改了路径，旧会话也不会被移到新目录执行。事项负责人变更会更新事项记录；切回原成员时恢复该成员的会话并补充有界的新交流。
 

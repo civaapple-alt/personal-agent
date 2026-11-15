@@ -457,12 +457,40 @@ export function ChatStage({
 		);
 	};
 
+	const selectedOrganization = useMemo(
+		() =>
+			selectedWorkspace?.orgId ? (organizations.find((org) => org.id === selectedWorkspace.orgId) ?? null) : null,
+		[selectedWorkspace, organizations],
+	);
+
 	return (
 		<div className="chat-stage">
 			<header className="stage-header">
 				<div className="stage-header-left">
 					{selectedWorkspace ? (
-						<span className="pill">仓库：{selectedWorkspace.name}</span>
+						<>
+							{selectedOrganization && (
+								<span
+									className="pill org-pill"
+									title={
+										selectedOrganization.description ||
+										`所属组织：${selectedOrganization.name}（同组织仓库共享组织记忆）`
+									}
+								>
+									组织：{selectedOrganization.name}
+								</span>
+							)}
+							<span
+								className="pill"
+								title={
+									selectedWorkspace.repoGitUser
+										? `Git Committer（真实用户保留）：${selectedWorkspace.repoGitUser.name} <${selectedWorkspace.repoGitUser.email}>`
+										: selectedWorkspace.repoPath
+								}
+							>
+								仓库：{selectedWorkspace.name}
+							</span>
+						</>
 					) : (
 						<span className="pill">通用工作区</span>
 					)}
@@ -687,6 +715,22 @@ export function ChatStage({
 									: (templateByRoleId.get(headerContact?.templateId ?? "")?.responsibilities.split("\n")[0] ??
 										"直接输入任务开始协作")}
 							</p>
+							<div className="hero-context-bar">
+								{selectedOrganization && (
+									<span className="pill org-pill">组织：{selectedOrganization.name}</span>
+								)}
+								<span className="pill">
+									{selectedWorkspace ? `仓库：${selectedWorkspace.name}` : "通用工作区（不绑定仓库）"}
+								</span>
+								{selectedWorkspace?.repoGitUser && (
+									<span
+										className="pill"
+										title="执行 Git 提交时以角色署名作 Author，同时保留此仓库真实 Git 用户作 Committer"
+									>
+										Git 真实提交者：{selectedWorkspace.repoGitUser.name}
+									</span>
+								)}
+							</div>
 						</div>
 					) : (
 						<>
@@ -998,11 +1042,15 @@ export function ChatStage({
 							onChange={(e) => onSelectWorkspace(e.target.value)}
 						>
 							<option value="">不绑定仓库</option>
-							{workspaces.map((ws) => (
-								<option key={ws.id} value={ws.id}>
-									仓库：{ws.name}
-								</option>
-							))}
+							{workspaces.map((ws) => {
+								const wsOrgName = ws.orgId ? organizationName(ws.orgId) : null;
+								return (
+									<option key={ws.id} value={ws.id}>
+										仓库：{wsOrgName ? `${wsOrgName} / ` : ""}
+										{ws.name}
+									</option>
+								);
+							})}
 						</select>
 						<select
 							className="select-pill"

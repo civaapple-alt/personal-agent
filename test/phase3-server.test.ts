@@ -1909,9 +1909,46 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		assert.equal(switched.memory.workspaceId, workspace.id);
 
 		const bootstrapRes = await fetch(`${baseUrl}/api/bootstrap`);
-		const bootstrapBody = (await bootstrapRes.json()) as { organizations: Array<{ id: string }> };
+		const bootstrapBody = (await bootstrapRes.json()) as {
+			organizations: Array<{ id: string; isDefault?: boolean }>;
+		};
 		assert.equal(bootstrapBody.organizations.length, 1);
 		assert.equal(bootstrapBody.organizations[0]?.id, organization.id);
+		assert.equal(bootstrapBody.organizations[0]?.isDefault, true);
+
+		// Creating another org & promoting it as default, then auto-assigning a new workspace with omitted orgId
+		const secondOrgRes = await fetch(`${baseUrl}/api/organizations`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Default Org Two" }),
+		});
+		assert.equal(secondOrgRes.status, 201);
+		const { organization: secondOrg } = (await secondOrgRes.json()) as {
+			organization: { id: string; isDefault: boolean };
+		};
+		assert.equal(secondOrg.isDefault, false);
+
+		const setDefaultRes = await fetch(`${baseUrl}/api/organizations/${secondOrg.id}/default`, { method: "POST" });
+		assert.equal(setDefaultRes.status, 200);
+
+		const autoWsRes = await fetch(`${baseUrl}/api/workspaces`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "auto-org-ws", repoPath: join(tempDir, "auto-org-ws") }),
+		});
+		assert.equal(autoWsRes.status, 201);
+		const { workspace: autoWs } = (await autoWsRes.json()) as { workspace: { orgId: string | null } };
+		assert.equal(autoWs.orgId, secondOrg.id);
+
+		// Explicit orgId: null still creates a standalone workspace
+		const standaloneWsRes = await fetch(`${baseUrl}/api/workspaces`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "standalone-ws", repoPath: join(tempDir, "standalone-ws"), orgId: null }),
+		});
+		assert.equal(standaloneWsRes.status, 201);
+		const { workspace: standaloneWs } = (await standaloneWsRes.json()) as { workspace: { orgId: string | null } };
+		assert.equal(standaloneWs.orgId, null);
 	} finally {
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

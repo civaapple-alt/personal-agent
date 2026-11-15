@@ -24,7 +24,13 @@ import type {
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
-import { type DeliveryDraft, resolveRoleSkills, validateDelivery, validateSavedSession } from "./execution-context.ts";
+import {
+	type DeliveryDraft,
+	resolveRepoGitUserIdentity,
+	resolveRoleSkills,
+	validateDelivery,
+	validateSavedSession,
+} from "./execution-context.ts";
 import { selectMatterContext } from "./matter-context.ts";
 
 export interface DialogContext {
@@ -782,6 +788,7 @@ export class TeamOrchestrator {
 		memories: MemberMemory[];
 		workspace: WorkspaceLink | null;
 		organization?: Organization | null;
+		repoGitUser?: { name: string; email: string } | null;
 		taskPrompt?: string;
 		isInternalDelegation?: boolean;
 		sessionMode?: "lead" | "internal" | "observer";
@@ -794,12 +801,16 @@ export class TeamOrchestrator {
 					? this.store.getOrganization(input.workspace.orgId)
 					: null;
 		const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
+		const repoGitUser = input.repoGitUser;
 		const identityLines = [
 			`- 成员标识：\`${input.member.id}\`（${input.member.displayName} · ${input.member.roleTitle}）`,
 			organization
 				? `- 所属组织：${organization.name}${organization.description ? `（${organization.description}）` : ""}`
 				: null,
-			`- Git 提交署名（Author / Committer）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>（执行环境已自动注入 GIT_AUTHOR_* / GIT_COMMITTER_*，提交代码时将自动归属到你的署名下，请勿修改全局 Git 配置）`,
+			`- Git Author（角色署名）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>`,
+			repoGitUser
+				? `- Git Committer（真实用户保留）：${repoGitUser.name} <${repoGitUser.email}>（执行环境已分别注入 GIT_AUTHOR_* 与 GIT_COMMITTER_*，提交时将区分角色作者并保留真实提交者，请勿修改全局或仓库 Git 配置）`
+				: `- Git 提交署名（Author / Committer）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>（执行环境已自动注入 GIT_AUTHOR_* / GIT_COMMITTER_*，请勿修改全局 Git 配置）`,
 			input.member.identitySummary ? `- 角色背景与专长：${input.member.identitySummary}` : null,
 		].filter(Boolean);
 		const sections: string[] = [
@@ -1780,6 +1791,9 @@ ${this.store
 			);
 			const organization = input.workspace?.orgId ? this.store.getOrganization(input.workspace.orgId) : null;
 			const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
+			const repoGitUser = resolveRepoGitUserIdentity(cwd);
+			const committerName = repoGitUser?.name || gitIdentity.gitName;
+			const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
 			const relevantMemories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null);
 			worker = this.workerFactory({
 				cwd,
@@ -1793,8 +1807,8 @@ ${this.store
 					...bridge.env,
 					GIT_AUTHOR_NAME: gitIdentity.gitName,
 					GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
-					GIT_COMMITTER_NAME: gitIdentity.gitName,
-					GIT_COMMITTER_EMAIL: gitIdentity.gitEmail,
+					GIT_COMMITTER_NAME: committerName,
+					GIT_COMMITTER_EMAIL: committerEmail,
 					PA_MEMBER_ID: input.member.id,
 					PA_MEMBER_NAME: input.member.displayName,
 					PA_MEMBER_TITLE: input.member.roleTitle,
@@ -1813,6 +1827,7 @@ ${this.store
 						memories: relevantMemories,
 						workspace: input.workspace,
 						organization,
+						repoGitUser,
 						sessionMode,
 					}),
 				},

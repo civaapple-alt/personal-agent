@@ -129,7 +129,7 @@ flowchart TB
 
 | 对象 | 当前存储与关系 | 尚不包含的能力 |
 | --- | --- | --- |
-| `Organization` | 组织 ID、名称、默认 Git 邮箱域名（`gitEmailDomain`）与组织简介，用来串联同一组织下的多个项目仓库 | 组织成员权限隔离、成员加入/退出审批流、企业 SSO |
+| `Organization` | 组织 ID、名称、默认标记（`isDefault`）、默认 Git 邮箱域名（`gitEmailDomain`）与组织简介，用来串联同一组织下的多个项目仓库；团队成员为跨组织全局复用 | 组织成员权限隔离、成员加入/退出审批流、企业 SSO |
 | `RoleTemplate` | Markdown 定义职责、方法、工具依赖、协作和验证约定，可导入导出 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
 | `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏） | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
 | `MemberMemory` | 成员经验与记忆、`scope`（`role_general`/`company_private`/`project_private`）与 `orgId`/`workspaceId` 绑定、`category`、`status`、`rationale`、来源事项/成果、替代链及命中/正负评估计数 | 后台夜间无人值守复盘调度与多组织权限鉴权 |
@@ -148,7 +148,8 @@ flowchart TB
 - `role_general` 是可供该成员跨组织与跨工作区使用的岗位经验，但仍属于本地私有运行数据，不会随角色 Markdown 导出。
 - `company_private` 在工作区已归属某个 `Organization` 时按 `orgId` 跨同组织多仓库共享，在未归属组织时继续兼容绑定单个工作区。
 - `project_private` 始终严格绑定当前工作区；无归属的旧私有记忆保留供查看，不作为全局背景。
-- 执行 Worker 通过注入 `GIT_AUTHOR_*` / `GIT_COMMITTER_*` 与身份提示段落，为各岗位的 Git 提交建立稳定署名。
+- 执行 Worker 保留目标仓库真实 `git config user.name/email` 作为 `GIT_COMMITTER_*`，将岗位有效署名注入 `GIT_AUTHOR_*`
+  （未配置真实用户时回退至角色身份），并附带身份提示段落以兼顾真实提交人留痕与角色归因。
 
 当前 RSI 已有三条生产路径，但其证据与职责不同：
 

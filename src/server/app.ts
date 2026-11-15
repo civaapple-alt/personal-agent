@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { basename, extname, join, resolve } from "node:path";
+import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import {
 	buildProgressSnapshot,
 	type DispatchMatterResult,
@@ -14,7 +15,14 @@ import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../rol
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
 import { MemoryValidationError, normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
-import type { DeliverableType, FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus } from "../storage/types.ts";
+import type {
+	DeliverableType,
+	FeedbackRating,
+	MemoryCategory,
+	MemoryScope,
+	MemoryStatus,
+	WorkspaceLink,
+} from "../storage/types.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 
@@ -26,6 +34,13 @@ const MEMORY_CATEGORIES = new Set<MemoryCategory>([
 	"user_correction",
 	"domain_constraint",
 ]);
+
+function enrichWorkspace(ws: WorkspaceLink): WorkspaceLink {
+	return {
+		...ws,
+		repoGitUser: resolveRepoGitUserIdentity(ws.repoPath),
+	};
+}
 
 function broadcastDistilledMemories(
 	broadcast: (event: string, data: unknown) => void,
@@ -472,7 +487,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						shareable: t.shareable,
 						responsibilities: t.sections.responsibilitiesAndBoundaries,
 					})),
-					workspaces: store.listWorkspaces(),
+					workspaces: store.listWorkspaces().map(enrichWorkspace),
 					organizations: store.listOrganizations(),
 					matters: store.listMatters(),
 					deliverables: store.listDeliverables(),
@@ -783,9 +798,23 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					name,
 					gitEmailDomain: typeof body.gitEmailDomain === "string" ? body.gitEmailDomain : "",
 					description: typeof body.description === "string" ? body.description : "",
+					isDefault: typeof body.isDefault === "boolean" ? body.isDefault : undefined,
 				});
 				broadcast("organization_updated", { organization });
 				sendJson(res, 201, { organization });
+				return;
+			}
+
+			const orgDefaultMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/default$/);
+			if (method === "POST" && orgDefaultMatch) {
+				const orgId = decodeURIComponent(orgDefaultMatch[1]!);
+				if (!store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
+				const organization = store.setDefaultOrganization(orgId);
+				broadcast("organization_updated", { organization });
+				sendJson(res, 200, { organization });
 				return;
 			}
 
@@ -801,6 +830,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					name: typeof body.name === "string" ? body.name : undefined,
 					gitEmailDomain: typeof body.gitEmailDomain === "string" ? body.gitEmailDomain : undefined,
 					description: typeof body.description === "string" ? body.description : undefined,
+					isDefault: typeof body.isDefault === "boolean" ? body.isDefault : undefined,
 				});
 				broadcast("organization_updated", { organization });
 				sendJson(res, 200, { organization });
@@ -815,7 +845,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "name and repoPath are required");
 					return;
 				}
-				const orgId =
+				let orgId: string | null | undefined =
 					body.orgId === null
 						? null
 						: typeof body.orgId === "string" && body.orgId.trim()
@@ -825,13 +855,19 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Organization not found: ${orgId}`);
 					return;
 				}
-				const ws = store.upsertWorkspace({
-					orgId,
-					name,
-					repoPath,
-					defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : "main",
-					description: typeof body.description === "string" ? body.description : "",
-				});
+				if (orgId === undefined) {
+					const fallbackOrg = store.getDefaultOrganization() ?? store.ensureDefaultOrganization();
+					orgId = fallbackOrg.id;
+				}
+				const ws = enrichWorkspace(
+					store.upsertWorkspace({
+						orgId,
+						name,
+						repoPath,
+						defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : "main",
+						description: typeof body.description === "string" ? body.description : "",
+					}),
+				);
 				broadcast("workspace_updated", ws);
 				sendJson(res, 201, { workspace: ws });
 				return;
@@ -855,12 +891,14 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Organization not found: ${orgId}`);
 					return;
 				}
-				const ws = store.updateWorkspace(workspaceId, {
-					orgId,
-					name: typeof body.name === "string" ? body.name : undefined,
-					defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : undefined,
-					description: typeof body.description === "string" ? body.description : undefined,
-				});
+				const ws = enrichWorkspace(
+					store.updateWorkspace(workspaceId, {
+						orgId,
+						name: typeof body.name === "string" ? body.name : undefined,
+						defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : undefined,
+						description: typeof body.description === "string" ? body.description : undefined,
+					}),
+				);
 				broadcast("workspace_updated", ws);
 				sendJson(res, 200, { workspace: ws });
 				return;

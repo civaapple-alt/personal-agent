@@ -28,8 +28,15 @@ async function main(): Promise<void> {
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
 
+	const hadOrganizations = store.listOrganizations().length > 0;
+	const defaultOrg = store.ensureDefaultOrganization();
+	if (!hadOrganizations) {
+		store.assignOrphanWorkspacesToDefaultOrganization();
+	}
+
 	if (store.listWorkspaces().length === 0) {
 		store.upsertWorkspace({
+			orgId: defaultOrg.id,
 			name: "personal-agent",
 			repoPath: rootDir,
 			defaultBranch: "main",

@@ -20,9 +20,13 @@ export function MaterialsView({
 	onError,
 	onUseWorkspace,
 }: MaterialsViewProps) {
+	const defaultOrganization = organizations.find((o) => o.isDefault) ?? organizations[0] ?? null;
 	const [newWsName, setNewWsName] = useState("");
 	const [newWsPath, setNewWsPath] = useState("");
-	const [newWsOrgId, setNewWsOrgId] = useState<string>("");
+	const [newWsOrgChoice, setNewWsOrgChoice] = useState<string>("");
+
+	const resolvedNewOrgId =
+		newWsOrgChoice === "__standalone__" ? null : newWsOrgChoice || defaultOrganization?.id || null;
 
 	const handleAddWorkspace = async () => {
 		if (!newWsName.trim() || !newWsPath.trim()) return;
@@ -30,7 +34,7 @@ export function MaterialsView({
 			await addWorkspace({
 				name: newWsName.trim(),
 				repoPath: newWsPath.trim(),
-				orgId: newWsOrgId || null,
+				orgId: newWsOrgChoice === "__standalone__" ? null : newWsOrgChoice || undefined,
 			});
 			setNewWsName("");
 			setNewWsPath("");
@@ -74,21 +78,24 @@ export function MaterialsView({
 							value={newWsPath}
 							onChange={(e) => setNewWsPath(e.target.value)}
 						/>
-						{organizations.length > 0 && (
-							<select
-								className="select-sm"
-								aria-label="新仓库所属组织"
-								value={newWsOrgId}
-								onChange={(e) => setNewWsOrgId(e.target.value)}
-							>
-								<option value="">不归属组织（独立仓库）</option>
-								{organizations.map((org) => (
+						<select
+							className="select-sm"
+							aria-label="新仓库所属组织"
+							value={newWsOrgChoice === "__standalone__" ? "__standalone__" : (resolvedNewOrgId ?? "")}
+							onChange={(e) => setNewWsOrgChoice(e.target.value)}
+						>
+							{organizations.length === 0 ? (
+								<option value="">自动归入默认组织</option>
+							) : (
+								organizations.map((org) => (
 									<option key={org.id} value={org.id}>
 										组织：{org.name}
+										{org.isDefault ? "（默认）" : ""}
 									</option>
-								))}
-							</select>
-						)}
+								))
+							)}
+							<option value="__standalone__">不归属组织（独立仓库）</option>
+						</select>
 						<button type="button" className="btn-pill-dark" onClick={() => void handleAddWorkspace()}>
 							绑定
 						</button>
@@ -107,9 +114,14 @@ export function MaterialsView({
 										<span>
 											{ws.name} ({ws.defaultBranch})
 										</span>
-										{org && <span className="pill">组织：{org.name}</span>}
+										{org && <span className="pill org-pill">组织：{org.name}</span>}
 									</div>
-									<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{ws.repoPath}</div>
+									<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+										{ws.repoPath}
+										{ws.repoGitUser
+											? ` · Git Committer：${ws.repoGitUser.name} <${ws.repoGitUser.email}>`
+											: ""}
+									</div>
 								</div>
 								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 									{organizations.length > 0 && (

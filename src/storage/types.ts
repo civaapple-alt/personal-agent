@@ -26,6 +26,7 @@ export interface Organization {
 	name: string;
 	gitEmailDomain: string;
 	description: string;
+	isDefault: boolean;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -88,6 +89,7 @@ export interface WorkspaceLink {
 	repoPath: string;
 	defaultBranch: string;
 	description: string;
+	repoGitUser?: { name: string; email: string } | null;
 	createdAt: string;
 }
 

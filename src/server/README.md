@@ -12,8 +12,11 @@
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
   - 图片落盘 `uploadsDir`（默认 `.data/uploads`，测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问，消息仅存轻量引用 `metadata.images`。
 - 组织与成员身份接口：
-  - `GET /api/bootstrap` 下发 `organizations`；`GET /api/organizations`、`POST /api/organizations`、`PATCH /api/organizations/:id` 管理组织字段。
-  - 字段覆盖组织名称、Git 邮箱域名与简介；`PATCH /api/workspaces/:id` 与 `POST /api/workspaces` 支持绑定/解绑 `orgId`（未知 `orgId` 返回 404）。
+  - [main.ts](main.ts) 启动时自动保证默认组织存在（`ensureDefaultOrganization`），并在首次无任何组织时将既有无归属工作区及自举仓库归入默认组织。
+  - `GET /api/bootstrap` 下发 `organizations`；`GET /api/organizations`、`POST /api/organizations`、
+    `PATCH /api/organizations/:id` 与 `POST /api/organizations/:id/default` 管理组织字段与默认组织切换。
+  - 字段覆盖名称、Git 邮箱域名、`isDefault` 与简介；`POST /api/workspaces` 省略 `orgId` 自动归入默认组织
+    （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
   - `POST /api/members` 与 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
 - Phase 4 RSI 接口：

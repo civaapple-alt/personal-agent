@@ -27,6 +27,13 @@ All notable changes to Personal Agent are documented in this file.
   - Separated current limits and future work from the historical four-phase design, and aligned the README document pointers.
 
 ### Changed
+- Upgraded Git commit attribution to separate AI role authorship from real host/repository committer identity (`1.A`):
+  - `resolveRepoGitUserIdentity` (`src/orchestrator/execution-context.ts`, `team-orchestrator.ts`) reads effective
+    `user.name` / `user.email` in the workspace and preserves that real user on `GIT_COMMITTER_NAME` /
+    `GIT_COMMITTER_EMAIL`, while keeping the AI role on `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` (falling back cleanly
+    when unconfigured).
+  - Updated `buildMemberPrompt` identity instructions and `TeamView` to distinguish `Git Author（角色）` vs
+    `Git Committer（真实用户）`.
 - Redesigned `DeliverableCard` and `DeliverablesView` (`web/src/components/DeliverableCard.tsx`,
   `DeliverablesView.tsx`, `web/src/utils.ts` `parseDeliverableSummary`, `web/src/styles.css`) for calmer,
   focus-and-process reading:
@@ -86,6 +93,17 @@ All notable changes to Personal Agent are documented in this file.
   `TeamOrchestrator` so restarts no longer claim "已按你的要求停止本次执行".
 
 ### Added
+- Added Default Organization (`默认组织`, `org-default`) management and workbench-wide organization visibility:
+  - **Storage & Startup Migration (`src/storage/`, `src/server/main.ts`)**: Added `organizations.is_default` migration,
+    `DEFAULT_ORGANIZATION_ID`, `ensureDefaultOrganization`, `setDefaultOrganization`, `getDefaultOrganization`, and
+    `assignOrphanWorkspacesToDefaultOrganization` (seeding the default org on startup when none exist).
+  - **HTTP API (`src/server/app.ts`)**: Added `POST /api/organizations/:id/default`, `isDefault` support on organization
+    `POST`/`PATCH`, `repoGitUser` enrichment on workspace DTOs, and automatic attachment of new workspaces without
+    explicit `orgId: null` to the active default organization.
+  - **UI Visibility (`ChatStage.tsx`, `MaterialsView.tsx`, `TeamView.tsx`, `ExperienceReviewPanel.tsx`)**: Surfaced
+    active organization pill, hero context bar (`组织` / `仓库` / `Git 真实提交者`), and org-prefixed workspace
+    selector in 「新建事项 / 对话页」, plus default-organization badge/switching in `TeamView` and default org
+    pre-selection in `MaterialsView` and `ExperienceReviewPanel`.
 - Strengthened organization and member identity, Git commit attribution, and 3-tier experience/memory isolation (`role_general` / `company_private` / `project_private`):
   - **Storage & Identity Resolution (`src/storage/`)**:
     - Added `organizations` table, `workspace_links.org_id`, `member_memories.org_id`, and private `team_members`
