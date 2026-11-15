@@ -14,8 +14,16 @@ import {
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
-import { MemoryValidationError, normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
+import {
+	DEFAULT_OWNER_COLLABORATOR_ID,
+	MemoryValidationError,
+	normalizeMemoryCategory,
+	type PersonalAgentStore,
+	toPublicCollaborator,
+} from "../storage/repositories.ts";
 import type {
+	Collaborator,
+	CollaboratorRole,
 	DeliverableType,
 	FeedbackRating,
 	MemoryCategory,
@@ -69,6 +77,152 @@ export interface PersonalAgentServerOptions {
 	webDistDir?: string;
 	rolesDir?: string;
 	uploadsDir?: string;
+	requireAuth?: boolean;
+}
+
+const SESSION_COOKIE_NAME = "pa_session";
+
+interface RequestActor {
+	collaborator: Collaborator;
+	viaToken: boolean;
+}
+
+function isLoopbackRemote(req: IncomingMessage): boolean {
+	const remote = req.socket?.remoteAddress ?? "";
+	return remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+}
+
+function parseCookies(req: IncomingMessage): Record<string, string> {
+	const raw = req.headers.cookie;
+	if (!raw || typeof raw !== "string") return {};
+	const result: Record<string, string> = {};
+	for (const part of raw.split(";")) {
+		const idx = part.indexOf("=");
+		if (idx <= 0) continue;
+		const key = part.slice(0, idx).trim();
+		const value = part.slice(idx + 1).trim();
+		if (!key) continue;
+		try {
+			result[key] = decodeURIComponent(value);
+		} catch {
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
+function extractHeaderToken(req: IncomingMessage): string | null {
+	const direct = req.headers["x-pa-token"];
+	if (typeof direct === "string" && direct.trim()) {
+		return direct.trim();
+	}
+	const auth = req.headers.authorization;
+	if (typeof auth === "string" && /^Bearer\s+/i.test(auth)) {
+		const token = auth.replace(/^Bearer\s+/i, "").trim();
+		return token || null;
+	}
+	return null;
+}
+
+function resolveRequestActor(
+	req: IncomingMessage,
+	store: PersonalAgentStore,
+	requireAuth: boolean,
+): RequestActor | null {
+	const headerToken = extractHeaderToken(req);
+	if (headerToken) {
+		const matched = store.getCollaboratorByToken(headerToken);
+		return matched ? { collaborator: matched, viaToken: true } : null;
+	}
+	const cookieToken = parseCookies(req)[SESSION_COOKIE_NAME]?.trim();
+	if (cookieToken) {
+		const matched = store.getCollaboratorByToken(cookieToken);
+		if (matched) return { collaborator: matched, viaToken: true };
+	}
+	if (!requireAuth && isLoopbackRemote(req)) {
+		const owner = store.ensureOwnerCollaborator();
+		return { collaborator: owner, viaToken: false };
+	}
+	return null;
+}
+
+function requireOwner(res: ServerResponse, actor: RequestActor | null): actor is RequestActor {
+	if (!actor) {
+		sendError(res, 401, "未认证，请通过有效邀请链接或口令登录");
+		return false;
+	}
+	if (actor.collaborator.permissionRole !== "owner") {
+		sendError(res, 403, "仅所有者（Owner）可执行此操作；协同成员可参与讨论、提交 AI 提请或评价成果");
+		return false;
+	}
+	return true;
+}
+
+function toDispatchAuthor(collaborator: Collaborator): {
+	collaboratorId: string;
+	name: string;
+	roleTitle: string;
+	permissionRole: CollaboratorRole;
+} {
+	return {
+		collaboratorId: collaborator.id,
+		name: collaborator.name,
+		roleTitle: collaborator.roleTitle,
+		permissionRole: collaborator.permissionRole,
+	};
+}
+
+function parseCollaboratorIds(raw: unknown, store: PersonalAgentStore): string[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	const seen = new Set<string>();
+	const ids: string[] = [];
+	for (const item of raw) {
+		if (typeof item !== "string") continue;
+		const trimmed = item.trim();
+		if (!trimmed || trimmed === DEFAULT_OWNER_COLLABORATOR_ID || seen.has(trimmed)) continue;
+		if (!store.getCollaborator(trimmed)) continue;
+		seen.add(trimmed);
+		ids.push(trimmed);
+	}
+	return ids;
+}
+
+async function loadStoredImagesFromRefs(
+	rawRefs: unknown,
+	uploadsDir: string | undefined,
+	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>,
+): Promise<PromptImageAttachment[]> {
+	if (!Array.isArray(rawRefs)) return [];
+	const loaded: PromptImageAttachment[] = [];
+	for (const item of rawRefs) {
+		if (!item || typeof item !== "object") continue;
+		const record = item as Record<string, unknown>;
+		const url = typeof record.url === "string" ? record.url.trim() : "";
+		const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "image/png";
+		const name = typeof record.name === "string" ? record.name.trim() : undefined;
+		if (!url.startsWith("/api/uploads/")) continue;
+		const filename = url.slice("/api/uploads/".length);
+		if (!/^[a-zA-Z0-9._-]+$/.test(filename)) continue;
+		let buffer: Buffer | undefined;
+		if (uploadsDir) {
+			const filePath = join(resolve(uploadsDir), filename);
+			if (existsSync(filePath)) {
+				buffer = await readFile(filePath);
+			}
+		}
+		if (!buffer) {
+			buffer = memoryUploads.get(filename)?.buffer;
+		}
+		if (!buffer) continue;
+		loaded.push({
+			type: "image",
+			data: buffer.toString("base64"),
+			mimeType,
+			name,
+			url,
+		});
+	}
+	return loaded;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -304,6 +458,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		observerMemberIds?: string[];
 		deliverableTitle?: string;
 		deliverableType?: DeliverableType;
+		author?: {
+			collaboratorId: string;
+			name: string;
+			roleTitle: string;
+			permissionRole: CollaboratorRole;
+		};
 	}) => {
 		const initialProgress: DispatchProgressEvent = {
 			stage: "starting",
@@ -328,6 +488,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,
+				author: input.author,
 				onTextDelta: (delta) => {
 					accumulatedDelta += delta;
 					activeEntry.accumulatedDelta = accumulatedDelta;
@@ -417,6 +578,53 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		const pathname = url.pathname;
 
 		try {
+			const requireAuth = Boolean(options.requireAuth);
+			let actor = resolveRequestActor(req, store, requireAuth);
+
+			if (method === "GET" && pathname === "/api/auth/session") {
+				sendJson(res, 200, {
+					authenticated: Boolean(actor),
+					permissionRequired: requireAuth || !isLoopbackRemote(req),
+					currentUser: actor ? toPublicCollaborator(actor.collaborator) : null,
+				});
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/auth/login") {
+				const body = await readJsonBody(req);
+				const token = typeof body.token === "string" ? body.token.trim() : "";
+				if (!token) {
+					sendError(res, 400, "token is required");
+					return;
+				}
+				const matched = store.getCollaboratorByToken(token);
+				if (!matched) {
+					sendError(res, 401, "无效或已失效的邀请口令");
+					return;
+				}
+				actor = { collaborator: matched, viaToken: true };
+				res.setHeader(
+					"Set-Cookie",
+					`${SESSION_COOKIE_NAME}=${encodeURIComponent(matched.token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+				);
+				sendJson(res, 200, {
+					ok: true,
+					currentUser: toPublicCollaborator(matched),
+				});
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/auth/logout") {
+				res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+				sendJson(res, 200, { ok: true });
+				return;
+			}
+
+			if (pathname.startsWith("/api/") && !actor) {
+				sendError(res, 401, "未认证，请使用邀请链接或口令登录");
+				return;
+			}
+
 			if (method === "GET" && pathname === "/api/events") {
 				res.writeHead(200, {
 					"Content-Type": "text/event-stream; charset=utf-8",
@@ -474,7 +682,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			if (method === "GET" && pathname === "/api/bootstrap") {
 				const liveTemplates = orchestrator.listTemplates();
+				const allCollaborators = store.listCollaborators();
 				sendJson(res, 200, {
+					currentUser: toPublicCollaborator(actor!.collaborator),
+					collaborators:
+						actor!.collaborator.permissionRole === "owner"
+							? allCollaborators
+							: allCollaborators.map(toPublicCollaborator),
 					members: store.listMembers(),
 					templates: liveTemplates.map((t) => ({
 						id: t.id,
@@ -501,6 +715,123 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						]),
 					),
 				});
+				return;
+			}
+
+			if (method === "GET" && pathname === "/api/collaborators") {
+				const list = store.listCollaborators();
+				sendJson(res, 200, {
+					collaborators: actor!.collaborator.permissionRole === "owner" ? list : list.map(toPublicCollaborator),
+				});
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/collaborators") {
+				if (!requireOwner(res, actor)) return;
+				const body = await readJsonBody(req);
+				const name = typeof body.name === "string" ? body.name.trim() : "";
+				if (!name) {
+					sendError(res, 400, "name is required");
+					return;
+				}
+				const roleTitle = typeof body.roleTitle === "string" ? body.roleTitle.trim() : "";
+				const orgId = typeof body.orgId === "string" && body.orgId.trim() ? body.orgId.trim() : null;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
+				const permissionRole: CollaboratorRole = body.permissionRole === "owner" ? "owner" : "collaborator";
+				const collaborator = store.upsertCollaborator({
+					id: typeof body.id === "string" && body.id.trim() ? body.id.trim() : undefined,
+					name,
+					roleTitle: roleTitle || (permissionRole === "owner" ? "团队所有者" : "协同同事"),
+					permissionRole,
+					orgId,
+				});
+				broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
+				sendJson(res, 201, { collaborator });
+				return;
+			}
+
+			const collabRegenMatch = pathname.match(/^\/api\/collaborators\/([^/]+)\/regenerate-token$/);
+			if (method === "POST" && collabRegenMatch) {
+				if (!requireOwner(res, actor)) return;
+				const collabId = decodeURIComponent(collabRegenMatch[1]!);
+				const collaborator = store.regenerateCollaboratorToken(collabId);
+				if (!collaborator) {
+					sendError(res, 404, `Collaborator not found: ${collabId}`);
+					return;
+				}
+				broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
+				sendJson(res, 200, { collaborator });
+				return;
+			}
+
+			const collabItemMatch = pathname.match(/^\/api\/collaborators\/([^/]+)$/);
+			if (method === "PATCH" && collabItemMatch) {
+				if (!requireOwner(res, actor)) return;
+				const collabId = decodeURIComponent(collabItemMatch[1]!);
+				const existing = store.getCollaborator(collabId);
+				if (!existing) {
+					sendError(res, 404, `Collaborator not found: ${collabId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const orgId =
+					body.orgId === null
+						? null
+						: typeof body.orgId === "string" && body.orgId.trim()
+							? body.orgId.trim()
+							: existing.orgId;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
+				const permissionRole: CollaboratorRole =
+					collabId === DEFAULT_OWNER_COLLABORATOR_ID
+						? "owner"
+						: body.permissionRole === "owner"
+							? "owner"
+							: body.permissionRole === "collaborator"
+								? "collaborator"
+								: existing.permissionRole;
+				const collaborator = store.upsertCollaborator({
+					id: collabId,
+					name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name,
+					roleTitle:
+						typeof body.roleTitle === "string" && body.roleTitle.trim()
+							? body.roleTitle.trim()
+							: existing.roleTitle,
+					permissionRole,
+					orgId,
+				});
+				broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
+				sendJson(res, 200, { collaborator });
+				return;
+			}
+
+			if (method === "DELETE" && collabItemMatch) {
+				if (!requireOwner(res, actor)) return;
+				const collabId = decodeURIComponent(collabItemMatch[1]!);
+				if (collabId === DEFAULT_OWNER_COLLABORATOR_ID) {
+					sendError(res, 400, "Cannot delete the default owner collaborator");
+					return;
+				}
+				if (!store.getCollaborator(collabId)) {
+					sendError(res, 404, `Collaborator not found: ${collabId}`);
+					return;
+				}
+				for (const matter of store.listMatters()) {
+					if (matter.collaboratorIds.includes(collabId)) {
+						store.updateMatterCollaborators(
+							matter.id,
+							matter.collaboratorIds.filter((id) => id !== collabId),
+						);
+					}
+				}
+				store.deleteCollaborator(collabId);
+				broadcast("collaborator_updated", { deletedId: collabId });
+				sendJson(res, 200, { ok: true, deletedId: collabId });
 				return;
 			}
 
@@ -536,6 +867,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const matterAbortMatch = pathname.match(/^\/api\/matters\/([^/]+)\/abort$/);
 			if (method === "POST" && matterAbortMatch) {
+				if (!requireOwner(res, actor)) return;
 				const matterId = decodeURIComponent(matterAbortMatch[1]!);
 				const matter = store.getMatter(matterId);
 				if (!matter) {
@@ -550,6 +882,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "PATCH" && matterDetailMatch) {
+				if (!requireOwner(res, actor)) return;
 				const matterId = decodeURIComponent(matterDetailMatch[1]!);
 				const existing = store.getMatter(matterId);
 				if (!existing) {
@@ -560,6 +893,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
 				const hasOrgUpdate = Object.hasOwn(body, "orgId");
 				const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
+				const hasCollaboratorUpdate = Object.hasOwn(body, "collaboratorIds");
 				const workspaceId =
 					typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0
 						? body.workspaceId.trim()
@@ -589,6 +923,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "observerMemberIds must be an array of member IDs");
 					return;
 				}
+				const collaboratorIds = hasCollaboratorUpdate
+					? parseCollaboratorIds(body.collaboratorIds, store)
+					: undefined;
+				if (hasCollaboratorUpdate && !collaboratorIds) {
+					sendError(res, 400, "collaboratorIds must be an array of collaborator IDs");
+					return;
+				}
 				if ((hasWorkspaceUpdate || hasOrgUpdate) && orchestrator.isMatterRunning(matterId)) {
 					sendError(res, 409, "Stop the active turn before switching workspaces or organizations");
 					return;
@@ -606,12 +947,19 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					updated = store.updateMatterObservers(matterId, observerMemberIds);
 					broadcast("matter_updated", { matterId, observerMemberIds: updated.observerMemberIds });
 				}
+				if (collaboratorIds !== undefined) {
+					updated = store.updateMatterCollaborators(matterId, collaboratorIds);
+					broadcast("matter_updated", { matterId, collaboratorIds: updated.collaboratorIds });
+				}
 				sendJson(res, 200, { matter: updated });
 				return;
 			}
 
 			if (method === "POST" && pathname === "/api/matters") {
 				const body = await readJsonBody(req);
+				const mode =
+					body.mode === "discussion" ? "discussion" : body.mode === "ai_request" ? "ai_request" : "dispatch";
+				if (mode === "dispatch" && !requireOwner(res, actor)) return;
 				const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 				const parsedImages = parseIncomingImages(body.images);
 				if (!prompt && parsedImages.length === 0) {
@@ -654,6 +1002,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const deliverableType =
 					typeof body.deliverableType === "string" ? (body.deliverableType as DeliverableType) : undefined;
 				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+				const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
+				const initialCollaboratorIds =
+					actor!.collaborator.permissionRole !== "owner" &&
+					!requestedCollaboratorIds.includes(actor!.collaborator.id)
+						? [...requestedCollaboratorIds, actor!.collaborator.id]
+						: requestedCollaboratorIds;
 				const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 
 				const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId);
@@ -668,7 +1022,39 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					workspaceId: workspaceId ?? null,
 					orgId,
 					observerMemberIds,
+					collaboratorIds: initialCollaboratorIds,
 				});
+
+				if (mode === "discussion" || mode === "ai_request") {
+					const imageMetadataRefs = images.map((item, idx) => ({
+						...(item.url ? { url: item.url } : {}),
+						mimeType: item.mimeType,
+						name: item.name || `image-${idx + 1}`,
+					}));
+					const message = store.appendMessage({
+						matterId: matter.id,
+						channel: "user",
+						senderType: "user",
+						senderId: actor!.collaborator.id,
+						content: prompt,
+						metadata: {
+							mode,
+							workspaceId: workspaceId ?? null,
+							repoPath: resolve(boundWorkspace?.repoPath ?? orchestrator.getDefaultCwd()),
+							authorId: actor!.collaborator.id,
+							authorName: actor!.collaborator.name,
+							authorRole: actor!.collaborator.roleTitle,
+							permissionRole: actor!.collaborator.permissionRole,
+							...(mode === "ai_request" ? { aiRequestStatus: "pending" } : {}),
+							...(preferredMemberId ? { preferredMemberId } : {}),
+							...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+						},
+					});
+					const refreshedMatter = store.getMatter(matter.id) ?? matter;
+					broadcast("matter_message", { matterId: refreshedMatter.id, message, matter: refreshedMatter });
+					sendJson(res, 201, { matter: refreshedMatter, message, assignedMember: leadMember });
+					return;
+				}
 
 				runDispatchInBackground({
 					matterId: matter.id,
@@ -680,9 +1066,106 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					observerMemberIds,
 					deliverableTitle,
 					deliverableType,
+					author: toDispatchAuthor(actor!.collaborator),
 				});
 
 				sendJson(res, 202, { matter, assignedMember: leadMember });
+				return;
+			}
+
+			const matterApproveAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/approve-ai$/);
+			if (method === "POST" && matterApproveAiMatch) {
+				if (!requireOwner(res, actor)) return;
+				const matterId = decodeURIComponent(matterApproveAiMatch[1]!);
+				const messageId = decodeURIComponent(matterApproveAiMatch[2]!);
+				const matter = store.getMatter(matterId);
+				if (!matter) {
+					sendError(res, 404, `Matter not found: ${matterId}`);
+					return;
+				}
+				if (orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Matter already has an active turn");
+					return;
+				}
+				const targetMsg = store.getMessage(messageId);
+				if (!targetMsg || targetMsg.matterId !== matterId) {
+					sendError(res, 404, `Message not found: ${messageId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const updatedMetadata: Record<string, unknown> = {
+					...(targetMsg.metadata ?? {}),
+					aiRequestStatus: "approved",
+					approvedById: actor!.collaborator.id,
+					approvedByName: actor!.collaborator.name,
+					approvedAt: new Date().toISOString(),
+				};
+				const updatedMsg = store.updateMessageMetadata(messageId, updatedMetadata);
+				const refreshedMatter = store.getMatter(matterId) ?? matter;
+				if (updatedMsg) {
+					broadcast("matter_message", { matterId, message: updatedMsg, matter: refreshedMatter });
+				}
+				const requesterName =
+					typeof targetMsg.metadata?.authorName === "string" && targetMsg.metadata.authorName.trim()
+						? targetMsg.metadata.authorName.trim()
+						: "同事";
+				const dispatchPrompt = targetMsg.content.trim()
+					? `[Owner 已确认同事 ${requesterName} 的 AI 提请并安排执行]\n${targetMsg.content.trim()}`
+					: `请处理同事 ${requesterName} 在上一条 AI 提请中附带的图片。`;
+				const preferredMemberId =
+					typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
+						? body.preferredMemberId
+						: typeof targetMsg.metadata?.preferredMemberId === "string" &&
+								targetMsg.metadata.preferredMemberId.length > 0
+							? targetMsg.metadata.preferredMemberId
+							: (matter.leadMemberId ?? undefined);
+				const workspaceId =
+					typeof body.workspaceId === "string" && body.workspaceId.length > 0
+						? body.workspaceId
+						: (matter.workspaceId ?? undefined);
+				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+				const images = await loadStoredImagesFromRefs(targetMsg.metadata?.images, uploadsDir, memoryUploads);
+
+				runDispatchInBackground({
+					matterId: matter.id,
+					prompt: dispatchPrompt,
+					images: images.length > 0 ? images : undefined,
+					preferredMemberId,
+					workspaceId,
+					observerMemberIds,
+					author: toDispatchAuthor(actor!.collaborator),
+				});
+
+				sendJson(res, 202, { accepted: true, matterId: matter.id, approvedMessageId: messageId });
+				return;
+			}
+
+			const matterDismissAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/dismiss-ai$/);
+			if (method === "POST" && matterDismissAiMatch) {
+				if (!requireOwner(res, actor)) return;
+				const matterId = decodeURIComponent(matterDismissAiMatch[1]!);
+				const messageId = decodeURIComponent(matterDismissAiMatch[2]!);
+				const matter = store.getMatter(matterId);
+				if (!matter) {
+					sendError(res, 404, `Matter not found: ${matterId}`);
+					return;
+				}
+				const targetMsg = store.getMessage(messageId);
+				if (!targetMsg || targetMsg.matterId !== matterId) {
+					sendError(res, 404, `Message not found: ${messageId}`);
+					return;
+				}
+				const updatedMsg = store.updateMessageMetadata(messageId, {
+					...(targetMsg.metadata ?? {}),
+					aiRequestStatus: "dismissed",
+					dismissedById: actor!.collaborator.id,
+					dismissedByName: actor!.collaborator.name,
+					dismissedAt: new Date().toISOString(),
+				});
+				if (updatedMsg) {
+					broadcast("matter_message", { matterId, message: updatedMsg, matter });
+				}
+				sendJson(res, 200, { ok: true, message: updatedMsg });
 				return;
 			}
 
@@ -694,11 +1177,14 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Matter not found: ${matterId}`);
 					return;
 				}
-				if (orchestrator.isMatterRunning(matterId)) {
+				const body = await readJsonBody(req);
+				const mode =
+					body.mode === "discussion" ? "discussion" : body.mode === "ai_request" ? "ai_request" : "dispatch";
+				if (mode === "dispatch" && !requireOwner(res, actor)) return;
+				if (mode === "dispatch" && orchestrator.isMatterRunning(matterId)) {
 					sendError(res, 409, "Matter already has an active turn");
 					return;
 				}
-				const body = await readJsonBody(req);
 				const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 				const parsedImages = parseIncomingImages(body.images);
 				if (!prompt && parsedImages.length === 0) {
@@ -720,6 +1206,41 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 				const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 
+				if (mode === "discussion" || mode === "ai_request") {
+					if (actor!.collaborator.permissionRole !== "owner") {
+						store.addMatterCollaborator(matterId, actor!.collaborator.id);
+					}
+					const boundWorkspace = workspaceId ? store.getWorkspace(workspaceId) : null;
+					const imageMetadataRefs = images.map((item, idx) => ({
+						...(item.url ? { url: item.url } : {}),
+						mimeType: item.mimeType,
+						name: item.name || `image-${idx + 1}`,
+					}));
+					const message = store.appendMessage({
+						matterId: matter.id,
+						channel: "user",
+						senderType: "user",
+						senderId: actor!.collaborator.id,
+						content: prompt,
+						metadata: {
+							mode,
+							workspaceId: workspaceId ?? null,
+							repoPath: resolve(boundWorkspace?.repoPath ?? orchestrator.getDefaultCwd()),
+							authorId: actor!.collaborator.id,
+							authorName: actor!.collaborator.name,
+							authorRole: actor!.collaborator.roleTitle,
+							permissionRole: actor!.collaborator.permissionRole,
+							...(mode === "ai_request" ? { aiRequestStatus: "pending" } : {}),
+							...(preferredMemberId ? { preferredMemberId } : {}),
+							...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+						},
+					});
+					const refreshedMatter = store.getMatter(matterId) ?? matter;
+					broadcast("matter_message", { matterId: matter.id, message, matter: refreshedMatter });
+					sendJson(res, 201, { accepted: false, mode, message, matter: refreshedMatter });
+					return;
+				}
+
 				runDispatchInBackground({
 					matterId: matter.id,
 					prompt,
@@ -728,6 +1249,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					workspaceId,
 					observerMemberIds,
 					deliverableTitle,
+					author: toDispatchAuthor(actor!.collaborator),
 				});
 
 				sendJson(res, 202, { accepted: true, matterId: matter.id });
@@ -736,6 +1258,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const dialogMatch = pathname.match(/^\/api\/dialogs\/([^/]+)\/respond$/);
 			if (method === "POST" && dialogMatch) {
+				if (!requireOwner(res, actor)) return;
 				const dialogId = decodeURIComponent(dialogMatch[1]!);
 				const body = await readJsonBody(req);
 				let payload: RpcExtensionUIResponsePayload;
@@ -768,7 +1291,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const body = await readJsonBody(req);
-				const feedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
+				if (body.autoDistill === true && !requireOwner(res, actor)) return;
+				const rawFeedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
+				const feedback =
+					rawFeedback && actor!.collaborator.permissionRole !== "owner"
+						? `[${actor!.collaborator.name} (${actor!.collaborator.roleTitle})]: ${rawFeedback}`
+						: rawFeedback;
 				const rawRating = body.rating;
 				const rating: FeedbackRating | undefined =
 					rawRating === "positive" || rawRating === "negative" || rawRating === "neutral" ? rawRating : undefined;
@@ -828,6 +1356,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/organizations") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const name = typeof body.name === "string" ? body.name.trim() : "";
 				if (!name) {
@@ -848,6 +1377,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const orgDefaultMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/default$/);
 			if (method === "POST" && orgDefaultMatch) {
+				if (!requireOwner(res, actor)) return;
 				const orgId = decodeURIComponent(orgDefaultMatch[1]!);
 				if (!store.getOrganization(orgId)) {
 					sendError(res, 404, `Organization not found: ${orgId}`);
@@ -861,6 +1391,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const orgPatchMatch = pathname.match(/^\/api\/organizations\/([^/]+)$/);
 			if (method === "PATCH" && orgPatchMatch) {
+				if (!requireOwner(res, actor)) return;
 				const orgId = decodeURIComponent(orgPatchMatch[1]!);
 				if (!store.getOrganization(orgId)) {
 					sendError(res, 404, `Organization not found: ${orgId}`);
@@ -879,6 +1410,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/workspaces") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const name = typeof body.name === "string" ? body.name.trim() : "";
 				const repoPath = typeof body.repoPath === "string" ? body.repoPath.trim() : "";
@@ -916,6 +1448,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const wsPatchMatch = pathname.match(/^\/api\/workspaces\/([^/]+)$/);
 			if (method === "PATCH" && wsPatchMatch) {
+				if (!requireOwner(res, actor)) return;
 				const workspaceId = decodeURIComponent(wsPatchMatch[1]!);
 				if (!store.getWorkspace(workspaceId)) {
 					sendError(res, 404, `Workspace not found: ${workspaceId}`);
@@ -946,6 +1479,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/members") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const name = typeof body.name === "string" ? body.name.trim() : "";
 				const title = typeof body.title === "string" ? body.title.trim() : "";
@@ -1045,6 +1579,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const memberPatchMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
 			if (method === "PATCH" && memberPatchMatch) {
+				if (!requireOwner(res, actor)) return;
 				const memberId = decodeURIComponent(memberPatchMatch[1]!);
 				if (!store.getMember(memberId)) {
 					sendError(res, 404, `Member not found: ${memberId}`);
@@ -1065,6 +1600,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const memberPrimaryMatch = pathname.match(/^\/api\/members\/([^/]+)\/primary$/);
 			if (method === "POST" && memberPrimaryMatch) {
+				if (!requireOwner(res, actor)) return;
 				const memberId = decodeURIComponent(memberPrimaryMatch[1]!);
 				const member = store.setPrimaryContact(memberId);
 				broadcast("team_updated", { memberId: member.id });
@@ -1091,6 +1627,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/members/import") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const markdown = typeof body.markdown === "string" ? body.markdown : "";
 				if (!markdown.trim()) {
@@ -1109,6 +1646,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/memories") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const memberId = typeof body.memberId === "string" ? body.memberId.trim() : "";
 				const content = typeof body.content === "string" ? body.content.trim() : "";
@@ -1203,6 +1741,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const memoryEvalMatch = pathname.match(/^\/api\/memories\/([^/]+)\/evaluate$/);
 			if (method === "POST" && memoryEvalMatch) {
+				if (!requireOwner(res, actor)) return;
 				const memoryId = decodeURIComponent(memoryEvalMatch[1]!);
 				const existing = store.getMemory(memoryId);
 				if (!existing) {
@@ -1228,6 +1767,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const memoryPatchMatch = pathname.match(/^\/api\/memories\/([^/]+)$/);
 			if (method === "PATCH" && memoryPatchMatch) {
+				if (!requireOwner(res, actor)) return;
 				const memoryId = decodeURIComponent(memoryPatchMatch[1]!);
 				const existing = store.getMemory(memoryId);
 				if (!existing) {
@@ -1312,6 +1852,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/rsi/distill/abort") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 				if (!matterId) {
@@ -1324,6 +1865,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/rsi/distill") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 				if (!matterId) {
@@ -1385,6 +1927,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "POST" && pathname === "/api/previews") {
+				if (!requireOwner(res, actor)) return;
 				const body = await readJsonBody(req);
 				const title = typeof body.title === "string" ? body.title.trim() : "独立预览服务";
 				const deliverableId = typeof body.deliverableId === "string" ? body.deliverableId : null;
@@ -1424,6 +1967,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const previewStopMatch = pathname.match(/^\/api\/previews\/([^/]+)\/stop$/);
 			if (method === "POST" && previewStopMatch) {
+				if (!requireOwner(res, actor)) return;
 				const previewId = decodeURIComponent(previewStopMatch[1]!);
 				const info = await previewManager.stopPreview(previewId);
 				if (!info) {

@@ -12,6 +12,7 @@ import {
 	resolveEffectiveGitIdentity,
 } from "../storage/repositories.ts";
 import type {
+	CollaboratorRole,
 	Deliverable,
 	DeliverableType,
 	FeedbackRating,
@@ -166,6 +167,12 @@ export interface DispatchMatterInput {
 	observerMemberIds?: string[];
 	deliverableType?: DeliverableType;
 	deliverableTitle?: string;
+	author?: {
+		collaboratorId: string;
+		name: string;
+		roleTitle: string;
+		permissionRole: CollaboratorRole;
+	};
 	timeoutMs?: number;
 	onTextDelta?: (delta: string) => void;
 	onProgress?: (progress: DispatchProgressEvent) => void;
@@ -482,6 +489,31 @@ function summarizeObserverProgress(
 	return `团队旁听 ${names}（${latest}）`;
 }
 
+function formatMessageHistorySpeaker(message: MatterMessage): string {
+	if (message.senderType === "user") {
+		const authorName =
+			typeof message.metadata?.authorName === "string" && message.metadata.authorName.trim()
+				? message.metadata.authorName.trim()
+				: null;
+		const authorRole =
+			typeof message.metadata?.authorRole === "string" && message.metadata.authorRole.trim()
+				? message.metadata.authorRole.trim()
+				: null;
+		const modeTag =
+			message.metadata?.mode === "discussion"
+				? "[团队讨论]"
+				: message.metadata?.mode === "ai_request"
+					? "[同事提请]"
+					: "";
+		if (authorName) {
+			const rolePart = authorRole ? ` (${authorRole})` : "";
+			return modeTag ? `${modeTag} ${authorName}${rolePart}` : `${authorName}${rolePart}`;
+		}
+		if (modeTag) return `${modeTag} user/${message.senderId}`;
+	}
+	return `${message.senderType}/${message.senderId}`;
+}
+
 function formatMessageHistoryContent(message: MatterMessage): string {
 	const rawImages = Array.isArray(message.metadata?.images) ? message.metadata.images : [];
 	const trimmed = message.content.trim();
@@ -537,7 +569,7 @@ function buildObserverContextDigest(input: {
 			.slice(-16)
 			.map(
 				(message) =>
-					`- ${message.senderType}/${message.senderId}: ${truncateInline(formatMessageHistoryContent(message), 400)}`,
+					`- ${formatMessageHistorySpeaker(message)}: ${truncateInline(formatMessageHistoryContent(message), 400)}`,
 			);
 		const headerLen = parts.join("\n").length;
 		const remainingBudget = Math.max(1200, 6000 - headerLen - 32);
@@ -673,6 +705,10 @@ export class TeamOrchestrator {
 		this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
 		this.dialogHandler = options.onDialog;
 		this.syncRoleTemplates(options.templates);
+	}
+
+	getDefaultCwd(): string {
+		return this.defaultCwd;
 	}
 
 	setDialogHandler(handler: OrchestratorDialogHandler | undefined): void {
@@ -1000,15 +1036,27 @@ ${this.store
 				matter = this.store.updateMatterObservers(matter.id, input.observerMemberIds);
 			}
 			this.store.updateMatterStatus(matter.id, "open");
+			if (input.author && input.author.permissionRole !== "owner") {
+				this.store.addMatterCollaborator(matter.id, input.author.collaboratorId);
+			}
+
 			const message = this.store.appendMessage({
 				matterId: matter.id,
 				channel: "user",
 				senderType: "user",
-				senderId: "user",
+				senderId: input.author?.collaboratorId ?? "user",
 				content: input.prompt,
 				metadata: {
 					workspaceId: workspace?.id ?? null,
 					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+					...(input.author
+						? {
+								authorId: input.author.collaboratorId,
+								authorName: input.author.name,
+								authorRole: input.author.roleTitle,
+								permissionRole: input.author.permissionRole,
+							}
+						: {}),
 					...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
 				},
 			});
@@ -1999,8 +2047,7 @@ ${this.store
 					: filteredHistory
 							.slice(-12)
 							.map(
-								(message) =>
-									`${message.senderType}/${message.senderId}: ${formatMessageHistoryContent(message)}`,
+								(message) => `${formatMessageHistorySpeaker(message)}: ${formatMessageHistoryContent(message)}`,
 							)
 							.join("\n\n")
 							.slice(-20000);

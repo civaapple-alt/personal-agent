@@ -20,7 +20,8 @@
 
 - `matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。
 - `fetchBootstrap` 与 `fetchMatterDetail` 消费服务端返回的 `organizations` 与 `activeRuns` / `activeRun`，保证页面刷新（F5）后立即恢复进行中进度、计时与停止按钮。
-- 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`memory_updated` 等 SSE 事件完成实时同步。
+- 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`memory_updated`、`matter_message`、
+  `collaborator_updated` 等 SSE 事件完成实时同步。
 - `matter_progress` 附带 `collabUpdated` 时刷新事项详情（主负责人回复或旁听同事主动插话后即时同步）；`matter_updated` 同步旁听成员列表。
 - 工作区或旁听变更失败/409 需呈现错误，不能只乐观改变选项而忽略后端状态；取消、错误和等待用户状态都要有对应刷新路径。
 
@@ -32,12 +33,19 @@
   - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
   输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。
-- 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及 [utils.ts](utils.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
-- [ChatStage](components/ChatStage.tsx) 支持在输入框点击图片按钮、拖拽图片到输入区或通过 `Ctrl/Cmd+V` 粘贴截图（最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）。
+- [ChatStage](components/ChatStage.tsx) 顶栏下方展示全局「参与人员（所有者与协同同事）+ AI 团队（主责/旁听/协同）」
+  角色条与「邀请/管理同事」浮层；发言区显式切换「团队聊天讨论」与「给 AI 安排事项 / 提请 AI 处理」，
+  讨论/提请/派发消息带独立归属徽章，所有者可一键「确认并派发 AI」或「忽略提请」。
+- 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及
+  [utils.ts](utils.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
+- [ChatStage](components/ChatStage.tsx) 支持在输入框点击图片按钮、拖拽图片到输入区或通过 `Ctrl/Cmd+V` 粘贴截图
+  （最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）。
 
 ## 组织身份、团队记忆与成果阅读
 
-- [TeamView](components/TeamView.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖组织与成员身份视图：
+- [TeamView](components/TeamView.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖协同同事管理、组织与成员身份视图：
+  - 支持所有者新增协同同事、复制局域网邀请链接（`?invite=<token>`）、重置口令、以同事视角本地体验并支持在侧栏「恢复所有者」，
+    同时在未认证局域网访问时经 [App.tsx](App.tsx) 显示邀请登录门禁，并在协同成员视图屏蔽管理员操作与 AI 经验提炼入口。
   - 支持默认组织徽标与「设为默认」切换、组织创建/编辑、新仓库默认选定默认组织（可选独立无组织）、
     仓库 `Git Committer` 真实用户展示、成员 `Git Author（角色）` vs `Git Committer（真实用户）` 与三层记忆筛选；
     经验表单与卡片亦优先预选默认组织。

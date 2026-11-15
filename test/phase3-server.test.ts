@@ -1666,6 +1666,7 @@ test("HTTP server persists uploaded chat images to uploadsDir, forwards them to 
 		const missingUpload = await fetch(`${baseUrl}/api/uploads/does-not-exist.png`);
 		assert.equal(missingUpload.status, 404);
 	} finally {
+		await orchestrator.shutdown();
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
@@ -1976,6 +1977,259 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		};
 		assert.equal(patchedOrgMatter.matter.orgId, organization.id);
 	} finally {
+		await orchestrator.shutdown();
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test("Multi-human restricted collaboration: auth gate, discussion vs ai_request vs dispatch, owner approval, and token redaction", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const owner = store.ensureOwnerCollaborator("团队所有者");
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-collab-"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const capturedPrompts: string[] = [];
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		defaultCwd: tempDir,
+		workerFactory: (opts) =>
+			({
+				options: opts,
+				onSessionEvent: () => () => {},
+				onNotice: () => () => {},
+				setDialogHandler: () => {},
+				start: async () => {
+					await reportReady(opts);
+				},
+				stop: async () => {},
+				getState: async () => ({ sessionId: "s", isStreaming: false }),
+				runPromptAndWait: async (prompt: string) => {
+					capturedPrompts.push(prompt);
+					return {
+						disposition: "started",
+						aborted: false,
+						assistantText: "已按所有者确认的提请完成分析。",
+						assistantMessages: [],
+						toolExecutions: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+					};
+				},
+			}) as unknown as RpcWorkerLike,
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		uploadsDir: join(tempDir, "uploads"),
+		requireAuth: true,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		// Unauthenticated LAN session check & API rejection
+		const unauthSession = await fetch(`${baseUrl}/api/auth/session`);
+		assert.equal(unauthSession.status, 200);
+		const unauthSessionJson = (await unauthSession.json()) as { authenticated: boolean; currentUser: unknown };
+		assert.equal(unauthSessionJson.authenticated, false);
+		assert.equal(unauthSessionJson.currentUser, null);
+
+		const unauthBoot = await fetch(`${baseUrl}/api/bootstrap`);
+		assert.equal(unauthBoot.status, 401);
+
+		// Owner login sets cookie & adds collaborator
+		const ownerLogin = await fetch(`${baseUrl}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: owner.token }),
+		});
+		assert.equal(ownerLogin.status, 200);
+		const ownerCookie = ownerLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
+		assert.match(ownerCookie, /^pa_session=/);
+
+		const addCollabRes = await fetch(`${baseUrl}/api/collaborators`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
+			body: JSON.stringify({ name: "李四", roleTitle: "后端研发" }),
+		});
+		assert.equal(addCollabRes.status, 201);
+		const { collaborator: colleague } = (await addCollabRes.json()) as {
+			collaborator: { id: string; name: string; roleTitle: string; token: string; permissionRole: string };
+		};
+		assert.equal(colleague.permissionRole, "collaborator");
+		assert.ok(colleague.token.startsWith("inv_"));
+
+		// Collaborator login & token redaction
+		const collabLogin = await fetch(`${baseUrl}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: colleague.token }),
+		});
+		assert.equal(collabLogin.status, 200);
+		const collabCookie = collabLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+		const collabBootRes = await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: collabCookie } });
+		assert.equal(collabBootRes.status, 200);
+		const collabBoot = (await collabBootRes.json()) as {
+			currentUser: { id: string; permissionRole: string; token?: string };
+			collaborators: Array<{ id: string; token?: string }>;
+		};
+		assert.equal(collabBoot.currentUser.id, colleague.id);
+		assert.equal(collabBoot.currentUser.permissionRole, "collaborator");
+		for (const item of collabBoot.collaborators) {
+			assert.equal(item.token, undefined);
+		}
+
+		// Collaborator is blocked from admin & direct AI dispatch
+		for (const [urlPath, payload] of [
+			["/api/matters", { prompt: "直接触发 AI" }],
+			["/api/organizations", { name: "Unauthorized Org" }],
+			["/api/workspaces", { name: "bad-ws", repoPath: tempDir }],
+			["/api/members", { name: "hack", title: "Hack" }],
+			["/api/previews", { url: "http://127.0.0.1:9999" }],
+		] as const) {
+			const res = await fetch(`${baseUrl}${urlPath}`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: collabCookie },
+				body: JSON.stringify(payload),
+			});
+			assert.equal(res.status, 403, `Expected 403 for collaborator on ${urlPath}`);
+		}
+
+		// Collaborator starts a matter in discussion mode & submits follow-up discussion + ai_request
+		const startDiscussionRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ mode: "discussion", prompt: "大家先讨论一下接口协议字段名" }),
+		});
+		assert.equal(startDiscussionRes.status, 201);
+		const { matter } = (await startDiscussionRes.json()) as {
+			matter: { id: string; collaboratorIds: string[] };
+		};
+		assert.ok(matter.collaboratorIds.includes(colleague.id));
+
+		const postAiRequestRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ mode: "ai_request", prompt: "请 AI 根据刚才讨论整理 API 文档" }),
+		});
+		assert.equal(postAiRequestRes.status, 201);
+		const { message: requestMsg } = (await postAiRequestRes.json()) as {
+			message: { id: string; metadata: Record<string, unknown> };
+		};
+		assert.equal(requestMsg.metadata.mode, "ai_request");
+		assert.equal(requestMsg.metadata.aiRequestStatus, "pending");
+
+		// Collaborator cannot directly dispatch on existing matter
+		const forbiddenDispatch = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ prompt: "绕过审核直接派发" }),
+		});
+		assert.equal(forbiddenDispatch.status, 403);
+
+		// Collaborator cannot approve own ai_request
+		const forbiddenApprove = await fetch(`${baseUrl}/api/matters/${matter.id}/messages/${requestMsg.id}/approve-ai`, {
+			method: "POST",
+			headers: { Cookie: collabCookie },
+		});
+		assert.equal(forbiddenApprove.status, 403);
+
+		// Owner approves ai_request -> AI worker executes with discussion + request context
+		const ownerApprove = await fetch(`${baseUrl}/api/matters/${matter.id}/messages/${requestMsg.id}/approve-ai`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
+			body: "{}",
+		});
+		assert.equal(ownerApprove.status, 202);
+
+		await new Promise<void>((resolveWait, rejectWait) => {
+			const deadline = Date.now() + 2000;
+			const poll = () => {
+				if (capturedPrompts.length > 0 && !orchestrator.isMatterRunning(matter.id)) {
+					resolveWait();
+					return;
+				}
+				if (Date.now() > deadline) {
+					rejectWait(new Error("Timed out waiting for approved AI request dispatch"));
+					return;
+				}
+				setTimeout(poll, 25);
+			};
+			poll();
+		});
+		assert.match(capturedPrompts[0] ?? "", /\[团队讨论\] 李四 \(后端研发\): 大家先讨论一下接口协议字段名/);
+		assert.match(capturedPrompts[0] ?? "", /Owner 已确认同事 李四 的 AI 提请并安排执行/);
+
+		// Collaborator can rate deliverable without autoDistill, but autoDistill: true returns 403
+		const deliv = store.recordDeliverable({
+			matterId: matter.id,
+			memberId: "product-manager",
+			type: "document",
+			title: "接口设计方案",
+			summary: "Draft",
+			contentOrPath: "# API",
+		});
+		const forbiddenDistill = await fetch(`${baseUrl}/api/deliverables/${deliv.id}/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ feedback: "需要补充错误码", rating: "neutral", autoDistill: true }),
+		});
+		assert.equal(forbiddenDistill.status, 403);
+
+		const allowedFeedback = await fetch(`${baseUrl}/api/deliverables/${deliv.id}/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ feedback: "字段定义清晰", rating: "positive" }),
+		});
+		assert.equal(allowedFeedback.status, 200);
+		const fbJson = (await allowedFeedback.json()) as { feedback: string; rating: string };
+		assert.equal(fbJson.rating, "positive");
+		assert.equal(fbJson.feedback, "[李四 (后端研发)]: 字段定义清晰");
+
+		// Dismiss flow + token regeneration
+		const secondReqRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ mode: "ai_request", prompt: "顺便重构一下数据库层" }),
+		});
+		assert.equal(secondReqRes.status, 201);
+		const { message: secondReq } = (await secondReqRes.json()) as { message: { id: string } };
+		const dismissRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages/${secondReq.id}/dismiss-ai`, {
+			method: "POST",
+			headers: { Cookie: ownerCookie },
+		});
+		assert.equal(dismissRes.status, 200);
+		assert.equal(store.getMessage(secondReq.id)?.metadata?.aiRequestStatus, "dismissed");
+
+		const regenRes = await fetch(`${baseUrl}/api/collaborators/${colleague.id}/regenerate-token`, {
+			method: "POST",
+			headers: { Cookie: ownerCookie },
+		});
+		assert.equal(regenRes.status, 200);
+		const oldLogin = await fetch(`${baseUrl}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: colleague.token }),
+		});
+		assert.equal(oldLogin.status, 401);
+	} finally {
+		await orchestrator.shutdown();
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();

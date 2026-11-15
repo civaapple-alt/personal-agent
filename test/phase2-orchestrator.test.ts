@@ -675,3 +675,69 @@ test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII
 		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });
+
+test("TeamOrchestrator preserves multi-human discussion speaker attribution and tracks non-owner collaborators", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-collab-orch-"));
+	const db = openPersonalAgentDatabase(join(tempRoot, "team.sqlite"));
+	try {
+		const store = new PersonalAgentStore(db);
+		const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+		const workers: FakeRpcWorker[] = [];
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			sessionDir: tempRoot,
+			noSession: true,
+			defaultCwd: tempRoot,
+			workerFactory: (opts) => {
+				const w = new FakeRpcWorker(opts, async () => "已收到各位成员的讨论，下面是执行方案。");
+				workers.push(w);
+				return w;
+			},
+		});
+
+		const lead = store.getMember("product-manager")!;
+		const matter = store.createMatter({
+			title: "多人协同讨论测试",
+			leadMemberId: lead.id,
+			workspaceId: null,
+		});
+
+		store.appendMessage({
+			matterId: matter.id,
+			channel: "user",
+			senderType: "user",
+			senderId: "collab-alice",
+			content: "我这边建议先做房间人员展示和聊天隔离，暂不动跨网段鉴权。",
+			metadata: {
+				mode: "discussion",
+				workspaceId: null,
+				repoPath: resolve(orchestrator.getDefaultCwd()),
+				authorId: "collab-alice",
+				authorName: "Alice",
+				authorRole: "后端研发",
+				permissionRole: "collaborator",
+			},
+		});
+
+		await orchestrator.dispatchMatter({
+			matterId: matter.id,
+			prompt: "请基于上面的团队讨论整理拆解方案",
+			preferredMemberId: lead.id,
+			author: {
+				collaboratorId: "collab-bob",
+				name: "Bob",
+				roleTitle: "产品测试",
+				permissionRole: "collaborator",
+			},
+		});
+
+		assert.equal(workers.length, 1);
+		assert.match(workers[0]?.receivedPrompts[0] ?? "", /\[团队讨论\] Alice \(后端研发\): 我这边建议先做房间人员展示/);
+		const updatedMatter = store.getMatter(matter.id);
+		assert.ok(updatedMatter?.collaboratorIds.includes("collab-bob"));
+	} finally {
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});

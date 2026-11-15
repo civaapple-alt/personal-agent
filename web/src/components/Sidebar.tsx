@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BootstrapPayload, MatterDto, MatterProgressDto } from "../api.ts";
+import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
@@ -7,6 +7,7 @@ import { BotFaceIcon } from "./BotFaceIcon.tsx";
 interface SidebarProps {
 	activeTab: NavTab;
 	bootstrap: BootstrapPayload | null;
+	currentUser?: CollaboratorDto | null;
 	filteredMatters: MatterDto[];
 	selectedMatterId: string | null;
 	selectedMemberId: string;
@@ -18,11 +19,13 @@ interface SidebarProps {
 	onNavigate: (route: HashRoute) => void;
 	onToggleMember: (memberId: string) => void;
 	onNewMatter: () => void;
+	onSwitchOrLogout?: () => void;
 }
 
 export function Sidebar({
 	activeTab,
 	bootstrap,
+	currentUser,
 	filteredMatters,
 	selectedMatterId,
 	selectedMemberId,
@@ -34,6 +37,7 @@ export function Sidebar({
 	onNavigate,
 	onToggleMember,
 	onNewMatter,
+	onSwitchOrLogout,
 }: SidebarProps) {
 	const [searchOpen, setSearchOpen] = useState(false);
 
@@ -184,8 +188,21 @@ export function Sidebar({
 					<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
 				</button>
 				<div className="sidebar-status-row">
-					<span className="muted-tiny">Pi RPC · kimi-for-coding</span>
-					<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>
+					<span className="muted-tiny">
+						{currentUser
+							? `${currentUser.name} · ${currentUser.permissionRole === "owner" ? "所有者" : "协同"}`
+							: "Pi RPC · kimi-for-coding"}
+					</span>
+					<div className="sidebar-status-actions">
+						{currentUser?.permissionRole === "collaborator" && onSwitchOrLogout && (
+							<button type="button" className="btn-inline btn-xs" onClick={onSwitchOrLogout}>
+								{window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+									? "恢复所有者"
+									: "退出"}
+							</button>
+						)}
+						<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>
+					</div>
 				</div>
 			</div>
 		</aside>

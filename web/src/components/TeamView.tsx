@@ -1,7 +1,10 @@
 import { type ChangeEvent, useMemo, useState } from "react";
 import {
+	type CollaboratorDto,
+	createCollaborator,
 	createMember,
 	createOrganization,
+	deleteCollaborator,
 	exportMemberPackage,
 	importMemberPackage,
 	type MatterDto,
@@ -11,6 +14,7 @@ import {
 	type MemoryStatus,
 	type OrganizationDto,
 	type RoleTemplateDto,
+	regenerateCollaboratorToken,
 	setDefaultOrganization,
 	setPrimaryMember,
 	type TeamMemberDto,
@@ -32,6 +36,8 @@ import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { ExperienceItemCard, ManualExperienceForm } from "./ExperienceReviewPanel.tsx";
 
 interface TeamViewProps {
+	currentUser?: CollaboratorDto | null;
+	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations?: OrganizationDto[];
@@ -45,6 +51,8 @@ interface TeamViewProps {
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
+	onPreviewAsCollaborator?: (token: string) => void;
+	onRestoreOwner?: () => void;
 	onAssignTask: (memberId: string) => void;
 	onOpenMatter?: (matterId: string) => void;
 	onOpenDeliverable?: (deliverableId: string) => void;
@@ -53,6 +61,8 @@ interface TeamViewProps {
 type MemoryFilterTab = "all" | "candidate" | "verified" | "archived";
 
 export function TeamView({
+	currentUser,
+	collaborators = [],
 	members,
 	workspaces,
 	organizations = [],
@@ -66,10 +76,17 @@ export function TeamView({
 	onRefresh,
 	onNotice,
 	onError,
+	onPreviewAsCollaborator,
+	onRestoreOwner,
 	onAssignTask,
 	onOpenMatter,
 	onOpenDeliverable,
 }: TeamViewProps) {
+	const isOwner = currentUser?.permissionRole !== "collaborator";
+	const [showAddCollab, setShowAddCollab] = useState(false);
+	const [collabNameInput, setCollabNameInput] = useState("");
+	const [collabRoleInput, setCollabRoleInput] = useState("");
+	const [collabOrgInput, setCollabOrgInput] = useState("");
 	const [showAddMember, setShowAddMember] = useState(false);
 	const [newMemberName, setNewMemberName] = useState("");
 	const [newMemberTitle, setNewMemberTitle] = useState("");
@@ -298,28 +315,30 @@ export function TeamView({
 						<h1>我的团队</h1>
 						<p>查看角色分工与积累经验，支持新增自定义角色，或导入导出脱敏角色能力包</p>
 					</div>
-					<div className="actions-row" style={{ marginTop: 0 }}>
-						<button
-							type="button"
-							className="btn-pill-dark"
-							onClick={() => {
-								setShowAddMember((v) => !v);
-								setShowImportMember(false);
-							}}
-						>
-							+ 新增角色
-						</button>
-						<button
-							type="button"
-							className="btn-pill-outline"
-							onClick={() => {
-								setShowImportMember((v) => !v);
-								setShowAddMember(false);
-							}}
-						>
-							导入角色包
-						</button>
-					</div>
+					{isOwner && (
+						<div className="actions-row" style={{ marginTop: 0 }}>
+							<button
+								type="button"
+								className="btn-pill-dark"
+								onClick={() => {
+									setShowAddMember((v) => !v);
+									setShowImportMember(false);
+								}}
+							>
+								+ 新增角色
+							</button>
+							<button
+								type="button"
+								className="btn-pill-outline"
+								onClick={() => {
+									setShowImportMember((v) => !v);
+									setShowAddMember(false);
+								}}
+							>
+								导入角色包
+							</button>
+						</div>
+					)}
 				</div>
 
 				{showAddMember && (
@@ -460,14 +479,198 @@ export function TeamView({
 				<div className="org-strip-card">
 					<div className="banner-row">
 						<div>
+							<strong style={{ fontSize: 14 }}>人类协作成员与局域网邀请（方案 B）</strong>
+							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
+								所有者掌管代码执行、仓库切换与角色设置；同事通过专属邀请链接加入同一房间讨论、提请 AI 与验收评价
+							</span>
+						</div>
+						<div style={{ display: "flex", gap: 8 }}>
+							{!isOwner && onRestoreOwner && (
+								<button type="button" className="btn-pill-outline btn-xs" onClick={onRestoreOwner}>
+									恢复所有者身份
+								</button>
+							)}
+							{isOwner && (
+								<button
+									type="button"
+									className="btn-pill-outline btn-xs"
+									onClick={() => setShowAddCollab((prev) => !prev)}
+								>
+									+ 新增邀请同事
+								</button>
+							)}
+						</div>
+					</div>
+
+					<div className="collab-humans-list">
+						{collaborators.map((col) => {
+							const isSelf = currentUser?.id === col.id;
+							const orgLabel = col.orgId
+								? (organizations.find((o) => o.id === col.orgId)?.name ?? col.orgId)
+								: null;
+							return (
+								<div key={col.id} className={`org-chip-card collab-human-card ${isSelf ? "is-default" : ""}`}>
+									<div className="org-chip-head">
+										<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+											<strong>{col.name}</strong>
+											<span className={`pill ${col.permissionRole === "owner" ? "live" : ""}`}>
+												{col.permissionRole === "owner" ? "所有者" : "协同成员"}
+											</span>
+											{isSelf && <span className="roster-me">当前视角</span>}
+										</div>
+										<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+											{isOwner && col.token && col.permissionRole !== "owner" && (
+												<>
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => {
+															const inviteUrl = `${window.location.origin}/?invite=${encodeURIComponent(col.token!)}`;
+															void navigator.clipboard
+																.writeText(inviteUrl)
+																.then(() => {
+																	const lanHint =
+																		window.location.hostname === "127.0.0.1" ||
+																		window.location.hostname === "localhost"
+																			? "（局域网访问请以 PA_HOST=0.0.0.0 启动并将域名替换为本机局域网 IP）"
+																			: "";
+																	onNotice(`已复制「${col.name}」的邀请链接${lanHint}`);
+																})
+																.catch(() => onNotice(`邀请链接：${inviteUrl}`));
+														}}
+													>
+														复制邀请链接
+													</button>
+													{onPreviewAsCollaborator && (
+														<button
+															type="button"
+															className="btn-inline"
+															onClick={() => onPreviewAsCollaborator(col.token!)}
+														>
+															以此身份体验
+														</button>
+													)}
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => {
+															void regenerateCollaboratorToken(col.id)
+																.then(async () => {
+																	await onRefresh();
+																	onNotice(`已重新生成「${col.name}」的邀请口令`);
+																})
+																.catch((err: unknown) =>
+																	onError(err instanceof Error ? err.message : String(err)),
+																);
+														}}
+													>
+														重置口令
+													</button>
+													<button
+														type="button"
+														className="btn-inline danger"
+														onClick={() => {
+															void deleteCollaborator(col.id)
+																.then(async () => {
+																	await onRefresh();
+																	onNotice(`已移除协作成员「${col.name}」`);
+																})
+																.catch((err: unknown) =>
+																	onError(err instanceof Error ? err.message : String(err)),
+																);
+														}}
+													>
+														移除
+													</button>
+												</>
+											)}
+										</div>
+									</div>
+									<div className="org-chip-meta">
+										<span>岗位：{col.roleTitle}</span>
+										{orgLabel && <span> · 组织：{orgLabel}</span>}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+
+					{showAddCollab && isOwner && (
+						<div className="org-inline-form">
+							<div style={{ fontWeight: 600, fontSize: 13 }}>新增协同同事并生成邀请链接</div>
+							<div className="form-grid">
+								<input
+									className="input-field"
+									placeholder="同事姓名（如：李四）"
+									value={collabNameInput}
+									onChange={(e) => setCollabNameInput(e.target.value)}
+								/>
+								<input
+									className="input-field"
+									placeholder="岗位/分工（如：后端研发、设计、测试）"
+									value={collabRoleInput}
+									onChange={(e) => setCollabRoleInput(e.target.value)}
+								/>
+							</div>
+							<div className="actions-row" style={{ marginTop: 4 }}>
+								{organizations.length > 0 && (
+									<select
+										className="select-pill"
+										value={collabOrgInput}
+										onChange={(e) => setCollabOrgInput(e.target.value)}
+									>
+										<option value="">组织：默认 / 不指定</option>
+										{organizations.map((org) => (
+											<option key={org.id} value={org.id}>
+												组织：{org.name}
+											</option>
+										))}
+									</select>
+								)}
+								<button
+									type="button"
+									className="btn-pill-dark"
+									disabled={!collabNameInput.trim()}
+									onClick={() => {
+										void createCollaborator({
+											name: collabNameInput.trim(),
+											roleTitle: collabRoleInput.trim() || "协同同事",
+											orgId: collabOrgInput || null,
+										})
+											.then(async (res) => {
+												setCollabNameInput("");
+												setCollabRoleInput("");
+												setCollabOrgInput("");
+												setShowAddCollab(false);
+												await onRefresh();
+												onNotice(`已创建同事「${res.collaborator.name}」并生成专属邀请链接`);
+											})
+											.catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)));
+									}}
+								>
+									保存并生成邀请
+								</button>
+								<button type="button" className="btn-pill-outline" onClick={() => setShowAddCollab(false)}>
+									取消
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
+
+				<div className="org-strip-card">
+					<div className="banner-row">
+						<div>
 							<strong style={{ fontSize: 14 }}>组织身份与多仓库分组</strong>
 							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
 								同一支全局团队成员跨组织与多仓库工作；新建仓库默认归入「默认组织」，同组织仓库共享「组织记忆」与邮箱域名
 							</span>
 						</div>
-						<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
-							+ 新建组织
-						</button>
+						{isOwner && (
+							<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
+								+ 新建组织
+							</button>
+						)}
 					</div>
 
 					{organizations.length === 0 ? (

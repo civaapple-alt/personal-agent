@@ -1,7 +1,8 @@
 # HTTP、SSE 与本机服务
 
 [main.ts](main.ts) 负责启动装配：角色、数据库、编排核、对话 broker、预览管理器及静态网页。
-默认端口 4310，`PORT`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 的读取以此文件为准；日常启动会接触用户数据库。
+默认端口 4310、`PA_HOST` 默认 `127.0.0.1`，`PORT`、`PA_HOST`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 读取以此文件为准；
+日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 
 [app.ts](app.ts) 是 HTTP 路由与 SSE 入口。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。
 修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
@@ -19,6 +20,14 @@
     （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
   - `POST /api/members` 与 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
+- 多人类受限协作与显式讨论隔离（方案 B）：
+  - `127.0.0.1`/`::1` 默认映射为所有者（测试传 `requireAuth: true` 时强制鉴权），非回环局域网请求须通过
+    `/api/auth/login` 签发 `pa_session` HttpOnly Cookie 或提供 `x-pa-token` / `Bearer` 口令。
+  - `/api/collaborators` 与 `/api/collaborators/:id/regenerate-token` 仅所有者可管理（向协同成员隐藏 `token`）。
+  - `POST /api/matters` 与 `POST /api/matters/:id/messages` 支持 `mode`：`"discussion"`（团队讨论，不占 AI 锁且支持
+    AI 运行中续发）、`"ai_request"`（同事提请单）与 `"dispatch"`（仅所有者可触发）。
+  - 所有者可通过 `/api/matters/:id/messages/:msgId/approve-ai` 或 `dismiss-ai` 一键批准并派发或忽略提请；
+    仓库/组织/成员/记忆/弹窗/预览写入与 `autoDistill: true` 均对协同成员返回 `403`。
 - Phase 4 RSI 接口：
   - `POST /api/deliverables/:id/feedback` 支持可选 `rating`、`autoDistill` 与 `scopeMode`，反馈与计数原子保存并仅评价该版本关联的经验（`neutral` 撤回当前票）。
   - 可选自动复盘失败时仍返回已保存反馈与 `distillationError`。

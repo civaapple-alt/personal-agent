@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import {
+	type CollaboratorDto,
 	type ComposerImageAttachment,
 	type DeliverableDto,
 	type DistillRsiResult,
@@ -43,6 +44,10 @@ import { ExploringStatus, ProgressSnapshotCard } from "./ExploringStatus.tsx";
 
 interface ChatStageProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
+	currentUser?: CollaboratorDto | null;
+	collaborators?: CollaboratorDto[];
+	composerMode: "discussion" | "dispatch";
+	onComposerModeChange: (mode: "discussion" | "dispatch") => void;
 	selectedWorkspace: WorkspaceDto | null;
 	selectedWorkspaceId: string;
 	selectedOrgId: string;
@@ -81,6 +86,9 @@ interface ChatStageProps {
 	onSelectMember: (memberId: string) => void;
 	activeObserverIds: string[];
 	onUpdateObservers: (observerIds: string[]) => void;
+	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
+	onApproveAiRequest?: (matterId: string, messageId: string) => void;
+	onDismissAiRequest?: (matterId: string, messageId: string) => void;
 	onSendPrompt: () => void;
 	onAbortMatter: (matterId: string) => void;
 	onNewMatter: () => void;
@@ -97,6 +105,10 @@ interface ChatStageProps {
 
 export function ChatStage({
 	composerRef,
+	currentUser,
+	collaborators = [],
+	composerMode,
+	onComposerModeChange,
 	selectedWorkspace,
 	selectedWorkspaceId,
 	selectedOrgId,
@@ -135,6 +147,9 @@ export function ChatStage({
 	onSelectMember,
 	activeObserverIds,
 	onUpdateObservers,
+	onUpdateMatterCollaborators,
+	onApproveAiRequest,
+	onDismissAiRequest,
 	onSendPrompt,
 	onAbortMatter,
 	onNewMatter,
@@ -163,14 +178,18 @@ export function ChatStage({
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
+	const [collaboratorMenuOpen, setCollaboratorMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 	const collabTriggerRef = useRef<HTMLSpanElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
+	const rosterRef = useRef<HTMLDivElement | null>(null);
+
+	const isOwner = currentUser?.permissionRole !== "collaborator";
 
 	useEffect(() => {
-		if (!collabOpen && !starterMenuOpen && !observerMenuOpen) return;
+		if (!collabOpen && !starterMenuOpen && !observerMenuOpen && !collaboratorMenuOpen) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
@@ -181,12 +200,16 @@ export function ChatStage({
 				setStarterMenuOpen(false);
 				setObserverMenuOpen(false);
 			}
+			if (collaboratorMenuOpen && !rosterRef.current?.contains(target)) {
+				setCollaboratorMenuOpen(false);
+			}
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setCollabOpen(false);
 				setStarterMenuOpen(false);
 				setObserverMenuOpen(false);
+				setCollaboratorMenuOpen(false);
 				setLightboxImage(null);
 			}
 		};
@@ -196,7 +219,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, starterMenuOpen, observerMenuOpen]);
+	}, [collabOpen, starterMenuOpen, observerMenuOpen, collaboratorMenuOpen]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -241,6 +264,7 @@ export function ChatStage({
 	};
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
+	const sendBlockedByTurn = isTurnRunning && isOwner && composerMode === "dispatch";
 	const messageCount = matterDetail?.userMessages.length ?? 0;
 	const streamLen = streamingDelta.length;
 	useEffect(() => {
@@ -252,7 +276,7 @@ export function ChatStage({
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 			e.preventDefault();
-			if (!isTurnRunning && !submitting && (composerText.trim() || pendingImages.length > 0)) {
+			if (!sendBlockedByTurn && !submitting && (composerText.trim() || pendingImages.length > 0)) {
 				onSendPrompt();
 			}
 		}
@@ -564,6 +588,212 @@ export function ChatStage({
 				</div>
 			</header>
 
+			{(() => {
+				const ownerCollab = collaborators.find((c) => c.permissionRole === "owner") ?? null;
+				const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
+				const assignedIds = matterDetail?.matter.collaboratorIds ?? [];
+				const matterHumanParticipants = nonOwnerCollaborators.filter(
+					(c) => assignedIds.includes(c.id) || currentUser?.id === c.id,
+				);
+				const leadAi =
+					(matterDetail?.matter.leadMemberId
+						? members.find((m) => m.id === matterDetail.matter.leadMemberId)
+						: null) ?? headerContact;
+				const observerAis = members.filter((m) => activeObserverIds.includes(m.id) && m.id !== leadAi?.id);
+				const specialistIds = Array.from(
+					new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean)),
+				).filter((id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id));
+				const specialistAis = members.filter((m) => specialistIds.includes(m.id));
+				const copyCollabInvite = async (col: CollaboratorDto) => {
+					if (!col.token) return;
+					const url = `${window.location.origin}/?invite=${encodeURIComponent(col.token)}`;
+					try {
+						await navigator.clipboard.writeText(url);
+						const localWarn =
+							window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+								? "（提示：本机启动时需设置 PA_HOST=0.0.0.0 并替换为局域网 IP 给同事访问）"
+								: "";
+						onNotice(`已复制「${col.name}」的邀请链接${localWarn}`);
+					} catch {
+						onNotice(`邀请链接：${url}`);
+					}
+				};
+				return (
+					<div ref={rosterRef} className="matter-roster-bar">
+						<div className="matter-roster-main">
+							<span className="roster-section-label">参与人员</span>
+							<div className="roster-chip-group" title="人类协同成员">
+								{ownerCollab ? (
+									<span
+										className={`roster-chip human owner ${currentUser?.id === ownerCollab.id ? "is-me" : ""}`}
+									>
+										<span className="roster-tag">所有者</span>
+										<span>{ownerCollab.name}</span>
+										{currentUser?.id === ownerCollab.id && <span className="roster-me">我</span>}
+									</span>
+								) : (
+									<span className="roster-chip human owner is-me">
+										<span className="roster-tag">所有者</span>
+										<span>我</span>
+									</span>
+								)}
+								{matterHumanParticipants.map((col) => (
+									<span
+										key={col.id}
+										className={`roster-chip human ${currentUser?.id === col.id ? "is-me" : ""}`}
+										title={`${col.name} · ${col.roleTitle}（协同权限）`}
+									>
+										<span>{col.name}</span>
+										<span className="roster-role-sub">· {col.roleTitle}</span>
+										{currentUser?.id === col.id && <span className="roster-me">我</span>}
+									</span>
+								))}
+								{isOwner && (
+									<button
+										type="button"
+										className={`roster-manage-btn ${collaboratorMenuOpen ? "active" : ""}`}
+										onClick={() => setCollaboratorMenuOpen((open) => !open)}
+									>
+										+ 邀请/管理同事
+									</button>
+								)}
+							</div>
+
+							<span className="roster-divider" aria-hidden="true" />
+
+							<span className="roster-section-label">AI 团队</span>
+							<div className="roster-chip-group" title="当前事项参与推进的 AI 员工与分工">
+								{leadAi && (
+									<span
+										className="roster-chip ai lead"
+										title={`主责：${leadAi.displayName}（${leadAi.roleTitle}）`}
+									>
+										<span
+											className="roster-ai-dot"
+											style={{ background: getMemberThemeById(members, leadAi.id).bg }}
+										/>
+										<span className="roster-tag">主责</span>
+										<span>{leadAi.displayName}</span>
+									</span>
+								)}
+								{observerAis.map((obs) => (
+									<span
+										key={obs.id}
+										className="roster-chip ai observer"
+										title={`旁听：${obs.displayName}（${obs.roleTitle}）`}
+									>
+										<span
+											className="roster-ai-dot"
+											style={{ background: getMemberThemeById(members, obs.id).bg }}
+										/>
+										<span className="roster-tag">旁听</span>
+										<span>{obs.displayName}</span>
+									</span>
+								))}
+								{specialistAis.map((spec) => (
+									<span
+										key={spec.id}
+										className="roster-chip ai specialist"
+										title={`内部委托协同：${spec.displayName}（${spec.roleTitle}）`}
+									>
+										<span
+											className="roster-ai-dot"
+											style={{ background: getMemberThemeById(members, spec.id).bg }}
+										/>
+										<span className="roster-tag">协同</span>
+										<span>{spec.displayName}</span>
+									</span>
+								))}
+							</div>
+						</div>
+
+						{!isOwner && (
+							<span
+								className="pill roster-permission-pill"
+								title="协同成员可自由聊天讨论、提交 AI 提请单与评价成果，执行权限由所有者掌握"
+							>
+								协同成员模式 · AI 执行需所有者确认
+							</span>
+						)}
+
+						{collaboratorMenuOpen && isOwner && (
+							<div className="collaborator-roster-popover">
+								<div className="banner-row">
+									<div>
+										<strong>同事参与与邀请链接</strong>
+										<span className="observer-hint">
+											勾选同事加入当前事项名单，或直接复制其专属邀请链接在局域网浏览器打开
+										</span>
+									</div>
+									<div style={{ display: "flex", gap: 6 }}>
+										<button
+											type="button"
+											className="btn-inline"
+											onClick={() => {
+												setCollaboratorMenuOpen(false);
+												onOpenTeam();
+											}}
+										>
+											去团队页新增同事
+										</button>
+										<button
+											type="button"
+											className="btn-inline"
+											onClick={() => setCollaboratorMenuOpen(false)}
+										>
+											关闭
+										</button>
+									</div>
+								</div>
+								{nonOwnerCollaborators.length === 0 ? (
+									<p className="muted-hint" style={{ margin: "6px 0 0" }}>
+										还没有登记协同同事。点击右上角「去团队页新增同事」即可生成专属邀请链接。
+									</p>
+								) : (
+									<div className="collaborator-popover-list">
+										{nonOwnerCollaborators.map((col) => {
+											const inMatter = assignedIds.includes(col.id);
+											return (
+												<div key={col.id} className="collaborator-popover-row">
+													<div className="collaborator-popover-ident">
+														{selectedMatterId && onUpdateMatterCollaborators && (
+															<input
+																type="checkbox"
+																checked={inMatter}
+																aria-label={`邀请 ${col.name} 参与本事项`}
+																onChange={() => {
+																	const nextIds = inMatter
+																		? assignedIds.filter((id) => id !== col.id)
+																		: [...assignedIds, col.id];
+																	onUpdateMatterCollaborators(nextIds);
+																}}
+															/>
+														)}
+														<strong>{col.name}</strong>
+														<span className="roster-role-sub">{col.roleTitle}</span>
+													</div>
+													<div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+														{col.token && (
+															<button
+																type="button"
+																className="btn-pill-outline btn-xs"
+																onClick={() => void copyCollabInvite(col)}
+															>
+																复制邀请链接
+															</button>
+														)}
+													</div>
+												</div>
+											);
+										})}
+									</div>
+								)}
+							</div>
+						)}
+					</div>
+				);
+			})()}
+
 			{collabOpen && matterDetail && (
 				<div ref={collabPanelRef} role="dialog" aria-label="团队委托与过程事件" className="collab-dock-panel">
 					<div className="collab-dock-inner">
@@ -745,6 +975,22 @@ export function ChatStage({
 								const isUser = msg.senderType === "user";
 								const isSystem = msg.senderType === "system";
 								const isObserverIntervention = msg.metadata?.observerIntervention === true;
+								const msgMode =
+									isUser && typeof msg.metadata?.mode === "string" ? msg.metadata.mode : "dispatch";
+								const isDiscussion = isUser && msgMode === "discussion";
+								const isAiRequest = isUser && msgMode === "ai_request";
+								const authorName =
+									isUser && typeof msg.metadata?.authorName === "string" ? msg.metadata.authorName : null;
+								const authorRole =
+									isUser && typeof msg.metadata?.authorRole === "string" ? msg.metadata.authorRole : null;
+								const aiRequestStatus =
+									isAiRequest && typeof msg.metadata?.aiRequestStatus === "string"
+										? msg.metadata.aiRequestStatus
+										: "pending";
+								const approvedByName =
+									isAiRequest && typeof msg.metadata?.approvedByName === "string"
+										? msg.metadata.approvedByName
+										: "所有者";
 								const speakerTheme = getMemberThemeById(members, msg.senderId);
 								const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
 								const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
@@ -757,7 +1003,29 @@ export function ChatStage({
 											: undefined;
 								return (
 									<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
-										{!isUser && (
+										{isUser ? (
+											<div className="stream-sender user-sender">
+												<span
+													className={`msg-mode-badge ${isDiscussion ? "discussion" : isAiRequest ? "ai-request" : "dispatch"}`}
+												>
+													{isDiscussion ? "团队讨论" : isAiRequest ? "提请 AI" : "AI 安排"}
+												</span>
+												<span>
+													{authorName ?? (isDiscussion ? "成员" : "团队所有者")}
+													{authorRole ? ` · ${authorRole}` : ""}
+												</span>
+												<span>· {formatClockTime(msg.createdAt)}</span>
+												{isAiRequest && (
+													<span className={`ai-request-status-badge status-${aiRequestStatus}`}>
+														{aiRequestStatus === "approved"
+															? `已由${approvedByName}确认派发`
+															: aiRequestStatus === "dismissed"
+																? "已忽略"
+																: "待所有者确认"}
+													</span>
+												)}
+											</div>
+										) : (
 											<div className="stream-sender">
 												{!isSystem && (
 													<BotFaceIcon
@@ -776,9 +1044,16 @@ export function ChatStage({
 										)}
 										{(() => {
 											const userImages = isUser ? parseMessageImages(msg.metadata) : [];
+											const bubbleModeClass = isUser
+												? isDiscussion
+													? " discussion"
+													: isAiRequest
+														? " ai-request"
+														: " dispatch"
+												: "";
 											return (
 												<div
-													className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${isObserverIntervention ? " observer" : ""}`}
+													className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
 												>
 													{isUser ? (
 														<>
@@ -818,6 +1093,37 @@ export function ChatStage({
 																</div>
 															)}
 															{msg.content && <div className="stream-bubble-text">{msg.content}</div>}
+															{isAiRequest &&
+																aiRequestStatus === "pending" &&
+																isOwner &&
+																matterDetail && (
+																	<div className="ai-request-actions">
+																		<button
+																			type="button"
+																			className="btn-pill-dark btn-xs"
+																			disabled={isTurnRunning}
+																			title={
+																				isTurnRunning
+																					? "请等待当前 AI 回合完成后确认派发"
+																					: "确认此提请并立即派发给 AI 执行"
+																			}
+																			onClick={() =>
+																				onApproveAiRequest?.(matterDetail.matter.id, msg.id)
+																			}
+																		>
+																			确认并派发 AI
+																		</button>
+																		<button
+																			type="button"
+																			className="btn-pill-outline btn-xs"
+																			onClick={() =>
+																				onDismissAiRequest?.(matterDetail.matter.id, msg.id)
+																			}
+																		>
+																			忽略提请
+																		</button>
+																	</div>
+																)}
 														</>
 													) : (
 														<MarkdownView content={msg.content} />
@@ -850,57 +1156,65 @@ export function ChatStage({
 									<div className="approval-eyebrow">需要你确认 · 来自【{dlg.memberName}】</div>
 									<h4>{dlg.request.title}</h4>
 									{dlg.request.message && <p>{dlg.request.message}</p>}
-									{dlg.request.method === "confirm" && (
-										<div className="approval-actions">
-											<button
-												type="button"
-												className="btn-pill-dark"
-												onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
-											>
-												允许继续
-											</button>
-											<button
-												type="button"
-												className="btn-pill-outline"
-												onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
-											>
-												拒绝
-											</button>
-										</div>
-									)}
-									{dlg.request.method === "select" && dlg.request.options && (
-										<div className="approval-actions">
-											{dlg.request.options.map((opt) => (
-												<button
-													key={opt}
-													type="button"
-													className="btn-pill-outline"
-													onClick={() => void respondToDialog(dlg.id, { value: opt })}
-												>
-													{opt}
-												</button>
-											))}
-										</div>
-									)}
-									{(dlg.request.method === "input" || dlg.request.method === "editor") && (
-										<div className="feedback-row">
-											<input
-												className="input-field"
-												value={dialogInput}
-												onChange={(e) => setDialogInput(e.target.value)}
-												placeholder={dlg.request.placeholder ?? "输入答复..."}
-											/>
-											<button
-												type="button"
-												className="btn-pill-dark"
-												onClick={() => {
-													void respondToDialog(dlg.id, { value: dialogInput });
-													setDialogInput("");
-												}}
-											>
-												提交
-											</button>
-										</div>
+									{!isOwner ? (
+										<p className="muted-hint" style={{ margin: "6px 0 0" }}>
+											当前处于协同成员受限模式，工具/操作确认弹窗仅可由团队所有者处理。
+										</p>
+									) : (
+										<>
+											{dlg.request.method === "confirm" && (
+												<div className="approval-actions">
+													<button
+														type="button"
+														className="btn-pill-dark"
+														onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
+													>
+														允许继续
+													</button>
+													<button
+														type="button"
+														className="btn-pill-outline"
+														onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
+													>
+														拒绝
+													</button>
+												</div>
+											)}
+											{dlg.request.method === "select" && dlg.request.options && (
+												<div className="approval-actions">
+													{dlg.request.options.map((opt) => (
+														<button
+															key={opt}
+															type="button"
+															className="btn-pill-outline"
+															onClick={() => void respondToDialog(dlg.id, { value: opt })}
+														>
+															{opt}
+														</button>
+													))}
+												</div>
+											)}
+											{(dlg.request.method === "input" || dlg.request.method === "editor") && (
+												<div className="feedback-row">
+													<input
+														className="input-field"
+														value={dialogInput}
+														onChange={(e) => setDialogInput(e.target.value)}
+														placeholder={dlg.request.placeholder ?? "输入答复..."}
+													/>
+													<button
+														type="button"
+														className="btn-pill-dark"
+														onClick={() => {
+															void respondToDialog(dlg.id, { value: dialogInput });
+															setDialogInput("");
+														}}
+													>
+														提交
+													</button>
+												</div>
+											)}
+										</>
 									)}
 								</div>
 							))}
@@ -1040,13 +1354,49 @@ export function ChatStage({
 						</div>
 					)}
 
+					<div className="composer-mode-bar">
+						<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
+							<button
+								type="button"
+								role="tab"
+								aria-selected={composerMode === "discussion"}
+								className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
+								onClick={() => onComposerModeChange("discussion")}
+							>
+								团队聊天讨论
+							</button>
+							<button
+								type="button"
+								role="tab"
+								aria-selected={composerMode === "dispatch"}
+								className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
+								onClick={() => onComposerModeChange("dispatch")}
+							>
+								{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
+							</button>
+						</div>
+						<span className="composer-mode-hint">
+							{composerMode === "discussion"
+								? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
+								: isOwner
+									? "正式指派 AI 团队分析、修改并生成交付成果"
+									: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
+						</span>
+					</div>
+
 					<div className="composer-meta-bar">
 						<select
 							className="select-pill"
 							aria-label="所属组织"
 							value={effectiveOrgId ?? ""}
-							disabled={isTurnRunning}
-							title={isTurnRunning ? "当前回合正在执行，请先停止后再切换组织" : "选择本次事项所属组织"}
+							disabled={isTurnRunning || !isOwner}
+							title={
+								!isOwner
+									? "仅团队所有者可切换组织"
+									: isTurnRunning
+										? "当前回合正在执行，请先停止后再切换组织"
+										: "选择本次事项所属组织"
+							}
 							onChange={(e) => onSelectOrganization(e.target.value)}
 						>
 							{organizations.map((org) => (
@@ -1061,8 +1411,14 @@ export function ChatStage({
 							className="select-pill"
 							aria-label="项目仓库"
 							value={selectedWorkspaceId}
-							disabled={isTurnRunning}
-							title={isTurnRunning ? "当前回合正在执行，请先停止后再切换仓库" : undefined}
+							disabled={isTurnRunning || !isOwner}
+							title={
+								!isOwner
+									? "仅团队所有者可切换项目仓库"
+									: isTurnRunning
+										? "当前回合正在执行，请先停止后再切换仓库"
+										: undefined
+							}
 							onChange={(e) => onSelectWorkspace(e.target.value)}
 						>
 							<option value="">
@@ -1094,19 +1450,21 @@ export function ChatStage({
 								</option>
 							))}
 						</select>
-						<button
-							type="button"
-							aria-expanded={observerMenuOpen}
-							className={`select-pill action ${activeObserverIds.length > 0 ? "observer-active" : ""}`}
-							onClick={() => {
-								setStarterMenuOpen(false);
-								setObserverMenuOpen((v) => !v);
-							}}
-						>
-							{activeObserverIds.length > 0
-								? `旁听：${activeObserverIds.map((id) => memberName(id)).join("、")}`
-								: "旁听：仅主负责人"}
-						</button>
+						{isOwner && (
+							<button
+								type="button"
+								aria-expanded={observerMenuOpen}
+								className={`select-pill action ${activeObserverIds.length > 0 ? "observer-active" : ""}`}
+								onClick={() => {
+									setStarterMenuOpen(false);
+									setObserverMenuOpen((v) => !v);
+								}}
+							>
+								{activeObserverIds.length > 0
+									? `旁听：${activeObserverIds.map((id) => memberName(id)).join("、")}`
+									: "旁听：仅主负责人"}
+							</button>
+						)}
 						{selectedMatterId && (
 							<button type="button" className="select-pill action" onClick={onNewMatter}>
 								+ 切到新事项
@@ -1204,14 +1562,18 @@ export function ChatStage({
 							onKeyDown={handleComposerKeyDown}
 							onPaste={handleComposerPaste}
 							placeholder={
-								isTurnRunning
-									? "当前回合仍在推进，完成后可继续（或点击 ■ 停止）..."
-									: selectedMatterId
-										? "继续对话、拖拽或粘贴图片，或提出修改（Enter 发送）..."
-										: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
+								composerMode === "discussion"
+									? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送）..."
+									: !isOwner
+										? "写下希望 AI 协助处理的内容，提交后由团队所有者一键确认并派发..."
+										: isTurnRunning
+											? "当前 AI 回合仍在推进，可切到「团队聊天讨论」或等待完成后继续..."
+											: selectedMatterId
+												? "继续给 AI 团队安排工作、拖拽或粘贴图片，或提出修改（Enter 发送）..."
+												: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
 							}
 						/>
-						{activeMatterProgress && selectedMatterId && (
+						{activeMatterProgress && selectedMatterId && isOwner && (
 							<button
 								type="button"
 								className="pill-stop-btn"
@@ -1224,12 +1586,18 @@ export function ChatStage({
 						)}
 						<button
 							type="button"
-							className="pill-send-btn"
-							aria-label="发送"
-							disabled={submitting || isTurnRunning || (!composerText.trim() && pendingImages.length === 0)}
+							className={`pill-send-btn pill-send-labeled ${composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
+							aria-label={composerMode === "discussion" ? "发送讨论" : isOwner ? "派发 AI" : "提请 AI"}
+							disabled={sendBlockedByTurn || submitting || (!composerText.trim() && pendingImages.length === 0)}
 							onClick={onSendPrompt}
 						>
-							{submitting ? "…" : "↑"}
+							{submitting
+								? "发送中..."
+								: composerMode === "discussion"
+									? "发讨论"
+									: isOwner
+										? "派发 AI"
+										: "提请 AI"}
 						</button>
 					</div>
 				</section>

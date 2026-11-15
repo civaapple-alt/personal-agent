@@ -33,6 +33,27 @@ export interface WorkspaceDto {
 	repoGitUser?: { name: string; email: string } | null;
 }
 
+export type CollaboratorRole = "owner" | "collaborator";
+
+export interface CollaboratorDto {
+	id: string;
+	name: string;
+	roleTitle: string;
+	permissionRole: CollaboratorRole;
+	orgId: string | null;
+	token?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface AuthSessionPayload {
+	authenticated: boolean;
+	permissionRequired: boolean;
+	currentUser: CollaboratorDto | null;
+}
+
+export type MatterSendMode = "discussion" | "dispatch" | "ai_request";
+
 export interface MatterDto {
 	id: string;
 	title: string;
@@ -42,6 +63,7 @@ export interface MatterDto {
 	workspaceId: string | null;
 	orgId?: string | null;
 	observerMemberIds?: string[];
+	collaboratorIds?: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -225,6 +247,8 @@ export interface ActiveRunSnapshotDto extends MatterProgressDto {
 }
 
 export interface BootstrapPayload {
+	currentUser?: CollaboratorDto;
+	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	templates: RoleTemplateDto[];
 	workspaces: WorkspaceDto[];
@@ -262,6 +286,24 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 	return data;
 }
 
+export function fetchAuthSession(): Promise<AuthSessionPayload> {
+	return requestJson<AuthSessionPayload>("/api/auth/session");
+}
+
+export function loginWithInviteToken(token: string): Promise<{ ok: boolean; currentUser: CollaboratorDto }> {
+	return requestJson("/api/auth/login", {
+		method: "POST",
+		body: JSON.stringify({ token }),
+	});
+}
+
+export function logoutAuthSession(): Promise<{ ok: boolean }> {
+	return requestJson("/api/auth/logout", {
+		method: "POST",
+		body: "{}",
+	});
+}
+
 export function fetchBootstrap(): Promise<BootstrapPayload> {
 	return requestJson<BootstrapPayload>("/api/bootstrap");
 }
@@ -271,12 +313,14 @@ export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload
 }
 
 export function createMatter(input: {
+	mode?: MatterSendMode;
 	prompt: string;
 	images?: UploadImagePayload[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	orgId?: string | null;
 	observerMemberIds?: string[];
+	collaboratorIds?: string[];
 	title?: string;
 }): Promise<{ matter: MatterDto; assignedMember: TeamMemberDto }> {
 	return requestJson("/api/matters", {
@@ -287,12 +331,45 @@ export function createMatter(input: {
 
 export function postMatterMessage(
 	matterId: string,
-	input: { prompt: string; images?: UploadImagePayload[]; preferredMemberId?: string; observerMemberIds?: string[] },
-): Promise<{ accepted: boolean }> {
+	input: {
+		mode?: MatterSendMode;
+		prompt: string;
+		images?: UploadImagePayload[];
+		preferredMemberId?: string;
+		observerMemberIds?: string[];
+	},
+): Promise<{ accepted: boolean; mode?: MatterSendMode; message?: MatterMessageDto; matter?: MatterDto }> {
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
 		method: "POST",
 		body: JSON.stringify(input),
 	});
+}
+
+export function approveAiRequest(
+	matterId: string,
+	messageId: string,
+	input?: { preferredMemberId?: string; observerMemberIds?: string[] },
+): Promise<{ accepted: boolean; matterId: string; approvedMessageId: string }> {
+	return requestJson(
+		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/approve-ai`,
+		{
+			method: "POST",
+			body: JSON.stringify(input ?? {}),
+		},
+	);
+}
+
+export function dismissAiRequest(
+	matterId: string,
+	messageId: string,
+): Promise<{ ok: boolean; message?: MatterMessageDto }> {
+	return requestJson(
+		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/dismiss-ai`,
+		{
+			method: "POST",
+			body: "{}",
+		},
+	);
 }
 
 export function respondToDialog(
@@ -572,5 +649,48 @@ export function updateMatterObservers(matterId: string, observerMemberIds: strin
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ observerMemberIds }),
+	});
+}
+
+export function updateMatterCollaborators(matterId: string, collaboratorIds: string[]): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ collaboratorIds }),
+	});
+}
+
+export function createCollaborator(input: {
+	id?: string;
+	name: string;
+	roleTitle?: string;
+	permissionRole?: CollaboratorRole;
+	orgId?: string | null;
+}): Promise<{ collaborator: CollaboratorDto }> {
+	return requestJson("/api/collaborators", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateCollaborator(
+	id: string,
+	input: { name?: string; roleTitle?: string; permissionRole?: CollaboratorRole; orgId?: string | null },
+): Promise<{ collaborator: CollaboratorDto }> {
+	return requestJson(`/api/collaborators/${encodeURIComponent(id)}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function regenerateCollaboratorToken(id: string): Promise<{ collaborator: CollaboratorDto }> {
+	return requestJson(`/api/collaborators/${encodeURIComponent(id)}/regenerate-token`, {
+		method: "POST",
+		body: "{}",
+	});
+}
+
+export function deleteCollaborator(id: string): Promise<{ ok: boolean }> {
+	return requestJson(`/api/collaborators/${encodeURIComponent(id)}`, {
+		method: "DELETE",
 	});
 }

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { ThinkingLevel } from "../rpc/types.ts";
 import type {
+	Collaborator,
+	CollaboratorRole,
 	Deliverable,
 	DeliverableType,
 	FeedbackRating,
@@ -17,6 +19,7 @@ import type {
 	MemoryScope,
 	MemoryStatus,
 	Organization,
+	PublicCollaborator,
 	TeamMember,
 	WorkerSessionRecord,
 	WorkspaceLink,
@@ -24,6 +27,12 @@ import type {
 
 export const DEFAULT_ORGANIZATION_ID = "org-default";
 export const DEFAULT_ORGANIZATION_NAME = "默认组织";
+export const DEFAULT_OWNER_COLLABORATOR_ID = "owner";
+
+export function toPublicCollaborator(collaborator: Collaborator): PublicCollaborator {
+	const { token: _token, ...publicInfo } = collaborator;
+	return publicInfo;
+}
 
 function nowIso(): string {
 	return new Date().toISOString();
@@ -987,16 +996,21 @@ export class PersonalAgentStore {
 		workspaceId?: string | null;
 		orgId?: string | null;
 		observerMemberIds?: string[];
+		collaboratorIds?: string[];
 	}): Matter {
 		const id = `mat_${randomUUID()}`;
 		const timestamp = nowIso();
 		const observerIds = normalizeUniqueIds(input.observerMemberIds);
+		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspace = input.workspaceId ? this.getWorkspace(input.workspaceId) : null;
 		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
 		this.db
 			.prepare(
-				`INSERT INTO matters (id, title, summary, status, lead_member_id, workspace_id, org_id, observer_ids_json, created_at, updated_at)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO matters (
+					id, title, summary, status, lead_member_id, workspace_id, org_id,
+					observer_ids_json, collaborator_ids_json, created_at, updated_at
+				)
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -1006,6 +1020,7 @@ export class PersonalAgentStore {
 				input.workspaceId ?? null,
 				effectiveOrgId,
 				JSON.stringify(observerIds),
+				JSON.stringify(collaboratorIds),
 				timestamp,
 				timestamp,
 			);
@@ -1070,6 +1085,149 @@ export class PersonalAgentStore {
 		return this.getMatter(matterId)!;
 	}
 
+	updateMatterCollaborators(matterId: string, collaboratorIds: string[]): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const timestamp = nowIso();
+		const normalized = normalizeUniqueIds(collaboratorIds);
+		this.db
+			.prepare("UPDATE matters SET collaborator_ids_json = ?, updated_at = ? WHERE id = ?")
+			.run(JSON.stringify(normalized), timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
+	addMatterCollaborator(matterId: string, collaboratorId: string): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		if (existing.collaboratorIds.includes(collaboratorId)) return existing;
+		return this.updateMatterCollaborators(matterId, [...existing.collaboratorIds, collaboratorId]);
+	}
+
+	getMessage(messageId: string): MatterMessage | null {
+		const row = this.db.prepare("SELECT * FROM matter_messages WHERE id = ?").get(messageId) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapMessage(row) : null;
+	}
+
+	updateMessageMetadata(messageId: string, metadata: Record<string, unknown>): MatterMessage | null {
+		const existing = this.getMessage(messageId);
+		if (!existing) return null;
+		this.db
+			.prepare("UPDATE matter_messages SET metadata_json = ? WHERE id = ?")
+			.run(JSON.stringify(metadata), messageId);
+		return this.getMessage(messageId);
+	}
+
+	ensureOwnerCollaborator(defaultName?: string): Collaborator {
+		const existing = this.getCollaborator(DEFAULT_OWNER_COLLABORATOR_ID);
+		if (existing) {
+			return existing;
+		}
+		const timestamp = nowIso();
+		const token = `own_${randomUUID().replace(/-/g, "")}`;
+		const name = defaultName?.trim() || "团队所有者";
+		this.db
+			.prepare(
+				`INSERT INTO collaborators (id, org_id, name, role_title, permission_role, token, created_at, updated_at)
+				 VALUES (?, NULL, ?, ?, 'owner', ?, ?, ?)`,
+			)
+			.run(DEFAULT_OWNER_COLLABORATOR_ID, name, "Owner / 宿主管理者", token, timestamp, timestamp);
+		return this.getCollaborator(DEFAULT_OWNER_COLLABORATOR_ID)!;
+	}
+
+	upsertCollaborator(input: {
+		id?: string;
+		orgId?: string | null;
+		name: string;
+		roleTitle?: string;
+		permissionRole?: CollaboratorRole;
+	}): Collaborator {
+		const name = input.name.trim();
+		if (!name) throw new Error("Collaborator name is required");
+		const orgId = input.orgId ?? null;
+		if (orgId && !this.getOrganization(orgId)) {
+			throw new Error(`Organization not found: ${orgId}`);
+		}
+		const timestamp = nowIso();
+		const existing = input.id ? this.getCollaborator(input.id) : null;
+		if (existing) {
+			const nextRole: CollaboratorRole =
+				existing.id === DEFAULT_OWNER_COLLABORATOR_ID ? "owner" : (input.permissionRole ?? existing.permissionRole);
+			const nextTitle = input.roleTitle !== undefined ? input.roleTitle.trim() : existing.roleTitle;
+			const nextOrgId = input.orgId !== undefined ? orgId : existing.orgId;
+			this.db
+				.prepare(
+					`UPDATE collaborators
+					 SET org_id = ?, name = ?, role_title = ?, permission_role = ?, updated_at = ?
+					 WHERE id = ?`,
+				)
+				.run(nextOrgId, name, nextTitle, nextRole, timestamp, existing.id);
+			return this.getCollaborator(existing.id)!;
+		}
+		const id = input.id?.trim() || `col_${randomUUID().slice(0, 12)}`;
+		const permissionRole: CollaboratorRole =
+			id === DEFAULT_OWNER_COLLABORATOR_ID ? "owner" : (input.permissionRole ?? "collaborator");
+		const token = `${permissionRole === "owner" ? "own" : "inv"}_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
+		this.db
+			.prepare(
+				`INSERT INTO collaborators (id, org_id, name, role_title, permission_role, token, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(id, orgId, name, input.roleTitle?.trim() ?? "协作者", permissionRole, token, timestamp, timestamp);
+		return this.getCollaborator(id)!;
+	}
+
+	regenerateCollaboratorToken(id: string): Collaborator {
+		const existing = this.getCollaborator(id);
+		if (!existing) throw new Error(`Collaborator not found: ${id}`);
+		const timestamp = nowIso();
+		const token = `${existing.permissionRole === "owner" ? "own" : "inv"}_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
+		this.db.prepare("UPDATE collaborators SET token = ?, updated_at = ? WHERE id = ?").run(token, timestamp, id);
+		return this.getCollaborator(id)!;
+	}
+
+	deleteCollaborator(id: string): boolean {
+		if (id === DEFAULT_OWNER_COLLABORATOR_ID) {
+			throw new Error("Cannot delete default owner collaborator");
+		}
+		const result = this.db.prepare("DELETE FROM collaborators WHERE id = ?").run(id);
+		return result.changes > 0;
+	}
+
+	getCollaborator(id: string): Collaborator | null {
+		const row = this.db.prepare("SELECT * FROM collaborators WHERE id = ?").get(id) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapCollaborator(row) : null;
+	}
+
+	getCollaboratorByToken(token: string): Collaborator | null {
+		const trimmed = token.trim();
+		if (!trimmed) return null;
+		const row = this.db.prepare("SELECT * FROM collaborators WHERE token = ?").get(trimmed) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapCollaborator(row) : null;
+	}
+
+	listCollaborators(orgId?: string): Collaborator[] {
+		const rows = (
+			orgId
+				? this.db
+						.prepare(
+							"SELECT * FROM collaborators WHERE org_id = ? OR org_id IS NULL ORDER BY CASE permission_role WHEN 'owner' THEN 0 ELSE 1 END, created_at ASC",
+						)
+						.all(orgId)
+				: this.db
+						.prepare(
+							"SELECT * FROM collaborators ORDER BY CASE permission_role WHEN 'owner' THEN 0 ELSE 1 END, created_at ASC",
+						)
+						.all()
+		) as Record<string, unknown>[];
+		return rows.map((row) => this.mapCollaborator(row));
+	}
+
 	appendMessage(input: {
 		matterId: string;
 		channel: MatterMessageChannel;
@@ -1121,7 +1279,11 @@ export class PersonalAgentStore {
 						.all(matterId)
 		) as Record<string, unknown>[];
 
-		return rows.map((row) => ({
+		return rows.map((row) => this.mapMessage(row));
+	}
+
+	private mapMessage(row: Record<string, unknown>): MatterMessage {
+		return {
 			id: String(row.id),
 			matterId: String(row.matter_id),
 			channel: row.channel as MatterMessageChannel,
@@ -1130,7 +1292,7 @@ export class PersonalAgentStore {
 			content: String(row.content),
 			metadata: row.metadata_json ? (JSON.parse(String(row.metadata_json)) as Record<string, unknown>) : null,
 			createdAt: String(row.created_at),
-		}));
+		};
 	}
 
 	/**
@@ -1510,6 +1672,20 @@ export class PersonalAgentStore {
 		};
 	}
 
+	private mapCollaborator(row: Record<string, unknown>): Collaborator {
+		const permissionRole: CollaboratorRole = row.permission_role === "owner" ? "owner" : "collaborator";
+		return {
+			id: String(row.id),
+			orgId: row.org_id ? String(row.org_id) : null,
+			name: String(row.name),
+			roleTitle: typeof row.role_title === "string" ? row.role_title : "",
+			permissionRole,
+			token: String(row.token),
+			createdAt: String(row.created_at),
+			updatedAt: String(row.updated_at),
+		};
+	}
+
 	private mapMatter(row: Record<string, unknown>): Matter {
 		return {
 			id: String(row.id),
@@ -1520,6 +1696,7 @@ export class PersonalAgentStore {
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 			orgId: row.org_id ? String(row.org_id) : null,
 			observerMemberIds: parseUniqueIds(row.observer_ids_json),
+			collaboratorIds: parseUniqueIds(row.collaborator_ids_json),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};

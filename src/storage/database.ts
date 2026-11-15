@@ -13,6 +13,17 @@ CREATE TABLE IF NOT EXISTS organizations (
 	updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS collaborators (
+	id TEXT PRIMARY KEY,
+	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+	name TEXT NOT NULL,
+	role_title TEXT NOT NULL DEFAULT '',
+	permission_role TEXT NOT NULL DEFAULT 'collaborator',
+	token TEXT NOT NULL UNIQUE,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS team_members (
 	id TEXT PRIMARY KEY,
 	template_id TEXT NOT NULL,
@@ -49,6 +60,7 @@ CREATE TABLE IF NOT EXISTS matters (
 	workspace_id TEXT REFERENCES workspace_links(id),
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	observer_ids_json TEXT,
+	collaborator_ids_json TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
 );
@@ -165,6 +177,9 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	const matterColumns = db.prepare("PRAGMA table_info(matters)").all();
 	if (!matterColumns.some((column) => column.name === "observer_ids_json")) {
 		db.exec("ALTER TABLE matters ADD COLUMN observer_ids_json TEXT");
+	}
+	if (!matterColumns.some((column) => column.name === "collaborator_ids_json")) {
+		db.exec("ALTER TABLE matters ADD COLUMN collaborator_ids_json TEXT");
 	}
 	if (!matterColumns.some((column) => column.name === "org_id")) {
 		db.exec("ALTER TABLE matters ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL");

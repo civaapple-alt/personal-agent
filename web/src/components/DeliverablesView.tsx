@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { BootstrapPayload, DeliverableDto, DistillRsiResult, FeedbackRating } from "../api.ts";
+import type { BootstrapPayload, CollaboratorDto, DeliverableDto, DistillRsiResult, FeedbackRating } from "../api.ts";
 import { collectMatterParticipantIds, formatClockTime, parseDeliverableSummary } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
 
@@ -15,6 +15,7 @@ interface DeliverableFamily {
 
 interface DeliverablesViewProps {
 	bootstrap: BootstrapPayload | null;
+	currentUser?: CollaboratorDto | null;
 	activeDeliverable: DeliverableDto | null;
 	filteredDeliverables: DeliverableDto[];
 	siblingVersions: DeliverableDto[];
@@ -45,6 +46,7 @@ interface DeliverablesViewProps {
 
 export function DeliverablesView({
 	bootstrap,
+	currentUser,
 	activeDeliverable,
 	filteredDeliverables,
 	siblingVersions,
@@ -311,6 +313,7 @@ export function DeliverablesView({
 									resolveWorkspaceName={workspaceName}
 									resolveOrganizationName={organizationName}
 									viewUrl={previewUrlFor(activeDeliverable)}
+									isOwner={currentUser?.permissionRole !== "collaborator"}
 									onSubmitFeedback={onSubmitFeedback}
 									onDistillExperiences={onDistillExperiences}
 									onCancelDistill={
@@ -349,13 +352,15 @@ export function DeliverablesView({
 														<a className="btn-secondary" href={prev.url} target="_blank" rel="noreferrer">
 															打开
 														</a>
-														<button
-															type="button"
-															className="btn-secondary"
-															onClick={() => void onStopPreview(prev.id)}
-														>
-															停止
-														</button>
+														{currentUser?.permissionRole !== "collaborator" && (
+															<button
+																type="button"
+																className="btn-secondary"
+																onClick={() => void onStopPreview(prev.id)}
+															>
+																停止
+															</button>
+														)}
 													</>
 												)}
 											</div>

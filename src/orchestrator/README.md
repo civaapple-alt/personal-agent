@@ -9,6 +9,8 @@
 按问题找入口：
 
 - `dispatchMatter`：选择或保留负责人、工作区与旁听成员（`observerMemberIds`），取得事项占用，保存交流并决定收尾。
+  - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。
+  - `formatMessageHistorySpeaker` 会在回放讨论消息及多人类历史上下文时附带 `[团队讨论]`/`[同事提请]` 与发言人姓名角色。
   - 支持可选 `images`（`PromptImageAttachment[]`），将轻量图片引用（`{ url, mimeType, name }`，不含原始 base64）存入消息 `metadata.images`。
   - 并将 `ImageContent[]` 同步传给主负责人与旁听 `runObservers` Worker（纯图片消息自动生成标题与指令兜底）。
   - 主成员正常回复后，旁听成员在 `runObservers` 中并行快速评估本轮讨论；无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。

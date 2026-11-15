@@ -20,6 +20,20 @@ export type MatterStatus = "open" | "waiting_user" | "delivered" | "archived";
 export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
 export type DeliverableType = "document" | "artifact" | "prototype_image" | "service_url";
+export type CollaboratorRole = "owner" | "collaborator";
+
+export interface Collaborator {
+	id: string;
+	orgId: string | null;
+	name: string;
+	roleTitle: string;
+	permissionRole: CollaboratorRole;
+	token: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export type PublicCollaborator = Omit<Collaborator, "token">;
 
 export interface Organization {
 	id: string;
@@ -102,6 +116,7 @@ export interface Matter {
 	workspaceId: string | null;
 	orgId: string | null;
 	observerMemberIds: string[];
+	collaboratorIds: string[];
 	createdAt: string;
 	updatedAt: string;
 }

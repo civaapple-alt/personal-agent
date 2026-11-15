@@ -50,6 +50,7 @@ interface DeliverableCardProps {
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
+	isOwner?: boolean;
 	compact?: boolean;
 }
 
@@ -273,12 +274,16 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				>
 					{feedbackOpen ? "收起验收" : ratingLabel ? "修改验收" : "记录验收"}
 				</button>
-				<button type="button" className="btn-pill-outline" onClick={() => setMemoryOpen((prev) => !prev)}>
-					{memoryOpen ? "收起手动沉淀" : "手动沉淀经验"}
-				</button>
-				<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
-					{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
-				</button>
+				{props.isOwner !== false && (
+					<>
+						<button type="button" className="btn-pill-outline" onClick={() => setMemoryOpen((prev) => !prev)}>
+							{memoryOpen ? "收起手动沉淀" : "手动沉淀经验"}
+						</button>
+						<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
+							{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
+						</button>
+					</>
+				)}
 				{distilling && props.onCancelDistill && (
 					<button type="button" className="btn-stop-pill" onClick={props.onCancelDistill}>
 						取消提炼
@@ -336,10 +341,16 @@ export function DeliverableCard(props: DeliverableCardProps) {
 								{FEEDBACK_RATING_LABELS[rating]}
 							</button>
 						))}
-						<label className="feedback-distill-toggle">
-							<input type="checkbox" checked={autoDistill} onChange={(e) => setAutoDistill(e.target.checked)} />
-							<span>保存后自动 AI 提炼经验</span>
-						</label>
+						{props.isOwner !== false && (
+							<label className="feedback-distill-toggle">
+								<input
+									type="checkbox"
+									checked={autoDistill}
+									onChange={(e) => setAutoDistill(e.target.checked)}
+								/>
+								<span>保存后自动 AI 提炼经验</span>
+							</label>
+						)}
 					</div>
 					<div className="feedback-row">
 						<input

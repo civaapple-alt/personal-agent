@@ -2,23 +2,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	abortMatter,
 	abortRsiDistillation,
+	approveAiRequest,
 	type BootstrapPayload,
+	type CollaboratorDto,
 	type ComposerImageAttachment,
 	createMatter,
 	type DeliverableDto,
 	type DistillRsiResult,
+	dismissAiRequest,
 	distillRsiExperiences,
 	type FeedbackRating,
+	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
+	loginWithInviteToken,
+	logoutAuthSession,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	type MatterSendMode,
 	type PreviewServiceDto,
 	postMatterMessage,
 	type RoleTemplateDto,
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
+	updateMatterCollaborators,
 	updateMatterObservers,
 	updateMatterOrganization,
 	updateMatterWorkspace,
@@ -32,8 +40,27 @@ import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute } from "./
 import { MAX_COMPOSER_IMAGES, prepareComposerImages } from "./imageAttachments.ts";
 import { buildStarterTasks, getBotTheme } from "./utils.ts";
 
+function extractInitialInviteToken(): string {
+	try {
+		const searchToken = new URLSearchParams(window.location.search).get("invite")?.trim();
+		if (searchToken) return searchToken;
+		const hash = window.location.hash;
+		const match = hash.match(/invite=([^&]+)/);
+		if (match?.[1]) return decodeURIComponent(match[1]).trim();
+	} catch {
+		// Ignore URL parsing errors.
+	}
+	return "";
+}
+
 export function App() {
+	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
+	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+	const [authTokenInput, setAuthTokenInput] = useState("");
+	const [authError, setAuthError] = useState<string | null>(null);
+	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
+	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
@@ -210,15 +237,57 @@ export function App() {
 	}, []);
 
 	useEffect(() => {
-		void refreshBootstrap().catch((err: unknown) => {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		});
-	}, [refreshBootstrap]);
+		let cancelled = false;
+		const initSession = async () => {
+			if (initialInviteToken) {
+				try {
+					const loginRes = await loginWithInviteToken(initialInviteToken);
+					if (cancelled) return;
+					setCurrentUserOverride(loginRes.currentUser);
+					if (loginRes.currentUser.permissionRole === "collaborator") {
+						setComposerMode("discussion");
+					}
+					const cleanHash = window.location.hash.includes("invite=") ? "#chats" : window.location.hash || "#chats";
+					window.history.replaceState(null, "", `${window.location.pathname}${cleanHash}`);
+					setAuthStatus("authenticated");
+					await refreshBootstrap();
+					return;
+				} catch (err: unknown) {
+					if (cancelled) return;
+					setAuthError(err instanceof Error ? err.message : "邀请链接无效或已失效，请重新向所有者获取");
+					setAuthStatus("unauthenticated");
+					return;
+				}
+			}
+			try {
+				const session = await fetchAuthSession();
+				if (cancelled) return;
+				if (!session.authenticated) {
+					setAuthStatus("unauthenticated");
+					return;
+				}
+				setCurrentUserOverride(session.currentUser);
+				if (session.currentUser?.permissionRole === "collaborator") {
+					setComposerMode("discussion");
+				}
+				setAuthStatus("authenticated");
+				await refreshBootstrap();
+			} catch (err: unknown) {
+				if (cancelled) return;
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+			}
+		};
+		void initSession();
+		return () => {
+			cancelled = true;
+		};
+	}, [initialInviteToken, refreshBootstrap]);
 
 	useEffect(() => {
+		if (authStatus !== "authenticated") return;
 		setStreamingDelta("");
 		void refreshDetail(selectedMatterId).catch(() => {});
-	}, [selectedMatterId, refreshDetail]);
+	}, [authStatus, selectedMatterId, refreshDetail]);
 
 	const activeProgressKeys = Object.keys(progressByMatter);
 	useEffect(() => {
@@ -228,6 +297,7 @@ export function App() {
 	}, [activeProgressKeys.length]);
 
 	useEffect(() => {
+		if (authStatus !== "authenticated") return;
 		const clearMatterProgress = (matterId: string) => {
 			if (selectedMatterIdRef.current === matterId) {
 				setStreamingDelta("");
@@ -311,7 +381,9 @@ export function App() {
 		};
 		for (const evtName of [
 			"matter_started",
+			"matter_message",
 			"matter_updated",
+			"collaborator_updated",
 			"dialog_requested",
 			"dialog_resolved",
 			"deliverable_updated",
@@ -325,7 +397,7 @@ export function App() {
 		}
 		es.onerror = () => setSseConnected(false);
 		return () => es.close();
-	}, [refreshBootstrap, refreshDetail]);
+	}, [authStatus, refreshBootstrap, refreshDetail]);
 
 	const activeDeliverable: DeliverableDto | null = useMemo(() => {
 		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
@@ -457,10 +529,15 @@ export function App() {
 		setComposerImages((prev) => prev.filter((item) => item.id !== imageId));
 	}, []);
 
+	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
+	const isOwner = currentUser?.permissionRole !== "collaborator";
+
 	const handleSendPrompt = async () => {
 		const text = composerText.trim();
 		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
 		if ((!text && imagesPayload.length === 0) || submitting) return;
+		const effectiveMode: MatterSendMode =
+			composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
@@ -470,14 +547,19 @@ export function App() {
 
 			if (targetMatterId) {
 				await postMatterMessage(targetMatterId, {
+					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId,
 				});
+				if (effectiveMode === "ai_request") {
+					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
+				}
 			} else {
 				const leadForMatter = preferredMemberId ?? headerContact?.id;
 				const observerIds = activeObserverIds.filter((id) => id !== leadForMatter);
 				const created = await createMatter({
+					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId,
@@ -488,7 +570,13 @@ export function App() {
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
 				navigateRoute({ tab: "chats", matterId: created.matter.id });
-				setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
+				if (effectiveMode === "discussion") {
+					setNoticeBanner("已创建事项并发送首条团队讨论");
+				} else if (effectiveMode === "ai_request") {
+					setNoticeBanner("已创建事项并提交 AI 提请，待团队所有者确认后派发");
+				} else {
+					setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
+				}
 			}
 			setComposerText("");
 			setComposerImages([]);
@@ -500,6 +588,78 @@ export function App() {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
 		} finally {
 			setSubmitting(false);
+		}
+	};
+
+	const handleApproveAiRequest = async (matterId: string, messageId: string) => {
+		setErrorBanner(null);
+		try {
+			await approveAiRequest(matterId, messageId);
+			setNoticeBanner("已确认同事提请并派发给 AI 团队执行");
+			await refreshBootstrap();
+			await refreshDetail(matterId);
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleDismissAiRequest = async (matterId: string, messageId: string) => {
+		setErrorBanner(null);
+		try {
+			await dismissAiRequest(matterId, messageId);
+			setNoticeBanner("已忽略该条 AI 提请");
+			await refreshDetail(matterId);
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleUpdateMatterCollaborators = (collaboratorIds: string[]) => {
+		if (!selectedMatterId) return;
+		const targetMatterId = selectedMatterId;
+		void updateMatterCollaborators(targetMatterId, collaboratorIds)
+			.then(async () => {
+				setNoticeBanner("已更新本事项参与同事");
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+			});
+	};
+
+	const handleInviteLogin = async (tokenValue: string) => {
+		const token = tokenValue.trim();
+		if (!token) return;
+		setAuthError(null);
+		try {
+			const res = await loginWithInviteToken(token);
+			setCurrentUserOverride(res.currentUser);
+			setComposerMode(res.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
+			setAuthTokenInput("");
+			setAuthStatus("authenticated");
+			await refreshBootstrap();
+		} catch (err: unknown) {
+			setAuthError(err instanceof Error ? err.message : "邀请口令无效");
+		}
+	};
+
+	const handleLogoutOrRestore = async () => {
+		try {
+			await logoutAuthSession();
+			const session = await fetchAuthSession();
+			if (session.authenticated && session.currentUser) {
+				setCurrentUserOverride(session.currentUser);
+				setComposerMode(session.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
+				await refreshBootstrap();
+				setNoticeBanner(`已切换回「${session.currentUser.name}」身份`);
+			} else {
+				setCurrentUserOverride(null);
+				setBootstrap(null);
+				setAuthStatus("unauthenticated");
+			}
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
 		}
 	};
 
@@ -735,11 +895,60 @@ export function App() {
 		? Math.max(0, Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000))
 		: 0;
 
+	if (authStatus === "checking") {
+		return (
+			<div className="auth-gate-shell">
+				<div className="auth-gate-card">
+					<div className="brand-mark">PA</div>
+					<h1>正在连接团队协同工作台...</h1>
+					<p className="muted-hint">正在校验访问身份与工作台状态</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (authStatus === "unauthenticated") {
+		return (
+			<div className="auth-gate-shell">
+				<div className="auth-gate-card">
+					<div className="auth-gate-head">
+						<span className="brand-mark">PA</span>
+						<div>
+							<h1>加入受限协同工作台</h1>
+							<p className="muted-hint">
+								当前服务运行在内网协同模式，需要团队所有者分享的个人邀请链接或口令方可加入讨论。
+							</p>
+						</div>
+					</div>
+					{authError && <div className="approval-card">{authError}</div>}
+					<form
+						className="auth-gate-form"
+						onSubmit={(e) => {
+							e.preventDefault();
+							void handleInviteLogin(authTokenInput);
+						}}
+					>
+						<input
+							className="input-field"
+							value={authTokenInput}
+							onChange={(e) => setAuthTokenInput(e.target.value)}
+							placeholder="粘贴邀请口令（如 inv_xxx）..."
+						/>
+						<button type="submit" className="btn-pill-dark" disabled={!authTokenInput.trim()}>
+							进入协同房间
+						</button>
+					</form>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="bot-shell">
 			<Sidebar
 				activeTab={activeTab}
 				bootstrap={bootstrap}
+				currentUser={currentUser}
 				filteredMatters={filteredMatters}
 				selectedMatterId={selectedMatterId}
 				selectedMemberId={selectedMemberId}
@@ -757,12 +966,17 @@ export function App() {
 					composerRef.current?.focus();
 				}}
 				onNewMatter={startNewMatter}
+				onSwitchOrLogout={() => void handleLogoutOrRestore()}
 			/>
 
 			<main className="main-stage">
 				{activeTab === "chats" && (
 					<ChatStage
 						composerRef={composerRef}
+						currentUser={currentUser}
+						collaborators={bootstrap?.collaborators ?? []}
+						composerMode={composerMode}
+						onComposerModeChange={setComposerMode}
 						selectedWorkspace={selectedWorkspace}
 						selectedWorkspaceId={selectedWorkspaceId}
 						selectedOrgId={selectedOrgId}
@@ -801,6 +1015,9 @@ export function App() {
 						onSelectMember={setSelectedMemberId}
 						activeObserverIds={activeObserverIds}
 						onUpdateObservers={handleUpdateObservers}
+						onUpdateMatterCollaborators={handleUpdateMatterCollaborators}
+						onApproveAiRequest={(matterId, messageId) => void handleApproveAiRequest(matterId, messageId)}
+						onDismissAiRequest={(matterId, messageId) => void handleDismissAiRequest(matterId, messageId)}
 						onSendPrompt={() => void handleSendPrompt()}
 						onAbortMatter={handleAbortMatter}
 						onNewMatter={startNewMatter}
@@ -819,6 +1036,7 @@ export function App() {
 				{activeTab === "deliverables" && (
 					<DeliverablesView
 						bootstrap={bootstrap}
+						currentUser={currentUser}
 						activeDeliverable={activeDeliverable}
 						filteredDeliverables={filteredDeliverables}
 						siblingVersions={siblingVersionsFor(activeDeliverable)}
@@ -852,6 +1070,8 @@ export function App() {
 
 				{activeTab === "team" && (
 					<TeamView
+						currentUser={currentUser}
+						collaborators={bootstrap?.collaborators ?? []}
 						members={bootstrap?.members ?? []}
 						workspaces={bootstrap?.workspaces ?? []}
 						organizations={bootstrap?.organizations ?? []}
@@ -865,6 +1085,8 @@ export function App() {
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
+						onPreviewAsCollaborator={(token) => void handleInviteLogin(token)}
+						onRestoreOwner={() => void handleLogoutOrRestore()}
 						onAssignTask={(memberId) => {
 							setSelectedMemberId(memberId);
 							startNewMatter();

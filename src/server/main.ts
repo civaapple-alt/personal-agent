@@ -1,4 +1,6 @@
+import { networkInterfaces } from "node:os";
 import { delimiter, resolve } from "node:path";
+import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
@@ -7,10 +9,25 @@ import { createPersonalAgentServer } from "./app.ts";
 import { DialogBroker } from "./dialog-broker.ts";
 import { PreviewManager } from "./preview-manager.ts";
 
+function listLanIpv4Addresses(): string[] {
+	const results: string[] = [];
+	const interfaces = networkInterfaces();
+	for (const entries of Object.values(interfaces)) {
+		if (!entries) continue;
+		for (const item of entries) {
+			if (item.family === "IPv4" && !item.internal) {
+				results.push(item.address);
+			}
+		}
+	}
+	return results;
+}
+
 async function main(): Promise<void> {
 	const rootDir = process.cwd();
 	const dbPath = process.env.PA_DB_PATH ?? resolve(rootDir, ".data/personal-agent.db");
 	const port = Number(process.env.PORT ?? 4310);
+	const host = process.env.PA_HOST?.trim() || "127.0.0.1";
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
@@ -33,6 +50,7 @@ async function main(): Promise<void> {
 	if (!hadOrganizations) {
 		store.assignOrphanWorkspacesToDefaultOrganization();
 	}
+	store.ensureOwnerCollaborator(resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者");
 
 	if (store.listWorkspaces().length === 0) {
 		store.upsertWorkspace({
@@ -56,10 +74,19 @@ async function main(): Promise<void> {
 	});
 
 	await new Promise<void>((resolveListen) => {
-		server.listen(port, "127.0.0.1", () => resolveListen());
+		server.listen(port, host, () => resolveListen());
 	});
 
-	console.log(`Personal Agent V4 workbench listening on http://127.0.0.1:${port}`);
+	const localHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+	console.log(`Personal Agent V4 workbench listening on http://${localHost}:${port} (bind ${host})`);
+	if (host === "0.0.0.0" || host === "::") {
+		const lanIps = listLanIpv4Addresses();
+		if (lanIps.length > 0) {
+			console.log(
+				`LAN collaboration URLs (invite link required): ${lanIps.map((ip) => `http://${ip}:${port}`).join(", ")}`,
+			);
+		}
+	}
 
 	let stopping = false;
 	const shutdown = async () => {

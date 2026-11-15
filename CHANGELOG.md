@@ -27,6 +27,18 @@ All notable changes to Personal Agent are documented in this file.
   - Separated current limits and future work from the historical four-phase design, and aligned the README document pointers.
 
 ### Changed
+- Added Solution B multi-human restricted LAN collaboration (`owner` / `collaborator`), explicit separation between team
+  discussion and AI dispatch, and live matter participant & role roster:
+  - Added `collaborators` SQLite table, `matters.collaborator_ids_json`, invite token generation/redaction
+    (`toPublicCollaborator`), and configurable `PA_HOST` LAN binding in `src/server/main.ts`.
+  - Added `/api/auth/{session,login,logout}` HttpOnly cookie/header token auth (auto-authenticating loopback as Owner by
+    default, gating non-loopback LAN clients or `requireAuth: true`), `/api/collaborators*` admin routes, and `403`
+    collaborator boundaries across admin/execution/dialog/`autoDistill: true` endpoints.
+  - Added `mode: "discussion" | "ai_request" | "dispatch"` on `POST /api/matters` & `POST /api/matters/:id/messages`, plus
+    Owner `/approve-ai` and `/dismiss-ai` endpoints, preserving speaker attribution in `TeamOrchestrator` history.
+  - Added invite gate & local Owner/colleague switch in `App.tsx` / `Sidebar.tsx`, `.matter-roster-bar` (humans + AI
+    lead/observers/specialists + invite popover), explicit composer mode switch & AI request approval cards in
+    `ChatStage.tsx`, collaborator management in `TeamView.tsx`, and deliverable admin gating in `DeliverableCard.tsx`.
 - Allowed selecting an organization directly on New Matter / Chat even before registering a workspace under it, and
   switched default member `gitName` values to English (`defaultMemberGitName`):
   - Added `matters.org_id` migration & backfill, `store.updateMatterOrganization`, `orgId` support on
