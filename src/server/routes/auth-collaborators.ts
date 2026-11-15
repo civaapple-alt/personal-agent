@@ -76,6 +76,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		const liveTemplates = orchestrator.listTemplates();
 		const allCollaborators = store.listCollaborators();
 		sendJson(res, 200, {
+			innerDemoAvailable: Boolean(ctx.innerMatterDemo),
 			currentUser: toPublicCollaborator(actor!.collaborator),
 			collaborators:
 				actor!.collaborator.permissionRole === "owner"

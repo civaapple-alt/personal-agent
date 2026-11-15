@@ -6,6 +6,7 @@ import type { MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
 import type { RequestActor } from "../auth.ts";
 import type { DialogBroker } from "../dialog-broker.ts";
 import type { ActiveRunState, BackgroundDispatchInput } from "../dispatch-runner.ts";
+import type { InnerMatterDemo } from "../inner-matter.ts";
 import type { PreviewManager } from "../preview-manager.ts";
 
 export const MEMORY_CATEGORIES = new Set<MemoryCategory>([
@@ -18,6 +19,7 @@ export const MEMORY_CATEGORIES = new Set<MemoryCategory>([
 ]);
 
 export interface ServerRouteContext {
+	innerMatterDemo?: InnerMatterDemo;
 	store: PersonalAgentStore;
 	orchestrator: TeamOrchestrator;
 	previewManager: PreviewManager;

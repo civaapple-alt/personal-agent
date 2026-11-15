@@ -1,6 +1,7 @@
 import { type RefObject, type UIEvent, useState } from "react";
 import {
 	type DeliverableDto,
+	type InnerMatterStep,
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type OrganizationDto,
@@ -21,8 +22,13 @@ import {
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
+import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
 
 interface MessageFeedProps {
+	onOpenDemo?: () => void;
+	demoOpening?: boolean;
+	onDemoStep?: (step: InnerMatterStep) => void;
+	demoStepBusy?: boolean;
 	chatScrollRef: RefObject<HTMLDivElement | null>;
 	chatStreamInnerRef: RefObject<HTMLDivElement | null>;
 	messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -65,6 +71,10 @@ interface MessageFeedProps {
 
 /** Scrollable message feed covering the empty-state welcome hero, chat messages, inline approvals, and live run status. */
 export function MessageFeed({
+	onOpenDemo,
+	demoOpening,
+	onDemoStep,
+	demoStepBusy,
 	chatScrollRef,
 	chatStreamInnerRef,
 	messagesEndRef,
@@ -175,9 +185,24 @@ export function MessageFeed({
 								</span>
 							)}
 						</div>
+						{isOwner && onOpenDemo && (
+							<div className="inner-demo-entry">
+								<button type="button" className="btn-pill-outline" disabled={demoOpening} onClick={onOpenDemo}>
+									{demoOpening ? "正在准备演示…" : "体验内置演示"}
+								</button>
+								<p>需求讨论 → 专业协作 → 阶段交付 → 反馈修订</p>
+							</div>
+						)}
 					</div>
 				) : (
 					<>
+						{matterDetail?.demoGuide && (
+							<InnerDemoGuide
+								detail={matterDetail}
+								disabled={isTurnRunning || Boolean(demoStepBusy)}
+								onChooseStep={isOwner ? onDemoStep : undefined}
+							/>
+						)}
 						{matterDetail?.userMessages.map((msg) => {
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";

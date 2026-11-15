@@ -27,6 +27,8 @@
 
 ## 对话、旁听、图片与运行快照
 
+- 新建事项欢迎页的“体验内置演示”按需调用准备接口，再打开演示事项。[InnerDemoGuide](components/chat/InnerDemoGuide.tsx) 只填入可修改的提问；[innerDemo.ts](innerDemo.ts) 依据真实消息、委托与版本计算进度。第四步沿正常验收接口保留已有反馈，再填入修订要求，不自动发给模型。
+
 - [BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作。
 - [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`；
   点击左上角 AI 头像仅用于按该角色发起新事项，已有事项顶栏始终显示该事项真实负责人且不随左上角选择切换。

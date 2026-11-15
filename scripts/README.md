@@ -5,7 +5,7 @@
 | 脚本与命令 | 输入、输出及执行边界 |
 | --- | --- |
 | [build-web.mjs](build-web.mjs)：`npm run build:web` | 将 `web/src/main.tsx` 和 HTML 构建到 `web/dist/`，不调用模型。`npm run build` 另外先编译后端 |
-| [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；为源码/编译入口分别使用临时数据库和端口，检查 bootstrap、首页、SIGTERM 退出，不发起事项或真实模型请求 |
+| [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；为源码/编译入口分别使用临时数据库和端口，检查 bootstrap、内置演示准备、首页与 SIGTERM 退出。演示文件位于临时数据库同级目录，不派发 AI 或调用模型 |
 | [check-docs.mjs](check-docs.mjs)：`npm run check:docs` | 零额外依赖，核对各级 README/AGENTS 的本地链接、章节锚点、npm 脚本与直接 Node 文件入口；只读取文件，不联网或运行文档中的命令 |
 
 检查边界如下：

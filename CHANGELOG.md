@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in built-in feedback-box matter with a separate Git workspace at `.data/inner-matter`, an isolated demo organization, and four editable prompts for discussion, real specialist consultation, V1 delivery and feedback-driven V2 revision. Preparation calls no model and fabricates no history or deliverables.
+- Preserve existing files, Git state, feedback and versions on reopen. Derive guide progress from normal persisted execution evidence; keep existing acceptance text and ratings when preparing revision input.
+- Added isolated regression coverage, source/compiled startup checks for the demo endpoint, and opt-in `demo:inner` real-Pi walkthrough with retained evidence.
+- Fixed a stop/cleanup race discovered during final regression: `abortMatter` now waits for the execution lease to be released before returning, so an immediate organization/workspace switch can proceed.
+
 ### Reliability follow-up after `1f68160`
 
 - Include organization identity in `v2` native-session keys and persist organization provenance on new messages. Filter chat handoffs, observer backgrounds, interruption briefs and reflection evidence by that scope; include organization memories in workspace-less reflection and reject results if the organization changes.

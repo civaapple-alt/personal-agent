@@ -7,6 +7,9 @@
 | [rpc-smoke.ts](rpc-smoke.ts)，根命令 `npm run demo:rpc` | 在仓库根 cwd 运行，无持久 session，读取架构文档并输出 RPC 状态；属于早期 transport 冒烟，不覆盖团队协作 |
 | [team-smoke.ts](team-smoke.ts)，根命令 `npm run demo:team` | 创建临时工作区、数据库和会话；主成员真实委托同事，继续澄清不归档，再跨宿主进程接续并发布一个明确测试版本 |
 | [rsi-smoke.ts](rsi-smoke.ts)，根命令 `npm run demo:rsi` | 临时工作区/数据库/会话中验证真实经验提案、成功收尾提交、正式文件、版本改评和无工具复盘，保留 `evidence.json` |
+| [inner-matter-smoke.ts](inner-matter-smoke.ts)，根命令 `npm run demo:inner` | 在临时 Git 工作区跑完内置四步场景，核对真实委托、前两轮零交付与反馈后的 V1/V2，保留 `turns.json` 和数据库 |
+
+[inner-matter-definition.ts](inner-matter-definition.ts) 是网页内置演示的纯定义，不是会自动运行的 CLI。四步体验及按需初始化规则见[内置演示事项](../../docs/inner-matter-demo.md)。
 
 `team-smoke` 保留临时证据目录，输出 `first.json`、`restart.json` 与数据库/会话的位置；样例是假设，不是业务需求确认，不访问书架。模型和超时以脚本为准，不展示或索取密钥。
 

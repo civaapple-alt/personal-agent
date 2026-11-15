@@ -548,6 +548,34 @@ test("shutdown cancels a host dialog wait and waits for cleanup before releasing
 	assert.equal(f.db.prepare("SELECT * FROM matter_execution_leases").all().length, 0);
 });
 
+test("abortMatter waits for execution cleanup and releases the lease before reporting completion", async (t) => {
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	const f = await fixture(t, async (_worker, _prompt, options) => {
+		entered.resolve();
+		await new Promise<void>((done) => options.signal?.addEventListener("abort", () => done(), { once: true }));
+		await release.promise;
+		return "已停止";
+	});
+	const matter = f.store.createMatter({ title: "stop then change context", workspaceId: f.workspace.id });
+	const pending = f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "work" });
+	await entered.promise;
+	let stopped = false;
+	const stopping = f.orchestrator.abortMatter(matter.id).then(() => {
+		stopped = true;
+	});
+	try {
+		await new Promise<void>((done) => setImmediate(done));
+		assert.equal(stopped, false);
+	} finally {
+		release.resolve();
+		await pending;
+		await stopping;
+	}
+	assert.equal(f.orchestrator.isMatterRunning(matter.id), false);
+	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
+});
+
 test("legacy sessions without proven organization scope remain archived while a fresh scoped session starts", async (t) => {
 	const f = await fixture(t, async () => "ok");
 	const first = await f.orchestrator.dispatchMatter({ prompt: "old", workspaceId: f.workspace.id });

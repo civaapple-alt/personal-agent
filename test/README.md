@@ -15,6 +15,7 @@
 | 组织/身份、受限协同门禁与花名册边界 | [server-collaboration.test.ts](server-collaboration.test.ts) |
 | 组织会话切换、旁听背景、复盘失效与旧范围保留 | [organization-context.test.ts](organization-context.test.ts) |
 | 提请状态、并发批准、附件缺失与并发图片派发 | [ai-request-lifecycle.test.ts](ai-request-lifecycle.test.ts) |
+| 内置演示准备、文件保留、四步进度与正常归档 | [inner-matter.test.ts](inner-matter.test.ts) |
 | 前端纯函数（委托气泡、进度、摘要与附件） | [web-utils.test.ts](web-utils.test.ts) |
 | 测试 Worker 的能力握手/工具请求 | [worker-helpers.ts](worker-helpers.ts)，供上述测试复用 |
 

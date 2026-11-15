@@ -612,6 +612,7 @@ export class TeamOrchestrator {
 				}
 			}),
 		);
+		await run.settled;
 		return true;
 	}
 

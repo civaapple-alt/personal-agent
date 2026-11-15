@@ -143,6 +143,7 @@
 取消信号、超时守卫与服务关闭：
 
 - 停止信号传递到主成员、同事及桥接请求；子工具连接关闭只取消该委托子树。
+- `abortMatter` 在发出取消、停止 Worker 后等待本轮收尾与执行占用释放再返回，避免停止后立即切换组织仍遇到旧占用。
 - 宿主执行桥接工具（如 `delegate_to_member`）阻塞父 Pi 进程期间，父 worker 通过 `suspendIdleTimeout()` 暂停自身 `idleTimeoutMs` 无活动超时。
 - 扩展侧使用 `node:http` 且桥接服务侧关闭默认 300s `requestTimeout` / `headersTimeout`，避免长耗时子委托被 HTTP 传输层误掐断。
 - 子 worker 由各自的 `idleTimeoutMs`（默认 `15` 分钟，支持 `PA_IDLE_TIMEOUT_MS` 覆盖或设 `0` 关闭）守卫。
@@ -293,3 +294,15 @@ npm run demo:rsi
 - 临时证据可能被系统清理，长期复现入口是 [rsi-smoke.ts](../src/demo/rsi-smoke.ts)。
 
 验收反馈与经验计数在一个事务内保存。若请求附带的自动复盘随后失败，接口仍返回成功保存的反馈及 `distillationError`，界面分别展示两个结果；客户端断连会取消可选复盘。
+
+### 2026-11-16 内置演示四步实机验证
+
+运行 `npm run demo:inner`，使用临时 Git 工作区与现有 Pi 配置，实际完成：
+
+- 需求讨论仅调用读取工具；专业协作实际调用两次 `delegate_to_member`，两轮均零交付。
+- 第三轮实际调用 `publish_deliverable` 归档 V1；记录反馈后，第四轮再次咨询研发与测试，并正式发布同标题 V2。
+- 四轮主负责人使用同一 Pi session；V1、V2 文件都保留，结束后事项执行占用为零。
+
+证据目录为 `/var/folders/nq/4dbss1_n7n5g160x6_x9_gn40000gn/T/personal-agent-inner-demo-yk13oZ`，包含 `proof.db`、`turns.json`、`sessions/` 与演示工作区。它不是用户的 `.data/inner-matter`，也不含业务仓库资料。网页另以临时数据库检查了打开、填入提问、刷新恢复和 375px 窄屏；这些查看行为没有派发模型。
+
+本次证明一项受控设计任务的四步链路可运行，不代表需求质量、长期岗位能力或任意业务场景均已验收。

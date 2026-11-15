@@ -2,10 +2,11 @@ import { createServer, type Server } from "node:http";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore } from "../storage/repositories.ts";
-import { resolveRequestActor } from "./auth.ts";
+import { requireOwner, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
-import { HttpRequestError, sendError, serveStaticAsset } from "./http.ts";
+import { HttpRequestError, sendError, sendJson, serveStaticAsset } from "./http.ts";
+import { InnerMatterDemo } from "./inner-matter.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 import { handleAuthRoutes, handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
@@ -25,6 +26,7 @@ export interface PersonalAgentServerOptions {
 	rolesDir?: string;
 	uploadsDir?: string;
 	requireAuth?: boolean;
+	innerMatterDir?: string;
 }
 
 /**
@@ -36,6 +38,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 } {
 	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
 	const sse = createSseHub();
+	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 
 	const offDialog = dialogBroker.onEvent((evt) => {
@@ -60,6 +63,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		broadcast: sse.broadcast,
 		revokeTokenSessions: sse.revokeTokenSessions,
 		runDispatchInBackground,
+		innerMatterDemo,
 	};
 
 	const handlers = [
@@ -84,6 +88,17 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			if (pathname.startsWith("/api/") && !actor) {
 				sendError(res, 401, "未认证，请使用邀请链接或口令登录");
+				return;
+			}
+			if (method === "POST" && pathname === "/api/demos/inner-matter") {
+				if (!requireOwner(res, actor)) return;
+				if (!innerMatterDemo) {
+					sendError(res, 404, "当前服务未启用内置演示");
+					return;
+				}
+				const matter = await innerMatterDemo.prepare();
+				sse.broadcast("matter_updated", { matterId: matter.id });
+				sendJson(res, 200, { matter });
 				return;
 			}
 

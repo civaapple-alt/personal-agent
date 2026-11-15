@@ -36,6 +36,7 @@
   - `collaborators` 表与 `matters.collaborator_ids_json` 维护人类参与者（`owner` / `collaborator`）、岗位头衔及邀请口令；
   - `ensureOwnerCollaborator` 自动初始化所有者记录，`toPublicCollaborator` 用于向非所有者隐藏邀请口令。
 - `appendMessage` 写入当时有效组织的 `metadata.orgId` 快照；读取历史不能使用事项今天的绑定替代来源。`transitionAiRequest` 用条件 UPDATE 认领待处理的人类提请，避免重复批准或忽略。
+- `createMatter` 可由内部调用指定固定 `id`，供按需内置演示复用；普通 HTTP 新建接口不接收该字段，仍生成随机 ID，不新增另一套演示消息或成果存储。
 - 角色 Markdown 与私有运行数据分离；不要把数据库内容导进 [可分享角色](../../roles/README.md)。预览索引和待答对话属于服务内存，未在此持久化。
 
 改 schema 时保留既有消息、版本、会话和用户数据，验证重开数据库后的行为；不要拿用户 `.data/` 试验迁移或清空修复。

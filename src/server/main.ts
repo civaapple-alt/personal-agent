@@ -1,5 +1,5 @@
 import { networkInterfaces } from "node:os";
-import { delimiter, resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
@@ -71,6 +71,7 @@ async function main(): Promise<void> {
 		webDistDir: resolve(rootDir, "web/dist"),
 		rolesDir: resolve(rootDir, "roles"),
 		uploadsDir: resolve(rootDir, ".data/uploads"),
+		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
 	});
 
 	await new Promise<void>((resolveListen) => {

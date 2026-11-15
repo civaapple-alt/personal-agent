@@ -41,6 +41,13 @@ try {
 			assert.equal(bootstrap.members.length, 4);
 			assert.equal(bootstrap.matters.length, 0);
 			assert.equal(bootstrap.deliverables.length, 0);
+			assert.equal(bootstrap.innerDemoAvailable, true);
+			const demoResponse = await fetch(`${base}/api/demos/inner-matter`, { method: "POST" });
+			assert.equal(demoResponse.status, 200);
+			const { matter } = await demoResponse.json();
+			const detail = await (await fetch(`${base}/api/matters/${matter.id}`)).json();
+			assert.equal(detail.demoGuide.steps.length, 4);
+			assert.equal(detail.deliverables.length, 0);
 			assert.equal((await fetch(base)).status, 200);
 			child.kill("SIGTERM");
 			const result = await Promise.race([
@@ -51,7 +58,7 @@ try {
 				}),
 			]);
 			assert.deepEqual(result, { code: 0, signal: null });
-			console.log(`PASS ${entry}: bootstrap, built UI and graceful shutdown`);
+			console.log(`PASS ${entry}: bootstrap, built-in demo, built UI and graceful shutdown`);
 		} finally {
 			if (child.exitCode === null) child.kill("SIGKILL");
 			await exited;

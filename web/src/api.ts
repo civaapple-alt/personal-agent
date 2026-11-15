@@ -1,3 +1,6 @@
+import type { InnerMatterGuide, InnerMatterStep } from "../../src/demo/inner-matter-definition.ts";
+export type { InnerMatterGuide, InnerMatterStep };
+
 export interface OrganizationDto {
 	id: string;
 	name: string;
@@ -256,6 +259,7 @@ export interface ActiveRunSnapshotDto extends MatterProgressDto {
 }
 
 export interface BootstrapPayload {
+	innerDemoAvailable?: boolean;
 	currentUser?: CollaboratorDto;
 	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
@@ -271,6 +275,7 @@ export interface BootstrapPayload {
 }
 
 export interface MatterDetailPayload {
+	demoGuide?: InnerMatterGuide;
 	matter: MatterDto;
 	userMessages: MatterMessageDto[];
 	internalCollabMessages: MatterMessageDto[];
@@ -322,6 +327,10 @@ export function fetchBootstrap(): Promise<BootstrapPayload> {
 
 export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload> {
 	return requestJson<MatterDetailPayload>(`/api/matters/${encodeURIComponent(matterId)}`);
+}
+
+export function openInnerMatterDemo(): Promise<{ matter: MatterDto }> {
+	return requestJson("/api/demos/inner-matter", { method: "POST", body: "{}" });
 }
 
 export function createMatter(input: {

@@ -22,7 +22,7 @@
 - 代码改动选择相关离线测试，再运行 `npm run check`、`npm run build`、`npm test`；首次运行涉及网页的测试前要构建网页资源。
 - `npm run check:startup` 需要已有构建，使用临时数据库检查源码和构建后的入口，不调用真实模型。
 - 文档改动使用 `npm run check:docs`；无需因此重跑整套应用测试或真实模型。
-- `demo:rpc`、`demo:team`、`demo:rsi` 会调用本机 Pi 与真实模型，按 [demo 说明](src/demo/README.md)选择，不能把离线 fixture 通过当作真实岗位能力证明。
+- `demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner` 会调用本机 Pi 与真实模型，按 [demo 说明](src/demo/README.md)选择，不能把离线 fixture 通过当作真实岗位能力证明。
 
 ## 改动边界
 

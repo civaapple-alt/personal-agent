@@ -76,6 +76,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const active = activeRuns.get(matterId);
 		sendJson(res, 200, {
 			matter,
+			demoGuide: ctx.innerMatterDemo?.guideFor(matter),
 			userMessages: store.listMessages(matterId, "user"),
 			internalCollabMessages: store.listMessages(matterId, "internal_collab"),
 			noticeMessages: store.listMessages(matterId, "notice"),

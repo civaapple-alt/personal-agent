@@ -7,6 +7,8 @@
 [app.ts](app.ts) 装配 HTTP 服务，并由 [auth.ts](auth.ts)、[sse.ts](sse.ts)、[uploads.ts](uploads.ts)、[dispatch-runner.ts](dispatch-runner.ts) 与 [routes/](routes/context.ts) 分担鉴权、推送、上传、后台派发与领域路由。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。
 修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
+[inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/inner-matter-demo.md)。
+
 - 并发、工作区切换与图片上传：
   - 同事项运行中发送消息、切换工作区及切换事项负责人（`leadMemberId`）返回 409；调整全局旁听开关（`observersEnabled`）、
     AI 参与名单（`aiMemberIds`）或旁听列表（`observerMemberIds`）可在运行中即时更新。取消要交给编排核，不只广播停止事件。

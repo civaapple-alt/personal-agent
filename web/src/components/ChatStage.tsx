@@ -4,6 +4,7 @@ import type {
 	ComposerImageAttachment,
 	DeliverableDto,
 	DistillRsiResult,
+	InnerMatterStep,
 	MatterDetailPayload,
 	MatterProgressDto,
 	MemberMemoryDto,
@@ -27,6 +28,10 @@ import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
 
 interface ChatStageProps {
+	onOpenDemo?: () => void;
+	demoOpening?: boolean;
+	onDemoStep?: (step: InnerMatterStep) => void;
+	demoStepBusy?: boolean;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	currentUser?: CollaboratorDto | null;
 	collaborators?: CollaboratorDto[];
@@ -93,6 +98,10 @@ const chatScrollMemory = new Map<string, { scrollTop: number; atBottom: boolean 
 
 /** Coordinates the active matter workspace: header bar, participant/collab popovers, scrollable stream, and composer. */
 export function ChatStage({
+	onOpenDemo,
+	demoOpening,
+	onDemoStep,
+	demoStepBusy,
 	composerRef,
 	currentUser,
 	collaborators = [],
@@ -530,6 +539,10 @@ export function ChatStage({
 			)}
 
 			<MessageFeed
+				onOpenDemo={onOpenDemo}
+				demoOpening={demoOpening}
+				onDemoStep={onDemoStep}
+				demoStepBusy={demoStepBusy}
 				chatScrollRef={chatScrollRef}
 				chatStreamInnerRef={chatStreamInnerRef}
 				messagesEndRef={messagesEndRef}

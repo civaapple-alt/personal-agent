@@ -40,6 +40,7 @@
 | 路径 | 用途 | 备注 |
 | --- | --- | --- |
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
+| `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话持久目录（`--session-dir`） | 按事项、成员、工作区路径与会话模式精确记录 `sessionFile` 与 `piSessionId` |
 | `roles/` | 可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`）；在工作台新建或导入角色会落盘至此 |
 | `skills/<name>/SKILL.md` | 角色引用的技能说明文件 | 供启动参数 `--skill` 显式挂载 |

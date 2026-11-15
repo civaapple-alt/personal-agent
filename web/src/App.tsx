@@ -8,14 +8,17 @@ import {
 	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
+	type InnerMatterStep,
 	loginWithInviteToken,
 	logoutAuthSession,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	openInnerMatterDemo,
 	type PreviewServiceDto,
 	type RoleTemplateDto,
 	setAuthRevokedHandler,
 	stopPreview,
+	submitDeliverableFeedback,
 	type TeamMemberDto,
 } from "./api.ts";
 import { AuthGateView } from "./components/AuthGateView.tsx";
@@ -81,6 +84,7 @@ export function App() {
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
+	const [demoOpening, setDemoOpening] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -411,6 +415,55 @@ export function App() {
 
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
 	const isOwner = currentUser?.permissionRole !== "collaborator";
+	const handleOpenDemo = async () => {
+		if (demoOpening) return;
+		setDemoOpening(true);
+		try {
+			const { matter } = await openInnerMatterDemo();
+			explicitNewMatterRef.current = false;
+			navigateRoute({ tab: "chats", matterId: matter.id });
+			setComposerText("");
+			setComposerImages([]);
+			setComposerMode("dispatch");
+			await refreshBootstrap();
+			await refreshDetail(matter.id);
+		} catch (error) {
+			setErrorBanner(error instanceof Error ? error.message : String(error));
+		} finally {
+			setDemoOpening(false);
+		}
+	};
+	const handleDemoStep = async (step: InnerMatterStep) => {
+		if (!matterDetail?.demoGuide || submitting || !isOwner) return;
+		const targetMatterId = matterDetail.matter.id;
+		setSubmitting(true);
+		try {
+			let prompt = step.prompt;
+			if (step.id === "revise") {
+				const v1 = matterDetail.deliverables.find(
+					(item) => item.title === matterDetail.demoGuide?.deliverableTitle && item.version === 1,
+				);
+				if (!v1) throw new Error("请先完成 V1 阶段交付");
+				const feedback = v1.feedback?.trim() || step.feedback;
+				if (!v1.feedback?.trim()) await submitDeliverableFeedback(v1.id, { feedback });
+				prompt += `\n\n本次反馈：\n${feedback}`;
+				await refreshDetail(matterDetail.matter.id);
+				await refreshBootstrap();
+			}
+			if (selectedMatterIdRef.current !== targetMatterId) return;
+			setComposerImages([]);
+			setComposerMode("dispatch");
+			setComposerText(prompt);
+			setNoticeBanner(
+				step.id === "revise" ? "V1 反馈已保留，修订要求已填入；发送后开始执行" : "提问已填入，可修改后发送给团队",
+			);
+			composerRef.current?.focus();
+		} catch (error) {
+			setErrorBanner(error instanceof Error ? error.message : String(error));
+		} finally {
+			setSubmitting(false);
+		}
+	};
 
 	const handleInviteLogin = async (tokenValue: string) => {
 		const token = tokenValue.trim();
@@ -609,6 +662,10 @@ export function App() {
 				</div>
 				{activeTab === "chats" && (
 					<ChatStage
+						onOpenDemo={bootstrap?.innerDemoAvailable && isOwner ? () => void handleOpenDemo() : undefined}
+						demoOpening={demoOpening}
+						onDemoStep={(step) => void handleDemoStep(step)}
+						demoStepBusy={submitting}
 						composerRef={composerRef}
 						currentUser={currentUser}
 						collaborators={bootstrap?.collaborators ?? []}
