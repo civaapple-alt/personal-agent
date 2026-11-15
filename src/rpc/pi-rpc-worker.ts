@@ -87,7 +87,7 @@ export interface RunPromptOptions {
 	signal?: AbortSignal;
 	images?: ImageContent[];
 	streamingBehavior?: "steer" | "followUp";
-	/** Hard overall timeout for `agent_settled` in milliseconds (default: 1800000 = 30 min). */
+	/** Hard overall timeout for `agent_settled` in milliseconds (default: 5400000 = 90 min). */
 	timeoutMs?: number;
 	/** Inactivity timeout with no RPC events or notices in milliseconds (default: min(timeoutMs, 300000)). */
 	idleTimeoutMs?: number;
@@ -434,7 +434,7 @@ export class PiRpcWorker {
 	async runPromptAndWait(message: string, options: RunPromptOptions = {}): Promise<PromptRunResult> {
 		options.signal?.throwIfAborted();
 		const envTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
-		const defaultTimeout = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 1_800_000;
+		const defaultTimeout = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 5_400_000;
 		const timeoutMs = options.timeoutMs ?? defaultTimeout;
 		const idleTimeoutMs = options.idleTimeoutMs ?? Math.min(timeoutMs, 300_000);
 		const events: RpcSessionEvent[] = [];

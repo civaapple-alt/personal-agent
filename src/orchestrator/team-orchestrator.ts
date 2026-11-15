@@ -161,7 +161,23 @@ interface MatterRun {
 	delegationCount: number;
 	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
 	userMessageId: string;
-	timeoutMs?: number;
+	timeoutMs: number;
+	deadlineAt: number;
+}
+
+function resolveTurnTimeoutMs(explicitMs?: number): number {
+	if (typeof explicitMs === "number" && Number.isFinite(explicitMs) && explicitMs > 0) {
+		return explicitMs;
+	}
+	const turnEnvTimeout = Number(process.env.PA_TURN_TIMEOUT_MS);
+	if (Number.isFinite(turnEnvTimeout) && turnEnvTimeout > 0) {
+		return turnEnvTimeout;
+	}
+	const promptEnvTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
+	if (Number.isFinite(promptEnvTimeout) && promptEnvTimeout > 0) {
+		return promptEnvTimeout;
+	}
+	return 5_400_000;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -629,6 +645,7 @@ ${this.store
 			});
 		const ownerId = randomUUID();
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
+		const turnDeadlineMs = resolveTurnTimeoutMs(input.timeoutMs);
 		const completion = Promise.withResolvers<void>();
 		const run: MatterRun = {
 			settled: completion.promise,
@@ -643,13 +660,10 @@ ${this.store
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
-			timeoutMs: input.timeoutMs,
+			timeoutMs: turnDeadlineMs,
+			deadlineAt: Date.now() + turnDeadlineMs,
 		};
 		this.runs.set(matter.id, run);
-		const turnEnvTimeout = Number(process.env.PA_TURN_TIMEOUT_MS);
-		const promptEnvTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
-		const turnDeadlineMs =
-			input.timeoutMs ?? (turnEnvTimeout > 0 ? turnEnvTimeout : promptEnvTimeout > 0 ? promptEnvTimeout : 5_400_000);
 		const deadline = setTimeout(
 			() => run.controller.abort(new Error(`Matter turn timed out after ${Math.round(turnDeadlineMs / 1000)}s`)),
 			turnDeadlineMs,
@@ -870,6 +884,7 @@ ${this.store
 		if (workspaceId && !workspace) throw new Error(`Unknown workspace: ${workspaceId}`);
 		const ownerId = randomUUID();
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
+		const turnDeadlineMs = resolveTurnTimeoutMs(input.timeoutMs);
 		const completion = Promise.withResolvers<void>();
 		const run: MatterRun = {
 			settled: completion.promise,
@@ -884,7 +899,8 @@ ${this.store
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
-			timeoutMs: input.timeoutMs,
+			timeoutMs: turnDeadlineMs,
+			deadlineAt: Date.now() + turnDeadlineMs,
 		};
 		this.runs.set(matter.id, run);
 		try {
@@ -1535,8 +1551,9 @@ ${this.store
 					memberId: input.member.id,
 				});
 			}
+			const remainingTimeoutMs = Math.max(1, Math.min(input.run.timeoutMs, input.run.deadlineAt - Date.now()));
 			const result = await worker.runPromptAndWait(prompt, {
-				timeoutMs: input.run.timeoutMs,
+				timeoutMs: remainingTimeoutMs,
 				signal,
 				onTextDelta: input.onTextDelta,
 			});

@@ -18,6 +18,7 @@ import { reportReady } from "./worker-helpers.ts";
 class FakeRpcWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
 	readonly receivedPrompts: string[] = [];
+	readonly receivedTimeouts: Array<number | undefined> = [];
 	private noticeListeners: Array<(notice: { method: string; [key: string]: unknown }) => void> = [];
 	private dialogHandler:
 		| ((req: RpcExtensionUIDialogRequest) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload)
@@ -69,8 +70,12 @@ class FakeRpcWorker implements RpcWorkerLike {
 		this.dialogHandler = handler;
 	}
 
-	async runPromptAndWait(message: string): Promise<PromptRunResult> {
+	async runPromptAndWait(
+		message: string,
+		runOptions?: { timeoutMs?: number; signal?: AbortSignal },
+	): Promise<PromptRunResult> {
 		this.receivedPrompts.push(message);
+		this.receivedTimeouts.push(runOptions?.timeoutMs);
 		const text = await this.responder(message, {
 			emitNotice: (notice) => {
 				for (const listener of this.noticeListeners) {
@@ -239,4 +244,42 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	assert.equal(v2Result.deliverable.version, 2);
 
 	db.close();
+});
+
+test("dispatchMatter forwards resolved 90m turn timeout and PA_TURN_TIMEOUT_MS override to workers", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const workers: FakeRpcWorker[] = [];
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		workerFactory: (opts) => {
+			const w = new FakeRpcWorker(opts, async () => "ok");
+			workers.push(w);
+			return w;
+		},
+	});
+
+	const prevTurnEnv = process.env.PA_TURN_TIMEOUT_MS;
+	const prevPromptEnv = process.env.PA_PROMPT_TIMEOUT_MS;
+	delete process.env.PA_TURN_TIMEOUT_MS;
+	delete process.env.PA_PROMPT_TIMEOUT_MS;
+	try {
+		await orchestrator.dispatchMatter({ prompt: "默认 90 分钟超时验证" });
+		const defaultSeen = workers[0]?.receivedTimeouts[0] ?? 0;
+		assert.ok(defaultSeen > 5_390_000 && defaultSeen <= 5_400_000, `Expected ~5400000ms, got ${defaultSeen}`);
+
+		process.env.PA_TURN_TIMEOUT_MS = "7200000";
+		await orchestrator.dispatchMatter({ prompt: "环境变量超时覆盖验证" });
+		const envSeen = workers[1]?.receivedTimeouts[0] ?? 0;
+		assert.ok(envSeen > 7_190_000 && envSeen <= 7_200_000, `Expected ~7200000ms, got ${envSeen}`);
+	} finally {
+		if (prevTurnEnv === undefined) delete process.env.PA_TURN_TIMEOUT_MS;
+		else process.env.PA_TURN_TIMEOUT_MS = prevTurnEnv;
+		if (prevPromptEnv === undefined) delete process.env.PA_PROMPT_TIMEOUT_MS;
+		else process.env.PA_PROMPT_TIMEOUT_MS = prevPromptEnv;
+		db.close();
+	}
 });

@@ -12,7 +12,7 @@
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../src/server/main.ts) → [编排核](../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
 | `PA_TURN_TIMEOUT_MS` | `5400000`（90 分钟） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。未通过 API/代码显式传入 `timeoutMs` 且该值为正数时优先使用 |
-| `PA_PROMPT_TIMEOUT_MS` | `1800000`（30 分钟） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) / [编排核](../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的硬超时上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时，也会被编排核用作整轮超时的回退覆盖值 |
+| `PA_PROMPT_TIMEOUT_MS` | `5400000`（90 分钟） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) / [编排核](../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的硬超时上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时，也会被编排核用作整轮超时的回退覆盖值 |
 | `NODE_ENV` | 未设置 | [前端构建脚本](../scripts/build-web.mjs) | 设为 `production` 时，`npm run build:web` 启用 esbuild 代码压缩 |
 
 > **说明**：模型厂商凭证（如 `kimi-coding` 等 provider 的认证配置）不保存在本仓库变量中，直接复用本机 Pi CLI 环境配置；请勿将密钥写入代码或 `roles/*.md`。
