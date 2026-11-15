@@ -257,6 +257,35 @@ function buildObserverTaskPrompt(input: { leadMember: TeamMember; userPrompt: st
 	].join("\n");
 }
 
+function buildObserverContextDigest(input: {
+	matter: Matter | null;
+	deliverables: Deliverable[];
+	history: MatterMessage[];
+	includeMatterHeader: boolean;
+}): string {
+	const parts: string[] = [];
+	if (input.includeMatterHeader && input.matter) {
+		if (input.matter.title) parts.push(`事项主题：${truncateInline(input.matter.title, 120)}`);
+		if (input.matter.summary) parts.push(`阶段摘要：${truncateInline(input.matter.summary, 280)}`);
+		if (input.deliverables.length > 0) {
+			const latestByTitle = new Map<string, Deliverable>();
+			for (const item of input.deliverables) {
+				const prev = latestByTitle.get(item.title);
+				if (!prev || item.version > prev.version) latestByTitle.set(item.title, item);
+			}
+			const list = [...latestByTitle.values()].map((d) => `${d.title} (V${d.version})`).join("、");
+			if (list) parts.push(`已归档成果：${truncateInline(list, 240)}`);
+		}
+	}
+	if (input.history.length > 0) {
+		const lines = input.history
+			.slice(-6)
+			.map((message) => `- ${message.senderType}/${message.senderId}: ${truncateInline(message.content, 360)}`);
+		parts.push(`此前最近对话摘录：\n${lines.join("\n")}`);
+	}
+	return parts.join("\n").slice(-3500);
+}
+
 function emptyAbortedResult(): PromptRunResult {
 	return {
 		disposition: "started",
@@ -1328,7 +1357,7 @@ ${this.store
 			const afterCursor = previous?.messageCursor
 				? messages.findIndex((message) => message.id === previous.messageCursor) + 1
 				: 0;
-			const history = messages
+			const filteredHistory = messages
 				.slice(afterCursor)
 				.filter(
 					(message) =>
@@ -1336,13 +1365,25 @@ ${this.store
 						message.metadata?.workspaceId === (input.workspace?.id ?? null) &&
 						message.metadata?.repoPath === cwd &&
 						!(previous && message.senderType === "member" && message.senderId === input.member.id),
-				)
-				.slice(-12);
-			const context = history
-				.map((message) => `${message.senderType}/${message.senderId}: ${message.content}`)
-				.join("\n\n")
-				.slice(-20000);
-			const prompt = `${context ? `同事项、同工作区中尚未进入本会话的对话（有界背景）：\n${context}\n\n` : ""}${input.taskPrompt}`;
+				);
+			const context =
+				sessionMode === "observer"
+					? buildObserverContextDigest({
+							matter: this.store.getMatter(input.matterId),
+							deliverables: this.store.listDeliverables(input.matterId),
+							history: filteredHistory,
+							includeMatterHeader: !previous,
+						})
+					: filteredHistory
+							.slice(-12)
+							.map((message) => `${message.senderType}/${message.senderId}: ${message.content}`)
+							.join("\n\n")
+							.slice(-20000);
+			const contextHeader =
+				sessionMode === "observer"
+					? "会前背景摘要（精简回顾）："
+					: "同事项、同工作区中尚未进入本会话的对话（有界背景）：";
+			const prompt = `${context ? `${contextHeader}\n${context}\n\n` : ""}${input.taskPrompt}`;
 			sessionRecord = this.store.recordWorkerSession({
 				memberId: input.member.id,
 				matterId: input.matterId,

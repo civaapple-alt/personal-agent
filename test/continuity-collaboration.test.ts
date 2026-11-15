@@ -702,6 +702,46 @@ test("proactive observer chimes in with independent user bubble while silent obs
 	assert.deepEqual(f.store.getMatter(result.matter.id)?.observerMemberIds, ["engineering-manager", "qa-manager"]);
 });
 
+test("late-joining observer receives summarized background digest rather than full historical session logs", async (t) => {
+	const observerPrompts: string[] = [];
+	const f = await fixture(t, async (worker, prompt) => {
+		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
+		if (ctx.includes("(Engineering Manager)")) {
+			observerPrompts.push(prompt);
+			return "[SILENT]";
+		}
+		if (prompt.includes("第1轮")) {
+			f.store.appendMessage({
+				matterId: f.store.listMatters()[0]!.id,
+				channel: "internal_collab",
+				senderType: "member",
+				senderId: "product-manager",
+				content: "INTERNAL_SECRET_TRACE_SHOULD_NOT_LEAK",
+			});
+			return `第1轮长篇细节：${"A".repeat(1200)}_TAIL_MARKER_IGNORED`;
+		}
+		return "第2轮讨论：先定边界再开发。";
+	});
+	const turn1 = await f.orchestrator.dispatchMatter({
+		prompt: "第1轮先讨论历史方案",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+	});
+	await f.orchestrator.dispatchMatter({
+		matterId: turn1.matter.id,
+		prompt: "第2轮把研发拉进旁听",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		observerMemberIds: ["engineering-manager"],
+	});
+	assert.equal(observerPrompts.length, 1);
+	const seen = observerPrompts[0]!;
+	assert.match(seen, /会前背景摘要（精简回顾）/);
+	assert.doesNotMatch(seen, /INTERNAL_SECRET_TRACE_SHOULD_NOT_LEAK/);
+	assert.doesNotMatch(seen, /TAIL_MARKER_IGNORED/);
+	assert.match(seen, /第2轮讨论：先定边界再开发/);
+});
+
 test("aborted turn skips observer evaluation", async (t) => {
 	let workerCount = 0;
 	let markStarted!: () => void;

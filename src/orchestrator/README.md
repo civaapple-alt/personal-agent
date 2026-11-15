@@ -5,7 +5,7 @@
 按问题找入口：
 
 - `dispatchMatter` 选择或保留负责人、工作区与旁听成员（`observerMemberIds`），取得事项占用，保存交流并决定收尾；主成员正常回复后，列席旁听成员在 `runObservers` 中并行快速评估本轮讨论，无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。
-- `executeWithWorker` 按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话，装配实际能力。不能用最近会话或无限历史拼接替代恢复。
+- `executeWithWorker` 按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话，装配实际能力。不能用最近会话或无限历史拼接替代恢复；其中旁听模式首次接入事项时只注入精简的阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色的完整过程记录或 `internal_collab` 细节。
 - `delegate` 由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者；桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
 - `abortMatter`、`shutdown` 传播取消并等待执行树清理；不要只改变界面状态。
 
