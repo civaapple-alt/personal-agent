@@ -108,17 +108,27 @@ export function ChatStage({
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 	const collabTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
+	const composerDockRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
-		if (!collabOpen) return;
+		if (!collabOpen && !starterMenuOpen && !observerMenuOpen) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
-			if (collabPanelRef.current?.contains(target) || collabTriggerRef.current?.contains(target)) return;
-			setCollabOpen(false);
+			if (collabOpen && !collabPanelRef.current?.contains(target) && !collabTriggerRef.current?.contains(target)) {
+				setCollabOpen(false);
+			}
+			if ((starterMenuOpen || observerMenuOpen) && !composerDockRef.current?.contains(target)) {
+				setStarterMenuOpen(false);
+				setObserverMenuOpen(false);
+			}
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
-			if (event.key === "Escape") setCollabOpen(false);
+			if (event.key === "Escape") {
+				setCollabOpen(false);
+				setStarterMenuOpen(false);
+				setObserverMenuOpen(false);
+			}
 		};
 		document.addEventListener("mousedown", onMouseDown);
 		document.addEventListener("keydown", onKeyDown);
@@ -126,7 +136,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen]);
+	}, [collabOpen, starterMenuOpen, observerMenuOpen]);
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const messageCount = matterDetail?.userMessages.length ?? 0;
@@ -534,7 +544,7 @@ export function ChatStage({
 			</div>
 
 			<div className="composer-dock">
-				<div className="composer-dock-inner">
+				<div ref={composerDockRef} className="composer-dock-inner">
 					{starterMenuOpen && (
 						<div className="quick-prompts-popover">
 							<div className="banner-row">
@@ -657,6 +667,7 @@ export function ChatStage({
 						</select>
 						<button
 							type="button"
+							aria-expanded={observerMenuOpen}
 							className={`select-pill action ${activeObserverIds.length > 0 ? "observer-active" : ""}`}
 							onClick={() => {
 								setStarterMenuOpen(false);
@@ -677,6 +688,7 @@ export function ChatStage({
 					<div className="pill-composer">
 						<button
 							type="button"
+							aria-expanded={starterMenuOpen}
 							className="pill-plus-btn"
 							aria-label="插入示范任务"
 							onClick={() => {

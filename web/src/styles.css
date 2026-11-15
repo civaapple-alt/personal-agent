@@ -1214,11 +1214,18 @@ body {
 }
 
 .quick-prompts-popover {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 0;
+	right: 0;
+	z-index: 30;
+	max-height: min(55vh, 420px);
+	overflow-y: auto;
 	border: 1px solid var(--border);
 	background: var(--bg-stage);
 	border-radius: 16px;
 	padding: 12px 14px;
-	box-shadow: 0 10px 30px rgba(15, 36, 28, 0.12);
+	box-shadow: 0 10px 30px rgba(15, 36, 28, 0.14);
 	font-size: 13px;
 }
 

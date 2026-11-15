@@ -24,6 +24,7 @@ All notable changes to Personal Agent are documented in this file.
 - `npm run demo:team` verifies real Pi model delegation, an actual document, and recall after restarting the host process in a disposable workspace/database. Regression tests cover continuity, isolation, tool transport and failure/cancellation boundaries.
 
 ### Changed
+- Anchored composer popovers (`.quick-prompts-popover`, including the `旁听` member picker and `+` starter prompt menu) with `position: absolute; bottom: calc(100% + 8px)` above `.composer-dock-inner` plus click-outside and `Escape` dismissal, preventing them from resizing the composer dock or shifting the main message stream.
 - Converted `ChatStage`'s top-right collaboration drawer (`.collab-dock-panel`) into an anchored floating overlay popover (`top: 64px; right: 24px`) with click-outside and `Escape` dismissal, so opening `团队委托 · 事件` no longer pushes down or squeezes the main conversation stream.
 - Tightened proactive observer background injection (`buildObserverContextDigest`): late-joining or active observers now receive only a compact summary (matter title/summary, delivered milestone titles, up to 16 truncated recent user-channel excerpts capped within 6,000 chars, plus the current turn's prompt & lead reply) rather than dumping full 20,000-character verbatim transcripts.
 - Role directory discovery now excludes `README.md`, so local asset documentation does not become an invalid team member.
