@@ -260,13 +260,18 @@ test("PiRpcWorker still times out when a started model produces no activity", as
 	`);
 	const worker = new PiRpcWorker({ executable: mock.executable, leadingArgs: mock.leadingArgs });
 	await worker.start();
+	const prevIdleEnv = process.env.PA_IDLE_TIMEOUT_MS;
 	try {
 		await worker.getState();
 		await assert.rejects(
 			worker.runPromptAndWait("idle", { idleTimeoutMs: 100, timeoutMs: 1000 }),
 			/100ms of inactivity/,
 		);
+		process.env.PA_IDLE_TIMEOUT_MS = "90";
+		await assert.rejects(worker.runPromptAndWait("idle-env-no-hard-cap", { timeoutMs: 0 }), /90ms of inactivity/);
 	} finally {
+		if (prevIdleEnv === undefined) delete process.env.PA_IDLE_TIMEOUT_MS;
+		else process.env.PA_IDLE_TIMEOUT_MS = prevIdleEnv;
 		await worker.stop();
 	}
 });

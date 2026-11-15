@@ -11,8 +11,9 @@
 | `PORT` | `4310` | [服务入口](../src/server/main.ts) | Web 工作台 HTTP/SSE 监听端口，固定绑定 `127.0.0.1` |
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../src/server/main.ts) → [编排核](../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
-| `PA_TURN_TIMEOUT_MS` | `5400000`（90 分钟） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。未通过 API/代码显式传入 `timeoutMs` 且该值为正数时优先使用 |
-| `PA_PROMPT_TIMEOUT_MS` | `5400000`（90 分钟） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) / [编排核](../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的硬超时上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时，也会被编排核用作整轮超时的回退覆盖值 |
+| `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
+| `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) / [编排核](../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
+| `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / `publish_deliverable` / 对话框等待期间自动暂停 |
 | `NODE_ENV` | 未设置 | [前端构建脚本](../scripts/build-web.mjs) | 设为 `production` 时，`npm run build:web` 启用 esbuild 代码压缩 |
 
 > **说明**：模型厂商凭证（如 `kimi-coding` 等 provider 的认证配置）不保存在本仓库变量中，直接复用本机 Pi CLI 环境配置；请勿将密钥写入代码或 `roles/*.md`。
@@ -61,7 +62,7 @@
 | `executable` | `"pi"` | `PiRpcWorkerOptions` | Pi CLI 可执行文件路径或命令名 |
 | `commandTimeoutMs` | `30000`（30s） | `PiRpcWorkerOptions` | 单条 RPC 控制命令（如 `get_state`、`prompt`、`abort`）等待响应超时 |
 | `shutdownGraceMs` | `2000`（2s） | `PiRpcWorkerOptions` | `stop()` 优雅关闭等待时长，超时后发送 `SIGTERM` / `SIGKILL` |
-| `idleTimeoutMs` | `Math.min(timeoutMs, 300000)`（上限 5 分钟） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗；在宿主执行 `delegate_to_member` / `publish_deliverable` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
+| `idleTimeoutMs` | `900000`（15 分钟，可由 `PA_IDLE_TIMEOUT_MS` 覆写） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗（有正的 `timeoutMs` 时不超过 `timeoutMs`，设为 `0` 关闭）；在宿主执行 `delegate_to_member` / `publish_deliverable` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
 | 动态工具等待上限 | `10000`（10s） | [team-extension.ts](../src/rpc/team-extension.ts) | `session_start` 后轮询 `pi.getAllTools()` 等待异步扩展或 MCP 注册完成的最长时间 |
 | 桥接 `/ready` 握手超时 | `30000`（30s） | [team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts) | 宿主等待子扩展回报实际激活工具清单的最长时间 |
 | 桥接 HTTP 传输超时 | `0`（禁用） | [team-extension.ts](../src/rpc/team-extension.ts) / [team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |

@@ -87,9 +87,15 @@ export interface RunPromptOptions {
 	signal?: AbortSignal;
 	images?: ImageContent[];
 	streamingBehavior?: "steer" | "followUp";
-	/** Hard overall timeout for `agent_settled` in milliseconds (default: 5400000 = 90 min). */
+	/**
+	 * Hard overall timeout for `agent_settled` in milliseconds.
+	 * Use `0` to disable the wall-clock cutoff (default: `PA_PROMPT_TIMEOUT_MS` or `0`).
+	 */
 	timeoutMs?: number;
-	/** Inactivity timeout with no RPC events or notices in milliseconds (default: min(timeoutMs, 300000)). */
+	/**
+	 * Inactivity timeout with no RPC events or notices in milliseconds.
+	 * Use `0` to disable (default: `PA_IDLE_TIMEOUT_MS` or `900000` = 15 min, capped by positive `timeoutMs`).
+	 */
 	idleTimeoutMs?: number;
 	/** Optional per-run streaming delta callback. */
 	onTextDelta?: (delta: string) => void;
@@ -433,10 +439,20 @@ export class PiRpcWorker {
 	 */
 	async runPromptAndWait(message: string, options: RunPromptOptions = {}): Promise<PromptRunResult> {
 		options.signal?.throwIfAborted();
-		const envTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
-		const defaultTimeout = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 5_400_000;
-		const timeoutMs = options.timeoutMs ?? defaultTimeout;
-		const idleTimeoutMs = options.idleTimeoutMs ?? Math.min(timeoutMs, 300_000);
+		const parseNonNegativeMs = (raw: string | undefined, fallback: number): number => {
+			if (raw === undefined || raw.trim() === "") return fallback;
+			const parsed = Number(raw);
+			return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+		};
+		const timeoutMs =
+			options.timeoutMs !== undefined && Number.isFinite(options.timeoutMs) && options.timeoutMs >= 0
+				? options.timeoutMs
+				: parseNonNegativeMs(process.env.PA_PROMPT_TIMEOUT_MS, 0);
+		const configuredIdleMs =
+			options.idleTimeoutMs !== undefined && Number.isFinite(options.idleTimeoutMs) && options.idleTimeoutMs >= 0
+				? options.idleTimeoutMs
+				: parseNonNegativeMs(process.env.PA_IDLE_TIMEOUT_MS, 900_000);
+		const idleTimeoutMs = timeoutMs > 0 ? Math.min(timeoutMs, configuredIdleMs) : configuredIdleMs;
 		const events: RpcSessionEvent[] = [];
 		const notices: RpcExtensionUINoticeRequest[] = [];
 		const dialogs: DialogInteractionRecord[] = [];
@@ -469,16 +485,26 @@ export class PiRpcWorker {
 		const resetIdleTimer = () => {
 			if (idleTimer) clearTimeout(idleTimer);
 			idleTimer = undefined;
-			if (settledDone || inDialog || this.externalIdleSuspendCount > 0 || idleTimeoutMs >= timeoutMs) return;
+			if (
+				settledDone ||
+				inDialog ||
+				this.externalIdleSuspendCount > 0 ||
+				idleTimeoutMs <= 0 ||
+				(timeoutMs > 0 && idleTimeoutMs >= timeoutMs)
+			) {
+				return;
+			}
 			idleTimer = setTimeout(() => {
 				rejectSettled(new Error(`Timed out after ${idleTimeoutMs}ms of inactivity waiting for agent_settled`));
 			}, idleTimeoutMs);
 		};
 
 		this.idleStateListeners.add(resetIdleTimer);
-		hardTimer = setTimeout(() => {
-			rejectSettled(new Error(`Timed out after ${timeoutMs}ms waiting for agent_settled`));
-		}, timeoutMs);
+		if (timeoutMs > 0) {
+			hardTimer = setTimeout(() => {
+				rejectSettled(new Error(`Timed out after ${timeoutMs}ms waiting for agent_settled`));
+			}, timeoutMs);
+		}
 		resetIdleTimer();
 
 		const offEvent = this.onEvent((event) => {

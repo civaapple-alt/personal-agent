@@ -246,7 +246,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	db.close();
 });
 
-test("dispatchMatter forwards resolved 90m turn timeout and PA_TURN_TIMEOUT_MS override to workers", async () => {
+test("dispatchMatter defaults to 0ms unlimited Goal-mode turn timeout and honors PA_TURN_TIMEOUT_MS override", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
@@ -267,14 +267,17 @@ test("dispatchMatter forwards resolved 90m turn timeout and PA_TURN_TIMEOUT_MS o
 	delete process.env.PA_TURN_TIMEOUT_MS;
 	delete process.env.PA_PROMPT_TIMEOUT_MS;
 	try {
-		await orchestrator.dispatchMatter({ prompt: "默认 90 分钟超时验证" });
-		const defaultSeen = workers[0]?.receivedTimeouts[0] ?? 0;
-		assert.ok(defaultSeen > 5_390_000 && defaultSeen <= 5_400_000, `Expected ~5400000ms, got ${defaultSeen}`);
+		await orchestrator.dispatchMatter({ prompt: "默认不设墙钟硬上限验证" });
+		assert.equal(workers[0]?.receivedTimeouts[0], 0);
 
 		process.env.PA_TURN_TIMEOUT_MS = "7200000";
 		await orchestrator.dispatchMatter({ prompt: "环境变量超时覆盖验证" });
 		const envSeen = workers[1]?.receivedTimeouts[0] ?? 0;
 		assert.ok(envSeen > 7_190_000 && envSeen <= 7_200_000, `Expected ~7200000ms, got ${envSeen}`);
+
+		process.env.PA_TURN_TIMEOUT_MS = "0";
+		await orchestrator.dispatchMatter({ prompt: "显式设为 0 关闭墙钟上限" });
+		assert.equal(workers[2]?.receivedTimeouts[0], 0);
 	} finally {
 		if (prevTurnEnv === undefined) delete process.env.PA_TURN_TIMEOUT_MS;
 		else process.env.PA_TURN_TIMEOUT_MS = prevTurnEnv;

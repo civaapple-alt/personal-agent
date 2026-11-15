@@ -162,22 +162,29 @@ interface MatterRun {
 	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
 	userMessageId: string;
 	timeoutMs: number;
-	deadlineAt: number;
+	deadlineAt: number | null;
+}
+
+function parseTimeoutEnv(raw: string | undefined): number | undefined {
+	if (raw === undefined || raw.trim() === "") return undefined;
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function resolveTurnTimeoutMs(explicitMs?: number): number {
-	if (typeof explicitMs === "number" && Number.isFinite(explicitMs) && explicitMs > 0) {
+	if (typeof explicitMs === "number" && Number.isFinite(explicitMs) && explicitMs >= 0) {
 		return explicitMs;
 	}
-	const turnEnvTimeout = Number(process.env.PA_TURN_TIMEOUT_MS);
-	if (Number.isFinite(turnEnvTimeout) && turnEnvTimeout > 0) {
+	const turnEnvTimeout = parseTimeoutEnv(process.env.PA_TURN_TIMEOUT_MS);
+	if (turnEnvTimeout !== undefined) {
 		return turnEnvTimeout;
 	}
-	const promptEnvTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
-	if (Number.isFinite(promptEnvTimeout) && promptEnvTimeout > 0) {
+	const promptEnvTimeout = parseTimeoutEnv(process.env.PA_PROMPT_TIMEOUT_MS);
+	if (promptEnvTimeout !== undefined) {
 		return promptEnvTimeout;
 	}
-	return 5_400_000;
+	// Default to Goal/Plan mode without a fixed wall-clock turn cutoff; guarded by worker idle watchdog and explicit abort.
+	return 0;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -661,13 +668,19 @@ ${this.store
 			deliveries: [],
 			userMessageId: "",
 			timeoutMs: turnDeadlineMs,
-			deadlineAt: Date.now() + turnDeadlineMs,
+			deadlineAt: turnDeadlineMs > 0 ? Date.now() + turnDeadlineMs : null,
 		};
 		this.runs.set(matter.id, run);
-		const deadline = setTimeout(
-			() => run.controller.abort(new Error(`Matter turn timed out after ${Math.round(turnDeadlineMs / 1000)}s`)),
-			turnDeadlineMs,
-		);
+		const deadline =
+			turnDeadlineMs > 0
+				? setTimeout(
+						() =>
+							run.controller.abort(
+								new Error(`Matter turn timed out after ${Math.round(turnDeadlineMs / 1000)}s`),
+							),
+						turnDeadlineMs,
+					)
+				: undefined;
 		try {
 			this.store.updateMatterLead(matter.id, assignedMember.id);
 			this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
@@ -836,7 +849,7 @@ ${this.store
 			if (run.controller.signal.aborted) throw run.controller.signal.reason;
 			throw error;
 		} finally {
-			clearTimeout(deadline);
+			if (deadline) clearTimeout(deadline);
 			run.controller.abort(new Error("Turn finished"));
 			this.runs.delete(matter.id);
 			this.store.releaseMatterLease(matter.id, ownerId);
@@ -900,7 +913,7 @@ ${this.store
 			deliveries: [],
 			userMessageId: "",
 			timeoutMs: turnDeadlineMs,
-			deadlineAt: Date.now() + turnDeadlineMs,
+			deadlineAt: turnDeadlineMs > 0 ? Date.now() + turnDeadlineMs : null,
 		};
 		this.runs.set(matter.id, run);
 		try {
@@ -1551,7 +1564,10 @@ ${this.store
 					memberId: input.member.id,
 				});
 			}
-			const remainingTimeoutMs = Math.max(1, Math.min(input.run.timeoutMs, input.run.deadlineAt - Date.now()));
+			const remainingTimeoutMs =
+				input.run.deadlineAt !== null
+					? Math.max(1, Math.min(input.run.timeoutMs, input.run.deadlineAt - Date.now()))
+					: 0;
 			const result = await worker.runPromptAndWait(prompt, {
 				timeoutMs: remainingTimeoutMs,
 				signal,
