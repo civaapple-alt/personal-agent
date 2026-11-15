@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	abortMatter,
+	abortRsiDistillation,
 	type BootstrapPayload,
 	createMatter,
 	type DeliverableDto,
@@ -70,6 +71,7 @@ export function App() {
 	const [nowMs, setNowMs] = useState(() => Date.now());
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
+	const distillAbortRef = useRef<Map<string, AbortController>>(new Map());
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
@@ -530,20 +532,43 @@ export function App() {
 		}
 	};
 
+	const cancelRsiDistill = (matterId: string) => {
+		const controller = distillAbortRef.current.get(matterId);
+		if (controller) {
+			controller.abort();
+			distillAbortRef.current.delete(matterId);
+		}
+		setNoticeBanner("已取消本次 AI 经验复盘");
+		void abortRsiDistillation(matterId).catch(() => {});
+	};
+
 	const runRsiDistill = async (input: {
 		matterId: string;
 		deliverableId?: string;
 		feedback?: string;
 		rating?: FeedbackRating;
 	}): Promise<DistillRsiResult | undefined> => {
+		const prevController = distillAbortRef.current.get(input.matterId);
+		if (prevController) {
+			prevController.abort();
+		}
+		const controller = new AbortController();
+		distillAbortRef.current.set(input.matterId, controller);
 		try {
-			const res = await distillRsiExperiences({
-				matterId: input.matterId,
-				deliverableId: input.deliverableId,
-				feedback: input.feedback,
-				rating: input.rating,
-				scopeMode: "team",
-			});
+			const res = await distillRsiExperiences(
+				{
+					matterId: input.matterId,
+					deliverableId: input.deliverableId,
+					feedback: input.feedback,
+					rating: input.rating,
+					scopeMode: "team",
+				},
+				controller.signal,
+			);
+			if (res.aborted || controller.signal.aborted) {
+				setNoticeBanner("已取消本次 AI 经验复盘");
+				return { ...res, aborted: true };
+			}
 			if (res.createdMemories.length > 0) {
 				const roleNames = Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId))));
 				setNoticeBanner(
@@ -562,8 +587,22 @@ export function App() {
 			}
 			return res;
 		} catch (err) {
+			if (controller.signal.aborted || (err instanceof Error && err.name === "AbortError")) {
+				setNoticeBanner("已取消本次 AI 经验复盘");
+				return {
+					ok: false,
+					aborted: true,
+					createdMemories: [],
+					skippedDuplicates: 0,
+					summary: "已取消 AI 经验复盘",
+				};
+			}
 			setErrorBanner(err instanceof Error ? err.message : String(err));
 			return undefined;
+		} finally {
+			if (distillAbortRef.current.get(input.matterId) === controller) {
+				distillAbortRef.current.delete(input.matterId);
+			}
 		}
 	};
 
@@ -646,6 +685,7 @@ export function App() {
 						onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 						onOpenTeam={() => navigateRoute({ tab: "team" })}
 						onDistillMatter={(matterId) => runRsiDistill({ matterId })}
+						onCancelDistillMatter={cancelRsiDistill}
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
@@ -665,6 +705,7 @@ export function App() {
 						workspaceName={workspaceName}
 						onSubmitFeedback={handleDeliverableFeedback}
 						onDistillExperiences={handleDistillExperiences}
+						onCancelDistill={cancelRsiDistill}
 						onStopPreview={async (previewId) => {
 							await stopPreview(previewId);
 							await refreshBootstrap();

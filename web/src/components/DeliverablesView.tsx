@@ -30,6 +30,7 @@ interface DeliverablesViewProps {
 		feedback?: string,
 		rating?: FeedbackRating,
 	) => Promise<DistillRsiResult | undefined>;
+	onCancelDistill?: (matterId: string) => void;
 	onStopPreview: (previewId: string) => Promise<void>;
 	onSelectDeliverable: (deliverableId: string, matterId?: string) => void;
 	onRequestRevision: (deliverable: DeliverableDto) => void;
@@ -51,6 +52,7 @@ export function DeliverablesView({
 	workspaceName,
 	onSubmitFeedback,
 	onDistillExperiences,
+	onCancelDistill,
 	onStopPreview,
 	onSelectDeliverable,
 	onRequestRevision,
@@ -305,6 +307,9 @@ export function DeliverablesView({
 									viewUrl={previewUrlFor(activeDeliverable)}
 									onSubmitFeedback={onSubmitFeedback}
 									onDistillExperiences={onDistillExperiences}
+									onCancelDistill={
+										onCancelDistill ? () => onCancelDistill(activeDeliverable.matterId) : undefined
+									}
 									onSelectVersion={(id) => onSelectDeliverable(id)}
 									onRequestRevision={() => onRequestRevision(activeDeliverable)}
 									onOpenMatterChat={() => onOpenMatterChat(activeDeliverable.matterId)}

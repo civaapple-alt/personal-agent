@@ -16,12 +16,20 @@ import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 class RsiScriptedWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
-	private readonly handler: (prompt: string, options: PiRpcWorkerOptions) => Promise<PromptRunResult>;
+	private readonly handler: (
+		prompt: string,
+		options: PiRpcWorkerOptions,
+		runOptions?: { timeoutMs?: number; signal?: AbortSignal },
+	) => Promise<PromptRunResult>;
 	private abortController = new AbortController();
 
 	constructor(
 		options: PiRpcWorkerOptions,
-		handler: (prompt: string, options: PiRpcWorkerOptions) => Promise<PromptRunResult>,
+		handler: (
+			prompt: string,
+			options: PiRpcWorkerOptions,
+			runOptions?: { timeoutMs?: number; signal?: AbortSignal },
+		) => Promise<PromptRunResult>,
 	) {
 		this.options = options;
 		this.handler = handler;
@@ -52,8 +60,11 @@ class RsiScriptedWorker implements RpcWorkerLike {
 
 	setDialogHandler(): void {}
 
-	runPromptAndWait(message: string): Promise<PromptRunResult> {
-		return this.handler(message, this.options);
+	runPromptAndWait(
+		message: string,
+		runOptions?: { timeoutMs?: number; signal?: AbortSignal },
+	): Promise<PromptRunResult> {
+		return this.handler(message, this.options, runOptions);
 	}
 }
 
@@ -601,5 +612,61 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
 		rmSync(repoDir, { recursive: true, force: true });
+	}
+});
+
+test("abortDistillation cancels in-flight distillation cleanly without persisting candidates", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-rsi-abort-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+
+	let workerStarted = false;
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		sessionDir: join(tempRoot, "sessions"),
+		workerFactory: (options) =>
+			new RsiScriptedWorker(options, (_prompt, _opts, runOpts) => {
+				workerStarted = true;
+				return new Promise<PromptRunResult>((resolvePromise) => {
+					runOpts?.signal?.addEventListener(
+						"abort",
+						() =>
+							resolvePromise({
+								disposition: "started",
+								aborted: true,
+								assistantText: JSON.stringify({
+									summary: "should not persist",
+									candidates: [{ scope: "role_general", content: "aborted partial rule" }],
+								}),
+								assistantMessages: [],
+								toolExecutions: [],
+								notices: [],
+								dialogs: [],
+								events: [],
+							}),
+						{ once: true },
+					);
+				});
+			}),
+	});
+
+	try {
+		const matter = store.createMatter({
+			title: "可取消提炼事项",
+			leadMemberId: "product-manager",
+		});
+		const pending = orchestrator.distillExperiences({ matterId: matter.id });
+		while (!workerStarted) {
+			await new Promise((r) => setTimeout(r, 10));
+		}
+		assert.equal(orchestrator.abortDistillation(matter.id), true);
+		await assert.rejects(() => pending, /Experience distillation was aborted/);
+		assert.equal(orchestrator.abortDistillation(matter.id), false);
+		assert.equal(store.listMemberMemories("product-manager").length, 0);
+	} finally {
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });

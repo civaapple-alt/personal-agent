@@ -183,6 +183,7 @@ export interface DistillExperiencesInput {
 	feedback?: string;
 	rating?: FeedbackRating | null;
 	timeoutMs?: number;
+	signal?: AbortSignal;
 }
 
 export interface DistillExperiencesResult {
@@ -601,6 +602,7 @@ export class TeamOrchestrator {
 	private readonly workerFactory: WorkerFactory;
 	private dialogHandler: OrchestratorDialogHandler | undefined;
 	private readonly runs = new Map<string, MatterRun>();
+	private readonly distillations = new Map<string, Set<AbortController>>();
 	private readonly extensions: string[];
 
 	constructor(options: TeamOrchestratorOptions) {
@@ -1059,9 +1061,21 @@ ${this.store
 	}
 
 	async shutdown(): Promise<void> {
+		for (const matterId of this.distillations.keys()) {
+			this.abortDistillation(matterId);
+		}
 		const runs = [...this.runs.entries()];
 		await Promise.allSettled(runs.map(([id]) => this.abortMatter(id, "shutdown")));
 		await Promise.allSettled(runs.map(([, run]) => run.settled));
+	}
+
+	abortDistillation(matterId: string): boolean {
+		const controllers = this.distillations.get(matterId);
+		if (!controllers || controllers.size === 0) return false;
+		for (const controller of controllers) {
+			controller.abort(new Error("Experience distillation was aborted"));
+		}
+		return true;
 	}
 
 	async abortMatter(matterId: string, reason: "user" | "shutdown" = "user"): Promise<boolean> {
@@ -2044,6 +2058,22 @@ ${this.store
 			.filter(Boolean)
 			.join("\n\n");
 
+		const controller = new AbortController();
+		const onCallerAbort = () =>
+			controller.abort(input.signal?.reason ?? new Error("Experience distillation was aborted"));
+		if (input.signal) {
+			if (input.signal.aborted) {
+				throw new Error("Experience distillation was aborted");
+			}
+			input.signal.addEventListener("abort", onCallerAbort, { once: true });
+		}
+		let matterDistills = this.distillations.get(matter.id);
+		if (!matterDistills) {
+			matterDistills = new Set();
+			this.distillations.set(matter.id, matterDistills);
+		}
+		matterDistills.add(controller);
+
 		const worker = this.workerFactory({
 			cwd,
 			provider: member.provider,
@@ -2051,16 +2081,32 @@ ${this.store
 			noSession: true,
 			args: ["--no-extensions", "--no-skills", "--no-mcp", "--tools", ""],
 		});
+		const onAbortWorker = () => {
+			void worker.abort?.().catch(() => {});
+			void worker.stop().catch(() => {});
+		};
+		controller.signal.addEventListener("abort", onAbortWorker, { once: true });
+
 		let result: PromptRunResult;
 		try {
 			await worker.start();
+			if (controller.signal.aborted) {
+				throw new Error("Experience distillation was aborted");
+			}
 			result = await worker.runPromptAndWait(prompt, {
 				timeoutMs: input.timeoutMs ?? 120_000,
+				signal: controller.signal,
 			});
 		} finally {
+			controller.signal.removeEventListener("abort", onAbortWorker);
+			input.signal?.removeEventListener("abort", onCallerAbort);
+			matterDistills.delete(controller);
+			if (matterDistills.size === 0) {
+				this.distillations.delete(matter.id);
+			}
 			await worker.stop().catch(() => {});
 		}
-		if (result.aborted) {
+		if (result.aborted || controller.signal.aborted) {
 			throw new Error("Experience distillation was aborted");
 		}
 		const payload = parseDistillationPayload(result.assistantText);

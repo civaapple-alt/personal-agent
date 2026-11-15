@@ -1247,6 +1247,22 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 			body: JSON.stringify({ memberId: "non-existent-role" }),
 		});
 		assert.equal(missingMemberRes.status, 404);
+
+		// Abort distillation endpoint returns aborted: false when idle and validates matterId
+		const idleAbortRes = await fetch(`${baseUrl}/api/rsi/distill/abort`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ matterId: created.matter.id }),
+		});
+		assert.equal(idleAbortRes.status, 200);
+		assert.deepEqual(await idleAbortRes.json(), { ok: true, aborted: false });
+
+		const badAbortRes = await fetch(`${baseUrl}/api/rsi/distill/abort`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({}),
+		});
+		assert.equal(badAbortRes.status, 400);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

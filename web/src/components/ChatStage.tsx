@@ -68,6 +68,7 @@ interface ChatStageProps {
 	onOpenDeliverables: (deliverableId?: string) => void;
 	onOpenTeam: () => void;
 	onDistillMatter: (matterId: string) => Promise<DistillRsiResult | undefined>;
+	onCancelDistillMatter?: (matterId: string) => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -114,6 +115,7 @@ export function ChatStage({
 	onOpenDeliverables,
 	onOpenTeam,
 	onDistillMatter,
+	onCancelDistillMatter,
 	onRefresh,
 	onNotice,
 	onError,
@@ -193,8 +195,9 @@ export function ChatStage({
 		try {
 			const res = await onDistillMatter(targetMatterId);
 			if (res) {
-				const note =
-					res.createdMemories.length > 0
+				const note = res.aborted
+					? "已取消本次 AI 经验复盘。"
+					: res.createdMemories.length > 0
 						? `AI 复盘完成：已从协同轨迹为 ${Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId)))).join("、")} 提炼 ${res.createdMemories.length} 条经验。`
 						: res.skippedDuplicates > 0
 							? `AI 复盘完成：未新增重复条目（跳过 ${res.skippedDuplicates} 条相似经验）。`
@@ -480,6 +483,9 @@ export function ChatStage({
 									lastDistillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
 									distilling={distillingMatter}
 									onDistill={() => void handleDistillCurrentMatter()}
+									onCancelDistill={
+										onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
+									}
 									onOpenTeam={onOpenTeam}
 									onRefresh={onRefresh}
 									onNotice={onNotice}

@@ -923,6 +923,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				return;
 			}
 
+			if (method === "POST" && pathname === "/api/rsi/distill/abort") {
+				const body = await readJsonBody(req);
+				const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
+				if (!matterId) {
+					sendError(res, 400, "matterId is required");
+					return;
+				}
+				const aborted = orchestrator.abortDistillation(matterId);
+				sendJson(res, 200, { ok: true, aborted });
+				return;
+			}
+
 			if (method === "POST" && pathname === "/api/rsi/distill") {
 				const body = await readJsonBody(req);
 				const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
@@ -943,16 +955,45 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						? body.rating
 						: undefined;
 				const scopeMode = body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined;
-				const result = await orchestrator.distillExperiences({
-					matterId,
-					deliverableId,
-					memberId,
-					feedback,
-					rating,
-					scopeMode,
-				});
-				broadcastDistilledMemories(broadcast, result.member.id, result.createdMemories);
-				sendJson(res, 200, { ok: true, ...result });
+				const distillAbortController = new AbortController();
+				const onResClose = () => {
+					if (!res.writableEnded) {
+						distillAbortController.abort();
+					}
+				};
+				res.on("close", onResClose);
+				try {
+					const result = await orchestrator.distillExperiences({
+						matterId,
+						deliverableId,
+						memberId,
+						feedback,
+						rating,
+						scopeMode,
+						signal: distillAbortController.signal,
+					});
+					broadcastDistilledMemories(broadcast, result.member.id, result.createdMemories);
+					sendJson(res, 200, { ok: true, ...result });
+				} catch (err) {
+					if (
+						distillAbortController.signal.aborted ||
+						(err instanceof Error && err.message === "Experience distillation was aborted")
+					) {
+						if (!res.writableEnded && !res.destroyed) {
+							sendJson(res, 200, {
+								ok: false,
+								aborted: true,
+								createdMemories: [],
+								skippedDuplicates: 0,
+								summary: "已取消 AI 经验复盘",
+							});
+						}
+						return;
+					}
+					throw err;
+				} finally {
+					res.off("close", onResClose);
+				}
 				return;
 			}
 

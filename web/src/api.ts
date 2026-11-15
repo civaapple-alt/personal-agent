@@ -412,26 +412,38 @@ export function fetchMemoryApplications(memoryId: string): Promise<{
 
 export interface DistillRsiResult {
 	ok: boolean;
-	matter: MatterDto;
-	member: TeamMemberDto;
-	deliverable: DeliverableDto | null;
+	aborted?: boolean;
+	matter?: MatterDto;
+	member?: TeamMemberDto;
+	deliverable?: DeliverableDto | null;
 	createdMemories: MemberMemoryDto[];
 	skippedDuplicates: number;
 	summary: string;
 	participatingMemberIds?: string[];
 }
 
-export function distillRsiExperiences(input: {
-	matterId: string;
-	deliverableId?: string;
-	memberId?: string;
-	feedback?: string;
-	rating?: FeedbackRating;
-	scopeMode?: "team" | "single";
-}): Promise<DistillRsiResult> {
+export function distillRsiExperiences(
+	input: {
+		matterId: string;
+		deliverableId?: string;
+		memberId?: string;
+		feedback?: string;
+		rating?: FeedbackRating;
+		scopeMode?: "team" | "single";
+	},
+	signal?: AbortSignal,
+): Promise<DistillRsiResult> {
 	return requestJson("/api/rsi/distill", {
 		method: "POST",
 		body: JSON.stringify(input),
+		signal,
+	});
+}
+
+export function abortRsiDistillation(matterId: string): Promise<{ ok: boolean; aborted: boolean }> {
+	return requestJson("/api/rsi/distill/abort", {
+		method: "POST",
+		body: JSON.stringify({ matterId }),
 	});
 }
 

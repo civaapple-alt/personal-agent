@@ -33,6 +33,7 @@ interface DeliverableCardProps {
 		feedback?: string,
 		rating?: FeedbackRating,
 	) => Promise<DistillRsiResult | undefined>;
+	onCancelDistill?: () => void;
 	onSelectVersion: (deliverableId: string) => void;
 	onRequestRevision: () => void;
 	onOpenMatterChat?: () => void;
@@ -87,6 +88,10 @@ export function DeliverableCard(props: DeliverableCardProps) {
 			.onDistillExperiences(props.deliverable, feedbackText.trim() || undefined, selectedRating)
 			.then((res) => {
 				if (!res) return;
+				if (res.aborted) {
+					setLastDistillNote("已取消本次 AI 经验复盘。");
+					return;
+				}
 				if (res.createdMemories.length > 0) {
 					const roleNames = Array.from(
 						new Set(res.createdMemories.map((m) => props.resolveMemberName(m.memberId))),
@@ -170,6 +175,11 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
 					{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
 				</button>
+				{distilling && props.onCancelDistill && (
+					<button type="button" className="btn-stop-pill" onClick={props.onCancelDistill}>
+						取消提炼
+					</button>
+				)}
 			</div>
 
 			{(associatedMemories.length > 0 || memoryOpen || lastDistillNote) && (
@@ -187,6 +197,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					lastDistillNote={lastDistillNote}
 					distilling={distilling}
 					onDistill={handleDistillClick}
+					onCancelDistill={props.onCancelDistill}
 					onOpenTeam={props.onOpenTeam}
 					manualOpen={memoryOpen}
 					onToggleManual={() => setMemoryOpen((prev) => !prev)}
