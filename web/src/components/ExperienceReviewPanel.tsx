@@ -60,7 +60,11 @@ export function ExperienceItemCard({
 	const wsLabel = memory.workspaceId ? workspaceName(memory.workspaceId) : null;
 	const scopeShort = MEMORY_SCOPE_SHORT_LABELS[memory.scope] ?? memory.scope;
 	const scopeText = memory.scope === "role_general" || !wsLabel ? scopeShort : `${scopeShort}：${wsLabel}`;
-	const needsReview = status === "candidate" || (memory.negativeCount ?? 0) > (memory.positiveCount ?? 0);
+	const needsReview = status === "verified" && (memory.negativeCount ?? 0) > (memory.positiveCount ?? 0);
+	const appliedCount = memory.appliedCount ?? 0;
+	const positiveCount = memory.positiveCount ?? 0;
+	const negativeCount = memory.negativeCount ?? 0;
+	const hasTelemetry = appliedCount > 0 || positiveCount > 0 || negativeCount > 0;
 	const theme = getMemberThemeById(members, memory.memberId);
 
 	const runAction = async (fn: () => Promise<void>, successMessage: string) => {
@@ -122,9 +126,11 @@ export function ExperienceItemCard({
 					<span className="pill">{scopeText}</span>
 					{needsReview && <span className="rsi-badge rsi-alert">待复核</span>}
 				</div>
-				<span className="memory-telemetry">
-					命中 {memory.appliedCount ?? 0} · +{memory.positiveCount ?? 0} / -{memory.negativeCount ?? 0}
-				</span>
+				{hasTelemetry && (
+					<span className="memory-telemetry">
+						命中 {appliedCount} · +{positiveCount} / -{negativeCount}
+					</span>
+				)}
 			</div>
 
 			{editing ? (
@@ -257,7 +263,7 @@ export function ExperienceItemCard({
 								核验通过
 							</button>
 						)}
-						{(status === "verified" || status === "candidate") && (
+						{status === "verified" && (
 							<>
 								<button
 									type="button"

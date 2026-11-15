@@ -26,6 +26,7 @@ import {
 	formatNoticeEventLine,
 	getMemberThemeById,
 	inferDelegationMood,
+	isKeyNoticeEvent,
 	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
 	parseProgressSnapshot,
@@ -1379,4 +1380,18 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 		],
 	});
 	assert.deepEqual(new Set(participants), new Set(["product-manager", "qa-manager", "engineering-manager"]));
+});
+
+test("formatNoticeEventLine and isKeyNoticeEvent handle truncated tool JSON notices safely", () => {
+	const truncatedRead =
+		'{"type":"tool_execution_end","toolCallId":"tool_1","toolName":"read","result":{"content":[{"type":"text","text":"# Huge PRD doc without closing brace...';
+	assert.equal(formatNoticeEventLine(truncatedRead), "结束工具 read");
+	assert.equal(isKeyNoticeEvent(truncatedRead), false);
+
+	const truncatedFailedBash =
+		'{"type":"tool_execution_end","toolCallId":"tool_2","toolName":"bash","isError":true,"result":"long...';
+	assert.equal(formatNoticeEventLine(truncatedFailedBash), "结束工具 bash（失败）");
+	assert.equal(isKeyNoticeEvent(truncatedFailedBash), true);
+
+	assert.equal(isKeyNoticeEvent('{"method":"error","message":"Timed out"}'), true);
 });

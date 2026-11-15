@@ -1632,14 +1632,32 @@ ${this.store
 			input.run.workers.add(worker);
 			const offEvent = worker.onEvent?.((event) => {
 				if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
+					const toolName = String(event.toolName ?? "tool");
+					const rawArgs =
+						event.args && typeof event.args === "object" ? (event.args as Record<string, unknown>) : undefined;
+					const compactArgs =
+						event.type === "tool_execution_start" && rawArgs
+							? {
+									...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
+									...(typeof rawArgs.command === "string"
+										? { command: rawArgs.command.replace(/\s+/g, " ").trim().slice(0, 240) }
+										: {}),
+									...(typeof rawArgs.title === "string" ? { title: rawArgs.title.slice(0, 240) } : {}),
+								}
+							: undefined;
 					this.store.appendMessage({
 						matterId: input.matterId,
 						channel: "notice",
 						senderType: "system",
 						senderId: input.member.id,
-						content: JSON.stringify(event).slice(0, 16000),
+						content: JSON.stringify({
+							type: event.type,
+							toolCallId: event.toolCallId,
+							toolName,
+							...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
+							...(event.type === "tool_execution_end" ? { isError: Boolean(event.isError) } : {}),
+						}),
 					});
-					const toolName = String(event.toolName ?? "tool");
 					const toolSummary = event.type === "tool_execution_start" ? summarizeToolArgs(event.args) : undefined;
 					if (event.type === "tool_execution_start" && toolName !== "delegate_to_member") {
 						pushRunLog(

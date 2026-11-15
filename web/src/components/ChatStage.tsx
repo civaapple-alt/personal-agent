@@ -19,6 +19,7 @@ import {
 	formatClockTime,
 	formatNoticeEventLine,
 	getMemberThemeById,
+	isKeyNoticeEvent,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
 	parseProgressSnapshot,
@@ -124,6 +125,9 @@ export function ChatStage({
 	const [distillingMatter, setDistillingMatter] = useState(false);
 	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
 	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
+	const [expandedDelegationTexts, setExpandedDelegationTexts] = useState<Record<string, boolean>>({});
+	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
+	const [showAllEvents, setShowAllEvents] = useState(false);
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
@@ -235,8 +239,65 @@ export function ChatStage({
 		[matterDetail, isTurnRunning],
 	);
 
+	const filteredNotices = useMemo(() => {
+		const raw = matterDetail?.noticeMessages ?? [];
+		const ordered = [...raw].reverse();
+		return eventsKeyOnly ? ordered.filter((entry) => isKeyNoticeEvent(entry.content)) : ordered;
+	}, [matterDetail?.noticeMessages, eventsKeyOnly]);
+
+	const visibleNotices = useMemo(
+		() => (showAllEvents ? filteredNotices : filteredNotices.slice(0, 80)),
+		[filteredNotices, showAllEvents],
+	);
+
 	const resolveDelegationTarget = (item: DelegationSummaryItem) =>
 		item.targetLabel || (item.toMemberId ? memberName(item.toMemberId) : "团队成员");
+
+	const renderDelegationItemCard = (item: DelegationSummaryItem, keyPrefix: string, showTime: boolean) => {
+		const itemKey = `${keyPrefix}:${item.id}`;
+		const totalLen = item.question.length + (item.answer?.length ?? 0);
+		const isLong = totalLen > 220 || item.question.split("\n").length > 4;
+		const isTextExpanded = Boolean(expandedDelegationTexts[itemKey]);
+		const compactPreview = !isTextExpanded && isLong;
+
+		return (
+			<div key={item.id} className="delegation-detail-item">
+				<div className="delegation-detail-head">
+					<span>
+						{memberName(item.fromMemberId)} → <strong>{resolveDelegationTarget(item)}</strong>
+						{showTime ? ` · ${formatClockTime(item.createdAt)}` : ""}
+					</span>
+					<span className={`delegation-status-tag ${item.status}`}>
+						{item.status === "running" ? "协同中" : item.status === "completed" ? "已完成" : "未完成"}
+					</span>
+				</div>
+				<div className={`delegation-md-body ${compactPreview ? "is-collapsed" : ""}`}>
+					<MarkdownView content={item.question} />
+				</div>
+				{item.answer && (
+					<div className={`delegation-detail-answer delegation-md-body ${compactPreview ? "is-collapsed" : ""}`}>
+						<MarkdownView content={item.answer} />
+					</div>
+				)}
+				{isLong && (
+					<div className="delegation-collapse-row">
+						<button
+							type="button"
+							className="btn-inline btn-xs"
+							onClick={() =>
+								setExpandedDelegationTexts((prev) => ({
+									...prev,
+									[itemKey]: !prev[itemKey],
+								}))
+							}
+						>
+							{isTextExpanded ? "收起内容" : "展开完整内容 →"}
+						</button>
+					</div>
+				)}
+			</div>
+		);
+	};
 
 	const renderDelegationSummary = (anchorKey: string, items: DelegationSummaryItem[]) => {
 		if (items.length === 0) return null;
@@ -269,20 +330,7 @@ export function ChatStage({
 				</button>
 				{expanded && (
 					<div className="delegation-detail-list">
-						{items.map((item) => (
-							<div key={item.id} className="delegation-detail-item">
-								<div className="delegation-detail-head">
-									<span>
-										{memberName(item.fromMemberId)} → <strong>{resolveDelegationTarget(item)}</strong>
-									</span>
-									<span className={`delegation-status-tag ${item.status}`}>
-										{item.status === "running" ? "协同中" : item.status === "completed" ? "已完成" : "未完成"}
-									</span>
-								</div>
-								<div className="delegation-detail-question">{item.question}</div>
-								{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
-							</div>
-						))}
+						{items.map((item) => renderDelegationItemCard(item, `inline-${anchorKey}`, false))}
 					</div>
 				)}
 			</div>
@@ -442,38 +490,60 @@ export function ChatStage({
 									<p className="muted-hint">当前事项暂无团队内部委托记录。</p>
 								) : (
 									<div className="collab-section">
-										{delegationsPlacement.all.map((item) => (
-											<div key={item.id} className="delegation-detail-item">
-												<div className="delegation-detail-head">
-													<span>
-														{memberName(item.fromMemberId)} →{" "}
-														<strong>{resolveDelegationTarget(item)}</strong> ·{" "}
-														{formatClockTime(item.createdAt)}
-													</span>
-													<span className={`delegation-status-tag ${item.status}`}>
-														{item.status === "running"
-															? "协同中"
-															: item.status === "completed"
-																? "已完成"
-																: "未完成"}
-													</span>
-												</div>
-												<div className="delegation-detail-question">{item.question}</div>
-												{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
-											</div>
-										))}
+										{delegationsPlacement.all.map((item) => renderDelegationItemCard(item, "dock", true))}
 									</div>
 								)
 							) : matterDetail.noticeMessages.length === 0 ? (
 								<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
 							) : (
-								<div className="collab-events-list">
-									{matterDetail.noticeMessages.map((entry) => (
-										<div key={entry.id}>
-											<strong>{memberName(entry.senderId)}</strong> · {formatClockTime(entry.createdAt)}：
-											{formatNoticeEventLine(entry.content)}
+								<div className="collab-section">
+									<div className="collab-events-toolbar">
+										<div className="memory-filter-tabs">
+											<button
+												type="button"
+												className={`choice-chip ${!eventsKeyOnly ? "active" : ""}`}
+												onClick={() => setEventsKeyOnly(false)}
+											>
+												全部事件 ({matterDetail.noticeMessages.length})
+											</button>
+											<button
+												type="button"
+												className={`choice-chip ${eventsKeyOnly ? "active" : ""}`}
+												onClick={() => setEventsKeyOnly(true)}
+											>
+												仅看关键/异常事件
+											</button>
 										</div>
-									))}
+										<span className="inline-participants-note">按最新时间倒序</span>
+									</div>
+									{visibleNotices.length === 0 ? (
+										<p className="muted-hint">当前过滤条件下暂无关键或异常事件。</p>
+									) : (
+										<div className="collab-events-list">
+											{visibleNotices.map((entry) => {
+												const line = formatNoticeEventLine(entry.content);
+												const isError = /异常|失败/.test(line);
+												return (
+													<div key={entry.id} className={`collab-event-row ${isError ? "is-error" : ""}`}>
+														<span className="collab-event-meta">
+															<strong>{memberName(entry.senderId)}</strong>
+															<span>{formatClockTime(entry.createdAt)}</span>
+														</span>
+														<span className="collab-event-text">{line}</span>
+													</div>
+												);
+											})}
+											{!showAllEvents && filteredNotices.length > visibleNotices.length && (
+												<button
+													type="button"
+													className="btn-pill-outline btn-xs"
+													onClick={() => setShowAllEvents(true)}
+												>
+													展开更早事件（剩余 {filteredNotices.length - visibleNotices.length} 条）
+												</button>
+											)}
+										</div>
+									)}
 								</div>
 							)}
 						</div>

@@ -415,6 +415,25 @@ export function mapDelegationsToMessages(
 	return { byMessageId, unattached, all: items };
 }
 
+export function isKeyNoticeEvent(rawContent: string): boolean {
+	try {
+		const parsed = JSON.parse(rawContent) as {
+			type?: string;
+			method?: string;
+			isError?: boolean;
+		};
+		if (parsed.type === "tool_execution_start") return false;
+		if (parsed.type === "tool_execution_end") return Boolean(parsed.isError);
+		return true;
+	} catch {
+		if (rawContent.includes('"type":"tool_execution_start"')) return false;
+		if (rawContent.includes('"type":"tool_execution_end"')) {
+			return rawContent.includes('"isError":true');
+		}
+		return true;
+	}
+}
+
 export function formatNoticeEventLine(rawContent: string): string {
 	try {
 		const parsed = JSON.parse(rawContent) as {
@@ -432,7 +451,7 @@ export function formatNoticeEventLine(rawContent: string): string {
 		const detail = parsed.args?.path
 			? ` (${parsed.args.path})`
 			: parsed.args?.command
-				? ` (${parsed.args.command.replace(/\s+/g, " ").trim().slice(0, 60)})`
+				? ` (${parsed.args.command.replace(/\s+/g, " ").trim().slice(0, 80)})`
 				: parsed.args?.title
 					? ` (${parsed.args.title})`
 					: "";
@@ -457,9 +476,21 @@ export function formatNoticeEventLine(rawContent: string): string {
 		}
 		if (parsed.message) return parsed.message;
 	} catch {
-		// Fall back to raw text when notice is plain string.
+		// Gracefully recover truncated historical JSON notices (e.g. large tool outputs)
+		const typeMatch = rawContent.match(/"type"\s*:\s*"(tool_execution_start|tool_execution_end)"/);
+		if (typeMatch) {
+			const toolName = rawContent.match(/"toolName"\s*:\s*"([^"]+)"/)?.[1] ?? "tool";
+			const isError = /"isError"\s*:\s*true/.test(rawContent);
+			if (typeMatch[1] === "tool_execution_start") {
+				const pathArg = rawContent.match(/"path"\s*:\s*"([^"]+)"/)?.[1];
+				const cmdArg = rawContent.match(/"command"\s*:\s*"([^"]{1,80})/)?.[1];
+				const detail = pathArg ? ` (${pathArg})` : cmdArg ? ` (${cmdArg})` : "";
+				return `开始工具 ${toolName}${detail}`;
+			}
+			return `结束工具 ${toolName}${isError ? "（失败）" : ""}`;
+		}
 	}
-	return rawContent;
+	return rawContent.length > 240 ? `${rawContent.slice(0, 240)}…` : rawContent;
 }
 
 const MEMORY_STATUS_SORT_ORDER: Record<string, number> = {
