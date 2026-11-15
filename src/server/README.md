@@ -4,7 +4,7 @@
 默认端口 4310、`PA_HOST` 默认 `127.0.0.1`，`PORT`、`PA_HOST`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 读取以此文件为准；
 日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 
-[app.ts](app.ts) 是 HTTP 路由与 SSE 入口。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。
+[app.ts](app.ts) 装配 HTTP 服务，并由 [auth.ts](auth.ts)、[sse.ts](sse.ts)、[uploads.ts](uploads.ts)、[dispatch-runner.ts](dispatch-runner.ts) 与 [routes/](routes/context.ts) 分担鉴权、推送、上传、后台派发与领域路由。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。
 修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
 - 并发、工作区切换与图片上传：
