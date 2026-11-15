@@ -600,7 +600,12 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	min-width: 0;
+	flex-shrink: 0;
+}
+
+.stage-header-left .pill,
+.stage-header-right .btn-pill-outline {
+	white-space: nowrap;
 }
 
 .stage-center-pill {
@@ -612,7 +617,9 @@ body {
 	background: var(--bg-sidebar);
 	border: 1px solid var(--border);
 	font-size: 13px;
-	max-width: 46%;
+	flex: 0 1 auto;
+	min-width: 110px;
+	max-width: 44%;
 	overflow: hidden;
 }
 
@@ -3432,48 +3439,6 @@ body {
 	gap: 6px;
 }
 
-.matter-roster-bar {
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	flex-wrap: wrap;
-	padding: 8px 20px;
-	background: rgba(248, 250, 252, 0.85);
-	border-bottom: 1px solid var(--border);
-	font-size: 12px;
-}
-
-.matter-roster-main {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
-	min-width: 0;
-}
-
-.roster-section-label {
-	font-size: 11px;
-	font-weight: 600;
-	color: var(--text-muted);
-	white-space: nowrap;
-}
-
-.roster-chip-group {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-}
-
-.roster-divider {
-	width: 1px;
-	height: 14px;
-	background: var(--border);
-	margin: 0 4px;
-}
-
 .roster-chip {
 	display: inline-flex;
 	align-items: center;
@@ -3487,22 +3452,9 @@ body {
 	line-height: 1.4;
 }
 
-.roster-chip.human.owner {
-	background: #f0f9ff;
-	border-color: #bae6fd;
-}
-
-.roster-chip.is-me {
-	box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
-}
-
 .roster-chip.ai.lead {
 	background: #f5f3ff;
 	border-color: #ddd6fe;
-}
-
-.roster-chip.ai.observer {
-	background: #f8fafc;
 }
 
 .roster-chip.ai.specialist {
@@ -3537,50 +3489,67 @@ body {
 	flex-shrink: 0;
 }
 
-.roster-manage-btn {
-	border: 1px dashed var(--border);
-	background: transparent;
-	color: var(--text-secondary);
-	border-radius: 999px;
-	padding: 2px 9px;
-	font-size: 11px;
-	cursor: pointer;
-}
-
-.roster-manage-btn:hover,
-.roster-manage-btn.active {
-	border-color: var(--text-primary);
-	color: var(--text-primary);
-	background: #fff;
-}
-
 .roster-permission-pill {
 	background: #fff7ed;
 	border-color: #fed7aa;
 	color: #9a3412;
 }
 
-.collaborator-roster-popover {
-	position: absolute;
-	top: calc(100% + 6px);
-	left: 20px;
-	z-index: 30;
-	width: min(520px, calc(100vw - 48px));
-	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: 14px;
-	padding: 12px 14px;
-	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+.unified-roster-panel {
+	width: min(620px, calc(100% - 48px));
+	gap: 12px;
+	overflow-y: auto;
+}
+
+.unified-roster-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.unified-roster-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.unified-roster-section {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	padding-top: 10px;
+	border-top: 1px solid var(--border);
+}
+
+.unified-roster-section-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.unified-roster-title {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-primary);
+}
+
+.unified-roster-ai-summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
 }
 
 .collaborator-popover-list {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	max-height: 220px;
+	max-height: 200px;
 	overflow-y: auto;
 }
 
@@ -3794,7 +3763,14 @@ body {
 	white-space: nowrap;
 }
 
-.roster-observer-popover {
-	left: auto;
-	right: 20px;
+.header-observer-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 10px;
+	font-weight: 600;
+	background: #ede9fe;
+	color: #5b21b6;
+	white-space: nowrap;
 }
