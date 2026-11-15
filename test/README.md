@@ -9,6 +9,7 @@
 | 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
 | Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
+| RSI 工作区证据、失败分支、替代关系、版本评价与退出清理 | [rsi-boundaries.test.ts](rsi-boundaries.test.ts) |
 | HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |
 | 测试 Worker 的能力握手/工具请求 | [worker-helpers.ts](worker-helpers.ts)，供上述测试复用 |
 

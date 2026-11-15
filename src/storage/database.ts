@@ -114,6 +114,17 @@ CREATE TABLE IF NOT EXISTS worker_sessions (
 	last_active_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS deliverable_memory_applications (
+	deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+	application_id TEXT NOT NULL REFERENCES memory_applications(id) ON DELETE CASCADE,
+	PRIMARY KEY (deliverable_id, application_id)
+);
+CREATE TABLE IF NOT EXISTS memory_feedback_votes (
+	deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
+	rating TEXT NOT NULL,
+	PRIMARY KEY (deliverable_id, memory_id)
+);
 CREATE INDEX IF NOT EXISTS idx_member_memories_lookup ON member_memories(member_id, scope, workspace_id);
 CREATE INDEX IF NOT EXISTS idx_matter_messages_matter ON matter_messages(matter_id, channel, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliverables_matter ON deliverables(matter_id, version);

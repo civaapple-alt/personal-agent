@@ -11,7 +11,7 @@ import {
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
-import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
+import { MemoryValidationError, normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
 import type { DeliverableType, FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus } from "../storage/types.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import type { PreviewManager } from "./preview-manager.ts";
@@ -87,6 +87,15 @@ function sendJson(res: ServerResponse, statusCode: number, data: unknown): void 
 
 function sendError(res: ServerResponse, statusCode: number, message: string): void {
 	sendJson(res, statusCode, { error: message });
+}
+
+function responseCancellation(res: ServerResponse): { signal: AbortSignal; dispose: () => void } {
+	const controller = new AbortController();
+	const onClose = () => {
+		if (!res.writableEnded) controller.abort();
+	};
+	res.on("close", onClose);
+	return { signal: controller.signal, dispose: () => res.off("close", onClose) };
 }
 
 function formatMemoryMap(store: PersonalAgentStore): Record<string, unknown[]> {
@@ -537,40 +546,34 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "feedback or rating is required");
 					return;
 				}
-				const updatedDeliverable = store.addDeliverableFeedback(
+				const { deliverable: updatedDeliverable, evaluatedMemories } = store.recordDeliverableFeedback(
 					deliverableId,
 					feedback || existing.feedback || "",
 					rating,
 				);
-				let evaluatedMemoryIds: string[] = [];
-				if (rating === "positive" || rating === "negative") {
-					// 跨岗位统一按事项回收：所有曾在该事项注入过的角色经验都会按最终验收反馈计分
-					const evaluated = store.evaluateMatterMemories({
-						matterId: existing.matterId,
-						deliverableId: existing.id,
-						outcome: rating === "positive" ? "feedback_positive" : "feedback_negative",
-						note: feedback,
-					});
-					evaluatedMemoryIds = evaluated.map((m) => m.id);
-					if (evaluatedMemoryIds.length > 0) {
-						const affectedMembers = Array.from(new Set([existing.memberId, ...evaluated.map((m) => m.memberId)]));
-						for (const affectedMemberId of affectedMembers) {
-							broadcast("memory_updated", { memberId: affectedMemberId, evaluatedMemoryIds });
-						}
-					}
-				}
+				const evaluatedMemoryIds = evaluatedMemories.map((memory) => memory.id);
+				for (const memberId of new Set(evaluatedMemories.map((memory) => memory.memberId)))
+					broadcast("memory_updated", { memberId, evaluatedMemoryIds });
 				let distilledMemories: unknown[] = [];
+				let distillationError: string | undefined;
 				if (body.autoDistill === true) {
-					const scopeMode = body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined;
-					const distilled = await orchestrator.distillExperiences({
-						matterId: existing.matterId,
-						deliverableId: existing.id,
-						feedback,
-						rating: rating ?? null,
-						scopeMode,
-					});
-					distilledMemories = distilled.createdMemories;
-					broadcastDistilledMemories(broadcast, distilled.member.id, distilled.createdMemories);
+					const cancellation = responseCancellation(res);
+					try {
+						const distilled = await orchestrator.distillExperiences({
+							matterId: existing.matterId,
+							deliverableId: existing.id,
+							feedback,
+							rating: rating ?? null,
+							scopeMode: body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined,
+							signal: cancellation.signal,
+						});
+						distilledMemories = distilled.createdMemories;
+						broadcastDistilledMemories(broadcast, distilled.member.id, distilled.createdMemories);
+					} catch (error) {
+						distillationError = error instanceof Error ? error.message : String(error);
+					} finally {
+						cancellation.dispose();
+					}
 				}
 				broadcast("deliverable_updated", {
 					deliverableId,
@@ -584,6 +587,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					rating: updatedDeliverable?.feedbackRating ?? null,
 					evaluatedMemoryIds,
 					distilledMemories,
+					distillationError,
 				});
 				return;
 			}
@@ -955,13 +959,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						? body.rating
 						: undefined;
 				const scopeMode = body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined;
-				const distillAbortController = new AbortController();
-				const onResClose = () => {
-					if (!res.writableEnded) {
-						distillAbortController.abort();
-					}
-				};
-				res.on("close", onResClose);
+				const cancellation = responseCancellation(res);
 				try {
 					const result = await orchestrator.distillExperiences({
 						matterId,
@@ -970,13 +968,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						feedback,
 						rating,
 						scopeMode,
-						signal: distillAbortController.signal,
+						signal: cancellation.signal,
 					});
 					broadcastDistilledMemories(broadcast, result.member.id, result.createdMemories);
 					sendJson(res, 200, { ok: true, ...result });
 				} catch (err) {
 					if (
-						distillAbortController.signal.aborted ||
+						cancellation.signal.aborted ||
 						(err instanceof Error && err.message === "Experience distillation was aborted")
 					) {
 						if (!res.writableEnded && !res.destroyed) {
@@ -992,7 +990,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					}
 					throw err;
 				} finally {
-					res.off("close", onResClose);
+					cancellation.dispose();
 				}
 				return;
 			}
@@ -1076,7 +1074,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			sendError(res, 404, `Not found: ${method} ${pathname}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
-			sendError(res, 500, message);
+			sendError(res, error instanceof MemoryValidationError ? 400 : 500, message);
 		}
 	});
 

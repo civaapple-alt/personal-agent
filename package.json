@@ -19,7 +19,8 @@
     "demo:rpc": "node src/demo/rpc-smoke.ts",
     "demo:team": "node src/demo/team-smoke.ts",
     "check:startup": "node scripts/check-server-startup.mjs",
-    "check:docs": "node scripts/check-docs.mjs"
+    "check:docs": "node scripts/check-docs.mjs",
+    "demo:rsi": "node src/demo/rsi-smoke.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",

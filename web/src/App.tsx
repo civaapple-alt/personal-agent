@@ -515,6 +515,7 @@ export function App() {
 	) => {
 		try {
 			const res = await submitDeliverableFeedback(deliverableId, payload);
+			if (res.distillationError) setErrorBanner(`验收已保存，经验复盘未完成：${res.distillationError}`);
 			const parts = ["验收记录已保存"];
 			if (res.evaluatedMemoryIds.length > 0) {
 				parts.push(`已回写 ${res.evaluatedMemoryIds.length} 条关联经验评估`);

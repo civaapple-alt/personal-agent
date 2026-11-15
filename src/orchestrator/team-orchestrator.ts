@@ -20,6 +20,7 @@ import type {
 	WorkspaceLink,
 } from "../storage/types.ts";
 import { type DeliveryDraft, resolveRoleSkills, validateDelivery, validateSavedSession } from "./execution-context.ts";
+import { selectMatterContext } from "./matter-context.ts";
 
 export interface DialogContext {
 	matterId: string;
@@ -196,6 +197,21 @@ export interface DistillExperiencesResult {
 	participatingMemberIds: string[];
 }
 
+type ExperienceDraft = Parameters<PersonalAgentStore["addMemory"]>[0];
+interface ExecutionEffects {
+	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
+	experiences: ExperienceDraft[];
+	applicationIds: string[];
+}
+function emptyEffects(): ExecutionEffects {
+	return { deliveries: [], experiences: [], applicationIds: [] };
+}
+function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
+	target.deliveries.push(...source.deliveries);
+	target.experiences.push(...source.experiences);
+	target.applicationIds.push(...source.applicationIds);
+}
+
 interface MatterRun {
 	settled: Promise<void>;
 	finish(): void;
@@ -208,7 +224,7 @@ interface MatterRun {
 	activeDelegations: Map<string, ActiveDelegationProgress>;
 	recentLogs: ProgressActivityItem[];
 	delegationCount: number;
-	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
+	effects: ExecutionEffects;
 	userMessageId: string;
 	startedAt: number;
 	lastProgress?: DispatchProgressEvent;
@@ -603,6 +619,8 @@ export class TeamOrchestrator {
 	private dialogHandler: OrchestratorDialogHandler | undefined;
 	private readonly runs = new Map<string, MatterRun>();
 	private readonly distillations = new Map<string, Set<AbortController>>();
+	private readonly distillationTasks = new Set<Promise<void>>();
+	private shuttingDown = false;
 	private readonly extensions: string[];
 
 	constructor(options: TeamOrchestratorOptions) {
@@ -807,6 +825,7 @@ ${this.store
 	}
 
 	async dispatchMatter(input: DispatchMatterInput): Promise<DispatchMatterResult> {
+		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
 		const existing = input.matterId ? this.requireMatter(input.matterId) : null;
 		if (existing && this.isMatterRunning(existing.id)) throw new Error("Matter already has an active turn");
 		const assignedMember = this.routeMemberForRequest(
@@ -840,7 +859,7 @@ ${this.store
 			activeDelegations: new Map(),
 			recentLogs: [],
 			delegationCount: 0,
-			deliveries: [],
+			effects: emptyEffects(),
 			userMessageId: "",
 			startedAt,
 			timeoutMs: turnDeadlineMs,
@@ -895,7 +914,7 @@ ${this.store
 					run,
 					chain: [assignedMember.id],
 					signal: run.controller.signal,
-					deliveryTarget: run.deliveries,
+					effectsTarget: run.effects,
 					onTextDelta: input.onTextDelta,
 					onProgress: emitDispatchProgress,
 				});
@@ -915,9 +934,9 @@ ${this.store
 				rawReply &&
 				input.deliverableTitle &&
 				(!input.deliverableType || input.deliverableType === "document") &&
-				run.deliveries.length === 0
+				run.effects.deliveries.length === 0
 			) {
-				run.deliveries.push({
+				run.effects.deliveries.push({
 					memberId: assignedMember.id,
 					cwd: workspace?.repoPath ?? this.defaultCwd,
 					draft: {
@@ -935,25 +954,44 @@ ${this.store
 			if (!aborted) {
 				// Recheck all paths before writing any index entry. Failed/cancelled turns publish nothing.
 				const validated = await Promise.all(
-					run.deliveries.map(async (entry) => ({
+					run.effects.deliveries.map(async (entry) => ({
 						...entry,
 						draft: await validateDelivery(entry.draft, entry.cwd),
 					})),
 				);
 				run.controller.signal.throwIfAborted();
-				deliveries.push(
-					...this.store.recordDeliverables(
-						validated.map(({ memberId, draft }) => ({
-							matterId: matter.id,
-							memberId,
-							type: draft.type,
-							title: draft.title,
-							contentOrPath: draft.content,
-							summary: [draft.summary, `交付依据：${draft.changeNote}`].filter(Boolean).join("\n"),
-							serviceUrl: draft.type === "service_url" ? draft.content : null,
-						})),
-					),
-				);
+				const outcome = this.store.recordTurnOutcome({
+					deliverables: validated.map(({ memberId, draft }) => ({
+						matterId: matter.id,
+						memberId,
+						type: draft.type,
+						title: draft.title,
+						contentOrPath: draft.content,
+						summary: [draft.summary, `交付依据：${draft.changeNote}`].filter(Boolean).join("\n"),
+						serviceUrl: draft.type === "service_url" ? draft.content : null,
+					})),
+					candidates: run.effects.experiences,
+					applicationIds: run.effects.applicationIds,
+				});
+				deliveries.push(...outcome.deliverables);
+				for (const memory of outcome.memories)
+					this.store.appendMessage({
+						matterId: matter.id,
+						channel: "notice",
+						senderType: "system",
+						senderId: memory.memberId,
+						content: JSON.stringify({
+							method: "rsi_candidate_proposed",
+							memoryId: memory.id,
+							scope: memory.scope,
+							category: memory.category,
+							content: memory.content,
+						}),
+						metadata: {
+							workspaceId: workspace?.id ?? null,
+							repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+						},
+					});
 			}
 			const leadMessage = this.store.appendMessage({
 				matterId: matter.id,
@@ -1061,11 +1099,12 @@ ${this.store
 	}
 
 	async shutdown(): Promise<void> {
+		this.shuttingDown = true;
 		for (const matterId of this.distillations.keys()) {
 			this.abortDistillation(matterId);
 		}
 		const runs = [...this.runs.entries()];
-		await Promise.allSettled(runs.map(([id]) => this.abortMatter(id, "shutdown")));
+		await Promise.allSettled([...this.distillationTasks, ...runs.map(([id]) => this.abortMatter(id, "shutdown"))]);
 		await Promise.allSettled(runs.map(([, run]) => run.settled));
 	}
 
@@ -1105,6 +1144,7 @@ ${this.store
 
 	/** The same production path used by delegate_to_member. External callers cannot join an active turn. */
 	async delegateToMember(input: DelegateInput): Promise<DelegateResult> {
+		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
 		if (this.isMatterRunning(input.matterId)) throw new Error("Use the active worker's delegation tool");
 		const matter = this.requireMatter(input.matterId);
 		const workspaceId = input.workspaceId ?? matter.workspaceId;
@@ -1126,7 +1166,7 @@ ${this.store
 			activeDelegations: new Map(),
 			recentLogs: [],
 			delegationCount: 0,
-			deliveries: [],
+			effects: emptyEffects(),
 			userMessageId: "",
 			startedAt,
 			timeoutMs: turnDeadlineMs,
@@ -1134,7 +1174,7 @@ ${this.store
 		};
 		this.runs.set(matter.id, run);
 		try {
-			return await this.delegate(input, run, workspace, [input.fromMemberId], run.controller.signal, run.deliveries);
+			return await this.delegate(input, run, workspace, [input.fromMemberId], run.controller.signal, run.effects);
 		} finally {
 			run.controller.abort();
 			this.runs.delete(matter.id);
@@ -1149,7 +1189,7 @@ ${this.store
 		workspace: WorkspaceLink | null,
 		chain: string[],
 		signal: AbortSignal,
-		deliveryTarget: MatterRun["deliveries"],
+		effectsTarget: ExecutionEffects,
 		onProgress?: (progress: DispatchProgressEvent) => void,
 	): Promise<DelegateResult> {
 		signal.throwIfAborted();
@@ -1190,9 +1230,9 @@ ${this.store
 			let childTextBuf = "";
 			let lastStreamBroadcastAt = 0;
 			try {
-				const drafts: MatterRun["deliveries"] = [];
+				const effects = emptyEffects();
 				const result = await this.executeWithWorker({
-					deliveryTarget: drafts,
+					effectsTarget: effects,
 					matterId: input.matterId,
 					member: toMember,
 					workspace,
@@ -1249,7 +1289,7 @@ ${this.store
 				if (result.aborted) throw new Error("Colleague execution was aborted");
 				const answerText = result.assistantText.trim();
 				if (!answerText) throw new Error("Colleague returned no answer");
-				deliveryTarget.push(...drafts);
+				mergeEffects(effectsTarget, effects);
 				const responseMessage = this.store.appendMessage({
 					matterId: input.matterId,
 					channel: "internal_collab",
@@ -1372,7 +1412,7 @@ ${this.store
 						run: input.run,
 						chain: [input.assignedMember.id, observer.id],
 						signal: input.signal,
-						deliveryTarget: [],
+						effectsTarget: emptyEffects(),
 						onProgress: (childProgress) => {
 							const stageLabel = mapChildStageLabel(childProgress, "旁听审视中");
 							input.run.activeDelegations.set(observerKey, {
@@ -1469,7 +1509,7 @@ ${this.store
 		run: MatterRun;
 		chain: string[];
 		signal: AbortSignal;
-		deliveryTarget: MatterRun["deliveries"];
+		effectsTarget: ExecutionEffects;
 		onTextDelta?: (delta: string) => void;
 		onProgress?: (progress: DispatchProgressEvent) => void;
 	}): Promise<PromptRunResult> {
@@ -1491,7 +1531,8 @@ ${this.store
 		let sessionRecord: ReturnType<PersonalAgentStore["recordWorkerSession"]> | undefined;
 		let bridge: Awaited<ReturnType<typeof createTeamToolBridge>> | undefined;
 		const cleanups: Array<() => void> = [];
-		const deliveries: MatterRun["deliveries"] = [];
+		const effects = emptyEffects();
+		const deliveries = effects.deliveries;
 		// A disconnected tool request cancels only that colleague subtree, not unrelated work.
 		const controller = new AbortController();
 		const signal = AbortSignal.any([input.signal, controller.signal]);
@@ -1538,7 +1579,7 @@ ${this.store
 							input.workspace,
 							input.chain,
 							toolSignal,
-							deliveries,
+							effects,
 							input.onProgress,
 						);
 						return { memberId: result.toMember.id, answer: result.answerText };
@@ -1549,7 +1590,7 @@ ${this.store
 						}
 						if ((call.scope === "company_private" || call.scope === "project_private") && !input.workspace) {
 							throw new Error(
-								"Private company or project experiences require a bound workspace; use role_general instead",
+								"Private company or project experiences require a bound workspace; private facts must not be reclassified as role_general",
 							);
 						}
 						if (call.supersedesMemoryId) {
@@ -1557,6 +1598,14 @@ ${this.store
 							if (!target || target.memberId !== input.member.id) {
 								throw new Error("Cannot supersede missing or foreign member memory");
 							}
+							this.store.validateMemoryReplacement(
+								{
+									memberId: input.member.id,
+									scope: call.scope,
+									workspaceId: call.scope === "role_general" ? null : (input.workspace?.id ?? null),
+								},
+								target.id,
+							);
 						}
 						const normContent = call.content.replace(/\s+/g, " ").trim().toLowerCase();
 						if (
@@ -1781,11 +1830,20 @@ ${this.store
 							message.metadata?.aborted !== true
 						),
 				);
+			const scopedContext = selectMatterContext({
+				messages: this.store.listMessages(input.matterId),
+				deliverables: this.store.listDeliverables(input.matterId),
+				workspaceId: input.workspace?.id ?? null,
+				repoPath: cwd,
+			});
 			const context =
 				sessionMode === "observer"
 					? buildObserverContextDigest({
-							matter: this.store.getMatter(input.matterId),
-							deliverables: this.store.listDeliverables(input.matterId),
+							matter: {
+								...this.requireMatter(input.matterId),
+								summary: scopedContext.messages.filter((msg) => msg.channel === "user").at(-1)?.content ?? "",
+							},
+							deliverables: scopedContext.deliverables,
 							history: filteredHistory,
 							includeMatterHeader: !previous,
 						})
@@ -1823,11 +1881,13 @@ ${this.store
 				messageCursor: messages.at(-1)?.id,
 			});
 			if (relevantMemories.length > 0) {
-				this.store.recordMemoryApplications({
-					memoryIds: relevantMemories.map((memory) => memory.id),
-					matterId: input.matterId,
-					memberId: input.member.id,
-				});
+				effects.applicationIds.push(
+					...this.store.recordMemoryApplications({
+						memoryIds: relevantMemories.map((memory) => memory.id),
+						matterId: input.matterId,
+						memberId: input.member.id,
+					}),
+				);
 			}
 			const remainingTimeoutMs =
 				input.run.deadlineAt !== null
@@ -1838,42 +1898,17 @@ ${this.store
 				signal,
 				onTextDelta: input.onTextDelta,
 			});
-			if (!result.aborted && !input.run.cancelled) input.deliveryTarget.push(...deliveries);
-			if (!result.aborted && !input.run.cancelled && stagedExperiences.length > 0) {
-				for (const item of stagedExperiences) {
-					const existingDup = this.store.findActiveDuplicateMemory(
-						input.member.id,
-						item.scope,
-						input.workspace?.id ?? null,
-						item.content,
-					);
-					if (existingDup) continue;
-					const saved = this.store.addMemory({
+			if (!result.aborted && !input.run.cancelled) {
+				for (const item of stagedExperiences)
+					effects.experiences.push({
+						...item,
 						memberId: input.member.id,
-						scope: item.scope,
-						category: item.category,
 						workspaceId: item.scope === "role_general" ? null : (input.workspace?.id ?? null),
-						content: item.content,
-						rationale: item.rationale,
 						sourceMatterId: input.matterId,
 						status: "candidate",
 						verified: false,
-						supersedesMemoryId: item.supersedesMemoryId ?? null,
 					});
-					this.store.appendMessage({
-						matterId: input.matterId,
-						channel: "notice",
-						senderType: "system",
-						senderId: input.member.id,
-						content: JSON.stringify({
-							method: "rsi_candidate_proposed",
-							memoryId: saved.id,
-							scope: saved.scope,
-							category: saved.category,
-							content: saved.content,
-						}),
-					});
-				}
+				mergeEffects(input.effectsTarget, effects);
 			}
 			if (!result.aborted && !input.run.cancelled)
 				input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}正在整理结果` });
@@ -1904,26 +1939,63 @@ ${this.store
 	 * to extract bounded candidate experiences separated by scope.
 	 */
 	async distillExperiences(input: DistillExperiencesInput): Promise<DistillExperiencesResult> {
-		const matter = this.requireMatter(input.matterId);
-		const deliverable = input.deliverableId
-			? this.store.getDeliverable(input.deliverableId)
-			: (this.store.listDeliverables(matter.id)[0] ?? null);
-		if (input.deliverableId && (!deliverable || deliverable.matterId !== matter.id)) {
-			throw new Error(`Deliverable not found in matter: ${input.deliverableId}`);
+		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
+		const controller = new AbortController();
+		const completion = Promise.withResolvers<void>();
+		const onCallerAbort = () => controller.abort(new Error("Experience distillation was aborted"));
+		input.signal?.throwIfAborted();
+		input.signal?.addEventListener("abort", onCallerAbort, { once: true });
+		const controllers = this.distillations.get(input.matterId) ?? new Set<AbortController>();
+		this.distillations.set(input.matterId, controllers);
+		controllers.add(controller);
+		this.distillationTasks.add(completion.promise);
+		try {
+			return await this.performDistillation({ ...input, signal: controller.signal });
+		} catch (error) {
+			if (controller.signal.aborted) throw new Error("Experience distillation was aborted", { cause: error });
+			throw error;
+		} finally {
+			input.signal?.removeEventListener("abort", onCallerAbort);
+			controllers.delete(controller);
+			if (!controllers.size) this.distillations.delete(input.matterId);
+			this.distillationTasks.delete(completion.promise);
+			completion.resolve();
 		}
-		const targetMemberId = input.memberId ?? deliverable?.memberId ?? matter.leadMemberId ?? undefined;
-		const member = this.routeMemberForRequest(matter.title, targetMemberId);
+	}
+
+	private async performDistillation(
+		input: DistillExperiencesInput & { signal: AbortSignal },
+	): Promise<DistillExperiencesResult> {
+		const matter = this.requireMatter(input.matterId);
 		const workspace = matter.workspaceId ? this.store.getWorkspace(matter.workspaceId) : null;
 		const cwd = resolve(workspace?.repoPath ?? this.defaultCwd);
-
-		const allUserMessages = this.store.listMessages(matter.id, "user");
-		const allCollabMessages = this.store.listMessages(matter.id, "internal_collab");
-		const allNoticeMessages = this.store.listMessages(matter.id, "notice");
-
+		const scoped = selectMatterContext({
+			workspaceId: workspace?.id ?? null,
+			repoPath: cwd,
+			messages: this.store.listMessages(matter.id),
+			deliverables: this.store.listDeliverables(matter.id),
+		});
+		const deliverable = input.deliverableId
+			? (scoped.deliverables.find((item) => item.id === input.deliverableId) ?? null)
+			: (scoped.deliverables[0] ?? null);
+		if (input.deliverableId && !deliverable)
+			throw new Error("Deliverable does not have provenance in the current workspace");
+		const targetMemberId = input.memberId ?? deliverable?.memberId ?? matter.leadMemberId ?? undefined;
+		const member = this.routeMemberForRequest(matter.title, targetMemberId);
+		const publicationIndex = input.deliverableId
+			? scoped.messages.findIndex(
+					(message) =>
+						Array.isArray(message.metadata?.deliverableIds) &&
+						message.metadata.deliverableIds.includes(input.deliverableId),
+				)
+			: -1;
+		const evidence = publicationIndex >= 0 ? scoped.messages.slice(0, publicationIndex + 1) : scoped.messages;
+		const allUserMessages = evidence.filter((message) => message.channel === "user");
+		const allCollabMessages = evidence.filter((message) => message.channel === "internal_collab");
+		const allNoticeMessages = evidence.filter((message) => message.channel === "notice");
 		const singleOnly = input.scopeMode === "single" || (Boolean(input.memberId) && input.scopeMode !== "team");
 		const participantIds = new Set<string>([member.id]);
 		if (!singleOnly) {
-			if (matter.leadMemberId) participantIds.add(matter.leadMemberId);
 			for (const msg of allUserMessages) {
 				if (msg.senderType === "member") participantIds.add(msg.senderId);
 			}
@@ -1933,7 +2005,6 @@ ${this.store
 					participantIds.add(msg.metadata.toMemberId);
 				}
 			}
-			for (const obsId of matter.observerMemberIds) participantIds.add(obsId);
 		}
 		const participatingMembers = [...participantIds]
 			.map((id) => this.store.getMember(id))
@@ -2034,7 +2105,7 @@ ${this.store
 			"5. 仅返回严格 JSON（不要附加解释文字），格式：",
 			`{"summary":"一句话说明复盘范围与提炼依据","candidates":[{"memberId":"${member.id}","category":"efficiency|troubleshooting|collaboration|user_correction|domain_constraint","scope":"role_general|project_private","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}`,
 			"",
-			`## 当前事项\n- 标题：${matter.title}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
+			`## 当前事项\n- 编号：${matter.id}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
 			deliverable
 				? [
 						"## 关联交付成果",
@@ -2058,22 +2129,6 @@ ${this.store
 			.filter(Boolean)
 			.join("\n\n");
 
-		const controller = new AbortController();
-		const onCallerAbort = () =>
-			controller.abort(input.signal?.reason ?? new Error("Experience distillation was aborted"));
-		if (input.signal) {
-			if (input.signal.aborted) {
-				throw new Error("Experience distillation was aborted");
-			}
-			input.signal.addEventListener("abort", onCallerAbort, { once: true });
-		}
-		let matterDistills = this.distillations.get(matter.id);
-		if (!matterDistills) {
-			matterDistills = new Set();
-			this.distillations.set(matter.id, matterDistills);
-		}
-		matterDistills.add(controller);
-
 		const worker = this.workerFactory({
 			cwd,
 			provider: member.provider,
@@ -2085,46 +2140,42 @@ ${this.store
 			void worker.abort?.().catch(() => {});
 			void worker.stop().catch(() => {});
 		};
-		controller.signal.addEventListener("abort", onAbortWorker, { once: true });
+		input.signal.addEventListener("abort", onAbortWorker, { once: true });
 
 		let result: PromptRunResult;
 		try {
 			await worker.start();
-			if (controller.signal.aborted) {
+			if (input.signal.aborted) {
 				throw new Error("Experience distillation was aborted");
 			}
 			result = await worker.runPromptAndWait(prompt, {
 				timeoutMs: input.timeoutMs ?? 120_000,
-				signal: controller.signal,
+				signal: input.signal,
 			});
 		} finally {
-			controller.signal.removeEventListener("abort", onAbortWorker);
-			input.signal?.removeEventListener("abort", onCallerAbort);
-			matterDistills.delete(controller);
-			if (matterDistills.size === 0) {
-				this.distillations.delete(matter.id);
-			}
+			input.signal.removeEventListener("abort", onAbortWorker);
 			await worker.stop().catch(() => {});
 		}
-		if (result.aborted || controller.signal.aborted) {
+		if (result.aborted || input.signal.aborted) {
 			throw new Error("Experience distillation was aborted");
 		}
+		const currentMatter = this.requireMatter(matter.id);
+		if (
+			currentMatter.workspaceId !== matter.workspaceId ||
+			(workspace && this.store.getWorkspace(workspace.id)?.repoPath !== workspace.repoPath)
+		)
+			throw new Error("Workspace changed during experience distillation");
+		input.signal?.throwIfAborted();
 		const payload = parseDistillationPayload(result.assistantText);
-		const createdMemories: MemberMemory[] = [];
+		const candidates: ExperienceDraft[] = [];
 		let skippedDuplicates = 0;
 
 		for (const candidate of payload.candidates) {
 			if ((candidate.scope === "company_private" || candidate.scope === "project_private") && !workspace) {
 				continue;
 			}
-			const candidateMember =
-				!singleOnly && candidate.memberId && participantSet.has(candidate.memberId)
-					? this.store.getMember(candidate.memberId)
-					: !singleOnly && candidate.memberId
-						? this.store.getMember(candidate.memberId)
-						: null;
-			const resolvedMember = singleOnly ? member : (candidateMember ?? member);
-
+			if (candidate.memberId && !participantSet.has(candidate.memberId)) continue;
+			const resolvedMember = singleOnly ? member : this.store.getMember(candidate.memberId ?? member.id)!;
 			const dup = this.store.findActiveDuplicateMemory(
 				resolvedMember.id,
 				candidate.scope,
@@ -2138,11 +2189,16 @@ ${this.store
 			let validSupersedes: string | null = null;
 			if (candidate.supersedesMemoryId) {
 				const oldMem = this.store.getMemory(candidate.supersedesMemoryId);
-				if (oldMem && oldMem.memberId === resolvedMember.id) {
+				if (
+					oldMem &&
+					oldMem.memberId === resolvedMember.id &&
+					oldMem.scope === candidate.scope &&
+					oldMem.workspaceId === (candidate.scope === "role_general" ? null : (workspace?.id ?? null))
+				) {
 					validSupersedes = oldMem.id;
 				}
 			}
-			const saved = this.store.addMemory({
+			candidates.push({
 				memberId: resolvedMember.id,
 				scope: candidate.scope,
 				category: candidate.category,
@@ -2155,8 +2211,11 @@ ${this.store
 				verified: false,
 				supersedesMemoryId: validSupersedes,
 			});
-			createdMemories.push(saved);
 		}
+
+		const saved = this.store.recordTurnOutcome({ deliverables: [], candidates, applicationIds: [] });
+		const createdMemories = saved.memories;
+		skippedDuplicates += saved.skippedDuplicates;
 
 		this.store.appendMessage({
 			matterId: matter.id,

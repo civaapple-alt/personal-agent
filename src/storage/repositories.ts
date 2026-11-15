@@ -64,6 +64,8 @@ function parseUniqueIds(raw: unknown): string[] {
 	}
 }
 
+export class MemoryValidationError extends Error {}
+
 export class PersonalAgentStore {
 	private readonly db: DatabaseSync;
 
@@ -185,6 +187,7 @@ export class PersonalAgentStore {
 		const category = normalizeMemoryCategory(input.category);
 		const workspaceId = input.scope === "role_general" ? null : (input.workspaceId ?? null);
 		const supersedesId = input.supersedesMemoryId ?? null;
+		this.validateMemoryReplacement({ id, memberId: input.memberId, scope: input.scope, workspaceId }, supersedesId);
 		this.db
 			.prepare(
 				`INSERT INTO member_memories (
@@ -283,6 +286,10 @@ export class PersonalAgentStore {
 		const nextSupersedesId =
 			patch.supersedesMemoryId !== undefined ? patch.supersedesMemoryId : existing.supersedesMemoryId;
 
+		this.validateMemoryReplacement(
+			{ id, memberId: nextMemberId, scope: nextScope, workspaceId: nextWorkspaceId },
+			nextSupersedesId,
+		);
 		this.db
 			.prepare(
 				`UPDATE member_memories
@@ -309,6 +316,51 @@ export class PersonalAgentStore {
 			this.markMemorySuperseded(nextSupersedesId, id, timestamp);
 		}
 		return this.getMemory(id)!;
+	}
+
+	validateMemoryReplacement(
+		replacement: { id?: string; memberId: string; scope: MemoryScope; workspaceId: string | null },
+		targetId: string | null,
+	): void {
+		const sameScope = (memory: MemberMemory) =>
+			memory.memberId === replacement.memberId &&
+			memory.scope === replacement.scope &&
+			memory.workspaceId === replacement.workspaceId;
+		if (replacement.id) {
+			const existing = this.getMemory(replacement.id);
+			const relatedIds = new Set<string>();
+			if (existing?.supersededBy) relatedIds.add(existing.supersededBy);
+			for (const row of this.db
+				.prepare("SELECT id FROM member_memories WHERE superseded_by = ? OR supersedes_memory_id = ?")
+				.all(replacement.id, replacement.id))
+				relatedIds.add(String(row.id));
+			for (const id of relatedIds) {
+				const related = this.getMemory(id);
+				if (related && !sameScope(related))
+					throw new MemoryValidationError(
+						"Replacement must retain the same member, scope and workspace as its linked memories",
+					);
+			}
+		}
+		if (replacement.id) {
+			const retired = this.db.prepare("SELECT id FROM member_memories WHERE superseded_by = ?").all(replacement.id);
+			if (retired.some((row) => row.id !== targetId))
+				throw new MemoryValidationError("Cannot detach an established memory replacement");
+		}
+		if (!targetId) return;
+		const target = this.getMemory(targetId);
+		if (!target || !sameScope(target))
+			throw new MemoryValidationError(
+				"Replacement must have the same member, scope and workspace as the prior memory",
+			);
+		const visited = new Set<string>();
+		let cursor: MemberMemory | null = target;
+		while (cursor) {
+			if (cursor.id === replacement.id || visited.has(cursor.id))
+				throw new MemoryValidationError("Memory replacement cycle");
+			visited.add(cursor.id);
+			cursor = cursor.supersedesMemoryId ? this.getMemory(cursor.supersedesMemoryId) : null;
+		}
 	}
 
 	private markMemorySuperseded(targetMemoryId: string, replacementId: string, timestamp: string): void {
@@ -355,10 +407,11 @@ export class PersonalAgentStore {
 		memberId: string;
 		deliverableId?: string | null;
 		note?: string;
-	}): void {
+	}): string[] {
 		const uniqueIds = normalizeUniqueIds(input.memoryIds);
-		if (uniqueIds.length === 0) return;
+		if (uniqueIds.length === 0) return [];
 		const timestamp = nowIso();
+		const applicationIds: string[] = [];
 		const insert = this.db.prepare(
 			`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, deliverable_id, outcome, note, created_at)
 			 VALUES (?, ?, ?, ?, ?, 'applied', ?, ?)`,
@@ -371,8 +424,10 @@ export class PersonalAgentStore {
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
 			for (const memoryId of uniqueIds) {
+				const applicationId = `mapp_${randomUUID()}`;
+				applicationIds.push(applicationId);
 				insert.run(
-					`mapp_${randomUUID()}`,
+					applicationId,
 					memoryId,
 					input.matterId,
 					input.memberId,
@@ -387,6 +442,7 @@ export class PersonalAgentStore {
 			this.db.exec("ROLLBACK");
 			throw error;
 		}
+		return applicationIds;
 	}
 
 	evaluateMemory(input: {
@@ -399,14 +455,17 @@ export class PersonalAgentStore {
 	}): MemberMemory {
 		const existing = this.getMemory(input.memoryId);
 		if (!existing) throw new Error(`Memory not found: ${input.memoryId}`);
-		if (input.deliverableId && input.matterId) {
-			const duplicate = this.db
-				.prepare(
-					`SELECT 1 FROM memory_applications
-					 WHERE memory_id = ? AND deliverable_id = ? AND outcome = ? LIMIT 1`,
-				)
-				.get(input.memoryId, input.deliverableId, input.outcome);
-			if (duplicate) return existing;
+		if (
+			input.deliverableId &&
+			input.matterId &&
+			(input.outcome === "feedback_positive" || input.outcome === "feedback_negative")
+		) {
+			return this.setMemoryFeedback({
+				...input,
+				deliverableId: input.deliverableId,
+				matterId: input.matterId,
+				rating: input.outcome === "feedback_positive" ? "positive" : "negative",
+			});
 		}
 		const timestamp = nowIso();
 		const isPositive = input.outcome === "feedback_positive" || input.outcome === "turn_succeeded";
@@ -440,6 +499,82 @@ export class PersonalAgentStore {
 		return this.getMemory(input.memoryId)!;
 	}
 
+	private setMemoryFeedback(input: {
+		memoryId: string;
+		matterId: string;
+		deliverableId: string;
+		rating: FeedbackRating;
+		memberId?: string | null;
+		note?: string;
+	}): MemberMemory {
+		const memory = this.getMemory(input.memoryId);
+		if (!memory) throw new Error("Memory not found");
+		const linked = this.db
+			.prepare(`SELECT 1 FROM deliverable_memory_applications link JOIN memory_applications a ON a.id = link.application_id
+			WHERE link.deliverable_id = ? AND a.memory_id = ? AND a.matter_id = ? LIMIT 1`)
+			.get(input.deliverableId, input.memoryId, input.matterId);
+		if (!linked) throw new Error("Memory was not injected for this deliverable");
+		const old = this.db
+			.prepare("SELECT rating FROM memory_feedback_votes WHERE deliverable_id = ? AND memory_id = ?")
+			.get(input.deliverableId, input.memoryId);
+		if (old?.rating === input.rating) return memory;
+		const timestamp = nowIso();
+		const ownsTransaction = !this.db.isTransaction;
+		if (ownsTransaction) this.db.exec("BEGIN IMMEDIATE");
+		try {
+			this.db
+				.prepare(
+					"UPDATE member_memories SET positive_count = positive_count + ?, negative_count = negative_count + ?, updated_at = ? WHERE id = ?",
+				)
+				.run(
+					Number(input.rating === "positive") - Number(old?.rating === "positive"),
+					Number(input.rating === "negative") - Number(old?.rating === "negative"),
+					timestamp,
+					input.memoryId,
+				);
+			this.db
+				.prepare(`INSERT INTO memory_feedback_votes (deliverable_id, memory_id, rating) VALUES (?, ?, ?)
+				ON CONFLICT(deliverable_id, memory_id) DO UPDATE SET rating = excluded.rating`)
+				.run(input.deliverableId, input.memoryId, input.rating);
+			if (input.rating !== "neutral")
+				this.db
+					.prepare(
+						`INSERT INTO memory_applications (id,memory_id,matter_id,member_id,deliverable_id,outcome,note,created_at) VALUES (?,?,?,?,?,?,?,?)`,
+					)
+					.run(
+						`mapp_${randomUUID()}`,
+						input.memoryId,
+						input.matterId,
+						input.memberId ?? memory.memberId,
+						input.deliverableId,
+						`feedback_${input.rating}`,
+						input.note ?? "",
+						timestamp,
+					);
+			if (ownsTransaction) this.db.exec("COMMIT");
+		} catch (error) {
+			if (ownsTransaction) this.db.exec("ROLLBACK");
+			throw error;
+		}
+		return this.getMemory(input.memoryId)!;
+	}
+
+	clearDeliverableMemoryFeedback(deliverableId: string): MemberMemory[] {
+		const delivery = this.getDeliverable(deliverableId);
+		if (!delivery) throw new Error("Deliverable not found");
+		const rows = this.db
+			.prepare("SELECT memory_id FROM memory_feedback_votes WHERE deliverable_id = ?")
+			.all(deliverableId);
+		return rows.map((row) =>
+			this.setMemoryFeedback({
+				memoryId: String(row.memory_id),
+				matterId: delivery.matterId,
+				deliverableId,
+				rating: "neutral",
+			}),
+		);
+	}
+
 	evaluateMatterMemories(input: {
 		matterId: string;
 		memberId?: string | null;
@@ -447,21 +582,14 @@ export class PersonalAgentStore {
 		outcome: Exclude<MemoryApplicationOutcome, "applied">;
 		note?: string;
 	}): MemberMemory[] {
-		const rows = (
-			input.memberId
-				? this.db
-						.prepare(
-							`SELECT DISTINCT memory_id FROM memory_applications
-							 WHERE matter_id = ? AND member_id = ? AND outcome = 'applied'`,
-						)
-						.all(input.matterId, input.memberId)
-				: this.db
-						.prepare(
-							`SELECT DISTINCT memory_id FROM memory_applications
-							 WHERE matter_id = ? AND outcome = 'applied'`,
-						)
-						.all(input.matterId)
-		) as Array<{ memory_id: string }>;
+		if (!input.deliverableId) throw new Error("Feedback evaluation requires a specific deliverable");
+		const rows = this.db
+			.prepare(`SELECT DISTINCT a.memory_id FROM deliverable_memory_applications link
+			JOIN memory_applications a ON a.id = link.application_id
+			WHERE link.deliverable_id = ? AND a.matter_id = ? AND (? IS NULL OR a.member_id = ?)`)
+			.all(input.deliverableId, input.matterId, input.memberId ?? null, input.memberId ?? null) as Array<{
+			memory_id: string;
+		}>;
 		const updated: MemberMemory[] = [];
 		for (const row of rows) {
 			updated.push(
@@ -738,15 +866,49 @@ export class PersonalAgentStore {
 
 	/** Commit a turn's index entries together, including their version numbers. */
 	recordDeliverables(inputs: Parameters<PersonalAgentStore["recordDeliverable"]>[0][]): Deliverable[] {
+		return this.recordTurnOutcome({ deliverables: inputs, candidates: [], applicationIds: [] }).deliverables;
+	}
+
+	recordTurnOutcome(input: {
+		deliverables: Parameters<PersonalAgentStore["recordDeliverable"]>[0][];
+		candidates: Parameters<PersonalAgentStore["addMemory"]>[0][];
+		applicationIds: string[];
+	}): { deliverables: Deliverable[]; memories: MemberMemory[]; skippedDuplicates: number } {
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
-			const deliveries = inputs.map((input) => this.recordDeliverable(input));
+			const deliverables = input.deliverables.map((entry) => this.recordDeliverable(entry));
+			for (const delivery of deliverables) this.linkDeliverableApplications(delivery.id, input.applicationIds);
+			const memories: MemberMemory[] = [];
+			let skippedDuplicates = 0;
+			for (const candidate of input.candidates) {
+				if (
+					this.findActiveDuplicateMemory(
+						candidate.memberId,
+						candidate.scope,
+						candidate.workspaceId ?? null,
+						candidate.content,
+					)
+				) {
+					skippedDuplicates++;
+					continue;
+				}
+				memories.push(this.addMemory({ ...candidate, status: "candidate", verified: false }));
+			}
 			this.db.exec("COMMIT");
-			return deliveries;
+			return { deliverables, memories, skippedDuplicates };
 		} catch (error) {
 			this.db.exec("ROLLBACK");
 			throw error;
 		}
+	}
+
+	linkDeliverableApplications(deliverableId: string, applicationIds: string[]): void {
+		const delivery = this.getDeliverable(deliverableId);
+		if (!delivery) throw new Error("Deliverable not found");
+		const insert =
+			this.db.prepare(`INSERT OR IGNORE INTO deliverable_memory_applications (deliverable_id, application_id)
+			SELECT ?, id FROM memory_applications WHERE id = ? AND matter_id = ? AND outcome = 'applied'`);
+		for (const id of applicationIds) insert.run(deliverableId, id, delivery.matterId);
 	}
 
 	getDeliverable(id: string): Deliverable | null {
@@ -766,6 +928,34 @@ export class PersonalAgentStore {
 		) as Record<string, unknown>[];
 
 		return rows.map((row) => this.mapDeliverable(row));
+	}
+
+	recordDeliverableFeedback(
+		deliverableId: string,
+		feedback: string,
+		rating?: FeedbackRating,
+	): { deliverable: Deliverable; evaluatedMemories: MemberMemory[] } {
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			const deliverable = this.addDeliverableFeedback(deliverableId, feedback, rating);
+			if (!deliverable) throw new Error("Deliverable not found");
+			const evaluatedMemories =
+				rating === "neutral"
+					? this.clearDeliverableMemoryFeedback(deliverableId)
+					: rating
+						? this.evaluateMatterMemories({
+								matterId: deliverable.matterId,
+								deliverableId,
+								outcome: rating === "positive" ? "feedback_positive" : "feedback_negative",
+								note: feedback,
+							})
+						: [];
+			this.db.exec("COMMIT");
+			return { deliverable, evaluatedMemories };
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
 	}
 
 	addDeliverableFeedback(deliverableId: string, feedback: string, rating?: FeedbackRating | null): Deliverable | null {

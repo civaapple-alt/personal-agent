@@ -273,6 +273,7 @@ export interface DeliverableFeedbackResult {
 	rating: FeedbackRating | null;
 	evaluatedMemoryIds: string[];
 	distilledMemories: MemberMemoryDto[];
+	distillationError?: string;
 }
 
 export function submitDeliverableFeedback(

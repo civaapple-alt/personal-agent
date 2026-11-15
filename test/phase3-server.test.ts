@@ -1157,6 +1157,53 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		assert.ok(appsJson.applications.some((a) => a.outcome === "applied"));
 		assert.ok(appsJson.applications.some((a) => a.outcome === "feedback_positive"));
 
+		// A rating is one current vote for this version; neutral retracts it.
+		for (const rating of ["negative", "positive", "neutral", "positive"]) {
+			const vote = await fetch(`${baseUrl}/api/deliverables/${deliverableId}/feedback`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ rating }),
+			});
+			assert.equal(vote.status, 200);
+			assert.equal(store.getMemory(seedMemory.id)?.positiveCount, rating === "positive" ? 1 : 0);
+			assert.equal(store.getMemory(seedMemory.id)?.negativeCount, rating === "negative" ? 1 : 0);
+		}
+		const badReplacement = await fetch(`${baseUrl}/api/memories`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				memberId: "qa-manager",
+				scope: "role_general",
+				content: "foreign replacement",
+				supersedesMemoryId: seedMemory.id,
+				status: "verified",
+			}),
+		});
+		assert.equal(badReplacement.status, 400);
+		assert.equal(store.getMemory(seedMemory.id)?.status, "verified");
+
+		const legacy = store.recordDeliverable({
+			matterId: created.matter.id,
+			memberId: "engineering-manager",
+			type: "document",
+			title: "old unscoped result",
+			contentOrPath: "legacy",
+		});
+		const partial = await fetch(`${baseUrl}/api/deliverables/${legacy.id}/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				feedback: "saved despite reflection scope rejection",
+				rating: "positive",
+				autoDistill: true,
+			}),
+		});
+		assert.equal(partial.status, 200);
+		const partialJson = (await partial.json()) as { ok: boolean; distillationError?: string };
+		assert.equal(partialJson.ok, true);
+		assert.match(partialJson.distillationError ?? "", /current workspace/);
+		assert.equal(store.getDeliverable(legacy.id)?.feedbackRating, "positive");
+
 		// Trigger AI experience distillation via HTTP API
 		const distillRes = await fetch(`${baseUrl}/api/rsi/distill`, {
 			method: "POST",

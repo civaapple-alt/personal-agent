@@ -475,12 +475,12 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 		});
 
 		// Record applied memories for two different participating roles on the same matter
-		store.recordMemoryApplications({
+		const engApplications = store.recordMemoryApplications({
 			memoryIds: [engRule.id],
 			matterId: matter.id,
 			memberId: "engineering-manager",
 		});
-		store.recordMemoryApplications({
+		const qaApplications = store.recordMemoryApplications({
 			memoryIds: [qaRule.id],
 			matterId: matter.id,
 			memberId: "qa-manager",
@@ -495,6 +495,8 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 			contentOrPath: "# M1 收口报告\n- 10/10 回归通过",
 		});
 
+		store.linkDeliverableApplications(deliverable.id, [...engApplications, ...qaApplications]);
+
 		// Simulate multi-role conversation trajectory: user correction, internal delegations, error notice
 		store.appendMessage({
 			matterId: matter.id,
@@ -502,6 +504,7 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 			senderType: "user",
 			senderId: "user",
 			content: "测试太长了先到这里，请止损收口并保留已有有效样本",
+			metadata: { workspaceId: ws.id, repoPath: ws.repoPath },
 		});
 		store.appendMessage({
 			matterId: matter.id,
@@ -551,6 +554,15 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 			senderType: "system",
 			senderId: "product-manager",
 			content: JSON.stringify({ method: "error", message: "Timed out waiting for bench-p95" }),
+		});
+
+		store.appendMessage({
+			matterId: matter.id,
+			channel: "user",
+			senderType: "member",
+			senderId: "product-manager",
+			content: "阶段成果",
+			metadata: { workspaceId: ws.id, repoPath: ws.repoPath, deliverableIds: [deliverable.id] },
 		});
 
 		// Cross-member acceptance scoring when omitting memberId
