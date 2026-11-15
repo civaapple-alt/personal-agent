@@ -577,6 +577,7 @@ body {
 }
 
 .chat-stage {
+	position: relative;
 	flex: 1;
 	display: flex;
 	flex-direction: column;
@@ -1602,15 +1603,26 @@ body {
 }
 
 .collab-dock-panel {
-	border-bottom: 1px solid var(--border);
-	background: var(--bg-sidebar);
-	padding: 12px 28px;
-	flex-shrink: 0;
+	position: absolute;
+	top: 64px;
+	right: 24px;
+	width: min(640px, calc(100% - 48px));
+	max-height: min(68vh, calc(100% - 88px));
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	background: var(--bg-stage);
+	box-shadow: 0 14px 36px rgba(15, 36, 28, 0.14);
+	padding: 14px 16px;
 }
 
 .collab-dock-inner {
-	max-width: 820px;
-	margin: 0 auto;
+	width: 100%;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
 	font-size: 12px;
 }
 
@@ -1619,6 +1631,7 @@ body {
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
+	flex-shrink: 0;
 }
 
 .collab-tabs {
@@ -1648,7 +1661,9 @@ body {
 
 .collab-log {
 	margin-top: 10px;
-	max-height: 280px;
+	flex: 1;
+	min-height: 0;
+	max-height: 54vh;
 	overflow-y: auto;
 	display: flex;
 	flex-direction: column;
@@ -2308,5 +2323,9 @@ body {
 	.quick-prompts-list,
 	.form-grid {
 		grid-template-columns: 1fr;
+	}
+	.collab-dock-panel {
+		right: 16px;
+		width: calc(100% - 32px);
 	}
 }

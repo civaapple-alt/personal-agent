@@ -106,6 +106,27 @@ export function ChatStage({
 	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
+	const collabTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const collabPanelRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!collabOpen) return;
+		const onMouseDown = (event: MouseEvent) => {
+			const target = event.target as Node | null;
+			if (!target) return;
+			if (collabPanelRef.current?.contains(target) || collabTriggerRef.current?.contains(target)) return;
+			setCollabOpen(false);
+		};
+		const onKeyDown = (event: globalThis.KeyboardEvent) => {
+			if (event.key === "Escape") setCollabOpen(false);
+		};
+		document.addEventListener("mousedown", onMouseDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onMouseDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [collabOpen]);
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const messageCount = matterDetail?.userMessages.length ?? 0;
@@ -240,7 +261,9 @@ export function ChatStage({
 				<div className="stage-header-right">
 					{matterDetail && (
 						<button
+							ref={collabTriggerRef}
 							type="button"
+							aria-expanded={collabOpen}
 							className={`btn-pill-outline btn-xs ${collabOpen ? "active" : ""}`}
 							title="查看团队内部委托记录及底层工具调用事件"
 							onClick={() => {
@@ -275,7 +298,7 @@ export function ChatStage({
 			</header>
 
 			{collabOpen && matterDetail && (
-				<div className="collab-dock-panel">
+				<div ref={collabPanelRef} role="dialog" aria-label="团队委托与过程事件" className="collab-dock-panel">
 					<div className="collab-dock-inner">
 						<div className="collab-dock-head">
 							<div className="collab-tabs">
