@@ -5,6 +5,7 @@ All notable changes to Personal Agent are documented in this file.
 ## [Unreleased]
 
 ### Documentation
+- Added a concise Chinese `AGENTS.md` and layered directory READMEs, separating role assets from parsers, runtime boundaries from local implementation guidance, and offline checks from real-model demos. Added a dependency-free documentation link/command checker.
 - Rewrote `docs/architecture-and-plan.md` against the implemented HTTP/SSE, per-execution Pi sessions, authenticated tool bridges, scoped state and explicit milestone delivery. Separated current limits and future work from the historical four-phase design; aligned the README document pointers.
 
 ### Added
@@ -15,6 +16,7 @@ All notable changes to Personal Agent are documented in this file.
 - `npm run demo:team` verifies real Pi model delegation, an actual document, and recall after restarting the host process in a disposable workspace/database. Regression tests cover continuity, isolation, tool transport and failure/cancellation boundaries.
 
 ### Changed
+- Role directory discovery now excludes `README.md`, so local asset documentation does not become an invalid team member.
 - Follow-up messages keep the matter's lead and workspace. A new matter still uses explicit selection, initial keyword routing or the primary contact; specialist collaboration is decided by the executing member.
 - Ordinary replies and clarification no longer become automatic documents or mark the matter delivered. Only the lead publishes reviewable milestones, explicitly requested versions or substantial revisions, with a required change basis linked to the source conversation. Internal specialists return results to the lead. Drafts are staged, validated and archived only when the turn succeeds.
 - Company-private memories now require a workspace to be injected. Unscoped historical memories remain viewable. Imported role definitions do not install plugins or Skills automatically.

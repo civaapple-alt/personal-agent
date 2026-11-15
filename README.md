@@ -23,78 +23,37 @@
 | **测试框架** | `node:test` + `node:assert/strict` | 零额外依赖，与 Pi 脚本及单元测试风格一致 |
 | **前端工作台（阶段三已实现）** | `React 19.3.0` + `esbuild` + 原生 CSS（Grok Bot 风格双栏布局） | 内置 `hashRouter.ts`、`MarkdownView.tsx` 与 SSE 实时流渲染 |
 
-## 目录结构
+## 按需阅读导航
 
-```text
-personal-agent/
-├── docs/
-│   ├── product-direction.md        # 产品方向确认稿
-│   ├── product-discussion.md       # 完整产品讨论演进记录
-│   ├── team-roles.md               # 跨项目角色职责草案
-│   ├── team-interaction.md         # 集中入口与团队协作设计
-│   ├── architecture-and-plan.md    # 当前架构、实现边界与后续计划
-│   ├── prototypes/                 # V1–V4 交互原型图与演进反馈
-│   └── references/                 # Grok Bot 与人才市场调研
-├── skills/                         # 初始角色声明对应的可加载 Pi Skills
-├── roles/                          # 可分享的角色 Markdown 定义
-│   ├── marketing-lead.md           # 市场与营销负责人
-│   ├── product-manager.md          # 产品经理（默认主要联系人）
-│   ├── engineering-manager.md      # 研发经理
-│   └── qa-manager.md               # 测试经理
-├── src/
-│   ├── index.ts                    # 公开导出入口
-│   ├── roles/                      # 角色模板解析与序列化
-│   ├── storage/                    # 基于 node:sqlite 的双轨状态存储
-│   ├── orchestrator/               # TeamOrchestrator（按事找人、内部委托、交付归拢）
-│   ├── server/                     # HTTP/SSE 服务、DialogBroker 与独立预览管理器
-│   ├── rpc/
-│   │   ├── jsonl.ts                # 严格按 LF (\n) 分帧的 JSONL 读写
-│   │   ├── types.ts                # Pi RPC 命令、事件与 Extension UI 协议类型
-│   │   └── pi-rpc-worker.ts        # PiRpcWorker（并发关联、agent_settled、双向 UI 确认）
-│   └── demo/
-│       └── rpc-smoke.ts            # 阶段一实机 RPC 冒烟脚本
-├── web/                            # 阶段三 React 19.3 Grok-Bot 风格双栏工作台前端（HashRouter + MarkdownView）
-├── scripts/
-│   └── build-web.mjs               # 基于 esbuild 的前端构建脚本
-├── test/
-│   ├── pi-rpc-worker.test.ts       # JSONL 拆帧与 PiRpcWorker 协议单元测试
-│   ├── phase2-orchestrator.test.ts # 阶段二角色模板、记忆隔离与编排测试
-│   └── phase3-server.test.ts       # 阶段三 HTTP/SSE、阻塞审批与独立预览服务测试
-├── biome.json                      # Biome 2.3.5 Lint & Format 配置
-├── tsconfig.json                   # TypeScript 类型检查配置
-└── tsconfig.build.json             # dist/ 构建配置
-```
+开发代理先读 [AGENTS.md](AGENTS.md)，然后进入最相关目录；每层 README 只展开本层职责，再链接源码和更深说明。
+
+| 要做的事 | 入口 |
+| --- | --- |
+| 修改后端行为 | [src/README.md](src/README.md)，再进入编排、RPC、存储或服务模块 |
+| 修改网页 | [web/README.md](web/README.md) → [前端源码](web/src/README.md) |
+| 调整可分享岗位定义 | [roles/README.md](roles/README.md)；解析代码另见 [src/roles](src/roles/README.md) |
+| 编辑具体工作方法 | [skills/README.md](skills/README.md)，按需打开对应 `SKILL.md` |
+| 了解当前产品、架构或历史 | [docs/README.md](docs/README.md) |
+| 选择离线或真实模型验证 | [test/README.md](test/README.md)、[demo](src/demo/README.md) |
+| 构建、启动或检查文档 | [scripts/README.md](scripts/README.md)、[package.json](package.json) |
 
 ## 快速开始
 
+命令均从仓库根运行，Node 与本机 Pi 的要求见上表。
+
 ```bash
-# 安装开发依赖
 npm install
-
-# 运行代码规范检查（Biome）与 TypeScript 严格类型检查
 npm run check
-
-# 自动格式化代码
-npm run format
-
-# 运行单元测试
+npm run build
 npm test
 
-# 构建后端 dist/ 与前端 web/dist/
-npm run build
-
-# 使用隔离数据库核对源码和构建后的服务入口
-npm run check:startup
-
-# 启动阶段三 V4 工作台服务（默认 http://127.0.0.1:4310）
+# 启动工作台，默认 http://127.0.0.1:4310，使用已有用户数据库
 npm run start:web
-
-# 运行阶段一实机冒烟测试（调用本机 pi --mode rpc 与 kimi-for-coding）
-npm run demo:rpc
-
-# 真实模型协作与跨进程接续验证，使用临时目录、独立数据库与会话
-npm run demo:team
 ```
+
+只改文档可运行 `npm run check:docs`。隔离启动检查使用 `npm run check:startup`，需要先构建，不调用模型。完整说明和针对性验证选择见 [scripts](scripts/README.md) 与 [test](test/README.md)。
+
+`npm run demo:rpc` 和 `npm run demo:team` 会调用真实模型，不属于默认检查；范围、临时数据与证据约定见 [demo](src/demo/README.md)。
 
 ## 阶段进展
 
@@ -106,12 +65,8 @@ npm run demo:team
 - [x] **运行闭环补齐**：按事项、成员、工作区恢复 Pi 会话，内部委托工具、运行能力核查与显式成果归档
 - [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享
 
-## 连续工作与内部协作
+## 连续工作与正式成果
 
-同一事项的后续消息默认保留负责人和工作区，并打开确切的 Pi session 文件。正常退出或进程重启后都可由下一条用户消息接续。不同事项、工作区及成员各自保存会话；切回原工作区接回原现场。正在执行时请先停止，再补充要求或切换工作区，服务会以 HTTP 409 拒绝重叠执行。
+同事项后续交流默认保留负责人和工作区，恢复确切 Pi 会话。成员可通过真实工具咨询同事并整合结果，内部过程按需查看。普通回复、澄清和细小讨论调整只保留对话；可审阅阶段成果、明确版本或实质变化才正式发布并记录变化依据，不要求用户逐次批准归档。
 
-成员通过 `delegate_to_member` 请求其他已存在成员完成专业工作，并把其结果整合给用户。内部请求、结果与错误进入折叠的协作过程。主成员在形成可审阅的阶段成果、明确版本或实质变化时，才用 `publish_deliverable` 归档正式文档、实际文件或服务链接，并记录变化依据。普通聊天、需求澄清和细小调整只保存对话；内部同事把结果返回主成员，由主成员整合。停止或失败的本轮不会归档暂存草稿。
-
-角色 `skills` 现在指向实际的 `SKILL.md` 文件，缺失时明确报错。初始工具按 `tools` 声明装配，必要的团队工具自动加入。自定义工具由运维者通过 `PA_PI_EXTENSIONS` 指定本地 Pi 扩展，多个路径按系统路径分隔符连接；`mcpDependencies` 使用现有 Pi 配置中的服务器名。工具和依赖均须通过实际运行清单核查，导入角色定义不会自动安装依赖。
-
-公司与项目私有记忆需要绑定工作区才自动注入。历史上没有工作区的私有记忆仍可在团队页查看，但不会作为全局背景加入执行；目前尚无组织身份模型。完整边界、迁移规则和实机证据见 [运行与协作机制](docs/runtime-collaboration.md)。
+会话隔离、私有经验、能力装配和失败边界见 [运行说明](docs/runtime-collaboration.md)；变更这些行为先从 [后端地图](src/README.md) 找到拥有规则的模块。角色与 Skill 的存在不代表长期成长或完整岗位能力已经验证。

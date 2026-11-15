@@ -138,12 +138,12 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 }
 
 /**
- * Load all `.md` role templates from a directory sorted deterministically by filename.
+ * Load `.md` role templates, excluding README documentation, sorted deterministically by filename.
  */
 export async function loadRoleTemplatesFromDir(dirPath: string): Promise<RoleTemplate[]> {
 	const entries = await readdir(dirPath, { withFileTypes: true });
 	const markdownFiles = entries
-		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name.toLowerCase() !== "readme.md")
 		.map((entry) => entry.name)
 		.sort();
 

@@ -1,0 +1,24 @@
+# 按行为选择验证
+
+本目录使用 `node:test`。受控 Worker、模型回复 fixture、本地子进程与 HTTP 都是离线验证；它们不调用真实模型，也不能证明岗位长期能力。所有命令在仓库根运行。
+
+| 你改了什么 | 主要覆盖 |
+| --- | --- |
+| Pi RPC、JSONL、超时或退出 | [pi-rpc-worker.test.ts](pi-rpc-worker.test.ts) |
+| 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |
+| 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
+| 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
+| HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |
+| 测试 Worker 的能力握手/工具请求 | [worker-helpers.ts](worker-helpers.ts)，供上述测试复用 |
+
+例如只验证连续上下文：
+
+```bash
+node --test test/continuity-collaboration.test.ts
+```
+
+完整离线验证先运行 `npm run build:web` 生成服务测试所需静态资源，再 `npm test`。代码交付还需相应的 `npm run check` 与 `npm run build`。验证源码和构建入口使用 `npm run check:startup`，前提是后端和网页均已构建。
+
+数据与会话使用内存或临时目录；服务绑定临时端口，并在结束/失败时清理。新增取消、失败或恢复用例时验证实际状态与成果记录，不能只检查“方法被调用”。不要缩短调度余量来制造不稳定的空闲超时测试。
+
+真实模型只在需要验证集成时显式选用 [demo](../src/demo/README.md)；纯文档改动使用 [check:docs](../scripts/README.md)，不重跑整套应用测试。

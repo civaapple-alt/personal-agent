@@ -98,7 +98,7 @@ class FakeRpcWorker implements RpcWorkerLike {
 	}
 }
 
-test("loads 4 shareable Markdown role templates and serializes cleanly without private state", async () => {
+test("loads 4 shareable role templates alongside README and serializes without private state", async () => {
 	const rolesDir = resolve(process.cwd(), "roles");
 	const templates = await loadRoleTemplatesFromDir(rolesDir);
 	const ids = templates.map((t) => t.id).sort();
