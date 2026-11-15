@@ -3652,6 +3652,64 @@ body {
 	color: var(--text-muted);
 }
 
+.wechat-row-sub {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-left: 2px;
+}
+
+.wechat-row-select {
+	border: 1px solid var(--border);
+	background: #f8fafc;
+	border-radius: 6px;
+	padding: 2px 6px;
+	font-size: 12px;
+	color: var(--text-primary);
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.wechat-row-select:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.wechat-switch {
+	position: relative;
+	width: 36px;
+	height: 20px;
+	border-radius: 999px;
+	border: none;
+	background: #cbd5e1;
+	padding: 2px;
+	cursor: pointer;
+	transition: background 0.16s ease;
+	flex-shrink: 0;
+}
+
+.wechat-switch.on {
+	background: var(--accent);
+}
+
+.wechat-switch-thumb {
+	display: block;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
+	transition: transform 0.16s ease;
+}
+
+.wechat-switch.on .wechat-switch-thumb {
+	transform: translateX(16px);
+}
+
+.wechat-avatar-box.ai.is-lead {
+	box-shadow: 0 0 0 2px var(--accent);
+	border-radius: 14px;
+}
+
 .wechat-add-scroll {
 	display: flex;
 	flex-direction: column;

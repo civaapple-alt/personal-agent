@@ -2236,3 +2236,175 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		rmSync(tempDir, { recursive: true, force: true });
 	}
 });
+
+test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegation scope enforcement", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-roster-"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		defaultCwd: tempDir,
+		workerFactory: (opts) =>
+			({
+				options: opts,
+				onSessionEvent: () => () => {},
+				onNotice: () => () => {},
+				setDialogHandler: () => {},
+				start: async () => {
+					await reportReady(opts);
+				},
+				stop: async () => {},
+				getState: async () => ({ sessionId: "s", isStreaming: false }),
+				runPromptAndWait: async () => ({
+					disposition: "started",
+					aborted: false,
+					assistantText: "已完成测试处理。",
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				}),
+			}) as unknown as RpcWorkerLike,
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		uploadsDir: join(tempDir, "uploads"),
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const createRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "验证默认全员 AI 参与与统一旁听开关",
+				preferredMemberId: "product-manager",
+			}),
+		});
+		assert.equal(createRes.status, 202);
+		const created = (await createRes.json()) as {
+			matter: {
+				id: string;
+				leadMemberId: string | null;
+				aiMemberIds: string[] | null;
+				observersEnabled: boolean;
+				observerMemberIds: string[];
+			};
+		};
+		const matterId = created.matter.id;
+		assert.equal(created.matter.leadMemberId, "product-manager");
+		assert.equal(created.matter.aiMemberIds, null);
+		assert.equal(created.matter.observersEnabled, false);
+		assert.deepEqual(created.matter.observerMemberIds, []);
+
+		// Wait for initial background dispatch turn to settle before patching lead/roster.
+		for (let i = 0; i < 40; i++) {
+			const detailRes = await fetch(`${baseUrl}/api/matters/${matterId}`);
+			assert.equal(detailRes.status, 200);
+			const detail = (await detailRes.json()) as { running?: boolean; matter: { status: string } };
+			if (!detail.running && detail.matter.status !== "running") break;
+			await new Promise((r) => setTimeout(r, 25));
+		}
+
+		// Enable Matter-wide observer toggle -> auto-populates all non-lead AI roles.
+		const enableObsRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ observersEnabled: true }),
+		});
+		assert.equal(enableObsRes.status, 200);
+		const enabledObs = (await enableObsRes.json()) as {
+			matter: { observersEnabled: boolean; observerMemberIds: string[] };
+		};
+		assert.equal(enabledObs.matter.observersEnabled, true);
+		assert.deepEqual([...enabledObs.matter.observerMemberIds].sort(), [
+			"engineering-manager",
+			"marketing-lead",
+			"qa-manager",
+		]);
+
+		// Switch Matter lead -> previous lead joins observers and new lead leaves observers.
+		const switchLeadRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ leadMemberId: "engineering-manager" }),
+		});
+		assert.equal(switchLeadRes.status, 200);
+		const switchedLead = (await switchLeadRes.json()) as {
+			matter: { leadMemberId: string | null; observerMemberIds: string[] };
+		};
+		assert.equal(switchedLead.matter.leadMemberId, "engineering-manager");
+		assert.deepEqual([...switchedLead.matter.observerMemberIds].sort(), [
+			"marketing-lead",
+			"product-manager",
+			"qa-manager",
+		]);
+
+		// Reject empty AI member roster with 400.
+		const emptyRosterRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ aiMemberIds: [] }),
+		});
+		assert.equal(emptyRosterRes.status, 400);
+
+		// Narrow AI roster -> removed AI roles are dropped from both aiMemberIds and observerMemberIds.
+		const narrowRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ aiMemberIds: ["engineering-manager", "product-manager"] }),
+		});
+		assert.equal(narrowRes.status, 200);
+		const narrowed = (await narrowRes.json()) as {
+			matter: { aiMemberIds: string[] | null; observerMemberIds: string[] };
+		};
+		assert.deepEqual(narrowed.matter.aiMemberIds, ["engineering-manager", "product-manager"]);
+		assert.deepEqual(narrowed.matter.observerMemberIds, ["product-manager"]);
+
+		// Turn off Matter-wide observer toggle -> clears observerMemberIds.
+		const disableObsRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ observersEnabled: false }),
+		});
+		assert.equal(disableObsRes.status, 200);
+		const disabledObs = (await disableObsRes.json()) as {
+			matter: { observersEnabled: boolean; observerMemberIds: string[] };
+		};
+		assert.equal(disabledObs.matter.observersEnabled, false);
+		assert.deepEqual(disabledObs.matter.observerMemberIds, []);
+
+		// Delegating to an AI removed from the Matter is rejected.
+		await assert.rejects(
+			() =>
+				orchestrator.delegateToMember({
+					matterId,
+					fromMemberId: "engineering-manager",
+					toMemberId: "qa-manager",
+					question: "请补充测试方案",
+				}),
+			/removed from this matter/,
+		);
+	} finally {
+		await orchestrator.shutdown();
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});

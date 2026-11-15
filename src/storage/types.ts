@@ -115,6 +115,8 @@ export interface Matter {
 	leadMemberId: string | null;
 	workspaceId: string | null;
 	orgId: string | null;
+	aiMemberIds: string[] | null;
+	observersEnabled: boolean;
 	observerMemberIds: string[];
 	collaboratorIds: string[];
 	createdAt: string;

@@ -37,10 +37,10 @@ All notable changes to Personal Agent are documented in this file.
   - Added `mode: "discussion" | "ai_request" | "dispatch"` on `POST /api/matters` & `POST /api/matters/:id/messages`, plus
     Owner `/approve-ai` and `/dismiss-ai` endpoints, preserving speaker attribution in `TeamOrchestrator` history.
   - Added invite gate & local Owner/colleague switch in `App.tsx` / `Sidebar.tsx`, a unified top-right `协作成员`
-    status button and compact WeChat-style member grid panel in `ChatStage.tsx` (search, 4-column human + AI
-    lead/specialist/observer avatar tiles, and `+` / `−` controls to manage matter colleagues, invite links, and live
-    AI observers), explicit composer mode switch & AI request approval cards, collaborator management in `TeamView.tsx`,
-    and deliverable admin gating in `DeliverableCard.tsx`.
+    status button and compact member grid panel in `ChatStage.tsx` (default all-AI roster with `+` / `−`
+    removal/restore, in-panel `事项负责人` lead switching, Matter-wide `AI 旁听` toggle replacing per-AI observer
+    selection, and removal of the bottom composer follow-up `<select>`), explicit composer mode switch & AI request
+    approval cards, collaborator management in `TeamView.tsx`, and deliverable admin gating in `DeliverableCard.tsx`.
 - Allowed selecting an organization directly on New Matter / Chat even before registering a workspace under it, and
   switched default member `gitName` values to English (`defaultMemberGitName`):
   - Added `matters.org_id` migration & backfill, `store.updateMatterOrganization`, `orgId` support on

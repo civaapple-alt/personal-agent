@@ -62,6 +62,8 @@ export interface MatterDto {
 	leadMemberId: string | null;
 	workspaceId: string | null;
 	orgId?: string | null;
+	aiMemberIds?: string[] | null;
+	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	collaboratorIds?: string[];
 	createdAt: string;
@@ -319,6 +321,8 @@ export function createMatter(input: {
 	preferredMemberId?: string;
 	workspaceId?: string;
 	orgId?: string | null;
+	aiMemberIds?: string[] | null;
+	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	collaboratorIds?: string[];
 	title?: string;
@@ -649,6 +653,30 @@ export function updateMatterObservers(matterId: string, observerMemberIds: strin
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ observerMemberIds }),
+	});
+}
+
+export function updateMatterLead(matterId: string, leadMemberId: string): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ leadMemberId }),
+	});
+}
+
+export function updateMatterAiMembers(matterId: string, aiMemberIds: string[] | null): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ aiMemberIds }),
+	});
+}
+
+export function updateMatterObserversEnabled(
+	matterId: string,
+	observersEnabled: boolean,
+): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ observersEnabled }),
 	});
 }
 

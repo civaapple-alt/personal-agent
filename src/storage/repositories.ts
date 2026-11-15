@@ -989,18 +989,44 @@ export class PersonalAgentStore {
 		return rows.map((row) => this.mapWorkspace(row));
 	}
 
+	private resolveEffectiveAiIds(aiMemberIds: string[] | null): string[] {
+		return aiMemberIds ?? this.listMembers().map((member) => member.id);
+	}
+
+	private computeAutoObservers(effectiveAiIds: string[], leadMemberId: string | null): string[] {
+		return effectiveAiIds.filter((id) => id !== leadMemberId);
+	}
+
 	createMatter(input: {
 		title: string;
 		summary?: string;
 		leadMemberId?: string | null;
 		workspaceId?: string | null;
 		orgId?: string | null;
+		aiMemberIds?: string[] | null;
+		observersEnabled?: boolean;
 		observerMemberIds?: string[];
 		collaboratorIds?: string[];
 	}): Matter {
 		const id = `mat_${randomUUID()}`;
 		const timestamp = nowIso();
-		const observerIds = normalizeUniqueIds(input.observerMemberIds);
+		let storedAiIds =
+			input.aiMemberIds === undefined || input.aiMemberIds === null ? null : normalizeUniqueIds(input.aiMemberIds);
+		if (storedAiIds !== null && input.leadMemberId && !storedAiIds.includes(input.leadMemberId)) {
+			storedAiIds = [input.leadMemberId, ...storedAiIds];
+		}
+		const effectiveAiIds = this.resolveEffectiveAiIds(storedAiIds);
+		const explicitObserverIds = normalizeUniqueIds(input.observerMemberIds).filter(
+			(memberId) => effectiveAiIds.includes(memberId) && memberId !== (input.leadMemberId ?? null),
+		);
+		const observersEnabled =
+			typeof input.observersEnabled === "boolean" ? input.observersEnabled : explicitObserverIds.length > 0;
+		const observerIds =
+			typeof input.observersEnabled === "boolean"
+				? input.observersEnabled
+					? this.computeAutoObservers(effectiveAiIds, input.leadMemberId ?? null)
+					: []
+				: explicitObserverIds;
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspace = input.workspaceId ? this.getWorkspace(input.workspaceId) : null;
 		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
@@ -1008,9 +1034,9 @@ export class PersonalAgentStore {
 			.prepare(
 				`INSERT INTO matters (
 					id, title, summary, status, lead_member_id, workspace_id, org_id,
-					observer_ids_json, collaborator_ids_json, created_at, updated_at
+					ai_member_ids_json, observers_enabled, observer_ids_json, collaborator_ids_json, created_at, updated_at
 				)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -1019,6 +1045,8 @@ export class PersonalAgentStore {
 				input.leadMemberId ?? null,
 				input.workspaceId ?? null,
 				effectiveOrgId,
+				storedAiIds === null ? null : JSON.stringify(storedAiIds),
+				observersEnabled ? 1 : 0,
 				JSON.stringify(observerIds),
 				JSON.stringify(collaboratorIds),
 				timestamp,
@@ -1077,11 +1105,51 @@ export class PersonalAgentStore {
 	}
 
 	updateMatterObservers(matterId: string, observerMemberIds: string[]): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
 		const timestamp = nowIso();
-		const observerIds = normalizeUniqueIds(observerMemberIds);
+		const effectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
+		const observerIds = normalizeUniqueIds(observerMemberIds).filter(
+			(id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId,
+		);
 		this.db
-			.prepare("UPDATE matters SET observer_ids_json = ?, updated_at = ? WHERE id = ?")
-			.run(JSON.stringify(observerIds), timestamp, matterId);
+			.prepare("UPDATE matters SET observer_ids_json = ?, observers_enabled = ?, updated_at = ? WHERE id = ?")
+			.run(JSON.stringify(observerIds), observerIds.length > 0 ? 1 : 0, timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterObserversEnabled(matterId: string, enabled: boolean): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const timestamp = nowIso();
+		const effectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
+		const observerIds = enabled ? this.computeAutoObservers(effectiveAiIds, existing.leadMemberId) : [];
+		this.db
+			.prepare("UPDATE matters SET observers_enabled = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?")
+			.run(enabled ? 1 : 0, JSON.stringify(observerIds), timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterAiMembers(matterId: string, aiMemberIds: string[] | null): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const timestamp = nowIso();
+		let normalizedAiIds = aiMemberIds === null ? null : normalizeUniqueIds(aiMemberIds);
+		if (normalizedAiIds !== null && existing.leadMemberId && !normalizedAiIds.includes(existing.leadMemberId)) {
+			normalizedAiIds = [existing.leadMemberId, ...normalizedAiIds];
+		}
+		const effectiveAiIds = this.resolveEffectiveAiIds(normalizedAiIds);
+		const nextObserverIds = existing.observersEnabled
+			? this.computeAutoObservers(effectiveAiIds, existing.leadMemberId)
+			: existing.observerMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId);
+		this.db
+			.prepare("UPDATE matters SET ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?")
+			.run(
+				normalizedAiIds === null ? null : JSON.stringify(normalizedAiIds),
+				JSON.stringify(nextObserverIds),
+				timestamp,
+				matterId,
+			);
 		return this.getMatter(matterId)!;
 	}
 
@@ -1568,8 +1636,36 @@ export class PersonalAgentStore {
 			.run(matterId, ownerId);
 	}
 
-	updateMatterLead(matterId: string, memberId: string): void {
-		this.db.prepare("UPDATE matters SET lead_member_id = ? WHERE id = ?").run(memberId, matterId);
+	updateMatterLead(matterId: string, memberId: string): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		if (
+			existing.leadMemberId === memberId &&
+			(existing.aiMemberIds === null || existing.aiMemberIds.includes(memberId))
+		) {
+			return existing;
+		}
+		const timestamp = nowIso();
+		let nextAiIds = existing.aiMemberIds;
+		if (nextAiIds !== null && !nextAiIds.includes(memberId)) {
+			nextAiIds = [memberId, ...nextAiIds];
+		}
+		const effectiveAiIds = this.resolveEffectiveAiIds(nextAiIds);
+		const nextObserverIds = existing.observersEnabled
+			? this.computeAutoObservers(effectiveAiIds, memberId)
+			: existing.observerMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== memberId);
+		this.db
+			.prepare(
+				"UPDATE matters SET lead_member_id = ?, ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?",
+			)
+			.run(
+				memberId,
+				nextAiIds === null ? null : JSON.stringify(nextAiIds),
+				JSON.stringify(nextObserverIds),
+				timestamp,
+				matterId,
+			);
+		return this.getMatter(matterId)!;
 	}
 
 	private mapOrganization(row: Record<string, unknown>): Organization {
@@ -1687,6 +1783,7 @@ export class PersonalAgentStore {
 	}
 
 	private mapMatter(row: Record<string, unknown>): Matter {
+		const observerMemberIds = parseUniqueIds(row.observer_ids_json);
 		return {
 			id: String(row.id),
 			title: String(row.title),
@@ -1695,7 +1792,12 @@ export class PersonalAgentStore {
 			leadMemberId: row.lead_member_id ? String(row.lead_member_id) : null,
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 			orgId: row.org_id ? String(row.org_id) : null,
-			observerMemberIds: parseUniqueIds(row.observer_ids_json),
+			aiMemberIds:
+				row.ai_member_ids_json === null || row.ai_member_ids_json === undefined
+					? null
+					: parseUniqueIds(row.ai_member_ids_json),
+			observersEnabled: Boolean(row.observers_enabled) || observerMemberIds.length > 0,
+			observerMemberIds,
 			collaboratorIds: parseUniqueIds(row.collaborator_ids_json),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),

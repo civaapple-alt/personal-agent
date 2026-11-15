@@ -26,8 +26,10 @@ import {
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
+	updateMatterAiMembers,
 	updateMatterCollaborators,
-	updateMatterObservers,
+	updateMatterLead,
+	updateMatterObserversEnabled,
 	updateMatterOrganization,
 	updateMatterWorkspace,
 } from "./api.ts";
@@ -86,14 +88,12 @@ export function App() {
 			return "";
 		}
 	});
-	const [draftObserverIds, setDraftObserverIds] = useState<string[] | null>(() => {
+	const [draftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
+	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(() => {
 		try {
-			const raw = window.localStorage.getItem("pa.defaultObserverIds");
-			if (!raw) return null;
-			const parsed: unknown = JSON.parse(raw);
-			return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : null;
+			return window.localStorage.getItem("pa.defaultObserversEnabled") === "true";
 		} catch {
-			return null;
+			return false;
 		}
 	});
 	const [composerText, setComposerText] = useState("");
@@ -500,20 +500,39 @@ export function App() {
 	);
 
 	const startNewMatter = () => {
+		setDraftAiMemberIds(null);
+		setSelectedMemberId("auto");
 		navigateRoute({ tab: "chats", isNewMatter: true });
 		composerRef.current?.focus();
 	};
 
-	const activeObserverIds: string[] = useMemo(() => {
-		const validIds = new Set((bootstrap?.members ?? []).map((m) => m.id));
+	const matterAiMemberIds: string[] = useMemo(() => {
+		const allIds = (bootstrap?.members ?? []).map((m) => m.id);
+		const validIds = new Set(allIds);
+		const leadId = headerContact?.id;
+		const raw =
+			selectedMatterId && matterDetail
+				? matterDetail.matter.aiMemberIds === null || matterDetail.matter.aiMemberIds === undefined
+					? allIds
+					: matterDetail.matter.aiMemberIds
+				: draftAiMemberIds === null
+					? allIds
+					: draftAiMemberIds;
+		const filtered = raw.filter((id) => validIds.has(id));
+		if (leadId && validIds.has(leadId) && !filtered.includes(leadId)) {
+			return [leadId, ...filtered];
+		}
+		return filtered.length > 0 ? filtered : allIds;
+	}, [bootstrap, draftAiMemberIds, headerContact?.id, matterDetail, selectedMatterId]);
+
+	const observersEnabled: boolean = useMemo(() => {
 		if (selectedMatterId && matterDetail) {
-			return (matterDetail.matter.observerMemberIds ?? []).filter((id) => validIds.has(id));
+			return Boolean(
+				matterDetail.matter.observersEnabled ?? (matterDetail.matter.observerMemberIds?.length ?? 0) > 0,
+			);
 		}
-		if (draftObserverIds !== null) {
-			return draftObserverIds.filter((id) => validIds.has(id));
-		}
-		return (bootstrap?.members ?? []).filter((m) => !m.isPrimaryContact).map((m) => m.id);
-	}, [bootstrap, draftObserverIds, matterDetail, selectedMatterId]);
+		return draftObserversEnabled;
+	}, [draftObserversEnabled, matterDetail, selectedMatterId]);
 
 	const handleAddComposerImages = useCallback(async (files: FileList | File[]) => {
 		const { attachments, warnings } = await prepareComposerImages(files, composerImagesRef.current.length);
@@ -556,16 +575,16 @@ export function App() {
 					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
 				}
 			} else {
-				const leadForMatter = preferredMemberId ?? headerContact?.id;
-				const observerIds = activeObserverIds.filter((id) => id !== leadForMatter);
+				const preferredForCreate = selectedMemberId === "auto" ? headerContact?.id : selectedMemberId;
 				const created = await createMatter({
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
-					preferredMemberId,
+					preferredMemberId: preferredForCreate,
 					workspaceId: selectedWorkspaceId || undefined,
 					orgId: selectedOrgId || null,
-					observerMemberIds: observerIds,
+					aiMemberIds: draftAiMemberIds,
+					observersEnabled: draftObserversEnabled,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
@@ -758,22 +777,67 @@ export function App() {
 			});
 	};
 
-	const handleUpdateObservers = (nextIds: string[]) => {
+	const handleChangeLeadMember = (memberId: string) => {
+		if (!memberId) return;
+		if (!selectedMatterId) {
+			setSelectedMemberId(memberId);
+			if (draftAiMemberIds !== null && !draftAiMemberIds.includes(memberId)) {
+				setDraftAiMemberIds([memberId, ...draftAiMemberIds]);
+			}
+			setNoticeBanner(`已将「${memberName(memberId)}」设为新事项负责人`);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterLead(targetMatterId, memberId)
+			.then(async () => {
+				setSelectedMemberId("auto");
+				setNoticeBanner(`已将「${memberName(memberId)}」设为当前事项负责人`);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleUpdateMatterAiMembers = (nextIds: string[]) => {
 		const leadId = headerContact?.id;
-		const cleaned = [...new Set(nextIds)].filter((id) => id !== leadId);
+		const deduped = [...new Set(nextIds)];
+		const ensured = leadId && !deduped.includes(leadId) ? [leadId, ...deduped] : deduped;
+		if (ensured.length === 0) return;
+		if (!selectedMatterId) {
+			const allCount = bootstrap?.members.length ?? 0;
+			setDraftAiMemberIds(ensured.length >= allCount ? null : ensured);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterAiMembers(targetMatterId, ensured)
+			.then(async () => {
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleToggleObserversEnabled = (enabled: boolean) => {
 		try {
-			window.localStorage.setItem("pa.defaultObserverIds", JSON.stringify(cleaned));
+			window.localStorage.setItem("pa.defaultObserversEnabled", enabled ? "true" : "false");
 		} catch {
 			// Ignore storage access errors.
 		}
 		if (!selectedMatterId) {
-			setDraftObserverIds(cleaned);
+			setDraftObserversEnabled(enabled);
+			setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
 			return;
 		}
 		const targetMatterId = selectedMatterId;
-		void updateMatterObservers(targetMatterId, cleaned)
+		void updateMatterObserversEnabled(targetMatterId, enabled)
 			.then(async () => {
-				setNoticeBanner(cleaned.length ? `已更新会议旁听席（${cleaned.length}位同事）` : "已设为仅主负责人跟进");
+				setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
 			})
@@ -1012,9 +1076,11 @@ export function App() {
 						onRemoveImage={handleRemoveComposerImage}
 						onSelectOrganization={handleSelectOrganization}
 						onSelectWorkspace={handleSelectWorkspace}
-						onSelectMember={setSelectedMemberId}
-						activeObserverIds={activeObserverIds}
-						onUpdateObservers={handleUpdateObservers}
+						matterAiMemberIds={matterAiMemberIds}
+						observersEnabled={observersEnabled}
+						onChangeLeadMember={handleChangeLeadMember}
+						onUpdateMatterAiMembers={handleUpdateMatterAiMembers}
+						onToggleObserversEnabled={handleToggleObserversEnabled}
 						onUpdateMatterCollaborators={handleUpdateMatterCollaborators}
 						onApproveAiRequest={(matterId, messageId) => void handleApproveAiRequest(matterId, messageId)}
 						onDismissAiRequest={(matterId, messageId) => void handleDismissAiRequest(matterId, messageId)}

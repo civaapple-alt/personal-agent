@@ -892,6 +892,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const body = await readJsonBody(req);
 				const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
 				const hasOrgUpdate = Object.hasOwn(body, "orgId");
+				const hasLeadUpdate = Object.hasOwn(body, "leadMemberId");
+				const hasAiMembersUpdate = Object.hasOwn(body, "aiMemberIds");
+				const hasObserversEnabledUpdate = Object.hasOwn(body, "observersEnabled");
 				const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
 				const hasCollaboratorUpdate = Object.hasOwn(body, "collaboratorIds");
 				const workspaceId =
@@ -916,6 +919,36 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Organization not found: ${nextOrgId}`);
 					return;
 				}
+				const nextLeadId =
+					typeof body.leadMemberId === "string" && body.leadMemberId.trim().length > 0
+						? body.leadMemberId.trim()
+						: null;
+				if (hasLeadUpdate && (!nextLeadId || !store.getMember(nextLeadId))) {
+					sendError(
+						res,
+						nextLeadId ? 404 : 400,
+						nextLeadId ? `Member not found: ${nextLeadId}` : "leadMemberId is invalid",
+					);
+					return;
+				}
+				const parsedAiMemberIds =
+					hasAiMembersUpdate && body.aiMemberIds === null
+						? null
+						: hasAiMembersUpdate
+							? parseObserverMemberIds(body.aiMemberIds, store)
+							: undefined;
+				if (hasAiMembersUpdate && parsedAiMemberIds === undefined) {
+					sendError(res, 400, "aiMemberIds must be null or an array of member IDs");
+					return;
+				}
+				if (hasAiMembersUpdate && Array.isArray(parsedAiMemberIds) && parsedAiMemberIds.length === 0) {
+					sendError(res, 400, "At least one AI member must remain in the matter");
+					return;
+				}
+				if (hasObserversEnabledUpdate && typeof body.observersEnabled !== "boolean") {
+					sendError(res, 400, "observersEnabled must be a boolean");
+					return;
+				}
 				const observerMemberIds = hasObserverUpdate
 					? parseObserverMemberIds(body.observerMemberIds, store)
 					: undefined;
@@ -930,8 +963,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "collaboratorIds must be an array of collaborator IDs");
 					return;
 				}
-				if ((hasWorkspaceUpdate || hasOrgUpdate) && orchestrator.isMatterRunning(matterId)) {
-					sendError(res, 409, "Stop the active turn before switching workspaces or organizations");
+				if ((hasWorkspaceUpdate || hasOrgUpdate || hasLeadUpdate) && orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Stop the active turn before switching workspaces, organizations, or lead member");
 					return;
 				}
 				let updated = existing;
@@ -943,9 +976,38 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					updated = store.updateMatterWorkspace(matterId, workspaceId);
 					broadcast("workspace_updated", { matterId, workspaceId, orgId: updated.orgId });
 				}
+				if (hasAiMembersUpdate && parsedAiMemberIds !== undefined) {
+					updated = store.updateMatterAiMembers(matterId, parsedAiMemberIds);
+					broadcast("matter_updated", {
+						matterId,
+						aiMemberIds: updated.aiMemberIds,
+						observerMemberIds: updated.observerMemberIds,
+					});
+				}
+				if (hasLeadUpdate && nextLeadId) {
+					updated = store.updateMatterLead(matterId, nextLeadId);
+					broadcast("matter_updated", {
+						matterId,
+						leadMemberId: updated.leadMemberId,
+						aiMemberIds: updated.aiMemberIds,
+						observerMemberIds: updated.observerMemberIds,
+					});
+				}
+				if (hasObserversEnabledUpdate) {
+					updated = store.updateMatterObserversEnabled(matterId, Boolean(body.observersEnabled));
+					broadcast("matter_updated", {
+						matterId,
+						observersEnabled: updated.observersEnabled,
+						observerMemberIds: updated.observerMemberIds,
+					});
+				}
 				if (observerMemberIds !== undefined) {
 					updated = store.updateMatterObservers(matterId, observerMemberIds);
-					broadcast("matter_updated", { matterId, observerMemberIds: updated.observerMemberIds });
+					broadcast("matter_updated", {
+						matterId,
+						observersEnabled: updated.observersEnabled,
+						observerMemberIds: updated.observerMemberIds,
+					});
 				}
 				if (collaboratorIds !== undefined) {
 					updated = store.updateMatterCollaborators(matterId, collaboratorIds);
@@ -1001,6 +1063,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						: undefined;
 				const deliverableType =
 					typeof body.deliverableType === "string" ? (body.deliverableType as DeliverableType) : undefined;
+				const aiMemberIds = Object.hasOwn(body, "aiMemberIds")
+					? body.aiMemberIds === null
+						? null
+						: parseObserverMemberIds(body.aiMemberIds, store)
+					: undefined;
+				const observersEnabled = typeof body.observersEnabled === "boolean" ? body.observersEnabled : undefined;
 				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 				const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
 				const initialCollaboratorIds =
@@ -1010,7 +1078,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						: requestedCollaboratorIds;
 				const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 
-				const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId);
+				const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds);
 				const fallbackTitle = prompt
 					? prompt.slice(0, 60)
 					: images.length === 1
@@ -1021,6 +1089,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					leadMemberId: leadMember.id,
 					workspaceId: workspaceId ?? null,
 					orgId,
+					aiMemberIds,
+					observersEnabled,
 					observerMemberIds,
 					collaboratorIds: initialCollaboratorIds,
 				});
@@ -1063,7 +1133,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					images: images.length > 0 ? images : undefined,
 					preferredMemberId: leadMember.id,
 					workspaceId,
-					observerMemberIds,
+					observerMemberIds: matter.observerMemberIds,
 					deliverableTitle,
 					deliverableType,
 					author: toDispatchAuthor(actor!.collaborator),

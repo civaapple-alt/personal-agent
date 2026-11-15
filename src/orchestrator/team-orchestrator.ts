@@ -164,6 +164,8 @@ export interface DispatchMatterInput {
 	images?: PromptImageAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
+	aiMemberIds?: string[] | null;
+	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	deliverableType?: DeliverableType;
 	deliverableTitle?: string;
@@ -773,10 +775,27 @@ export class TeamOrchestrator {
 		return member;
 	}
 
+	private resolveMatterAiMembers(matter: Matter | null): TeamMember[] {
+		const all = this.store.listMembers();
+		if (!matter || matter.aiMemberIds === null) return all;
+		const allowed = new Set(matter.aiMemberIds);
+		if (matter.leadMemberId) allowed.add(matter.leadMemberId);
+		const filtered = all.filter((member) => allowed.has(member.id));
+		return filtered.length > 0 ? filtered : all;
+	}
+
 	/**
 	 * Route an incoming task to the most appropriate team member ("按事找人").
 	 */
-	routeMemberForRequest(prompt: string, preferredMemberId?: string): TeamMember {
+	routeMemberForRequest(prompt: string, preferredMemberId?: string, allowedMemberIds?: string[] | null): TeamMember {
+		const allMembers = this.store.listMembers();
+		if (allMembers.length === 0) {
+			throw new Error("No team members registered in store");
+		}
+		const allowedSet = allowedMemberIds ? new Set(allowedMemberIds) : null;
+		const members = allowedSet ? allMembers.filter((member) => allowedSet.has(member.id)) : allMembers;
+		const pool = members.length > 0 ? members : allMembers;
+
 		if (preferredMemberId) {
 			const explicit = this.store.getMember(preferredMemberId);
 			if (!explicit) {
@@ -785,16 +804,11 @@ export class TeamOrchestrator {
 			return explicit;
 		}
 
-		const members = this.store.listMembers();
-		if (members.length === 0) {
-			throw new Error("No team members registered in store");
-		}
-
 		const lowerPrompt = prompt.toLowerCase();
 		let bestMember: TeamMember | null = null;
 		let bestScore = 0;
 
-		for (const member of members) {
+		for (const member of pool) {
 			let score = 0;
 			for (const keyword of member.keywords) {
 				if (lowerPrompt.includes(keyword.toLowerCase())) {
@@ -811,7 +825,11 @@ export class TeamOrchestrator {
 			return bestMember;
 		}
 
-		return this.store.getPrimaryContact() ?? members[0]!;
+		const primary = this.store.getPrimaryContact();
+		if (primary && (!allowedSet || allowedSet.has(primary.id))) {
+			return primary;
+		}
+		return pool[0]!;
 	}
 
 	/**
@@ -828,6 +846,7 @@ export class TeamOrchestrator {
 		taskPrompt?: string;
 		isInternalDelegation?: boolean;
 		sessionMode?: "lead" | "internal" | "observer";
+		matterId?: string;
 	}): string {
 		const mode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 		const organization =
@@ -926,9 +945,9 @@ export class TeamOrchestrator {
 			);
 		}
 
+		const matterForPrompt = input.matterId ? this.store.getMatter(input.matterId) : null;
 		sections.push(`## 当前团队
-${this.store
-	.listMembers()
+${this.resolveMatterAiMembers(matterForPrompt)
 	.map((member) => `- ${member.id}: ${member.displayName}，${member.roleTitle}`)
 	.join("\n")}`);
 		if (mode !== "observer")
@@ -950,6 +969,7 @@ ${this.store
 		const assignedMember = this.routeMemberForRequest(
 			input.prompt,
 			input.preferredMemberId ?? existing?.leadMemberId ?? undefined,
+			existing ? existing.aiMemberIds : input.aiMemberIds,
 		);
 		const workspaceId = input.workspaceId ?? existing?.workspaceId;
 		const workspace = workspaceId ? this.store.getWorkspace(workspaceId) : null;
@@ -983,6 +1003,8 @@ ${this.store
 				title: input.title ?? fallbackTitle,
 				leadMemberId: assignedMember.id,
 				workspaceId: workspace?.id,
+				aiMemberIds: input.aiMemberIds,
+				observersEnabled: input.observersEnabled,
 				observerMemberIds: input.observerMemberIds,
 			});
 		const ownerId = randomUUID();
@@ -1030,7 +1052,9 @@ ${this.store
 					)
 				: undefined;
 		try {
-			this.store.updateMatterLead(matter.id, assignedMember.id);
+			if (matter.leadMemberId !== assignedMember.id) {
+				matter = this.store.updateMatterLead(matter.id, assignedMember.id);
+			}
 			this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
 			if (existing && input.observerMemberIds !== undefined) {
 				matter = this.store.updateMatterObservers(matter.id, input.observerMemberIds);
@@ -1360,6 +1384,10 @@ ${this.store
 		const fromMember = this.store.getMember(input.fromMemberId);
 		const toMember = this.store.getMember(input.toMemberId);
 		if (!fromMember || !toMember) throw new Error("Delegation requires existing team members");
+		const matterRecord = this.store.getMatter(input.matterId);
+		if (matterRecord && matterRecord.aiMemberIds !== null && !matterRecord.aiMemberIds.includes(toMember.id)) {
+			throw new Error(`Team member ${toMember.displayName} has been removed from this matter`);
+		}
 		if (chain.includes(toMember.id)) throw new Error("Delegation cycle: cannot call yourself or an ancestor");
 		if (chain.length >= 3) throw new Error("Delegation depth limit reached (3 members)");
 		const key = JSON.stringify([fromMember.id, toMember.id, input.question.trim()]);
@@ -1885,6 +1913,7 @@ ${this.store
 						organization,
 						repoGitUser,
 						sessionMode,
+						matterId: input.matterId,
 					}),
 				},
 			});

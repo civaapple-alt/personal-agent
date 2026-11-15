@@ -8,7 +8,8 @@
 
 按问题找入口：
 
-- `dispatchMatter`：选择或保留负责人、工作区与旁听成员（`observerMemberIds`），取得事项占用，保存交流并决定收尾。
+- `dispatchMatter`：结合事项 `aiMemberIds`（`NULL` 默认全员 AI）、`observersEnabled` 与旁听成员选择或保留负责人与工作区，
+  取得事项占用，保存交流并决定收尾；`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前事项 AI 成员范围约束。
   - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。
   - `formatMessageHistorySpeaker` 会在回放讨论消息及多人类历史上下文时附带 `[团队讨论]`/`[同事提请]` 与发言人姓名角色。
   - 支持可选 `images`（`PromptImageAttachment[]`），将轻量图片引用（`{ url, mimeType, name }`，不含原始 base64）存入消息 `metadata.images`。

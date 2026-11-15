@@ -83,9 +83,11 @@ interface ChatStageProps {
 	onRemoveImage: (imageId: string) => void;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
-	onSelectMember: (memberId: string) => void;
-	activeObserverIds: string[];
-	onUpdateObservers: (observerIds: string[]) => void;
+	matterAiMemberIds: string[];
+	observersEnabled: boolean;
+	onChangeLeadMember: (memberId: string) => void;
+	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
+	onToggleObserversEnabled: (enabled: boolean) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
@@ -144,9 +146,11 @@ export function ChatStage({
 	onRemoveImage,
 	onSelectOrganization,
 	onSelectWorkspace,
-	onSelectMember,
-	activeObserverIds,
-	onUpdateObservers,
+	matterAiMemberIds,
+	observersEnabled,
+	onChangeLeadMember,
+	onUpdateMatterAiMembers,
+	onToggleObserversEnabled,
 	onUpdateMatterCollaborators,
 	onApproveAiRequest,
 	onDismissAiRequest,
@@ -530,12 +534,21 @@ export function ChatStage({
 	const leadAi =
 		(matterDetail?.matter.leadMemberId ? members.find((m) => m.id === matterDetail.matter.leadMemberId) : null) ??
 		headerContact;
-	const eligibleObserverPeers = members.filter((m) => m.id !== leadAi?.id);
-	const observerAis = eligibleObserverPeers.filter((m) => activeObserverIds.includes(m.id));
+	const inGroupAiMembers = useMemo(() => {
+		const idSet = new Set(matterAiMemberIds);
+		if (leadAi) idSet.add(leadAi.id);
+		const filtered = members.filter((m) => idSet.has(m.id));
+		if (leadAi && filtered.some((m) => m.id === leadAi.id)) {
+			return [leadAi, ...filtered.filter((m) => m.id !== leadAi.id)];
+		}
+		return filtered.length > 0 ? filtered : members;
+	}, [leadAi, matterAiMemberIds, members]);
+	const nonLeadGroupAiMembers = inGroupAiMembers.filter((m) => m.id !== leadAi?.id);
+	const removedAiMembers = members.filter((m) => !inGroupAiMembers.some((g) => g.id === m.id));
+	const observerAis = observersEnabled ? nonLeadGroupAiMembers : [];
 	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
 		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
 	);
-	const specialistAis = members.filter((m) => specialistIds.includes(m.id));
 	const copyCollabInvite = async (col: CollaboratorDto) => {
 		if (!col.token) return;
 		const url = `${window.location.origin}/?invite=${encodeURIComponent(col.token)}`;
@@ -597,14 +610,9 @@ export function ChatStage({
 						aria-expanded={rosterOpen}
 						className={`btn-pill-outline btn-xs header-humans-btn ${rosterOpen ? "active" : ""}`}
 						title={[
-							`参与人类（${allActiveHumans.length || 1}人）：${allActiveHumans.length > 0 ? allActiveHumans.map((h) => `${h.name}·${h.permissionRole === "owner" ? "所有者" : h.roleTitle}`).join("、") : "当前用户"}`,
-							leadAi ? `主责 AI：${leadAi.displayName}` : "",
-							observerAis.length > 0
-								? `AI 旁听（${observerAis.length}）：${observerAis.map((o) => o.displayName).join("、")}`
-								: "AI 旁听：暂无（点击配置）",
-							specialistAis.length > 0
-								? `内部协同 AI：${specialistAis.map((s) => s.displayName).join("、")}`
-								: "",
+							`人类成员（${allActiveHumans.length || 1}人）：${allActiveHumans.length > 0 ? allActiveHumans.map((h) => `${h.name}·${h.permissionRole === "owner" ? "所有者" : h.roleTitle}`).join("、") : "当前用户"}`,
+							`协作 AI（${inGroupAiMembers.length}/${members.length}）：${leadAi ? `负责人 ${leadAi.displayName}` : ""}${nonLeadGroupAiMembers.length > 0 ? `、${nonLeadGroupAiMembers.map((m) => m.displayName).join("、")}` : ""}`,
+							`AI 旁听：${observersEnabled ? `已开启（${observerAis.length} 位）` : "未开启"}`,
 						]
 							.filter(Boolean)
 							.join("\n")}
@@ -637,7 +645,11 @@ export function ChatStage({
 										.join("、")}${allActiveHumans.length > 2 ? ` +${allActiveHumans.length - 2}` : ""}`
 								: "协作成员 (1)"}
 						</span>
-						{observerAis.length > 0 && <span className="header-observer-badge">{observerAis.length}旁听</span>}
+						{observersEnabled && (
+							<span className="header-observer-badge">
+								{observerAis.length > 0 ? `旁听 ${observerAis.length}` : "旁听开"}
+							</span>
+						)}
 					</button>
 					{matterDetail && (
 						<span ref={collabTriggerRef} className="collab-header-triggers">
@@ -703,22 +715,24 @@ export function ChatStage({
 					const filteredHumanTiles = matterHumanParticipants.filter((col) =>
 						matchesQuery(col.name, col.roleTitle, "同事"),
 					);
-					const showLeadAiTile = leadAi && matchesQuery(leadAi.displayName, leadAi.roleTitle, "主责");
-					const filteredSpecialistTiles = specialistAis.filter((spec) =>
-						matchesQuery(spec.displayName, spec.roleTitle, "协同"),
-					);
-					const filteredObserverTiles = observerAis.filter((obs) =>
-						matchesQuery(obs.displayName, obs.roleTitle, "旁听"),
-					);
+					const filteredAiTiles = inGroupAiMembers.filter((ai) => {
+						const isLead = ai.id === leadAi?.id;
+						const roleLabel = isLead
+							? "负责人"
+							: observersEnabled
+								? "旁听"
+								: specialistIds.includes(ai.id)
+									? "协同"
+									: "协作成员";
+						return matchesQuery(ai.displayName, ai.roleTitle, roleLabel);
+					});
 					const hasRemovable =
-						(selectedMatterId && onUpdateMatterCollaborators && matterHumanParticipants.length > 0) ||
-						observerAis.length > 0;
+						Boolean(selectedMatterId && onUpdateMatterCollaborators && matterHumanParticipants.length > 0) ||
+						nonLeadGroupAiMembers.length > 0;
 					const filteredCollabCandidates = nonOwnerCollaborators.filter((col) =>
 						matchesQuery(col.name, col.roleTitle),
 					);
-					const filteredObserverCandidates = eligibleObserverPeers.filter((peer) =>
-						matchesQuery(peer.displayName, peer.roleTitle),
-					);
+					const filteredRemovedAi = removedAiMembers.filter((ai) => matchesQuery(ai.displayName, ai.roleTitle));
 					return (
 						<div
 							ref={rosterPanelRef}
@@ -739,7 +753,7 @@ export function ChatStage({
 										>
 											‹ 返回
 										</button>
-										<strong className="wechat-nav-title">添加成员</strong>
+										<strong className="wechat-nav-title">添加协作成员</strong>
 										<button
 											type="button"
 											className="wechat-nav-btn primary"
@@ -840,52 +854,43 @@ export function ChatStage({
 
 										<div className="wechat-add-group">
 											<div className="wechat-add-head">
-												<span>AI 旁听</span>
-												<div className="observer-quick-actions">
+												<span>可添回的 AI 角色</span>
+												{removedAiMembers.length > 0 && (
 													<button
 														type="button"
 														className="btn-inline"
-														onClick={() => onUpdateObservers(eligibleObserverPeers.map((m) => m.id))}
+														onClick={() => onUpdateMatterAiMembers(members.map((m) => m.id))}
 													>
-														全选
+														全部添回
 													</button>
-													<button
-														type="button"
-														className="btn-inline"
-														onClick={() => onUpdateObservers([])}
-													>
-														清空
-													</button>
-												</div>
+												)}
 											</div>
-											{filteredObserverCandidates.map((peer) => {
-												const checked = activeObserverIds.includes(peer.id);
-												const theme = getMemberThemeById(members, peer.id);
-												return (
-													<button
-														key={peer.id}
-														type="button"
-														className={`wechat-pick-row clickable ${checked ? "active" : ""}`}
-														onClick={() => {
-															const next = checked
-																? activeObserverIds.filter((id) => id !== peer.id)
-																: [...activeObserverIds, peer.id];
-															onUpdateObservers(next);
-														}}
-													>
-														<span className="wechat-pick-main">
-															<span className={`wechat-check-box ${checked ? "checked" : ""}`}>
-																{checked ? "✓" : ""}
+											{removedAiMembers.length === 0 ? (
+												<div className="wechat-empty-row">全部 AI 角色已参与当前事项</div>
+											) : filteredRemovedAi.length === 0 ? (
+												<div className="wechat-empty-row">无匹配 AI 角色</div>
+											) : (
+												filteredRemovedAi.map((peer) => {
+													const theme = getMemberThemeById(members, peer.id);
+													return (
+														<button
+															key={peer.id}
+															type="button"
+															className="wechat-pick-row clickable"
+															onClick={() => onUpdateMatterAiMembers([...matterAiMemberIds, peer.id])}
+														>
+															<span className="wechat-pick-main">
+																<span className="wechat-check-box">+</span>
+																<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
+																<span className="wechat-pick-text">
+																	<strong>{peer.displayName}</strong>
+																	<small>{peer.roleTitle}</small>
+																</span>
 															</span>
-															<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-															<span className="wechat-pick-text">
-																<strong>{peer.displayName}</strong>
-																<small>{peer.roleTitle}</small>
-															</span>
-														</span>
-													</button>
-												);
-											})}
+														</button>
+													);
+												})
+											)}
 										</div>
 									</div>
 								</>
@@ -894,7 +899,7 @@ export function ChatStage({
 									<input
 										type="search"
 										className="wechat-roster-search"
-										placeholder="搜索群成员 / AI"
+										placeholder="搜索协作成员 / AI"
 										value={rosterSearch}
 										onChange={(e) => setRosterSearch(e.target.value)}
 									/>
@@ -951,65 +956,51 @@ export function ChatStage({
 											);
 										})}
 
-										{showLeadAiTile &&
-											leadAi &&
-											(() => {
-												const theme = getMemberThemeById(members, leadAi.id);
-												return (
-													<div
-														key={`ai-lead-${leadAi.id}`}
-														className="wechat-member-tile"
-														title={`${leadAi.displayName} · 主责`}
-													>
-														<div className="wechat-avatar-box ai">
-															<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-														</div>
-														<span className="wechat-tile-name">{leadAi.displayName}</span>
-														<span className="wechat-tile-tag lead">主责</span>
-													</div>
-												);
-											})()}
-
-										{filteredSpecialistTiles.map((spec) => {
-											const theme = getMemberThemeById(members, spec.id);
-											return (
-												<div
-													key={`ai-spec-${spec.id}`}
-													className="wechat-member-tile"
-													title={`${spec.displayName} · 内部协同`}
-												>
-													<div className="wechat-avatar-box ai">
-														<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-													</div>
-													<span className="wechat-tile-name">{spec.displayName}</span>
-													<span className="wechat-tile-tag">协同</span>
-												</div>
-											);
-										})}
-
-										{filteredObserverTiles.map((obs) => {
-											const theme = getMemberThemeById(members, obs.id);
-											const canRemoveObs = rosterMode === "remove" && isOwner;
+										{filteredAiTiles.map((ai) => {
+											const theme = getMemberThemeById(members, ai.id);
+											const isLead = ai.id === leadAi?.id;
+											const canRemoveAi = rosterMode === "remove" && isOwner && !isLead;
+											const canPromoteLead = rosterMode === "view" && isOwner && !isLead && !isTurnRunning;
+											const tagLabel = isLead
+												? "负责人"
+												: observersEnabled
+													? "旁听"
+													: specialistIds.includes(ai.id)
+														? "协同"
+														: "协作成员";
+											const tagClass = isLead ? "lead" : observersEnabled ? "observer" : "";
 											return (
 												<button
-													key={`ai-obs-${obs.id}`}
+													key={`ai-${ai.id}`}
 													type="button"
-													className={`wechat-member-tile ${canRemoveObs ? "interactive" : ""}`}
+													className={`wechat-member-tile ${canRemoveAi || canPromoteLead ? "interactive" : ""}`}
 													title={
-														canRemoveObs ? `取消 ${obs.displayName} 旁听` : `${obs.displayName} · 旁听`
+														canRemoveAi
+															? `移出 ${ai.displayName}`
+															: isLead
+																? `${ai.displayName} · 当前事项负责人`
+																: isTurnRunning
+																	? `${ai.displayName}（当前回合执行中，完成后可切换负责人）`
+																	: isOwner
+																		? `点击将「${ai.displayName}」设为当前事项负责人`
+																		: `${ai.displayName} · ${tagLabel}`
 													}
 													onClick={() => {
-														if (canRemoveObs) {
-															onUpdateObservers(activeObserverIds.filter((id) => id !== obs.id));
+														if (canRemoveAi) {
+															onUpdateMatterAiMembers(
+																inGroupAiMembers.map((m) => m.id).filter((id) => id !== ai.id),
+															);
+														} else if (canPromoteLead) {
+															onChangeLeadMember(ai.id);
 														}
 													}}
 												>
-													<div className="wechat-avatar-box ai">
+													<div className={`wechat-avatar-box ai ${isLead ? "is-lead" : ""}`}>
 														<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-														{canRemoveObs && <span className="wechat-remove-badge">−</span>}
+														{canRemoveAi && <span className="wechat-remove-badge">−</span>}
 													</div>
-													<span className="wechat-tile-name">{obs.displayName}</span>
-													<span className="wechat-tile-tag observer">旁听</span>
+													<span className="wechat-tile-name">{ai.displayName}</span>
+													<span className={`wechat-tile-tag ${tagClass}`}>{tagLabel}</span>
 												</button>
 											);
 										})}
@@ -1018,7 +1009,7 @@ export function ChatStage({
 											<button
 												type="button"
 												className="wechat-member-tile interactive"
-												title="添加同事或 AI 旁听"
+												title="邀请同事或添回已移出的 AI 角色"
 												onClick={() => {
 													setRosterSearch("");
 													setRosterMode("add");
@@ -1033,7 +1024,7 @@ export function ChatStage({
 											<button
 												type="button"
 												className="wechat-member-tile interactive"
-												title={rosterMode === "remove" ? "完成移出" : "移出成员或取消旁听"}
+												title={rosterMode === "remove" ? "完成移出" : "移出协同同事或非负责人 AI"}
 												onClick={() => setRosterMode((mode) => (mode === "remove" ? "view" : "remove"))}
 											>
 												<div
@@ -1050,21 +1041,54 @@ export function ChatStage({
 
 									<div className="wechat-roster-rows">
 										<div className="wechat-roster-row">
-											<span>AI 旁听</span>
+											<span>事项负责人</span>
+											{isOwner ? (
+												<select
+													className="wechat-row-select"
+													aria-label="事项负责人"
+													value={leadAi?.id ?? ""}
+													disabled={isTurnRunning}
+													title={
+														isTurnRunning ? "当前回合执行中，完成后可更换负责人" : "切换当前事项负责人"
+													}
+													onChange={(e) => onChangeLeadMember(e.target.value)}
+												>
+													{inGroupAiMembers.map((ai) => (
+														<option key={ai.id} value={ai.id}>
+															{ai.displayName}
+														</option>
+													))}
+												</select>
+											) : (
+												<span className="wechat-row-val">{leadAi?.displayName ?? "默认"}</span>
+											)}
+										</div>
+										<div className="wechat-roster-row">
+											<span>
+												AI 旁听
+												{observersEnabled && observerAis.length > 0 && (
+													<small className="wechat-row-sub">（{observerAis.length} 位）</small>
+												)}
+											</span>
 											{isOwner ? (
 												<button
 													type="button"
-													className="wechat-row-action"
-													onClick={() => {
-														setRosterSearch("");
-														setRosterMode("add");
-													}}
+													role="switch"
+													aria-checked={observersEnabled}
+													aria-label="开启或关闭事项 AI 旁听"
+													className={`wechat-switch ${observersEnabled ? "on" : ""}`}
+													title={
+														observersEnabled
+															? "开启中：本事项内非负责人 AI 将自动旁听补充"
+															: "已关闭：仅当前事项负责人跟进答复"
+													}
+													onClick={() => onToggleObserversEnabled(!observersEnabled)}
 												>
-													{observerAis.length > 0 ? `${observerAis.length} 位` : "未开启"} ›
+													<span className="wechat-switch-thumb" />
 												</button>
 											) : (
 												<span className="wechat-row-val">
-													{observerAis.length > 0 ? `${observerAis.length} 位` : "无"}
+													{observersEnabled ? `已开启（${observerAis.length} 位）` : "未开启"}
 												</span>
 											)}
 										</div>
@@ -1591,7 +1615,7 @@ export function ChatStage({
 										type="button"
 										className="quick-prompt-item"
 										onClick={() => {
-											if (task.memberId) onSelectMember(task.memberId);
+											if (task.memberId) onChangeLeadMember(task.memberId);
 											onComposerTextChange(task.prompt);
 											setStarterMenuOpen(false);
 											composerRef.current?.focus();
@@ -1680,24 +1704,6 @@ export function ChatStage({
 							{orgFilteredWorkspaces.map((ws) => (
 								<option key={ws.id} value={ws.id}>
 									仓库：{ws.name}
-								</option>
-							))}
-						</select>
-						<select
-							className="select-pill"
-							value={selectedMemberId}
-							disabled={isTurnRunning}
-							title={isTurnRunning ? "当前回合正在执行，完成后可调整下一轮负责人" : undefined}
-							onChange={(e) => onSelectMember(e.target.value)}
-						>
-							<option value="auto">
-								{selectedMatterId
-									? `继续由负责人跟进（${headerContact?.displayName ?? "自动"}）`
-									: `按事找人（主联系：${headerContact?.displayName ?? "自动"}）`}
-							</option>
-							{members.map((m) => (
-								<option key={m.id} value={m.id}>
-									指定：{m.displayName}
 								</option>
 							))}
 						</select>

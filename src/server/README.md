@@ -8,8 +8,10 @@
 修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
 - 并发、工作区切换与图片上传：
-  - 同事项运行中发送消息及切换工作区返回 409；调整旁听成员（`PATCH /api/matters/:id` 仅传 `observerMemberIds`）不改动 `cwd`/会话，可在运行中即时更新。取消要交给编排核，不只广播停止事件。
-  - `POST /api/matters` 与 `POST /api/matters/:id/messages` 支持传入有效 `observerMemberIds` 及可选 `images`：
+  - 同事项运行中发送消息、切换工作区及切换事项负责人（`leadMemberId`）返回 409；调整全局旁听开关（`observersEnabled`）、
+    AI 参与名单（`aiMemberIds`）或旁听列表（`observerMemberIds`）可在运行中即时更新。取消要交给编排核，不只广播停止事件。
+  - `POST /api/matters` 支持传入 `aiMemberIds`、`observersEnabled` 与可选 `images`（`POST /api/matters/:id/messages`
+    同样支持可选 `observerMemberIds` 与 `images`）：
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
   - 图片落盘 `uploadsDir`（默认 `.data/uploads`，测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问，消息仅存轻量引用 `metadata.images`。
 - 组织与成员身份接口：

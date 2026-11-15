@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS matters (
 	lead_member_id TEXT REFERENCES team_members(id),
 	workspace_id TEXT REFERENCES workspace_links(id),
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+	ai_member_ids_json TEXT,
+	observers_enabled INTEGER NOT NULL DEFAULT 0,
 	observer_ids_json TEXT,
 	collaborator_ids_json TEXT,
 	created_at TEXT NOT NULL,
@@ -177,6 +179,17 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	const matterColumns = db.prepare("PRAGMA table_info(matters)").all();
 	if (!matterColumns.some((column) => column.name === "observer_ids_json")) {
 		db.exec("ALTER TABLE matters ADD COLUMN observer_ids_json TEXT");
+	}
+	if (!matterColumns.some((column) => column.name === "ai_member_ids_json")) {
+		db.exec("ALTER TABLE matters ADD COLUMN ai_member_ids_json TEXT");
+	}
+	if (!matterColumns.some((column) => column.name === "observers_enabled")) {
+		db.exec("ALTER TABLE matters ADD COLUMN observers_enabled INTEGER NOT NULL DEFAULT 0");
+		db.exec(`
+			UPDATE matters
+			SET observers_enabled = 1
+			WHERE observer_ids_json IS NOT NULL AND observer_ids_json != '[]' AND trim(observer_ids_json) != '';
+		`);
 	}
 	if (!matterColumns.some((column) => column.name === "collaborator_ids_json")) {
 		db.exec("ALTER TABLE matters ADD COLUMN collaborator_ids_json TEXT");

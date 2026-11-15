@@ -28,7 +28,9 @@
 - 经验应用与版本反馈记录：
   - `memory_applications` 记录实际注入，不能证明模型采用；`deliverable_memory_applications` 关联成果版本与本轮应用，验收只评价这些经验，历史未关联版本不猜测补记。
   - `memory_feedback_votes` 对每个版本、经验只保存一个当前评价，改评按差值回写，`neutral` 撤回该票；独立手动评价仍累加。
-- `matters.observer_ids_json` 保存事项关联的旁听成员 ID 列表（空数组或旧库 `NULL` 表示无旁听）；由 `createMatter` 和 `updateMatterObservers` 维护。
+- `matters.ai_member_ids_json`（`NULL` 表示默认全部 AI 角色参与，数组表示当前保留的 AI 成员）、`matters.observers_enabled`
+  （事项全局 AI 旁听开关）与 `matters.observer_ids_json` 协同维护事项内 AI 参与范围、负责人切换及自动旁听列表；
+  由 `createMatter`、`updateMatterLead`、`updateMatterAiMembers`、`updateMatterObserversEnabled` 与 `updateMatterObservers` 维护。
 - 人类协作成员与受限房间访问：
   - `collaborators` 表与 `matters.collaborator_ids_json` 维护人类参与者（`owner` / `collaborator`）、岗位头衔及邀请口令；
   - `ensureOwnerCollaborator` 自动初始化所有者记录，`toPublicCollaborator` 用于向非所有者隐藏邀请口令。
