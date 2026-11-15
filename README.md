@@ -2,7 +2,7 @@
 
 面向跨项目工作的 **AI 角色团队**：成员拥有稳定的岗位身份，按需要组建团队，跨多个产品与仓库工作。初始提供市场与营销、产品、研发、测试四个示例角色；持续成长（RSI）与公开人才市场仍是后续目标。
 
-当前已基于 **Pi (`pi --mode rpc`)** 实现工作台、持久会话接续、模型可调用的内部委托与显式成果归档。实现边界与协议说明见 [运行与协作机制](docs/runtime-collaboration.md)。
+当前已基于 **Pi (`pi --mode rpc`)** 实现工作台、持久会话接续、模型可调用的内部委托与显式成果归档。模块关系、当前范围和后续计划见[当前架构与后续计划](docs/architecture-and-plan.md)，协议、迁移与验证细节见[运行与协作机制](docs/runtime-collaboration.md)。
 
 ## 为什么做 Personal Agent
 
@@ -32,7 +32,7 @@ personal-agent/
 │   ├── product-discussion.md       # 完整产品讨论演进记录
 │   ├── team-roles.md               # 跨项目角色职责草案
 │   ├── team-interaction.md         # 集中入口与团队协作设计
-│   ├── architecture-and-plan.md    # 基于 Pi RPC 的架构设计与四阶段规划
+│   ├── architecture-and-plan.md    # 当前架构、实现边界与后续计划
 │   ├── prototypes/                 # V1–V4 交互原型图与演进反馈
 │   └── references/                 # Grok Bot 与人才市场调研
 ├── skills/                         # 初始角色声明对应的可加载 Pi Skills
@@ -99,7 +99,7 @@ npm run demo:team
 ## 阶段进展
 
 - [x] 产品方向确认、V1–V4 概念原型演进及 Grok Bot 调研（见 [docs/product-direction.md](docs/product-direction.md)）
-- [x] 技术架构与四阶段规划落盘（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
+- [x] 当前架构与后续计划已按源码同步（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
 - [x] **阶段一**：`PiRpcWorker` 闭环实现、Biome + TS 严格基线、单元测试与实机 `kimi-for-coding` 冒烟验证
 - [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
 - [x] **阶段三**：Grok-Bot 风格双栏工作台（React 19 + HashRouter + MarkdownView）、HTTP/SSE 实时流与任务中断、团队成员与能力包导入/导出、空闲时工作区切换及独立服务预览链接
