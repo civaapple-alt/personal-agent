@@ -154,7 +154,7 @@ export function MessageFeed({
 				{!selectedMatterId || (!matterDetail && !activeMatterProgress) ? (
 					<div className="welcome-hero">
 						<BotFaceIcon bg={headerTheme.bg} size="lg" />
-						<h2>{selectedMemberId === "auto" ? "有什么可以帮你？" : memberName(selectedMemberId)}</h2>
+						<h1>{selectedMemberId === "auto" ? "有什么可以帮你？" : memberName(selectedMemberId)}</h1>
 						<p>
 							{selectedMemberId === "auto"
 								? "直接描述目标，系统会自动分配最合适的同事推进"
@@ -347,7 +347,7 @@ export function MessageFeed({
 						{activeDialogs.map((dlg) => (
 							<div key={dlg.id} className="inline-approval-card">
 								<div className="approval-eyebrow">需要你确认 · 来自【{dlg.memberName}】</div>
-								<h4>{dlg.request.title}</h4>
+								<h3>{dlg.request.title}</h3>
 								{dlg.request.message && <p>{dlg.request.message}</p>}
 								{!isOwner ? (
 									<p className="muted-hint compact">

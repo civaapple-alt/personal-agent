@@ -1,7 +1,7 @@
 .memory-draft-box {
 	margin-top: 12px;
-	padding: 12px;
-	border-radius: 12px;
+	padding: 12px 14px;
+	border-radius: var(--radius-md);
 	background: var(--bg-sidebar);
 	border: 1px solid var(--border);
 }
@@ -10,7 +10,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	font-size: 12px;
+	font-size: var(--text-xs);
 	flex-wrap: wrap;
 }
 .memory-draft-controls {
@@ -20,19 +20,19 @@
 	flex-wrap: wrap;
 }
 .team-grid {
-	margin-top: 18px;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 12px;
+	gap: 14px;
 }
 .member-card {
-	background: var(--bg-stage);
+	background: var(--bg-card);
 	border: 1px solid var(--border);
-	border-radius: 14px;
-	padding: 16px;
+	border-radius: var(--radius-lg);
+	padding: var(--card-pad);
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	box-shadow: var(--shadow-sm);
 }
 .member-card-top {
 	display: flex;
@@ -52,15 +52,15 @@
 	flex-wrap: wrap;
 }
 .member-sub {
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--text-muted);
 	margin-top: 2px;
 }
 .member-resp {
 	margin: 0;
-	font-size: 13px;
+	font-size: var(--text-sm);
 	color: var(--text-secondary);
-	line-height: 1.5;
+	line-height: 1.55;
 }
 .memory-list {
 	border-top: 1px solid var(--border);
@@ -90,7 +90,7 @@
 	flex-wrap: wrap;
 }
 .memory-empty-note {
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--text-muted);
 	padding: 6px 2px;
 }
@@ -99,7 +99,7 @@
 	flex-direction: column;
 	align-items: stretch;
 	gap: 6px;
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--text-secondary);
 	background: var(--bg-sidebar);
 	border: 1px solid var(--border);
@@ -124,19 +124,19 @@
 	flex-wrap: wrap;
 }
 .memory-telemetry {
-	font-size: 11px;
+	font-size: var(--text-micro);
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 }
 .memory-item-content {
-	font-size: 13px;
+	font-size: var(--text-sm);
 	color: var(--text-primary);
-	line-height: 1.45;
+	line-height: 1.5;
 }
 .memory-rationale {
-	font-size: 11px;
+	font-size: var(--text-xs);
 	color: var(--text-muted);
-	line-height: 1.4;
+	line-height: 1.45;
 }
 .memory-item-actions {
 	display: flex;
@@ -176,7 +176,7 @@
 	justify-content: space-between;
 	gap: 8px;
 	flex-wrap: wrap;
-	font-size: 13px;
+	font-size: var(--text-sm);
 }
 .inline-experience-title-group {
 	display: flex;
@@ -185,11 +185,11 @@
 	flex-wrap: wrap;
 }
 .inline-participants-note {
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--text-muted);
 }
 .distill-result-note {
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--accent);
 	background: var(--bg-accent-soft);
 	padding: 7px 10px;
@@ -218,7 +218,7 @@
 	align-items: center;
 	gap: 10px;
 	flex-wrap: wrap;
-	font-size: 11px;
+	font-size: var(--text-micro);
 	color: var(--text-muted);
 }
 .member-identity-box {
@@ -240,7 +240,7 @@
 }
 .member-git-pill {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-size: 11px;
+	font-size: var(--text-micro);
 	color: #0b574e;
 	background: #edf9f5;
 	border: 1px solid rgba(15, 107, 96, 0.2);
@@ -249,13 +249,13 @@
 	word-break: break-all;
 }
 .member-summary-line {
-	font-size: 12px;
+	font-size: var(--text-xs);
 	color: var(--text-secondary);
 	line-height: 1.45;
 }
 .member-committer-line {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	font-size: 11px;
+	font-size: var(--text-micro);
 	color: var(--text-muted);
 }
 .member-memory-tiers {
@@ -263,7 +263,7 @@
 	align-items: center;
 	gap: 6px;
 	flex-wrap: wrap;
-	font-size: 11px;
+	font-size: var(--text-micro);
 	color: var(--text-muted);
 }
 .collab-humans-list {

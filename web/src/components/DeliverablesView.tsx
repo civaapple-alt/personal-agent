@@ -227,7 +227,7 @@ export function DeliverablesView({
 				)}
 
 				{allFamilies.length === 0 ? (
-					<div className="deliverable-card">
+					<div className="ui-card">
 						<p className="ui-empty-note">
 							暂无交付记录。回到对话工作台发送需求或点选示范任务，完成后成果会自动归拢到这里。
 						</p>
@@ -236,7 +236,7 @@ export function DeliverablesView({
 					<div className="deliverables-workspace">
 						<div className="deliverables-master-col">
 							{groupedByProject.length === 0 ? (
-								<div className="deliverable-card">
+								<div className="ui-card">
 									<p className="ui-empty-note compact">当前筛选条件下暂无匹配成果。</p>
 								</div>
 							) : (
@@ -326,14 +326,16 @@ export function DeliverablesView({
 									onError={onError}
 								/>
 							) : (
-								<div className="deliverable-card">
+								<div className="ui-card">
 									<p className="ui-empty-note">请在左侧选择一条交付成果查看详情。</p>
 								</div>
 							)}
 
 							{bootstrap && bootstrap.previews.length > 0 && (
-								<div className="list-section">
-									<h3 className="ui-sub-heading">独立预览服务</h3>
+								<section className="ui-section">
+									<div className="ui-section-head">
+										<h2 className="ui-section-title">独立预览服务</h2>
+									</div>
 									{bootstrap.previews.map((prev) => (
 										<div key={prev.id} className="compact-row static">
 											<div>
@@ -362,7 +364,7 @@ export function DeliverablesView({
 											</div>
 										</div>
 									))}
-								</div>
+								</section>
 							)}
 						</div>
 					</div>

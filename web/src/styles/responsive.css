@@ -34,3 +34,27 @@
 		width: calc(100% - 32px);
 	}
 }
+@media (max-width: 640px) {
+	:root {
+		--page-pad-x: 16px;
+		--page-pad-y: 18px;
+		--section-gap: 16px;
+		--card-pad: 14px;
+	}
+	.stage-header {
+		padding: 8px 14px;
+		height: auto;
+		min-height: var(--header-height);
+		flex-wrap: wrap;
+	}
+	.stage-center-pill {
+		max-width: 100%;
+		order: 3;
+	}
+	.pane-header h1 {
+		font-size: var(--text-xl);
+	}
+	.deliverables-detail-col .deliverable-card {
+		padding: var(--card-pad);
+	}
+}

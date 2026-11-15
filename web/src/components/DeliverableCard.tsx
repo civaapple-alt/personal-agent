@@ -157,7 +157,11 @@ export function DeliverableCard(props: DeliverableCardProps) {
 						<span>·</span>
 						<span>{formatClockTime(props.deliverable.createdAt)}</span>
 					</div>
-					<h3 className="deliverable-title">{props.deliverable.title}</h3>
+					{props.compact ? (
+						<h3 className="deliverable-title">{props.deliverable.title}</h3>
+					) : (
+						<h2 className="deliverable-title">{props.deliverable.title}</h2>
+					)}
 				</div>
 				{props.siblingVersions.length > 1 && (
 					<div className="version-bar compact">

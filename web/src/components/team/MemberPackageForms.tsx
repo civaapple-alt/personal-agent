@@ -107,8 +107,8 @@ export function MemberPackageForms({
 	return (
 		<>
 			{showAddMember && (
-				<div className="deliverable-card form-card">
-					<h3 className="section-title">组建新角色</h3>
+				<section className="ui-card form-card">
+					<h2 className="ui-card-title">组建新角色</h2>
 					<div className="form-grid">
 						<input
 							className="input-field"
@@ -182,12 +182,12 @@ export function MemberPackageForms({
 							</button>
 						</div>
 					</div>
-				</div>
+				</section>
 			)}
 
 			{showImportMember && (
-				<div className="deliverable-card form-card">
-					<h3 className="section-title">导入团队成员能力包（.md）</h3>
+				<section className="ui-card form-card">
+					<h2 className="ui-card-title">导入团队成员能力包（.md）</h2>
 					<p className="muted-hint">
 						支持粘贴或选择导出的角色 Markdown 模板。导入后立即注册到当前团队，不包含他人私有项目记忆。
 					</p>
@@ -210,13 +210,13 @@ export function MemberPackageForms({
 							取消
 						</button>
 					</div>
-				</div>
+				</section>
 			)}
 
 			{exportedPackage && (
-				<div className="deliverable-card form-card">
+				<section className="ui-card form-card">
 					<div className="banner-row">
-						<h3 className="section-title">已导出脱敏能力包：{exportedPackage.filename}</h3>
+						<h2 className="ui-card-title">已导出脱敏能力包：{exportedPackage.filename}</h2>
 						<button type="button" className="btn-inline" onClick={onCloseExportedPackage}>
 							关闭
 						</button>
@@ -238,7 +238,7 @@ export function MemberPackageForms({
 							复制内容
 						</button>
 					</div>
-				</div>
+				</section>
 			)}
 		</>
 	);

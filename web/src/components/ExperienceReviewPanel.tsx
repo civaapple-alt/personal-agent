@@ -493,7 +493,7 @@ export function ManualExperienceForm({
 	return (
 		<div className="memory-draft-box">
 			<div className="memory-draft-head">
-				<strong>{headerLabel ?? `手动沉淀经验（当前归属：${selectedMemberName}）`}</strong>
+				<h4 className="ui-sub-heading">{headerLabel ?? `手动沉淀经验（当前归属：${selectedMemberName}）`}</h4>
 				<div className="memory-draft-controls">
 					{allowSelectMember && members.length > 0 && (
 						<select
@@ -698,7 +698,7 @@ export function InlineExperienceReviewSection({
 		<div className="inline-experience-section">
 			<div className="inline-experience-head">
 				<div className="inline-experience-title-group">
-					<strong>{title}</strong>
+					<h3 className="ui-sub-heading">{title}</h3>
 					{memories.length > 0 && (
 						<span className="pill">
 							{memories.length} 条{pendingMemories.length > 0 ? ` · ${pendingMemories.length} 待核验` : ""}

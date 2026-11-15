@@ -26,6 +26,9 @@
 	--dark-pill: #151b18;
 
 	/* Semantic Status */
+	--surface-accent: #f3faf7;
+	--surface-accent-soft: #edf9f5;
+	--surface-accent-border: #c3e6da;
 	--success-bg: #eef7f4;
 	--success-border: #cde5dc;
 	--success-text: #115e52;
@@ -49,17 +52,33 @@
 	--radius-lg: 16px;
 	--radius-xl: 20px;
 	--radius-pill: 999px;
-	--shadow-sm: 0 2px 8px rgba(15, 23, 20, 0.06);
+	--shadow-sm: 0 2px 8px rgba(15, 23, 20, 0.05);
 	--shadow-md: 0 8px 24px rgba(15, 23, 20, 0.08);
 	--shadow-lg: 0 18px 42px rgba(15, 23, 20, 0.14);
 
-	/* Typography & Layout */
+	/* Typography Scale & Layout Rhythm */
 	--font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
 	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--text-micro: 11px;
+	--text-xs: 12px;
+	--text-sm: 13px;
+	--text-base: 14px;
+	--text-md: 15px;
+	--text-lg: 16px;
+	--text-xl: 18px;
+	--text-2xl: 22px;
 	--sidebar-width: 292px;
-	--header-height: 54px;
+	--header-height: 56px;
+	--page-pad-x: 28px;
+	--page-pad-y: 24px;
+	--content-max-w: 840px;
+	--content-wide-w: 1160px;
+	--section-gap: 20px;
+	--card-pad: 18px;
+	--card-pad-compact: 14px 16px;
 
 	font-family: var(--font-sans);
+	font-size: var(--text-base);
 	color: var(--text-primary);
 	background: var(--bg-stage);
 }

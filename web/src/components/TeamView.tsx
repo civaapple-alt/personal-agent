@@ -128,67 +128,77 @@ export function TeamView({
 					)}
 				</div>
 
-				<MemberPackageForms
-					showAddMember={showAddMember}
-					showImportMember={showImportMember}
-					exportedPackage={exportedPackage}
-					onCloseAddMember={() => setShowAddMember(false)}
-					onCloseImportMember={() => setShowImportMember(false)}
-					onCloseExportedPackage={() => setExportedPackage(null)}
-					onRefresh={onRefresh}
-					onNotice={onNotice}
-					onError={onError}
-				/>
+				<div className="ui-sections-stack">
+					<MemberPackageForms
+						showAddMember={showAddMember}
+						showImportMember={showImportMember}
+						exportedPackage={exportedPackage}
+						onCloseAddMember={() => setShowAddMember(false)}
+						onCloseImportMember={() => setShowImportMember(false)}
+						onCloseExportedPackage={() => setExportedPackage(null)}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+					/>
 
-				<CollaboratorsSection
-					isOwner={isOwner}
-					currentUser={currentUser}
-					collaborators={collaborators}
-					organizations={organizations}
-					onRefresh={onRefresh}
-					onNotice={onNotice}
-					onError={onError}
-					onPreviewAsCollaborator={onPreviewAsCollaborator}
-					onRestoreOwner={onRestoreOwner}
-				/>
+					<CollaboratorsSection
+						isOwner={isOwner}
+						currentUser={currentUser}
+						collaborators={collaborators}
+						organizations={organizations}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+						onPreviewAsCollaborator={onPreviewAsCollaborator}
+						onRestoreOwner={onRestoreOwner}
+					/>
 
-				<OrganizationsSection
-					isOwner={isOwner}
-					organizations={organizations}
-					workspaces={workspaces}
-					onRefresh={onRefresh}
-					onNotice={onNotice}
-					onError={onError}
-				/>
+					<OrganizationsSection
+						isOwner={isOwner}
+						organizations={organizations}
+						workspaces={workspaces}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+					/>
 
-				<div className="team-grid">
-					{members.map((member, idx) => (
-						<MemberCard
-							key={member.id}
-							member={member}
-							index={idx}
-							template={templateByRoleId.get(member.templateId)}
-							memories={memoriesByMember[member.id] ?? []}
-							members={members}
-							workspaces={workspaces}
-							organizations={organizations}
-							activeWorkspace={activeWorkspace}
-							activeOrg={activeOrg}
-							defaultWorkspaceId={defaultWorkspaceId}
-							matterWorkspaceById={matterWorkspaceById}
-							memberName={memberName}
-							workspaceName={workspaceName}
-							organizationName={organizationName}
-							onAssignTask={onAssignTask}
-							onSetPrimary={handleSetPrimary}
-							onExportMember={handleExportMember}
-							onOpenMatter={onOpenMatter}
-							onOpenDeliverable={onOpenDeliverable}
-							onRefresh={onRefresh}
-							onNotice={onNotice}
-							onError={onError}
-						/>
-					))}
+					<section className="ui-section">
+						<div className="ui-section-head">
+							<div>
+								<h2 className="ui-section-title">AI 团队成员（{members.length}）</h2>
+								<p className="ui-section-desc">各岗位独立维护角色规范、Git 提交者署名与三层成长记忆</p>
+							</div>
+						</div>
+						<div className="team-grid">
+							{members.map((member, idx) => (
+								<MemberCard
+									key={member.id}
+									member={member}
+									index={idx}
+									template={templateByRoleId.get(member.templateId)}
+									memories={memoriesByMember[member.id] ?? []}
+									members={members}
+									workspaces={workspaces}
+									organizations={organizations}
+									activeWorkspace={activeWorkspace}
+									activeOrg={activeOrg}
+									defaultWorkspaceId={defaultWorkspaceId}
+									matterWorkspaceById={matterWorkspaceById}
+									memberName={memberName}
+									workspaceName={workspaceName}
+									organizationName={organizationName}
+									onAssignTask={onAssignTask}
+									onSetPrimary={handleSetPrimary}
+									onExportMember={handleExportMember}
+									onOpenMatter={onOpenMatter}
+									onOpenDeliverable={onOpenDeliverable}
+									onRefresh={onRefresh}
+									onNotice={onNotice}
+									onError={onError}
+								/>
+							))}
+						</div>
+					</section>
 				</div>
 			</div>
 		</div>

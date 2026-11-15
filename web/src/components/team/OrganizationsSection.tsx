@@ -84,13 +84,13 @@ export function OrganizationsSection({
 	};
 
 	return (
-		<div className="org-strip-card">
-			<div className="banner-row">
+		<section className="org-strip-card">
+			<div className="ui-section-head">
 				<div>
-					<strong className="ui-inline-head-title">组织身份与多仓库分组</strong>
-					<span className="ui-inline-sub">
+					<h2 className="ui-section-title">组织身份与多仓库分组</h2>
+					<p className="ui-section-desc">
 						同一支全局团队成员跨组织与多仓库工作；新建仓库默认归入「默认组织」，同组织仓库共享「组织记忆」与邮箱域名
-					</span>
+					</p>
 				</div>
 				{isOwner && (
 					<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
@@ -202,6 +202,6 @@ export function OrganizationsSection({
 					</div>
 				</div>
 			)}
-		</div>
+		</section>
 	);
 }

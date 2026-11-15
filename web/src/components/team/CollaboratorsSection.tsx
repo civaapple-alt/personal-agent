@@ -38,13 +38,13 @@ export function CollaboratorsSection({
 	const [collabOrgInput, setCollabOrgInput] = useState("");
 
 	return (
-		<div className="org-strip-card">
-			<div className="banner-row">
+		<section className="org-strip-card">
+			<div className="ui-section-head">
 				<div>
-					<strong className="ui-inline-head-title">团队同事与邀请</strong>
-					<span className="ui-inline-sub">
+					<h2 className="ui-section-title">团队同事与邀请</h2>
+					<p className="ui-section-desc">
 						所有者掌管代码执行、仓库切换与角色设置；同事通过专属邀请链接加入同一房间讨论、提请 AI 与验收评价
-					</span>
+					</p>
 				</div>
 				<div className="ui-row-actions">
 					{!isOwner && onRestoreOwner && (
@@ -203,6 +203,6 @@ export function CollaboratorsSection({
 					</div>
 				</div>
 			)}
-		</div>
+		</section>
 	);
 }
