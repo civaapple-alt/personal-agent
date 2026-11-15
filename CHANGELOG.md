@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Refactored & UI/UX
+- Modularized all >1,000-line source, style, and server-test files so every file across `src/`, `web/src/`, `test/`, and `scripts/` stays under 1,000 lines while keeping public exports and behavior identical:
+  - **Web Design System & Frontend Components/Hooks**: Split `web/src/styles.css` into 9 domain stylesheets under `web/src/styles/` (`tokens.css`, `primitives.css` `.ui-*` controls, `shell.css`, `chat-stream.css`, `chat-composer.css`, `chat-roster.css`, `deliverables.css`, `views.css`, `responsive.css`), and extracted modular components (`AuthGateView`, `chat/*`, `team/*`), `web/src/clipboard.ts`, and hooks (`web/src/hooks/{useHashRouteNav,useMatterEventSync,useMatterActions,useRsiDistill}.ts`).
+  - **Storage, Server & Orchestrator**: Split `src/storage/repositories.ts` into domain repositories under `src/storage/repos/`, split `src/server/app.ts` into `src/server/{http,auth,uploads,sse,dispatch-runner}.ts` and `src/server/routes/*`, and split `src/orchestrator/team-orchestrator.ts` into `src/orchestrator/{types,prompts,observer-runner,delegation-runner,worker-runner,distiller}.ts`.
+  - **Server Tests**: Split `test/phase3-server.test.ts` across `test/phase3-server.test.ts`, `test/web-utils.test.ts`, `test/server-rsi-and-uploads.test.ts`, and `test/server-collaboration.test.ts` while preserving all 75 offline test cases.
+
 ### Documentation
 - Reconciled the architecture, runtime and module guides against `90be687` and the RSI boundary fixes below:
   - Documented unlimited default turn ceiling (`0`) with a 15-minute worker idle watchdog (historical 90-minute

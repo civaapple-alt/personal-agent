@@ -11,6 +11,9 @@
 | Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
 | RSI 工作区证据、失败分支、替代关系、版本评价与退出清理 | [rsi-boundaries.test.ts](rsi-boundaries.test.ts) |
 | HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |
+| 旁听广播、Phase 4 RSI 与图片上传接口 | [server-rsi-and-uploads.test.ts](server-rsi-and-uploads.test.ts) |
+| 组织/身份、受限协同门禁与花名册边界 | [server-collaboration.test.ts](server-collaboration.test.ts) |
+| 前端纯函数（委托气泡、进度、摘要与附件） | [web-utils.test.ts](web-utils.test.ts) |
 | 测试 Worker 的能力握手/工具请求 | [worker-helpers.ts](worker-helpers.ts)，供上述测试复用 |
 
 例如只验证连续上下文：
