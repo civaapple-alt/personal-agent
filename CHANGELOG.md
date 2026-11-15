@@ -5,6 +5,7 @@ All notable changes to Personal Agent are documented in this file.
 ## [Unreleased]
 
 ### Documentation
+- Synced [docs/architecture-and-plan.md](docs/architecture-and-plan.md) with the `b1ea108` implementation baseline: documented meeting-room observer participation, active-run F5 hydration, interruption `progressSnapshot` & resume brief injection, 90-minute default turn ceiling, Phase 4 multi-role RSI distillation/cancellation & inline review UX, `technical-writing` deliverable standard, and the 52-test offline baseline.
 - Added [docs/configuration.md](docs/configuration.md) as a dedicated reference for environment variables (`PORT`, `PA_DB_PATH`, `PA_PI_EXTENSIONS`, `PA_TURN_TIMEOUT_MS`, `PA_PROMPT_TIMEOUT_MS`, `NODE_ENV`), storage/session paths, Pi RPC & bridge timeouts, role Markdown frontmatter fields, and orchestrator/observer runtime limits, and linked it from `README.md` and `docs/README.md`.
 - Added a concise Chinese `AGENTS.md` and layered directory READMEs, separating role assets from parsers, runtime boundaries from local implementation guidance, and offline checks from real-model demos. Added a dependency-free documentation link/command checker.
 - Rewrote `docs/architecture-and-plan.md` against the implemented HTTP/SSE, per-execution Pi sessions, authenticated tool bridges, scoped state and explicit milestone delivery. Separated current limits and future work from the historical four-phase design; aligned the README document pointers.
