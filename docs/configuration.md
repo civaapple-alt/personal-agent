@@ -1,6 +1,9 @@
 # 配置参考
 
-本文集中说明 Personal Agent 当前实际生效的环境变量、服务路径、Pi RPC 参数、岗位模板字段以及编排核内置限制。所有默认数值均以当前源码为准；未列出的能力（如持久化定时后台调度、全局多租户配置或自定义工作流配置文件）尚未实现。
+本文集中说明 Personal Agent 当前实际生效的环境变量、服务路径、Pi RPC 参数、岗位模板字段以及编排核内置限制。
+
+- 所有默认数值均以当前源码为准。
+- 未列出的能力（如持久化定时后台调度、全局多租户配置或自定义工作流配置文件）尚未实现。
 
 ## 1. 环境变量
 
@@ -22,7 +25,9 @@
 
 以下变量由编排核或预览管理器在拉起子进程时自动注入，用于工具桥接鉴权与端口隔离：
 
-- **Pi 子进程注入**（[编排核](../src/orchestrator/team-orchestrator.ts) / [工具桥接](../src/rpc/team-tool-bridge.ts) / [团队扩展](../src/rpc/team-extension.ts)）：`PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_PUBLISH`、`PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
+- **Pi 子进程注入**（见[编排核](../src/orchestrator/team-orchestrator.ts)与[工具桥接](../src/rpc/team-tool-bridge.ts) / [团队扩展](../src/rpc/team-extension.ts)）：
+  - `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_PUBLISH`
+  - `PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
 - **本地预览子进程注入**（[PreviewManager](../src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
 
 ---
@@ -41,7 +46,9 @@
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。
-- 若数据库中存在旧表结构，[database.ts](../src/storage/database.ts) 仅做幂等增量迁移（如 `worker_sessions.context_key`、`message_cursor`、`matters.observer_ids_json`、`matter_execution_leases`、`deliverables.feedback_rating`、`member_memories` 生命周期与评估计数字段及 `memory_applications` 表），不改写历史消息或成果。
+- 若数据库中存在旧表结构，[database.ts](../src/storage/database.ts) 仅做幂等增量迁移，不改写历史消息或成果：
+  - 迁移范围包括 `worker_sessions.context_key`、`message_cursor`、`matters.observer_ids_json`、`matter_execution_leases`。
+  - 同时补齐 `deliverables.feedback_rating`、`member_memories` 生命周期/评估计数字段及 `memory_applications` 表。
 
 ---
 
@@ -51,9 +58,12 @@
 
 编排核启动每个成员 worker 时采用隔离策略（见 [团队编排核](../src/orchestrator/team-orchestrator.ts) 与 [运行说明](runtime-collaboration.md)）：
 
-- 固定参数：`--mode rpc --no-extensions --no-skills`，再按顺序显式传入团队扩展（源码或构建后的 `team-extension`）、`PA_PI_EXTENSIONS`、角色声明的 `--skill` 路径，以及限定可用工具清单的 `--tools`。
+- 固定参数：`--mode rpc --no-extensions --no-skills`，再按顺序显式传入：
+  - 团队扩展（源码或构建后的 `team-extension`）与 `PA_PI_EXTENSIONS`
+  - 角色声明的 `--skill` 路径，以及限定可用工具清单的 `--tools`
 - MCP 开关：当角色 `mcpDependencies` 为空时附加 `--no-mcp`；非空时附加 `--extension builtin:mcp`，并在工具列表中声明对应 `mcp__<server>__*` 前缀。
-- 会话接续：未开启 `noSession` 且存在同上下文记录时，先由 [execution-context.ts](../src/orchestrator/execution-context.ts) 校验 JSONL 首行 `sessionId` 与真实 `cwd`，通过后传入 `--session <sessionFile>`；绝不使用 `--continue`。
+- 会话接续：未开启 `noSession` 且存在同上下文记录时，先由 [execution-context.ts](../src/orchestrator/execution-context.ts) 校验 JSONL。
+  - 核查首行 `sessionId` 与真实 `cwd` 通过后传入 `--session <sessionFile>`，绝不使用 `--continue`。
 
 ### 进程与传输超时配置（代码常量 / 可构造参数）
 
@@ -107,7 +117,10 @@
 
 ## 5. 编排边界、旁听席与工作台参数
 
-以下规则目前内置在 [team-orchestrator.ts](../src/orchestrator/team-orchestrator.ts)、[team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts)、[repositories.ts](../src/storage/repositories.ts)、[app.ts](../src/server/app.ts) 与 [preview-manager.ts](../src/server/preview-manager.ts) 中，作为系统运行边界：
+以下规则目前内置在以下源码模块中，作为系统运行边界：
+
+- [team-orchestrator.ts](../src/orchestrator/team-orchestrator.ts) 与 [team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts)
+- [repositories.ts](../src/storage/repositories.ts)、[app.ts](../src/server/app.ts) 与 [preview-manager.ts](../src/server/preview-manager.ts)
 
 ### 协作与会话边界
 
@@ -122,26 +135,42 @@
 
 ### 旁听席（`observerMemberIds`）与背景摘要预算
 
-- **配置入口**：可通过 `POST /api/matters`、`POST /api/matters/:id/messages` 或 `PATCH /api/matters/:id` 设置或调整旁听成员数组；与切换工作区（运行中返回 HTTP 409）不同，**旁听成员可在执行进行中实时调整**，不中断主负责人。
+- **配置入口**：
+  - 可通过 `POST /api/matters`、`POST /api/matters/:id/messages` 或 `PATCH /api/matters/:id` 设置或调整旁听成员数组。
+  - 与切换工作区（运行中返回 HTTP 409）不同，**旁听成员可在执行进行中实时调整**，不中断主负责人。
 - **权限隔离**：旁听成员运行在独立 `observer` 会话模式下，工具列表自动剔除 `edit`、`write`、`publish_deliverable` 与 `delegate_to_member`（双端禁权，只读审视）。
 - **静默识别**：默认哨兵 `[SILENT]`；同时兼容 `[PASS]`、`[NOOP]`、`暂无异议`、`无需补充`、`无需发言`（均不写入用户频道）。
 - **旁听提示与摘要窗口**：
   - 当前轮输入：用户发言最多截取 `2000` 字符，主负责人回复最多截取 `6000` 字符。
-  - 首次接入背景摘要（`buildObserverContextDigest`）：保留事项标题/最新摘要/已归档成果标题，并从最新往前取最多 **`16` 条** `user` 频道历史消息（单条最多 `400` 字符），整体控制在 **`6000` 字符**总预算内（并至少为消息摘录保留 `1200` 字符）；后续轮次仅按 `messageCursor` 增量传入新增交流，不回放 `internal_collab` 或 `notice` 全量日志。
+  - 首次接入背景摘要（`buildObserverContextDigest`）：
+    - 保留事项标题/最新摘要/已归档成果标题，并从最新往前取最多 **`16` 条** `user` 频道历史消息（单条最多 `400` 字符）。
+    - 整体控制在 **`6000` 字符**总预算内（并至少为消息摘录保留 `1200` 字符）。
+    - 后续轮次仅按 `messageCursor` 增量传入新增交流，不回放 `internal_collab` 或 `notice` 全量日志。
 
 ### 私有记忆与 RSI 经验提炼边界
 
-- **状态流转与范围隔离**：`member_memories.status` 区分 `candidate`（待核验，不视为已确认定稿）、`verified`（已验证）、`superseded`（被后续已验证新规 `supersedes_memory_id` 自动替代并退出注入）、`rejected`（人工忽略并退出注入）。`role_general` 强制保持 `workspaceId = null` 跨项目注入；`company_private` 与 `project_private` 仅匹配当前 `workspaceId` 时注入，且永不导出至 `roles/*.md`。
-- **执行期经验提案**：非旁听成员可调用 `propose_experience`，单条 `content` 与 `rationale` 各自上限 `1200` 字符（暂存后仅在整轮无中止正常完成时写入 `"candidate"`）；旁听成员固定注入 `PA_CAN_EXPERIENCE="false"` 禁止提案。
-- **只读 AI 复盘提炼**（`TeamOrchestrator.distillExperiences`）：以 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思 worker，单次默认超时 `120000` ms（2 分钟），最多读取前 `8` 条候选并校验范围、成员和去重（可选 `supersedesMemoryId` 仅能指向同成员、同 scope/工作区旧规则，且不能成环）。
-- **应用与验收评估幂等计数**（`memory_applications`）：每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；当前版本只评价 `deliverable_memory_applications` 中精确关联的注入记录，`memory_feedback_votes` 每成果/经验一票；相同票幂等，改票替换、`neutral` 撤回。卡片手动评价独立累计，旧历史不猜测补关联或重算。
+- **状态流转与范围隔离**：
+  - `member_memories.status` 区分四类状态：`candidate`（待核验，不视为定稿）、`verified`（已验证）、`superseded`（已被新规替代并退出注入）与 `rejected`（人工忽略）。
+  - `role_general` 强制保持 `workspaceId = null` 跨项目注入；`company_private` 与 `project_private` 仅在匹配当前范围时注入，且永不导出至 `roles/*.md`。
+- **执行期经验提案**：
+  - 非旁听成员可调用 `propose_experience`，单条 `content` 与 `rationale` 各自上限 `1200` 字符（暂存后仅在整轮无中止正常完成时写入 `"candidate"`）。
+  - 旁听成员固定注入 `PA_CAN_EXPERIENCE="false"` 禁止提案。
+- **只读 AI 复盘提炼**（`TeamOrchestrator.distillExperiences`）：
+  - 以 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思 worker，单次默认超时 `120000` ms（2 分钟）。
+  - 最多读取前 `8` 条候选并校验范围、成员和去重（可选 `supersedesMemoryId` 仅能指向同成员、同 scope/工作区旧规则，且不能成环）。
+- **应用与验收评估幂等计数**（`memory_applications`）：
+  - 每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；当前版本只评价 `deliverable_memory_applications` 中精确关联的注入记录。
+  - `memory_feedback_votes` 每成果/经验一票；相同票幂等，改票替换、`neutral` 撤回。卡片手动评价独立累计，旧历史不猜测补关联或重算。
 
 ### 工具载荷、日志、SSE 与预览管理限制
 
-- **桥接参数长度限制**（[team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts)）：`callId` ≤ 256、`memberId` ≤ 256、`task` ≤ 16000、`title` ≤ 200、`changeNote` ≤ 2000、`summary` ≤ 1000（默认通用非空文本 ≤ 64000 字符）。
+- **桥接参数长度限制**（[team-tool-bridge.ts](../src/rpc/team-tool-bridge.ts)）：
+  - `callId` ≤ 256、`memberId` ≤ 256、`task` ≤ 16000、`title` ≤ 200、`changeNote` ≤ 2000、`summary` ≤ 1000（默认通用非空文本 ≤ 64000 字符）。
 - **过程记录截断**：`notice` 单条工具事件截取 `16000` 字符；进度面板 `recentLogs` 最多保留最近 `6` 条活动。
 - **SSE 心跳**（[app.ts](../src/server/app.ts)）：`/api/events` 每 `15000` ms 发送一次 `: ping` 保活帧。
-- **本地预览管理**（[preview-manager.ts](../src/server/preview-manager.ts)）：命令预览默认端口监听超时 `startupTimeoutMs = 5000` ms、内存中最多保留 `200` 行日志、停止时等待 `SIGTERM` 宽限 `1500` ms 后强杀 `SIGKILL`；未传入 `port` 时自动分配 `127.0.0.1` 临时空闲端口。
+- **本地预览管理**（[preview-manager.ts](../src/server/preview-manager.ts)）：
+  - 命令预览默认端口监听超时 `startupTimeoutMs = 5000` ms，内存中最多保留 `200` 行日志，停止时等待 `SIGTERM` 宽限 `1500` ms 后强杀 `SIGKILL`。
+  - 未传入 `port` 时自动分配 `127.0.0.1` 临时空闲端口。
 
 ---
 

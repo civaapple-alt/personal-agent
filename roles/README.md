@@ -11,7 +11,11 @@
 
 新增角色可参考现有文件的 frontmatter 和五个正文标题，不必固定为上述四个岗位。`id` 决定注册身份，当前通过不同 ID 组合成员；修改已有 ID 会影响成员与运行历史的对应。
 
-frontmatter 中，`defaultProvider`、`defaultModel`、`thinkingLevel` 是执行配置；`keywords` 只参与新事项初始路由。`skills` 对应[实际 Skill 文件](../skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。声明、导入、序列化成功都不是依赖已安装或工具已执行的证据。
+frontmatter 字段与依赖校验约定：
+
+- `defaultProvider`、`defaultModel`、`thinkingLevel` 是执行配置；`keywords` 只参与新事项初始路由。
+- `skills` 对应[实际 Skill 文件](../skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。
+- 声明、导入、序列化成功都不是依赖已安装或工具已执行的证据。
 
 五段正文分别承载职责边界、方法、工具环境、协作约定及交付验证。保留“内部咨询返回主成员、正式阶段成果才发布”的协作语义，具体机制以[运行说明](../docs/runtime-collaboration.md)为准。
 

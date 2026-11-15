@@ -15,4 +15,5 @@
 
 先在拥有行为的模块修改，再沿调用关系核对契约；例如委托策略在编排核，网络参数校验在 bridge，JSONL 分帧在 RPC。不要通过修改本机 Pi 上游绕过本项目的问题。
 
-离线覆盖按 [test 导航](../test/README.md)选择。跨模块改动按根 [开发约定](../AGENTS.md)运行检查和构建；整体关系见[当前架构](../docs/architecture-and-plan.md)，精确协议和迁移细节再查[运行说明](../docs/runtime-collaboration.md)。
+- 离线覆盖按 [test 导航](../test/README.md)选择；跨模块改动按根 [开发约定](../AGENTS.md)运行检查和构建。
+- 整体关系见[当前架构](../docs/architecture-and-plan.md)，精确协议和迁移细节再查[运行说明](../docs/runtime-collaboration.md)。

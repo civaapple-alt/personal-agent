@@ -10,4 +10,6 @@
 
 `team-smoke` 保留临时证据目录，输出 `first.json`、`restart.json` 与数据库/会话的位置；样例是假设，不是业务需求确认，不访问书架。模型和超时以脚本为准，不展示或索取密钥。
 
-构建后可在仓库根用 `node dist/demo/team-smoke.js` 验证编译后的扩展路径；先运行 `npm run build`。隔离启动但不调用模型的方式见 [scripts](../../scripts/README.md)，离线验证选择见 [test](../../test/README.md)，已有有限实机证据见[运行说明](../../docs/runtime-collaboration.md)。
+- 构建后可在仓库根用 `node dist/demo/team-smoke.js` 验证编译后的扩展路径（先运行 `npm run build`）。
+- 隔离启动但不调用模型的方式见 [scripts](../../scripts/README.md)，离线验证选择见 [test](../../test/README.md)。
+- 已有有限实机证据见[运行说明](../../docs/runtime-collaboration.md)。

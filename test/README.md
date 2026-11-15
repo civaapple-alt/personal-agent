@@ -19,7 +19,9 @@
 node --test test/continuity-collaboration.test.ts
 ```
 
-完整离线验证先运行 `npm run build:web` 生成服务测试所需静态资源，再 `npm test`。代码交付还需相应的 `npm run check` 与 `npm run build`。验证源码和构建入口使用 `npm run check:startup`，前提是后端和网页均已构建。
+- 完整离线验证先运行 `npm run build:web` 生成服务测试所需静态资源，再运行 `npm test`。
+- 代码交付还需相应的 `npm run check` 与 `npm run build`。
+- 验证源码和构建入口使用 `npm run check:startup`，前提是后端和网页均已构建。
 
 数据与会话使用内存或临时目录；服务绑定临时端口，并在结束/失败时清理。新增取消、失败或恢复用例时验证实际状态与成果记录，不能只检查“方法被调用”。不要缩短调度余量来制造不稳定的空闲超时测试。
 
