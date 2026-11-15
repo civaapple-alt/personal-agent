@@ -5,6 +5,7 @@ import {
 	type MemoryCategory,
 	type MemoryScope,
 	type MemoryStatus,
+	type OrganizationDto,
 	saveMemberMemory,
 	type TeamMemberDto,
 	updateMemberMemory,
@@ -24,9 +25,11 @@ interface ExperienceItemCardProps {
 	memory: MemberMemoryDto;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	organizations?: OrganizationDto[];
 	defaultWorkspaceId?: string | null;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
+	organizationName?: (id: string | null) => string | null;
 	showMemberBadge?: boolean;
 	onOpenMatter?: (matterId: string) => void;
 	onOpenDeliverable?: (deliverableId: string) => void;
@@ -39,9 +42,11 @@ export function ExperienceItemCard({
 	memory,
 	members,
 	workspaces,
+	organizations = [],
 	defaultWorkspaceId = null,
 	memberName,
 	workspaceName,
+	organizationName,
 	showMemberBadge = false,
 	onOpenMatter,
 	onOpenDeliverable,
@@ -50,20 +55,37 @@ export function ExperienceItemCard({
 	onError,
 }: ExperienceItemCardProps) {
 	const fallbackWorkspaceId = pickDefaultWorkspaceId(workspaces, memory.workspaceId, defaultWorkspaceId);
+	const fallbackOrgId =
+		memory.orgId ?? workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? organizations[0]?.id ?? "";
 	const [editing, setEditing] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [editMemberId, setEditMemberId] = useState(memory.memberId);
 	const [editCategory, setEditCategory] = useState<MemoryCategory>(memory.category ?? "general");
 	const [editScope, setEditScope] = useState<MemoryScope>(memory.scope);
+	const [editOrgId, setEditOrgId] = useState<string>(fallbackOrgId);
 	const [editWorkspaceId, setEditWorkspaceId] = useState<string>(fallbackWorkspaceId);
 	const [editContent, setEditContent] = useState(memory.content);
 	const [editRationale, setEditRationale] = useState(memory.rationale ?? "");
 
 	const status: MemoryStatus = memory.status ?? (memory.verified ? "verified" : "candidate");
 	const category: MemoryCategory = memory.category ?? "general";
+	const orgLabel = memory.orgId
+		? (organizationName?.(memory.orgId) ?? organizations.find((org) => org.id === memory.orgId)?.name ?? memory.orgId)
+		: null;
 	const wsLabel = memory.workspaceId ? workspaceName(memory.workspaceId) : null;
 	const scopeShort = MEMORY_SCOPE_SHORT_LABELS[memory.scope] ?? memory.scope;
-	const scopeText = memory.scope === "role_general" || !wsLabel ? scopeShort : `${scopeShort}：${wsLabel}`;
+	const scopeText =
+		memory.scope === "role_general"
+			? scopeShort
+			: memory.scope === "company_private"
+				? orgLabel
+					? `${scopeShort}：${orgLabel}`
+					: wsLabel
+						? `${scopeShort}：${wsLabel}`
+						: scopeShort
+				: wsLabel
+					? `${scopeShort}：${wsLabel}`
+					: scopeShort;
 	const needsReview = status === "verified" && (memory.negativeCount ?? 0) > (memory.positiveCount ?? 0);
 	const appliedCount = memory.appliedCount ?? 0;
 	const positiveCount = memory.positiveCount ?? 0;
@@ -88,7 +110,9 @@ export function ExperienceItemCard({
 		setEditMemberId(memory.memberId);
 		setEditCategory(memory.category ?? "general");
 		setEditScope(memory.scope);
-		setEditWorkspaceId(pickDefaultWorkspaceId(workspaces, memory.workspaceId, defaultWorkspaceId));
+		const nextWsId = pickDefaultWorkspaceId(workspaces, memory.workspaceId, defaultWorkspaceId);
+		setEditWorkspaceId(nextWsId);
+		setEditOrgId(memory.orgId ?? workspaces.find((ws) => ws.id === nextWsId)?.orgId ?? organizations[0]?.id ?? "");
 		setEditContent(memory.content);
 		setEditRationale(memory.rationale ?? "");
 		setEditing(true);
@@ -97,12 +121,17 @@ export function ExperienceItemCard({
 	const saveEdit = async () => {
 		const content = editContent.trim();
 		if (!content) return;
+		const resolvedOrgId = editScope === "company_private" ? editOrgId || null : null;
 		const resolvedWsId =
-			editScope === "role_general"
+			editScope === "role_general" || (editScope === "company_private" && resolvedOrgId)
 				? null
 				: pickDefaultWorkspaceId(workspaces, editWorkspaceId, memory.workspaceId, defaultWorkspaceId) || null;
-		if (editScope !== "role_general" && !resolvedWsId) {
-			onError("私有经验或当前仓库规范需要绑定一个工作区仓库");
+		if (editScope === "project_private" && !resolvedWsId) {
+			onError("仓库经验需要绑定一个工作区仓库");
+			return;
+		}
+		if (editScope === "company_private" && !resolvedOrgId && !resolvedWsId) {
+			onError("组织经验需要绑定一个组织或工作区仓库");
 			return;
 		}
 		await runAction(async () => {
@@ -112,6 +141,7 @@ export function ExperienceItemCard({
 				content,
 				rationale: editRationale.trim(),
 				scope: editScope,
+				orgId: resolvedOrgId,
 				workspaceId: resolvedWsId,
 			});
 			setEditing(false);
@@ -179,32 +209,54 @@ export function ExperienceItemCard({
 								if (nextScope !== "role_general" && !workspaces.some((ws) => ws.id === editWorkspaceId)) {
 									setEditWorkspaceId(fallbackWorkspaceId);
 								}
+								if (nextScope === "company_private" && !editOrgId && organizations.length > 0) {
+									const wsOrg = workspaces.find(
+										(ws) => ws.id === (editWorkspaceId || fallbackWorkspaceId),
+									)?.orgId;
+									setEditOrgId(wsOrg ?? organizations[0]?.id ?? "");
+								}
 							}}
 						>
 							<option value="role_general">{MEMORY_SCOPE_LABELS.role_general}</option>
 							<option value="project_private" disabled={workspaces.length === 0}>
 								{MEMORY_SCOPE_LABELS.project_private}
 							</option>
-							<option value="company_private" disabled={workspaces.length === 0}>
+							<option value="company_private" disabled={workspaces.length === 0 && organizations.length === 0}>
 								{MEMORY_SCOPE_LABELS.company_private}
 							</option>
 						</select>
-						{editScope !== "role_general" && workspaces.length > 0 && (
+						{editScope === "company_private" && organizations.length > 0 && (
 							<select
 								className="select-sm"
-								aria-label="绑定仓库"
-								value={
-									workspaces.some((ws) => ws.id === editWorkspaceId) ? editWorkspaceId : fallbackWorkspaceId
-								}
-								onChange={(e) => setEditWorkspaceId(e.target.value)}
+								aria-label="绑定组织"
+								value={editOrgId}
+								onChange={(e) => setEditOrgId(e.target.value)}
 							>
-								{workspaces.map((ws) => (
-									<option key={ws.id} value={ws.id}>
-										{ws.name}
+								{organizations.map((org) => (
+									<option key={org.id} value={org.id}>
+										组织：{org.name}
 									</option>
 								))}
+								{workspaces.length > 0 && <option value="">仅当前单个仓库</option>}
 							</select>
 						)}
+						{(editScope === "project_private" || (editScope === "company_private" && !editOrgId)) &&
+							workspaces.length > 0 && (
+								<select
+									className="select-sm"
+									aria-label="绑定仓库"
+									value={
+										workspaces.some((ws) => ws.id === editWorkspaceId) ? editWorkspaceId : fallbackWorkspaceId
+									}
+									onChange={(e) => setEditWorkspaceId(e.target.value)}
+								>
+									{workspaces.map((ws) => (
+										<option key={ws.id} value={ws.id}>
+											{ws.name}
+										</option>
+									))}
+								</select>
+							)}
 					</div>
 					<input
 						className="input-field"
@@ -335,6 +387,7 @@ export function ExperienceItemCard({
 interface ManualExperienceFormProps {
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	organizations?: OrganizationDto[];
 	defaultMemberId: string;
 	allowSelectMember?: boolean;
 	defaultWorkspaceId?: string | null;
@@ -352,6 +405,7 @@ interface ManualExperienceFormProps {
 export function ManualExperienceForm({
 	members,
 	workspaces,
+	organizations = [],
 	defaultMemberId,
 	allowSelectMember = true,
 	defaultWorkspaceId = null,
@@ -366,9 +420,11 @@ export function ManualExperienceForm({
 	onError,
 }: ManualExperienceFormProps) {
 	const fallbackWorkspaceId = pickDefaultWorkspaceId(workspaces, defaultWorkspaceId);
+	const defaultWsOrgId = workspaces.find((ws) => ws.id === fallbackWorkspaceId)?.orgId ?? organizations[0]?.id ?? "";
 	const [memberId, setMemberId] = useState(defaultMemberId);
 	const [category, setCategory] = useState<MemoryCategory>("efficiency");
 	const [scope, setScope] = useState<MemoryScope>(defaultWorkspaceId ? "project_private" : "role_general");
+	const [orgId, setOrgId] = useState<string>(defaultWsOrgId);
 	const [workspaceId, setWorkspaceId] = useState<string>(fallbackWorkspaceId);
 	const [status, setStatus] = useState<"verified" | "candidate">("verified");
 	const [rationale, setRationale] = useState("");
@@ -382,6 +438,8 @@ export function ManualExperienceForm({
 	useEffect(() => {
 		if (defaultWorkspaceId && workspaces.some((ws) => ws.id === defaultWorkspaceId)) {
 			setWorkspaceId(defaultWorkspaceId);
+			const nextOrg = workspaces.find((ws) => ws.id === defaultWorkspaceId)?.orgId ?? "";
+			if (nextOrg) setOrgId(nextOrg);
 		}
 	}, [defaultWorkspaceId, workspaces]);
 
@@ -390,12 +448,17 @@ export function ManualExperienceForm({
 	const handleSave = async () => {
 		const trimmed = content.trim();
 		if (!trimmed || !memberId) return;
+		const resolvedOrgId = scope === "company_private" ? orgId || null : null;
 		const resolvedWsId =
-			scope === "role_general"
+			scope === "role_general" || (scope === "company_private" && resolvedOrgId)
 				? undefined
 				: pickDefaultWorkspaceId(workspaces, workspaceId, defaultWorkspaceId) || undefined;
-		if (scope !== "role_general" && !resolvedWsId) {
-			onError("个人私有经验或当前仓库规范需要至少一个已关联的工作区仓库");
+		if (scope === "project_private" && !resolvedWsId) {
+			onError("仓库经验或规范需要至少一个已关联的工作区仓库");
+			return;
+		}
+		if (scope === "company_private" && !resolvedOrgId && !resolvedWsId) {
+			onError("组织经验需要绑定一个组织或工作区仓库");
 			return;
 		}
 		setSaving(true);
@@ -405,6 +468,7 @@ export function ManualExperienceForm({
 				content: trimmed,
 				scope,
 				category,
+				orgId: resolvedOrgId,
 				workspaceId: resolvedWsId,
 				sourceMatterId,
 				sourceDeliverableId,
@@ -459,17 +523,39 @@ export function ManualExperienceForm({
 						className="select-sm"
 						aria-label="生效范围"
 						value={scope}
-						onChange={(e) => setScope(e.target.value as MemoryScope)}
+						onChange={(e) => {
+							const nextScope = e.target.value as MemoryScope;
+							setScope(nextScope);
+							if (nextScope === "company_private" && !orgId && organizations.length > 0) {
+								const wsOrg = workspaces.find((ws) => ws.id === workspaceId)?.orgId;
+								setOrgId(wsOrg ?? organizations[0]?.id ?? "");
+							}
+						}}
 					>
 						<option value="role_general">{MEMORY_SCOPE_LABELS.role_general}</option>
 						<option value="project_private" disabled={workspaces.length === 0}>
 							{MEMORY_SCOPE_LABELS.project_private}
 						</option>
-						<option value="company_private" disabled={workspaces.length === 0}>
+						<option value="company_private" disabled={workspaces.length === 0 && organizations.length === 0}>
 							{MEMORY_SCOPE_LABELS.company_private}
 						</option>
 					</select>
-					{scope !== "role_general" && workspaces.length > 0 && (
+					{scope === "company_private" && organizations.length > 0 && (
+						<select
+							className="select-sm"
+							aria-label="绑定组织"
+							value={orgId}
+							onChange={(e) => setOrgId(e.target.value)}
+						>
+							{organizations.map((org) => (
+								<option key={org.id} value={org.id}>
+									组织：{org.name}
+								</option>
+							))}
+							{workspaces.length > 0 && <option value="">仅当前单个仓库</option>}
+						</select>
+					)}
+					{(scope === "project_private" || (scope === "company_private" && !orgId)) && workspaces.length > 0 && (
 						<select
 							className="select-sm"
 							aria-label="绑定仓库"
@@ -534,8 +620,10 @@ interface InlineExperienceReviewSectionProps {
 	memories: MemberMemoryDto[];
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	organizations?: OrganizationDto[];
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
+	organizationName?: (id: string | null) => string | null;
 	title?: string;
 	lastDistillNote?: string | null;
 	distilling?: boolean;
@@ -561,8 +649,10 @@ export function InlineExperienceReviewSection({
 	memories,
 	members,
 	workspaces,
+	organizations = [],
 	memberName,
 	workspaceName,
+	organizationName,
 	title = "本次协作提炼与关联经验",
 	lastDistillNote,
 	distilling = false,
@@ -663,6 +753,7 @@ export function InlineExperienceReviewSection({
 				<ManualExperienceForm
 					members={members}
 					workspaces={workspaces}
+					organizations={organizations}
 					defaultMemberId={defaultMemberId}
 					allowSelectMember={true}
 					defaultWorkspaceId={workspaceId}
@@ -695,9 +786,11 @@ export function InlineExperienceReviewSection({
 							memory={mem}
 							members={members}
 							workspaces={workspaces}
+							organizations={organizations}
 							defaultWorkspaceId={workspaceId}
 							memberName={memberName}
 							workspaceName={workspaceName}
+							organizationName={organizationName}
 							showMemberBadge={true}
 							onRefresh={onRefresh}
 							onNotice={onNotice}

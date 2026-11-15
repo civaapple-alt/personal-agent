@@ -112,20 +112,21 @@ flowchart TB
 
 | 对象 | 当前存储与关系 | 尚不包含的能力 |
 | --- | --- | --- |
+| `Organization` | 组织 ID、名称、默认 Git 邮箱域名（`gitEmailDomain`）与组织简介，用来串联同一组织下的多个项目仓库 | 组织成员权限隔离、成员加入/退出审批流、企业 SSO |
 | `RoleTemplate` | Markdown 定义职责、方法、工具依赖、协作和验证约定，可导入导出 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
-| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置和主要联系人标记 | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
-| `MemberMemory` | 成员经验、`category`（`efficiency`/`troubleshooting`/`collaboration`/`user_correction`/`domain_constraint`/`general`）、`status`（`candidate`/`verified`/`rejected`/`superseded`）、依据、来源事项/成果、替代链及命中/正负评估计数 | 后台夜间无人值守复盘调度与跨仓库组织级身份共享 |
+| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏） | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
+| `MemberMemory` | 成员经验与记忆、`scope`（`role_general`/`company_private`/`project_private`）与 `orgId`/`workspaceId` 绑定、`category`、`status`、`rationale`、来源事项/成果、替代链及命中/正负评估计数 | 后台夜间无人值守复盘调度与多组织权限鉴权 |
 | `Matter` | 事项标题、摘要、当前负责人、当前工作区、列席旁听成员（`observerMemberIds`）与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
 | `MatterMessage` | `user`、`internal_collab`、`notice` 三个通道及元数据（如 `observerIntervention`、`progressSnapshot`、截断安全的工具摘要 JSON） | 完整逐事件审计库；并非每个 Pi 流式事件都落入 SQLite |
 | `Deliverable` | 所属事项、发布成员、类型、正文或路径、链接、版本、反馈及 `feedbackRating` | 自动业务验收、统一文件托管、自动绑定 Git 提交或会话快照 |
-| `WorkspaceLink` | 工作区 ID、仓库路径、默认分支等登记信息 | 公司身份、动态 Git 状态快照或自动工作树管理 |
+| `WorkspaceLink` | 工作区 ID、所属组织 `orgId`、仓库路径、默认分支等登记信息 | 动态 Git 状态快照或自动工作树管理 |
 | `WorkerSession` | 事项、成员、工作区、Pi session ID/文件、上下文键及消息游标 | 常驻进程；`active` 状态记录本身不能证明宿主仍存活 |
 | 成果与经验关联 | `deliverable_memory_applications` 关联该版本实际生成轮次的成功执行注入记录，`memory_feedback_votes` 保存每成果/经验当前评价 | 不从事项全历史推测归属，不证明经验被模型实际采用或导致结果改善 |
 | 事项执行占用 | SQLite 的 `matter_execution_leases` 保存宿主 PID 与占用者 ID | 分布式租约、对 PID 复用的防护 |
 
 ### 经验、历史与运行状态
 
-`role_general` 是可供该成员跨工作区使用的岗位经验，但仍属于本地私有运行数据，不会随角色 Markdown 导出。公司与项目私有记忆只有明确绑定当前工作区时才自动注入；无工作区的旧私有记忆保留供查看，不作为全局背景。系统还不能识别两个工作区是否属于同一组织。
+`role_general` 是可供该成员跨组织与跨工作区使用的岗位经验，但仍属于本地私有运行数据，不会随角色 Markdown 导出。`company_private` 在工作区已归属某个 `Organization` 时按 `orgId` 跨同组织多仓库共享，在未归属组织时继续兼容绑定单个工作区；`project_private` 始终严格绑定当前工作区；无归属的旧私有记忆保留供查看，不作为全局背景。同时执行 Worker 通过注入 `GIT_AUTHOR_*`/`GIT_COMMITTER_*` 与身份提示段落，为各岗位的 Git 提交建立稳定署名。
 
 当前 RSI 已有三条生产路径，但其证据与职责不同：
 
@@ -249,7 +250,7 @@ sequenceDiagram
 | 方向 | 尚缺的关键设计与验证 |
 | --- | --- |
 | 持久后台任务与多日自主工作 | 持久任务状态、唤醒、恢复、取消、重试和外部动作去重，持续运行的资源与失败观测 |
-| 组织身份与跨项目经验 | 公司/组织标识、成员与工作区的授权关系、哪些经验可以在同组织多个工作区共享 |
+| 多组织授权与更细粒度的权限隔离 | 基于组织角色的仓库访问授权、项目级记忆加密与多租户账号边界（当前已支持轻量组织档案、Git 署名分角色注入与同组织跨仓库记忆共享） |
 | RSI 持续成长 | 已有候选/核验/替代/注入/反馈基础；后续需要真实任务对照评估、验证候选效果和隐私分类，证明改善而非只累计命中或评分 |
 | 完整人才市场 | 角色定义与成员私有背景的分享边界、可验证的包与依赖、安装/升级和发布机制；当前导入导出只是基础 |
 | 权限与运行环境 | 按实际使用风险设计命令授权和隔离环境，不能把本机 `cwd` 当作沙箱 |

@@ -7,6 +7,7 @@ import type {
 	MemberMemoryDto,
 	MemoryCategory,
 	MessageImageDto,
+	OrganizationDto,
 	ProgressActivityDto,
 	ProgressSnapshotDto,
 	TeamMemberDto,
@@ -39,16 +40,55 @@ export const SHORT_STAGE_LABELS: Record<MatterProgressDto["stage"], string> = {
 };
 
 export const MEMORY_SCOPE_LABELS: Record<string, string> = {
-	role_general: "跨项目通用（所有仓库可用）",
-	company_private: "个人私有经验（仅绑定当前仓库）",
-	project_private: "当前仓库规范（仅当前仓库生效）",
+	role_general: "岗位通用（所有组织与仓库可用）",
+	company_private: "组织经验与记忆（同组织跨仓库共享）",
+	project_private: "仓库经验与规范（仅当前仓库生效）",
 };
 
 export const MEMORY_SCOPE_SHORT_LABELS: Record<string, string> = {
-	role_general: "跨项目通用",
-	company_private: "个人私有",
-	project_private: "当前仓库规范",
+	role_general: "岗位通用",
+	company_private: "组织记忆",
+	project_private: "仓库记忆",
 };
+
+export function formatMemberGitIdentity(
+	member: Pick<TeamMemberDto, "id" | "displayName" | "gitName" | "gitEmail">,
+	organization?: Pick<OrganizationDto, "gitEmailDomain"> | null,
+): { gitName: string; gitEmail: string; formatted: string } {
+	const gitName = (member.gitName || member.displayName || member.id).trim();
+	const rawEmail = (member.gitEmail || "").trim();
+	const domain = organization?.gitEmailDomain?.trim().replace(/^@+/, "") ?? "";
+	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;
+	const gitEmail = isDefaultEmail && domain ? `${member.id}@${domain}` : rawEmail || `${member.id}@team.local`;
+	return { gitName, gitEmail, formatted: `${gitName} <${gitEmail}>` };
+}
+
+export function countMemberMemoriesByScope(memories: MemberMemoryDto[]): {
+	totalActive: number;
+	roleGeneral: number;
+	companyPrivate: number;
+	projectPrivate: number;
+	pendingReview: number;
+} {
+	let roleGeneral = 0;
+	let companyPrivate = 0;
+	let projectPrivate = 0;
+	let pendingReview = 0;
+	for (const memory of memories) {
+		if (memory.status === "rejected" || memory.status === "superseded") continue;
+		if (memory.status === "candidate") pendingReview += 1;
+		if (memory.scope === "role_general") roleGeneral += 1;
+		else if (memory.scope === "company_private") companyPrivate += 1;
+		else if (memory.scope === "project_private") projectPrivate += 1;
+	}
+	return {
+		totalActive: roleGeneral + companyPrivate + projectPrivate,
+		roleGeneral,
+		companyPrivate,
+		projectPrivate,
+		pendingReview,
+	};
+}
 
 export const MEMORY_CATEGORY_VALUES: MemoryCategory[] = [
 	"efficiency",

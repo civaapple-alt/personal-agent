@@ -6,7 +6,11 @@ import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../rpc/team-tool-bridge.ts";
 import type { ImageContent, RpcExtensionUIDialogRequest, RpcExtensionUIResponsePayload } from "../rpc/types.ts";
-import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
+import {
+	normalizeMemoryCategory,
+	type PersonalAgentStore,
+	resolveEffectiveGitIdentity,
+} from "../storage/repositories.ts";
 import type {
 	Deliverable,
 	DeliverableType,
@@ -16,6 +20,7 @@ import type {
 	MemberMemory,
 	MemoryCategory,
 	MemoryScope,
+	Organization,
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
@@ -776,13 +781,30 @@ export class TeamOrchestrator {
 		template?: RoleTemplate;
 		memories: MemberMemory[];
 		workspace: WorkspaceLink | null;
+		organization?: Organization | null;
 		taskPrompt?: string;
 		isInternalDelegation?: boolean;
 		sessionMode?: "lead" | "internal" | "observer";
 	}): string {
 		const mode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
+		const organization =
+			input.organization !== undefined
+				? input.organization
+				: input.workspace?.orgId
+					? this.store.getOrganization(input.workspace.orgId)
+					: null;
+		const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
+		const identityLines = [
+			`- 成员标识：\`${input.member.id}\`（${input.member.displayName} · ${input.member.roleTitle}）`,
+			organization
+				? `- 所属组织：${organization.name}${organization.description ? `（${organization.description}）` : ""}`
+				: null,
+			`- Git 提交署名（Author / Committer）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>（执行环境已自动注入 GIT_AUTHOR_* / GIT_COMMITTER_*，提交代码时将自动归属到你的署名下，请勿修改全局 Git 配置）`,
+			input.member.identitySummary ? `- 角色背景与专长：${input.member.identitySummary}` : null,
+		].filter(Boolean);
 		const sections: string[] = [
 			`你当前担任 Personal Agent 团队中的【${input.member.displayName} (${input.member.roleTitle})】。`,
+			`## 角色与组织身份（Role & Organization Identity）\n${identityLines.join("\n")}`,
 		];
 
 		if (input.template) {
@@ -804,21 +826,41 @@ export class TeamOrchestrator {
 		}
 
 		if (input.memories.length > 0) {
-			const memoryLines = input.memories
-				.map((m) => {
-					const tag = m.status === "verified" ? `已验证 · ${m.scope}` : `待验证 · ${m.scope}`;
-					const catPrefix =
-						m.category && m.category !== "general"
-							? `【${MEMORY_CATEGORY_PROMPT_LABELS[m.category] ?? m.category}】`
-							: "";
-					const suffix =
-						m.status === "candidate"
-							? "（待核实：若在当前工作中发现不成立或需修正，可调用 propose_experience 提出替代）"
-							: "";
-					return `- [${m.id} | ${tag}] ${catPrefix}${m.content}${suffix}`;
-				})
-				.join("\n");
-			sections.push(`## 个人与组织积累经验（私有记忆）\n${memoryLines}`);
+			const formatMemoryLine = (m: MemberMemory): string => {
+				const tag = m.status === "verified" ? `已验证 · ${m.scope}` : `待验证 · ${m.scope}`;
+				const catPrefix =
+					m.category && m.category !== "general"
+						? `【${MEMORY_CATEGORY_PROMPT_LABELS[m.category] ?? m.category}】`
+						: "";
+				const suffix =
+					m.status === "candidate"
+						? "（待核实：若在当前工作中发现不成立或需修正，可调用 propose_experience 提出替代）"
+						: "";
+				return `- [${m.id} | ${tag}] ${catPrefix}${m.content}${suffix}`;
+			};
+			const groups: Array<{ title: string; items: MemberMemory[] }> = [
+				{
+					title: "### 岗位通用经验（role_general，跨组织与跨仓库通用）",
+					items: input.memories.filter((m) => m.scope === "role_general"),
+				},
+				{
+					title: organization
+						? `### 组织经验与记忆（company_private · ${organization.name}，同组织跨仓库共享）`
+						: "### 组织/团队经验与记忆（company_private）",
+					items: input.memories.filter((m) => m.scope === "company_private"),
+				},
+				{
+					title: input.workspace
+						? `### 当前仓库经验与记忆（project_private · ${input.workspace.name}）`
+						: "### 当前仓库经验与记忆（project_private）",
+					items: input.memories.filter((m) => m.scope === "project_private"),
+				},
+			];
+			const memoryBlocks = groups
+				.filter((group) => group.items.length > 0)
+				.map((group) => `${group.title}\n${group.items.map(formatMemoryLine).join("\n")}`)
+				.join("\n\n");
+			sections.push(`## 个人与组织积累经验（分作用域记忆）\n${memoryBlocks}`);
 		}
 
 		if (input.workspace) {
@@ -1665,11 +1707,16 @@ ${this.store
 							if (!target || target.memberId !== input.member.id) {
 								throw new Error("Cannot supersede missing or foreign member memory");
 							}
+							const orgId =
+								call.scope === "company_private" && input.workspace?.orgId ? input.workspace.orgId : null;
+							const targetWorkspaceId =
+								call.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
 							this.store.validateMemoryReplacement(
 								{
 									memberId: input.member.id,
 									scope: call.scope,
-									workspaceId: call.scope === "role_general" ? null : (input.workspace?.id ?? null),
+									orgId,
+									workspaceId: targetWorkspaceId,
 								},
 								target.id,
 							);
@@ -1731,6 +1778,8 @@ ${this.store
 				"--tools",
 				[...requestedTools, ...teamTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(","),
 			);
+			const organization = input.workspace?.orgId ? this.store.getOrganization(input.workspace.orgId) : null;
+			const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
 			const relevantMemories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null);
 			worker = this.workerFactory({
 				cwd,
@@ -1742,6 +1791,14 @@ ${this.store
 				args,
 				env: {
 					...bridge.env,
+					GIT_AUTHOR_NAME: gitIdentity.gitName,
+					GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
+					GIT_COMMITTER_NAME: gitIdentity.gitName,
+					GIT_COMMITTER_EMAIL: gitIdentity.gitEmail,
+					PA_MEMBER_ID: input.member.id,
+					PA_MEMBER_NAME: input.member.displayName,
+					PA_MEMBER_TITLE: input.member.roleTitle,
+					...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
 					PA_CAN_PUBLISH: String(canPublish),
 					PA_CAN_DELEGATE: String(canDelegate),
 					PA_CAN_EXPERIENCE: String(sessionMode !== "observer"),
@@ -1755,6 +1812,7 @@ ${this.store
 						template,
 						memories: relevantMemories,
 						workspace: input.workspace,
+						organization,
 						sessionMode,
 					}),
 				},
@@ -1971,15 +2029,19 @@ ${this.store
 				onTextDelta: input.onTextDelta,
 			});
 			if (!result.aborted && !input.run.cancelled) {
-				for (const item of stagedExperiences)
+				for (const item of stagedExperiences) {
+					const orgId = item.scope === "company_private" && input.workspace?.orgId ? input.workspace.orgId : null;
+					const workspaceId = item.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
 					effects.experiences.push({
 						...item,
 						memberId: input.member.id,
-						workspaceId: item.scope === "role_general" ? null : (input.workspace?.id ?? null),
+						orgId,
+						workspaceId,
 						sourceMatterId: input.matterId,
 						status: "candidate",
 						verified: false,
 					});
+				}
 				mergeEffects(input.effectsTarget, effects);
 			}
 			if (!result.aborted && !input.run.cancelled)
@@ -2169,13 +2231,18 @@ ${this.store
 				? `2. 归属精确：将研发排查/工程优化归入研发对应 \`memberId\`，将测试策略/回归经验归入测试对应 \`memberId\`，将需求收口/产品决策归入产品对应 \`memberId\`（可生成 0~6 条；若无明显新规律则返回空数组 []）。`
 				: "2. 仅提炼确有依据、可复用的规律或约束（0~3 条）；若无新经验，candidates 返回空数组 []。",
 			"3. 严格区分作用域 `scope`：",
-			"   - `role_general`：跨项目通用的岗位方法、分析清单或排障/协同习惯（不含某仓库私有路径或密钥）。",
+			"   - `role_general`：跨组织/跨项目通用的岗位方法、分析清单或排障/协同习惯（不含某组织或某仓库私有路径、名称与密钥）。",
 			workspace
-				? `   - \`project_private\`（当前仓库规范）或 \`company_private\`：绑定当前仓库「${workspace.name}」的具体业务规则、架构约束或团队习惯。`
+				? [
+						workspace.orgId
+							? `   - \`company_private\`：绑定所属组织（\`${this.store.getOrganization(workspace.orgId)?.name ?? workspace.orgId}\`）的跨仓库组织规范、共同流程或长期记忆；`
+							: `   - \`company_private\`：绑定当前项目方/团队（${workspace.name}）的组织经验或流程约束；`,
+						`   - \`project_private\`：绑定当前仓库「${workspace.name}」的具体业务规则、代码架构约束或验收口径。`,
+					].join("\n")
 				: "   - 当前事项未绑定项目工作区，请仅输出 `role_general`。",
 			"4. 若当前证据明确推翻或修正了下方同成员的已有经验，请填写 `supersedesMemoryId`。",
 			"5. 仅返回严格 JSON（不要附加解释文字），格式：",
-			`{"summary":"一句话说明复盘范围与提炼依据","candidates":[{"memberId":"${member.id}","category":"efficiency|troubleshooting|collaboration|user_correction|domain_constraint","scope":"role_general|project_private","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}`,
+			`{"summary":"一句话说明复盘范围与提炼依据","candidates":[{"memberId":"${member.id}","category":"efficiency|troubleshooting|collaboration|user_correction|domain_constraint","scope":"role_general|company_private|project_private","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}`,
 			"",
 			`## 当前事项\n- 编号：${matter.id}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
 			deliverable
@@ -2248,11 +2315,14 @@ ${this.store
 			}
 			if (candidate.memberId && !participantSet.has(candidate.memberId)) continue;
 			const resolvedMember = singleOnly ? member : this.store.getMember(candidate.memberId ?? member.id)!;
+			const orgId = candidate.scope === "company_private" && workspace?.orgId ? workspace.orgId : null;
+			const targetWorkspaceId = candidate.scope === "role_general" ? null : orgId ? null : (workspace?.id ?? null);
 			const dup = this.store.findActiveDuplicateMemory(
 				resolvedMember.id,
 				candidate.scope,
-				workspace?.id ?? null,
+				targetWorkspaceId,
 				candidate.content,
+				orgId,
 			);
 			if (dup) {
 				skippedDuplicates += 1;
@@ -2265,7 +2335,8 @@ ${this.store
 					oldMem &&
 					oldMem.memberId === resolvedMember.id &&
 					oldMem.scope === candidate.scope &&
-					oldMem.workspaceId === (candidate.scope === "role_general" ? null : (workspace?.id ?? null))
+					oldMem.orgId === orgId &&
+					oldMem.workspaceId === targetWorkspaceId
 				) {
 					validSupersedes = oldMem.id;
 				}
@@ -2274,7 +2345,8 @@ ${this.store
 				memberId: resolvedMember.id,
 				scope: candidate.scope,
 				category: candidate.category,
-				workspaceId: candidate.scope === "role_general" ? null : (workspace?.id ?? null),
+				orgId,
+				workspaceId: targetWorkspaceId,
 				content: candidate.content,
 				rationale: candidate.rationale || payload.summary,
 				sourceMatterId: matter.id,

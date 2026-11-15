@@ -3,6 +3,15 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS organizations (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	git_email_domain TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS team_members (
 	id TEXT PRIMARY KEY,
 	template_id TEXT NOT NULL,
@@ -13,12 +22,16 @@ CREATE TABLE IF NOT EXISTS team_members (
 	model TEXT NOT NULL,
 	thinking_level TEXT NOT NULL,
 	keywords_json TEXT NOT NULL DEFAULT '[]',
+	git_name TEXT NOT NULL DEFAULT '',
+	git_email TEXT NOT NULL DEFAULT '',
+	identity_summary TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspace_links (
 	id TEXT PRIMARY KEY,
+	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	name TEXT NOT NULL,
 	repo_path TEXT NOT NULL UNIQUE,
 	default_branch TEXT NOT NULL DEFAULT 'main',
@@ -43,6 +56,7 @@ CREATE TABLE IF NOT EXISTS member_memories (
 	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
 	scope TEXT NOT NULL,
 	category TEXT NOT NULL DEFAULT 'general',
+	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
 	content TEXT NOT NULL,
 	rationale TEXT NOT NULL DEFAULT '',
@@ -157,12 +171,30 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	if (!columns.some((column) => column.name === "message_cursor")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN message_cursor TEXT");
 	}
+	const memberColumns = db.prepare("PRAGMA table_info(team_members)").all();
+	const ensureMemberCol = (name: string, ddl: string) => {
+		if (!memberColumns.some((column) => column.name === name)) {
+			db.exec(`ALTER TABLE team_members ADD COLUMN ${ddl}`);
+		}
+	};
+	ensureMemberCol("git_name", "git_name TEXT NOT NULL DEFAULT ''");
+	ensureMemberCol("git_email", "git_email TEXT NOT NULL DEFAULT ''");
+	ensureMemberCol("identity_summary", "identity_summary TEXT NOT NULL DEFAULT ''");
+	db.exec(`
+		UPDATE team_members SET git_name = display_name WHERE TRIM(git_name) = '';
+		UPDATE team_members SET git_email = id || '@team.local' WHERE TRIM(git_email) = '';
+	`);
+	const workspaceColumns = db.prepare("PRAGMA table_info(workspace_links)").all();
+	if (!workspaceColumns.some((column) => column.name === "org_id")) {
+		db.exec("ALTER TABLE workspace_links ADD COLUMN org_id TEXT");
+	}
 	const memoryColumns = db.prepare("PRAGMA table_info(member_memories)").all();
 	const ensureMemoryCol = (name: string, ddl: string) => {
 		if (!memoryColumns.some((column) => column.name === name)) {
 			db.exec(`ALTER TABLE member_memories ADD COLUMN ${ddl}`);
 		}
 	};
+	ensureMemoryCol("org_id", "org_id TEXT");
 	ensureMemoryCol("rationale", "rationale TEXT NOT NULL DEFAULT ''");
 	ensureMemoryCol("category", "category TEXT NOT NULL DEFAULT 'general'");
 	ensureMemoryCol("source_deliverable_id", "source_deliverable_id TEXT");
@@ -186,5 +218,7 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		db.exec("ALTER TABLE deliverables ADD COLUMN feedback_rating TEXT");
 	}
 	db.exec("CREATE INDEX IF NOT EXISTS idx_worker_context ON worker_sessions(matter_id, member_id, context_key)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_workspace_links_org ON workspace_links(org_id)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_member_memories_org ON member_memories(member_id, org_id)");
 	return db;
 }

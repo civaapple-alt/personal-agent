@@ -4,6 +4,7 @@ import type {
 	DistillRsiResult,
 	FeedbackRating,
 	MemberMemoryDto,
+	OrganizationDto,
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../api.ts";
@@ -25,10 +26,12 @@ interface DeliverableCardProps {
 	workspaceName: string | null;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	organizations?: OrganizationDto[];
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	participantIds: string[];
 	resolveMemberName: (id: string) => string;
 	resolveWorkspaceName: (id: string | null) => string | null;
+	resolveOrganizationName?: (id: string | null) => string | null;
 	viewUrl: string | null;
 	onSubmitFeedback: (
 		deliverableId: string,
@@ -302,8 +305,10 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					memories={associatedMemories}
 					members={props.members}
 					workspaces={props.workspaces}
+					organizations={props.organizations}
 					memberName={props.resolveMemberName}
 					workspaceName={props.resolveWorkspaceName}
+					organizationName={props.resolveOrganizationName}
 					lastDistillNote={lastDistillNote}
 					onOpenTeam={props.onOpenTeam}
 					manualOpen={memoryOpen}

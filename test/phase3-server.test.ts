@@ -22,12 +22,16 @@ import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
 import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
+	countMemberMemoriesByScope,
 	formatElapsedDuration,
+	formatMemberGitIdentity,
 	formatNoticeEventLine,
 	getMemberThemeById,
 	inferDelegationMood,
 	isKeyNoticeEvent,
 	MEMORY_CATEGORY_LABELS,
+	MEMORY_SCOPE_LABELS,
+	MEMORY_SCOPE_SHORT_LABELS,
 	mapDelegationsToMessages,
 	parseDeliverableSummary,
 	parseMessageImages,
@@ -1365,6 +1369,7 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					memberId: "product-manager",
 					scope: "role_general",
 					category: "collaboration",
+					orgId: null,
 					workspaceId: null,
 					content: "verified pm rule",
 					sourceMatterId: "mat-1",
@@ -1383,6 +1388,7 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					memberId: "engineering-manager",
 					scope: "role_general",
 					category: "troubleshooting",
+					orgId: null,
 					workspaceId: null,
 					content: "candidate eng rule",
 					sourceMatterId: "mat-1",
@@ -1399,6 +1405,7 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					memberId: "engineering-manager",
 					scope: "role_general",
 					category: "general",
+					orgId: null,
 					workspaceId: null,
 					content: "other matter rule",
 					sourceMatterId: "mat-other",
@@ -1658,6 +1665,253 @@ test("HTTP server persists uploaded chat images to uploadsDir, forwards them to 
 		// Path traversal / unknown upload should return 404
 		const missingUpload = await fetch(`${baseUrl}/api/uploads/does-not-exist.png`);
 		assert.equal(missingUpload.status, 404);
+	} finally {
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test("organization CRUD, workspace binding, member identity updates & sanitized export, and frontend identity helpers", async () => {
+	assert.equal(MEMORY_SCOPE_SHORT_LABELS.role_general, "岗位通用");
+	assert.equal(MEMORY_SCOPE_SHORT_LABELS.company_private, "组织记忆");
+	assert.equal(MEMORY_SCOPE_SHORT_LABELS.project_private, "仓库记忆");
+	assert.match(MEMORY_SCOPE_LABELS.company_private ?? "", /组织/);
+
+	const gitDefault = formatMemberGitIdentity(
+		{ id: "pm", displayName: "PM", gitName: "PM", gitEmail: "pm@team.local" },
+		{ gitEmailDomain: "@acme.dev" },
+	);
+	assert.equal(gitDefault.formatted, "PM <pm@acme.dev>");
+
+	const gitCustom = formatMemberGitIdentity(
+		{ id: "pm", displayName: "PM", gitName: "Alice", gitEmail: "alice@custom.io" },
+		{ gitEmailDomain: "acme.dev" },
+	);
+	assert.equal(gitCustom.formatted, "Alice <alice@custom.io>");
+
+	const scopeCounts = countMemberMemoriesByScope([
+		{
+			id: "m1",
+			memberId: "pm",
+			scope: "role_general",
+			category: "general",
+			orgId: null,
+			workspaceId: null,
+			content: "a",
+			status: "verified",
+			verified: true,
+			appliedCount: 0,
+			positiveCount: 0,
+			negativeCount: 0,
+			createdAt: "2026-11-15T00:00:00Z",
+		},
+		{
+			id: "m2",
+			memberId: "pm",
+			scope: "company_private",
+			category: "collaboration",
+			orgId: "org1",
+			workspaceId: null,
+			content: "b",
+			status: "candidate",
+			verified: false,
+			appliedCount: 0,
+			positiveCount: 0,
+			negativeCount: 0,
+			createdAt: "2026-11-15T00:00:00Z",
+		},
+		{
+			id: "m3",
+			memberId: "pm",
+			scope: "project_private",
+			category: "domain_constraint",
+			orgId: null,
+			workspaceId: "ws1",
+			content: "c",
+			status: "verified",
+			verified: true,
+			appliedCount: 0,
+			positiveCount: 0,
+			negativeCount: 0,
+			createdAt: "2026-11-15T00:00:00Z",
+		},
+		{
+			id: "m4",
+			memberId: "pm",
+			scope: "project_private",
+			category: "general",
+			orgId: null,
+			workspaceId: "ws1",
+			content: "ignored",
+			status: "rejected",
+			verified: false,
+			appliedCount: 0,
+			positiveCount: 0,
+			negativeCount: 0,
+			createdAt: "2026-11-15T00:00:00Z",
+		},
+	]);
+	assert.deepEqual(scopeCounts, {
+		totalActive: 3,
+		roleGeneral: 1,
+		companyPrivate: 1,
+		projectPrivate: 1,
+		pendingReview: 1,
+	});
+
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-org-"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		workerFactory: (opts) =>
+			({
+				options: opts,
+				onSessionEvent: () => () => {},
+				onNotice: () => () => {},
+				setDialogHandler: () => {},
+				start: async () => {},
+				stop: async () => {},
+				getState: async () => ({ sessionId: "s", isStreaming: false }),
+				runPromptAndWait: async () => ({
+					disposition: "started",
+					aborted: false,
+					assistantText: "ok",
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				}),
+			}) as unknown as RpcWorkerLike,
+	});
+
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		uploadsDir: join(tempDir, "uploads"),
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const orgCreate = await fetch(`${baseUrl}/api/organizations`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				name: "Acme Corp",
+				gitEmailDomain: "@acme.dev",
+				description: "Engineering org",
+			}),
+		});
+		assert.equal(orgCreate.status, 201);
+		const { organization } = (await orgCreate.json()) as {
+			organization: { id: string; name: string; gitEmailDomain: string };
+		};
+		assert.equal(organization.gitEmailDomain, "acme.dev");
+
+		const orgPatch = await fetch(`${baseUrl}/api/organizations/${organization.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ description: "Updated org description" }),
+		});
+		assert.equal(orgPatch.status, 200);
+
+		const wsCreate = await fetch(`${baseUrl}/api/workspaces`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				orgId: organization.id,
+				name: "app-one",
+				repoPath: join(tempDir, "app-one"),
+			}),
+		});
+		assert.equal(wsCreate.status, 201);
+		const { workspace } = (await wsCreate.json()) as { workspace: { id: string; orgId: string | null } };
+		assert.equal(workspace.orgId, organization.id);
+
+		const badWsPatch = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ orgId: "non-existent-org" }),
+		});
+		assert.equal(badWsPatch.status, 404);
+
+		const memberPatch = await fetch(`${baseUrl}/api/members/product-manager`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				gitName: "PM Secret Name",
+				gitEmail: "secret-pm@acme.dev",
+				identitySummary: "Private internal company background",
+			}),
+		});
+		assert.equal(memberPatch.status, 200);
+		const patchedMember = (await memberPatch.json()) as {
+			member: { gitName: string; gitEmail: string; identitySummary: string };
+		};
+		assert.equal(patchedMember.member.gitName, "PM Secret Name");
+		assert.equal(patchedMember.member.gitEmail, "secret-pm@acme.dev");
+		assert.equal(patchedMember.member.identitySummary, "Private internal company background");
+
+		// Public role export MUST NOT leak private gitEmail, identitySummary, or org name
+		const exportRes = await fetch(`${baseUrl}/api/members/product-manager/export`);
+		assert.equal(exportRes.status, 200);
+		const exported = (await exportRes.json()) as { markdown: string };
+		assert.doesNotMatch(exported.markdown, /secret-pm@acme\.dev/);
+		assert.doesNotMatch(exported.markdown, /Private internal company background/);
+		assert.doesNotMatch(exported.markdown, /Acme Corp/);
+
+		// Memory CRUD with orgId
+		const memRes = await fetch(`${baseUrl}/api/memories`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				memberId: "product-manager",
+				scope: "company_private",
+				orgId: organization.id,
+				content: "All Acme PRs require tests",
+			}),
+		});
+		assert.equal(memRes.status, 201);
+		const { memory } = (await memRes.json()) as {
+			memory: { id: string; orgId: string | null; workspaceId: string | null };
+		};
+		assert.equal(memory.orgId, organization.id);
+		assert.equal(memory.workspaceId, null);
+
+		const memSwitchRes = await fetch(`${baseUrl}/api/memories/${memory.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				scope: "project_private",
+				workspaceId: workspace.id,
+			}),
+		});
+		assert.equal(memSwitchRes.status, 200);
+		const switched = (await memSwitchRes.json()) as {
+			memory: { scope: string; orgId: string | null; workspaceId: string | null };
+		};
+		assert.equal(switched.memory.scope, "project_private");
+		assert.equal(switched.memory.orgId, null);
+		assert.equal(switched.memory.workspaceId, workspace.id);
+
+		const bootstrapRes = await fetch(`${baseUrl}/api/bootstrap`);
+		const bootstrapBody = (await bootstrapRes.json()) as { organizations: Array<{ id: string }> };
+		assert.equal(bootstrapBody.organizations.length, 1);
+		assert.equal(bootstrapBody.organizations[0]?.id, organization.id);
 	} finally {
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

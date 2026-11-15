@@ -21,6 +21,15 @@ export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
 export type DeliverableType = "document" | "artifact" | "prototype_image" | "service_url";
 
+export interface Organization {
+	id: string;
+	name: string;
+	gitEmailDomain: string;
+	description: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
 export interface TeamMember {
 	id: string;
 	templateId: string;
@@ -31,6 +40,9 @@ export interface TeamMember {
 	model: string;
 	thinkingLevel: ThinkingLevel;
 	keywords: string[];
+	gitName: string;
+	gitEmail: string;
+	identitySummary: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -40,6 +52,7 @@ export interface MemberMemory {
 	memberId: string;
 	scope: MemoryScope;
 	category: MemoryCategory;
+	orgId: string | null;
 	workspaceId: string | null;
 	content: string;
 	rationale: string;
@@ -70,6 +83,7 @@ export interface MemoryApplicationRecord {
 
 export interface WorkspaceLink {
 	id: string;
+	orgId: string | null;
 	name: string;
 	repoPath: string;
 	defaultBranch: string;

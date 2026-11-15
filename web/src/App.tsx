@@ -285,6 +285,7 @@ export function App() {
 			"dialog_resolved",
 			"deliverable_updated",
 			"workspace_updated",
+			"organization_updated",
 			"preview_updated",
 			"team_updated",
 			"memory_updated",
@@ -377,6 +378,9 @@ export function App() {
 
 	const workspaceName = (id: string | null) =>
 		id ? (bootstrap?.workspaces.find((w) => w.id === id)?.name ?? id) : null;
+
+	const organizationName = (id: string | null) =>
+		id ? (bootstrap?.organizations.find((o) => o.id === id)?.name ?? id) : null;
 
 	const previewUrlFor = useCallback(
 		(deliv: DeliverableDto | null): string | null => {
@@ -675,6 +679,7 @@ export function App() {
 						selectedWorkspace={selectedWorkspace}
 						selectedWorkspaceId={selectedWorkspaceId}
 						workspaces={bootstrap?.workspaces ?? []}
+						organizations={bootstrap?.organizations ?? []}
 						members={bootstrap?.members ?? []}
 						selectedMemberId={selectedMemberId}
 						headerContact={headerContact}
@@ -698,6 +703,7 @@ export function App() {
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						memberName={memberName}
 						workspaceName={workspaceName}
+						organizationName={organizationName}
 						previewUrlFor={previewUrlFor}
 						onComposerTextChange={setComposerText}
 						onAddImages={(files) => void handleAddComposerImages(files)}
@@ -730,6 +736,7 @@ export function App() {
 						previewUrlFor={previewUrlFor}
 						memberName={memberName}
 						workspaceName={workspaceName}
+						organizationName={organizationName}
 						onSubmitFeedback={handleDeliverableFeedback}
 						onDistillExperiences={handleDistillExperiences}
 						onCancelDistill={cancelRsiDistill}
@@ -758,12 +765,14 @@ export function App() {
 					<TeamView
 						members={bootstrap?.members ?? []}
 						workspaces={bootstrap?.workspaces ?? []}
+						organizations={bootstrap?.organizations ?? []}
 						matters={bootstrap?.matters ?? []}
 						defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						templateByRoleId={templateByRoleId}
 						memberName={memberName}
 						workspaceName={workspaceName}
+						organizationName={organizationName}
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
@@ -779,6 +788,7 @@ export function App() {
 				{activeTab === "materials" && (
 					<MaterialsView
 						workspaces={bootstrap?.workspaces ?? []}
+						organizations={bootstrap?.organizations ?? []}
 						selectedWorkspaceId={selectedWorkspaceId}
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}

@@ -122,7 +122,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "propose_experience",
 			label: "提炼候选经验",
 			description:
-				"Record a reusable lesson learned during execution, debugging, user correction, or team collaboration (not status logs). Focus on efficiency improvements, root-cause troubleshooting, collaboration handoffs, user-corrected constraints, or project conventions. Distinguish role_general (cross-project method) from project_private/company_private (workspace-specific rules).",
+				"Record a reusable lesson learned during execution, debugging, user correction, or team collaboration (not status logs). Focus on efficiency improvements, root-cause troubleshooting, collaboration handoffs, user-corrected constraints, or project conventions. Distinguish role_general (cross-organization/cross-project method), company_private (organization-wide shared rules/memories), and project_private (repository-specific rules).",
 			parameters: {
 				type: "object",
 				properties: {

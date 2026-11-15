@@ -1,31 +1,45 @@
 import { type ChangeEvent, useMemo, useState } from "react";
 import {
 	createMember,
+	createOrganization,
 	exportMemberPackage,
 	importMemberPackage,
 	type MatterDto,
 	type MemberMemoryDto,
 	type MemoryCategory,
+	type MemoryScope,
 	type MemoryStatus,
+	type OrganizationDto,
 	type RoleTemplateDto,
 	setPrimaryMember,
 	type TeamMemberDto,
+	updateMemberIdentity,
 	updateMemberMemory,
+	updateOrganization,
 	type WorkspaceDto,
 } from "../api.ts";
-import { getBotTheme, MEMORY_CATEGORY_LABELS, MEMORY_CATEGORY_VALUES, splitTagsInput } from "../utils.ts";
+import {
+	countMemberMemoriesByScope,
+	formatMemberGitIdentity,
+	getBotTheme,
+	MEMORY_CATEGORY_LABELS,
+	MEMORY_CATEGORY_VALUES,
+	splitTagsInput,
+} from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { ExperienceItemCard, ManualExperienceForm } from "./ExperienceReviewPanel.tsx";
 
 interface TeamViewProps {
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	organizations?: OrganizationDto[];
 	matters?: MatterDto[];
 	defaultWorkspaceId?: string | null;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
+	organizationName?: (id: string | null) => string | null;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -39,12 +53,14 @@ type MemoryFilterTab = "all" | "candidate" | "verified" | "archived";
 export function TeamView({
 	members,
 	workspaces,
+	organizations = [],
 	matters = [],
 	defaultWorkspaceId = null,
 	memoriesByMember,
 	templateByRoleId,
 	memberName,
 	workspaceName,
+	organizationName,
 	onRefresh,
 	onNotice,
 	onError,
@@ -58,13 +74,37 @@ export function TeamView({
 	const [newMemberResp, setNewMemberResp] = useState("");
 	const [newMemberKeywords, setNewMemberKeywords] = useState("");
 	const [newMemberSkills, setNewMemberSkills] = useState("");
+	const [newMemberGitName, setNewMemberGitName] = useState("");
+	const [newMemberGitEmail, setNewMemberGitEmail] = useState("");
+	const [newMemberIdentitySummary, setNewMemberIdentitySummary] = useState("");
 	const [newMemberPrimary, setNewMemberPrimary] = useState(false);
+
+	const [showOrgForm, setShowOrgForm] = useState(false);
+	const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+	const [orgNameInput, setOrgNameInput] = useState("");
+	const [orgDomainInput, setOrgDomainInput] = useState("");
+	const [orgDescInput, setOrgDescInput] = useState("");
+
+	const [editingIdentityMemberId, setEditingIdentityMemberId] = useState<string | null>(null);
+	const [editDisplayName, setEditDisplayName] = useState("");
+	const [editRoleTitle, setEditRoleTitle] = useState("");
+	const [editGitName, setEditGitName] = useState("");
+	const [editGitEmail, setEditGitEmail] = useState("");
+	const [editIdentitySummary, setEditIdentitySummary] = useState("");
 
 	const [showImportMember, setShowImportMember] = useState(false);
 	const [importMarkdown, setImportMarkdown] = useState("");
 	const matterWorkspaceById = useMemo(
 		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
 		[matters],
+	);
+	const activeWorkspace = useMemo(
+		() => workspaces.find((ws) => ws.id === defaultWorkspaceId) ?? null,
+		[workspaces, defaultWorkspaceId],
+	);
+	const activeOrg = useMemo(
+		() => (activeWorkspace?.orgId ? (organizations.find((org) => org.id === activeWorkspace.orgId) ?? null) : null),
+		[activeWorkspace, organizations],
 	);
 	const [exportedPackage, setExportedPackage] = useState<{
 		id: string;
@@ -73,6 +113,7 @@ export function TeamView({
 	} | null>(null);
 	const [expandedMemoryMemberId, setExpandedMemoryMemberId] = useState<string | null>(null);
 	const [memoryFilter, setMemoryFilter] = useState<MemoryFilterTab>("all");
+	const [scopeFilter, setScopeFilter] = useState<"all" | MemoryScope>("all");
 	const [categoryFilter, setCategoryFilter] = useState<"all" | MemoryCategory>("all");
 	const [showAddMemoryFor, setShowAddMemoryFor] = useState<string | null>(null);
 	const [batchApprovingMemberId, setBatchApprovingMemberId] = useState<string | null>(null);
@@ -100,6 +141,9 @@ export function TeamView({
 				responsibilities: newMemberResp.trim() || undefined,
 				keywords: splitTagsInput(newMemberKeywords),
 				skills: splitTagsInput(newMemberSkills),
+				gitName: newMemberGitName.trim() || undefined,
+				gitEmail: newMemberGitEmail.trim() || undefined,
+				identitySummary: newMemberIdentitySummary.trim() || undefined,
 				isPrimaryContact: newMemberPrimary,
 			});
 			setNewMemberName("");
@@ -107,9 +151,80 @@ export function TeamView({
 			setNewMemberResp("");
 			setNewMemberKeywords("");
 			setNewMemberSkills("");
+			setNewMemberGitName("");
+			setNewMemberGitEmail("");
+			setNewMemberIdentitySummary("");
 			setNewMemberPrimary(false);
 			setShowAddMember(false);
 			onNotice(`新同事「${res.member.displayName}」已加入团队`);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const openCreateOrgForm = () => {
+		setEditingOrgId(null);
+		setOrgNameInput("");
+		setOrgDomainInput("");
+		setOrgDescInput("");
+		setShowOrgForm(true);
+	};
+
+	const openEditOrgForm = (org: OrganizationDto) => {
+		setEditingOrgId(org.id);
+		setOrgNameInput(org.name);
+		setOrgDomainInput(org.gitEmailDomain);
+		setOrgDescInput(org.description);
+		setShowOrgForm(true);
+	};
+
+	const handleSaveOrg = async () => {
+		if (!orgNameInput.trim()) return;
+		try {
+			if (editingOrgId) {
+				await updateOrganization(editingOrgId, {
+					name: orgNameInput.trim(),
+					gitEmailDomain: orgDomainInput.trim(),
+					description: orgDescInput.trim(),
+				});
+				onNotice(`组织「${orgNameInput.trim()}」已更新`);
+			} else {
+				await createOrganization({
+					name: orgNameInput.trim(),
+					gitEmailDomain: orgDomainInput.trim(),
+					description: orgDescInput.trim(),
+				});
+				onNotice(`已创建组织「${orgNameInput.trim()}」`);
+			}
+			setShowOrgForm(false);
+			setEditingOrgId(null);
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const openMemberIdentityEditor = (member: TeamMemberDto) => {
+		setEditingIdentityMemberId(member.id);
+		setEditDisplayName(member.displayName);
+		setEditRoleTitle(member.roleTitle);
+		setEditGitName(member.gitName || member.displayName);
+		setEditGitEmail(member.gitEmail || `${member.id}@team.local`);
+		setEditIdentitySummary(member.identitySummary || "");
+	};
+
+	const handleSaveMemberIdentity = async (memberId: string) => {
+		try {
+			const res = await updateMemberIdentity(memberId, {
+				displayName: editDisplayName.trim() || undefined,
+				roleTitle: editRoleTitle.trim() || undefined,
+				gitName: editGitName.trim() || undefined,
+				gitEmail: editGitEmail.trim() || undefined,
+				identitySummary: editIdentitySummary.trim(),
+			});
+			setEditingIdentityMemberId(null);
+			onNotice(`已更新「${res.member.displayName}」的角色身份与 Git 署名`);
 			await onRefresh();
 		} catch (err: unknown) {
 			onError(err instanceof Error ? err.message : String(err));
@@ -233,6 +348,26 @@ export function TeamView({
 								onChange={(e) => setNewMemberSkills(e.target.value)}
 							/>
 						</div>
+						<div className="form-grid">
+							<input
+								className="input-field"
+								placeholder="Git 提交署名 Name（可选，默认使用角色名称）"
+								value={newMemberGitName}
+								onChange={(e) => setNewMemberGitName(e.target.value)}
+							/>
+							<input
+								className="input-field"
+								placeholder="Git 提交邮箱 Email（可选，默认按组织域名或 @team.local）"
+								value={newMemberGitEmail}
+								onChange={(e) => setNewMemberGitEmail(e.target.value)}
+							/>
+						</div>
+						<input
+							className="input-field"
+							placeholder="角色背景与身份定位说明（可选，仅私有保存，导出能力包时自动脱敏）"
+							value={newMemberIdentitySummary}
+							onChange={(e) => setNewMemberIdentitySummary(e.target.value)}
+						/>
 						<div className="form-footer">
 							<label className="checkbox-label">
 								<input
@@ -310,12 +445,113 @@ export function TeamView({
 					</div>
 				)}
 
+				<div className="org-strip-card">
+					<div className="banner-row">
+						<div>
+							<strong style={{ fontSize: 14 }}>组织身份与多仓库分组</strong>
+							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
+								归属同一组织的仓库可共享「组织记忆」，并可为团队成员统一后缀默认 Git 邮箱域名
+							</span>
+						</div>
+						<button type="button" className="btn-pill-outline btn-xs" onClick={openCreateOrgForm}>
+							+ 新建组织
+						</button>
+					</div>
+
+					{organizations.length === 0 ? (
+						<div className="muted-hint" style={{ margin: 0 }}>
+							尚未建立组织。成员当前使用默认 Git
+							署名（可通过下方卡片「编辑身份」单独配置）；创建组织并在「资料与仓库」绑定项目后，同一组织的仓库可共享组织经验与记忆。
+						</div>
+					) : (
+						<div className="org-chip-list">
+							{organizations.map((org) => {
+								const boundWs = workspaces.filter((ws) => ws.orgId === org.id);
+								return (
+									<div key={org.id} className="org-chip-card">
+										<div className="org-chip-head">
+											<strong style={{ fontSize: 13 }}>{org.name}</strong>
+											<button
+												type="button"
+												className="btn-inline btn-xs"
+												onClick={() => openEditOrgForm(org)}
+											>
+												编辑
+											</button>
+										</div>
+										<div className="org-chip-meta">
+											{org.gitEmailDomain ? `Git 域名：@${org.gitEmailDomain} · ` : ""}
+											{boundWs.length > 0
+												? `已关联仓库：${boundWs.map((w) => w.name).join("、")}`
+												: "尚未关联仓库（可在「资料与仓库」选择归属）"}
+										</div>
+										{org.description && <div className="org-chip-meta">{org.description}</div>}
+									</div>
+								);
+							})}
+						</div>
+					)}
+
+					{showOrgForm && (
+						<div className="memory-draft-box">
+							<div className="memory-draft-head">
+								<strong>{editingOrgId ? "编辑组织身份" : "新建组织身份"}</strong>
+							</div>
+							<div className="form-grid">
+								<input
+									className="input-field"
+									aria-label="组织名称"
+									placeholder="组织名称（如：Acme Engineering）"
+									value={orgNameInput}
+									onChange={(e) => setOrgNameInput(e.target.value)}
+								/>
+								<input
+									className="input-field"
+									aria-label="组织 Git 邮箱域名"
+									placeholder="默认 Git 邮箱域名（可选，如：acme.dev）"
+									value={orgDomainInput}
+									onChange={(e) => setOrgDomainInput(e.target.value)}
+								/>
+							</div>
+							<div className="feedback-row">
+								<input
+									className="input-field"
+									aria-label="组织简介"
+									placeholder="组织背景或共同准则摘要（可选，执行时自动注入上下文）"
+									value={orgDescInput}
+									onChange={(e) => setOrgDescInput(e.target.value)}
+								/>
+								<button
+									type="button"
+									className="btn-pill-dark btn-xs"
+									disabled={!orgNameInput.trim()}
+									onClick={() => void handleSaveOrg()}
+								>
+									保存组织
+								</button>
+								<button
+									type="button"
+									className="btn-pill-outline btn-xs"
+									onClick={() => {
+										setShowOrgForm(false);
+										setEditingOrgId(null);
+									}}
+								>
+									取消
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
+
 				<div className="team-grid">
 					{members.map((member, idx) => {
 						const tpl = templateByRoleId.get(member.templateId);
 						const memories = memoriesByMember[member.id] ?? [];
 						const isExpanded = expandedMemoryMemberId === member.id;
 						const theme = getBotTheme(idx);
+						const scopeCounts = countMemberMemoriesByScope(memories);
+						const gitIdentity = formatMemberGitIdentity(member, activeOrg);
 						const verifiedCount = memories.filter(
 							(m) => m.status === "verified" || (!m.status && m.verified),
 						).length;
@@ -328,6 +564,7 @@ export function TeamView({
 							if (memoryFilter === "candidate" && st !== "candidate") return false;
 							if (memoryFilter === "verified" && st !== "verified") return false;
 							if (memoryFilter === "archived" && st !== "rejected" && st !== "superseded") return false;
+							if (scopeFilter !== "all" && m.scope !== scopeFilter) return false;
 							const cat: MemoryCategory = m.category ?? "general";
 							if (categoryFilter !== "all" && cat !== categoryFilter) return false;
 							return true;
@@ -354,6 +591,94 @@ export function TeamView({
 										<span className="pill">{verifiedCount} 已验证</span>
 									</div>
 								</div>
+
+								<div className="member-identity-box">
+									<div className="member-identity-row">
+										<span className="member-git-pill" title="执行 Git 提交时自动注入 Author / Committer 身份">
+											Git: {gitIdentity.formatted}
+										</span>
+										<button
+											type="button"
+											className="btn-inline btn-xs"
+											onClick={() =>
+												editingIdentityMemberId === member.id
+													? setEditingIdentityMemberId(null)
+													: openMemberIdentityEditor(member)
+											}
+										>
+											{editingIdentityMemberId === member.id ? "收起身份编辑" : "编辑身份"}
+										</button>
+									</div>
+									{member.identitySummary && (
+										<div className="member-summary-line">{member.identitySummary}</div>
+									)}
+									<div className="member-memory-tiers">
+										<span>三层记忆：</span>
+										<span className="pill">岗位通用 {scopeCounts.roleGeneral}</span>
+										<span className="pill">组织记忆 {scopeCounts.companyPrivate}</span>
+										<span className="pill">仓库记忆 {scopeCounts.projectPrivate}</span>
+									</div>
+								</div>
+
+								{editingIdentityMemberId === member.id && (
+									<div className="memory-draft-box" style={{ marginBottom: 10 }}>
+										<div className="form-grid">
+											<input
+												className="input-field"
+												aria-label="显示名称"
+												placeholder="显示名称"
+												value={editDisplayName}
+												onChange={(e) => setEditDisplayName(e.target.value)}
+											/>
+											<input
+												className="input-field"
+												aria-label="职位头衔"
+												placeholder="职位头衔"
+												value={editRoleTitle}
+												onChange={(e) => setEditRoleTitle(e.target.value)}
+											/>
+										</div>
+										<div className="form-grid">
+											<input
+												className="input-field"
+												aria-label="Git Author/Committer Name"
+												placeholder="Git Name（如：R&D Lead）"
+												value={editGitName}
+												onChange={(e) => setEditGitName(e.target.value)}
+											/>
+											<input
+												className="input-field"
+												aria-label="Git Author/Committer Email"
+												placeholder="Git Email（如：rd@acme.dev）"
+												value={editGitEmail}
+												onChange={(e) => setEditGitEmail(e.target.value)}
+											/>
+										</div>
+										<input
+											className="input-field"
+											aria-label="角色背景与专长补充"
+											placeholder="身份定位与组织专长补充（不随公开模板导出）"
+											value={editIdentitySummary}
+											onChange={(e) => setEditIdentitySummary(e.target.value)}
+										/>
+										<div className="actions-row" style={{ marginTop: 4 }}>
+											<button
+												type="button"
+												className="btn-pill-dark btn-xs"
+												onClick={() => void handleSaveMemberIdentity(member.id)}
+											>
+												保存身份
+											</button>
+											<button
+												type="button"
+												className="btn-pill-outline btn-xs"
+												onClick={() => setEditingIdentityMemberId(null)}
+											>
+												取消
+											</button>
+										</div>
+									</div>
+								)}
 
 								{tpl?.responsibilities && <p className="member-resp">{tpl.responsibilities.split("\n")[0]}</p>}
 
@@ -430,6 +755,17 @@ export function TeamView({
 											<div className="memory-draft-controls">
 												<select
 													className="select-sm"
+													aria-label="按记忆层级筛选"
+													value={scopeFilter}
+													onChange={(e) => setScopeFilter(e.target.value as "all" | MemoryScope)}
+												>
+													<option value="all">全部层级</option>
+													<option value="role_general">岗位通用</option>
+													<option value="company_private">组织记忆</option>
+													<option value="project_private">仓库记忆</option>
+												</select>
+												<select
+													className="select-sm"
 													aria-label="按经验维度筛选"
 													value={categoryFilter}
 													onChange={(e) => setCategoryFilter(e.target.value as "all" | MemoryCategory)}
@@ -469,6 +805,7 @@ export function TeamView({
 											<ManualExperienceForm
 												members={members}
 												workspaces={workspaces}
+												organizations={organizations}
 												defaultMemberId={member.id}
 												allowSelectMember={false}
 												defaultWorkspaceId={defaultWorkspaceId}
@@ -490,6 +827,7 @@ export function TeamView({
 													memory={mem}
 													members={members}
 													workspaces={workspaces}
+													organizations={organizations}
 													defaultWorkspaceId={
 														(mem.sourceMatterId
 															? matterWorkspaceById.get(mem.sourceMatterId)
@@ -497,6 +835,7 @@ export function TeamView({
 													}
 													memberName={memberName}
 													workspaceName={workspaceName}
+													organizationName={organizationName}
 													onOpenMatter={onOpenMatter}
 													onOpenDeliverable={onOpenDeliverable}
 													onRefresh={onRefresh}

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
 	loadRoleTemplatesFromDir,
@@ -284,5 +288,281 @@ test("dispatchMatter defaults to 0ms unlimited Goal-mode turn timeout and honors
 		if (prevPromptEnv === undefined) delete process.env.PA_PROMPT_TIMEOUT_MS;
 		else process.env.PA_PROMPT_TIMEOUT_MS = prevPromptEnv;
 		db.close();
+	}
+});
+
+test("organization identity, 3-tier memory scope sharing/isolation, and real Git commit attribution per member", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-org-git-identity-"));
+	const repoA = join(tempRoot, "repo-a");
+	const repoB = join(tempRoot, "repo-b");
+	const repoC = join(tempRoot, "repo-c");
+	for (const repo of [repoA, repoB, repoC]) {
+		mkdirSync(repo, { recursive: true });
+		execFileSync("git", ["init"], { cwd: repo });
+		execFileSync("git", ["config", "user.name", "Wrong Local User"], { cwd: repo });
+		execFileSync("git", ["config", "user.email", "wrong-local@example.com"], { cwd: repo });
+	}
+
+	const db = openPersonalAgentDatabase(":memory:");
+	try {
+		const store = new PersonalAgentStore(db);
+		const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+		const workers: FakeRpcWorker[] = [];
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			noSession: true,
+			workerFactory: (opts) => {
+				const w = new FakeRpcWorker(opts, async () => {
+					if (opts.env?.PA_MEMBER_ID === "engineering-manager") {
+						execFileSync("git", ["commit", "--allow-empty", "-m", "feat: attributed commit"], {
+							cwd: opts.cwd,
+							env: { ...process.env, ...opts.env },
+						});
+					}
+					return "done";
+				});
+				workers.push(w);
+				return w;
+			},
+		});
+
+		const orgAcme = store.upsertOrganization({
+			id: "org-acme",
+			name: "Acme Engineering",
+			gitEmailDomain: "acme.dev",
+			description: "Core engineering org",
+		});
+		const orgBeta = store.upsertOrganization({
+			id: "org-beta",
+			name: "Beta Labs",
+			gitEmailDomain: "beta.io",
+		});
+
+		const wsA = store.upsertWorkspace({ id: "ws-a", orgId: orgAcme.id, name: "service-a", repoPath: repoA });
+		const wsB = store.upsertWorkspace({ id: "ws-b", orgId: orgAcme.id, name: "service-b", repoPath: repoB });
+		const wsC = store.upsertWorkspace({ id: "ws-c", name: "standalone-c", repoPath: repoC });
+
+		// Customize member identities:
+		// 1) product-manager overrides gitName & identitySummary, keeps default email so org domain (@acme.dev) applies
+		store.updateMemberIdentity("product-manager", {
+			gitName: "PM Alice",
+			identitySummary: "Owns checkout product metrics across Acme",
+		});
+		// 2) engineering-manager overrides explicit gitName + custom email (must NOT be overwritten by org domain)
+		store.updateMemberIdentity("engineering-manager", {
+			gitName: "Eng Bob",
+			gitEmail: "bob@custom.org",
+			identitySummary: "Leads backend storage",
+		});
+
+		// Re-syncing public templates must preserve private customized member identities
+		orchestrator.syncRoleTemplates(templates);
+		const syncedPm = store.getMember("product-manager")!;
+		assert.equal(syncedPm.gitName, "PM Alice");
+		assert.equal(syncedPm.gitEmail, "product-manager@team.local");
+		assert.equal(syncedPm.identitySummary, "Owns checkout product metrics across Acme");
+
+		// Seed 3-tier memories
+		store.addMemory({
+			memberId: "product-manager",
+			scope: "role_general",
+			verified: true,
+			content: "GLOBAL_RULE: Always list clear acceptance criteria",
+		});
+		store.addMemory({
+			memberId: "product-manager",
+			scope: "company_private",
+			orgId: orgAcme.id,
+			verified: true,
+			content: "ACME_ORG_MEM: All Acme services release on Thursdays",
+		});
+		store.addMemory({
+			memberId: "product-manager",
+			scope: "company_private",
+			orgId: orgBeta.id,
+			verified: true,
+			content: "BETA_ORG_MEM: Beta internal rule must never leak to Acme",
+		});
+		store.addMemory({
+			memberId: "product-manager",
+			scope: "project_private",
+			workspaceId: wsA.id,
+			verified: true,
+			content: "REPO_A_MEM: repo-a uses Postgres 16",
+		});
+		store.addMemory({
+			memberId: "product-manager",
+			scope: "project_private",
+			workspaceId: wsB.id,
+			verified: true,
+			content: "REPO_B_MEM: repo-b uses SQLite",
+		});
+
+		// Dispatch PM in wsA (Acme)
+		await orchestrator.dispatchMatter({
+			prompt: "分析 service-a 需求",
+			preferredMemberId: "product-manager",
+			workspaceId: wsA.id,
+		});
+		const pmWorkerA = workers[0]!;
+		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_NAME, "PM Alice");
+		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_EMAIL, "product-manager@acme.dev");
+		assert.equal(pmWorkerA.options.env?.GIT_COMMITTER_EMAIL, "product-manager@acme.dev");
+		assert.equal(pmWorkerA.options.env?.PA_ORG_ID, "org-acme");
+		assert.equal(pmWorkerA.options.env?.PA_ORG_NAME, "Acme Engineering");
+
+		const ctxA = pmWorkerA.options.env?.PA_MEMBER_CONTEXT ?? "";
+		assert.match(ctxA, /## 角色与组织身份（Role & Organization Identity）/);
+		assert.match(ctxA, /Acme Engineering/);
+		assert.match(ctxA, /PM Alice <product-manager@acme\.dev>/);
+		assert.match(ctxA, /Owns checkout product metrics across Acme/);
+		assert.match(ctxA, /GLOBAL_RULE/);
+		assert.match(ctxA, /ACME_ORG_MEM/);
+		assert.match(ctxA, /REPO_A_MEM/);
+		assert.doesNotMatch(ctxA, /REPO_B_MEM/);
+		assert.doesNotMatch(ctxA, /BETA_ORG_MEM/);
+
+		// Dispatch PM in wsB (same Acme org, different repo!)
+		await orchestrator.dispatchMatter({
+			prompt: "分析 service-b 需求",
+			preferredMemberId: "product-manager",
+			workspaceId: wsB.id,
+		});
+		const ctxB = workers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		assert.match(ctxB, /GLOBAL_RULE/);
+		assert.match(ctxB, /ACME_ORG_MEM/);
+		assert.match(ctxB, /REPO_B_MEM/);
+		assert.doesNotMatch(ctxB, /REPO_A_MEM/);
+		assert.doesNotMatch(ctxB, /BETA_ORG_MEM/);
+
+		// Dispatch PM in wsC (standalone workspace without org)
+		await orchestrator.dispatchMatter({
+			prompt: "分析独立仓库需求",
+			preferredMemberId: "product-manager",
+			workspaceId: wsC.id,
+		});
+		const ctxC = workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		assert.equal(workers[2]?.options.env?.GIT_AUTHOR_EMAIL, "product-manager@team.local");
+		assert.match(ctxC, /GLOBAL_RULE/);
+		assert.doesNotMatch(ctxC, /ACME_ORG_MEM/);
+		assert.doesNotMatch(ctxC, /BETA_ORG_MEM/);
+		assert.doesNotMatch(ctxC, /REPO_A_MEM/);
+
+		// Dispatch engineering-manager in wsA: executes real git commit and proves custom email overrides repo config + org domain
+		await orchestrator.dispatchMatter({
+			prompt: "提交一笔研发变更",
+			preferredMemberId: "engineering-manager",
+			workspaceId: wsA.id,
+		});
+		const gitLog = execFileSync("git", ["log", "-1", "--format=%an|%ae|%cn|%ce"], {
+			cwd: repoA,
+			encoding: "utf8",
+		}).trim();
+		assert.equal(gitLog, "Eng Bob|bob@custom.org|Eng Bob|bob@custom.org");
+	} finally {
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});
+
+test("openPersonalAgentDatabase upgrades legacy databases without member identity or org columns", () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-legacy-migration-"));
+	const dbPath = join(tempRoot, "legacy.sqlite");
+	const raw = new DatabaseSync(dbPath);
+	raw.exec(`
+		CREATE TABLE team_members (
+			id TEXT PRIMARY KEY,
+			template_id TEXT NOT NULL,
+			display_name TEXT NOT NULL,
+			role_title TEXT NOT NULL,
+			is_primary_contact INTEGER NOT NULL DEFAULT 0,
+			provider TEXT NOT NULL,
+			model TEXT NOT NULL,
+			thinking_level TEXT NOT NULL,
+			keywords_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE workspace_links (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			repo_path TEXT NOT NULL UNIQUE,
+			default_branch TEXT NOT NULL DEFAULT 'main',
+			description TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		);
+		CREATE TABLE matters (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open',
+			lead_member_id TEXT,
+			workspace_id TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE member_memories (
+			id TEXT PRIMARY KEY,
+			member_id TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			workspace_id TEXT,
+			content TEXT NOT NULL,
+			verified INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL
+		);
+		CREATE TABLE worker_sessions (
+			id TEXT PRIMARY KEY,
+			member_id TEXT NOT NULL,
+			matter_id TEXT,
+			workspace_id TEXT,
+			pi_session_id TEXT,
+			session_file TEXT,
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE TABLE deliverables (
+			id TEXT PRIMARY KEY,
+			matter_id TEXT NOT NULL,
+			member_id TEXT NOT NULL,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL DEFAULT '',
+			content_or_path TEXT NOT NULL,
+			service_url TEXT,
+			version INTEGER NOT NULL DEFAULT 1,
+			feedback TEXT,
+			created_at TEXT NOT NULL
+		);
+		INSERT INTO team_members VALUES (
+			'legacy-pm', 'product-manager', 'Legacy PM', 'Product Manager', 1,
+			'kimi-coding', 'kimi-for-coding', 'high', '[]', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+		);
+		INSERT INTO workspace_links VALUES ('ws-1', 'legacy-repo', '/tmp/legacy-repo', 'main', '', '2026-01-01T00:00:00Z');
+		INSERT INTO member_memories VALUES ('mem-1', 'legacy-pm', 'company_private', 'ws-1', 'Legacy workspace memory', 1, '2026-01-01T00:00:00Z');
+	`);
+	raw.close();
+
+	const db = openPersonalAgentDatabase(dbPath);
+	try {
+		const store = new PersonalAgentStore(db);
+		const member = store.getMember("legacy-pm");
+		assert.ok(member);
+		assert.equal(member.gitName, "Legacy PM");
+		assert.equal(member.gitEmail, "legacy-pm@team.local");
+		assert.equal(member.identitySummary, "");
+
+		const ws = store.getWorkspace("ws-1");
+		assert.ok(ws);
+		assert.equal(ws.orgId, null);
+
+		const relevant = store.listRelevantMemories("legacy-pm", "ws-1");
+		assert.equal(relevant.length, 1);
+		assert.equal(relevant[0]?.orgId, null);
+		assert.equal(relevant[0]?.workspaceId, "ws-1");
+	} finally {
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });

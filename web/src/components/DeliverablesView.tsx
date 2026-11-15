@@ -21,6 +21,7 @@ interface DeliverablesViewProps {
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
+	organizationName: (id: string | null) => string | null;
 	onSubmitFeedback: (
 		deliverableId: string,
 		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
@@ -50,6 +51,7 @@ export function DeliverablesView({
 	previewUrlFor,
 	memberName,
 	workspaceName,
+	organizationName,
 	onSubmitFeedback,
 	onDistillExperiences,
 	onCancelDistill,
@@ -297,6 +299,7 @@ export function DeliverablesView({
 									workspaceName={workspaceName(matterWorkspaceMap.get(activeDeliverable.matterId) ?? null)}
 									members={bootstrap?.members ?? []}
 									workspaces={bootstrap?.workspaces ?? []}
+									organizations={bootstrap?.organizations ?? []}
 									memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 									participantIds={collectMatterParticipantIds({
 										matter: bootstrap?.matters.find((m) => m.id === activeDeliverable.matterId) ?? null,
@@ -306,6 +309,7 @@ export function DeliverablesView({
 									})}
 									resolveMemberName={memberName}
 									resolveWorkspaceName={workspaceName}
+									resolveOrganizationName={organizationName}
 									viewUrl={previewUrlFor(activeDeliverable)}
 									onSubmitFeedback={onSubmitFeedback}
 									onDistillExperiences={onDistillExperiences}

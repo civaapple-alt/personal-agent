@@ -46,6 +46,7 @@ interface ChatStageProps {
 	selectedWorkspace: WorkspaceDto | null;
 	selectedWorkspaceId: string;
 	workspaces: WorkspaceDto[];
+	organizations: import("../api.ts").OrganizationDto[];
 	members: TeamMemberDto[];
 	selectedMemberId: string;
 	headerContact: TeamMemberDto | null;
@@ -69,6 +70,7 @@ interface ChatStageProps {
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
+	organizationName: (id: string | null) => string | null;
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	onComposerTextChange: (value: string) => void;
 	onAddImages: (files: FileList | File[]) => void;
@@ -96,6 +98,7 @@ export function ChatStage({
 	selectedWorkspace,
 	selectedWorkspaceId,
 	workspaces,
+	organizations,
 	members,
 	selectedMemberId,
 	headerContact,
@@ -119,6 +122,7 @@ export function ChatStage({
 	memoriesByMember,
 	memberName,
 	workspaceName,
+	organizationName,
 	previewUrlFor,
 	onComposerTextChange,
 	onAddImages,
@@ -566,8 +570,10 @@ export function ChatStage({
 									memories={matterMemories}
 									members={members}
 									workspaces={workspaces}
+									organizations={organizations}
 									memberName={memberName}
 									workspaceName={workspaceName}
+									organizationName={organizationName}
 									title="本事项团队经验复盘"
 									lastDistillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
 									distilling={distillingMatter}

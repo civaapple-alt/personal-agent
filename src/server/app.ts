@@ -473,6 +473,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						responsibilities: t.sections.responsibilitiesAndBoundaries,
 					})),
 					workspaces: store.listWorkspaces(),
+					organizations: store.listOrganizations(),
 					matters: store.listMatters(),
 					deliverables: store.listDeliverables(),
 					pendingDialogs: dialogBroker.listPending(),
@@ -765,6 +766,47 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				return;
 			}
 
+			if (method === "GET" && pathname === "/api/organizations") {
+				sendJson(res, 200, { organizations: store.listOrganizations() });
+				return;
+			}
+
+			if (method === "POST" && pathname === "/api/organizations") {
+				const body = await readJsonBody(req);
+				const name = typeof body.name === "string" ? body.name.trim() : "";
+				if (!name) {
+					sendError(res, 400, "name is required");
+					return;
+				}
+				const organization = store.upsertOrganization({
+					id: typeof body.id === "string" && body.id.trim() ? body.id.trim() : undefined,
+					name,
+					gitEmailDomain: typeof body.gitEmailDomain === "string" ? body.gitEmailDomain : "",
+					description: typeof body.description === "string" ? body.description : "",
+				});
+				broadcast("organization_updated", { organization });
+				sendJson(res, 201, { organization });
+				return;
+			}
+
+			const orgPatchMatch = pathname.match(/^\/api\/organizations\/([^/]+)$/);
+			if (method === "PATCH" && orgPatchMatch) {
+				const orgId = decodeURIComponent(orgPatchMatch[1]!);
+				if (!store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const organization = store.updateOrganization(orgId, {
+					name: typeof body.name === "string" ? body.name : undefined,
+					gitEmailDomain: typeof body.gitEmailDomain === "string" ? body.gitEmailDomain : undefined,
+					description: typeof body.description === "string" ? body.description : undefined,
+				});
+				broadcast("organization_updated", { organization });
+				sendJson(res, 200, { organization });
+				return;
+			}
+
 			if (method === "POST" && pathname === "/api/workspaces") {
 				const body = await readJsonBody(req);
 				const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -773,7 +815,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "name and repoPath are required");
 					return;
 				}
+				const orgId =
+					body.orgId === null
+						? null
+						: typeof body.orgId === "string" && body.orgId.trim()
+							? body.orgId.trim()
+							: undefined;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
 				const ws = store.upsertWorkspace({
+					orgId,
 					name,
 					repoPath,
 					defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : "main",
@@ -781,6 +834,35 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				});
 				broadcast("workspace_updated", ws);
 				sendJson(res, 201, { workspace: ws });
+				return;
+			}
+
+			const wsPatchMatch = pathname.match(/^\/api\/workspaces\/([^/]+)$/);
+			if (method === "PATCH" && wsPatchMatch) {
+				const workspaceId = decodeURIComponent(wsPatchMatch[1]!);
+				if (!store.getWorkspace(workspaceId)) {
+					sendError(res, 404, `Workspace not found: ${workspaceId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const orgId =
+					body.orgId === null
+						? null
+						: typeof body.orgId === "string" && body.orgId.trim()
+							? body.orgId.trim()
+							: undefined;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
+				const ws = store.updateWorkspace(workspaceId, {
+					orgId,
+					name: typeof body.name === "string" ? body.name : undefined,
+					defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : undefined,
+					description: typeof body.description === "string" ? body.description : undefined,
+				});
+				broadcast("workspace_updated", ws);
+				sendJson(res, 200, { workspace: ws });
 				return;
 			}
 
@@ -866,9 +948,39 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					await writeFile(join(rolesDir, `${rawId}.md`), serializeRoleTemplateMarkdown(template), "utf8");
 				}
 
-				const member = orchestrator.registerRoleTemplate(template);
+				const registered = orchestrator.registerRoleTemplate(template);
+				const member =
+					typeof body.gitName === "string" ||
+					typeof body.gitEmail === "string" ||
+					typeof body.identitySummary === "string"
+						? store.updateMemberIdentity(registered.id, {
+								gitName: typeof body.gitName === "string" ? body.gitName : undefined,
+								gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
+								identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
+							})
+						: registered;
 				broadcast("team_updated", { memberId: member.id });
 				sendJson(res, 201, { member });
+				return;
+			}
+
+			const memberPatchMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
+			if (method === "PATCH" && memberPatchMatch) {
+				const memberId = decodeURIComponent(memberPatchMatch[1]!);
+				if (!store.getMember(memberId)) {
+					sendError(res, 404, `Member not found: ${memberId}`);
+					return;
+				}
+				const body = await readJsonBody(req);
+				const member = store.updateMemberIdentity(memberId, {
+					displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+					roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : undefined,
+					gitName: typeof body.gitName === "string" ? body.gitName : undefined,
+					gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
+					identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
+				});
+				broadcast("team_updated", { memberId: member.id });
+				sendJson(res, 200, { member });
 				return;
 			}
 
@@ -944,8 +1056,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, `Unsupported memory category: ${String(body.category)}`);
 					return;
 				}
+				const orgId =
+					scope === "company_private" && typeof body.orgId === "string" && body.orgId.trim()
+						? body.orgId.trim()
+						: null;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
 				const workspaceId =
-					scope === "role_general"
+					scope === "role_general" || orgId
 						? null
 						: typeof body.workspaceId === "string" && body.workspaceId
 							? body.workspaceId
@@ -968,6 +1088,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					memberId,
 					scope,
 					category,
+					orgId,
 					workspaceId,
 					content,
 					rationale: typeof body.rationale === "string" ? body.rationale.trim() : "",
@@ -1056,6 +1177,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, `Unsupported memory category: ${String(body.category)}`);
 					return;
 				}
+				const orgId =
+					body.orgId === null
+						? null
+						: typeof body.orgId === "string" && body.orgId.trim()
+							? body.orgId.trim()
+							: undefined;
+				if (orgId && !store.getOrganization(orgId)) {
+					sendError(res, 404, `Organization not found: ${orgId}`);
+					return;
+				}
 				const workspaceId =
 					body.workspaceId === null
 						? null
@@ -1082,6 +1213,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					content: typeof body.content === "string" ? body.content : undefined,
 					scope,
 					category,
+					orgId,
 					workspaceId,
 					status,
 					rationale: typeof body.rationale === "string" ? body.rationale : undefined,

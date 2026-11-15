@@ -16,6 +16,7 @@ import type {
 	MemoryCategory,
 	MemoryScope,
 	MemoryStatus,
+	Organization,
 	TeamMember,
 	WorkerSessionRecord,
 	WorkspaceLink,
@@ -23,6 +24,18 @@ import type {
 
 function nowIso(): string {
 	return new Date().toISOString();
+}
+
+export function resolveEffectiveGitIdentity(
+	member: Pick<TeamMember, "id" | "displayName" | "gitName" | "gitEmail">,
+	organization?: Pick<Organization, "gitEmailDomain"> | null,
+): { gitName: string; gitEmail: string } {
+	const gitName = member.gitName.trim() || member.displayName.trim() || member.id;
+	const rawEmail = member.gitEmail.trim();
+	const domain = organization?.gitEmailDomain.trim().replace(/^@+/, "") ?? "";
+	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;
+	const gitEmail = isDefaultEmail && domain ? `${member.id}@${domain}` : rawEmail || `${member.id}@team.local`;
+	return { gitName, gitEmail };
 }
 
 export function normalizeMemoryCategory(raw: unknown): MemoryCategory {
@@ -83,15 +96,29 @@ export class PersonalAgentStore {
 		model: string;
 		thinkingLevel: ThinkingLevel;
 		keywords: string[];
+		gitName?: string;
+		gitEmail?: string;
+		identitySummary?: string;
 	}): TeamMember {
 		const timestamp = nowIso();
 		const existing = this.getMember(input.id);
+		const gitName =
+			input.gitName !== undefined
+				? input.gitName.trim() || input.displayName.trim()
+				: existing?.gitName.trim() || input.displayName.trim();
+		const gitEmail =
+			input.gitEmail !== undefined
+				? input.gitEmail.trim() || `${input.id}@team.local`
+				: existing?.gitEmail.trim() || `${input.id}@team.local`;
+		const identitySummary =
+			input.identitySummary !== undefined ? input.identitySummary.trim() : (existing?.identitySummary ?? "");
 		if (existing) {
 			this.db
 				.prepare(
 					`UPDATE team_members
 					 SET template_id = ?, display_name = ?, role_title = ?, is_primary_contact = ?,
-					     provider = ?, model = ?, thinking_level = ?, keywords_json = ?, updated_at = ?
+					     provider = ?, model = ?, thinking_level = ?, keywords_json = ?,
+					     git_name = ?, git_email = ?, identity_summary = ?, updated_at = ?
 					 WHERE id = ?`,
 				)
 				.run(
@@ -103,6 +130,9 @@ export class PersonalAgentStore {
 					input.model,
 					input.thinkingLevel,
 					JSON.stringify(input.keywords),
+					gitName,
+					gitEmail,
+					identitySummary,
 					timestamp,
 					input.id,
 				);
@@ -113,8 +143,9 @@ export class PersonalAgentStore {
 			.prepare(
 				`INSERT INTO team_members (
 					id, template_id, display_name, role_title, is_primary_contact,
-					provider, model, thinking_level, keywords_json, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					provider, model, thinking_level, keywords_json,
+					git_name, git_email, identity_summary, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				input.id,
@@ -126,10 +157,47 @@ export class PersonalAgentStore {
 				input.model,
 				input.thinkingLevel,
 				JSON.stringify(input.keywords),
+				gitName,
+				gitEmail,
+				identitySummary,
 				timestamp,
 				timestamp,
 			);
 		return this.getMember(input.id)!;
+	}
+
+	updateMemberIdentity(
+		memberId: string,
+		patch: {
+			displayName?: string;
+			roleTitle?: string;
+			gitName?: string;
+			gitEmail?: string;
+			identitySummary?: string;
+		},
+	): TeamMember {
+		const existing = this.getMember(memberId);
+		if (!existing) {
+			throw new Error(`Member not found: ${memberId}`);
+		}
+		const timestamp = nowIso();
+		const displayName =
+			patch.displayName !== undefined ? patch.displayName.trim() || existing.displayName : existing.displayName;
+		const roleTitle =
+			patch.roleTitle !== undefined ? patch.roleTitle.trim() || existing.roleTitle : existing.roleTitle;
+		const gitName = patch.gitName !== undefined ? patch.gitName.trim() || displayName : existing.gitName;
+		const gitEmail =
+			patch.gitEmail !== undefined ? patch.gitEmail.trim() || `${existing.id}@team.local` : existing.gitEmail;
+		const identitySummary =
+			patch.identitySummary !== undefined ? patch.identitySummary.trim() : existing.identitySummary;
+		this.db
+			.prepare(
+				`UPDATE team_members
+				 SET display_name = ?, role_title = ?, git_name = ?, git_email = ?, identity_summary = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(displayName, roleTitle, gitName, gitEmail, identitySummary, timestamp, memberId);
+		return this.getMember(memberId)!;
 	}
 
 	getMember(id: string): TeamMember | null {
@@ -170,6 +238,7 @@ export class PersonalAgentStore {
 		memberId: string;
 		scope: MemoryScope;
 		category?: MemoryCategory;
+		orgId?: string | null;
 		workspaceId?: string | null;
 		content: string;
 		rationale?: string;
@@ -185,24 +254,34 @@ export class PersonalAgentStore {
 		const status: MemoryStatus = input.status ?? (input.verified ? "verified" : "candidate");
 		const verified = status === "verified";
 		const category = normalizeMemoryCategory(input.category);
-		const workspaceId = input.scope === "role_general" ? null : (input.workspaceId ?? null);
+		const orgId = input.scope === "company_private" ? (input.orgId ?? null) : null;
+		const workspaceId =
+			input.scope === "role_general"
+				? null
+				: input.scope === "company_private" && orgId
+					? null
+					: (input.workspaceId ?? null);
 		const supersedesId = input.supersedesMemoryId ?? null;
-		this.validateMemoryReplacement({ id, memberId: input.memberId, scope: input.scope, workspaceId }, supersedesId);
+		this.validateMemoryReplacement(
+			{ id, memberId: input.memberId, scope: input.scope, orgId, workspaceId },
+			supersedesId,
+		);
 		this.db
 			.prepare(
 				`INSERT INTO member_memories (
-					id, member_id, scope, category, workspace_id, content, rationale,
+					id, member_id, scope, category, org_id, workspace_id, content, rationale,
 					source_matter_id, source_deliverable_id, status, verified,
 					superseded_by, supersedes_memory_id,
 					applied_count, positive_count, negative_count, last_applied_at,
 					created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
 			)
 			.run(
 				id,
 				input.memberId,
 				input.scope,
 				category,
+				orgId,
 				workspaceId,
 				input.content,
 				input.rationale ?? "",
@@ -233,15 +312,19 @@ export class PersonalAgentStore {
 		scope: MemoryScope,
 		workspaceId: string | null,
 		content: string,
+		orgId: string | null = null,
 	): MemberMemory | null {
 		const normalized = content.replace(/\s+/g, " ").trim().toLowerCase();
 		if (!normalized) return null;
-		const effectiveWs = scope === "role_general" ? null : workspaceId;
+		const effectiveOrgId = scope === "company_private" ? orgId : null;
+		const effectiveWs =
+			scope === "role_general" ? null : scope === "company_private" && effectiveOrgId ? null : workspaceId;
 		return (
 			this.listMemberMemories(memberId).find(
 				(memory) =>
 					(memory.status === "candidate" || memory.status === "verified") &&
 					memory.scope === scope &&
+					memory.orgId === effectiveOrgId &&
 					memory.workspaceId === effectiveWs &&
 					memory.content.replace(/\s+/g, " ").trim().toLowerCase() === normalized,
 			) ?? null
@@ -255,6 +338,7 @@ export class PersonalAgentStore {
 			content?: string;
 			scope?: MemoryScope;
 			category?: MemoryCategory;
+			orgId?: string | null;
 			workspaceId?: string | null;
 			status?: MemoryStatus;
 			rationale?: string;
@@ -271,12 +355,16 @@ export class PersonalAgentStore {
 		}
 		const nextScope = patch.scope ?? existing.scope;
 		const nextCategory = patch.category !== undefined ? normalizeMemoryCategory(patch.category) : existing.category;
+		const nextOrgId =
+			nextScope === "company_private" ? (patch.orgId !== undefined ? patch.orgId : existing.orgId) : null;
 		const nextWorkspaceId =
 			nextScope === "role_general"
 				? null
-				: patch.workspaceId !== undefined
-					? patch.workspaceId
-					: existing.workspaceId;
+				: nextScope === "company_private" && nextOrgId
+					? null
+					: patch.workspaceId !== undefined
+						? patch.workspaceId
+						: existing.workspaceId;
 		const nextContent = patch.content !== undefined ? patch.content.trim() : existing.content;
 		if (!nextContent) throw new Error("Memory content cannot be empty");
 		const nextStatus = patch.status ?? existing.status;
@@ -287,13 +375,13 @@ export class PersonalAgentStore {
 			patch.supersedesMemoryId !== undefined ? patch.supersedesMemoryId : existing.supersedesMemoryId;
 
 		this.validateMemoryReplacement(
-			{ id, memberId: nextMemberId, scope: nextScope, workspaceId: nextWorkspaceId },
+			{ id, memberId: nextMemberId, scope: nextScope, orgId: nextOrgId, workspaceId: nextWorkspaceId },
 			nextSupersedesId,
 		);
 		this.db
 			.prepare(
 				`UPDATE member_memories
-				 SET member_id = ?, scope = ?, category = ?, workspace_id = ?, content = ?, rationale = ?,
+				 SET member_id = ?, scope = ?, category = ?, org_id = ?, workspace_id = ?, content = ?, rationale = ?,
 				     status = ?, verified = ?, superseded_by = ?, supersedes_memory_id = ?, updated_at = ?
 				 WHERE id = ?`,
 			)
@@ -301,6 +389,7 @@ export class PersonalAgentStore {
 				nextMemberId,
 				nextScope,
 				nextCategory,
+				nextOrgId,
 				nextWorkspaceId,
 				nextContent,
 				nextRationale,
@@ -319,12 +408,19 @@ export class PersonalAgentStore {
 	}
 
 	validateMemoryReplacement(
-		replacement: { id?: string; memberId: string; scope: MemoryScope; workspaceId: string | null },
+		replacement: {
+			id?: string;
+			memberId: string;
+			scope: MemoryScope;
+			orgId?: string | null;
+			workspaceId: string | null;
+		},
 		targetId: string | null,
 	): void {
 		const sameScope = (memory: MemberMemory) =>
 			memory.memberId === replacement.memberId &&
 			memory.scope === replacement.scope &&
+			memory.orgId === (replacement.orgId ?? null) &&
 			memory.workspaceId === replacement.workspaceId;
 		if (replacement.id) {
 			const existing = this.getMemory(replacement.id);
@@ -338,7 +434,7 @@ export class PersonalAgentStore {
 				const related = this.getMemory(id);
 				if (related && !sameScope(related))
 					throw new MemoryValidationError(
-						"Replacement must retain the same member, scope and workspace as its linked memories",
+						"Replacement must retain the same member, scope, organization and workspace as its linked memories",
 					);
 			}
 		}
@@ -351,7 +447,7 @@ export class PersonalAgentStore {
 		const target = this.getMemory(targetId);
 		if (!target || !sameScope(target))
 			throw new MemoryValidationError(
-				"Replacement must have the same member, scope and workspace as the prior memory",
+				"Replacement must have the same member, scope, organization and workspace as the prior memory",
 			);
 		const visited = new Set<string>();
 		let cursor: MemberMemory | null = target;
@@ -373,18 +469,25 @@ export class PersonalAgentStore {
 			.run(replacementId, timestamp, targetMemoryId);
 	}
 
-	/** Private organization facts require an explicit workspace until organization identity exists. */
+	/** Inject role-general facts, organization-shared memory for the workspace's org (or single-workspace legacy company memory), and workspace-specific facts. */
 	listRelevantMemories(
 		memberId: string,
 		workspaceId: string | null,
 		options?: { includeCandidates?: boolean },
 	): MemberMemory[] {
 		const includeCandidates = options?.includeCandidates ?? true;
+		const workspace = workspaceId ? this.getWorkspace(workspaceId) : null;
+		const activeOrgId = workspace?.orgId ?? null;
 		return this.listMemberMemories(memberId)
 			.filter((memory) => {
 				if (memory.status === "rejected" || memory.status === "superseded") return false;
 				if (!includeCandidates && memory.status !== "verified") return false;
-				return memory.scope === "role_general" || (workspaceId !== null && memory.workspaceId === workspaceId);
+				if (memory.scope === "role_general") return true;
+				if (memory.scope === "company_private") {
+					if (activeOrgId !== null && memory.orgId === activeOrgId) return true;
+					return workspaceId !== null && !memory.orgId && memory.workspaceId === workspaceId;
+				}
+				return workspaceId !== null && memory.workspaceId === workspaceId;
 			})
 			.sort((a, b) => {
 				const rankA = a.status === "verified" ? 0 : 1;
@@ -627,8 +730,79 @@ export class PersonalAgentStore {
 		}));
 	}
 
+	upsertOrganization(input: {
+		id?: string;
+		name: string;
+		gitEmailDomain?: string;
+		description?: string;
+	}): Organization {
+		const name = input.name.trim();
+		if (!name) throw new Error("Organization name is required");
+		const timestamp = nowIso();
+		const gitEmailDomain = (input.gitEmailDomain ?? "").trim().replace(/^@+/, "");
+		const description = (input.description ?? "").trim();
+		if (input.id) {
+			const existing = this.getOrganization(input.id);
+			if (existing) {
+				this.db
+					.prepare(
+						`UPDATE organizations
+						 SET name = ?, git_email_domain = ?, description = ?, updated_at = ?
+						 WHERE id = ?`,
+					)
+					.run(name, gitEmailDomain, description, timestamp, existing.id);
+				return this.getOrganization(existing.id)!;
+			}
+		}
+		const id = input.id?.trim() || `org_${randomUUID()}`;
+		this.db
+			.prepare(
+				`INSERT INTO organizations (id, name, git_email_domain, description, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?)`,
+			)
+			.run(id, name, gitEmailDomain, description, timestamp, timestamp);
+		return this.getOrganization(id)!;
+	}
+
+	updateOrganization(
+		id: string,
+		patch: { name?: string; gitEmailDomain?: string; description?: string },
+	): Organization {
+		const existing = this.getOrganization(id);
+		if (!existing) throw new Error(`Organization not found: ${id}`);
+		const timestamp = nowIso();
+		const name = patch.name !== undefined ? patch.name.trim() || existing.name : existing.name;
+		const gitEmailDomain =
+			patch.gitEmailDomain !== undefined ? patch.gitEmailDomain.trim().replace(/^@+/, "") : existing.gitEmailDomain;
+		const description = patch.description !== undefined ? patch.description.trim() : existing.description;
+		this.db
+			.prepare(
+				`UPDATE organizations
+				 SET name = ?, git_email_domain = ?, description = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(name, gitEmailDomain, description, timestamp, id);
+		return this.getOrganization(id)!;
+	}
+
+	getOrganization(id: string): Organization | null {
+		const row = this.db.prepare("SELECT * FROM organizations WHERE id = ?").get(id) as
+			| Record<string, unknown>
+			| undefined;
+		return row ? this.mapOrganization(row) : null;
+	}
+
+	listOrganizations(): Organization[] {
+		const rows = this.db.prepare("SELECT * FROM organizations ORDER BY created_at ASC").all() as Record<
+			string,
+			unknown
+		>[];
+		return rows.map((row) => this.mapOrganization(row));
+	}
+
 	upsertWorkspace(input: {
 		id?: string;
+		orgId?: string | null;
 		name: string;
 		repoPath: string;
 		defaultBranch?: string;
@@ -638,13 +812,15 @@ export class PersonalAgentStore {
 			| Record<string, unknown>
 			| undefined;
 		if (existing) {
+			const nextOrgId = input.orgId !== undefined ? input.orgId : existing.org_id ? String(existing.org_id) : null;
 			this.db
 				.prepare(
 					`UPDATE workspace_links
-					 SET name = ?, default_branch = ?, description = ?
+					 SET org_id = ?, name = ?, default_branch = ?, description = ?
 					 WHERE id = ?`,
 				)
 				.run(
+					nextOrgId,
 					input.name,
 					input.defaultBranch ?? String(existing.default_branch),
 					input.description ?? String(existing.description),
@@ -657,10 +833,44 @@ export class PersonalAgentStore {
 		const timestamp = nowIso();
 		this.db
 			.prepare(
-				`INSERT INTO workspace_links (id, name, repo_path, default_branch, description, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO workspace_links (id, org_id, name, repo_path, default_branch, description, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			)
-			.run(id, input.name, input.repoPath, input.defaultBranch ?? "main", input.description ?? "", timestamp);
+			.run(
+				id,
+				input.orgId ?? null,
+				input.name,
+				input.repoPath,
+				input.defaultBranch ?? "main",
+				input.description ?? "",
+				timestamp,
+			);
+		return this.getWorkspace(id)!;
+	}
+
+	updateWorkspace(
+		id: string,
+		patch: { orgId?: string | null; name?: string; defaultBranch?: string; description?: string },
+	): WorkspaceLink {
+		const existing = this.getWorkspace(id);
+		if (!existing) throw new Error(`Workspace not found: ${id}`);
+		const nextOrgId = patch.orgId !== undefined ? patch.orgId : existing.orgId;
+		if (nextOrgId && !this.getOrganization(nextOrgId)) {
+			throw new Error(`Organization not found: ${nextOrgId}`);
+		}
+		const nextName = patch.name !== undefined ? patch.name.trim() || existing.name : existing.name;
+		const nextBranch =
+			patch.defaultBranch !== undefined
+				? patch.defaultBranch.trim() || existing.defaultBranch
+				: existing.defaultBranch;
+		const nextDesc = patch.description !== undefined ? patch.description.trim() : existing.description;
+		this.db
+			.prepare(
+				`UPDATE workspace_links
+				 SET org_id = ?, name = ?, default_branch = ?, description = ?
+				 WHERE id = ?`,
+			)
+			.run(nextOrgId, nextName, nextBranch, nextDesc, id);
 		return this.getWorkspace(id)!;
 	}
 
@@ -887,6 +1097,7 @@ export class PersonalAgentStore {
 						candidate.scope,
 						candidate.workspaceId ?? null,
 						candidate.content,
+						candidate.orgId ?? null,
 					)
 				) {
 					skippedDuplicates++;
@@ -1085,17 +1296,35 @@ export class PersonalAgentStore {
 		this.db.prepare("UPDATE matters SET lead_member_id = ? WHERE id = ?").run(memberId, matterId);
 	}
 
-	private mapMember(row: Record<string, unknown>): TeamMember {
+	private mapOrganization(row: Record<string, unknown>): Organization {
 		return {
 			id: String(row.id),
+			name: String(row.name),
+			gitEmailDomain: typeof row.git_email_domain === "string" ? row.git_email_domain : "",
+			description: typeof row.description === "string" ? row.description : "",
+			createdAt: String(row.created_at),
+			updatedAt: String(row.updated_at),
+		};
+	}
+
+	private mapMember(row: Record<string, unknown>): TeamMember {
+		const id = String(row.id);
+		const displayName = String(row.display_name);
+		const rawGitName = typeof row.git_name === "string" ? row.git_name.trim() : "";
+		const rawGitEmail = typeof row.git_email === "string" ? row.git_email.trim() : "";
+		return {
+			id,
 			templateId: String(row.template_id),
-			displayName: String(row.display_name),
+			displayName,
 			roleTitle: String(row.role_title),
 			isPrimaryContact: Boolean(row.is_primary_contact),
 			provider: String(row.provider),
 			model: String(row.model),
 			thinkingLevel: row.thinking_level as ThinkingLevel,
 			keywords: JSON.parse(String(row.keywords_json)) as string[],
+			gitName: rawGitName || displayName,
+			gitEmail: rawGitEmail || `${id}@team.local`,
+			identitySummary: typeof row.identity_summary === "string" ? row.identity_summary : "",
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};
@@ -1104,6 +1333,7 @@ export class PersonalAgentStore {
 	private mapWorkspace(row: Record<string, unknown>): WorkspaceLink {
 		return {
 			id: String(row.id),
+			orgId: row.org_id ? String(row.org_id) : null,
 			name: String(row.name),
 			repoPath: String(row.repo_path),
 			defaultBranch: String(row.default_branch),
@@ -1125,6 +1355,7 @@ export class PersonalAgentStore {
 			memberId: String(row.member_id),
 			scope: row.scope as MemoryScope,
 			category: normalizeMemoryCategory(row.category),
+			orgId: row.org_id ? String(row.org_id) : null,
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 			content: String(row.content),
 			rationale: typeof row.rationale === "string" ? row.rationale : "",

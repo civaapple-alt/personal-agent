@@ -416,3 +416,85 @@ test("explicit reflection abort normalizes transport rejection to the public can
 	assert.equal(f.orchestrator.abortDistillation(matter.id), true);
 	await rejected;
 });
+
+test("org-bound propose_experience and distillation route company_private to orgId shared across org repos", async (t) => {
+	let phase: "execute" | "distill" = "execute";
+	const f = await fixture(t, async (options) => {
+		if (phase === "execute") {
+			await invokeTool(options, "propose_experience", {
+				scope: "company_private",
+				category: "collaboration",
+				content: "ORG_COLLAB: PRD signoff required before DB migrations across Acme repos",
+				rationale: "Avoid breaking downstream services in the same org",
+			});
+			return result("done");
+		}
+		return result(
+			JSON.stringify({
+				summary: "提炼组织经验与仓库规范",
+				candidates: [
+					{
+						memberId: "product-manager",
+						category: "domain_constraint",
+						scope: "company_private",
+						content: "ORG_CONSTRAINT: Use UTC ISO-8601 timestamps across Acme APIs",
+						rationale: "Shared multi-repo API standard",
+					},
+					{
+						memberId: "product-manager",
+						category: "efficiency",
+						scope: "project_private",
+						content: "WS_A_ONLY: Run fast sqlite smoke test in service-a",
+						rationale: "Specific to service-a",
+					},
+				],
+			}),
+		);
+	});
+
+	const org = f.store.upsertOrganization({ name: "Acme Corp", gitEmailDomain: "acme.dev" });
+	const wsA = f.store.upsertWorkspace({ orgId: org.id, name: "service-a", repoPath: "/tmp/rsi-org-a" });
+	const wsB = f.store.upsertWorkspace({ orgId: org.id, name: "service-b", repoPath: "/tmp/rsi-org-b" });
+
+	await f.orchestrator.dispatchMatter({
+		prompt: "在 service-a 协作",
+		preferredMemberId: "product-manager",
+		workspaceId: wsA.id,
+	});
+	const matter = f.store.listMatters()[0]!;
+	phase = "distill";
+	const distilled = await f.orchestrator.distillExperiences({ matterId: matter.id });
+	assert.equal(distilled.createdMemories.length, 2);
+
+	const memories = f.store.listMemberMemories("product-manager");
+	const orgCollab = memories.find((m) => m.content.includes("ORG_COLLAB"))!;
+	const orgConstraint = memories.find((m) => m.content.includes("ORG_CONSTRAINT"))!;
+	const wsAOnly = memories.find((m) => m.content.includes("WS_A_ONLY"))!;
+
+	assert.equal(orgCollab.orgId, org.id);
+	assert.equal(orgCollab.workspaceId, null);
+	assert.equal(orgConstraint.orgId, org.id);
+	assert.equal(orgConstraint.workspaceId, null);
+	assert.equal(wsAOnly.orgId, null);
+	assert.equal(wsAOnly.workspaceId, wsA.id);
+
+	// Both org memories are visible in sibling repo wsB; wsA-only project memory is NOT visible in wsB
+	const wsBRelevant = f.store.listRelevantMemories("product-manager", wsB.id);
+	assert.ok(wsBRelevant.some((m) => m.id === orgCollab.id));
+	assert.ok(wsBRelevant.some((m) => m.id === orgConstraint.id));
+	assert.ok(!wsBRelevant.some((m) => m.id === wsAOnly.id));
+
+	// Cross-org memory replacement must be rejected
+	const otherOrg = f.store.upsertOrganization({ name: "Other Corp" });
+	assert.throws(
+		() =>
+			f.store.addMemory({
+				memberId: "product-manager",
+				scope: "company_private",
+				orgId: otherOrg.id,
+				content: "Cross org override",
+				supersedesMemoryId: orgConstraint.id,
+			}),
+		/same member, scope, organization and workspace/,
+	);
+});

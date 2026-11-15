@@ -1,3 +1,12 @@
+export interface OrganizationDto {
+	id: string;
+	name: string;
+	gitEmailDomain: string;
+	description: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
 export interface TeamMemberDto {
 	id: string;
 	templateId: string;
@@ -8,10 +17,14 @@ export interface TeamMemberDto {
 	model: string;
 	thinkingLevel: string;
 	keywords: string[];
+	gitName: string;
+	gitEmail: string;
+	identitySummary: string;
 }
 
 export interface WorkspaceDto {
 	id: string;
+	orgId: string | null;
 	name: string;
 	repoPath: string;
 	defaultBranch: string;
@@ -124,6 +137,7 @@ export interface MemberMemoryDto {
 	memberId: string;
 	scope: MemoryScope;
 	category: MemoryCategory;
+	orgId: string | null;
 	workspaceId: string | null;
 	content: string;
 	rationale?: string;
@@ -211,6 +225,7 @@ export interface BootstrapPayload {
 	members: TeamMemberDto[];
 	templates: RoleTemplateDto[];
 	workspaces: WorkspaceDto[];
+	organizations: OrganizationDto[];
 	matters: MatterDto[];
 	deliverables: DeliverableDto[];
 	pendingDialogs: PendingDialogDto[];
@@ -314,7 +329,30 @@ export function submitDeliverableFeedback(
 	});
 }
 
+export function createOrganization(input: {
+	id?: string;
+	name: string;
+	gitEmailDomain?: string;
+	description?: string;
+}): Promise<{ organization: OrganizationDto }> {
+	return requestJson("/api/organizations", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateOrganization(
+	orgId: string,
+	input: { name?: string; gitEmailDomain?: string; description?: string },
+): Promise<{ organization: OrganizationDto }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
 export function addWorkspace(input: {
+	orgId?: string | null;
 	name: string;
 	repoPath: string;
 	defaultBranch?: string;
@@ -322,6 +360,16 @@ export function addWorkspace(input: {
 }): Promise<{ workspace: WorkspaceDto }> {
 	return requestJson("/api/workspaces", {
 		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateWorkspace(
+	workspaceId: string,
+	input: { orgId?: string | null; name?: string; defaultBranch?: string; description?: string },
+): Promise<{ workspace: WorkspaceDto }> {
+	return requestJson(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
+		method: "PATCH",
 		body: JSON.stringify(input),
 	});
 }
@@ -343,9 +391,28 @@ export function createMember(input: {
 	provider?: string;
 	thinkingLevel?: string;
 	isPrimaryContact?: boolean;
+	gitName?: string;
+	gitEmail?: string;
+	identitySummary?: string;
 }): Promise<{ member: TeamMemberDto }> {
 	return requestJson("/api/members", {
 		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateMemberIdentity(
+	memberId: string,
+	input: {
+		displayName?: string;
+		roleTitle?: string;
+		gitName?: string;
+		gitEmail?: string;
+		identitySummary?: string;
+	},
+): Promise<{ member: TeamMemberDto }> {
+	return requestJson(`/api/members/${encodeURIComponent(memberId)}`, {
+		method: "PATCH",
 		body: JSON.stringify(input),
 	});
 }
@@ -377,7 +444,8 @@ export function saveMemberMemory(input: {
 	content: string;
 	scope?: MemoryScope;
 	category?: MemoryCategory;
-	workspaceId?: string;
+	orgId?: string | null;
+	workspaceId?: string | null;
 	sourceMatterId?: string;
 	sourceDeliverableId?: string;
 	rationale?: string;
@@ -398,6 +466,7 @@ export function updateMemberMemory(
 		content?: string;
 		scope?: MemoryScope;
 		category?: MemoryCategory;
+		orgId?: string | null;
 		workspaceId?: string | null;
 		status?: MemoryStatus;
 		rationale?: string;
