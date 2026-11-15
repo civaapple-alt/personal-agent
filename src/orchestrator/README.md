@@ -2,7 +2,9 @@
 
 职责分工：
 
-- [team-orchestrator.ts](team-orchestrator.ts) 拥有一轮用户任务的生命周期。
+- [team-orchestrator.ts](team-orchestrator.ts) 拥有一轮用户任务的生命周期，并由 [types.ts](types.ts)、[prompts.ts](prompts.ts)、
+  [worker-runner.ts](worker-runner.ts)、[delegation-runner.ts](delegation-runner.ts)、
+  [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担提示词装配、Worker 执行、内部委托、旁听与复盘。
 - [execution-context.ts](execution-context.ts) 负责 Skill 路径、保存会话身份与成果文件/URL 校验。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
 
