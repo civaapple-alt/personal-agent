@@ -125,6 +125,16 @@ export function App() {
 	const refreshBootstrap = useCallback(async () => {
 		const data = await fetchBootstrap();
 		setBootstrap(data);
+		if (data.activeRuns) {
+			const nextProgress: Record<string, MatterProgressDto> = {};
+			const nextStartedAt: Record<string, number> = {};
+			for (const [id, snapshot] of Object.entries(data.activeRuns)) {
+				nextProgress[id] = snapshot;
+				nextStartedAt[id] = snapshot.startedAt;
+			}
+			setProgressByMatter(nextProgress);
+			setProgressStartedAt(nextStartedAt);
+		}
 		setSelectedMatterId((prev) => (explicitNewMatterRef.current ? null : (prev ?? data.matters[0]?.id ?? null)));
 		setSelectedWorkspaceId((prev) => {
 			if (prev && data.workspaces.some((w) => w.id === prev)) return prev;
@@ -149,6 +159,14 @@ export function App() {
 		const detail = await fetchMatterDetail(matterId);
 		setMatterDetail(detail);
 		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
+		if (detail.activeRun) {
+			const snapshot = detail.activeRun;
+			setProgressByMatter((prev) => ({ ...prev, [matterId]: snapshot }));
+			setProgressStartedAt((prev) => ({ ...prev, [matterId]: snapshot.startedAt }));
+			if (snapshot.streamingDelta !== undefined) {
+				setStreamingDelta(snapshot.streamingDelta);
+			}
+		}
 	}, []);
 
 	useEffect(() => {

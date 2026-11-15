@@ -127,6 +127,11 @@ export interface MatterProgressDto {
 	collabUpdated?: boolean;
 }
 
+export interface ActiveRunSnapshotDto extends MatterProgressDto {
+	startedAt: number;
+	streamingDelta?: string;
+}
+
 export interface BootstrapPayload {
 	members: TeamMemberDto[];
 	templates: RoleTemplateDto[];
@@ -136,6 +141,7 @@ export interface BootstrapPayload {
 	pendingDialogs: PendingDialogDto[];
 	previews: PreviewServiceDto[];
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
+	activeRuns?: Record<string, ActiveRunSnapshotDto>;
 }
 
 export interface MatterDetailPayload {
@@ -145,6 +151,7 @@ export interface MatterDetailPayload {
 	noticeMessages: MatterMessageDto[];
 	deliverables: DeliverableDto[];
 	pendingDialogs: PendingDialogDto[];
+	activeRun?: ActiveRunSnapshotDto | null;
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {

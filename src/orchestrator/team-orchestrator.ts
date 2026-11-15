@@ -132,6 +132,7 @@ interface MatterRun {
 	finish(): void;
 	controller: AbortController;
 	cancelled: boolean;
+	cancelReason?: "user" | "shutdown";
 	workers: Set<RpcWorkerLike>;
 	contexts: Set<string>;
 	delegations: Map<string, Promise<DelegateResult>>;
@@ -267,6 +268,15 @@ function emptyAbortedResult(): PromptRunResult {
 		dialogs: [],
 		events: [],
 	};
+}
+
+function formatAbortedReply(rawReply: string, cancelReason?: "user" | "shutdown"): string {
+	const prefix = cancelReason === "shutdown" ? "[服务重启中断]" : "[已中断执行]";
+	const fallback =
+		cancelReason === "shutdown"
+			? "服务正在关闭或重启，本次执行已安全暂停；服务恢复后回复“继续”即可接续推进。"
+			: "已按你的要求停止本次执行。";
+	return rawReply ? `${prefix}\n\n${rawReply}` : fallback;
 }
 
 function defaultWorkerFactory(options: PiRpcWorkerOptions): RpcWorkerLike {
@@ -560,9 +570,7 @@ ${this.store
 			if (!aborted) run.controller.signal.throwIfAborted();
 			const rawReply = result.assistantText.trim();
 			const replyText = aborted
-				? rawReply
-					? `[已中断执行]\n\n${rawReply}`
-					: "已按你的要求停止本次执行。"
+				? formatAbortedReply(rawReply, run.cancelReason)
 				: rawReply || "本轮未返回正文，请继续追问；执行记录保留在协作过程中。";
 			// Keep explicit document exports supported by API callers. Chat has no implicit export.
 			if (
@@ -665,7 +673,7 @@ ${this.store
 		} catch (error) {
 			this.store.updateMatterStatus(matter.id, "open");
 			if (run.cancelled) {
-				const replyText = "已按你的要求停止本次执行。";
+				const replyText = formatAbortedReply("", run.cancelReason);
 				this.store.appendMessage({
 					matterId: matter.id,
 					channel: "user",
@@ -674,6 +682,7 @@ ${this.store
 					content: replyText,
 					metadata: {
 						aborted: true,
+						cancelReason: run.cancelReason ?? "user",
 						workspaceId: workspace?.id ?? null,
 						repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
 					},
@@ -700,15 +709,16 @@ ${this.store
 
 	async shutdown(): Promise<void> {
 		const runs = [...this.runs.entries()];
-		await Promise.allSettled(runs.map(([id]) => this.abortMatter(id)));
+		await Promise.allSettled(runs.map(([id]) => this.abortMatter(id, "shutdown")));
 		await Promise.allSettled(runs.map(([, run]) => run.settled));
 	}
 
-	async abortMatter(matterId: string): Promise<boolean> {
+	async abortMatter(matterId: string, reason: "user" | "shutdown" = "user"): Promise<boolean> {
 		const run = this.runs.get(matterId);
 		if (!run) return false;
 		run.cancelled = true;
-		run.controller.abort(new Error("Cancelled by user"));
+		run.cancelReason = reason;
+		run.controller.abort(new Error(reason === "shutdown" ? "Server shutting down" : "Cancelled by user"));
 		await Promise.allSettled(
 			[...run.workers].map(async (worker) => {
 				let timer: NodeJS.Timeout | undefined;

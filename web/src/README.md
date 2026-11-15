@@ -14,6 +14,6 @@
 
 组件数量尚小，本页直接定位文件，`components/` 不再加一层重复目录说明。
 
-`matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。`matter_progress` 附带 `collabUpdated` 时刷新事项详情（主负责人回复后、旁听同事主动插话后都会即时同步），`matter_updated` 同步旁听成员列表；[BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作，[ExploringStatus](components/ExploringStatus.tsx) 和 [Sidebar](components/Sidebar.tsx) 分别展示主成员与协同/旁听同事的动态头像、5 阶段标签进度及最近工具/输出动态（`recentLogs`）。[ChatStage](components/ChatStage.tsx) 在每条 AI 回复上方显示对应角色头像、名称及「旁听补充」徽章，并在底部工具栏提供「旁听席」选择器以随时增减列席讨论的团队角色；同时按轮次显示可折叠「团队委托」摘要，顶部按钮明确区分委托数与事件数，并在顶栏下方固定展开分栏抽屉（「团队内部委托」与「过程与工具事件」标签页，默认收起）。工作区或旁听变更失败/409 需呈现错误，不能只乐观改变选项而忽略后端状态。取消、错误和等待用户状态都要有对应刷新路径。
+`matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。`fetchBootstrap` 与 `fetchMatterDetail` 会消费服务端返回的 `activeRuns` / `activeRun`，保证页面刷新后立即恢复进行中进度、计时与停止按钮；`matter_progress` 附带 `collabUpdated` 时刷新事项详情（主负责人回复后、旁听同事主动插话后都会即时同步），`matter_updated` 同步旁听成员列表；[BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作，[ExploringStatus](components/ExploringStatus.tsx) 和 [Sidebar](components/Sidebar.tsx) 分别展示主成员与协同/旁听同事的动态头像、5 阶段标签进度及最近工具/输出动态（`recentLogs`）。[ChatStage](components/ChatStage.tsx) 在每条 AI 回复上方显示对应角色头像、名称及「旁听补充」徽章，并在底部工具栏提供「旁听席」选择器以随时增减列席讨论的团队角色；同时按轮次显示可折叠「团队委托」摘要，顶部按钮明确区分委托数与事件数，并在顶栏下方固定展开分栏抽屉（「团队内部委托」与「过程与工具事件」标签页，默认收起）。工作区或旁听变更失败/409 需呈现错误，不能只乐观改变选项而忽略后端状态。取消、错误和等待用户状态都要有对应刷新路径。
 
 从仓库根运行 `npm run check`、`npm run build:web`。路由和 HTTP/SSE 行为覆盖在 [服务测试](../../test/phase3-server.test.ts)，该文件依赖已构建网页；视觉与交互效果仍需查看运行页面。更多构建和启动说明见[上层入口](../README.md)。

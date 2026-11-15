@@ -523,7 +523,9 @@ test("shutdown cancels a host dialog wait and waits for cleanup before releasing
 	const running = f.orchestrator.dispatchMatter({ prompt: "提问", workspaceId: f.workspace.id });
 	await opened;
 	await f.orchestrator.shutdown();
-	assert.equal((await running).runResult.aborted, true);
+	const res = await running;
+	assert.equal(res.runResult.aborted, true);
+	assert.match(res.replyText, /服务正在关闭或重启/);
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	assert.equal(f.db.prepare("SELECT * FROM matter_execution_leases").all().length, 0);
 });

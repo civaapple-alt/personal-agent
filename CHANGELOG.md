@@ -8,6 +8,10 @@ All notable changes to Personal Agent are documented in this file.
 - Added a concise Chinese `AGENTS.md` and layered directory READMEs, separating role assets from parsers, runtime boundaries from local implementation guidance, and offline checks from real-model demos. Added a dependency-free documentation link/command checker.
 - Rewrote `docs/architecture-and-plan.md` against the implemented HTTP/SSE, per-execution Pi sessions, authenticated tool bridges, scoped state and explicit milestone delivery. Separated current limits and future work from the historical four-phase design; aligned the README document pointers.
 
+### Fixed
+- Restored live execution progress, elapsed timer, streamed partial output, and the Stop button across browser refreshes (`F5`) by snapshotting in-flight runs in `src/server/app.ts` (`activeRuns` on `GET /api/bootstrap` and `activeRun` on `GET /api/matters/:id`) and hydrating them in `web/src/App.tsx`.
+- Distinguished server shutdown/restart aborts (`cancelReason: "shutdown"`) from user-initiated stops in `TeamOrchestrator` so restarts no longer claim "已按你的要求停止本次执行".
+
 ### Added
 - Raised the default multi-agent matter turn ceiling in `TeamOrchestrator` from 30 minutes (`1,800,000 ms`) to 90 minutes (`5,400,000 ms`, configurable via `PA_TURN_TIMEOUT_MS` / `PA_PROMPT_TIMEOUT_MS`) with explicit timeout duration in the error message, preventing active multi-specialist chains from timing out right before final lead synthesis while preserving `PiRpcWorker`'s 300s inactivity watchdog.
 - Proactive meeting-room observer participation (`observerMemberIds` on matters, `PA_CAN_DELEGATE`/`PA_CAN_PUBLISH` restrictions, isolated `observer` Pi session scope, `[SILENT]` no-op filtering vs independent `user`-channel interjections tagged with `observerIntervention: true`, `PATCH /api/matters/:id` observer updates with 409 busy guard, per-speaker avatars/`旁听补充` badges in `ChatStage`, and a meeting-seat selector pill in the composer bar).

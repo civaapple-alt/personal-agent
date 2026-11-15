@@ -2,7 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve } from "node:path";
-import type { DispatchMatterResult, TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
+import type {
+	DispatchMatterResult,
+	DispatchProgressEvent,
+	TeamOrchestrator,
+} from "../orchestrator/team-orchestrator.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
@@ -104,6 +108,15 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		broadcast(evt.type, evt);
 	});
 
+	const activeRuns = new Map<
+		string,
+		{
+			progress: DispatchProgressEvent;
+			startedAt: number;
+			accumulatedDelta: string;
+		}
+	>();
+
 	const runDispatchInBackground = (input: {
 		matterId: string;
 		title?: string;
@@ -114,6 +127,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		deliverableTitle?: string;
 		deliverableType?: DeliverableType;
 	}) => {
+		const initialProgress: DispatchProgressEvent = {
+			stage: "starting",
+			label: "正在准备执行环境...",
+		};
+		const activeEntry = {
+			progress: initialProgress,
+			startedAt: Date.now(),
+			accumulatedDelta: "",
+		};
+		activeRuns.set(input.matterId, activeEntry);
 		broadcast("matter_started", { matterId: input.matterId });
 		let accumulatedDelta = "";
 		void orchestrator
@@ -128,13 +151,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				deliverableType: input.deliverableType,
 				onTextDelta: (delta) => {
 					accumulatedDelta += delta;
+					activeEntry.accumulatedDelta = accumulatedDelta;
 					broadcast("text_delta", { matterId: input.matterId, delta });
 				},
 				onProgress: (progress) => {
+					activeEntry.progress = progress;
 					broadcast("matter_progress", { matterId: input.matterId, ...progress });
 				},
 			})
 			.then((result: DispatchMatterResult) => {
+				activeRuns.delete(input.matterId);
 				if (result.runResult.aborted) {
 					broadcast("matter_aborted", {
 						matterId: result.matter.id,
@@ -150,6 +176,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				});
 			})
 			.catch((error: unknown) => {
+				activeRuns.delete(input.matterId);
 				const message = error instanceof Error ? error.message : String(error);
 				store.appendMessage({
 					matterId: input.matterId,
@@ -219,6 +246,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					pendingDialogs: dialogBroker.listPending(),
 					previews: previewManager.listPreviews(),
 					memoriesByMember: formatMemoryMap(store),
+					activeRuns: Object.fromEntries(
+						[...activeRuns.entries()].map(([matterId, run]) => [
+							matterId,
+							{ ...run.progress, matterId, startedAt: run.startedAt },
+						]),
+					),
 				});
 				return;
 			}
@@ -238,6 +271,17 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					noticeMessages: store.listMessages(matterId, "notice"),
 					deliverables: store.listDeliverables(matterId),
 					pendingDialogs: dialogBroker.listPending(matterId),
+					activeRun: (() => {
+						const active = activeRuns.get(matterId);
+						return active
+							? {
+									...active.progress,
+									matterId,
+									startedAt: active.startedAt,
+									streamingDelta: active.accumulatedDelta,
+								}
+							: null;
+					})(),
 				});
 				return;
 			}

@@ -575,6 +575,16 @@ test("Server supports aborting a running matter and updating its bound workspace
 		// Allow worker to start
 		await new Promise((r) => setTimeout(r, 40));
 
+		// Bootstrap & detail endpoints expose live run progress so browser refresh restores status.
+		const bootWhileRunning = (await (await fetch(`${baseUrl}/api/bootstrap`)).json()) as {
+			activeRuns?: Record<string, { matterId: string; stage: string; startedAt: number }>;
+		};
+		assert.ok(bootWhileRunning.activeRuns?.[created.matter.id]?.startedAt);
+		const detailWhileRunning = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+			activeRun?: { matterId: string; stage: string; startedAt: number } | null;
+		};
+		assert.equal(detailWhileRunning.activeRun?.matterId, created.matter.id);
+
 		// Reject workspace switches and overlapping messages while a turn owns this matter.
 		for (const [method, path, body] of [
 			["PATCH", "", { workspaceId: (ws2 as { workspace: { id: string } }).workspace.id }],
@@ -605,10 +615,12 @@ test("Server supports aborting a running matter and updating its bound workspace
 				matter: { status: string };
 				userMessages: Array<{ content: string }>;
 				deliverables: unknown[];
+				activeRun?: unknown | null;
 			};
 			if (detail.userMessages.length >= 2) {
 				assert.equal(detail.matter.status, "open");
 				assert.equal(detail.deliverables.length, 0);
+				assert.equal(detail.activeRun ?? null, null);
 				assert.match(detail.userMessages[1]?.content ?? "", /停止本次执行/);
 				break;
 			}
