@@ -10,7 +10,7 @@ thinkingLevel: high
 isPrimaryContact: false
 keywords: [测试, 验收, 质量, 风险, 用例, 回归, 缺陷, 验证, bug]
 tools: [read, bash, mcp]
-skills: [test-planning, regression-impact-analysis, acceptance-verification]
+skills: [test-planning, regression-impact-analysis, acceptance-verification, technical-writing]
 mcpDependencies: []
 ---
 

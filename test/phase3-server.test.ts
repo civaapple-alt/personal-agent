@@ -29,6 +29,7 @@ import {
 	isKeyNoticeEvent,
 	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
+	parseDeliverableSummary,
 	parseProgressSnapshot,
 	pickDefaultWorkspaceId,
 } from "../web/src/utils.ts";
@@ -1419,4 +1420,22 @@ test("pickDefaultWorkspaceId prefers memory workspace, then active matter worksp
 	assert.equal(pickDefaultWorkspaceId(workspaces, "personal-agent", "bookshelf"), "personal-agent");
 	assert.equal(pickDefaultWorkspaceId(workspaces, "missing-ws", null), "personal-agent");
 	assert.equal(pickDefaultWorkspaceId([], null, "bookshelf"), "");
+});
+
+test("parseDeliverableSummary extracts lead takeaway and scannable process/evidence bullets", () => {
+	const raw =
+		"M1 收口：QA 验收通过（10/10），默认档 T1。\n交付依据：v1.6 收口并按用户指示收尾。QA 验收报告已归档。\n固化结论：recall 89.9%（62/69）。p95 T1 达标，待补 S1 实拍。";
+	const parsed = parseDeliverableSummary(raw);
+	assert.equal(parsed.lead, "M1 收口：QA 验收通过（10/10），默认档 T1。");
+	assert.deepEqual(parsed.details, [
+		"交付依据：v1.6 收口并按用户指示收尾。QA 验收报告已归档。",
+		"固化结论：recall 89.9%（62/69）。p95 T1 达标，待补 S1 实拍。",
+	]);
+
+	const inlineLabeled =
+		"第一句核心结论。交付依据：补充检查完成。固化结论：所有门禁全部通过，其余指标保持不变，下周继续推进下一阶段内容！";
+	const inlineParsed = parseDeliverableSummary(inlineLabeled, 40);
+	assert.equal(inlineParsed.lead, "第一句核心结论。");
+	assert.ok(inlineParsed.details.length >= 2);
+	assert.equal(parseDeliverableSummary("   ").lead, "");
 });

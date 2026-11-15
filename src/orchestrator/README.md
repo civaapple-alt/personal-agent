@@ -10,7 +10,7 @@
 - `delegate` 由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者；桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
 - `abortMatter`、`abortDistillation`、`shutdown` 传播取消并等待执行树清理；中止与失败路径分别通过 `buildProgressSnapshot` 保留中断时的阶段、耗时、`activeDelegations` 与最近步骤摘要，并在同一事项工作区作用域续跑时由 `executeWithWorker` 为主负责人注入结构化的「上次中断状态简报」（仅作用于紧随中断后的下一轮，恢复成功后不重复带入旧报错）。其中 `abortDistillation(matterId)` 会立即中止该事项正在进行的 `distillExperiences` reflection worker 并丢弃未完成候选。
 
-内部委托成员与旁听成员均只做本职专业判断，工具装配与宿主校验均禁止其调用 `publish_deliverable`（旁听成员同时禁用 `delegate_to_member`）。只有主成员在形成可审阅阶段成果、明确版本或实质变化时，才通过 `publish_deliverable` 提供 `changeNote` 归档正式成果。过程回复、澄清及细小讨论调整只留对话；草稿须整轮成功后才归档。工具权限和最终写入都要保持这些规则，不能只在角色提示词里约定。
+内部委托成员与旁听成员均只做本职专业判断，工具装配与宿主校验均禁止其调用 `publish_deliverable`（旁听成员同时禁用 `delegate_to_member`）。只有主成员在形成可审阅阶段成果、明确版本或实质变化时，才通过 `publish_deliverable` 结合 [technical-writing](../../skills/technical-writing/SKILL.md) 提供精简的 1–3 句 `changeNote` 与「核心结论 → 正文内容 → 交付过程与验证依据」结构归档正式成果。过程回复、澄清及细小讨论调整只留对话；草稿须整轮成功后才归档。工具权限和最终写入都要保持这些规则，不能只在角色提示词里约定。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。
 

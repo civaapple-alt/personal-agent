@@ -4,6 +4,7 @@
 
 | 岗位方向 | 具体方法 |
 | --- | --- |
+| 通用 | [技术与成果写作规范](technical-writing/SKILL.md) |
 | 产品 | [澄清需求](requirement-clarification/SKILL.md)、[范围与优先级](scope-prioritization/SKILL.md)、[验收条件](acceptance-criteria/SKILL.md) |
 | 研发 | [仓库核查](repo-analysis/SKILL.md)、[技术设计](architecture-design/SKILL.md)、[工作拆解](task-breakdown/SKILL.md)、[编码执行](coding-execution/SKILL.md) |
 | 测试 | [测试计划](test-planning/SKILL.md)、[回归影响](regression-impact-analysis/SKILL.md)、[验收验证](acceptance-verification/SKILL.md) |

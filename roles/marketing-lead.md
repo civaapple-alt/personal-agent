@@ -10,7 +10,7 @@ thinkingLevel: high
 isPrimaryContact: false
 keywords: [市场, 营销, 客户, 需求证据, 竞品, 细分, 推广, 试用, 反馈, 价值表达]
 tools: [read, bash, mcp]
-skills: [market-research, competitor-analysis, launch-copy]
+skills: [market-research, competitor-analysis, launch-copy, technical-writing]
 mcpDependencies: []
 ---
 

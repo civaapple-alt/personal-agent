@@ -100,7 +100,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "publish_deliverable",
 			label: "登记成果",
 			description:
-				"Publish a reviewable milestone, an explicitly requested version, or a substantial change for the user. Explain what changed and the evidence/decision behind this version in changeNote. document: full finished document in content; artifact/prototype_image: existing workspace file path; service_url: http(s) URL. Give a stable title for versioning. Ordinary conversation, clarification, progress updates and minor discussion edits stay in chat. Do not decide from response length or number of turns. Specialist consultations return to the lead rather than becoming user deliverables. Staged results are finalized only when this user turn succeeds.",
+				"Publish a reviewable milestone, an explicitly requested version, or a substantial change for the user. Write concisely with key takeaways and traceable verification/collaboration process (lead with conclusions, keep changeNote to 1-3 clear sentences without raw log walls). document: structured Markdown in content; artifact/prototype_image: existing workspace file path; service_url: http(s) URL. Give a stable title for versioning. Ordinary conversation, clarification, progress updates and minor discussion edits stay in chat. Do not decide from response length or number of turns. Specialist consultations return to the lead rather than becoming user deliverables. Staged results are finalized only when this user turn succeeds.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -111,7 +111,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 					changeNote: {
 						type: "string",
 						description:
-							"Why this is a reviewable milestone or substantial revision; cite relevant feedback, decisions or verification.",
+							"Concise 1-3 sentence summary of this version's conclusion, key changes, and verification/process basis (shown at top of deliverable card).",
 					},
 				},
 				required: ["type", "title", "content", "changeNote"],

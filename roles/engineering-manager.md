@@ -10,7 +10,7 @@ thinkingLevel: high
 isPrimaryContact: false
 keywords: [架构, 代码, 仓库, 实现, 依赖, 技术栈, 接口, 修复, bug, 开发, rpc, sqlite]
 tools: [read, edit, write, bash, mcp]
-skills: [repo-analysis, architecture-design, task-breakdown, coding-execution]
+skills: [repo-analysis, architecture-design, task-breakdown, coding-execution, technical-writing]
 mcpDependencies: []
 ---
 

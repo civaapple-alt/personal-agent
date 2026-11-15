@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { BootstrapPayload, DeliverableDto, DistillRsiResult, FeedbackRating } from "../api.ts";
-import { collectMatterParticipantIds, formatClockTime } from "../utils.ts";
+import { collectMatterParticipantIds, formatClockTime, parseDeliverableSummary } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
 
 interface DeliverableFamily {
@@ -183,8 +183,8 @@ export function DeliverablesView({
 					<div className="pane-header">
 						<h1>交付成果库</h1>
 						<p>
-							按项目归类、同一成果自动折叠多版本（共 {allFamilies.length} 项成果 ·{" "}
-							{bootstrap?.deliverables.length ?? 0} 个版本）
+							共 {allFamilies.length} 项成果 · {bootstrap?.deliverables.length ?? 0}{" "}
+							个版本（按项目与版本自动收拢）
 						</p>
 					</div>
 					<button type="button" className="btn-pill-dark" onClick={onNewTask}>
@@ -261,7 +261,9 @@ export function DeliverablesView({
 																{fam.versions.length > 1 ? ` · ${fam.versions.length}版` : ""}
 															</span>
 														</div>
-														<div className="deliverable-family-summary">{fam.latest.summary}</div>
+														<div className="deliverable-family-summary">
+															{parseDeliverableSummary(fam.latest.summary).lead}
+														</div>
 														<div className="deliverable-family-meta">
 															<span>
 																{memberName(fam.latest.memberId)} ·{" "}

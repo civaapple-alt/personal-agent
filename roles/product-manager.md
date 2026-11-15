@@ -10,7 +10,7 @@ thinkingLevel: high
 isPrimaryContact: true
 keywords: [需求, 产品, 规划, 优先级, 验收, 原型, 功能, 用户故事, PRD, 方案]
 tools: [read, bash, mcp]
-skills: [requirement-clarification, scope-prioritization, acceptance-criteria]
+skills: [requirement-clarification, scope-prioritization, acceptance-criteria, technical-writing]
 mcpDependencies: []
 ---
 
