@@ -137,7 +137,8 @@ function resolveRequestActor(
 	const cookieToken = parseCookies(req)[SESSION_COOKIE_NAME]?.trim();
 	if (cookieToken) {
 		const matched = store.getCollaboratorByToken(cookieToken);
-		if (matched) return { collaborator: matched, viaToken: true };
+		// Explicit session cookie must remain valid; never silently elevate an invalidated session to loopback Owner.
+		return matched ? { collaborator: matched, viaToken: true } : null;
 	}
 	if (!requireAuth && isLoopbackRemote(req)) {
 		const owner = store.ensureOwnerCollaborator();
@@ -421,17 +422,29 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	broadcast: (eventName: string, payload: unknown) => void;
 } {
 	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
-	const sseClients = new Set<ServerResponse>();
+	const sseClients = new Map<ServerResponse, { collaboratorId: string; viaToken: boolean }>();
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 
 	const broadcast = (eventName: string, payload: unknown) => {
 		const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
-		for (const client of [...sseClients]) {
+		for (const client of [...sseClients.keys()]) {
 			if (client.destroyed || client.writableEnded) {
 				sseClients.delete(client);
 				continue;
 			}
 			client.write(frame);
+		}
+	};
+
+	const revokeTokenSessions = (collaboratorId: string, reason: string) => {
+		const frame = `event: auth_revoked\ndata: ${JSON.stringify({ collaboratorId, reason })}\n\n`;
+		for (const [client, meta] of [...sseClients.entries()]) {
+			if (!meta.viaToken || meta.collaboratorId !== collaboratorId) continue;
+			sseClients.delete(client);
+			if (!client.destroyed && !client.writableEnded) {
+				client.write(frame);
+				client.end();
+			}
 		}
 	};
 
@@ -582,9 +595,11 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			let actor = resolveRequestActor(req, store, requireAuth);
 
 			if (method === "GET" && pathname === "/api/auth/session") {
+				const presentedToken = Boolean(extractHeaderToken(req) || parseCookies(req)[SESSION_COOKIE_NAME]?.trim());
 				sendJson(res, 200, {
 					authenticated: Boolean(actor),
 					permissionRequired: requireAuth || !isLoopbackRemote(req),
+					revokedSession: Boolean(!actor && presentedToken),
 					currentUser: actor ? toPublicCollaborator(actor.collaborator) : null,
 				});
 				return;
@@ -632,7 +647,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					Connection: "keep-alive",
 				});
 				res.write(`event: connected\ndata: ${JSON.stringify({ ok: true })}\n\n`);
-				sseClients.add(res);
+				if (actor) {
+					sseClients.set(res, { collaboratorId: actor.collaborator.id, viaToken: actor.viaToken });
+				}
 				const heartbeat = setInterval(() => {
 					if (!res.destroyed && !res.writableEnded) {
 						res.write(": ping\n\n");
@@ -762,6 +779,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Collaborator not found: ${collabId}`);
 					return;
 				}
+				revokeTokenSessions(collabId, "token_regenerated");
 				broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
 				sendJson(res, 200, { collaborator });
 				return;
@@ -830,6 +848,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					}
 				}
 				store.deleteCollaborator(collabId);
+				revokeTokenSessions(collabId, "collaborator_deleted");
 				broadcast("collaborator_updated", { deletedId: collabId });
 				sendJson(res, 200, { ok: true, deletedId: collabId });
 				return;
@@ -2081,7 +2100,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	server.once("close", () => {
 		offDialog();
 		dialogBroker.cancelAll();
-		for (const client of sseClients) {
+		for (const client of sseClients.keys()) {
 			client.end();
 		}
 		sseClients.clear();

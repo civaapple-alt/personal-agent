@@ -23,6 +23,7 @@ import {
 	type PreviewServiceDto,
 	postMatterMessage,
 	type RoleTemplateDto,
+	setAuthRevokedHandler,
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
@@ -59,6 +60,7 @@ export function App() {
 	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+	const [permissionRequired, setPermissionRequired] = useState(true);
 	const [authTokenInput, setAuthTokenInput] = useState("");
 	const [authError, setAuthError] = useState<string | null>(null);
 	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
@@ -236,6 +238,28 @@ export function App() {
 		}
 	}, []);
 
+	const applyRevokedSession = useCallback((message?: string) => {
+		setCurrentUserOverride(null);
+		setBootstrap(null);
+		setMatterDetail(null);
+		setProgressByMatter({});
+		setSseConnected(false);
+		setAuthError(message ?? "当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
+		setAuthStatus("unauthenticated");
+		void fetchAuthSession()
+			.then((s) => {
+				setPermissionRequired(s.permissionRequired);
+			})
+			.catch(() => {});
+	}, []);
+
+	useEffect(() => {
+		setAuthRevokedHandler((message) => {
+			applyRevokedSession(message);
+		});
+		return () => setAuthRevokedHandler(null);
+	}, [applyRevokedSession]);
+
 	useEffect(() => {
 		let cancelled = false;
 		const initSession = async () => {
@@ -256,13 +280,22 @@ export function App() {
 					if (cancelled) return;
 					setAuthError(err instanceof Error ? err.message : "邀请链接无效或已失效，请重新向所有者获取");
 					setAuthStatus("unauthenticated");
+					void fetchAuthSession()
+						.then((s) => {
+							if (!cancelled) setPermissionRequired(s.permissionRequired);
+						})
+						.catch(() => {});
 					return;
 				}
 			}
 			try {
 				const session = await fetchAuthSession();
 				if (cancelled) return;
+				setPermissionRequired(session.permissionRequired);
 				if (!session.authenticated) {
+					if (session.revokedSession) {
+						setAuthError("当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
+					}
 					setAuthStatus("unauthenticated");
 					return;
 				}
@@ -395,9 +428,25 @@ export function App() {
 		]) {
 			es.addEventListener(evtName, handleSync);
 		}
-		es.onerror = () => setSseConnected(false);
+		es.addEventListener("auth_revoked", () => {
+			es.close();
+			applyRevokedSession("当前邀请口令已被重置或已移出协同团队，请向所有者获取新的邀请链接");
+		});
+		es.onerror = () => {
+			setSseConnected(false);
+			if (es.readyState === EventSource.CLOSED) {
+				void fetchAuthSession()
+					.then((session) => {
+						setPermissionRequired(session.permissionRequired);
+						if (!session.authenticated) {
+							applyRevokedSession("当前访问凭证已失效，请使用新的邀请链接或口令重新进入");
+						}
+					})
+					.catch(() => {});
+			}
+		};
 		return () => es.close();
-	}, [authStatus, refreshBootstrap, refreshDetail]);
+	}, [authStatus, refreshBootstrap, refreshDetail, applyRevokedSession]);
 
 	const activeDeliverable: DeliverableDto | null = useMemo(() => {
 		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
@@ -1002,6 +1051,11 @@ export function App() {
 							进入协同房间
 						</button>
 					</form>
+					{!permissionRequired && (
+						<button type="button" className="btn-inline" onClick={() => void handleLogoutOrRestore()}>
+							退出失效的协同体验，返回本机所有者视图
+						</button>
+					)}
 				</div>
 			</div>
 		);

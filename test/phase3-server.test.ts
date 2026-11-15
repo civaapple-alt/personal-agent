@@ -2408,3 +2408,157 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 		rmSync(tempDir, { recursive: true, force: true });
 	}
 });
+
+test("Revoked or deleted collaborator session stays blocked on refresh, loopback, and live SSE", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	store.ensureOwnerCollaborator("团队所有者");
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-revoke-"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		defaultCwd: tempDir,
+		workerFactory: (opts) =>
+			({
+				options: opts,
+				onSessionEvent: () => () => {},
+				onNotice: () => () => {},
+				setDialogHandler: () => {},
+				start: async () => {
+					await reportReady(opts);
+				},
+				stop: async () => {},
+				getState: async () => ({ sessionId: "s", isStreaming: false }),
+				runPromptAndWait: async () => ({
+					disposition: "started",
+					aborted: false,
+					assistantText: "ok",
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				}),
+			}) as unknown as RpcWorkerLike,
+	});
+
+	// Intentionally omit requireAuth (defaults to false, same as local start:web) to verify loopback does NOT fallback.
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		uploadsDir: join(tempDir, "uploads"),
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const addRes = await fetch(`${baseUrl}/api/collaborators`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "potato", roleTitle: "协同同事" }),
+		});
+		assert.equal(addRes.status, 201);
+		const { collaborator } = (await addRes.json()) as { collaborator: { id: string; token: string } };
+
+		const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: collaborator.token }),
+		});
+		assert.equal(loginRes.status, 200);
+		const staleCookie = loginRes.headers.get("set-cookie")?.split(";")[0] ?? "";
+		assert.match(staleCookie, /^pa_session=/);
+
+		// Open live SSE stream as the collaborator.
+		const sseRes = await fetch(`${baseUrl}/api/events`, {
+			headers: { Cookie: staleCookie },
+		});
+		assert.equal(sseRes.status, 200);
+		assert.ok(sseRes.body);
+		const reader = sseRes.body.getReader();
+		const decoder = new TextDecoder();
+		const firstChunk = await reader.read();
+		assert.match(decoder.decode(firstChunk.value), /event: connected/);
+
+		// Owner regenerates collaborator token -> live SSE must receive auth_revoked and close.
+		const regenRes = await fetch(`${baseUrl}/api/collaborators/${collaborator.id}/regenerate-token`, {
+			method: "POST",
+		});
+		assert.equal(regenRes.status, 200);
+
+		let sseText = "";
+		for (let i = 0; i < 5; i++) {
+			const chunk = await reader.read();
+			if (chunk.value) sseText += decoder.decode(chunk.value);
+			if (chunk.done) break;
+		}
+		assert.match(sseText, /event: auth_revoked/);
+
+		// Stale cookie on loopback MUST NOT silently fall back to local Owner.
+		const sessionAfter = await fetch(`${baseUrl}/api/auth/session`, {
+			headers: { Cookie: staleCookie },
+		});
+		assert.equal(sessionAfter.status, 200);
+		const sessionJson = (await sessionAfter.json()) as {
+			authenticated: boolean;
+			revokedSession?: boolean;
+			currentUser: unknown;
+		};
+		assert.equal(sessionJson.authenticated, false);
+		assert.equal(sessionJson.revokedSession, true);
+		assert.equal(sessionJson.currentUser, null);
+
+		const bootAfter = await fetch(`${baseUrl}/api/bootstrap`, {
+			headers: { Cookie: staleCookie },
+		});
+		assert.equal(bootAfter.status, 401);
+
+		const sseReconnect = await fetch(`${baseUrl}/api/events`, {
+			headers: { Cookie: staleCookie },
+		});
+		assert.equal(sseReconnect.status, 401);
+
+		const matterPostAfter = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: staleCookie },
+			body: JSON.stringify({ prompt: "试图用已重置的旧会话发起事项" }),
+		});
+		assert.equal(matterPostAfter.status, 401);
+
+		// New token works; deleting collaborator also invalidates its active cookie session.
+		const { collaborator: refreshed } = (await regenRes.json()) as { collaborator: { token: string } };
+		const reloginRes = await fetch(`${baseUrl}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ token: refreshed.token }),
+		});
+		assert.equal(reloginRes.status, 200);
+		const newCookie = reloginRes.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+		const delRes = await fetch(`${baseUrl}/api/collaborators/${collaborator.id}`, {
+			method: "DELETE",
+		});
+		assert.equal(delRes.status, 200);
+
+		const bootAfterDelete = await fetch(`${baseUrl}/api/bootstrap`, {
+			headers: { Cookie: newCookie },
+		});
+		assert.equal(bootAfterDelete.status, 401);
+	} finally {
+		await orchestrator.shutdown();
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});

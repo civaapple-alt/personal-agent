@@ -23,9 +23,10 @@
   - `POST /api/members` 与 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
 - 多人类受限协作与显式讨论隔离（方案 B）：
-  - `127.0.0.1`/`::1` 默认映射为所有者（测试传 `requireAuth: true` 时强制鉴权），非回环局域网请求须通过
-    `/api/auth/login` 签发 `pa_session` HttpOnly Cookie 或提供 `x-pa-token` / `Bearer` 口令。
-  - `/api/collaborators` 与 `/api/collaborators/:id/regenerate-token` 仅所有者可管理（向协同成员隐藏 `token`）。
+  - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式
+    登出）；非回环局域网与 `requireAuth: true` 须通过 `/api/auth/login` 签发 `pa_session` 或携带 `x-pa-token` / `Bearer`。
+  - `/api/collaborators` 与 `/api/collaborators/:id/regenerate-token` 仅所有者可管理（向协同成员隐藏 `token`）；重置口令或删除成员会
+    立即向对应在线 SSE 推送 `auth_revoked` 并断开连接，后续请求统一返回 `401`。
   - `POST /api/matters` 与 `POST /api/matters/:id/messages` 支持 `mode`：`"discussion"`（团队讨论，不占 AI 锁且支持
     AI 运行中续发）、`"ai_request"`（同事提请单）与 `"dispatch"`（仅所有者可触发）。
   - 所有者可通过 `/api/matters/:id/messages/:msgId/approve-ai` 或 `dismiss-ai` 一键批准并派发或忽略提请；

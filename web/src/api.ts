@@ -46,9 +46,16 @@ export interface CollaboratorDto {
 	updatedAt: string;
 }
 
+let authRevokedHandler: ((message?: string) => void) | null = null;
+
+export function setAuthRevokedHandler(handler: ((message?: string) => void) | null): void {
+	authRevokedHandler = handler;
+}
+
 export interface AuthSessionPayload {
 	authenticated: boolean;
 	permissionRequired: boolean;
+	revokedSession?: boolean;
 	currentUser: CollaboratorDto | null;
 }
 
@@ -283,6 +290,9 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 	});
 	const data = (await res.json()) as T & { error?: string };
 	if (!res.ok) {
+		if (res.status === 401 && url !== "/api/auth/login" && url !== "/api/auth/session") {
+			authRevokedHandler?.(data.error ?? "当前访问口令已失效或已被重置，请重新获取邀请链接");
+		}
 		throw new Error(data.error ?? `Request failed (${res.status})`);
 	}
 	return data;
