@@ -31,7 +31,7 @@
 - [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费失败/中止消息的 `metadata.progressSnapshot`：
   - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
-  输入栏仓库下拉标出「组织 / 仓库」；每条 AI 回复显示角色头像与「旁听补充」徽章，底部「旁听席」可增减列席角色。
+  输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。
 - 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及 [utils.ts](utils.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
 - [ChatStage](components/ChatStage.tsx) 支持在输入框点击图片按钮、拖拽图片到输入区或通过 `Ctrl/Cmd+V` 粘贴截图（最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）。
 

@@ -1680,10 +1680,10 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 	assert.match(MEMORY_SCOPE_LABELS.company_private ?? "", /组织/);
 
 	const gitDefault = formatMemberGitIdentity(
-		{ id: "pm", displayName: "PM", gitName: "PM", gitEmail: "pm@team.local" },
+		{ id: "pm", displayName: "产品经理", roleTitle: "Product Manager", gitName: "", gitEmail: "pm@team.local" },
 		{ gitEmailDomain: "@acme.dev" },
 	);
-	assert.equal(gitDefault.formatted, "PM <pm@acme.dev>");
+	assert.equal(gitDefault.formatted, "Product Manager <pm@acme.dev>");
 
 	const gitCustom = formatMemberGitIdentity(
 		{ id: "pm", displayName: "PM", gitName: "Alice", gitEmail: "alice@custom.io" },
@@ -1949,6 +1949,32 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		assert.equal(standaloneWsRes.status, 201);
 		const { workspace: standaloneWs } = (await standaloneWsRes.json()) as { workspace: { orgId: string | null } };
 		assert.equal(standaloneWs.orgId, null);
+
+		// Creating & switching organization on a workspace-less matter (e.g., new org with no registered repos yet)
+		const createMatterRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ prompt: "Plan test-org roadmap", orgId: secondOrg.id }),
+		});
+		assert.equal(createMatterRes.status, 202);
+		const { matter: orgMatter } = (await createMatterRes.json()) as {
+			matter: { id: string; orgId: string | null; workspaceId: string | null };
+		};
+		assert.equal(orgMatter.orgId, secondOrg.id);
+		assert.equal(orgMatter.workspaceId, null);
+
+		await orchestrator.abortMatter(orgMatter.id);
+
+		const patchMatterOrgRes = await fetch(`${baseUrl}/api/matters/${orgMatter.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ orgId: organization.id }),
+		});
+		assert.equal(patchMatterOrgRes.status, 200);
+		const patchedOrgMatter = (await patchMatterOrgRes.json()) as {
+			matter: { orgId: string | null; workspaceId: string | null };
+		};
+		assert.equal(patchedOrgMatter.matter.orgId, organization.id);
 	} finally {
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

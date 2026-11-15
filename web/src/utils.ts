@@ -51,11 +51,21 @@ export const MEMORY_SCOPE_SHORT_LABELS: Record<string, string> = {
 	project_private: "仓库记忆",
 };
 
+const ASCII_PRINTABLE_RE = /^[\x20-\x7E]+$/;
+
+export function defaultMemberGitName(member: { id: string; displayName?: string; roleTitle?: string }): string {
+	const displayName = member.displayName?.trim() ?? "";
+	if (displayName && ASCII_PRINTABLE_RE.test(displayName)) return displayName;
+	const roleTitle = member.roleTitle?.trim() ?? "";
+	if (roleTitle && ASCII_PRINTABLE_RE.test(roleTitle)) return roleTitle;
+	return member.id.trim() || roleTitle || displayName || "team-member";
+}
+
 export function formatMemberGitIdentity(
-	member: Pick<TeamMemberDto, "id" | "displayName" | "gitName" | "gitEmail">,
+	member: Pick<TeamMemberDto, "id" | "displayName" | "gitName" | "gitEmail"> & { roleTitle?: string },
 	organization?: Pick<OrganizationDto, "gitEmailDomain"> | null,
 ): { gitName: string; gitEmail: string; formatted: string } {
-	const gitName = (member.gitName || member.displayName || member.id).trim();
+	const gitName = (member.gitName || "").trim() || defaultMemberGitName(member);
 	const rawEmail = (member.gitEmail || "").trim();
 	const domain = organization?.gitEmailDomain?.trim().replace(/^@+/, "") ?? "";
 	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;

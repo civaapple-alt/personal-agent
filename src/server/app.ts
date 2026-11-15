@@ -558,6 +558,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				}
 				const body = await readJsonBody(req);
 				const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
+				const hasOrgUpdate = Object.hasOwn(body, "orgId");
 				const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
 				const workspaceId =
 					typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0
@@ -567,6 +568,20 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Workspace not found: ${workspaceId}`);
 					return;
 				}
+				const nextOrgId =
+					body.orgId === null
+						? null
+						: typeof body.orgId === "string" && body.orgId.trim().length > 0
+							? body.orgId.trim()
+							: null;
+				if (hasOrgUpdate && body.orgId !== null && typeof body.orgId !== "string") {
+					sendError(res, 400, "orgId must be a string or null");
+					return;
+				}
+				if (hasOrgUpdate && nextOrgId && !store.getOrganization(nextOrgId)) {
+					sendError(res, 404, `Organization not found: ${nextOrgId}`);
+					return;
+				}
 				const observerMemberIds = hasObserverUpdate
 					? parseObserverMemberIds(body.observerMemberIds, store)
 					: undefined;
@@ -574,14 +589,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "observerMemberIds must be an array of member IDs");
 					return;
 				}
-				if (hasWorkspaceUpdate && orchestrator.isMatterRunning(matterId)) {
-					sendError(res, 409, "Stop the active turn before switching workspaces");
+				if ((hasWorkspaceUpdate || hasOrgUpdate) && orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Stop the active turn before switching workspaces or organizations");
 					return;
 				}
 				let updated = existing;
+				if (hasOrgUpdate) {
+					updated = store.updateMatterOrganization(matterId, nextOrgId);
+					broadcast("matter_updated", { matterId, orgId: updated.orgId, workspaceId: updated.workspaceId });
+				}
 				if (hasWorkspaceUpdate) {
 					updated = store.updateMatterWorkspace(matterId, workspaceId);
-					broadcast("workspace_updated", { matterId, workspaceId });
+					broadcast("workspace_updated", { matterId, workspaceId, orgId: updated.orgId });
 				}
 				if (observerMemberIds !== undefined) {
 					updated = store.updateMatterObservers(matterId, observerMemberIds);
@@ -605,6 +624,27 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						: undefined;
 				const workspaceId =
 					typeof body.workspaceId === "string" && body.workspaceId.length > 0 ? body.workspaceId : undefined;
+				const boundWorkspace = workspaceId ? store.getWorkspace(workspaceId) : null;
+				if (workspaceId && !boundWorkspace) {
+					sendError(res, 404, `Workspace not found: ${workspaceId}`);
+					return;
+				}
+				const hasExplicitOrg = Object.hasOwn(body, "orgId");
+				if (hasExplicitOrg && body.orgId !== null && typeof body.orgId !== "string") {
+					sendError(res, 400, "orgId must be a string or null");
+					return;
+				}
+				const requestedOrgId =
+					typeof body.orgId === "string" && body.orgId.trim().length > 0 ? body.orgId.trim() : null;
+				if (requestedOrgId && !store.getOrganization(requestedOrgId)) {
+					sendError(res, 404, `Organization not found: ${requestedOrgId}`);
+					return;
+				}
+				const orgId = boundWorkspace
+					? boundWorkspace.orgId
+					: hasExplicitOrg
+						? requestedOrgId
+						: (store.getDefaultOrganization()?.id ?? null);
 				const title =
 					typeof body.title === "string" && body.title.trim().length > 0 ? body.title.trim() : undefined;
 				const deliverableTitle =
@@ -626,6 +666,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					title: title ?? fallbackTitle,
 					leadMemberId: leadMember.id,
 					workspaceId: workspaceId ?? null,
+					orgId,
 					observerMemberIds,
 				});
 

@@ -1637,6 +1637,9 @@ ${this.store
 		const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 		const canPublish = sessionMode === "lead";
 		const canDelegate = sessionMode !== "observer";
+		const matter = this.store.getMatter(input.matterId);
+		const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
+		const organization = activeOrgId ? this.store.getOrganization(activeOrgId) : null;
 		const cwd = resolve(input.workspace?.repoPath ?? this.defaultCwd);
 		const contextKey = JSON.stringify([
 			"v1",
@@ -1708,9 +1711,14 @@ ${this.store
 						if (sessionMode === "observer") {
 							throw new Error("Observing specialists cannot propose experiences during peer review");
 						}
-						if ((call.scope === "company_private" || call.scope === "project_private") && !input.workspace) {
+						if (call.scope === "project_private" && !input.workspace) {
 							throw new Error(
-								"Private company or project experiences require a bound workspace; private facts must not be reclassified as role_general",
+								"Project experiences require a bound workspace; private facts must not be reclassified as role_general",
+							);
+						}
+						if (call.scope === "company_private" && !input.workspace && !activeOrgId) {
+							throw new Error(
+								"Private company or project experiences require a bound workspace or organization; private facts must not be reclassified as role_general",
 							);
 						}
 						if (call.supersedesMemoryId) {
@@ -1718,8 +1726,7 @@ ${this.store
 							if (!target || target.memberId !== input.member.id) {
 								throw new Error("Cannot supersede missing or foreign member memory");
 							}
-							const orgId =
-								call.scope === "company_private" && input.workspace?.orgId ? input.workspace.orgId : null;
+							const orgId = call.scope === "company_private" ? activeOrgId : null;
 							const targetWorkspaceId =
 								call.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
 							this.store.validateMemoryReplacement(
@@ -1789,12 +1796,13 @@ ${this.store
 				"--tools",
 				[...requestedTools, ...teamTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(","),
 			);
-			const organization = input.workspace?.orgId ? this.store.getOrganization(input.workspace.orgId) : null;
 			const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
 			const repoGitUser = resolveRepoGitUserIdentity(cwd);
 			const committerName = repoGitUser?.name || gitIdentity.gitName;
 			const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
-			const relevantMemories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null);
+			const relevantMemories = this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null, {
+				orgId: activeOrgId,
+			});
 			worker = this.workerFactory({
 				cwd,
 				provider: input.member.provider,
@@ -2045,7 +2053,7 @@ ${this.store
 			});
 			if (!result.aborted && !input.run.cancelled) {
 				for (const item of stagedExperiences) {
-					const orgId = item.scope === "company_private" && input.workspace?.orgId ? input.workspace.orgId : null;
+					const orgId = item.scope === "company_private" ? activeOrgId : null;
 					const workspaceId = item.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
 					effects.experiences.push({
 						...item,
@@ -2254,7 +2262,9 @@ ${this.store
 							: `   - \`company_private\`：绑定当前项目方/团队（${workspace.name}）的组织经验或流程约束；`,
 						`   - \`project_private\`：绑定当前仓库「${workspace.name}」的具体业务规则、代码架构约束或验收口径。`,
 					].join("\n")
-				: "   - 当前事项未绑定项目工作区，请仅输出 `role_general`。",
+				: matter.orgId
+					? `   - \`company_private\`：绑定当前组织（\`${this.store.getOrganization(matter.orgId)?.name ?? matter.orgId}\`）的组织规范与跨仓库记忆；未绑定仓库，请勿输出 \`project_private\`。`
+					: "   - 当前事项未绑定项目工作区与组织，请仅输出 `role_general`。",
 			"4. 若当前证据明确推翻或修正了下方同成员的已有经验，请填写 `supersedesMemoryId`。",
 			"5. 仅返回严格 JSON（不要附加解释文字），格式：",
 			`{"summary":"一句话说明复盘范围与提炼依据","candidates":[{"memberId":"${member.id}","category":"efficiency|troubleshooting|collaboration|user_correction|domain_constraint","scope":"role_general|company_private|project_private","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}`,
@@ -2324,13 +2334,13 @@ ${this.store
 		const candidates: ExperienceDraft[] = [];
 		let skippedDuplicates = 0;
 
+		const activeOrgId = workspace ? workspace.orgId : (matter.orgId ?? null);
 		for (const candidate of payload.candidates) {
-			if ((candidate.scope === "company_private" || candidate.scope === "project_private") && !workspace) {
-				continue;
-			}
+			if (candidate.scope === "project_private" && !workspace) continue;
+			if (candidate.scope === "company_private" && !workspace && !activeOrgId) continue;
 			if (candidate.memberId && !participantSet.has(candidate.memberId)) continue;
 			const resolvedMember = singleOnly ? member : this.store.getMember(candidate.memberId ?? member.id)!;
-			const orgId = candidate.scope === "company_private" && workspace?.orgId ? workspace.orgId : null;
+			const orgId = candidate.scope === "company_private" ? activeOrgId : null;
 			const targetWorkspaceId = candidate.scope === "role_general" ? null : orgId ? null : (workspace?.id ?? null);
 			const dup = this.store.findActiveDuplicateMemory(
 				resolvedMember.id,

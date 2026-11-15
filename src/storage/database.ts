@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS matters (
 	status TEXT NOT NULL DEFAULT 'open',
 	lead_member_id TEXT REFERENCES team_members(id),
 	workspace_id TEXT REFERENCES workspace_links(id),
+	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	observer_ids_json TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
@@ -165,6 +166,14 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	if (!matterColumns.some((column) => column.name === "observer_ids_json")) {
 		db.exec("ALTER TABLE matters ADD COLUMN observer_ids_json TEXT");
 	}
+	if (!matterColumns.some((column) => column.name === "org_id")) {
+		db.exec("ALTER TABLE matters ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL");
+		db.exec(`
+			UPDATE matters
+			SET org_id = (SELECT org_id FROM workspace_links WHERE workspace_links.id = matters.workspace_id)
+			WHERE org_id IS NULL AND workspace_id IS NOT NULL;
+		`);
+	}
 	const columns = db.prepare("PRAGMA table_info(worker_sessions)").all();
 	if (!columns.some((column) => column.name === "context_key")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN context_key TEXT");
@@ -182,7 +191,14 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	ensureMemberCol("git_email", "git_email TEXT NOT NULL DEFAULT ''");
 	ensureMemberCol("identity_summary", "identity_summary TEXT NOT NULL DEFAULT ''");
 	db.exec(`
-		UPDATE team_members SET git_name = display_name WHERE TRIM(git_name) = '';
+		UPDATE team_members
+		SET git_name = CASE
+			WHEN TRIM(display_name) != '' AND display_name GLOB '[ -~]*' AND display_name NOT GLOB '*[^ -~]*' THEN TRIM(display_name)
+			WHEN TRIM(role_title) != '' AND role_title GLOB '[ -~]*' AND role_title NOT GLOB '*[^ -~]*' THEN TRIM(role_title)
+			ELSE id
+		END
+		WHERE TRIM(git_name) = ''
+		   OR (git_name = display_name AND display_name GLOB '*[^ -~]*');
 		UPDATE team_members SET git_email = id || '@team.local' WHERE TRIM(git_email) = '';
 	`);
 	const orgColumns = db.prepare("PRAGMA table_info(organizations)").all();

@@ -21,6 +21,7 @@ import {
 } from "../api.ts";
 import {
 	countMemberMemoriesByScope,
+	defaultMemberGitName,
 	formatMemberGitIdentity,
 	getBotTheme,
 	MEMORY_CATEGORY_LABELS,
@@ -210,7 +211,7 @@ export function TeamView({
 		setEditingIdentityMemberId(member.id);
 		setEditDisplayName(member.displayName);
 		setEditRoleTitle(member.roleTitle);
-		setEditGitName(member.gitName || member.displayName);
+		setEditGitName(member.gitName || defaultMemberGitName(member));
 		setEditGitEmail(member.gitEmail || `${member.id}@team.local`);
 		setEditIdentitySummary(member.identitySummary || "");
 	};
@@ -362,7 +363,7 @@ export function TeamView({
 						<div className="form-grid">
 							<input
 								className="input-field"
-								placeholder="Git 提交署名 Name（可选，默认使用角色名称）"
+								placeholder="Git Author 名称（可选，默认用英文头衔或 ID）"
 								value={newMemberGitName}
 								onChange={(e) => setNewMemberGitName(e.target.value)}
 							/>

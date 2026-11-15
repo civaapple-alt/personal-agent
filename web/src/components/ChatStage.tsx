@@ -45,6 +45,7 @@ interface ChatStageProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	selectedWorkspace: WorkspaceDto | null;
 	selectedWorkspaceId: string;
+	selectedOrgId: string;
 	workspaces: WorkspaceDto[];
 	organizations: import("../api.ts").OrganizationDto[];
 	members: TeamMemberDto[];
@@ -75,6 +76,7 @@ interface ChatStageProps {
 	onComposerTextChange: (value: string) => void;
 	onAddImages: (files: FileList | File[]) => void;
 	onRemoveImage: (imageId: string) => void;
+	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	onSelectMember: (memberId: string) => void;
 	activeObserverIds: string[];
@@ -97,6 +99,7 @@ export function ChatStage({
 	composerRef,
 	selectedWorkspace,
 	selectedWorkspaceId,
+	selectedOrgId,
 	workspaces,
 	organizations,
 	members,
@@ -127,6 +130,7 @@ export function ChatStage({
 	onComposerTextChange,
 	onAddImages,
 	onRemoveImage,
+	onSelectOrganization,
 	onSelectWorkspace,
 	onSelectMember,
 	activeObserverIds,
@@ -457,42 +461,45 @@ export function ChatStage({
 		);
 	};
 
+	const effectiveOrgId = selectedWorkspace ? selectedWorkspace.orgId : selectedOrgId || null;
 	const selectedOrganization = useMemo(
+		() => (effectiveOrgId ? (organizations.find((org) => org.id === effectiveOrgId) ?? null) : null),
+		[effectiveOrgId, organizations],
+	);
+	const orgFilteredWorkspaces = useMemo(
 		() =>
-			selectedWorkspace?.orgId ? (organizations.find((org) => org.id === selectedWorkspace.orgId) ?? null) : null,
-		[selectedWorkspace, organizations],
+			effectiveOrgId ? workspaces.filter((ws) => ws.orgId === effectiveOrgId) : workspaces.filter((ws) => !ws.orgId),
+		[effectiveOrgId, workspaces],
 	);
 
 	return (
 		<div className="chat-stage">
 			<header className="stage-header">
 				<div className="stage-header-left">
+					{selectedOrganization && (
+						<span
+							className="pill org-pill"
+							title={
+								selectedOrganization.description ||
+								`所属组织：${selectedOrganization.name}（同组织共享组织记忆与默认 Git 域名）`
+							}
+						>
+							组织：{selectedOrganization.name}
+						</span>
+					)}
 					{selectedWorkspace ? (
-						<>
-							{selectedOrganization && (
-								<span
-									className="pill org-pill"
-									title={
-										selectedOrganization.description ||
-										`所属组织：${selectedOrganization.name}（同组织仓库共享组织记忆）`
-									}
-								>
-									组织：{selectedOrganization.name}
-								</span>
-							)}
-							<span
-								className="pill"
-								title={
-									selectedWorkspace.repoGitUser
-										? `Git Committer（真实用户保留）：${selectedWorkspace.repoGitUser.name} <${selectedWorkspace.repoGitUser.email}>`
-										: selectedWorkspace.repoPath
-								}
-							>
-								仓库：{selectedWorkspace.name}
-							</span>
-						</>
+						<span
+							className="pill"
+							title={
+								selectedWorkspace.repoGitUser
+									? `Git Committer（真实用户保留）：${selectedWorkspace.repoGitUser.name} <${selectedWorkspace.repoGitUser.email}>`
+									: selectedWorkspace.repoPath
+							}
+						>
+							仓库：{selectedWorkspace.name}
+						</span>
 					) : (
-						<span className="pill">通用工作区</span>
+						<span className="pill">{selectedOrganization ? "未绑定仓库" : "通用工作区"}</span>
 					)}
 				</div>
 				<div className="stage-center-pill">
@@ -1036,21 +1043,38 @@ export function ChatStage({
 					<div className="composer-meta-bar">
 						<select
 							className="select-pill"
+							aria-label="所属组织"
+							value={effectiveOrgId ?? ""}
+							disabled={isTurnRunning}
+							title={isTurnRunning ? "当前回合正在执行，请先停止后再切换组织" : "选择本次事项所属组织"}
+							onChange={(e) => onSelectOrganization(e.target.value)}
+						>
+							{organizations.map((org) => (
+								<option key={org.id} value={org.id}>
+									组织：{org.name}
+									{org.isDefault ? "（默认）" : ""}
+								</option>
+							))}
+							<option value="">不归属组织</option>
+						</select>
+						<select
+							className="select-pill"
+							aria-label="项目仓库"
 							value={selectedWorkspaceId}
 							disabled={isTurnRunning}
 							title={isTurnRunning ? "当前回合正在执行，请先停止后再切换仓库" : undefined}
 							onChange={(e) => onSelectWorkspace(e.target.value)}
 						>
-							<option value="">不绑定仓库</option>
-							{workspaces.map((ws) => {
-								const wsOrgName = ws.orgId ? organizationName(ws.orgId) : null;
-								return (
-									<option key={ws.id} value={ws.id}>
-										仓库：{wsOrgName ? `${wsOrgName} / ` : ""}
-										{ws.name}
-									</option>
-								);
-							})}
+							<option value="">
+								{effectiveOrgId && orgFilteredWorkspaces.length === 0
+									? "不绑定仓库（该组织暂无仓库）"
+									: "不绑定仓库"}
+							</option>
+							{orgFilteredWorkspaces.map((ws) => (
+								<option key={ws.id} value={ws.id}>
+									仓库：{ws.name}
+								</option>
+							))}
 						</select>
 						<select
 							className="select-pill"

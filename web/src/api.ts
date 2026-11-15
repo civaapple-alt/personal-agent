@@ -40,6 +40,7 @@ export interface MatterDto {
 	status: "open" | "waiting_user" | "delivered" | "archived";
 	leadMemberId: string | null;
 	workspaceId: string | null;
+	orgId?: string | null;
 	observerMemberIds?: string[];
 	createdAt: string;
 	updatedAt: string;
@@ -274,6 +275,7 @@ export function createMatter(input: {
 	images?: UploadImagePayload[];
 	preferredMemberId?: string;
 	workspaceId?: string;
+	orgId?: string | null;
 	observerMemberIds?: string[];
 	title?: string;
 }): Promise<{ matter: MatterDto; assignedMember: TeamMemberDto }> {
@@ -556,6 +558,13 @@ export function updateMatterWorkspace(matterId: string, workspaceId: string | nu
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ workspaceId }),
+	});
+}
+
+export function updateMatterOrganization(matterId: string, orgId: string | null): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ orgId }),
 	});
 }
 

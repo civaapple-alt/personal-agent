@@ -20,6 +20,7 @@ import {
 	submitDeliverableFeedback,
 	type TeamMemberDto,
 	updateMatterObservers,
+	updateMatterOrganization,
 	updateMatterWorkspace,
 } from "./api.ts";
 import { ChatStage } from "./components/ChatStage.tsx";
@@ -44,6 +45,13 @@ export function App() {
 		initialRoute.deliverableId ?? null,
 	);
 	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
+	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => {
+		try {
+			return window.localStorage.getItem("pa.defaultOrgId") ?? "";
+		} catch {
+			return "";
+		}
+	});
 	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() => {
 		try {
 			return window.localStorage.getItem("pa.defaultWorkspaceId") ?? "";
@@ -145,17 +153,39 @@ export function App() {
 			setProgressStartedAt(nextStartedAt);
 		}
 		setSelectedMatterId((prev) => (explicitNewMatterRef.current ? null : (prev ?? data.matters[0]?.id ?? null)));
+		let resolvedWorkspaceId = "";
 		setSelectedWorkspaceId((prev) => {
-			if (prev && data.workspaces.some((w) => w.id === prev)) return prev;
+			if (prev && data.workspaces.some((w) => w.id === prev)) {
+				resolvedWorkspaceId = prev;
+				return prev;
+			}
 			try {
 				const saved = window.localStorage.getItem("pa.defaultWorkspaceId");
 				if (saved !== null) {
-					return saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
+					resolvedWorkspaceId = saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
+					return resolvedWorkspaceId;
 				}
 			} catch {
 				// Ignore storage access errors.
 			}
-			return data.workspaces[0]?.id || "";
+			resolvedWorkspaceId = data.workspaces[0]?.id || "";
+			return resolvedWorkspaceId;
+		});
+		const resolvedWs = resolvedWorkspaceId
+			? (data.workspaces.find((w) => w.id === resolvedWorkspaceId) ?? null)
+			: null;
+		setSelectedOrgId((prev) => {
+			if (prev && data.organizations.some((o) => o.id === prev)) return prev;
+			if (resolvedWs?.orgId) return resolvedWs.orgId;
+			try {
+				const savedOrg = window.localStorage.getItem("pa.defaultOrgId");
+				if (savedOrg !== null) {
+					return savedOrg && data.organizations.some((o) => o.id === savedOrg) ? savedOrg : "";
+				}
+			} catch {
+				// Ignore storage access errors.
+			}
+			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
 		});
 		setSelectedDeliverableId((prev) => prev ?? data.deliverables[0]?.id ?? null);
 	}, []);
@@ -168,6 +198,7 @@ export function App() {
 		const detail = await fetchMatterDetail(matterId);
 		setMatterDetail(detail);
 		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
+		setSelectedOrgId(detail.matter.orgId ?? "");
 		if (detail.activeRun) {
 			const snapshot = detail.activeRun;
 			setProgressByMatter((prev) => ({ ...prev, [matterId]: snapshot }));
@@ -451,6 +482,7 @@ export function App() {
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId,
 					workspaceId: selectedWorkspaceId || undefined,
+					orgId: selectedOrgId || null,
 					observerMemberIds: observerIds,
 				});
 				targetMatterId = created.matter.id;
@@ -481,7 +513,52 @@ export function App() {
 			});
 	};
 
+	const handleSelectOrganization = (nextOrgId: string) => {
+		const targetOrgId = nextOrgId || "";
+		const orgWorkspaces = (bootstrap?.workspaces ?? []).filter((w) =>
+			targetOrgId ? w.orgId === targetOrgId : !w.orgId,
+		);
+		if (!selectedMatterId) {
+			setSelectedOrgId(targetOrgId);
+			try {
+				window.localStorage.setItem("pa.defaultOrgId", targetOrgId);
+			} catch {
+				// Ignore storage access errors.
+			}
+			const currentStillMatches = selectedWorkspace
+				? targetOrgId
+					? selectedWorkspace.orgId === targetOrgId
+					: !selectedWorkspace.orgId
+				: false;
+			if (!currentStillMatches) {
+				const fallbackWsId = targetOrgId ? (orgWorkspaces[0]?.id ?? "") : "";
+				setSelectedWorkspaceId(fallbackWsId);
+				try {
+					window.localStorage.setItem("pa.defaultWorkspaceId", fallbackWsId);
+				} catch {
+					// Ignore storage access errors.
+				}
+			}
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterOrganization(targetMatterId, targetOrgId || null)
+			.then(async (res) => {
+				setSelectedOrgId(res.matter.orgId ?? "");
+				setSelectedWorkspaceId(res.matter.workspaceId ?? "");
+				const orgLabel = res.matter.orgId ? (organizationName(res.matter.orgId) ?? res.matter.orgId) : "不归属组织";
+				setNoticeBanner(`已切换当前事项组织为「${orgLabel}」`);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
 	const handleSelectWorkspace = (nextId: string) => {
+		const nextWs = nextId ? (bootstrap?.workspaces.find((w) => w.id === nextId) ?? null) : null;
 		if (!selectedMatterId) {
 			setSelectedWorkspaceId(nextId);
 			try {
@@ -489,14 +566,24 @@ export function App() {
 			} catch {
 				// Ignore storage access errors.
 			}
+			if (nextWs) {
+				const nextOrgId = nextWs.orgId ?? "";
+				setSelectedOrgId(nextOrgId);
+				try {
+					window.localStorage.setItem("pa.defaultOrgId", nextOrgId);
+				} catch {
+					// Ignore storage access errors.
+				}
+			}
 			return;
 		}
 		const targetMatterId = selectedMatterId;
 		void updateMatterWorkspace(targetMatterId, nextId || null)
-			.then(async () => {
-				setSelectedWorkspaceId(nextId);
+			.then(async (res) => {
+				setSelectedWorkspaceId(res.matter.workspaceId ?? "");
+				setSelectedOrgId(res.matter.orgId ?? "");
 				try {
-					window.localStorage.setItem("pa.defaultWorkspaceId", nextId);
+					window.localStorage.setItem("pa.defaultWorkspaceId", res.matter.workspaceId ?? "");
 				} catch {
 					// Ignore storage access errors.
 				}
@@ -678,6 +765,7 @@ export function App() {
 						composerRef={composerRef}
 						selectedWorkspace={selectedWorkspace}
 						selectedWorkspaceId={selectedWorkspaceId}
+						selectedOrgId={selectedOrgId}
 						workspaces={bootstrap?.workspaces ?? []}
 						organizations={bootstrap?.organizations ?? []}
 						members={bootstrap?.members ?? []}
@@ -708,6 +796,7 @@ export function App() {
 						onComposerTextChange={setComposerText}
 						onAddImages={(files) => void handleAddComposerImages(files)}
 						onRemoveImage={handleRemoveComposerImage}
+						onSelectOrganization={handleSelectOrganization}
 						onSelectWorkspace={handleSelectWorkspace}
 						onSelectMember={setSelectedMemberId}
 						activeObserverIds={activeObserverIds}

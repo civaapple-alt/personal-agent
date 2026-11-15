@@ -27,6 +27,15 @@ All notable changes to Personal Agent are documented in this file.
   - Separated current limits and future work from the historical four-phase design, and aligned the README document pointers.
 
 ### Changed
+- Allowed selecting an organization directly on New Matter / Chat even before registering a workspace under it, and
+  switched default member `gitName` values to English (`defaultMemberGitName`):
+  - Added `matters.org_id` migration & backfill, `store.updateMatterOrganization`, `orgId` support on
+    `POST /api/matters` and `PATCH /api/matters/:id`, and `orgId` resolution in `TeamOrchestrator` when running
+    workspace-less matters (`company_private` org memories + `PA_ORG_*` + org email domain).
+  - Added an Organization selector alongside the Repository selector in `ChatStage.tsx` (filtering repositories by
+    selected organization while supporting workspace-less matters directly under new orgs such as `test-org`).
+  - Defaulted `gitName` to English ASCII `displayName`/`roleTitle`/`id` (upgrading untouched non-ASCII auto-backfills
+    while preserving custom `gitName`), and replaced unlabeled identity inputs in `TeamView.tsx` with labeled fields.
 - Upgraded Git commit attribution to separate AI role authorship from real host/repository committer identity (`1.A`):
   - `resolveRepoGitUserIdentity` (`src/orchestrator/execution-context.ts`, `team-orchestrator.ts`) reads effective
     `user.name` / `user.email` in the workspace and preserves that real user on `GIT_COMMITTER_NAME` /

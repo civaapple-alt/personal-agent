@@ -29,11 +29,21 @@ function nowIso(): string {
 	return new Date().toISOString();
 }
 
+const ASCII_PRINTABLE_RE = /^[\x20-\x7E]+$/;
+
+export function defaultMemberGitName(member: { id: string; displayName?: string; roleTitle?: string }): string {
+	const displayName = member.displayName?.trim() ?? "";
+	if (displayName && ASCII_PRINTABLE_RE.test(displayName)) return displayName;
+	const roleTitle = member.roleTitle?.trim() ?? "";
+	if (roleTitle && ASCII_PRINTABLE_RE.test(roleTitle)) return roleTitle;
+	return member.id.trim() || roleTitle || displayName || "team-member";
+}
+
 export function resolveEffectiveGitIdentity(
-	member: Pick<TeamMember, "id" | "displayName" | "gitName" | "gitEmail">,
+	member: Pick<TeamMember, "id" | "displayName" | "gitName" | "gitEmail"> & { roleTitle?: string },
 	organization?: Pick<Organization, "gitEmailDomain"> | null,
 ): { gitName: string; gitEmail: string } {
-	const gitName = member.gitName.trim() || member.displayName.trim() || member.id;
+	const gitName = member.gitName.trim() || defaultMemberGitName(member);
 	const rawEmail = member.gitEmail.trim();
 	const domain = organization?.gitEmailDomain.trim().replace(/^@+/, "") ?? "";
 	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;
@@ -105,10 +115,11 @@ export class PersonalAgentStore {
 	}): TeamMember {
 		const timestamp = nowIso();
 		const existing = this.getMember(input.id);
+		const fallbackGitName = defaultMemberGitName(input);
 		const gitName =
 			input.gitName !== undefined
-				? input.gitName.trim() || input.displayName.trim()
-				: existing?.gitName.trim() || input.displayName.trim();
+				? input.gitName.trim() || fallbackGitName
+				: existing?.gitName.trim() || fallbackGitName;
 		const gitEmail =
 			input.gitEmail !== undefined
 				? input.gitEmail.trim() || `${input.id}@team.local`
@@ -188,7 +199,10 @@ export class PersonalAgentStore {
 			patch.displayName !== undefined ? patch.displayName.trim() || existing.displayName : existing.displayName;
 		const roleTitle =
 			patch.roleTitle !== undefined ? patch.roleTitle.trim() || existing.roleTitle : existing.roleTitle;
-		const gitName = patch.gitName !== undefined ? patch.gitName.trim() || displayName : existing.gitName;
+		const gitName =
+			patch.gitName !== undefined
+				? patch.gitName.trim() || defaultMemberGitName({ id: existing.id, displayName, roleTitle })
+				: existing.gitName;
 		const gitEmail =
 			patch.gitEmail !== undefined ? patch.gitEmail.trim() || `${existing.id}@team.local` : existing.gitEmail;
 		const identitySummary =
@@ -476,11 +490,11 @@ export class PersonalAgentStore {
 	listRelevantMemories(
 		memberId: string,
 		workspaceId: string | null,
-		options?: { includeCandidates?: boolean },
+		options?: { includeCandidates?: boolean; orgId?: string | null },
 	): MemberMemory[] {
 		const includeCandidates = options?.includeCandidates ?? true;
 		const workspace = workspaceId ? this.getWorkspace(workspaceId) : null;
-		const activeOrgId = workspace?.orgId ?? null;
+		const activeOrgId = workspace ? workspace.orgId : (options?.orgId ?? null);
 		return this.listMemberMemories(memberId)
 			.filter((memory) => {
 				if (memory.status === "rejected" || memory.status === "superseded") return false;
@@ -971,15 +985,18 @@ export class PersonalAgentStore {
 		summary?: string;
 		leadMemberId?: string | null;
 		workspaceId?: string | null;
+		orgId?: string | null;
 		observerMemberIds?: string[];
 	}): Matter {
 		const id = `mat_${randomUUID()}`;
 		const timestamp = nowIso();
 		const observerIds = normalizeUniqueIds(input.observerMemberIds);
+		const workspace = input.workspaceId ? this.getWorkspace(input.workspaceId) : null;
+		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
 		this.db
 			.prepare(
-				`INSERT INTO matters (id, title, summary, status, lead_member_id, workspace_id, observer_ids_json, created_at, updated_at)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
+				`INSERT INTO matters (id, title, summary, status, lead_member_id, workspace_id, org_id, observer_ids_json, created_at, updated_at)
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -987,6 +1004,7 @@ export class PersonalAgentStore {
 				input.summary ?? "",
 				input.leadMemberId ?? null,
 				input.workspaceId ?? null,
+				effectiveOrgId,
 				JSON.stringify(observerIds),
 				timestamp,
 				timestamp,
@@ -1018,9 +1036,28 @@ export class PersonalAgentStore {
 
 	updateMatterWorkspace(matterId: string, workspaceId: string | null): Matter {
 		const timestamp = nowIso();
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const workspace = workspaceId ? this.getWorkspace(workspaceId) : null;
+		const nextOrgId = workspace ? workspace.orgId : existing.orgId;
 		this.db
-			.prepare("UPDATE matters SET workspace_id = ?, updated_at = ? WHERE id = ?")
-			.run(workspaceId, timestamp, matterId);
+			.prepare("UPDATE matters SET workspace_id = ?, org_id = ?, updated_at = ? WHERE id = ?")
+			.run(workspaceId, nextOrgId, timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterOrganization(matterId: string, orgId: string | null): Matter {
+		const timestamp = nowIso();
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		if (orgId && !this.getOrganization(orgId)) {
+			throw new Error(`Organization not found: ${orgId}`);
+		}
+		const currentWs = existing.workspaceId ? this.getWorkspace(existing.workspaceId) : null;
+		const nextWorkspaceId = currentWs && currentWs.orgId !== orgId ? null : existing.workspaceId;
+		this.db
+			.prepare("UPDATE matters SET org_id = ?, workspace_id = ?, updated_at = ? WHERE id = ?")
+			.run(orgId, nextWorkspaceId, timestamp, matterId);
 		return this.getMatter(matterId)!;
 	}
 
@@ -1388,19 +1425,20 @@ export class PersonalAgentStore {
 	private mapMember(row: Record<string, unknown>): TeamMember {
 		const id = String(row.id);
 		const displayName = String(row.display_name);
+		const roleTitle = String(row.role_title);
 		const rawGitName = typeof row.git_name === "string" ? row.git_name.trim() : "";
 		const rawGitEmail = typeof row.git_email === "string" ? row.git_email.trim() : "";
 		return {
 			id,
 			templateId: String(row.template_id),
 			displayName,
-			roleTitle: String(row.role_title),
+			roleTitle,
 			isPrimaryContact: Boolean(row.is_primary_contact),
 			provider: String(row.provider),
 			model: String(row.model),
 			thinkingLevel: row.thinking_level as ThinkingLevel,
 			keywords: JSON.parse(String(row.keywords_json)) as string[],
-			gitName: rawGitName || displayName,
+			gitName: rawGitName || defaultMemberGitName({ id, displayName, roleTitle }),
 			gitEmail: rawGitEmail || `${id}@team.local`,
 			identitySummary: typeof row.identity_summary === "string" ? row.identity_summary : "",
 			createdAt: String(row.created_at),
@@ -1480,6 +1518,7 @@ export class PersonalAgentStore {
 			status: row.status as MatterStatus,
 			leadMemberId: row.lead_member_id ? String(row.lead_member_id) : null,
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+			orgId: row.org_id ? String(row.org_id) : null,
 			observerMemberIds: parseUniqueIds(row.observer_ids_json),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),

@@ -55,6 +55,7 @@ export { openPersonalAgentDatabase } from "./storage/database.ts";
 export {
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
+	defaultMemberGitName,
 	normalizeMemoryCategory,
 	PersonalAgentStore,
 	resolveEffectiveGitIdentity,

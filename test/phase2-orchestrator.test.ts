@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+	defaultMemberGitName,
 	loadRoleTemplatesFromDir,
 	openPersonalAgentDatabase,
 	PersonalAgentStore,
@@ -590,6 +591,87 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 		assert.equal(relevant[0]?.workspaceId, "ws-1");
 	} finally {
 		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});
+
+test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII auto-backfills", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-gitname-en-"));
+	const dbPath = join(tempRoot, "team.sqlite");
+	const db = openPersonalAgentDatabase(dbPath);
+	try {
+		const store = new PersonalAgentStore(db);
+		const pm = store.upsertMember({
+			id: "architect-lead",
+			templateId: "architect-lead",
+			displayName: "系统架构师",
+			roleTitle: "System Architect",
+			isPrimaryContact: false,
+			provider: "kimi-coding",
+			model: "kimi-for-coding",
+			thinkingLevel: "high",
+			keywords: ["架构"],
+		});
+		assert.equal(pm.gitName, "System Architect");
+		assert.equal(defaultMemberGitName({ id: "sec-ops", displayName: "安全官", roleTitle: "安全负责人" }), "sec-ops");
+
+		// Simulate an untouched Chinese auto-backfill from older version (git_name = display_name)
+		db.prepare("UPDATE team_members SET git_name = ? WHERE id = ?").run("系统架构师", "architect-lead");
+	} finally {
+		db.close();
+	}
+
+	const reopened = openPersonalAgentDatabase(dbPath);
+	try {
+		const store = new PersonalAgentStore(reopened);
+		assert.equal(store.getMember("architect-lead")?.gitName, "System Architect");
+
+		// Workspace-less matter under an explicit org injects org context & company_private memories
+		const org = store.upsertOrganization({
+			id: "org-test",
+			name: "test-org",
+			gitEmailDomain: "test-team.local",
+		});
+		store.addMemory({
+			memberId: "architect-lead",
+			scope: "company_private",
+			orgId: org.id,
+			verified: true,
+			content: "TEST_ORG_ONLY: Follow test-org RFC format",
+		});
+		const matter = store.createMatter({
+			title: "Org-level design",
+			leadMemberId: "architect-lead",
+			workspaceId: null,
+			orgId: org.id,
+		});
+		assert.equal(matter.orgId, org.id);
+
+		const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+		const workers: FakeRpcWorker[] = [];
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			sessionDir: tempRoot,
+			noSession: true,
+			defaultCwd: process.cwd(),
+			workerFactory: (opts) => {
+				const w = new FakeRpcWorker(opts, async () => "done");
+				workers.push(w);
+				return w;
+			},
+		});
+		await orchestrator.dispatchMatter({
+			matterId: matter.id,
+			prompt: "Draft architecture plan",
+			preferredMemberId: "architect-lead",
+		});
+		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_NAME, "System Architect");
+		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_EMAIL, "architect-lead@test-team.local");
+		assert.equal(workers[0]?.options.env?.PA_ORG_ID, org.id);
+		assert.match(workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /TEST_ORG_ONLY/);
+	} finally {
+		reopened.close();
 		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });

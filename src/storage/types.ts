@@ -100,6 +100,7 @@ export interface Matter {
 	status: MatterStatus;
 	leadMemberId: string | null;
 	workspaceId: string | null;
+	orgId: string | null;
 	observerMemberIds: string[];
 	createdAt: string;
 	updatedAt: string;
