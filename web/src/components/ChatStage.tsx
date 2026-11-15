@@ -184,9 +184,10 @@ export function ChatStage({
 	const [rosterOpen, setRosterOpen] = useState(false);
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
+	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
-	const collabTriggerRef = useRef<HTMLSpanElement | null>(null);
+	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
 	const rosterPanelRef = useRef<HTMLDivElement | null>(null);
@@ -201,11 +202,11 @@ export function ChatStage({
 	};
 
 	useEffect(() => {
-		if (!collabOpen && !starterMenuOpen && !rosterOpen) return;
+		if (!collabOpen && !starterMenuOpen && !rosterOpen && !moreMenuOpen) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
-			if (collabOpen && !collabPanelRef.current?.contains(target) && !collabTriggerRef.current?.contains(target)) {
+			if (collabOpen && !collabPanelRef.current?.contains(target) && !moreMenuWrapRef.current?.contains(target)) {
 				setCollabOpen(false);
 			}
 			if (starterMenuOpen && !composerDockRef.current?.contains(target)) {
@@ -216,12 +217,16 @@ export function ChatStage({
 				setRosterMode("view");
 				setRosterSearch("");
 			}
+			if (moreMenuOpen && !moreMenuWrapRef.current?.contains(target)) {
+				setMoreMenuOpen(false);
+			}
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setCollabOpen(false);
 				setStarterMenuOpen(false);
 				setRosterOpen(false);
+				setMoreMenuOpen(false);
 				setRosterMode("view");
 				setRosterSearch("");
 				setLightboxImage(null);
@@ -233,7 +238,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, starterMenuOpen, rosterOpen]);
+	}, [collabOpen, starterMenuOpen, rosterOpen, moreMenuOpen]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -618,6 +623,7 @@ export function ChatStage({
 							.join("\n")}
 						onClick={() => {
 							setCollabOpen(false);
+							setMoreMenuOpen(false);
 							if (rosterOpen) {
 								closeRoster();
 							} else {
@@ -651,57 +657,100 @@ export function ChatStage({
 							</span>
 						)}
 					</button>
-					{matterDetail && (
-						<span ref={collabTriggerRef} className="collab-header-triggers">
-							<button
-								type="button"
-								aria-expanded={collabOpen && collabTab !== "experiences"}
-								className={`btn-pill-outline btn-xs ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
-								title="查看团队内部委托记录及底层工具调用事件"
-								onClick={() => {
-									closeRoster();
-									setCollabOpen((open) => {
-										const next = !open || collabTab === "experiences";
-										if (
-											next &&
-											delegationsPlacement.all.length === 0 &&
-											matterDetail.noticeMessages.length > 0
-										) {
-											setCollabTab("events");
-										} else if (next) {
-											setCollabTab("delegations");
-										}
-										return next;
-									});
-								}}
-							>
-								{delegationsPlacement.all.length > 0
-									? `团队委托 (${delegationsPlacement.all.length}) · 事件 ${matterDetail.noticeMessages.length}`
-									: `过程事件 (${matterDetail.noticeMessages.length})`}
-							</button>
-							<button
-								type="button"
-								aria-expanded={collabOpen && collabTab === "experiences"}
-								className={`btn-pill-outline btn-xs ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
-								title="在本事项上下文中提炼、查看并核验各岗位协同经验"
-								onClick={() => {
-									closeRoster();
-									setCollabOpen((open) => !(open && collabTab === "experiences"));
-									setCollabTab("experiences");
-								}}
-							>
-								经验复盘 ({matterMemories.length})
-								{pendingMatterMemoriesCount > 0 ? ` · ${pendingMatterMemoriesCount} 待核验` : ""}
-							</button>
-						</span>
-					)}
-					<button
-						type="button"
-						className="btn-pill-outline btn-xs"
-						onClick={() => onOpenDeliverables(activeChatDeliverable?.id ?? selectedDeliverableId ?? undefined)}
-					>
-						成果库 ({deliverablesCount})
-					</button>
+					<div ref={moreMenuWrapRef} className="header-more-wrap">
+						<button
+							type="button"
+							aria-label={
+								pendingMatterMemoriesCount > 0
+									? `更多功能（${pendingMatterMemoriesCount} 条待核验经验）`
+									: "更多功能"
+							}
+							aria-haspopup="menu"
+							aria-expanded={moreMenuOpen}
+							className={`btn-pill-outline btn-xs header-more-btn ${moreMenuOpen || collabOpen ? "active" : ""}`}
+							title={
+								pendingMatterMemoriesCount > 0
+									? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与成果库`
+									: "团队委托、经验复盘与成果库"
+							}
+							onClick={() => {
+								closeRoster();
+								setMoreMenuOpen((open) => !open);
+							}}
+						>
+							<span aria-hidden="true">···</span>
+							{pendingMatterMemoriesCount > 0 && <span className="header-more-dot" aria-hidden="true" />}
+						</button>
+						{moreMenuOpen && (
+							<div role="menu" aria-label="更多功能" className="header-more-menu">
+								{matterDetail && (
+									<>
+										<button
+											type="button"
+											role="menuitem"
+											className={`header-more-item ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
+											onClick={() => {
+												setMoreMenuOpen(false);
+												const willOpen = !(collabOpen && collabTab !== "experiences");
+												if (
+													willOpen &&
+													delegationsPlacement.all.length === 0 &&
+													matterDetail.noticeMessages.length > 0
+												) {
+													setCollabTab("events");
+												} else if (willOpen) {
+													setCollabTab("delegations");
+												}
+												setCollabOpen(willOpen);
+											}}
+										>
+											<span className="header-more-label">
+												{delegationsPlacement.all.length > 0 ? "团队委托与事件" : "过程事件"}
+											</span>
+											<span className="header-more-meta">
+												{delegationsPlacement.all.length > 0
+													? `${delegationsPlacement.all.length} / ${matterDetail.noticeMessages.length}`
+													: matterDetail.noticeMessages.length}
+											</span>
+										</button>
+										<button
+											type="button"
+											role="menuitem"
+											className={`header-more-item ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
+											onClick={() => {
+												setMoreMenuOpen(false);
+												const willOpen = !(collabOpen && collabTab === "experiences");
+												setCollabTab("experiences");
+												setCollabOpen(willOpen);
+											}}
+										>
+											<span className="header-more-label">经验复盘</span>
+											<span className="header-more-meta">
+												{matterMemories.length}
+												{pendingMatterMemoriesCount > 0 && (
+													<span className="header-more-pending">
+														· {pendingMatterMemoriesCount} 待核验
+													</span>
+												)}
+											</span>
+										</button>
+									</>
+								)}
+								<button
+									type="button"
+									role="menuitem"
+									className="header-more-item"
+									onClick={() => {
+										setMoreMenuOpen(false);
+										onOpenDeliverables(activeChatDeliverable?.id ?? selectedDeliverableId ?? undefined);
+									}}
+								>
+									<span className="header-more-label">成果库</span>
+									<span className="header-more-meta">{deliverablesCount}</span>
+								</button>
+							</div>
+						)}
+					</div>
 				</div>
 			</header>
 
