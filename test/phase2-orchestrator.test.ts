@@ -13,6 +13,7 @@ import {
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
 } from "../src/index.ts";
+import { reportReady } from "./worker-helpers.ts";
 
 class FakeRpcWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
@@ -43,7 +44,9 @@ class FakeRpcWorker implements RpcWorkerLike {
 		this.responder = responder;
 	}
 
-	async start(): Promise<void> {}
+	async start(): Promise<void> {
+		await reportReady(this.options);
+	}
 	async stop(): Promise<void> {}
 	async getState(): Promise<{ sessionId: string; sessionFile?: string }> {
 		return { sessionId: `fake-session-${this.options.model ?? "default"}` };
@@ -130,6 +133,7 @@ test("isolates project-private memories across workspaces while preserving share
 	store.addMemory({
 		memberId: "engineering-manager",
 		scope: "company_private",
+		workspaceId: wsA.id,
 		content: "公司默认采用 Node 22+",
 		verified: true,
 	});
@@ -150,7 +154,7 @@ test("isolates project-private memories across workspaces while preserving share
 	assert.deepEqual(forA, ["改动前先跑 typecheck", "公司默认采用 Node 22+", "订单表金额字段为分"]);
 
 	const forB = store.listRelevantMemories("engineering-manager", wsB.id).map((m) => m.content);
-	assert.deepEqual(forB, ["改动前先跑 typecheck", "公司默认采用 Node 22+", "CRM 导出有字段脱敏"]);
+	assert.deepEqual(forB, ["改动前先跑 typecheck", "CRM 导出有字段脱敏"]);
 	db.close();
 });
 
@@ -222,7 +226,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	const noticeMsgs = store.listMessages(engResult.matter.id, "notice");
 	assert.equal(userMsgs.length, 2);
 	assert.equal(collabMsgs.length, 2);
-	assert.equal(noticeMsgs.length, 2);
+	assert.equal(noticeMsgs.length, 4);
 
 	// 3. Dispatching a follow-up deliverable with the same title increments version to 2
 	const v2Result = await orchestrator.dispatchMatter({
@@ -230,7 +234,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 		prompt: "请基于最新需求补充功能范围和验收条件",
 		deliverableTitle: "架构评估报告",
 	});
-	assert.equal(v2Result.assignedMember.id, "product-manager");
+	assert.equal(v2Result.assignedMember.id, "engineering-manager");
 	assert.ok(v2Result.deliverable);
 	assert.equal(v2Result.deliverable.version, 2);
 

@@ -1,8 +1,8 @@
 # Personal Agent
 
-面向跨项目工作的 **AI 角色团队**：成员按固定岗位组织（市场与营销负责人、产品经理、研发经理、测试经理），跨多个产品与仓库协作履职，并在日常工作中持续成长（RSI）及沉淀可分享的能力模板。
+面向跨项目工作的 **AI 角色团队**：成员拥有稳定的岗位身份，按需要组建团队，跨多个产品与仓库工作。初始提供市场与营销、产品、研发、测试四个示例角色；持续成长（RSI）与公开人才市场仍是后续目标。
 
-当前阶段正在基于 **Pi (`pi --mode rpc`)** 推进阶段一至阶段四落地。
+当前已基于 **Pi (`pi --mode rpc`)** 实现工作台、持久会话接续、模型可调用的内部委托与显式成果归档。实现边界与协议说明见 [运行与协作机制](docs/runtime-collaboration.md)。
 
 ## 为什么做 Personal Agent
 
@@ -35,7 +35,8 @@ personal-agent/
 │   ├── architecture-and-plan.md    # 基于 Pi RPC 的架构设计与四阶段规划
 │   ├── prototypes/                 # V1–V4 交互原型图与演进反馈
 │   └── references/                 # Grok Bot 与人才市场调研
-├── roles/                          # 可分享的四角色 Markdown 能力模板
+├── skills/                         # 初始角色声明对应的可加载 Pi Skills
+├── roles/                          # 可分享的角色 Markdown 定义
 │   ├── marketing-lead.md           # 市场与营销负责人
 │   ├── product-manager.md          # 产品经理（默认主要联系人）
 │   ├── engineering-manager.md      # 研发经理
@@ -82,11 +83,17 @@ npm test
 # 构建后端 dist/ 与前端 web/dist/
 npm run build
 
+# 使用隔离数据库核对源码和构建后的服务入口
+npm run check:startup
+
 # 启动阶段三 V4 工作台服务（默认 http://127.0.0.1:4310）
 npm run start:web
 
 # 运行阶段一实机冒烟测试（调用本机 pi --mode rpc 与 kimi-for-coding）
 npm run demo:rpc
+
+# 真实模型协作与跨进程接续验证，使用临时目录、独立数据库与会话
+npm run demo:team
 ```
 
 ## 阶段进展
@@ -95,5 +102,16 @@ npm run demo:rpc
 - [x] 技术架构与四阶段规划落盘（见 [docs/architecture-and-plan.md](docs/architecture-and-plan.md)）
 - [x] **阶段一**：`PiRpcWorker` 闭环实现、Biome + TS 严格基线、单元测试与实机 `kimi-for-coding` 冒烟验证
 - [x] **阶段二**：四角色 Markdown 模板、SQLite 双轨存储（Matter / Deliverable / 私有记忆）与按事找人编排路由
-- [x] **阶段三**：Grok-Bot 风格双栏工作台（React 19 + HashRouter + MarkdownView）、HTTP/SSE 实时流与任务中断、团队成员与能力包导入/导出、仓库热切换及独立服务预览链接
+- [x] **阶段三**：Grok-Bot 风格双栏工作台（React 19 + HashRouter + MarkdownView）、HTTP/SSE 实时流与任务中断、团队成员与能力包导入/导出、空闲时工作区切换及独立服务预览链接
+- [x] **运行闭环补齐**：按事项、成员、工作区恢复 Pi 会话，内部委托工具、运行能力核查与显式成果归档
 - [ ] **阶段四**：RSI 经验提炼流水线与人才市场角色能力包分享
+
+## 连续工作与内部协作
+
+同一事项的后续消息默认保留负责人和工作区，并打开确切的 Pi session 文件。正常退出或进程重启后都可由下一条用户消息接续。不同事项、工作区及成员各自保存会话；切回原工作区接回原现场。正在执行时请先停止，再补充要求或切换工作区，服务会以 HTTP 409 拒绝重叠执行。
+
+成员通过 `delegate_to_member` 请求其他已存在成员完成专业工作，并把其结果整合给用户。内部请求、结果与错误进入折叠的协作过程。主成员在形成可审阅的阶段成果、明确版本或实质变化时，才用 `publish_deliverable` 归档正式文档、实际文件或服务链接，并记录变化依据。普通聊天、需求澄清和细小调整只保存对话；内部同事把结果返回主成员，由主成员整合。停止或失败的本轮不会归档暂存草稿。
+
+角色 `skills` 现在指向实际的 `SKILL.md` 文件，缺失时明确报错。初始工具按 `tools` 声明装配，必要的团队工具自动加入。自定义工具由运维者通过 `PA_PI_EXTENSIONS` 指定本地 Pi 扩展，多个路径按系统路径分隔符连接；`mcpDependencies` 使用现有 Pi 配置中的服务器名。工具和依赖均须通过实际运行清单核查，导入角色定义不会自动安装依赖。
+
+公司与项目私有记忆需要绑定工作区才自动注入。历史上没有工作区的私有记忆仍可在团队页查看，但不会作为全局背景加入执行；目前尚无组织身份模型。完整边界、迁移规则和实机证据见 [运行与协作机制](docs/runtime-collaboration.md)。

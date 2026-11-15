@@ -209,36 +209,63 @@ test("PiRpcWorker resets idleTimeoutMs while active events keep arriving", async
 		const send = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
 		process.stdin.on("data", (chunk) => {
 			buf += chunk;
-			while (true) {
+			while (buf.includes("\\n")) {
 				const idx = buf.indexOf("\\n");
-				if (idx === -1) break;
-				const msg = JSON.parse(buf.slice(0, idx));
-				buf = buf.slice(idx + 1);
-				if (msg.type === "prompt") {
+				const msg = JSON.parse(buf.slice(0, idx)); buf = buf.slice(idx + 1);
+				if (msg.type === "get_state") {
+					send({ id: msg.id, type: "response", command: msg.type, success: true, data: { sessionId: "ready" } });
+				} else if (msg.type === "prompt") {
 					send({ id: msg.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
-					setTimeout(() => send({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "step 1 " } }), 40);
-					setTimeout(() => send({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "step 2" } }), 85);
-					setTimeout(() => {
-						send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "step 1 step 2" }] } });
-						send({ type: "agent_settled", aborted: false });
-					}, 130);
+					let step = 0;
+					const timer = setInterval(() => {
+						step++;
+						send({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "step " + step } });
+						if (step === 9) {
+							clearInterval(timer);
+							send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "all steps" }] } });
+							send({ type: "agent_settled", aborted: false });
+						}
+					}, 100);
 				}
 			}
 		});
 	`);
-
-	const worker = new PiRpcWorker({
-		executable: mock.executable,
-		leadingArgs: mock.leadingArgs,
-	});
+	const worker = new PiRpcWorker({ executable: mock.executable, leadingArgs: mock.leadingArgs });
 	await worker.start();
 	try {
-		// 130ms total > 75ms idleTimeoutMs, but each event keeps resetting the idle timer.
+		// Handshake excludes child JavaScript startup from the short activity window.
+		await worker.getState();
+		const deltas: string[] = [];
+		// Nine 100ms ticks exceed a 500ms idle window, with substantial scheduler margin per tick.
 		const result = await worker.runPromptAndWait("long task", {
-			idleTimeoutMs: 75,
-			timeoutMs: 1000,
+			idleTimeoutMs: 500,
+			timeoutMs: 5000,
+			onTextDelta: (delta) => deltas.push(delta),
 		});
-		assert.equal(result.assistantText, "step 1 step 2");
+		assert.equal(result.assistantText, "all steps");
+		assert.equal(deltas.length, 9);
+	} finally {
+		await worker.stop();
+	}
+});
+
+test("PiRpcWorker still times out when a started model produces no activity", async () => {
+	const mock = makeInlineMockScript(`
+		process.stdin.setEncoding("utf8");
+		process.stdin.on("data", data => {
+			const msg = JSON.parse(data.trim());
+			process.stdout.write(JSON.stringify({ id: msg.id, type: "response", command: msg.type, success: true,
+				data: msg.type === "get_state" ? { sessionId: "ready" } : { disposition: "started" } }) + "\\n");
+		});
+	`);
+	const worker = new PiRpcWorker({ executable: mock.executable, leadingArgs: mock.leadingArgs });
+	await worker.start();
+	try {
+		await worker.getState();
+		await assert.rejects(
+			worker.runPromptAndWait("idle", { idleTimeoutMs: 100, timeoutMs: 1000 }),
+			/100ms of inactivity/,
+		);
 	} finally {
 		await worker.stop();
 	}
@@ -247,4 +274,57 @@ test("PiRpcWorker resets idleTimeoutMs while active events keep arriving", async
 test("serializeJsonLine produces strict single-line LF framing", () => {
 	const line = serializeJsonLine({ type: "get_state" });
 	assert.equal(line, '{"type":"get_state"}\n');
+});
+
+test("PiRpcWorker forwards exact session paths and surfaces provider error messages instead of empty success", async () => {
+	const mock = makeInlineMockScript(`
+		process.stdin.setEncoding("utf8");
+		let buf = "";
+		const send = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
+		process.stdin.on("data", chunk => {
+			buf += chunk;
+			while (buf.includes("\\n")) {
+				const i = buf.indexOf("\\n"); const msg = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
+				if (msg.type === "prompt") {
+					send({ id: msg.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+					send({ type: "message_end", message: { role: "assistant", content: [], stopReason: "error", errorMessage: "provider unavailable" } });
+					send({ type: "agent_settled", aborted: false });
+				} else if (msg.type === "get_state") {
+					send({ id: msg.id, type: "response", command: msg.type, success: true, data: { sessionId: process.argv[process.argv.indexOf("--session") + 1] } });
+				}
+			}
+		});
+	`);
+	const worker = new PiRpcWorker({
+		executable: mock.executable,
+		leadingArgs: mock.leadingArgs,
+		sessionFile: "/tmp/scoped/session.jsonl",
+	});
+	await worker.start();
+	try {
+		assert.equal((await worker.getState()).sessionId, "/tmp/scoped/session.jsonl");
+		await assert.rejects(worker.runPromptAndWait("prompt"), /provider unavailable/);
+	} finally {
+		await worker.stop();
+	}
+});
+
+test("PiRpcWorker signal interrupts an unsettled real subprocess promptly and stop is idempotent", async () => {
+	const mock = makeInlineMockScript(`
+		process.stdin.setEncoding("utf8");
+		process.stdin.on("data", data => {
+			const msg = JSON.parse(data.trim());
+			process.stdout.write(JSON.stringify({id: msg.id, type:"response", command:msg.type, success:true, data:{disposition:"started"}}) + "\\n");
+		});
+	`);
+	const worker = new PiRpcWorker({ executable: mock.executable, leadingArgs: mock.leadingArgs });
+	await worker.start();
+	try {
+		const controller = new AbortController();
+		const running = worker.runPromptAndWait("slow", { signal: controller.signal });
+		controller.abort();
+		await assert.rejects(running, /cancelled/);
+	} finally {
+		await Promise.all([worker.stop(), worker.stop()]);
+	}
 });

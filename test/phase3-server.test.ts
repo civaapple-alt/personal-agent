@@ -9,6 +9,7 @@ import {
 	loadRoleTemplatesFromDir,
 	openPersonalAgentDatabase,
 	PersonalAgentStore,
+	type PiRpcWorkerOptions,
 	PreviewManager,
 	type PromptRunResult,
 	type RpcExtensionUIDialogRequest,
@@ -18,14 +19,21 @@ import {
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
+import { reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
+	readonly options: PiRpcWorkerOptions;
+	constructor(options: PiRpcWorkerOptions) {
+		this.options = options;
+	}
 	private dialogHandler:
 		| ((req: RpcExtensionUIDialogRequest) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload)
 		| undefined;
 	private noticeListeners: Array<(notice: { method: string; [key: string]: unknown }) => void> = [];
 
-	async start(): Promise<void> {}
+	async start(): Promise<void> {
+		await reportReady(this.options);
+	}
 	async stop(): Promise<void> {}
 	async getState(): Promise<{ sessionId: string; sessionFile?: string }> {
 		return { sessionId: "test-web-session" };
@@ -126,7 +134,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		store,
 		templates,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
-		workerFactory: () => new InteractiveTestWorker(),
+		workerFactory: (options) => new InteractiveTestWorker(options),
 	});
 
 	const { server } = createPersonalAgentServer({
@@ -162,7 +170,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		const createRes = await fetch(`${baseUrl}/api/matters`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ prompt: "帮我准备 V4 交互原型交付" }),
+			body: JSON.stringify({ prompt: "帮我准备 V4 交互原型交付", deliverableTitle: "交付说明" }),
 		});
 		assert.equal(createRes.status, 202);
 		const created = (await createRes.json()) as { matter: { id: string } };
@@ -199,7 +207,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 			};
 			if (detail.matter.status === "delivered" && detail.deliverables[0]) {
 				assert.equal(detail.deliverables[0].contentOrPath, "交付原型已准备就绪");
-				assert.equal(detail.noticeMessages.length, 1);
+				assert.equal(detail.noticeMessages.length, 2);
 				deliverableId = detail.deliverables[0].id;
 				break;
 			}
@@ -234,9 +242,15 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 });
 
 class ProgressTestWorker implements RpcWorkerLike {
+	readonly options: PiRpcWorkerOptions;
+	constructor(options: PiRpcWorkerOptions) {
+		this.options = options;
+	}
 	private eventListeners: Array<(event: RpcSessionEvent) => void> = [];
 
-	async start(): Promise<void> {}
+	async start(): Promise<void> {
+		await reportReady(this.options);
+	}
 	async stop(): Promise<void> {}
 	async getState(): Promise<{ sessionId: string; sessionFile?: string }> {
 		return { sessionId: "test-progress-session" };
@@ -286,7 +300,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 		store,
 		templates,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
-		workerFactory: () => new ProgressTestWorker(),
+		workerFactory: (options) => new ProgressTestWorker(options),
 	});
 
 	const { server } = createPersonalAgentServer({
@@ -346,7 +360,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
 				matter: { status: string };
 			};
-			if (detail.matter.status === "delivered") break;
+			if (detail.matter.status === "open" && sseChunks.join("").includes("matter_settled")) break;
 			await new Promise((r) => setTimeout(r, 20));
 		}
 
@@ -451,10 +465,16 @@ test("hashRouter parses and formats deliverable, chat, team, and materials hash 
 });
 
 class AbortableTestWorker implements RpcWorkerLike {
+	readonly options: PiRpcWorkerOptions;
+	constructor(options: PiRpcWorkerOptions) {
+		this.options = options;
+	}
 	private resolveRun: ((res: PromptRunResult) => void) | null = null;
 	private settled = false;
 
-	async start(): Promise<void> {}
+	async start(): Promise<void> {
+		await reportReady(this.options);
+	}
 	async stop(): Promise<void> {
 		this.finish(true);
 	}
@@ -502,7 +522,7 @@ test("Server supports aborting a running matter and updating its bound workspace
 		store,
 		templates,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
-		workerFactory: () => new AbortableTestWorker(),
+		workerFactory: (options) => new AbortableTestWorker(options),
 	});
 
 	const { server } = createPersonalAgentServer({
@@ -548,6 +568,19 @@ test("Server supports aborting a running matter and updating its bound workspace
 
 		// Allow worker to start
 		await new Promise((r) => setTimeout(r, 40));
+
+		// Reject workspace switches and overlapping messages while a turn owns this matter.
+		for (const [method, path, body] of [
+			["PATCH", "", { workspaceId: (ws2 as { workspace: { id: string } }).workspace.id }],
+			["POST", "/messages", { prompt: "overlap" }],
+		] as const) {
+			const busy = await fetch(`${baseUrl}/api/matters/${created.matter.id}${path}`, {
+				method,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			assert.equal(busy.status, 409);
+		}
 
 		// Abort running matter
 		const abortRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}/abort`, {
@@ -604,8 +637,10 @@ test("Server persists partial streamed text and readable failure message in user
 		store,
 		templates,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
-		workerFactory: () => ({
-			async start() {},
+		workerFactory: (options) => ({
+			async start() {
+				await reportReady(options);
+			},
 			async getState() {
 				return { sessionId: "fail-session", isStreaming: false };
 			},

@@ -46,6 +46,8 @@ export interface PiRpcWorkerOptions {
 	noSession?: boolean;
 	/** Explicit session storage directory (`--session-dir`). */
 	sessionDir?: string;
+	/** Exact Pi session file to reopen. Never use --continue across matters. */
+	sessionFile?: string;
 	/** Additional CLI flags appended after standard RPC options. */
 	args?: string[];
 	/** Timeout for individual RPC command responses in milliseconds (default: 30000). */
@@ -82,6 +84,7 @@ export interface PromptRunResult {
 }
 
 export interface RunPromptOptions {
+	signal?: AbortSignal;
 	images?: ImageContent[];
 	streamingBehavior?: "steer" | "followUp";
 	/** Hard overall timeout for `agent_settled` in milliseconds (default: 1800000 = 30 min). */
@@ -129,6 +132,7 @@ export class PiRpcWorker {
 	>();
 
 	private child: ChildProcess | null = null;
+	private stopping: Promise<void> | undefined;
 	private stopReadingStdout: (() => void) | null = null;
 	private requestSeq = 0;
 	private stderrBuffer = "";
@@ -171,6 +175,7 @@ export class PiRpcWorker {
 			throw new Error("PiRpcWorker is already started");
 		}
 
+		this.stopping = undefined;
 		this.terminalError = null;
 		this.stderrBuffer = "";
 
@@ -182,6 +187,9 @@ export class PiRpcWorker {
 		}
 		if (this.options.sessionDir) {
 			args.push("--session-dir", this.options.sessionDir);
+		}
+		if (this.options.sessionFile) {
+			args.push("--session", this.options.sessionFile);
 		}
 		if (this.options.provider) {
 			args.push("--provider", this.options.provider);
@@ -288,7 +296,12 @@ export class PiRpcWorker {
 	/**
 	 * Request an orderly shutdown via stdin EOF, falling back to SIGTERM then SIGKILL.
 	 */
-	async stop(): Promise<void> {
+	stop(): Promise<void> {
+		this.stopping ??= this.stopProcess();
+		return this.stopping;
+	}
+
+	private async stopProcess(): Promise<void> {
 		const child = this.child;
 		if (!child) return;
 
@@ -400,6 +413,7 @@ export class PiRpcWorker {
 	 * waiting for `agent_settled` as required by the Pi RPC specification.
 	 */
 	async runPromptAndWait(message: string, options: RunPromptOptions = {}): Promise<PromptRunResult> {
+		options.signal?.throwIfAborted();
 		const envTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
 		const defaultTimeout = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 1_800_000;
 		const timeoutMs = options.timeoutMs ?? defaultTimeout;
@@ -510,6 +524,10 @@ export class PiRpcWorker {
 			};
 		}
 
+		const onAbort = () => rejectSettled(new Error("Prompt cancelled", { cause: options.signal?.reason }));
+		options.signal?.addEventListener("abort", onAbort, { once: true });
+		if (options.signal?.aborted) onAbort();
+
 		// Monitor unexpected child exit while waiting for agent_settled.
 		const child = this.child;
 		const onChildExit = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -533,6 +551,10 @@ export class PiRpcWorker {
 			}
 
 			const aborted = await settledPromise;
+			const lastMessage = assistantMessages.at(-1);
+			if (!aborted && lastMessage?.stopReason === "error") {
+				throw new Error(`Pi model failed: ${String(lastMessage.errorMessage ?? "unknown provider error")}`);
+			}
 			const nonEmptyText = [...assistantMessages]
 				.reverse()
 				.map((msg) => extractMessageText(msg))
@@ -549,6 +571,7 @@ export class PiRpcWorker {
 			};
 		} finally {
 			settledDone = true;
+			options.signal?.removeEventListener("abort", onAbort);
 			if (hardTimer) clearTimeout(hardTimer);
 			if (idleTimer) clearTimeout(idleTimer);
 			offEvent();

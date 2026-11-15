@@ -158,31 +158,17 @@ export class PersonalAgentStore {
 		};
 	}
 
-	/**
-	 * Load applicable memories for a member working in an optional workspace.
-	 * Project-private memories from other workspaces are excluded to prevent cross-project leakage.
-	 */
+	/** Private organization facts require an explicit workspace until organization identity exists. */
 	listRelevantMemories(memberId: string, workspaceId: string | null): MemberMemory[] {
-		const rows = (
-			workspaceId
-				? this.db
-						.prepare(
-							`SELECT * FROM member_memories
-							 WHERE member_id = ?
-							   AND (scope IN ('role_general', 'company_private')
-							        OR (scope = 'project_private' AND workspace_id = ?))
-							 ORDER BY created_at ASC, rowid ASC`,
-						)
-						.all(memberId, workspaceId)
-				: this.db
-						.prepare(
-							`SELECT * FROM member_memories
-							 WHERE member_id = ? AND scope IN ('role_general', 'company_private')
-							 ORDER BY created_at ASC, rowid ASC`,
-						)
-						.all(memberId)
-		) as Record<string, unknown>[];
+		return this.listMemberMemories(memberId).filter(
+			(memory) => memory.scope === "role_general" || (workspaceId !== null && memory.workspaceId === workspaceId),
+		);
+	}
 
+	listMemberMemories(memberId: string): MemberMemory[] {
+		const rows = this.db
+			.prepare("SELECT * FROM member_memories WHERE member_id = ? ORDER BY created_at, rowid")
+			.all(memberId);
 		return rows.map((row) => ({
 			id: String(row.id),
 			memberId: String(row.member_id),
@@ -419,6 +405,19 @@ export class PersonalAgentStore {
 		};
 	}
 
+	/** Commit a turn's index entries together, including their version numbers. */
+	recordDeliverables(inputs: Parameters<PersonalAgentStore["recordDeliverable"]>[0][]): Deliverable[] {
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			const deliveries = inputs.map((input) => this.recordDeliverable(input));
+			this.db.exec("COMMIT");
+			return deliveries;
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
+	}
+
 	listDeliverables(matterId?: string): Deliverable[] {
 		const rows = (
 			matterId
@@ -454,13 +453,15 @@ export class PersonalAgentStore {
 		piSessionId: string | null;
 		sessionFile: string | null;
 		status: "active" | "idle" | "closed";
+		contextKey?: string;
+		messageCursor?: string;
 	}): WorkerSessionRecord {
 		const id = `wsess_${randomUUID()}`;
 		const timestamp = nowIso();
 		this.db
 			.prepare(
-				`INSERT INTO worker_sessions (id, member_id, matter_id, workspace_id, pi_session_id, session_file, status, last_active_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO worker_sessions (id, member_id, matter_id, workspace_id, pi_session_id, session_file, status, last_active_at, context_key, message_cursor)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -471,9 +472,12 @@ export class PersonalAgentStore {
 				input.sessionFile,
 				input.status,
 				timestamp,
+				input.contextKey ?? null,
+				input.messageCursor ?? null,
 			);
 		return {
 			id,
+			messageCursor: input.messageCursor ?? null,
 			memberId: input.memberId,
 			matterId: input.matterId,
 			workspaceId: input.workspaceId,
@@ -482,6 +486,80 @@ export class PersonalAgentStore {
 			status: input.status,
 			lastActiveAt: timestamp,
 		};
+	}
+
+	findWorkerSession(
+		matterId: string,
+		memberId: string,
+		contextKey: string,
+		workspaceId: string | null,
+	): WorkerSessionRecord | null {
+		let row = this.db
+			.prepare(`SELECT * FROM worker_sessions
+			WHERE matter_id = ? AND member_id = ? AND context_key = ? AND status != 'closed'
+			AND session_file IS NOT NULL ORDER BY rowid DESC LIMIT 1`)
+			.get(matterId, memberId, contextKey);
+		if (!row)
+			row = this.db
+				.prepare(`SELECT * FROM worker_sessions WHERE matter_id = ? AND member_id = ?
+			AND workspace_id IS ? AND context_key IS NULL AND session_file IS NOT NULL
+			ORDER BY rowid DESC LIMIT 1`)
+				.get(matterId, memberId, workspaceId);
+		return row
+			? {
+					id: String(row.id),
+					memberId,
+					matterId,
+					messageCursor: row.message_cursor ? String(row.message_cursor) : null,
+					workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+					piSessionId: row.pi_session_id ? String(row.pi_session_id) : null,
+					sessionFile: String(row.session_file),
+					status: row.status === "active" ? "active" : "idle",
+					lastActiveAt: String(row.last_active_at),
+				}
+			: null;
+	}
+
+	finishWorkerSession(id: string, status: "idle" | "closed"): void {
+		this.db
+			.prepare("UPDATE worker_sessions SET status = ?, last_active_at = ? WHERE id = ?")
+			.run(status, nowIso(), id);
+	}
+
+	hasLiveMatterLease(matterId: string): boolean {
+		const lease = this.db.prepare("SELECT owner_pid FROM matter_execution_leases WHERE matter_id = ?").get(matterId);
+		if (!lease) return false;
+		try {
+			process.kill(Number(lease.owner_pid), 0);
+			return true;
+		} catch (error) {
+			return !(error instanceof Error && "code" in error && error.code === "ESRCH");
+		}
+	}
+
+	acquireMatterLease(matterId: string, ownerId: string): boolean {
+		const prior = this.db.prepare("SELECT owner_id FROM matter_execution_leases WHERE matter_id = ?").get(matterId);
+		if (prior) {
+			if (this.hasLiveMatterLease(matterId)) return false;
+			this.db
+				.prepare("DELETE FROM matter_execution_leases WHERE matter_id = ? AND owner_id = ?")
+				.run(matterId, String(prior.owner_id));
+		}
+		return (
+			this.db
+				.prepare("INSERT OR IGNORE INTO matter_execution_leases (matter_id, owner_id, owner_pid) VALUES (?, ?, ?)")
+				.run(matterId, ownerId, process.pid).changes > 0
+		);
+	}
+
+	releaseMatterLease(matterId: string, ownerId: string): void {
+		this.db
+			.prepare("DELETE FROM matter_execution_leases WHERE matter_id = ? AND owner_id = ?")
+			.run(matterId, ownerId);
+	}
+
+	updateMatterLead(matterId: string, memberId: string): void {
+		this.db.prepare("UPDATE matters SET lead_member_id = ? WHERE id = ?").run(memberId, matterId);
 	}
 
 	private mapMember(row: Record<string, unknown>): TeamMember {

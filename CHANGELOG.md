@@ -2,6 +2,23 @@
 
 All notable changes to Personal Agent are documented in this file.
 
+## [Unreleased]
+
+### Added
+- Persisted Pi session continuation scoped by matter, member, workspace path and conversation mode, including restart recovery, scoped handoff context, legacy session lookup and session-header validation.
+- Shipped Pi extension with real `delegate_to_member` and `publish_deliverable` tools over an authenticated per-worker loopback bridge. Internal work returns to the caller and stays in collaboration records.
+- Actual loading of the 13 initial role Skills, explicit tool selection, delayed capability handshake for dynamically registered tools, and required tool/MCP dependency checks.
+- SQLite matter execution ownership, cancellation across delegation trees, bounded delegation depth/count, duplicate-call handling, and orderly service shutdown.
+- `npm run demo:team` verifies real Pi model delegation, an actual document, and recall after restarting the host process in a disposable workspace/database. Regression tests cover continuity, isolation, tool transport and failure/cancellation boundaries.
+
+### Changed
+- Follow-up messages keep the matter's lead and workspace. A new matter still uses explicit selection, initial keyword routing or the primary contact; specialist collaboration is decided by the executing member.
+- Ordinary replies and clarification no longer become automatic documents or mark the matter delivered. Only the lead publishes reviewable milestones, explicitly requested versions or substantial revisions, with a required change basis linked to the source conversation. Internal specialists return results to the lead. Drafts are staged, validated and archived only when the turn succeeds.
+- Company-private memories now require a workspace to be injected. Unscoped historical memories remain viewable. Imported role definitions do not install plugins or Skills automatically.
+- Removed the UI's `修改` prefix shortcut that implicitly exported any reply as a new version. Revision requests now use the same explicit milestone decision as other dialogue.
+- Active turns reject concurrent messages and workspace switches with HTTP 409. Saved session failures are reported instead of silently starting a new conversation.
+- Marketing's declared tools now match the installed Pi baseline (`read`, `bash`), replacing the unimplemented `web_search` declaration. No claim of a dedicated search service is made.
+
 ## [0.4.0] - 2026-11-14
 
 ### Changed

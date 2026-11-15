@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS deliverables (
 	created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS matter_execution_leases (
+	matter_id TEXT PRIMARY KEY REFERENCES matters(id) ON DELETE CASCADE,
+	owner_id TEXT NOT NULL,
+	owner_pid INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS worker_sessions (
 	id TEXT PRIMARY KEY,
 	member_id TEXT NOT NULL REFERENCES team_members(id),
@@ -103,5 +109,13 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		db.exec("PRAGMA journal_mode = WAL;");
 	}
 	db.exec(SCHEMA_SQL);
+	const columns = db.prepare("PRAGMA table_info(worker_sessions)").all();
+	if (!columns.some((column) => column.name === "context_key")) {
+		db.exec("ALTER TABLE worker_sessions ADD COLUMN context_key TEXT");
+	}
+	if (!columns.some((column) => column.name === "message_cursor")) {
+		db.exec("ALTER TABLE worker_sessions ADD COLUMN message_cursor TEXT");
+	}
+	db.exec("CREATE INDEX IF NOT EXISTS idx_worker_context ON worker_sessions(matter_id, member_id, context_key)");
 	return db;
 }

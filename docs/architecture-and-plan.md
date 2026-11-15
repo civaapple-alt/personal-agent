@@ -1,6 +1,6 @@
 # Personal Agent 技术架构与分阶段规划
 
-状态：初版落地文档（V1）。基于 [产品方向确认稿](product-direction.md)、[跨项目角色草案](team-roles.md)、[集中入口与团队协作](team-interaction.md)、[V4 原型记录](prototypes/v4/README.md) 以及本地 Pi 仓库（`pi-source`）的 RPC 协议规范整理。
+状态：初始架构与路线图，以下保留设计演进；当前实现以 [运行与协作机制](runtime-collaboration.md) 为准。基于 [产品方向确认稿](product-direction.md)、[跨项目角色草案](team-roles.md)、[集中入口与团队协作](team-interaction.md)、[V4 原型记录](prototypes/v4/README.md) 以及本地 Pi 仓库（`pi-source`）的 RPC 协议规范整理。
 
 ---
 
@@ -30,7 +30,7 @@
 | **上层编排与路由核** | 自研轻量 Orchestrator（后续按需引入 `@earendil-works/pi-ai` / `pi-agent-core` / `pi-durable`） | `pi --mode rpc` 是单会话、单工作区执行器；跨项目角色路由、多角色异步协作、事项与交付物归拢、RSI 记忆提炼由上层编排核统筹。 |
 | **结构化状态存储** | 本地 SQLite | 保存事项（Matter）、多项目/仓库关联、角色实例私有记忆、交付物版本与预览服务状态。 |
 | **可分享角色资产** | Markdown + YAML Frontmatter + Git（对齐 Pi Packages 规范） | 角色定义、Skills、Prompt Templates 与扩展落盘为纯文本，天然支持版本控制与跨团队分享。 |
-| **前端工作台（V4，阶段三）** | `React 19.3.x` + `@earendil-works/elanor-react` / `design-tokens`（对齐 Pi `apps/p2`） | 与 Pi 官方应用组件栈保持一致，配合 `marked`、`lowlight`、`grok-mermaid` 渲染交付成果与流式交互。 |
+| **前端工作台（V4，阶段三）** | `React 19.3.x` + `esbuild` + 原生 CSS | 当前使用内置 Markdown 渲染器、HashRouter 与 SSE，未集成原规划中的 Pi UI 组件和 Mermaid 渲染。 |
 
 > **演化预留**：Pi 仓库中的 `@earendil-works/pi-durable` 与 `@earendil-works/chord` 提供了持久对话、Task Graph 与跨进程对象运行时，但 `pi-durable` 目前明确标注为 **Experimental（API 可能随版本变更）**。一期先以稳定的 `pi --mode rpc` 跑通闭环，把业务模型沉淀在上层，后续可平滑切换或按模块引入。
 
@@ -47,7 +47,7 @@ flowchart TD
         Router --> Team["角色实例管理器 (市场 / 产品 / 研发 / 测试)"]
         Team --> Collab["内部异步协作总线 (记录留存 / 默认折叠)"]
         Team --> Delivery["交付物与版本归拢器 (Deliverables)"]
-        Team --> RSI["RSI 经验提炼器 (反馈 -> 经验修正)"]
+        Team -.-> RSI["规划：RSI 经验提炼器"]
     end
 
     subgraph Data["双轨资产与状态存储 (Local-First)"]
@@ -75,9 +75,9 @@ flowchart TD
 ## 4. 基于 Pi RPC 模式的核心机制设计
 
 ### 4.1 Worker 生命周期与隔离粒度
-- **按“角色任务 + 目标工作区（`cwd`）”拉起或复用 `pi --mode rpc` 子进程**，配合 `--session-dir` 独立存放该仓库下的会话文件（或按轻量查询使用 `--no-session`），避免不同项目之间的代码上下文相互污染。
+- **每轮启动进程，按“事项 + 成员 + 工作区 ID/路径 + 用户/内部模式”恢复持久会话**。使用保存的确切路径传入 `--session`，不使用目录中的最近会话。会话文件身份与 `cwd` 必须匹配；`--no-session` 仅用于明确的临时运行。
 - **动态模型与推理深度调档**：上层编排核可根据任务性质调用 `set_model` 和 `set_thinking_level`——例如轻量信息梳理用高响应模型，复杂架构拆解或跨模块修改切到强推理模型。
-- **运行中干预**：用户通过 V4 提出补充要求或纠偏时，编排核按目标 Worker 的当前状态选择 `steer`（当前工具执行完后立即插话改向）或 `follow_up`（当前轮收尾后继续执行），必要时发送 `clear_queue` + `abort`。
+- **运行中干预**：当前工作台提供停止，随后通过新消息接续。RPC 封装提供 `steer` / `follow_up`，但工作台尚未接入运行中插话；并发消息和运行中切换工作区会返回 409。
 
 ### 4.2 双轨事件消费与“静默 / 关键确认”映射
 编排核持续消费 `pi --mode rpc` 的 stdout 事件流，并按以下规则分流到 V4 界面：
@@ -152,6 +152,8 @@ sequenceDiagram
 
 ## 7. 分阶段落地规划路线图
 
+本节是路线图，勾选实现范围请看 README。阶段三的三栏布局已被双栏工作台取代；运行中 steer 尚未接入，阶段四的自动 RSI、评估与公开人才市场尚未完成。角色定义导入导出已实现，但不包含自动依赖安装。
+
 ### 阶段一：架构底座与 Pi RPC 闭环原型（MVP 验证）
 - **目标**：不先铺重型 UI，先把最核心的“编排核调度 `pi --mode rpc` 干活并收回结构化结果”跑通。
 - **关键任务**：
@@ -183,9 +185,8 @@ sequenceDiagram
 
 ---
 
-## 8. 风险边界与待拍板工程项
+## 8. 当前工程选择与权限边界
 
 1. **命令与文件权限隔离**：Pi 文档明确指出其默认不限制文件系统、进程和网络权限，按启动进程权限运行。前期本地个人使用可直接运行；若需让角色自动执行高风险测试或对外启动预览服务，需按 [containerization.md](file://pi-source/packages/coding-agent/docs/containerization.md) 接入 Docker 或 Gondolin micro-VM 隔离。
-2. **下一轮开启编码前需确认的两项工程细节**：
-   - **代码工程形态**：是在当前仓库直接新建 `packages/`（或 `src/` + `web/`）作为一体化 TypeScript 工程，还是先建 `server/`（编排核）+ 独立前端目录？
-   - **本地 Pi 执行方式**：第一期是直接调用机器上已构建/安装的 `pi` CLI，还是将 `pi-source` 打包产物集成进本仓库依赖？
+2. **已采用的工程形态**：当前仓库使用 `src/` 后端与 `web/` 前端的一体化 TypeScript 工程，直接启动本机 `pi` CLI。该选择已实施，不再是编码前待确认事项。
+3. **本轮实现取舍与验证边界**：详见 [运行与协作机制](runtime-collaboration.md)。组织级身份、崩溃动作去重、持久后台任务和自动成长仍需后续设计与验证。

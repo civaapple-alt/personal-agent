@@ -60,7 +60,7 @@ function sendError(res: ServerResponse, statusCode: number, message: string): vo
 function formatMemoryMap(store: PersonalAgentStore): Record<string, unknown[]> {
 	const result: Record<string, unknown[]> = {};
 	for (const member of store.listMembers()) {
-		result[member.id] = store.listRelevantMemories(member.id, null);
+		result[member.id] = store.listMemberMemories(member.id);
 	}
 	return result;
 }
@@ -257,6 +257,10 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 404, `Workspace not found: ${workspaceId}`);
 					return;
 				}
+				if (orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Stop the active turn before switching workspaces");
+					return;
+				}
 				const updated = store.updateMatterWorkspace(matterId, workspaceId);
 				broadcast("workspace_updated", { matterId, workspaceId });
 				sendJson(res, 200, { matter: updated });
@@ -312,6 +316,10 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const matter = store.getMatter(matterId);
 				if (!matter) {
 					sendError(res, 404, `Matter not found: ${matterId}`);
+					return;
+				}
+				if (orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Matter already has an active turn");
 					return;
 				}
 				const body = await readJsonBody(req);

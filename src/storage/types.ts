@@ -77,6 +77,7 @@ export interface Deliverable {
 }
 
 export interface WorkerSessionRecord {
+	messageCursor: string | null;
 	id: string;
 	memberId: string;
 	matterId: string;

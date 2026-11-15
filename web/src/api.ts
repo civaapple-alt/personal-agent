@@ -166,7 +166,7 @@ export function createMatter(input: {
 
 export function postMatterMessage(
 	matterId: string,
-	input: { prompt: string; preferredMemberId?: string; deliverableTitle?: string },
+	input: { prompt: string; preferredMemberId?: string },
 ): Promise<{ accepted: boolean }> {
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
 		method: "POST",

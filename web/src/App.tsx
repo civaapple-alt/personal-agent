@@ -355,10 +355,6 @@ export function App() {
 	const handleSendPrompt = async () => {
 		const text = composerText.trim();
 		if (!text || submitting) return;
-		const targetDeliv = activeChatDeliverable ?? activeDeliverable;
-		const deliverableTitle =
-			selectedMatterId && targetDeliv && text.startsWith("修改") ? targetDeliv.title : undefined;
-
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
@@ -370,7 +366,6 @@ export function App() {
 				await postMatterMessage(targetMatterId, {
 					prompt: text,
 					preferredMemberId,
-					deliverableTitle,
 				});
 			} else {
 				const created = await createMatter({

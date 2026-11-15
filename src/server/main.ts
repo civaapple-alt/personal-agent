@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { delimiter, resolve } from "node:path";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
@@ -23,6 +23,7 @@ async function main(): Promise<void> {
 		templates,
 		defaultCwd: rootDir,
 		noSession: false,
+		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
 		sessionDir: resolve(rootDir, ".data/pi-sessions"),
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
@@ -52,10 +53,17 @@ async function main(): Promise<void> {
 
 	console.log(`Personal Agent V4 workbench listening on http://127.0.0.1:${port}`);
 
+	let stopping = false;
 	const shutdown = async () => {
+		if (stopping) return;
+		stopping = true;
 		console.log("\nShutting down Personal Agent server...");
+		const closed = new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		server.closeAllConnections();
+		for (const pending of dialogBroker.listPending()) dialogBroker.cancelForMatter(pending.matterId);
+		await orchestrator.shutdown();
 		await previewManager.stopAll();
-		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		await closed;
 		db.close();
 		process.exit(0);
 	};

@@ -9,7 +9,7 @@ defaultModel: kimi-for-coding
 thinkingLevel: high
 isPrimaryContact: false
 keywords: [市场, 营销, 客户, 需求证据, 竞品, 细分, 推广, 试用, 反馈, 价值表达]
-tools: [read, web_search, mcp]
+tools: [read, bash, mcp]
 skills: [market-research, competitor-analysis, launch-copy]
 mcpDependencies: []
 ---
@@ -25,6 +25,7 @@ mcpDependencies: []
 3. 针对初版或迭代版本设计低门槛的触达与试用反馈收集方案。
 
 ## 工具与环境依赖
+- 使用已装配的 bash 调用联网 CLI 或读取公开页面；没有检索服务时应说明覆盖限制，不声称执行了 web_search。
 - 资料读取工具、外部市场/文档检索（MCP）、产品说明与试用反馈记录。
 
 ## 协作和沟通约定
