@@ -285,12 +285,20 @@ export function formatNoticeEventLine(rawContent: string): string {
 			type?: string;
 			method?: string;
 			toolName?: string;
+			args?: { path?: string; command?: string; title?: string };
 			isError?: boolean;
 			message?: string;
 			tools?: string[];
 		};
+		const detail = parsed.args?.path
+			? ` (${parsed.args.path})`
+			: parsed.args?.command
+				? ` (${parsed.args.command.replace(/\s+/g, " ").trim().slice(0, 60)})`
+				: parsed.args?.title
+					? ` (${parsed.args.title})`
+					: "";
 		if (parsed.type === "tool_execution_start") {
-			return `开始工具 ${parsed.toolName ?? "tool"}`;
+			return `开始工具 ${parsed.toolName ?? "tool"}${detail}`;
 		}
 		if (parsed.type === "tool_execution_end") {
 			return `结束工具 ${parsed.toolName ?? "tool"}${parsed.isError ? "（失败）" : ""}`;

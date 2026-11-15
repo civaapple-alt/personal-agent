@@ -34,11 +34,19 @@ export interface ActiveDelegationProgress {
 	stageLabel: string;
 }
 
+export interface ProgressActivityItem {
+	memberName: string;
+	summary: string;
+	at: string;
+}
+
 export interface DispatchProgressEvent {
 	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
 	label: string;
 	toolName?: string;
+	toolSummary?: string;
 	activeDelegations?: ActiveDelegationProgress[];
+	recentLogs?: ProgressActivityItem[];
 	collabUpdated?: boolean;
 }
 
@@ -126,6 +134,7 @@ interface MatterRun {
 	contexts: Set<string>;
 	delegations: Map<string, Promise<DelegateResult>>;
 	activeDelegations: Map<string, ActiveDelegationProgress>;
+	recentLogs: ProgressActivityItem[];
 	delegationCount: number;
 	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
 	userMessageId: string;
@@ -144,6 +153,43 @@ const TOOL_LABELS: Record<string, string> = {
 function formatToolAction(toolName?: string): string {
 	if (!toolName) return "处理工具";
 	return TOOL_LABELS[toolName] ?? `调用 ${toolName}`;
+}
+
+function truncateInline(text: string, maxLen = 52): string {
+	const single = text.replace(/\s+/g, " ").trim();
+	if (single.length <= maxLen) return single;
+	return `${single.slice(0, maxLen - 1)}…`;
+}
+
+function summarizeToolArgs(args: unknown): string {
+	if (!args || typeof args !== "object") return "";
+	const record = args as Record<string, unknown>;
+	if (typeof record.path === "string" && record.path.trim()) {
+		const parts = record.path.trim().split("/").filter(Boolean);
+		const compact = parts.length > 2 ? parts.slice(-2).join("/") : record.path.trim();
+		return truncateInline(compact, 48);
+	}
+	if (typeof record.command === "string" && record.command.trim()) {
+		return truncateInline(record.command, 52);
+	}
+	if (typeof record.title === "string" && record.title.trim()) {
+		return truncateInline(record.title, 44);
+	}
+	if (typeof record.task === "string" && record.task.trim()) {
+		return truncateInline(record.task, 40);
+	}
+	return "";
+}
+
+function pushRunLog(run: MatterRun, memberName: string, summary: string): void {
+	const cleaned = summary.trim();
+	if (!cleaned) return;
+	const prev = run.recentLogs.at(-1);
+	if (prev && prev.memberName === memberName && prev.summary === cleaned) return;
+	run.recentLogs.push({ memberName, summary: cleaned, at: new Date().toISOString() });
+	if (run.recentLogs.length > 6) {
+		run.recentLogs.splice(0, run.recentLogs.length - 6);
+	}
 }
 
 function summarizeActiveDelegations(
@@ -401,6 +447,7 @@ ${this.store
 			contexts: new Set(),
 			delegations: new Map(),
 			activeDelegations: new Map(),
+			recentLogs: [],
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
@@ -612,6 +659,7 @@ ${this.store
 			contexts: new Set(),
 			delegations: new Map(),
 			activeDelegations: new Map(),
+			recentLogs: [],
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
@@ -658,6 +706,7 @@ ${this.store
 				metadata: { toMemberId: toMember.id, workspaceId: workspace?.id ?? null },
 			});
 			const delegationKey = requestMessage.id;
+			pushRunLog(run, fromMember.displayName, `委托${toMember.displayName}：${truncateInline(input.question, 44)}`);
 			run.activeDelegations.set(delegationKey, {
 				memberId: toMember.id,
 				memberName: toMember.displayName,
@@ -668,8 +717,11 @@ ${this.store
 				label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, "已接入任务"),
 				toolName: "delegate_to_member",
 				activeDelegations: [...run.activeDelegations.values()],
+				recentLogs: [...run.recentLogs],
 				collabUpdated: true,
 			});
+			let childTextBuf = "";
+			let lastStreamBroadcastAt = 0;
 			try {
 				const drafts: MatterRun["deliveries"] = [];
 				const result = await this.executeWithWorker({
@@ -682,10 +734,37 @@ ${this.store
 					run,
 					chain: [...chain, toMember.id],
 					signal,
+					onTextDelta: (delta) => {
+						childTextBuf += delta;
+						const now = Date.now();
+						if (now - lastStreamBroadcastAt < 1200) return;
+						const lines = childTextBuf
+							.split(/\r?\n/)
+							.map((line) => line.replace(/^[#*\-\s>`]+/, "").trim())
+							.filter(Boolean);
+						const snippet = lines.at(-1);
+						if (!snippet) return;
+						lastStreamBroadcastAt = now;
+						const label = `撰写结论：${truncateInline(snippet, 28)}`;
+						run.activeDelegations.set(delegationKey, {
+							memberId: toMember.id,
+							memberName: toMember.displayName,
+							stageLabel: label,
+						});
+						onProgress?.({
+							stage: "tool",
+							label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, label),
+							toolName: "delegate_to_member",
+							activeDelegations: [...run.activeDelegations.values()],
+							recentLogs: [...run.recentLogs],
+						});
+					},
 					onProgress: (childProgress) => {
 						const stageLabel =
 							childProgress.stage === "tool" && childProgress.toolName
-								? formatToolAction(childProgress.toolName)
+								? childProgress.toolSummary
+									? `${formatToolAction(childProgress.toolName)} ${truncateInline(childProgress.toolSummary, 24)}`
+									: formatToolAction(childProgress.toolName)
 								: childProgress.stage === "waiting_user"
 									? childProgress.label
 									: childProgress.stage === "finalizing"
@@ -706,6 +785,7 @@ ${this.store
 									: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, stageLabel),
 							toolName: childProgress.toolName ?? "delegate_to_member",
 							activeDelegations: [...run.activeDelegations.values()],
+							recentLogs: [...run.recentLogs],
 						});
 					},
 				});
@@ -727,6 +807,7 @@ ${this.store
 					},
 				});
 				run.activeDelegations.delete(delegationKey);
+				pushRunLog(run, toMember.displayName, "已完成委托并返回结论");
 				const remaining = [...run.activeDelegations.values()];
 				onProgress?.({
 					stage: remaining.length > 0 ? "tool" : "thinking",
@@ -736,6 +817,7 @@ ${this.store
 							: `${toMember.displayName}已返回结果，${fromMember.displayName}正在整合`,
 					toolName: remaining.length > 0 ? "delegate_to_member" : undefined,
 					activeDelegations: remaining,
+					recentLogs: [...run.recentLogs],
 					collabUpdated: true,
 				});
 				return { fromMember, toMember, requestMessage, responseMessage, answerText };
@@ -749,6 +831,11 @@ ${this.store
 					metadata: { requestMessageId: requestMessage.id, failed: true },
 				});
 				run.activeDelegations.delete(delegationKey);
+				pushRunLog(
+					run,
+					toMember.displayName,
+					`委托未完成：${truncateInline(error instanceof Error ? error.message : String(error), 36)}`,
+				);
 				const remaining = [...run.activeDelegations.values()];
 				onProgress?.({
 					stage: remaining.length > 0 ? "tool" : "thinking",
@@ -758,6 +845,7 @@ ${this.store
 							: `${toMember.displayName}未完成委托，${fromMember.displayName}正在处理`,
 					toolName: remaining.length > 0 ? "delegate_to_member" : undefined,
 					activeDelegations: remaining,
+					recentLogs: [...run.recentLogs],
 					collabUpdated: true,
 				});
 				throw error;
@@ -907,27 +995,42 @@ ${this.store
 						content: JSON.stringify(event).slice(0, 16000),
 					});
 					const toolName = String(event.toolName ?? "tool");
+					const toolSummary = event.type === "tool_execution_start" ? summarizeToolArgs(event.args) : undefined;
+					if (event.type === "tool_execution_start" && toolName !== "delegate_to_member") {
+						pushRunLog(
+							input.run,
+							input.member.displayName,
+							`${formatToolAction(toolName)}${toolSummary ? `：${toolSummary}` : ""}`,
+						);
+					}
 					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
 						return;
 					}
 					if (event.type === "tool_execution_start") {
 						input.onProgress?.({
 							stage: "tool",
-							label: `${input.member.displayName}：${formatToolAction(toolName)}`,
+							label: `${input.member.displayName}：${formatToolAction(toolName)}${toolSummary ? `（${toolSummary}）` : ""}`,
 							toolName,
+							toolSummary,
+							recentLogs: [...input.run.recentLogs],
 						});
 					} else {
 						input.onProgress?.({
 							stage: "thinking",
 							label: `${input.member.displayName}正在分析结果`,
 							toolName,
+							recentLogs: [...input.run.recentLogs],
 						});
 					}
 				} else if (event.type === "agent_start") {
 					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
 						return;
 					}
-					input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}正在思考` });
+					input.onProgress?.({
+						stage: "thinking",
+						label: `${input.member.displayName}正在思考`,
+						recentLogs: [...input.run.recentLogs],
+					});
 				}
 			});
 			if (offEvent) cleanups.push(offEvent);

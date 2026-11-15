@@ -109,12 +109,20 @@ export interface ActiveDelegationDto {
 	stageLabel: string;
 }
 
+export interface ProgressActivityDto {
+	memberName: string;
+	summary: string;
+	at: string;
+}
+
 export interface MatterProgressDto {
 	matterId: string;
 	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
 	label: string;
 	toolName?: string;
+	toolSummary?: string;
 	activeDelegations?: ActiveDelegationDto[];
+	recentLogs?: ProgressActivityDto[];
 	collabUpdated?: boolean;
 }
 

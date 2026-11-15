@@ -797,7 +797,9 @@ test("mapDelegationsToMessages pairs turn delegations for running, completed, an
 	assert.equal(placedStopped.byMessageId.get("u2")?.[0]?.status, "failed");
 
 	assert.equal(
-		formatNoticeEventLine(JSON.stringify({ type: "tool_execution_start", toolName: "read" })),
-		"开始工具 read",
+		formatNoticeEventLine(
+			JSON.stringify({ type: "tool_execution_start", toolName: "read", args: { path: "docs/prd.md" } }),
+		),
+		"开始工具 read (docs/prd.md)",
 	);
 });

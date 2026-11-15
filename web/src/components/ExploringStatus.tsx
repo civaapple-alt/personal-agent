@@ -1,5 +1,5 @@
 import type { MatterProgressDto } from "../api.ts";
-import { STAGE_LABELS, STAGE_ORDER } from "../utils.ts";
+import { formatClockTime, STAGE_LABELS, STAGE_ORDER } from "../utils.ts";
 
 interface ExploringStatusProps {
 	progress: MatterProgressDto;
@@ -40,6 +40,17 @@ export function ExploringStatus({ progress, elapsedSeconds, onAbort }: Exploring
 							<strong>{entry.memberName}</strong>
 							<span>{entry.stageLabel}</span>
 						</span>
+					))}
+				</div>
+			)}
+			{progress.recentLogs && progress.recentLogs.length > 0 && (
+				<div className="exploring-feed">
+					{progress.recentLogs.slice(-5).map((entry, idx) => (
+						<div key={`${entry.at}-${entry.memberName}-${idx}`} className="exploring-feed-item">
+							<span className="exploring-feed-time">{formatClockTime(entry.at)}</span>
+							<strong>{entry.memberName}</strong>
+							<span className="exploring-feed-text">{entry.summary}</span>
+						</div>
 					))}
 				</div>
 			)}

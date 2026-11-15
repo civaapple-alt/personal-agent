@@ -582,7 +582,12 @@ test("delegation suspends parent idle watchdog and forwards colleague progress a
 	const f = await fixture(t, async (worker) => {
 		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
 			assert.equal(f.workers[0]?.idleSuspendActive, true);
-			worker.emitEvent({ type: "tool_execution_start", toolName: "read", toolCallId: "eng-read" });
+			worker.emitEvent({
+				type: "tool_execution_start",
+				toolName: "read",
+				toolCallId: "eng-read",
+				args: { path: "docs/prd.md" },
+			});
 			worker.emitEvent({ type: "tool_execution_end", toolName: "read", toolCallId: "eng-read" });
 			return "技术方案已完成读取分析。";
 		}
@@ -595,7 +600,13 @@ test("delegation suspends parent idle watchdog and forwards colleague progress a
 		assert.ok(worker.idleSuspendCount >= 1);
 		return "已汇总研发分析结论。";
 	});
-	const events: Array<{ stage: string; label: string; collabUpdated?: boolean; activeNames: string[] }> = [];
+	const events: Array<{
+		stage: string;
+		label: string;
+		collabUpdated?: boolean;
+		activeNames: string[];
+		recentSummaries: string[];
+	}> = [];
 	const result = await f.orchestrator.dispatchMatter({
 		prompt: "用户目标：启动并行技术评估",
 		workspaceId: f.workspace.id,
@@ -606,11 +617,13 @@ test("delegation suspends parent idle watchdog and forwards colleague progress a
 				label: evt.label,
 				collabUpdated: evt.collabUpdated,
 				activeNames: (evt.activeDelegations ?? []).map((entry) => entry.memberName),
+				recentSummaries: (evt.recentLogs ?? []).map((item) => `${item.memberName}:${item.summary}`),
 			});
 		},
 	});
 	assert.match(result.replyText, /已汇总研发分析结论/);
 	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.includes("研发经理")));
 	assert.ok(events.some((evt) => evt.stage === "tool" && /研发经理/.test(evt.label) && /读取文件/.test(evt.label)));
+	assert.ok(events.some((evt) => evt.recentSummaries.some((line) => /研发经理:读取文件：docs\/prd\.md/.test(line))));
 	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.length === 0));
 });
