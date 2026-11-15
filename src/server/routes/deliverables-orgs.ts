@@ -3,6 +3,12 @@ import { requireOwner } from "../auth.ts";
 import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import { broadcastDistilledMemories, enrichWorkspace, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
+function workspaceHasActiveTurn(ctx: ServerRouteContext, workspaceId: string): boolean {
+	return ctx.store
+		.listMatters()
+		.some((matter) => matter.workspaceId === workspaceId && ctx.orchestrator.isMatterRunning(matter.id));
+}
+
 /** Handle deliverables feedback, organizations, workspaces, and preview services. */
 export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, previewManager, broadcast } = ctx;
@@ -158,6 +164,11 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			const fallbackOrg = store.getDefaultOrganization() ?? store.ensureDefaultOrganization();
 			orgId = fallbackOrg.id;
 		}
+		const existingWorkspace = store.listWorkspaces().find((ws) => ws.repoPath === repoPath);
+		if (existingWorkspace && existingWorkspace.orgId !== orgId && workspaceHasActiveTurn(ctx, existingWorkspace.id)) {
+			sendError(res, 409, "Stop active workspace turns before changing its organization");
+			return true;
+		}
 		const ws = enrichWorkspace(
 			store.upsertWorkspace({
 				orgId,
@@ -189,6 +200,14 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					: undefined;
 		if (orgId && !store.getOrganization(orgId)) {
 			sendError(res, 404, `Organization not found: ${orgId}`);
+			return true;
+		}
+		if (
+			orgId !== undefined &&
+			orgId !== store.getWorkspace(workspaceId)!.orgId &&
+			workspaceHasActiveTurn(ctx, workspaceId)
+		) {
+			sendError(res, 409, "Stop active workspace turns before changing its organization");
 			return true;
 		}
 		const ws = enrichWorkspace(

@@ -3,13 +3,23 @@ import type { Deliverable, MatterMessage } from "../storage/types.ts";
 export interface WorkspaceContext {
 	workspaceId: string | null;
 	repoPath: string;
+	orgId?: string | null;
+}
+
+export function messageMatchesContext(message: MatterMessage, context: WorkspaceContext): boolean {
+	return (
+		message.metadata?.workspaceId === context.workspaceId &&
+		message.metadata?.repoPath === context.repoPath &&
+		message.metadata?.orgId === (context.orgId ?? null)
+	);
 }
 
 function explicitScope(message: MatterMessage): WorkspaceContext | null {
 	const metadata = message.metadata;
 	if (!metadata || !Object.hasOwn(metadata, "workspaceId") || typeof metadata.repoPath !== "string") return null;
 	if (metadata.workspaceId !== null && typeof metadata.workspaceId !== "string") return null;
-	return { workspaceId: metadata.workspaceId, repoPath: metadata.repoPath };
+	if (metadata.orgId !== null && typeof metadata.orgId !== "string") return null;
+	return { workspaceId: metadata.workspaceId, repoPath: metadata.repoPath, orgId: metadata.orgId };
 }
 
 /** Recover scope from an explicit user-turn anchor for older internal events lacking repoPath.
@@ -25,7 +35,14 @@ export function selectMatterContext(
 		const explicit = explicitScope(message);
 		if (message.channel === "user" && message.senderType === "user") turnScope = explicit;
 		const scope = explicit ?? turnScope;
-		if (!scope || scope.workspaceId !== input.workspaceId || scope.repoPath !== input.repoPath) continue;
+		if (
+			!scope ||
+			scope.workspaceId !== input.workspaceId ||
+			scope.repoPath !== input.repoPath ||
+			scope.orgId !== (input.orgId ?? null)
+		)
+			continue;
+		if (message.metadata?.orgId !== scope.orgId) continue;
 		if (
 			message.metadata &&
 			Object.hasOwn(message.metadata, "workspaceId") &&

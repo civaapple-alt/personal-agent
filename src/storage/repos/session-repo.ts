@@ -59,17 +59,11 @@ export class SessionRepo {
 		contextKey: string,
 		workspaceId: string | null,
 	): WorkerSessionRecord | null {
-		let row = this.db
+		const row = this.db
 			.prepare(`SELECT * FROM worker_sessions
-			WHERE matter_id = ? AND member_id = ? AND context_key = ? AND status != 'closed'
+			WHERE matter_id = ? AND member_id = ? AND context_key = ? AND workspace_id IS ? AND status != 'closed'
 			AND session_file IS NOT NULL ORDER BY rowid DESC LIMIT 1`)
-			.get(matterId, memberId, contextKey);
-		if (!row)
-			row = this.db
-				.prepare(`SELECT * FROM worker_sessions WHERE matter_id = ? AND member_id = ?
-			AND workspace_id IS ? AND context_key IS NULL AND session_file IS NOT NULL
-			ORDER BY rowid DESC LIMIT 1`)
-				.get(matterId, memberId, workspaceId);
+			.get(matterId, memberId, contextKey, workspaceId);
 		return row
 			? {
 					id: String(row.id),

@@ -9,6 +9,7 @@ import type {
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
+import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
 import {
 	MEMORY_CATEGORY_PROMPT_LABELS,
 	OBSERVER_SILENT_SENTINEL,
@@ -29,15 +30,13 @@ export function buildInterruptionResumeBrief(input: {
 	store: PersonalAgentStore;
 	matterId: string;
 	workspaceId: string | null;
+	orgId?: string | null;
 	repoPath: string;
 	messages: MatterMessage[];
 	afterCursor: number;
 	excludeIds: Set<string>;
 }): string {
-	const inScope = (msg: MatterMessage) =>
-		!input.excludeIds.has(msg.id) &&
-		msg.metadata?.workspaceId === input.workspaceId &&
-		msg.metadata?.repoPath === input.repoPath;
+	const inScope = (msg: MatterMessage) => !input.excludeIds.has(msg.id) && messageMatchesContext(msg, input);
 	const recentScoped = input.messages
 		.slice(input.afterCursor)
 		.filter((msg) => inScope(msg) && !msg.metadata?.observerIntervention);
@@ -82,9 +81,11 @@ export function buildInterruptionResumeBrief(input: {
 		scopedOutcomeIdx >= 0
 			? [...scopedAll.slice(0, scopedOutcomeIdx)].reverse().find((msg) => msg.senderType === "user")
 			: undefined;
-	const collabMessages = input.store
-		.listMessages(input.matterId, "internal_collab")
-		.filter((msg) => (msg.metadata?.workspaceId ?? null) === input.workspaceId);
+	const collabMessages = selectMatterContext({
+		...input,
+		messages: input.store.listMessages(input.matterId),
+		deliverables: [],
+	}).messages.filter((msg) => msg.channel === "internal_collab");
 	const responseByReqId = new Map<string, MatterMessage>();
 	for (const msg of collabMessages) {
 		const reqId = typeof msg.metadata?.requestMessageId === "string" ? msg.metadata.requestMessageId : null;

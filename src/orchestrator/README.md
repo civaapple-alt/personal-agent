@@ -7,6 +7,7 @@
   [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担提示词装配、Worker 执行、内部委托、旁听与复盘。
 - [execution-context.ts](execution-context.ts) 负责 Skill 路径、保存会话身份与成果文件/URL 校验。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
+  筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。
 
 按问题找入口：
 
@@ -18,6 +19,7 @@
   - 并将 `ImageContent[]` 同步传给主负责人与旁听 `runObservers` Worker（纯图片消息自动生成标题与指令兜底）。
   - 主成员正常回复后，旁听成员在 `runObservers` 中并行快速评估本轮讨论；无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
+  - `v2` 会话键额外包含有效组织 ID。旧 `v1` 或无范围会话继续保留，但首次升级不自动恢复；新范围建立后可切回续接。详见[迁移说明](../../docs/runtime-collaboration.md#兼容历史数据)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
   - 依据工作区 `Organization` 与 `resolveEffectiveGitIdentity` 解析角色署名，并用 `resolveRepoGitUserIdentity(cwd)`
     读取目标仓库当前有效 `user.name` / `user.email`。

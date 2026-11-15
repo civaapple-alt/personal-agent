@@ -218,6 +218,9 @@ export class PersonalAgentStore {
 	updateMessageMetadata(messageId: string, metadata: Record<string, unknown>) {
 		return this.matters.updateMessageMetadata(messageId, metadata);
 	}
+	transitionAiRequest(...args: Parameters<MatterRepo["transitionAiRequest"]>) {
+		return this.matters.transitionAiRequest(...args);
+	}
 	appendMessage(input: Parameters<MatterRepo["appendMessage"]>[0]) {
 		return this.matters.appendMessage(input);
 	}

@@ -85,7 +85,9 @@ export async function performDistillationPass(
 	const matter = deps.requireMatter(input.matterId);
 	const workspace = matter.workspaceId ? deps.store.getWorkspace(matter.workspaceId) : null;
 	const cwd = resolve(workspace?.repoPath ?? deps.defaultCwd);
+	const activeOrgId = workspace ? workspace.orgId : (matter.orgId ?? null);
 	const scoped = selectMatterContext({
+		orgId: activeOrgId,
 		workspaceId: workspace?.id ?? null,
 		repoPath: cwd,
 		messages: deps.store.listMessages(matter.id),
@@ -129,7 +131,7 @@ export async function performDistillationPass(
 
 	const existingMemoryLines: string[] = [];
 	for (const pMember of participatingMembers) {
-		const mems = deps.store.listRelevantMemories(pMember.id, workspace?.id ?? null);
+		const mems = deps.store.listRelevantMemories(pMember.id, workspace?.id ?? null, { orgId: activeOrgId });
 		for (const mem of mems) {
 			existingMemoryLines.push(
 				`- [${mem.id} | ${pMember.id} (${pMember.displayName}) | ${mem.status} | ${mem.scope} | ${mem.category}] ${mem.content}`,
@@ -281,6 +283,9 @@ export async function performDistillationPass(
 		throw new Error("Experience distillation was aborted");
 	}
 	const currentMatter = deps.requireMatter(matter.id);
+	const currentWorkspace = workspace ? deps.store.getWorkspace(workspace.id) : null;
+	if ((workspace ? currentWorkspace?.orgId : currentMatter.orgId) !== activeOrgId)
+		throw new Error("Organization changed during experience distillation");
 	if (
 		currentMatter.workspaceId !== matter.workspaceId ||
 		(workspace && deps.store.getWorkspace(workspace.id)?.repoPath !== workspace.repoPath)
@@ -291,7 +296,6 @@ export async function performDistillationPass(
 	const candidates: ExperienceDraft[] = [];
 	let skippedDuplicates = 0;
 
-	const activeOrgId = workspace ? workspace.orgId : (matter.orgId ?? null);
 	for (const candidate of payload.candidates) {
 		if (candidate.scope === "project_private" && !workspace) continue;
 		if (candidate.scope === "company_private" && !workspace && !activeOrgId) continue;

@@ -31,6 +31,8 @@
     AI 运行中续发）、`"ai_request"`（同事提请单）与 `"dispatch"`（仅所有者可触发）。
   - 所有者可通过 `/api/matters/:id/messages/:msgId/approve-ai` 或 `dismiss-ai` 一键批准并派发或忽略提请；
     仓库/组织/成员/记忆/弹窗/预览写入与 `autoDistill: true` 均对协同成员返回 `403`。
+  - 提请只允许从 `pending` 原子转为 `approved` 或 `dismissed`；重复处理/非提请返回 409。批准先校验来源组织与仓库、AI 成员和附件，失败保持待处理；附件缺失返回 410。
+  - 图片上传完成后由 `dispatch-runner` 统一检查运行占用，冲突返回 409，不能覆盖原运行进度。运行中的仓库也不能经 PATCH 或同路径 upsert 改归属组织。
 - Phase 4 RSI 接口：
   - `POST /api/deliverables/:id/feedback` 支持可选 `rating`、`autoDistill` 与 `scopeMode`，反馈与计数原子保存并仅评价该版本关联的经验（`neutral` 撤回当前票）。
   - 可选自动复盘失败时仍返回已保存反馈与 `distillationError`。

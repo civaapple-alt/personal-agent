@@ -2,7 +2,7 @@
 
 状态：
 
-- 2026-11-15 按当前源码核对，调查基线为 `90be687`，本轮在其上修复 RSI 范围与收尾边界，产品说明基线为 `ee79e90`。
+- 2026-11-15 按当前源码核对，调查范围为 `793b46b..1f68160` 的 26 笔提交，本轮补齐组织上下文隔离、提请状态与并发派发边界，产品说明基线为 `ee79e90`。
 - 环境变量、超时阈值与运行默认参数另见[配置参考](configuration.md)。
 - 本文说明模块关系、当前实现范围和下一阶段计划；协议细节、迁移规则与实机证据见[连续上下文与内部角色协作](runtime-collaboration.md)。
 
@@ -116,13 +116,13 @@ flowchart TB
 
 | 源码入口 | 负责的事实与行为 |
 | --- | --- |
-| [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | HTTP/SSE、异步派发、用户对话与服务退出顺序 |
-| [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 新事项路由、后续负责人、工作区、运行树、内部委托与归档决定 |
-| [`execution-context.ts`](../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者筛选工作区证据及有来源关联的成果，供旁听与复盘使用 |
+| [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../src/server/auth.ts)、[sse](../src/server/sse.ts)、[uploads](../src/server/uploads.ts)、[dispatch-runner](../src/server/dispatch-runner.ts) 与 [routes](../src/server/routes/matters.ts) 维护 |
+| [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 事项生命周期与归档；[worker-runner](../src/orchestrator/worker-runner.ts)、[delegation-runner](../src/orchestrator/delegation-runner.ts)、[observer-runner](../src/orchestrator/observer-runner.ts)、[distiller](../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
+| [`execution-context.ts`](../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
 | [`team-extension.ts`](../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
 | [`team-tool-bridge.ts`](../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
 | [`pi-rpc-worker.ts`](../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
-| [`storage/`](../src/storage/) | SQLite 模式、领域记录、批量成果事务与单机事项执行占用 |
+| [`storage/`](../src/storage/) | `PersonalAgentStore` 门面委托各域 [repos](../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
 | [`dialog-broker.ts`](../src/server/dialog-broker.ts)、[`preview-manager.ts`](../src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
 
 ### 领域模型与当前范围
@@ -133,7 +133,7 @@ flowchart TB
 | `RoleTemplate` | Markdown 定义职责、方法、工具依赖、协作和验证约定，可导入导出 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
 | `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏） | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
 | `MemberMemory` | 成员经验与记忆、`scope`（`role_general`/`company_private`/`project_private`）与 `orgId`/`workspaceId` 绑定、`category`、`status`、`rationale`、来源事项/成果、替代链及命中/正负评估计数 | 后台夜间无人值守复盘调度与多组织权限鉴权 |
-| `Matter` | 事项标题、摘要、当前负责人、当前工作区、列席旁听成员（`observerMemberIds`）与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
+| `Matter` | 事项标题、摘要、组织/工作区、负责人、AI 参与范围、旁听开关、人类协作名单与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
 | `MatterMessage` | `user`、`internal_collab`、`notice` 三个通道及元数据（如 `observerIntervention`、`progressSnapshot`、截断安全的工具摘要 JSON） | 完整逐事件审计库；并非每个 Pi 流式事件都落入 SQLite |
 | `Deliverable` | 所属事项、发布成员、类型、正文或路径、链接、版本、反馈及 `feedbackRating` | 自动业务验收、统一文件托管、自动绑定 Git 提交或会话快照 |
 | `WorkspaceLink` | 工作区 ID、所属组织 `orgId`、仓库路径、默认分支等登记信息 | 动态 Git 状态快照或自动工作树管理 |
@@ -157,7 +157,7 @@ flowchart TB
    - 候选、正式成果草稿及成功执行的经验注入 ID 以 `ExecutionEffects` 沿调用树逐层返回。
    - 同事成功不等于主任务成功，失败分支和主任务失败均不提交候选；主执行成功时才在同一事务中保存成果、候选与版本应用关联。
 2. 用户从对话或成果卡触发 `distillExperiences`，使用无工具、无扩展、无 Skill 的独立 Pi 复盘：
-   - 输入按当前工作区 ID 和路径筛选；明确选择某个版本时，只使用截至该版本发布的同范围轨迹与对应反馈。
+   - 输入按当前组织、工作区 ID 和路径筛选；明确选择某个版本时，只使用截至该版本发布的同范围轨迹与对应反馈。
    - 模型不能把候选归给未参与该范围工作的成员；无法确认来源的旧资料继续保存，但不自动作为当前项目证据。
 3. 用户核验候选或编辑经验：
    - `supersedesMemoryId` 必须同成员、同 scope、同工作区且无循环；已建立替代关系的任一端不能靠清空指针或重归属跨范围迁移。
@@ -172,13 +172,21 @@ flowchart TB
 - 会话映射承接 Pi 历史，内存 `activeRuns` 支持同一宿主内网页刷新，失败/停止消息中的快照辅助下一轮显式续接；这些基础不构成重启后自动调度的持久后台任务。
 - 更详细的迁移与边界见[运行说明](runtime-collaboration.md)。
 
+### 人类协作与执行入口
+
+- 默认回环访问可使用所有者身份；局域网访问需有效邀请口令。所有者管理配置并派发 AI，协同成员可讨论、提请与评价。口令撤销会断开对应 SSE。它仍是共享工作台，尚无按组织或房间隔离读取数据的多租户权限。
+- `discussion` 只记录交流，`ai_request` 等待所有者处理，`dispatch` 启动 AI。只有待处理的人类提请能原子转换为 `approved` 或 `dismissed`，重复处理返回 409。
+- 批准前校验来源组织/仓库、参与成员与图片；来源变化返回 409，附件失效返回 410，均保持提请待处理。提请批准记录表示已安排执行，实际结果由事项运行状态表达，崩溃后不自动重派。
+- 图片落盘是异步步骤。`dispatch-runner` 在更新运行视图或广播前统一拒绝重叠派发，避免两次上传完成后覆盖同一事项的运行记录。
+- 新会话使用含组织 ID 的 `v2` 范围键。旧 `v1` 或无范围映射继续保存，但不能证明组织归属，因此升级后首次执行建立新会话；只有来源明确的新背景会补入。历史会话文件、消息、成果不被重写。详见[迁移说明](runtime-collaboration.md#兼容历史数据)。
+
 ## 4. 一轮交流、内部协作与成果的数据流
 
 1. HTTP 接收请求：
    - 新事项优先使用显式成员，否则按关键词初始路由，未命中时使用主要联系人；后续消息默认保留事项负责人和工作区，除非明确变更。
 2. 编排核取得事项执行占用，记录带工作区范围的用户消息；已有同事项执行时拒绝重叠消息或工作区切换，HTTP 返回 409。
 3. 执行范围与会话恢复：
-   - 由事项、成员、工作区 ID、绝对路径和主/内部/旁听模式共同确定。
+   - 由事项、成员、有效组织 ID、工作区 ID、绝对路径和主/内部/旁听模式共同确定。
    - 找到历史映射时校验 Pi 文件首行的 session ID 与真实 `cwd`，再用确切 `--session` 路径启动；没有映射才建立新会话。
 4. 能力与上下文注入：
    - 显式加载角色 Skills（含通用成果写作规范 [technical-writing](../skills/technical-writing/SKILL.md)）、团队扩展和批准的扩展，核查实际注册的普通工具及 MCP 依赖。
@@ -325,6 +333,12 @@ sequenceDiagram
 上述方向尚未完成，持续成长也不能由一次测试通过或一份 `SKILL.md` 的存在证明。
 
 ## 7. 核对方式与演进记录
+
+本轮核对 `793b46b..1f68160` 的组织与 Git 身份、图片、多人协作、花名册及模块拆分；基线代码检查、构建与 75 项离线测试通过。新增回归先复现组织会话串用、复盘范围缺失、重复批准及并发图片派发覆盖运行状态，再验证修复。修复后 `npm run check`、`npm run build`、86 项 `npm test`、`npm run check:startup`、`npm run check:docs` 均通过。新增 11 项用例使用临时数据库、会话文件、HTTP 服务与受控 Worker，不调用模型；本轮未进行网页视觉验收，也未重跑历史真实 Pi 演示。
+
+既有真实模型证据仍以[运行说明](runtime-collaboration.md#已留存实机证据)中的日期、脚本与范围为准，不把新增权限或组织用例当作长期自主能力证明。
+
+上一轮 `793b46b` 的核对记录：
 
 - 本轮从 `6897e78..90be687` 的 28 笔提交核对了旁听、刷新恢复、中断续接、经验提炼/审核/取消、成果阅读器与写作 Skill 的真实调用路径。
 - 调查起点 `90be687` 的 `check` 与 52 项离线测试通过；新增边界回归先复现了跨范围替代、复盘串入旧项目、子提案提前落库及误评分历史版本的问题，再验证修复。

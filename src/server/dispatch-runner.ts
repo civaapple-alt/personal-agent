@@ -8,6 +8,7 @@ import {
 } from "../orchestrator/team-orchestrator.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { CollaboratorRole, DeliverableType } from "../storage/types.ts";
+import { HttpRequestError } from "./http.ts";
 
 export interface ActiveRunState {
 	progress: DispatchProgressEvent;
@@ -43,6 +44,9 @@ export function createDispatchRunner(deps: {
 	const activeRuns = new Map<string, ActiveRunState>();
 
 	const runDispatchInBackground = (input: BackgroundDispatchInput): void => {
+		// Uploads and body reads can yield after a route's first busy check. Reserve here before emitting events.
+		if (activeRuns.has(input.matterId) || orchestrator.isMatterRunning(input.matterId))
+			throw new HttpRequestError(409, "Matter already has an active turn");
 		const activeEntry: ActiveRunState = {
 			progress: { stage: "starting", label: "正在准备执行环境..." },
 			startedAt: Date.now(),

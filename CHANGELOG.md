@@ -4,6 +4,14 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Reliability follow-up after `1f68160`
+
+- Include organization identity in `v2` native-session keys and persist organization provenance on new messages. Filter chat handoffs, observer backgrounds, interruption briefs and reflection evidence by that scope; include organization memories in workspace-less reflection and reject results if the organization changes.
+- Keep legacy `v1`/unscoped sessions and messages archived without guessing their organization. The first upgraded turn starts a fresh scoped session; subsequent turns resume its exact file.
+- Atomically transition only pending human AI requests to approved/dismissed. Validate scope, member and attachments before approval; reject repeat handling with 409 and unavailable attachments with 410.
+- Reject overlapping dispatches after asynchronous uploads without overwriting active progress, and prevent organization reassignment of a workspace with active turns.
+- Update architecture and module guides against the 26 commits after `793b46b`; add isolated regressions for organization scope and request lifecycle.
+
 ### Refactored & UI/UX
   - **Page Polish, Markdown Summary Stripping & Visual Consistency**:
     - Added `stripMarkdownFormatting` (`web/src/utils.ts`) and applied it in `parseDeliverableSummary`, `Sidebar`, and `MemberCard` so card/sidebar previews render crisp plain text instead of raw `#`/`**`/`` ` ``/`-` Markdown syntax.

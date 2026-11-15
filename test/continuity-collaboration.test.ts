@@ -548,7 +548,7 @@ test("shutdown cancels a host dialog wait and waits for cleanup before releasing
 	assert.equal(f.db.prepare("SELECT * FROM matter_execution_leases").all().length, 0);
 });
 
-test("legacy session mapping migrates without replaying unscoped old messages and keeps existing rows", async (t) => {
+test("legacy sessions without proven organization scope remain archived while a fresh scoped session starts", async (t) => {
 	const f = await fixture(t, async () => "ok");
 	const first = await f.orchestrator.dispatchMatter({ prompt: "old", workspaceId: f.workspace.id });
 	f.db.exec("UPDATE worker_sessions SET context_key = NULL, message_cursor = NULL");
@@ -560,7 +560,9 @@ test("legacy session mapping migrates without replaying unscoped old messages an
 		content: "LEGACY_UNSCOPED_BACKGROUND",
 	});
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "continue" });
-	assert.equal(f.workers[1]?.options.sessionFile, f.workers[0]?.sessionFile);
+	assert.equal(f.workers[1]?.options.sessionFile, undefined);
+	assert.notEqual(f.workers[1]?.sessionFile, f.workers[0]?.sessionFile);
+	assert.match(await readFile(f.workers[0]!.sessionFile, "utf8"), /old/);
 	assert.doesNotMatch(f.workers[1]?.prompt ?? "", /LEGACY_UNSCOPED_BACKGROUND/);
 	assert.ok(f.store.listMessages(first.matter.id).some((message) => message.content === "LEGACY_UNSCOPED_BACKGROUND"));
 });

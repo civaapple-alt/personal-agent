@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import type { PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
 import type { Collaborator, DeliverableType, Matter } from "../../storage/types.ts";
@@ -360,17 +361,6 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			return true;
 		}
 		const body = await readJsonBody(req);
-		const updatedMsg = store.updateMessageMetadata(messageId, {
-			...(targetMsg.metadata ?? {}),
-			aiRequestStatus: "approved",
-			approvedById: actor!.collaborator.id,
-			approvedByName: actor!.collaborator.name,
-			approvedAt: new Date().toISOString(),
-		});
-		const refreshedMatter = store.getMatter(matterId) ?? matter;
-		if (updatedMsg) {
-			broadcast("matter_message", { matterId, message: updatedMsg, matter: refreshedMatter });
-		}
 		const requesterName =
 			typeof targetMsg.metadata?.authorName === "string" && targetMsg.metadata.authorName.trim()
 				? targetMsg.metadata.authorName.trim()
@@ -391,6 +381,57 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				: (matter.workspaceId ?? undefined);
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		const images = await loadStoredImagesFromRefs(targetMsg.metadata?.images, uploadsDir, memoryUploads);
+
+		// Validate all asynchronous inputs before claiming the request. No awaits between claim and dispatch.
+		const currentMatter = store.getMatter(matterId)!;
+		const currentMessage = store.getMessage(messageId)!;
+		const currentWorkspace = currentMatter.workspaceId ? store.getWorkspace(currentMatter.workspaceId) : null;
+		const effectiveOrgId = currentWorkspace ? currentWorkspace.orgId : currentMatter.orgId;
+		if (workspaceId && !store.getWorkspace(workspaceId)) {
+			sendError(res, 404, `Workspace not found: ${workspaceId}`);
+			return true;
+		}
+		if (
+			(workspaceId ?? null) !== currentMatter.workspaceId ||
+			!messageMatchesContext(currentMessage, {
+				workspaceId: currentMatter.workspaceId,
+				orgId: effectiveOrgId,
+				repoPath: resolve(currentWorkspace?.repoPath ?? orchestrator.getDefaultCwd()),
+			})
+		) {
+			sendError(res, 409, "AI request scope changed; submit a new request in the current organization/workspace");
+			return true;
+		}
+		if (preferredMemberId && !store.getMember(preferredMemberId)) {
+			sendError(res, 404, `Member not found: ${preferredMemberId}`);
+			return true;
+		}
+		if (
+			preferredMemberId &&
+			currentMatter.aiMemberIds !== null &&
+			!currentMatter.aiMemberIds.includes(preferredMemberId)
+		) {
+			sendError(res, 409, "Requested AI member is no longer in this matter");
+			return true;
+		}
+		if (Array.isArray(targetMsg.metadata?.images) && images.length !== targetMsg.metadata.images.length) {
+			sendError(res, 410, "Request attachments are no longer available; submit the request again");
+			return true;
+		}
+		if (orchestrator.isMatterRunning(matterId)) {
+			sendError(res, 409, "Matter already has an active turn");
+			return true;
+		}
+		const updatedMsg = store.transitionAiRequest(messageId, "approved", {
+			approvedById: actor!.collaborator.id,
+			approvedByName: actor!.collaborator.name,
+			approvedAt: new Date().toISOString(),
+		});
+		if (!updatedMsg) {
+			sendError(res, 409, "Only a pending AI request can be approved");
+			return true;
+		}
+		broadcast("matter_message", { matterId, message: updatedMsg, matter: currentMatter });
 
 		runDispatchInBackground({
 			matterId: matter.id,
@@ -421,16 +462,16 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 404, `Message not found: ${messageId}`);
 			return true;
 		}
-		const updatedMsg = store.updateMessageMetadata(messageId, {
-			...(targetMsg.metadata ?? {}),
-			aiRequestStatus: "dismissed",
+		const updatedMsg = store.transitionAiRequest(messageId, "dismissed", {
 			dismissedById: actor!.collaborator.id,
 			dismissedByName: actor!.collaborator.name,
 			dismissedAt: new Date().toISOString(),
 		});
-		if (updatedMsg) {
-			broadcast("matter_message", { matterId, message: updatedMsg, matter });
+		if (!updatedMsg) {
+			sendError(res, 409, "Only a pending AI request can be dismissed");
+			return true;
 		}
+		broadcast("matter_message", { matterId, message: updatedMsg, matter });
 		sendJson(res, 200, { ok: true, message: updatedMsg });
 		return true;
 	}

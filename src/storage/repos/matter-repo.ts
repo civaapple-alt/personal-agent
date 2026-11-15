@@ -247,6 +247,24 @@ export class MatterRepo {
 		return this.getMessage(messageId);
 	}
 
+	/** Atomically claim a pending human AI request; terminal requests cannot be dispatched twice. */
+	transitionAiRequest(
+		messageId: string,
+		status: "approved" | "dismissed",
+		audit: Record<string, unknown>,
+	): MatterMessage | null {
+		const message = this.getMessage(messageId);
+		if (!message) return null;
+		const metadata = { ...message.metadata, ...audit, aiRequestStatus: status };
+		const changed = this.db
+			.prepare(`UPDATE matter_messages SET metadata_json = ?
+			WHERE id = ? AND channel = 'user' AND sender_type = 'user'
+			AND json_extract(metadata_json, '$.mode') = 'ai_request'
+			AND json_extract(metadata_json, '$.aiRequestStatus') = 'pending'`)
+			.run(JSON.stringify(metadata), messageId).changes;
+		return changed ? this.getMessage(messageId) : null;
+	}
+
 	appendMessage(input: {
 		matterId: string;
 		channel: MatterMessageChannel;
@@ -257,6 +275,13 @@ export class MatterRepo {
 	}): MatterMessage {
 		const id = `msg_${randomUUID()}`;
 		const timestamp = nowIso();
+		// Snapshot provenance when writing, never infer an old message's organization at read time.
+		const workspace =
+			typeof input.metadata?.workspaceId === "string" ? this.orgRepo.getWorkspace(input.metadata.workspaceId) : null;
+		const metadata = {
+			orgId: workspace ? workspace.orgId : (this.getMatter(input.matterId)?.orgId ?? null),
+			...input.metadata,
+		};
 		this.db
 			.prepare(
 				`INSERT INTO matter_messages (id, matter_id, channel, sender_type, sender_id, content, metadata_json, created_at)
@@ -269,7 +294,7 @@ export class MatterRepo {
 				input.senderType,
 				input.senderId,
 				input.content,
-				input.metadata ? JSON.stringify(input.metadata) : null,
+				JSON.stringify(metadata),
 				timestamp,
 			);
 		this.db.prepare("UPDATE matters SET updated_at = ? WHERE id = ?").run(timestamp, input.matterId);
@@ -280,7 +305,7 @@ export class MatterRepo {
 			senderType: input.senderType,
 			senderId: input.senderId,
 			content: input.content,
-			metadata: input.metadata ?? null,
+			metadata,
 			createdAt: timestamp,
 		};
 	}

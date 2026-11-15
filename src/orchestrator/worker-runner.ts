@@ -13,7 +13,7 @@ import {
 	validateDelivery,
 	validateSavedSession,
 } from "./execution-context.ts";
-import { selectMatterContext } from "./matter-context.ts";
+import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
 import {
 	buildInterruptionResumeBrief,
 	buildMemberSystemPrompt,
@@ -90,10 +90,11 @@ export async function executeWithWorkerPass(
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
 	const contextKey = JSON.stringify([
-		"v1",
+		"v2",
 		input.workspace?.id ?? null,
 		cwd,
 		sessionMode === "lead" ? "user" : sessionMode,
+		activeOrgId,
 	]);
 	const executionKey = JSON.stringify([input.member.id, contextKey]);
 	if (input.run.contexts.has(executionKey)) throw new Error("Colleague is already working in this conversation");
@@ -416,21 +417,23 @@ export async function executeWithWorkerPass(
 		const afterCursor = previous?.messageCursor
 			? messages.findIndex((message) => message.id === previous.messageCursor) + 1
 			: 0;
-		const filteredHistory = messages
-			.slice(afterCursor)
-			.filter(
-				(message) =>
-					!excludeIds.has(message.id) &&
-					message.metadata?.workspaceId === (input.workspace?.id ?? null) &&
-					message.metadata?.repoPath === cwd &&
-					!(
-						previous &&
-						message.senderType === "member" &&
-						message.senderId === input.member.id &&
-						message.metadata?.aborted !== true
-					),
-			);
+		const filteredHistory = messages.slice(afterCursor).filter(
+			(message) =>
+				!excludeIds.has(message.id) &&
+				messageMatchesContext(message, {
+					workspaceId: input.workspace?.id ?? null,
+					repoPath: cwd,
+					orgId: activeOrgId,
+				}) &&
+				!(
+					previous &&
+					message.senderType === "member" &&
+					message.senderId === input.member.id &&
+					message.metadata?.aborted !== true
+				),
+		);
 		const scopedContext = selectMatterContext({
+			orgId: activeOrgId,
 			messages: deps.store.listMessages(input.matterId),
 			deliverables: deps.store.listDeliverables(input.matterId),
 			workspaceId: input.workspace?.id ?? null,
@@ -442,6 +445,10 @@ export async function executeWithWorkerPass(
 				? buildObserverContextDigest({
 						matter: {
 							...deps.requireMatter(input.matterId),
+							title:
+								scopedContext.messages
+									.find((msg) => msg.channel === "user" && msg.senderType === "user")
+									?.content.slice(0, 120) ?? `事项 ${input.matterId}`,
 							summary: lastUserMsg ? formatMessageHistoryContent(lastUserMsg) : "",
 						},
 						deliverables: scopedContext.deliverables,
@@ -460,6 +467,7 @@ export async function executeWithWorkerPass(
 		const resumeBrief =
 			sessionMode === "lead"
 				? buildInterruptionResumeBrief({
+						orgId: activeOrgId,
 						store: deps.store,
 						matterId: input.matterId,
 						workspaceId: input.workspace?.id ?? null,
