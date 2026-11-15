@@ -83,6 +83,7 @@ export function App() {
 	const [submitting, setSubmitting] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
+	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
 
@@ -517,8 +518,26 @@ export function App() {
 		);
 	}
 
+	const mobileViewTitle =
+		activeTab === "deliverables"
+			? "交付成果库"
+			: activeTab === "team"
+				? "我的团队"
+				: activeTab === "materials"
+					? "项目仓库与资料"
+					: matterDetail?.matter.title || "新事项对话";
+	const hasRunningMatters = Object.keys(progressByMatter).length > 0;
+
 	return (
 		<div className="bot-shell">
+			{mobileNavOpen && (
+				<button
+					type="button"
+					className="mobile-sidebar-backdrop"
+					aria-label="关闭导航抽屉"
+					onClick={() => setMobileNavOpen(false)}
+				/>
+			)}
 			<Sidebar
 				activeTab={activeTab}
 				bootstrap={bootstrap}
@@ -530,9 +549,15 @@ export function App() {
 				progressByMatter={progressByMatter}
 				sseConnected={sseConnected}
 				searchQuery={searchQuery}
+				mobileOpen={mobileNavOpen}
+				onCloseMobile={() => setMobileNavOpen(false)}
 				onSearchQueryChange={setSearchQuery}
-				onNavigate={(route) => navigateRoute(route)}
+				onNavigate={(route) => {
+					setMobileNavOpen(false);
+					navigateRoute(route);
+				}}
 				onToggleMember={(memberId) => {
+					setMobileNavOpen(false);
 					if (activeTab !== "chats" || selectedMatterId !== null) {
 						setDraftAiMemberIds(null);
 						setSelectedMemberId(memberId);
@@ -542,11 +567,46 @@ export function App() {
 					}
 					composerRef.current?.focus();
 				}}
-				onNewMatter={startNewMatter}
-				onSwitchOrLogout={() => void handleLogoutOrRestore()}
+				onNewMatter={() => {
+					setMobileNavOpen(false);
+					startNewMatter();
+				}}
+				onSwitchOrLogout={() => {
+					setMobileNavOpen(false);
+					void handleLogoutOrRestore();
+				}}
 			/>
 
 			<main className="main-stage">
+				<div className="mobile-topbar">
+					<button
+						type="button"
+						className="icon-btn mobile-nav-trigger"
+						aria-label="打开导航菜单"
+						onClick={() => setMobileNavOpen(true)}
+					>
+						<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+							<path
+								d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13"
+								stroke="currentColor"
+								strokeWidth="1.7"
+								strokeLinecap="round"
+							/>
+						</svg>
+						{hasRunningMatters && <span className="mobile-nav-dot" />}
+					</button>
+					<span className="mobile-topbar-title">{mobileViewTitle}</span>
+					<button
+						type="button"
+						className="btn-pill-outline btn-xs"
+						onClick={() => {
+							setMobileNavOpen(false);
+							startNewMatter();
+						}}
+					>
+						+ 新建事项
+					</button>
+				</div>
 				{activeTab === "chats" && (
 					<ChatStage
 						composerRef={composerRef}

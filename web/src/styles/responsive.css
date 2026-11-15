@@ -18,14 +18,59 @@
 }
 @media (max-width: 960px) {
 	.bot-shell {
-		grid-template-columns: 1fr;
-		height: auto;
-		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+		height: 100dvh;
+		overflow: hidden;
 	}
-	body {
-		overflow: auto;
+	.bot-sidebar {
+		position: fixed;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: min(304px, 86vw);
+		z-index: 60;
+		transform: translateX(-105%);
+		transition: transform 0.2s ease;
+		box-shadow: var(--shadow-lg);
 	}
-	.quick-prompts-list,
+	.bot-sidebar.mobile-open {
+		transform: translateX(0);
+	}
+	.mobile-sidebar-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		border: none;
+		padding: 0;
+		background: rgba(15, 23, 20, 0.36);
+		z-index: 55;
+		cursor: pointer;
+	}
+	.mobile-topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		height: 50px;
+		padding: 0 14px;
+		border-bottom: 1px solid var(--border);
+		background: var(--bg-sidebar);
+		flex-shrink: 0;
+	}
+	.mobile-close-btn {
+		display: grid;
+	}
+	.main-stage {
+		flex: 1;
+		width: 100%;
+		min-width: 0;
+		min-height: 0;
+	}
+	.quick-prompts-list {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 	.form-grid {
 		grid-template-columns: 1fr;
 	}
@@ -34,27 +79,60 @@
 		width: calc(100% - 32px);
 	}
 }
-@media (max-width: 640px) {
-	:root {
-		--page-pad-x: 16px;
-		--page-pad-y: 18px;
-		--section-gap: 16px;
-		--card-pad: 14px;
-	}
+@media (max-width: 720px) {
 	.stage-header {
 		padding: 8px 14px;
 		height: auto;
-		min-height: var(--header-height);
+		min-height: 48px;
 		flex-wrap: wrap;
+		gap: 6px 10px;
 	}
 	.stage-center-pill {
 		max-width: 100%;
 		order: 3;
+		flex: 1 1 100%;
+	}
+	.quick-prompts-list {
+		grid-template-columns: 1fr;
+	}
+	.progress-snapshot-card {
+		max-width: 100%;
+	}
+}
+@media (max-width: 640px) {
+	:root {
+		--page-pad-x: 14px;
+		--page-pad-y: 16px;
+		--section-gap: 16px;
+		--card-pad: 14px;
+	}
+	.header-humans-text {
+		max-width: 112px;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.pane-header h1 {
 		font-size: var(--text-xl);
 	}
+	.deliverables-search {
+		max-width: none;
+		width: 100%;
+		flex: 1 1 100%;
+	}
 	.deliverables-detail-col .deliverable-card {
 		padding: var(--card-pad);
+	}
+	.collab-event-row {
+		grid-template-columns: 1fr;
+		gap: 4px;
+	}
+	.stream-bubble.user,
+	.stream-bubble.member,
+	.stream-bubble.system {
+		max-width: 94%;
+	}
+	.feedback-row > .select-sm,
+	.feedback-row > .btn-pill-dark {
+		width: 100%;
 	}
 }

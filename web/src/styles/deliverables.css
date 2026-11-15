@@ -287,7 +287,16 @@
 .feedback-row {
 	margin-top: 10px;
 	display: flex;
+	align-items: center;
 	gap: 8px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.feedback-row .input-field {
+	flex: 1 1 200px;
+}
+.feedback-row .select-sm {
+	max-width: 100%;
 }
 .feedback-panel {
 	margin-top: 12px;
@@ -481,7 +490,8 @@
 }
 .deliverables-search {
 	max-width: 280px;
-	min-width: 210px;
+	min-width: 0;
+	flex: 1 1 200px;
 }
 .deliverables-workspace {
 	margin-top: var(--section-gap);

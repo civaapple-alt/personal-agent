@@ -1,7 +1,10 @@
 .bot-shell {
 	display: grid;
-	grid-template-columns: 292px 1fr;
+	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 	height: 100vh;
+	height: 100dvh;
+	max-width: 100vw;
+	overflow-x: hidden;
 	background: var(--bg-stage);
 }
 .bot-sidebar {
@@ -9,7 +12,9 @@
 	border-right: 1px solid var(--border);
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
 }
 .sidebar-top {
 	height: 56px;
@@ -64,6 +69,7 @@
 	background: transparent;
 	border-radius: 14px;
 	padding: 8px 4px;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -447,20 +453,58 @@
 	background: var(--bg-stage);
 	min-width: 0;
 	min-height: 0;
+	max-width: 100%;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden;
+}
+.mobile-topbar,
+.mobile-sidebar-backdrop,
+.mobile-close-btn {
+	display: none;
+}
+.mobile-nav-trigger {
+	position: relative;
+	flex-shrink: 0;
+}
+.mobile-nav-dot {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: #16a34a;
+}
+.mobile-topbar-title {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--text-primary);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .stage-header {
-	height: 56px;
+	height: var(--header-height);
 	padding: 0 24px;
 	border-bottom: 1px solid var(--border);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
+	min-width: 0;
 	flex-shrink: 0;
 }
-.stage-header-left,
+.stage-header-left {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	flex: 0 1 auto;
+	overflow: hidden;
+}
 .stage-header-right {
 	display: flex;
 	align-items: center;
@@ -470,6 +514,11 @@
 .stage-header-left .pill,
 .stage-header-right .btn-pill-outline {
 	white-space: nowrap;
+}
+.stage-header-left .pill {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 180px;
 }
 .stage-center-pill {
 	display: inline-flex;
@@ -481,7 +530,7 @@
 	border: 1px solid var(--border);
 	font-size: var(--text-sm);
 	flex: 0 1 auto;
-	min-width: 110px;
+	min-width: 0;
 	max-width: 44%;
 	overflow: hidden;
 }

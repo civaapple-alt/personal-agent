@@ -183,7 +183,7 @@
 	background: var(--bg-sidebar);
 	border: 1px solid var(--border);
 	width: min(100%, 660px);
-	min-width: 300px;
+	min-width: 0;
 	box-shadow: 0 4px 14px rgba(15, 36, 28, 0.04);
 }
 .exploring-hero {

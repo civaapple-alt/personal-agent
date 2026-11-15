@@ -5,6 +5,7 @@ All notable changes to Personal Agent are documented in this file.
 ## [Unreleased]
 
 ### Refactored & UI/UX
+  - **Responsive & Narrow-Screen Shell (`<= 960px` / `<= 720px` / `<= 640px`)**: Switched `.bot-shell` tracks to `minmax(0, 1fr)` with `min-width: 0` across `.bot-sidebar`/`.main-stage`/`.compact-row`/`.feedback-row`/`.exploring-block`/`.team-grid` to eliminate horizontal overflow and right-edge clipping, and upgraded `< 960px` viewports from a full-height stacked sidebar to a sticky `mobile-topbar` + slide-over navigation drawer (`App.tsx`, `Sidebar.tsx`, `responsive.css`).
 - Unified web page layout, sectioning, semantic heading hierarchy, and typography scale (`web/src/styles/tokens.css`, `primitives.css`, `shell.css`, `chat-stream.css`, `chat-composer.css`, `chat-roster.css`, `deliverables.css`, `views.css`, `responsive.css`, and views under `web/src/components/`):
   - Added `--text-micro`/`--text-xs`/`--text-sm`/`--text-base`/`--text-md`/`--text-lg`/`--text-xl`/`--text-2xl` font-size tokens and `--page-pad-*`/`--content-*`/`--section-gap` layout tokens in `tokens.css`, consolidating 13 ad-hoc pixel sizes and unifying horizontal padding (`28px`) and column widths (`840px`/`1160px`) across chat and subpages.
   - Introduced `.ui-sections-stack`, `.ui-section`, `.ui-section-head`, `.ui-section-title`, `.ui-section-desc`, and `.ui-card` primitives in `primitives.css`, replacing overloaded `.deliverable-card` usage on forms/empty states (`MaterialsView`, `MemberPackageForms`, `DeliverablesView`).

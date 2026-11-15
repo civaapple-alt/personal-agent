@@ -140,6 +140,8 @@
 }
 .input-field {
 	flex: 1;
+	min-width: 0;
+	max-width: 100%;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-sm);
 	padding: 8px 12px;
@@ -191,6 +193,7 @@
 }
 .compact-row {
 	width: 100%;
+	min-width: 0;
 	text-align: left;
 	font: inherit;
 	background: var(--bg-stage);
@@ -201,7 +204,12 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
+	flex-wrap: wrap;
 	cursor: pointer;
+}
+.compact-row > :first-child {
+	flex: 1 1 240px;
+	min-width: 0;
 }
 .compact-row:hover {
 	border-color: var(--accent);
@@ -344,7 +352,9 @@
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
-	min-width: 210px;
+	flex: 1 1 220px;
+	min-width: 0;
+	max-width: 100%;
 }
 .org-chip-head {
 	display: flex;
@@ -520,6 +530,8 @@
 	color: var(--text-muted);
 	margin-top: 2px;
 	line-height: 1.45;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 
 .ui-row-actions {
@@ -527,6 +539,10 @@
 	align-items: center;
 	gap: 8px;
 	flex-wrap: wrap;
+	max-width: 100%;
+}
+.ui-row-actions .select-sm {
+	max-width: 100%;
 }
 
 .ui-row-actions.tight {

@@ -15,6 +15,8 @@ interface SidebarProps {
 	progressByMatter: Record<string, MatterProgressDto>;
 	sseConnected: boolean;
 	searchQuery: string;
+	mobileOpen?: boolean;
+	onCloseMobile?: () => void;
 	onSearchQueryChange: (q: string) => void;
 	onNavigate: (route: HashRoute) => void;
 	onToggleMember: (memberId: string) => void;
@@ -33,6 +35,8 @@ export function Sidebar({
 	progressByMatter,
 	sseConnected,
 	searchQuery,
+	mobileOpen = false,
+	onCloseMobile,
 	onSearchQueryChange,
 	onNavigate,
 	onToggleMember,
@@ -42,7 +46,7 @@ export function Sidebar({
 	const [searchOpen, setSearchOpen] = useState(false);
 
 	return (
-		<aside className="bot-sidebar">
+		<aside className={`bot-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
 			<div className="sidebar-top">
 				<button
 					type="button"
@@ -73,6 +77,18 @@ export function Sidebar({
 							<path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
 						</svg>
 					</button>
+					{onCloseMobile && (
+						<button
+							type="button"
+							className="icon-btn mobile-close-btn"
+							aria-label="收起侧栏"
+							onClick={onCloseMobile}
+						>
+							<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+								<path d="M5.5 5.5l9 9m0-9l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+							</svg>
+						</button>
+					)}
 				</div>
 			</div>
 
