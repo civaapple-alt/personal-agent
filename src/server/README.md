@@ -4,7 +4,7 @@
 
 [app.ts](app.ts) 是 HTTP 路由与 SSE 入口。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
-- 同事项运行中消息、工作区切换及旁听成员（`PATCH /api/matters/:id` `observerMemberIds`）更新返回 409；取消要交给编排核，不只广播停止事件。`POST /api/matters` 与 `POST /api/matters/:id/messages` 也支持传入有效的 `observerMemberIds`。
+- 同事项运行中消息及工作区切换返回 409；调整旁听成员（`PATCH /api/matters/:id` 仅传 `observerMemberIds`）不改动 `cwd`/会话，可在运行中即时更新。取消要交给编排核，不只广播停止事件。`POST /api/matters` 与 `POST /api/matters/:id/messages` 也支持传入有效的 `observerMemberIds`。
 - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回当前 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端刷新（F5）后可恢复进行中的状态卡片、计时与停止按钮。
 - [dialog-broker.ts](dialog-broker.ts) 在内存中等待 Extension UI 回答，HTTP 回复最终经 RPC 回写 Pi。它不是对所有命令的通用权限拦截器。
 - [preview-manager.ts](preview-manager.ts) 启停本地命令或登记外部服务链接；索引在内存中，不是部署系统，也不会因成果登记自动创建预览。

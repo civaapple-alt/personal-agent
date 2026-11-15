@@ -598,6 +598,16 @@ test("Server supports aborting a running matter and updating its bound workspace
 			assert.equal(busy.status, 409);
 		}
 
+		// Updating observer seats while a turn is running is non-destructive and succeeds immediately.
+		const observerUpdateWhileRunning = await fetch(`${baseUrl}/api/matters/${created.matter.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ observerMemberIds: ["engineering-manager"] }),
+		});
+		assert.equal(observerUpdateWhileRunning.status, 200);
+		const updatedObs = (await observerUpdateWhileRunning.json()) as { matter: { observerMemberIds: string[] } };
+		assert.deepEqual(updatedObs.matter.observerMemberIds, ["engineering-manager"]);
+
 		// Abort running matter
 		const abortRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}/abort`, {
 			method: "POST",

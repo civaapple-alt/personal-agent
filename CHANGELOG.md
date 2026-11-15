@@ -9,6 +9,7 @@ All notable changes to Personal Agent are documented in this file.
 - Rewrote `docs/architecture-and-plan.md` against the implemented HTTP/SSE, per-execution Pi sessions, authenticated tool bridges, scoped state and explicit milestone delivery. Separated current limits and future work from the historical four-phase design; aligned the README document pointers.
 
 ### Fixed
+- Allowed updating `observerMemberIds` via `PATCH /api/matters/:id` and the `ChatStage` observer seat popover even while a matter turn is running (still returning HTTP 409 for active workspace switches), so users can invite or adjust observers live without stopping the lead.
 - Restored live execution progress, elapsed timer, streamed partial output, and the Stop button across browser refreshes (`F5`) by snapshotting in-flight runs in `src/server/app.ts` (`activeRuns` on `GET /api/bootstrap` and `activeRun` on `GET /api/matters/:id`) and hydrating them in `web/src/App.tsx`.
 - Distinguished server shutdown/restart aborts (`cancelReason: "shutdown"`) from user-initiated stops in `TeamOrchestrator` so restarts no longer claim "已按你的要求停止本次执行".
 

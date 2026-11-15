@@ -547,26 +547,20 @@ export function ChatStage({
 								<div>
 									<strong>会议旁听成员</strong>
 									<span className="observer-hint">
-										主负责人答复后，旁听同事从本职角度审视，有关键风险或遗漏才主动补充，无异议保持静默
+										主负责人答复后，旁听同事从本职角度审视（运行中调整也会对即将评估的旁听/下一轮生效）
 									</span>
 								</div>
 								<div className="observer-quick-actions">
 									<button
 										type="button"
 										className="btn-inline"
-										disabled={isTurnRunning}
 										onClick={() => {
 											onUpdateObservers(members.filter((m) => m.id !== headerContact?.id).map((m) => m.id));
 										}}
 									>
 										全员旁听
 									</button>
-									<button
-										type="button"
-										className="btn-inline"
-										disabled={isTurnRunning}
-										onClick={() => onUpdateObservers([])}
-									>
+									<button type="button" className="btn-inline" onClick={() => onUpdateObservers([])}>
 										清空
 									</button>
 									<button type="button" className="btn-inline" onClick={() => setObserverMenuOpen(false)}>
@@ -584,7 +578,6 @@ export function ChatStage({
 											<button
 												key={peer.id}
 												type="button"
-												disabled={isTurnRunning}
 												className={`observer-peer-chip ${checked ? "active" : ""}`}
 												onClick={() => {
 													const next = checked
@@ -625,6 +618,7 @@ export function ChatStage({
 							className="select-pill"
 							value={selectedMemberId}
 							disabled={isTurnRunning}
+							title={isTurnRunning ? "当前回合正在执行，完成后可调整下一轮负责人" : undefined}
 							onChange={(e) => onSelectMember(e.target.value)}
 						>
 							<option value="auto">

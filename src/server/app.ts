@@ -326,14 +326,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "observerMemberIds must be an array of member IDs");
 					return;
 				}
-				if (orchestrator.isMatterRunning(matterId)) {
-					sendError(
-						res,
-						409,
-						hasWorkspaceUpdate
-							? "Stop the active turn before switching workspaces"
-							: "Stop the active turn before updating observers",
-					);
+				if (hasWorkspaceUpdate && orchestrator.isMatterRunning(matterId)) {
+					sendError(res, 409, "Stop the active turn before switching workspaces");
 					return;
 				}
 				let updated = existing;
