@@ -271,6 +271,57 @@ test("PiRpcWorker still times out when a started model produces no activity", as
 	}
 });
 
+test("PiRpcWorker suspends idleTimeoutMs during external bridge wait and resumes afterward", async () => {
+	const mock = makeInlineMockScript(`
+		process.stdin.setEncoding("utf8");
+		let buf = "";
+		const send = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
+		process.stdin.on("data", (chunk) => {
+			buf += chunk;
+			while (buf.includes("\\n")) {
+				const idx = buf.indexOf("\\n");
+				const msg = JSON.parse(buf.slice(0, idx)); buf = buf.slice(idx + 1);
+				if (msg.type === "get_state") {
+					send({ id: msg.id, type: "response", command: msg.type, success: true, data: { sessionId: "ready" } });
+				} else if (msg.type === "prompt") {
+					send({ id: msg.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+					if (msg.message === "suspend-then-finish") {
+						setTimeout(() => {
+							send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "after external wait" }] } });
+							send({ type: "agent_settled", aborted: false });
+						}, 320);
+					}
+				}
+			}
+		});
+	`);
+	const worker = new PiRpcWorker({ executable: mock.executable, leadingArgs: mock.leadingArgs });
+	await worker.start();
+	try {
+		await worker.getState();
+		const release = worker.suspendIdleTimeout();
+		setTimeout(() => {
+			release();
+			release(); // idempotent
+		}, 260);
+		const result = await worker.runPromptAndWait("suspend-then-finish", {
+			idleTimeoutMs: 120,
+			timeoutMs: 2000,
+		});
+		assert.equal(result.aborted, false);
+		assert.equal(result.assistantText, "after external wait");
+
+		const releaseShort = worker.suspendIdleTimeout();
+		setTimeout(() => releaseShort(), 50);
+		await assert.rejects(
+			worker.runPromptAndWait("suspend-then-hang", { idleTimeoutMs: 100, timeoutMs: 2000 }),
+			/100ms of inactivity/,
+		);
+	} finally {
+		await worker.stop();
+	}
+});
+
 test("serializeJsonLine produces strict single-line LF framing", () => {
 	const line = serializeJsonLine({ type: "get_state" });
 	assert.equal(line, '{"type":"get_state"}\n');

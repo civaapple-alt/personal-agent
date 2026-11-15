@@ -24,7 +24,10 @@ class SessionWorker implements RpcWorkerLike {
 	priorTranscript = "";
 	stopped = false;
 	prompt = "";
+	idleSuspendActive = false;
+	idleSuspendCount = 0;
 	private readonly respond: Responder;
+	private readonly eventListeners = new Set<(event: { type: string; [key: string]: unknown }) => void>();
 	constructor(options: PiRpcWorkerOptions, respond: Responder) {
 		this.options = options;
 		this.respond = respond;
@@ -70,6 +73,25 @@ class SessionWorker implements RpcWorkerLike {
 		this.stopped = true;
 	}
 	async abort() {}
+	suspendIdleTimeout(): () => void {
+		this.idleSuspendCount += 1;
+		this.idleSuspendActive = true;
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this.idleSuspendActive = false;
+		};
+	}
+	onEvent(listener: (event: { type: string; [key: string]: unknown }) => void): () => void {
+		this.eventListeners.add(listener);
+		return () => {
+			this.eventListeners.delete(listener);
+		};
+	}
+	emitEvent(event: { type: string; [key: string]: unknown }) {
+		for (const listener of this.eventListeners) listener(event);
+	}
 	onNotice() {
 		return () => {};
 	}
@@ -554,4 +576,41 @@ test("multiple process conversations stay in chat; explicit substantial mileston
 	assert.ok(reply?.metadata?.sourceUserMessageId);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "随后继续讨论一个小问题" });
 	assert.equal(f.store.listDeliverables(first.matter.id).length, 1);
+});
+
+test("delegation suspends parent idle watchdog and forwards colleague progress and collab updates", async (t) => {
+	const f = await fixture(t, async (worker) => {
+		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+			assert.equal(f.workers[0]?.idleSuspendActive, true);
+			worker.emitEvent({ type: "tool_execution_start", toolName: "read", toolCallId: "eng-read" });
+			worker.emitEvent({ type: "tool_execution_end", toolName: "read", toolCallId: "eng-read" });
+			return "技术方案已完成读取分析。";
+		}
+		assert.equal(worker.idleSuspendActive, false);
+		await worker.call("delegate_to_member", {
+			memberId: "engineering-manager",
+			task: "分析架构与读取关键文件",
+		});
+		assert.equal(worker.idleSuspendActive, false);
+		assert.ok(worker.idleSuspendCount >= 1);
+		return "已汇总研发分析结论。";
+	});
+	const events: Array<{ stage: string; label: string; collabUpdated?: boolean; activeNames: string[] }> = [];
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "用户目标：启动并行技术评估",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		onProgress: (evt) => {
+			events.push({
+				stage: evt.stage,
+				label: evt.label,
+				collabUpdated: evt.collabUpdated,
+				activeNames: (evt.activeDelegations ?? []).map((entry) => entry.memberName),
+			});
+		},
+	});
+	assert.match(result.replyText, /已汇总研发分析结论/);
+	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.includes("研发经理")));
+	assert.ok(events.some((evt) => evt.stage === "tool" && /研发经理/.test(evt.label) && /读取文件/.test(evt.label)));
+	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.length === 0));
 });

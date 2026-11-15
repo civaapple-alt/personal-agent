@@ -191,8 +191,10 @@ export function App() {
 			const data = JSON.parse((ev as MessageEvent).data) as MatterProgressDto;
 			setProgressByMatter((prev) => ({ ...prev, [data.matterId]: data }));
 			setProgressStartedAt((prev) => (prev[data.matterId] ? prev : { ...prev, [data.matterId]: Date.now() }));
-			if (data.stage === "starting") {
-				void refreshBootstrap();
+			if (data.stage === "starting" || data.collabUpdated) {
+				if (data.stage === "starting") {
+					void refreshBootstrap();
+				}
 				if (data.matterId === selectedMatterIdRef.current) {
 					void refreshDetail(data.matterId);
 				}

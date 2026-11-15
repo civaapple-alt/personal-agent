@@ -36,6 +36,7 @@ export interface MatterMessageDto {
 	senderType: "user" | "member" | "system";
 	senderId: string;
 	content: string;
+	metadata?: Record<string, unknown> | null;
 	createdAt: string;
 }
 
@@ -102,11 +103,19 @@ export interface RoleTemplateDto {
 	responsibilities: string;
 }
 
+export interface ActiveDelegationDto {
+	memberId: string;
+	memberName: string;
+	stageLabel: string;
+}
+
 export interface MatterProgressDto {
 	matterId: string;
 	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
 	label: string;
 	toolName?: string;
+	activeDelegations?: ActiveDelegationDto[];
+	collabUpdated?: boolean;
 }
 
 export interface BootstrapPayload {

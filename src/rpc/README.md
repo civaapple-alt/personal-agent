@@ -4,7 +4,7 @@
 
 | 文件 | 改动入口与约束 |
 | --- | --- |
-| [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾。`sessionFile` 必须是编排核选定的文件 |
+| [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾；支持 `suspendIdleTimeout()` 在宿主桥接耗时期间暂停空闲看门狗。`sessionFile` 必须是编排核选定的文件 |
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
 | [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果工具，核查动态工具装配并加入当前岗位系统上下文；内部模式不注册发布工具 |

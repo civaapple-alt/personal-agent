@@ -126,6 +126,7 @@ export class PiRpcWorker {
 	private readonly options: PiRpcWorkerOptions;
 	private readonly eventListeners = new Set<SessionEventListener>();
 	private readonly noticeListeners = new Set<ExtensionUiNoticeListener>();
+	private readonly idleStateListeners = new Set<() => void>();
 	private readonly pendingRequests = new Map<
 		string,
 		{ resolve: (response: RpcResponse) => void; reject: (error: Error) => void }
@@ -137,6 +138,7 @@ export class PiRpcWorker {
 	private requestSeq = 0;
 	private stderrBuffer = "";
 	private terminalError: Error | null = null;
+	private externalIdleSuspendCount = 0;
 	private dialogHandler: ExtensionUiDialogHandler | undefined;
 
 	constructor(options: PiRpcWorkerOptions = {}) {
@@ -154,6 +156,23 @@ export class PiRpcWorker {
 
 	setDialogHandler(handler: ExtensionUiDialogHandler | undefined): void {
 		this.dialogHandler = handler;
+	}
+
+	/**
+	 * Temporarily suspend the inactivity watchdog while the host awaits an external
+	 * operation (e.g. a delegated colleague worker) that keeps Pi blocked on a bridge tool.
+	 * The overall turn `timeoutMs` remains active.
+	 */
+	suspendIdleTimeout(): () => void {
+		this.externalIdleSuspendCount += 1;
+		for (const listener of this.idleStateListeners) listener();
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			this.externalIdleSuspendCount = Math.max(0, this.externalIdleSuspendCount - 1);
+			for (const listener of this.idleStateListeners) listener();
+		};
 	}
 
 	onEvent(listener: SessionEventListener): () => void {
@@ -449,12 +468,14 @@ export class PiRpcWorker {
 
 		const resetIdleTimer = () => {
 			if (idleTimer) clearTimeout(idleTimer);
-			if (settledDone || inDialog || idleTimeoutMs >= timeoutMs) return;
+			idleTimer = undefined;
+			if (settledDone || inDialog || this.externalIdleSuspendCount > 0 || idleTimeoutMs >= timeoutMs) return;
 			idleTimer = setTimeout(() => {
 				rejectSettled(new Error(`Timed out after ${idleTimeoutMs}ms of inactivity waiting for agent_settled`));
 			}, idleTimeoutMs);
 		};
 
+		this.idleStateListeners.add(resetIdleTimer);
 		hardTimer = setTimeout(() => {
 			rejectSettled(new Error(`Timed out after ${timeoutMs}ms waiting for agent_settled`));
 		}, timeoutMs);
@@ -571,6 +592,7 @@ export class PiRpcWorker {
 			};
 		} finally {
 			settledDone = true;
+			this.idleStateListeners.delete(resetIdleTimer);
 			options.signal?.removeEventListener("abort", onAbort);
 			if (hardTimer) clearTimeout(hardTimer);
 			if (idleTimer) clearTimeout(idleTimer);

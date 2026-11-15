@@ -10,7 +10,14 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { formatClockTime, mapDeliverablesToMessages, type StarterTask } from "../utils.ts";
+import {
+	type DelegationSummaryItem,
+	formatClockTime,
+	formatNoticeEventLine,
+	mapDelegationsToMessages,
+	mapDeliverablesToMessages,
+	type StarterTask,
+} from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { ExploringStatus } from "./ExploringStatus.tsx";
 
@@ -88,6 +95,7 @@ export function ChatStage({
 	onDismissNotice,
 }: ChatStageProps) {
 	const [collabOpen, setCollabOpen] = useState(false);
+	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +122,70 @@ export function ChatStage({
 		() => mapDeliverablesToMessages(matterDetail?.userMessages ?? [], matterDetail?.deliverables ?? []),
 		[matterDetail],
 	);
+
+	const delegationsPlacement = useMemo(
+		() =>
+			mapDelegationsToMessages(
+				matterDetail?.userMessages ?? [],
+				matterDetail?.internalCollabMessages ?? [],
+				isTurnRunning,
+			),
+		[matterDetail, isTurnRunning],
+	);
+
+	const resolveDelegationTarget = (item: DelegationSummaryItem) =>
+		item.targetLabel || (item.toMemberId ? memberName(item.toMemberId) : "团队成员");
+
+	const renderDelegationSummary = (anchorKey: string, items: DelegationSummaryItem[]) => {
+		if (items.length === 0) return null;
+		const expanded = Boolean(expandedDelegations[anchorKey]);
+		const targets = [...new Set(items.map((item) => resolveDelegationTarget(item)))];
+		const runningCount = items.filter((item) => item.status === "running").length;
+		const failedCount = items.filter((item) => item.status === "failed").length;
+		const statusSummary =
+			runningCount > 0
+				? `${runningCount} 项协同中`
+				: failedCount === items.length
+					? `${items.length} 项未完成`
+					: failedCount > 0
+						? `${items.length - failedCount} 项完成 · ${failedCount} 项未完成`
+						: `${items.length} 项已完成`;
+		return (
+			<div className={`delegation-inline-card ${runningCount > 0 ? "is-running" : ""}`}>
+				<button
+					type="button"
+					className="delegation-inline-toggle"
+					onClick={() => setExpandedDelegations((prev) => ({ ...prev, [anchorKey]: !prev[anchorKey] }))}
+				>
+					<span className="delegation-pill-info">
+						<span className="delegation-pill-badge">团队委托</span>
+						<span>
+							已委托 <strong>{targets.join("、")}</strong> · {statusSummary}
+						</span>
+					</span>
+					<span className="delegation-toggle-text">{expanded ? "收起详情" : "查看详情"}</span>
+				</button>
+				{expanded && (
+					<div className="delegation-detail-list">
+						{items.map((item) => (
+							<div key={item.id} className="delegation-detail-item">
+								<div className="delegation-detail-head">
+									<span>
+										{memberName(item.fromMemberId)} → <strong>{resolveDelegationTarget(item)}</strong>
+									</span>
+									<span className={`delegation-status-tag ${item.status}`}>
+										{item.status === "running" ? "协同中" : item.status === "completed" ? "已完成" : "未完成"}
+									</span>
+								</div>
+								<div className="delegation-detail-question">{item.question}</div>
+								{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		);
+	};
 
 	const renderDeliverablePill = (deliv: DeliverableDto) => {
 		const url = previewUrlFor(deliv);
@@ -207,15 +279,50 @@ export function ChatStage({
 									收起
 								</button>
 							</div>
-							{matterDetail.internalCollabMessages.length + matterDetail.noticeMessages.length === 0 ? (
+							{delegationsPlacement.all.length === 0 && matterDetail.noticeMessages.length === 0 ? (
 								<p className="muted-hint">当前事项暂无内部协作记录。</p>
 							) : (
 								<div className="collab-log">
-									{[...matterDetail.internalCollabMessages, ...matterDetail.noticeMessages].map((entry) => (
-										<div key={entry.id}>
-											<strong>[{entry.channel}]</strong> {memberName(entry.senderId)}：{entry.content}
+									{delegationsPlacement.all.length > 0 && (
+										<div className="collab-section">
+											<div className="collab-section-title">
+												团队内部委托（{delegationsPlacement.all.length} 项）
+											</div>
+											{delegationsPlacement.all.map((item) => (
+												<div key={item.id} className="delegation-detail-item">
+													<div className="delegation-detail-head">
+														<span>
+															{memberName(item.fromMemberId)} →{" "}
+															<strong>{resolveDelegationTarget(item)}</strong> ·{" "}
+															{formatClockTime(item.createdAt)}
+														</span>
+														<span className={`delegation-status-tag ${item.status}`}>
+															{item.status === "running"
+																? "协同中"
+																: item.status === "completed"
+																	? "已完成"
+																	: "未完成"}
+														</span>
+													</div>
+													<div className="delegation-detail-question">{item.question}</div>
+													{item.answer && <div className="delegation-detail-answer">{item.answer}</div>}
+												</div>
+											))}
 										</div>
-									))}
+									)}
+									{matterDetail.noticeMessages.length > 0 && (
+										<details className="collab-events-details" open={delegationsPlacement.all.length === 0}>
+											<summary>过程与工具事件（{matterDetail.noticeMessages.length} 条）</summary>
+											<div className="collab-events-list">
+												{matterDetail.noticeMessages.map((entry) => (
+													<div key={entry.id}>
+														<strong>{memberName(entry.senderId)}</strong> ·{" "}
+														{formatClockTime(entry.createdAt)}：{formatNoticeEventLine(entry.content)}
+													</div>
+												))}
+											</div>
+										</details>
+									)}
 								</div>
 							)}
 						</div>
@@ -238,6 +345,7 @@ export function ChatStage({
 								const isUser = msg.senderType === "user";
 								const isSystem = msg.senderType === "system";
 								const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
+								const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
 								return (
 									<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
 										{!isUser && (
@@ -249,6 +357,7 @@ export function ChatStage({
 										<div className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}`}>
 											{isUser ? msg.content : <MarkdownView content={msg.content} />}
 										</div>
+										{renderDelegationSummary(msg.id, attachedDelegations)}
 										{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 									</div>
 								);
@@ -315,6 +424,7 @@ export function ChatStage({
 							))}
 
 							{deliverablesPlacement.unattached.map((deliv) => renderDeliverablePill(deliv))}
+							{renderDelegationSummary("unattached", delegationsPlacement.unattached)}
 
 							{streamingDelta && (
 								<div className="stream-msg from-member">

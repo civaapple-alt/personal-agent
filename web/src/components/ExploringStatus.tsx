@@ -32,6 +32,17 @@ export function ExploringStatus({ progress, elapsedSeconds, onAbort }: Exploring
 					/>
 				))}
 			</div>
+			{progress.activeDelegations && progress.activeDelegations.length > 0 && (
+				<div className="exploring-delegations">
+					<span className="exploring-delegations-prefix">团队协同</span>
+					{progress.activeDelegations.map((entry) => (
+						<span key={`${entry.memberId}-${entry.stageLabel}`} className="exploring-delegation-chip">
+							<strong>{entry.memberName}</strong>
+							<span>{entry.stageLabel}</span>
+						</span>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

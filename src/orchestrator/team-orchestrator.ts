@@ -28,16 +28,25 @@ export type OrchestratorDialogHandler = (
 	ctx: DialogContext,
 ) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload;
 
+export interface ActiveDelegationProgress {
+	memberId: string;
+	memberName: string;
+	stageLabel: string;
+}
+
 export interface DispatchProgressEvent {
 	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
 	label: string;
 	toolName?: string;
+	activeDelegations?: ActiveDelegationProgress[];
+	collabUpdated?: boolean;
 }
 
 export interface RpcWorkerLike {
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	abort?(): Promise<void>;
+	suspendIdleTimeout?(): () => void;
 	getState(): Promise<{ sessionId: string; sessionFile?: string }>;
 	setThinkingLevel?(level: TeamMember["thinkingLevel"]): Promise<void>;
 	onEvent?(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
@@ -116,10 +125,38 @@ interface MatterRun {
 	workers: Set<RpcWorkerLike>;
 	contexts: Set<string>;
 	delegations: Map<string, Promise<DelegateResult>>;
+	activeDelegations: Map<string, ActiveDelegationProgress>;
 	delegationCount: number;
 	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
 	userMessageId: string;
 	timeoutMs?: number;
+}
+
+const TOOL_LABELS: Record<string, string> = {
+	read: "读取文件",
+	bash: "执行命令",
+	edit: "修改文件",
+	write: "写入文件",
+	delegate_to_member: "委托团队成员",
+	publish_deliverable: "提交成果",
+};
+
+function formatToolAction(toolName?: string): string {
+	if (!toolName) return "处理工具";
+	return TOOL_LABELS[toolName] ?? `调用 ${toolName}`;
+}
+
+function summarizeActiveDelegations(
+	activeDelegations: Map<string, ActiveDelegationProgress>,
+	focusMemberName?: string,
+	focusStageLabel?: string,
+): string {
+	const list = [...activeDelegations.values()];
+	if (list.length === 0) return "";
+	const names = list.map((entry) => entry.memberName).join("、");
+	const latest =
+		focusMemberName && focusStageLabel ? `${focusMemberName}：${focusStageLabel}` : list.at(-1)!.stageLabel;
+	return list.length === 1 ? `已委托${names}（${latest}）` : `正在协同 ${names}（${latest}）`;
 }
 
 function emptyAbortedResult(): PromptRunResult {
@@ -363,6 +400,7 @@ ${this.store
 			workers: new Set(),
 			contexts: new Set(),
 			delegations: new Map(),
+			activeDelegations: new Map(),
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
@@ -573,6 +611,7 @@ ${this.store
 			workers: new Set(),
 			contexts: new Set(),
 			delegations: new Map(),
+			activeDelegations: new Map(),
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
@@ -596,6 +635,7 @@ ${this.store
 		chain: string[],
 		signal: AbortSignal,
 		deliveryTarget: MatterRun["deliveries"],
+		onProgress?: (progress: DispatchProgressEvent) => void,
 	): Promise<DelegateResult> {
 		signal.throwIfAborted();
 		const fromMember = this.store.getMember(input.fromMemberId);
@@ -617,6 +657,19 @@ ${this.store
 				content: `@${toMember.displayName}: ${input.question}`,
 				metadata: { toMemberId: toMember.id, workspaceId: workspace?.id ?? null },
 			});
+			const delegationKey = requestMessage.id;
+			run.activeDelegations.set(delegationKey, {
+				memberId: toMember.id,
+				memberName: toMember.displayName,
+				stageLabel: "已接入任务",
+			});
+			onProgress?.({
+				stage: "tool",
+				label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, "已接入任务"),
+				toolName: "delegate_to_member",
+				activeDelegations: [...run.activeDelegations.values()],
+				collabUpdated: true,
+			});
 			try {
 				const drafts: MatterRun["deliveries"] = [];
 				const result = await this.executeWithWorker({
@@ -629,6 +682,32 @@ ${this.store
 					run,
 					chain: [...chain, toMember.id],
 					signal,
+					onProgress: (childProgress) => {
+						const stageLabel =
+							childProgress.stage === "tool" && childProgress.toolName
+								? formatToolAction(childProgress.toolName)
+								: childProgress.stage === "waiting_user"
+									? childProgress.label
+									: childProgress.stage === "finalizing"
+										? "整理结论"
+										: childProgress.stage === "starting"
+											? "启动中"
+											: "思考分析";
+						run.activeDelegations.set(delegationKey, {
+							memberId: toMember.id,
+							memberName: toMember.displayName,
+							stageLabel,
+						});
+						onProgress?.({
+							stage: childProgress.stage === "waiting_user" ? "waiting_user" : "tool",
+							label:
+								childProgress.stage === "waiting_user"
+									? childProgress.label
+									: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, stageLabel),
+							toolName: childProgress.toolName ?? "delegate_to_member",
+							activeDelegations: [...run.activeDelegations.values()],
+						});
+					},
 				});
 				signal.throwIfAborted();
 				if (result.aborted) throw new Error("Colleague execution was aborted");
@@ -647,6 +726,18 @@ ${this.store
 						workspaceId: workspace?.id ?? null,
 					},
 				});
+				run.activeDelegations.delete(delegationKey);
+				const remaining = [...run.activeDelegations.values()];
+				onProgress?.({
+					stage: remaining.length > 0 ? "tool" : "thinking",
+					label:
+						remaining.length > 0
+							? summarizeActiveDelegations(run.activeDelegations)
+							: `${toMember.displayName}已返回结果，${fromMember.displayName}正在整合`,
+					toolName: remaining.length > 0 ? "delegate_to_member" : undefined,
+					activeDelegations: remaining,
+					collabUpdated: true,
+				});
 				return { fromMember, toMember, requestMessage, responseMessage, answerText };
 			} catch (error) {
 				this.store.appendMessage({
@@ -656,6 +747,18 @@ ${this.store
 					senderId: toMember.id,
 					content: `内部委托未完成：${error instanceof Error ? error.message : String(error)}`,
 					metadata: { requestMessageId: requestMessage.id, failed: true },
+				});
+				run.activeDelegations.delete(delegationKey);
+				const remaining = [...run.activeDelegations.values()];
+				onProgress?.({
+					stage: remaining.length > 0 ? "tool" : "thinking",
+					label:
+						remaining.length > 0
+							? summarizeActiveDelegations(run.activeDelegations)
+							: `${toMember.displayName}未完成委托，${fromMember.displayName}正在处理`,
+					toolName: remaining.length > 0 ? "delegate_to_member" : undefined,
+					activeDelegations: remaining,
+					collabUpdated: true,
 				});
 				throw error;
 			}
@@ -710,38 +813,44 @@ ${this.store
 				: ["delegate_to_member", "publish_deliverable"];
 			bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 				toolSignal.throwIfAborted();
-				if (call.tool === "delegate_to_member") {
-					const result = await this.delegate(
-						{
-							matterId: input.matterId,
-							fromMemberId: input.member.id,
-							toMemberId: call.memberId,
-							question: call.task,
-						},
-						input.run,
-						input.workspace,
-						input.chain,
-						toolSignal,
-						deliveries,
-					);
-					return { memberId: result.toMember.id, answer: result.answerText };
-				}
-				if (input.isInternalDelegation)
-					throw new Error(
-						"Internal specialists return results to the lead; only the lead publishes user deliverables",
-					);
-				const draft = await validateDelivery(call, cwd);
-				toolSignal.throwIfAborted();
-				if (
-					!deliveries.some(
-						(entry) =>
-							entry.memberId === input.member.id &&
-							entry.draft.title === draft.title &&
-							entry.draft.content === draft.content,
+				const releaseIdle = worker?.suspendIdleTimeout?.();
+				try {
+					if (call.tool === "delegate_to_member") {
+						const result = await this.delegate(
+							{
+								matterId: input.matterId,
+								fromMemberId: input.member.id,
+								toMemberId: call.memberId,
+								question: call.task,
+							},
+							input.run,
+							input.workspace,
+							input.chain,
+							toolSignal,
+							deliveries,
+							input.onProgress,
+						);
+						return { memberId: result.toMember.id, answer: result.answerText };
+					}
+					if (input.isInternalDelegation)
+						throw new Error(
+							"Internal specialists return results to the lead; only the lead publishes user deliverables",
+						);
+					const draft = await validateDelivery(call, cwd);
+					toolSignal.throwIfAborted();
+					if (
+						!deliveries.some(
+							(entry) =>
+								entry.memberId === input.member.id &&
+								entry.draft.title === draft.title &&
+								entry.draft.content === draft.content,
+						)
 					)
-				)
-					deliveries.push({ memberId: input.member.id, cwd, draft });
-				return { staged: true, title: draft.title, note: "本轮成功结束后归档" };
+						deliveries.push({ memberId: input.member.id, cwd, draft });
+					return { staged: true, title: draft.title, note: "本轮成功结束后归档" };
+				} finally {
+					releaseIdle?.();
+				}
 			}, signal);
 			const args = [
 				"--no-extensions",
@@ -797,13 +906,29 @@ ${this.store
 						senderId: input.member.id,
 						content: JSON.stringify(event).slice(0, 16000),
 					});
-					input.onProgress?.({
-						stage: "tool",
-						label: `${input.member.displayName}正在处理任务`,
-						toolName: String(event.toolName ?? "tool"),
-					});
-				} else if (event.type === "agent_start")
+					const toolName = String(event.toolName ?? "tool");
+					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
+						return;
+					}
+					if (event.type === "tool_execution_start") {
+						input.onProgress?.({
+							stage: "tool",
+							label: `${input.member.displayName}：${formatToolAction(toolName)}`,
+							toolName,
+						});
+					} else {
+						input.onProgress?.({
+							stage: "thinking",
+							label: `${input.member.displayName}正在分析结果`,
+							toolName,
+						});
+					}
+				} else if (event.type === "agent_start") {
+					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
+						return;
+					}
 					input.onProgress?.({ stage: "thinking", label: `${input.member.displayName}正在思考` });
+				}
 			});
 			if (offEvent) cleanups.push(offEvent);
 			cleanups.push(

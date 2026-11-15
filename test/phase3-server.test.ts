@@ -19,6 +19,7 @@ import {
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
+import { formatNoticeEventLine, mapDelegationsToMessages } from "../web/src/utils.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
@@ -700,4 +701,103 @@ test("Server persists partial streamed text and readable failure message in user
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
 	}
+});
+
+test("mapDelegationsToMessages pairs turn delegations for running, completed, and failed outcomes", () => {
+	const userMessages = [
+		{
+			id: "u1",
+			matterId: "m1",
+			channel: "user" as const,
+			senderType: "user" as const,
+			senderId: "user",
+			content: "开始技术评估",
+			createdAt: "2026-11-15T01:00:00.000Z",
+		},
+		{
+			id: "s1",
+			matterId: "m1",
+			channel: "user" as const,
+			senderType: "system" as const,
+			senderId: "orchestrator",
+			content: "执行异常",
+			createdAt: "2026-11-15T01:05:00.000Z",
+		},
+		{
+			id: "u2",
+			matterId: "m1",
+			channel: "user" as const,
+			senderType: "user" as const,
+			senderId: "user",
+			content: "继续追问",
+			createdAt: "2026-11-15T01:06:00.000Z",
+		},
+	];
+	const internalCollab = [
+		{
+			id: "c-req-1",
+			matterId: "m1",
+			channel: "internal_collab" as const,
+			senderType: "member" as const,
+			senderId: "product-manager",
+			content: "@研发经理: 评估工作量",
+			metadata: { toMemberId: "engineering-manager" },
+			createdAt: "2026-11-15T01:00:30.000Z",
+		},
+		{
+			id: "c-res-1",
+			matterId: "m1",
+			channel: "internal_collab" as const,
+			senderType: "member" as const,
+			senderId: "engineering-manager",
+			content: "需要 3 人日。",
+			metadata: { replyToMemberId: "product-manager", requestMessageId: "c-req-1" },
+			createdAt: "2026-11-15T01:01:30.000Z",
+		},
+		{
+			id: "c-req-2",
+			matterId: "m1",
+			channel: "internal_collab" as const,
+			senderType: "member" as const,
+			senderId: "product-manager",
+			content: "@测试经理: 核对验收标准",
+			metadata: { toMemberId: "qa-manager" },
+			createdAt: "2026-11-15T01:00:35.000Z",
+		},
+		{
+			id: "c-res-2",
+			matterId: "m1",
+			channel: "internal_collab" as const,
+			senderType: "system" as const,
+			senderId: "qa-manager",
+			content: "内部委托未完成：Prompt cancelled",
+			metadata: { requestMessageId: "c-req-2", failed: true },
+			createdAt: "2026-11-15T01:04:50.000Z",
+		},
+		{
+			id: "c-req-3",
+			matterId: "m1",
+			channel: "internal_collab" as const,
+			senderType: "member" as const,
+			senderId: "product-manager",
+			content: "@研发经理: 二次复核",
+			metadata: { toMemberId: "engineering-manager" },
+			createdAt: "2026-11-15T01:06:10.000Z",
+		},
+	];
+
+	const placedRunning = mapDelegationsToMessages(userMessages, internalCollab, true);
+	assert.equal(placedRunning.byMessageId.get("s1")?.length, 2);
+	assert.equal(placedRunning.byMessageId.get("s1")?.[0]?.status, "completed");
+	assert.equal(placedRunning.byMessageId.get("s1")?.[0]?.answer, "需要 3 人日。");
+	assert.equal(placedRunning.byMessageId.get("s1")?.[1]?.status, "failed");
+	assert.equal(placedRunning.byMessageId.get("u2")?.[0]?.status, "running");
+
+	const placedStopped = mapDelegationsToMessages(userMessages, internalCollab, false);
+	assert.equal(placedStopped.byMessageId.get("u2")?.[0]?.status, "failed");
+
+	assert.equal(
+		formatNoticeEventLine(JSON.stringify({ type: "tool_execution_start", toolName: "read" })),
+		"开始工具 read",
+	);
 });
