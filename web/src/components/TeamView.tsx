@@ -479,7 +479,7 @@ export function TeamView({
 				<div className="org-strip-card">
 					<div className="banner-row">
 						<div>
-							<strong style={{ fontSize: 14 }}>人类协作成员与局域网邀请（方案 B）</strong>
+							<strong style={{ fontSize: 14 }}>团队同事与邀请</strong>
 							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
 								所有者掌管代码执行、仓库切换与角色设置；同事通过专属邀请链接加入同一房间讨论、提请 AI 与验收评价
 							</span>
