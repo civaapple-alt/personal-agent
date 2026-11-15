@@ -1,8 +1,9 @@
-import { type ChangeEvent, useState } from "react";
+import { type ChangeEvent, useMemo, useState } from "react";
 import {
 	createMember,
 	exportMemberPackage,
 	importMemberPackage,
+	type MatterDto,
 	type MemberMemoryDto,
 	type MemoryCategory,
 	type MemoryStatus,
@@ -19,6 +20,8 @@ import { ExperienceItemCard, ManualExperienceForm } from "./ExperienceReviewPane
 interface TeamViewProps {
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
+	matters?: MatterDto[];
+	defaultWorkspaceId?: string | null;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memberName: (id: string) => string;
@@ -36,6 +39,8 @@ type MemoryFilterTab = "all" | "candidate" | "verified" | "archived";
 export function TeamView({
 	members,
 	workspaces,
+	matters = [],
+	defaultWorkspaceId = null,
 	memoriesByMember,
 	templateByRoleId,
 	memberName,
@@ -57,6 +62,10 @@ export function TeamView({
 
 	const [showImportMember, setShowImportMember] = useState(false);
 	const [importMarkdown, setImportMarkdown] = useState("");
+	const matterWorkspaceById = useMemo(
+		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
+		[matters],
+	);
 	const [exportedPackage, setExportedPackage] = useState<{
 		id: string;
 		filename: string;
@@ -462,6 +471,7 @@ export function TeamView({
 												workspaces={workspaces}
 												defaultMemberId={member.id}
 												allowSelectMember={false}
+												defaultWorkspaceId={defaultWorkspaceId}
 												headerLabel={`为「${member.displayName}」新增经验规则`}
 												onSaved={() => setShowAddMemoryFor(null)}
 												onCancel={() => setShowAddMemoryFor(null)}
@@ -480,6 +490,11 @@ export function TeamView({
 													memory={mem}
 													members={members}
 													workspaces={workspaces}
+													defaultWorkspaceId={
+														(mem.sourceMatterId
+															? matterWorkspaceById.get(mem.sourceMatterId)
+															: undefined) ?? defaultWorkspaceId
+													}
 													memberName={memberName}
 													workspaceName={workspaceName}
 													onOpenMatter={onOpenMatter}

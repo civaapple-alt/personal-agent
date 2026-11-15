@@ -731,6 +731,8 @@ export function App() {
 					<TeamView
 						members={bootstrap?.members ?? []}
 						workspaces={bootstrap?.workspaces ?? []}
+						matters={bootstrap?.matters ?? []}
+						defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						templateByRoleId={templateByRoleId}
 						memberName={memberName}

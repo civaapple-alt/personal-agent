@@ -549,3 +549,16 @@ export function collectMatterParticipantIds(params: {
 	}
 	return Array.from(ids);
 }
+
+/** Picks the first valid workspace id from ordered candidates, falling back to the first workspace. */
+export function pickDefaultWorkspaceId(
+	workspaces: Array<{ id: string }>,
+	...candidates: Array<string | null | undefined>
+): string {
+	for (const candidate of candidates) {
+		if (candidate && workspaces.some((ws) => ws.id === candidate)) {
+			return candidate;
+		}
+	}
+	return workspaces[0]?.id ?? "";
+}

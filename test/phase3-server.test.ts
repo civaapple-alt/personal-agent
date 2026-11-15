@@ -30,6 +30,7 @@ import {
 	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
 	parseProgressSnapshot,
+	pickDefaultWorkspaceId,
 } from "../web/src/utils.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
@@ -1410,4 +1411,12 @@ test("formatNoticeEventLine and isKeyNoticeEvent handle truncated tool JSON noti
 	assert.equal(isKeyNoticeEvent(truncatedFailedBash), true);
 
 	assert.equal(isKeyNoticeEvent('{"method":"error","message":"Timed out"}'), true);
+});
+
+test("pickDefaultWorkspaceId prefers memory workspace, then active matter workspace, then first workspace", () => {
+	const workspaces = [{ id: "personal-agent" }, { id: "bookshelf" }];
+	assert.equal(pickDefaultWorkspaceId(workspaces, null, "bookshelf"), "bookshelf");
+	assert.equal(pickDefaultWorkspaceId(workspaces, "personal-agent", "bookshelf"), "personal-agent");
+	assert.equal(pickDefaultWorkspaceId(workspaces, "missing-ws", null), "personal-agent");
+	assert.equal(pickDefaultWorkspaceId([], null, "bookshelf"), "");
 });
