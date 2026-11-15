@@ -10,6 +10,7 @@ export {
 	type DistillExperiencesResult,
 	type OrchestratorDialogHandler,
 	type ProgressSnapshot,
+	type PromptImageAttachment,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 	type TeamOrchestratorOptions,

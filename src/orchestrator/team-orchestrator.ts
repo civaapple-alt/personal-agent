@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../rpc/team-tool-bridge.ts";
-import type { RpcExtensionUIDialogRequest, RpcExtensionUIResponsePayload } from "../rpc/types.ts";
+import type { ImageContent, RpcExtensionUIDialogRequest, RpcExtensionUIResponsePayload } from "../rpc/types.ts";
 import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	Deliverable,
@@ -117,7 +117,12 @@ export interface RpcWorkerLike {
 	): void;
 	runPromptAndWait(
 		message: string,
-		options?: { timeoutMs?: number; signal?: AbortSignal; onTextDelta?: (delta: string) => void },
+		options?: {
+			timeoutMs?: number;
+			signal?: AbortSignal;
+			images?: ImageContent[];
+			onTextDelta?: (delta: string) => void;
+		},
 	): Promise<PromptRunResult>;
 }
 
@@ -135,10 +140,16 @@ export interface TeamOrchestratorOptions {
 	extensions?: string[];
 }
 
+export interface PromptImageAttachment extends ImageContent {
+	name?: string;
+	url?: string;
+}
+
 export interface DispatchMatterInput {
 	matterId?: string;
 	title?: string;
 	prompt: string;
+	images?: PromptImageAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	observerMemberIds?: string[];
@@ -460,8 +471,24 @@ function summarizeObserverProgress(
 	return `团队旁听 ${names}（${latest}）`;
 }
 
-function buildObserverTaskPrompt(input: { leadMember: TeamMember; userPrompt: string; leadReply: string }): string {
-	const userPart = truncateInline(input.userPrompt.trim(), 2000);
+function formatMessageHistoryContent(message: MatterMessage): string {
+	const rawImages = Array.isArray(message.metadata?.images) ? message.metadata.images : [];
+	const trimmed = message.content.trim();
+	if (rawImages.length === 0) return message.content;
+	const badge = `[附带 ${rawImages.length} 张图片]`;
+	return trimmed ? `${trimmed}\n${badge}` : badge;
+}
+
+function buildObserverTaskPrompt(input: {
+	leadMember: TeamMember;
+	userPrompt: string;
+	leadReply: string;
+	imageCount?: number;
+}): string {
+	const trimmedUser = input.userPrompt.trim();
+	const userPart = trimmedUser
+		? `${truncateInline(trimmedUser, 2000)}${input.imageCount ? `\n（用户同时附带了 ${input.imageCount} 张图片）` : ""}`
+		: `（用户发送了 ${input.imageCount ?? 1} 张图片，未附带额外文字）`;
 	const leadPart = input.leadReply.trim().slice(0, 6000);
 	return [
 		"请从你的本职岗位视角快速审视本轮讨论，判断是否需要主动插话补充：",
@@ -497,7 +524,10 @@ function buildObserverContextDigest(input: {
 	if (input.history.length > 0) {
 		const lines = input.history
 			.slice(-16)
-			.map((message) => `- ${message.senderType}/${message.senderId}: ${truncateInline(message.content, 400)}`);
+			.map(
+				(message) =>
+					`- ${message.senderType}/${message.senderId}: ${truncateInline(formatMessageHistoryContent(message), 400)}`,
+			);
 		const headerLen = parts.join("\n").length;
 		const remainingBudget = Math.max(1200, 6000 - headerLen - 32);
 		const kept: string[] = [];
@@ -835,10 +865,33 @@ ${this.store
 		const workspaceId = input.workspaceId ?? existing?.workspaceId;
 		const workspace = workspaceId ? this.store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !workspace) throw new Error(`Unknown workspace: ${workspaceId}`);
+		const images = (input.images ?? []).filter(
+			(item) =>
+				item &&
+				item.type === "image" &&
+				typeof item.data === "string" &&
+				item.data.length > 0 &&
+				typeof item.mimeType === "string" &&
+				item.mimeType.length > 0,
+		);
+		const rpcImages: ImageContent[] = images.map(({ data, mimeType }) => ({ type: "image", data, mimeType }));
+		const imageMetadataRefs = images.map((item, idx) => ({
+			...(item.url ? { url: item.url } : {}),
+			mimeType: item.mimeType,
+			name: item.name || `image-${idx + 1}`,
+		}));
+		const trimmedPrompt = input.prompt.trim();
+		const fallbackTitle = trimmedPrompt
+			? trimmedPrompt.slice(0, 60)
+			: images.length === 1
+				? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
+				: images.length > 1
+					? `上传了 ${images.length} 张图片`
+					: "新事项";
 		let matter =
 			existing ??
 			this.store.createMatter({
-				title: input.title ?? input.prompt.slice(0, 60),
+				title: input.title ?? fallbackTitle,
 				leadMemberId: assignedMember.id,
 				workspaceId: workspace?.id,
 				observerMemberIds: input.observerMemberIds,
@@ -900,16 +953,25 @@ ${this.store
 				senderType: "user",
 				senderId: "user",
 				content: input.prompt,
-				metadata: { workspaceId: workspace?.id ?? null, repoPath: resolve(workspace?.repoPath ?? this.defaultCwd) },
+				metadata: {
+					workspaceId: workspace?.id ?? null,
+					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+					...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+				},
 			});
 			run.userMessageId = message.id;
+			const effectiveTaskPrompt =
+				trimmedPrompt.length > 0
+					? input.prompt
+					: `请查看用户随消息附带的 ${rpcImages.length} 张图片，结合图片内容理解需求并直接回复。`;
 			let result: PromptRunResult;
 			try {
 				result = await this.executeWithWorker({
 					matterId: matter.id,
 					member: assignedMember,
 					workspace,
-					taskPrompt: input.prompt,
+					taskPrompt: effectiveTaskPrompt,
+					images: rpcImages.length > 0 ? rpcImages : undefined,
 					isInternalDelegation: false,
 					run,
 					chain: [assignedMember.id],
@@ -1038,6 +1100,7 @@ ${this.store
 							assignedMember,
 							workspace,
 							userPrompt: input.prompt,
+							userImages: rpcImages.length > 0 ? rpcImages : undefined,
 							leadReply: replyText,
 							leadMessageId: leadMessage.id,
 							observers: observerCandidates,
@@ -1367,6 +1430,7 @@ ${this.store
 		assignedMember: TeamMember;
 		workspace: WorkspaceLink | null;
 		userPrompt: string;
+		userImages?: ImageContent[];
 		leadReply: string;
 		leadMessageId: string;
 		observers: TeamMember[];
@@ -1379,6 +1443,7 @@ ${this.store
 			leadMember: input.assignedMember,
 			userPrompt: input.userPrompt,
 			leadReply: input.leadReply,
+			imageCount: input.userImages?.length ?? 0,
 		});
 		const observerNames = input.observers.map((member) => member.displayName).join("、");
 		pushRunLog(input.run, "旁听席", `${observerNames}正在审视本轮讨论`);
@@ -1407,6 +1472,7 @@ ${this.store
 						member: observer,
 						workspace: input.workspace,
 						taskPrompt,
+						images: input.userImages,
 						sessionMode: "observer",
 						excludeMessageIds: [input.run.userMessageId, input.leadMessageId],
 						run: input.run,
@@ -1503,6 +1569,7 @@ ${this.store
 		member: TeamMember;
 		workspace: WorkspaceLink | null;
 		taskPrompt: string;
+		images?: ImageContent[];
 		isInternalDelegation?: boolean;
 		sessionMode?: "lead" | "internal" | "observer";
 		excludeMessageIds?: string[];
@@ -1836,12 +1903,13 @@ ${this.store
 				workspaceId: input.workspace?.id ?? null,
 				repoPath: cwd,
 			});
+			const lastUserMsg = scopedContext.messages.filter((msg) => msg.channel === "user").at(-1);
 			const context =
 				sessionMode === "observer"
 					? buildObserverContextDigest({
 							matter: {
 								...this.requireMatter(input.matterId),
-								summary: scopedContext.messages.filter((msg) => msg.channel === "user").at(-1)?.content ?? "",
+								summary: lastUserMsg ? formatMessageHistoryContent(lastUserMsg) : "",
 							},
 							deliverables: scopedContext.deliverables,
 							history: filteredHistory,
@@ -1849,7 +1917,10 @@ ${this.store
 						})
 					: filteredHistory
 							.slice(-12)
-							.map((message) => `${message.senderType}/${message.senderId}: ${message.content}`)
+							.map(
+								(message) =>
+									`${message.senderType}/${message.senderId}: ${formatMessageHistoryContent(message)}`,
+							)
 							.join("\n\n")
 							.slice(-20000);
 			const contextHeader =
@@ -1896,6 +1967,7 @@ ${this.store
 			const result = await worker.runPromptAndWait(prompt, {
 				timeoutMs: remainingTimeoutMs,
 				signal,
+				images: input.images?.length ? input.images : undefined,
 				onTextDelta: input.onTextDelta,
 			});
 			if (!result.aborted && !input.run.cancelled) {

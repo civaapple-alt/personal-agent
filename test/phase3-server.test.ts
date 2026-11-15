@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -30,6 +30,7 @@ import {
 	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
 	parseDeliverableSummary,
+	parseMessageImages,
 	parseProgressSnapshot,
 	pickDefaultWorkspaceId,
 } from "../web/src/utils.ts";
@@ -1485,4 +1486,182 @@ test("parseDeliverableSummary extracts lead takeaway and scannable process/evide
 	assert.equal(inlineParsed.lead, "第一句核心结论。");
 	assert.ok(inlineParsed.details.length >= 2);
 	assert.equal(parseDeliverableSummary("   ").lead, "");
+});
+
+test("parseMessageImages extracts valid lightweight image refs from message metadata", () => {
+	assert.deepEqual(parseMessageImages(null), []);
+	assert.deepEqual(
+		parseMessageImages({
+			images: [
+				{ url: "/api/uploads/a.png", mimeType: "image/png", name: "a.png" },
+				{ mimeType: "image/webp" },
+				null,
+				{},
+			],
+		}),
+		[{ url: "/api/uploads/a.png", mimeType: "image/png", name: "a.png" }, { mimeType: "image/webp" }],
+	);
+});
+
+test("HTTP server persists uploaded chat images to uploadsDir, forwards them to worker, and serves GET /api/uploads/:file", async () => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-uploads-"));
+	const dbPath = join(tempDir, "test.sqlite");
+	const uploadsDir = join(tempDir, "uploads");
+	const receivedImages: Array<Array<{ type: string; data: string; mimeType: string }>> = [];
+	const pngPayload = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02]);
+	const pngBase64 = pngPayload.toString("base64");
+
+	class ImageCaptureWorker implements RpcWorkerLike {
+		readonly options: PiRpcWorkerOptions;
+		constructor(options: PiRpcWorkerOptions) {
+			this.options = options;
+		}
+		async start() {
+			await reportReady(this.options);
+		}
+		async getState() {
+			return { sessionId: "sess-img", sessionFile: undefined };
+		}
+		async stop() {}
+		async abort() {}
+		onEvent() {
+			return () => {};
+		}
+		onNotice() {
+			return () => {};
+		}
+		setDialogHandler() {}
+		async runPromptAndWait(
+			_prompt: string,
+			options: { images?: Array<{ type: string; data: string; mimeType: string }> } = {},
+		): Promise<PromptRunResult> {
+			if (options.images) receivedImages.push(options.images);
+			return {
+				disposition: "started",
+				aborted: false,
+				assistantText: "已识别截图内容",
+				assistantMessages: [],
+				toolExecutions: [],
+				notices: [],
+				dialogs: [],
+				events: [],
+			};
+		}
+	}
+
+	const db = openPersonalAgentDatabase(dbPath);
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tempDir,
+		workerFactory: (opts) => new ImageCaptureWorker(opts),
+	});
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager: new PreviewManager(),
+		dialogBroker: new DialogBroker(),
+		uploadsDir,
+	});
+
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		// Reject empty request without prompt or images
+		const emptyRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ prompt: "   " }),
+		});
+		assert.equal(emptyRes.status, 400);
+
+		// Reject unsupported MIME type
+		const badMimeRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "check file",
+				images: [{ mimeType: "application/pdf", data: pngBase64, name: "bad.pdf" }],
+			}),
+		});
+		assert.equal(badMimeRes.status, 400);
+
+		// Accept image-only matter creation
+		const createRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "",
+				images: [{ mimeType: "image/png", data: pngBase64, name: "screen.png" }],
+			}),
+		});
+		assert.equal(createRes.status, 202);
+		const createdBody = (await createRes.json()) as { matter: { id: string; title: string } };
+		assert.equal(createdBody.matter.title, "图片：screen.png");
+
+		// Wait briefly for background dispatch to persist user/assistant messages
+		type DetailResult = {
+			userMessages: Array<{ senderType: string; metadata?: Record<string, unknown> | null }>;
+			activeRun?: unknown;
+		};
+		let detail: DetailResult | null = null;
+		for (let i = 0; i < 30; i += 1) {
+			const res = await fetch(`${baseUrl}/api/matters/${createdBody.matter.id}`);
+			const data = (await res.json()) as DetailResult;
+			if (data.userMessages.length >= 2 && !data.activeRun) {
+				detail = data;
+				break;
+			}
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		assert.ok(detail);
+		assert.equal(receivedImages.length, 1);
+		assert.deepEqual(receivedImages[0], [{ type: "image", data: pngBase64, mimeType: "image/png" }]);
+
+		const userMsg = detail.userMessages.find((m) => m.senderType === "user");
+		assert.ok(userMsg);
+		const storedImages = parseMessageImages(userMsg.metadata);
+		assert.equal(storedImages.length, 1);
+		assert.match(storedImages[0]!.url ?? "", /^\/api\/uploads\/.+\.png$/);
+		assert.equal(storedImages[0]!.name, "screen.png");
+		assert.equal(readdirSync(uploadsDir).length, 1);
+
+		const uploadGetRes = await fetch(`${baseUrl}${storedImages[0]!.url!}`);
+		assert.equal(uploadGetRes.status, 200);
+		assert.equal(uploadGetRes.headers.get("content-type"), "image/png");
+		const fetchedBytes = Buffer.from(await uploadGetRes.arrayBuffer());
+		assert.deepEqual(fetchedBytes, pngPayload);
+
+		// Follow-up message with text + image
+		const followupRes = await fetch(`${baseUrl}/api/matters/${createdBody.matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "再看一下这第二张",
+				images: [{ mimeType: "image/jpeg", data: pngBase64, name: "second.jpg" }],
+			}),
+		});
+		assert.equal(followupRes.status, 202);
+		for (let i = 0; i < 30; i += 1) {
+			if (receivedImages.length >= 2 && !orchestrator.isMatterRunning(createdBody.matter.id)) break;
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		assert.equal(receivedImages.length, 2);
+		assert.deepEqual(receivedImages[1], [{ type: "image", data: pngBase64, mimeType: "image/jpeg" }]);
+
+		// Path traversal / unknown upload should return 404
+		const missingUpload = await fetch(`${baseUrl}/api/uploads/does-not-exist.png`);
+		assert.equal(missingUpload.status, 404);
+	} finally {
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
 });

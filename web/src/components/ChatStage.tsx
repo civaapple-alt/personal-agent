@@ -1,5 +1,15 @@
-import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
+	type ClipboardEvent,
+	type DragEvent,
+	type KeyboardEvent,
+	type RefObject,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import {
+	type ComposerImageAttachment,
 	type DeliverableDto,
 	type DistillRsiResult,
 	type MatterDetailPayload,
@@ -11,6 +21,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../api.ts";
+import { MAX_COMPOSER_IMAGES } from "../imageAttachments.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
 import {
 	collectMatterMemories,
@@ -22,6 +33,7 @@ import {
 	isKeyNoticeEvent,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
+	parseMessageImages,
 	parseProgressSnapshot,
 	type StarterTask,
 } from "../utils.ts";
@@ -49,6 +61,7 @@ interface ChatStageProps {
 	streamingDelta: string;
 	submitting: boolean;
 	composerText: string;
+	pendingImages: ComposerImageAttachment[];
 	errorBanner: string | null;
 	noticeBanner: string | null;
 	starterTasks: StarterTask[];
@@ -58,6 +71,8 @@ interface ChatStageProps {
 	workspaceName: (id: string | null) => string | null;
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	onComposerTextChange: (value: string) => void;
+	onAddImages: (files: FileList | File[]) => void;
+	onRemoveImage: (imageId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	onSelectMember: (memberId: string) => void;
 	activeObserverIds: string[];
@@ -96,6 +111,7 @@ export function ChatStage({
 	streamingDelta,
 	submitting,
 	composerText,
+	pendingImages,
 	errorBanner,
 	noticeBanner,
 	starterTasks,
@@ -105,6 +121,8 @@ export function ChatStage({
 	workspaceName,
 	previewUrlFor,
 	onComposerTextChange,
+	onAddImages,
+	onRemoveImage,
 	onSelectWorkspace,
 	onSelectMember,
 	activeObserverIds,
@@ -123,6 +141,10 @@ export function ChatStage({
 	onDismissNotice,
 }: ChatStageProps) {
 	const [collabOpen, setCollabOpen] = useState(false);
+	const [dragOverComposer, setDragOverComposer] = useState(false);
+	const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	const dragDepthRef = useRef(0);
 	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
 	const [distillingMatter, setDistillingMatter] = useState(false);
 	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
@@ -157,6 +179,7 @@ export function ChatStage({
 				setCollabOpen(false);
 				setStarterMenuOpen(false);
 				setObserverMenuOpen(false);
+				setLightboxImage(null);
 			}
 		};
 		document.addEventListener("mousedown", onMouseDown);
@@ -221,9 +244,75 @@ export function ChatStage({
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 			e.preventDefault();
-			if (!isTurnRunning && !submitting) {
+			if (!isTurnRunning && !submitting && (composerText.trim() || pendingImages.length > 0)) {
 				onSendPrompt();
 			}
+		}
+	};
+
+	const hasDraggedFiles = (dataTransfer: DataTransfer | null): boolean => {
+		if (!dataTransfer) return false;
+		if (dataTransfer.files && dataTransfer.files.length > 0) return true;
+		return Array.from(dataTransfer.types ?? []).includes("Files");
+	};
+
+	const handleComposerDragEnter = (e: DragEvent<HTMLDivElement>) => {
+		if (!hasDraggedFiles(e.dataTransfer)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		dragDepthRef.current += 1;
+		setDragOverComposer(true);
+	};
+
+	const handleComposerDragOver = (e: DragEvent<HTMLDivElement>) => {
+		if (!hasDraggedFiles(e.dataTransfer)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		e.dataTransfer.dropEffect = "copy";
+		if (!dragOverComposer) setDragOverComposer(true);
+	};
+
+	const handleComposerDragLeave = (e: DragEvent<HTMLDivElement>) => {
+		if (!hasDraggedFiles(e.dataTransfer)) return;
+		e.preventDefault();
+		e.stopPropagation();
+		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+		if (dragDepthRef.current === 0) {
+			setDragOverComposer(false);
+		}
+	};
+
+	const handleComposerDrop = (e: DragEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		e.stopPropagation();
+		dragDepthRef.current = 0;
+		setDragOverComposer(false);
+		if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+			onAddImages(e.dataTransfer.files);
+			composerRef.current?.focus();
+		}
+	};
+
+	const handleComposerPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+		const clipboard = e.clipboardData;
+		if (!clipboard) return;
+		const imageFiles: File[] = [];
+		for (const item of Array.from(clipboard.items ?? [])) {
+			if (item.kind === "file" && item.type.startsWith("image/")) {
+				const file = item.getAsFile();
+				if (file) imageFiles.push(file);
+			}
+		}
+		if (imageFiles.length === 0) {
+			for (const file of Array.from(clipboard.files ?? [])) {
+				if (file.type.startsWith("image/")) imageFiles.push(file);
+			}
+		}
+		if (imageFiles.length > 0) {
+			if (!clipboard.getData("text/plain")) {
+				e.preventDefault();
+			}
+			onAddImages(imageFiles);
 		}
 	};
 
@@ -628,11 +717,57 @@ export function ChatStage({
 												{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 											</div>
 										)}
-										<div
-											className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${isObserverIntervention ? " observer" : ""}`}
-										>
-											{isUser ? msg.content : <MarkdownView content={msg.content} />}
-										</div>
+										{(() => {
+											const userImages = isUser ? parseMessageImages(msg.metadata) : [];
+											return (
+												<div
+													className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${isObserverIntervention ? " observer" : ""}`}
+												>
+													{isUser ? (
+														<>
+															{userImages.length > 0 && (
+																<div
+																	className={`stream-msg-images${userImages.length === 1 ? " single" : ""}`}
+																>
+																	{userImages.map((img, idx) =>
+																		img.url ? (
+																			<button
+																				key={img.url}
+																				type="button"
+																				className="stream-msg-image-btn"
+																				title={img.name ?? "点击查看大图"}
+																				onClick={() =>
+																					setLightboxImage({
+																						src: img.url!,
+																						alt: img.name ?? `附件图片 ${idx + 1}`,
+																					})
+																				}
+																			>
+																				<img
+																					src={img.url}
+																					alt={img.name ?? `附件图片 ${idx + 1}`}
+																					loading="lazy"
+																				/>
+																			</button>
+																		) : (
+																			<span
+																				key={`${msg.id}-missing-${img.name ?? img.mimeType}`}
+																				className="stream-msg-image-fallback"
+																			>
+																				[图片：{img.name ?? `附件 ${idx + 1}`}]
+																			</span>
+																		),
+																	)}
+																</div>
+															)}
+															{msg.content && <div className="stream-bubble-text">{msg.content}</div>}
+														</>
+													) : (
+														<MarkdownView content={msg.content} />
+													)}
+												</div>
+											);
+										})()}
 										{progressSnapshot && (
 											<ProgressSnapshotCard
 												snapshot={progressSnapshot}
@@ -746,7 +881,21 @@ export function ChatStage({
 			</div>
 
 			<div className="composer-dock">
-				<div ref={composerDockRef} className="composer-dock-inner">
+				<section
+					ref={composerDockRef}
+					aria-label="消息与图片输入区"
+					className={`composer-dock-inner${dragOverComposer ? " drag-over" : ""}`}
+					onDragEnter={handleComposerDragEnter}
+					onDragOver={handleComposerDragOver}
+					onDragLeave={handleComposerDragLeave}
+					onDrop={handleComposerDrop}
+				>
+					{dragOverComposer && (
+						<div className="composer-drop-overlay" aria-hidden="true">
+							<strong>松开即可添加图片附件</strong>
+							<span>支持 PNG / JPG / WebP / GIF（最多 {MAX_COMPOSER_IMAGES} 张）</span>
+						</div>
+					)}
 					{starterMenuOpen && (
 						<div className="quick-prompts-popover">
 							<div className="banner-row">
@@ -887,18 +1036,86 @@ export function ChatStage({
 						)}
 					</div>
 
+					{pendingImages.length > 0 && (
+						<ul className="composer-image-strip" aria-label="待发送图片">
+							{pendingImages.map((img) => (
+								<li key={img.id} className="composer-image-chip" title={img.name}>
+									<button
+										type="button"
+										className="composer-image-preview"
+										onClick={() => setLightboxImage({ src: img.previewUrl, alt: img.name })}
+										aria-label={`预览图片 ${img.name}`}
+									>
+										<img src={img.previewUrl} alt={img.name} />
+									</button>
+									<button
+										type="button"
+										className="composer-image-remove"
+										onClick={() => onRemoveImage(img.id)}
+										aria-label={`移除图片 ${img.name}`}
+										title="移除图片"
+									>
+										×
+									</button>
+								</li>
+							))}
+							<li className="composer-image-hint">
+								已选 {pendingImages.length}/{MAX_COMPOSER_IMAGES} 张 · 可继续拖拽或粘贴图片
+							</li>
+						</ul>
+					)}
+
 					<div className="pill-composer">
+						<input
+							ref={fileInputRef}
+							type="file"
+							accept="image/png,image/jpeg,image/webp,image/gif"
+							multiple
+							hidden
+							onChange={(e) => {
+								if (e.target.files?.length) {
+									onAddImages(e.target.files);
+									composerRef.current?.focus();
+								}
+								e.target.value = "";
+							}}
+						/>
 						<button
 							type="button"
 							aria-expanded={starterMenuOpen}
 							className="pill-plus-btn"
 							aria-label="插入示范任务"
+							title="插入示范任务"
 							onClick={() => {
 								setObserverMenuOpen(false);
 								setStarterMenuOpen((v) => !v);
 							}}
 						>
 							+
+						</button>
+						<button
+							type="button"
+							className="pill-upload-btn"
+							aria-label="上传图片"
+							title="上传图片（也可直接拖拽或 Ctrl/Cmd+V 粘贴图片）"
+							disabled={submitting || pendingImages.length >= MAX_COMPOSER_IMAGES}
+							onClick={() => fileInputRef.current?.click()}
+						>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="1.9"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								aria-hidden="true"
+							>
+								<rect x="3" y="4" width="18" height="16" rx="2.5" />
+								<circle cx="8.5" cy="9.5" r="1.5" />
+								<path d="m21 15-4.5-4.5a1.5 1.5 0 0 0-2.1 0L6 19" />
+							</svg>
 						</button>
 						<textarea
 							ref={composerRef}
@@ -907,12 +1124,13 @@ export function ChatStage({
 							value={composerText}
 							onChange={(e) => onComposerTextChange(e.target.value)}
 							onKeyDown={handleComposerKeyDown}
+							onPaste={handleComposerPaste}
 							placeholder={
 								isTurnRunning
 									? "当前回合仍在推进，完成后可继续（或点击 ■ 停止）..."
 									: selectedMatterId
-										? "继续对话，回答问题或提出修改（Enter 发送）..."
-										: "向你的 AI 团队布置任务（Enter 发送）..."
+										? "继续对话、拖拽或粘贴图片，或提出修改（Enter 发送）..."
+										: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
 							}
 						/>
 						{activeMatterProgress && selectedMatterId && (
@@ -930,14 +1148,34 @@ export function ChatStage({
 							type="button"
 							className="pill-send-btn"
 							aria-label="发送"
-							disabled={submitting || isTurnRunning || !composerText.trim()}
+							disabled={submitting || isTurnRunning || (!composerText.trim() && pendingImages.length === 0)}
 							onClick={onSendPrompt}
 						>
 							{submitting ? "…" : "↑"}
 						</button>
 					</div>
-				</div>
+				</section>
 			</div>
+
+			{lightboxImage && (
+				<div className="image-lightbox-backdrop">
+					<button
+						type="button"
+						className="image-lightbox-scrim"
+						aria-label="关闭预览"
+						onClick={() => setLightboxImage(null)}
+					/>
+					<div className="image-lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
+						<img src={lightboxImage.src} alt={lightboxImage.alt} />
+						<div className="image-lightbox-footer">
+							<span>{lightboxImage.alt}</span>
+							<button type="button" className="btn-inline" onClick={() => setLightboxImage(null)}>
+								关闭
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

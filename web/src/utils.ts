@@ -6,6 +6,7 @@ import type {
 	MatterProgressDto,
 	MemberMemoryDto,
 	MemoryCategory,
+	MessageImageDto,
 	ProgressActivityDto,
 	ProgressSnapshotDto,
 	TeamMemberDto,
@@ -630,4 +631,25 @@ export function pickDefaultWorkspaceId(
 		}
 	}
 	return workspaces[0]?.id ?? "";
+}
+
+/** Extracts lightweight image attachment references stored on a user message's metadata. */
+export function parseMessageImages(metadata: Record<string, unknown> | null | undefined): MessageImageDto[] {
+	const raw = metadata?.images;
+	if (!Array.isArray(raw)) return [];
+	const images: MessageImageDto[] = [];
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
+		const record = entry as Record<string, unknown>;
+		const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "";
+		const url = typeof record.url === "string" ? record.url.trim() : undefined;
+		const name = typeof record.name === "string" ? record.name.trim() : undefined;
+		if (!mimeType && !url) continue;
+		images.push({
+			...(url ? { url } : {}),
+			mimeType: mimeType || "image/png",
+			...(name ? { name } : {}),
+		});
+	}
+	return images;
 }

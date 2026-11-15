@@ -45,6 +45,7 @@ async function main(): Promise<void> {
 		dialogBroker,
 		webDistDir: resolve(rootDir, "web/dist"),
 		rolesDir: resolve(rootDir, "roles"),
+		uploadsDir: resolve(rootDir, ".data/uploads"),
 	});
 
 	await new Promise<void>((resolveListen) => {

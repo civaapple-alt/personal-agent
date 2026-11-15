@@ -1,11 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import {
 	buildProgressSnapshot,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
+	type PromptImageAttachment,
 	type TeamOrchestrator,
 } from "../orchestrator/team-orchestrator.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
@@ -51,6 +53,7 @@ export interface PersonalAgentServerOptions {
 	dialogBroker: DialogBroker;
 	webDistDir?: string;
 	rolesDir?: string;
+	uploadsDir?: string;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -60,18 +63,139 @@ const MIME_TYPES: Record<string, string> = {
 	".json": "application/json; charset=utf-8",
 	".svg": "image/svg+xml",
 	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".webp": "image/webp",
+	".gif": "image/gif",
 };
+
+const MAX_JSON_BODY_BYTES = 36 * 1024 * 1024;
+const MAX_UPLOAD_IMAGES = 6;
+const MAX_UPLOAD_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_MEMORY_UPLOAD_CACHE = 128;
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+	"image/png": ".png",
+	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
+	"image/gif": ".gif",
+};
+
+class HttpRequestError extends Error {
+	statusCode: number;
+
+	constructor(statusCode: number, message: string) {
+		super(message);
+		this.statusCode = statusCode;
+	}
+}
+
+interface ParsedUploadImage {
+	data: string;
+	mimeType: string;
+	name: string;
+	buffer: Buffer;
+}
+
+function parseIncomingImages(raw: unknown): ParsedUploadImage[] {
+	if (raw === undefined || raw === null) return [];
+	if (!Array.isArray(raw)) {
+		throw new HttpRequestError(400, "images must be an array");
+	}
+	if (raw.length > MAX_UPLOAD_IMAGES) {
+		throw new HttpRequestError(400, `At most ${MAX_UPLOAD_IMAGES} images per message are allowed`);
+	}
+	const parsed: ParsedUploadImage[] = [];
+	for (let i = 0; i < raw.length; i += 1) {
+		const item = raw[i];
+		if (!item || typeof item !== "object" || Array.isArray(item)) {
+			throw new HttpRequestError(400, `Invalid image entry at index ${i}`);
+		}
+		const record = item as Record<string, unknown>;
+		const rawMime = typeof record.mimeType === "string" ? record.mimeType.trim().toLowerCase() : "";
+		const mimeType = rawMime === "image/jpg" ? "image/jpeg" : rawMime;
+		if (!IMAGE_EXTENSIONS[mimeType]) {
+			throw new HttpRequestError(400, `Unsupported image type: ${rawMime || "unknown"}`);
+		}
+		const rawData = typeof record.data === "string" ? record.data.trim() : "";
+		const dataUrlMatch = rawData.match(/^data:([^;]+);base64,(.+)$/s);
+		const base64Text = (dataUrlMatch ? dataUrlMatch[2]! : rawData).replace(/\s+/g, "");
+		if (!base64Text || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64Text) || base64Text.length % 4 === 1) {
+			throw new HttpRequestError(400, `Invalid base64 image data at index ${i}`);
+		}
+		const buffer = Buffer.from(base64Text, "base64");
+		if (buffer.byteLength === 0) {
+			throw new HttpRequestError(400, `Empty image data at index ${i}`);
+		}
+		if (buffer.byteLength > MAX_UPLOAD_IMAGE_BYTES) {
+			throw new HttpRequestError(400, `Image exceeds ${MAX_UPLOAD_IMAGE_BYTES / (1024 * 1024)}MB limit`);
+		}
+		const rawName = typeof record.name === "string" ? basename(record.name.trim()).slice(0, 120) : "";
+		parsed.push({
+			data: buffer.toString("base64"),
+			mimeType,
+			name: rawName || `image-${i + 1}${IMAGE_EXTENSIONS[mimeType]}`,
+			buffer,
+		});
+	}
+	return parsed;
+}
+
+async function persistUploadedImages(
+	items: ParsedUploadImage[],
+	uploadsDir: string | undefined,
+	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>,
+): Promise<PromptImageAttachment[]> {
+	if (items.length === 0) return [];
+	if (uploadsDir) {
+		await mkdir(resolve(uploadsDir), { recursive: true });
+	}
+	const stored: PromptImageAttachment[] = [];
+	for (const item of items) {
+		const ext = IMAGE_EXTENSIONS[item.mimeType] ?? ".bin";
+		const filename = `${Date.now()}-${randomUUID().slice(0, 8)}${ext}`;
+		if (uploadsDir) {
+			await writeFile(join(resolve(uploadsDir), filename), item.buffer);
+		} else {
+			memoryUploads.set(filename, { buffer: item.buffer, mimeType: item.mimeType });
+			while (memoryUploads.size > MAX_MEMORY_UPLOAD_CACHE) {
+				const oldestKey = memoryUploads.keys().next().value;
+				if (!oldestKey) break;
+				memoryUploads.delete(oldestKey);
+			}
+		}
+		stored.push({
+			type: "image",
+			data: item.data,
+			mimeType: item.mimeType,
+			name: item.name,
+			url: `/api/uploads/${filename}`,
+		});
+	}
+	return stored;
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 	const chunks: Buffer[] = [];
+	let totalBytes = 0;
 	for await (const chunk of req) {
-		chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+		const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+		totalBytes += buf.byteLength;
+		if (totalBytes > MAX_JSON_BODY_BYTES) {
+			throw new HttpRequestError(413, "Request body exceeds 36MB limit");
+		}
+		chunks.push(buf);
 	}
 	const raw = Buffer.concat(chunks).toString("utf8").trim();
 	if (raw.length === 0) return {};
-	const parsed = JSON.parse(raw) as unknown;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw) as unknown;
+	} catch {
+		throw new HttpRequestError(400, "Invalid JSON request body");
+	}
 	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-		throw new Error("Request body must be a JSON object");
+		throw new HttpRequestError(400, "Request body must be a JSON object");
 	}
 	return parsed as Record<string, unknown>;
 }
@@ -127,8 +251,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	server: Server;
 	broadcast: (eventName: string, payload: unknown) => void;
 } {
-	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir } = options;
+	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
 	const sseClients = new Set<ServerResponse>();
+	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 
 	const broadcast = (eventName: string, payload: unknown) => {
 		const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -158,6 +283,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		matterId: string;
 		title?: string;
 		prompt: string;
+		images?: PromptImageAttachment[];
 		preferredMemberId?: string;
 		workspaceId?: string;
 		observerMemberIds?: string[];
@@ -181,6 +307,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				matterId: input.matterId,
 				title: input.title,
 				prompt: input.prompt,
+				images: input.images,
 				preferredMemberId: input.preferredMemberId,
 				workspaceId: input.workspaceId,
 				observerMemberIds: input.observerMemberIds,
@@ -292,6 +419,41 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					clearInterval(heartbeat);
 					sseClients.delete(res);
 				});
+				return;
+			}
+
+			const uploadMatch = pathname.match(/^\/api\/uploads\/([a-zA-Z0-9._-]+)$/);
+			if (method === "GET" && uploadMatch) {
+				const filename = uploadMatch[1]!;
+				const mime = MIME_TYPES[extname(filename).toLowerCase()];
+				if (!mime || !mime.startsWith("image/")) {
+					sendError(res, 404, "Upload not found");
+					return;
+				}
+				if (uploadsDir) {
+					const targetPath = resolve(uploadsDir, filename);
+					if (targetPath.startsWith(resolve(uploadsDir)) && existsSync(targetPath)) {
+						const content = await readFile(targetPath);
+						res.writeHead(200, {
+							"Content-Type": mime,
+							"Content-Length": content.byteLength,
+							"Cache-Control": "public, max-age=31536000, immutable",
+						});
+						res.end(content);
+						return;
+					}
+				}
+				const memEntry = memoryUploads.get(filename);
+				if (memEntry) {
+					res.writeHead(200, {
+						"Content-Type": memEntry.mimeType,
+						"Content-Length": memEntry.buffer.byteLength,
+						"Cache-Control": "public, max-age=31536000, immutable",
+					});
+					res.end(memEntry.buffer);
+					return;
+				}
+				sendError(res, 404, "Upload not found");
 				return;
 			}
 
@@ -416,8 +578,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			if (method === "POST" && pathname === "/api/matters") {
 				const body = await readJsonBody(req);
 				const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-				if (!prompt) {
-					sendError(res, 400, "prompt is required");
+				const parsedImages = parseIncomingImages(body.images);
+				if (!prompt && parsedImages.length === 0) {
+					sendError(res, 400, "prompt or images is required");
 					return;
 				}
 				const preferredMemberId =
@@ -435,10 +598,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const deliverableType =
 					typeof body.deliverableType === "string" ? (body.deliverableType as DeliverableType) : undefined;
 				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+				const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 
 				const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId);
+				const fallbackTitle = prompt
+					? prompt.slice(0, 60)
+					: images.length === 1
+						? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
+						: `上传了 ${images.length} 张图片`;
 				const matter = store.createMatter({
-					title: title ?? prompt.slice(0, 60),
+					title: title ?? fallbackTitle,
 					leadMemberId: leadMember.id,
 					workspaceId: workspaceId ?? null,
 					observerMemberIds,
@@ -448,6 +617,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					matterId: matter.id,
 					title,
 					prompt,
+					images: images.length > 0 ? images : undefined,
 					preferredMemberId: leadMember.id,
 					workspaceId,
 					observerMemberIds,
@@ -473,8 +643,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				}
 				const body = await readJsonBody(req);
 				const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-				if (!prompt) {
-					sendError(res, 400, "prompt is required");
+				const parsedImages = parseIncomingImages(body.images);
+				if (!prompt && parsedImages.length === 0) {
+					sendError(res, 400, "prompt or images is required");
 					return;
 				}
 				const preferredMemberId =
@@ -490,10 +661,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						? body.deliverableTitle.trim()
 						: undefined;
 				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+				const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 
 				runDispatchInBackground({
 					matterId: matter.id,
 					prompt,
+					images: images.length > 0 ? images : undefined,
 					preferredMemberId,
 					workspaceId,
 					observerMemberIds,
@@ -1074,7 +1247,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			sendError(res, 404, `Not found: ${method} ${pathname}`);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
-			sendError(res, error instanceof MemoryValidationError ? 400 : 500, message);
+			const statusCode =
+				error instanceof HttpRequestError ? error.statusCode : error instanceof MemoryValidationError ? 400 : 500;
+			sendError(res, statusCode, message);
 		}
 	});
 

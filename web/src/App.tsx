@@ -3,6 +3,7 @@ import {
 	abortMatter,
 	abortRsiDistillation,
 	type BootstrapPayload,
+	type ComposerImageAttachment,
 	createMatter,
 	type DeliverableDto,
 	type DistillRsiResult,
@@ -27,6 +28,7 @@ import { MaterialsView } from "./components/MaterialsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute } from "./hashRouter.ts";
+import { MAX_COMPOSER_IMAGES, prepareComposerImages } from "./imageAttachments.ts";
 import { buildStarterTasks, getBotTheme } from "./utils.ts";
 
 export function App() {
@@ -60,6 +62,9 @@ export function App() {
 		}
 	});
 	const [composerText, setComposerText] = useState("");
+	const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
+	const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
+	composerImagesRef.current = composerImages;
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -403,9 +408,24 @@ export function App() {
 		return (bootstrap?.members ?? []).filter((m) => !m.isPrimaryContact).map((m) => m.id);
 	}, [bootstrap, draftObserverIds, matterDetail, selectedMatterId]);
 
+	const handleAddComposerImages = useCallback(async (files: FileList | File[]) => {
+		const { attachments, warnings } = await prepareComposerImages(files, composerImagesRef.current.length);
+		if (attachments.length > 0) {
+			setComposerImages((prev) => [...prev, ...attachments].slice(0, MAX_COMPOSER_IMAGES));
+		}
+		if (warnings.length > 0) {
+			setErrorBanner(warnings[0]!);
+		}
+	}, []);
+
+	const handleRemoveComposerImage = useCallback((imageId: string) => {
+		setComposerImages((prev) => prev.filter((item) => item.id !== imageId));
+	}, []);
+
 	const handleSendPrompt = async () => {
 		const text = composerText.trim();
-		if (!text || submitting) return;
+		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
+		if ((!text && imagesPayload.length === 0) || submitting) return;
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
@@ -416,6 +436,7 @@ export function App() {
 			if (targetMatterId) {
 				await postMatterMessage(targetMatterId, {
 					prompt: text,
+					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId,
 				});
 			} else {
@@ -423,6 +444,7 @@ export function App() {
 				const observerIds = activeObserverIds.filter((id) => id !== leadForMatter);
 				const created = await createMatter({
 					prompt: text,
+					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId,
 					workspaceId: selectedWorkspaceId || undefined,
 					observerMemberIds: observerIds,
@@ -433,6 +455,7 @@ export function App() {
 				setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
 			}
 			setComposerText("");
+			setComposerImages([]);
 			await refreshBootstrap();
 			if (targetMatterId) {
 				await refreshDetail(targetMatterId);
@@ -667,6 +690,7 @@ export function App() {
 						streamingDelta={streamingDelta}
 						submitting={submitting}
 						composerText={composerText}
+						pendingImages={composerImages}
 						errorBanner={errorBanner}
 						noticeBanner={noticeBanner}
 						starterTasks={starterTasks}
@@ -676,6 +700,8 @@ export function App() {
 						workspaceName={workspaceName}
 						previewUrlFor={previewUrlFor}
 						onComposerTextChange={setComposerText}
+						onAddImages={(files) => void handleAddComposerImages(files)}
+						onRemoveImage={handleRemoveComposerImage}
 						onSelectWorkspace={handleSelectWorkspace}
 						onSelectMember={setSelectedMemberId}
 						activeObserverIds={activeObserverIds}

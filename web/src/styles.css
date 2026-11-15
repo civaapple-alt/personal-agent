@@ -716,6 +716,50 @@ body {
 	border-radius: 20px 20px 6px 20px;
 	max-width: 72%;
 	white-space: pre-wrap;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.stream-bubble-text {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.stream-msg-images {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.stream-msg-image-btn {
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 12px;
+	overflow: hidden;
+	background: rgba(255, 255, 255, 0.08);
+	cursor: zoom-in;
+	display: block;
+}
+
+.stream-msg-image-btn img {
+	display: block;
+	width: 112px;
+	height: 112px;
+	object-fit: cover;
+}
+
+.stream-msg-images.single .stream-msg-image-btn img {
+	width: auto;
+	height: auto;
+	max-width: min(300px, 100%);
+	max-height: 220px;
+	object-fit: contain;
+}
+
+.stream-msg-image-fallback {
+	font-size: 12px;
+	opacity: 0.85;
 }
 
 .stream-bubble.member {
@@ -1254,6 +1298,177 @@ body {
 
 .pill-plus-btn:hover {
 	background: var(--bg-subtle);
+}
+
+.pill-upload-btn {
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	border: 1px solid var(--border);
+	background: var(--bg-sidebar);
+	color: var(--text-secondary);
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.pill-upload-btn:hover:not(:disabled) {
+	background: var(--bg-subtle);
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+.pill-upload-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.composer-dock-inner.drag-over .pill-composer {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px rgba(15, 107, 96, 0.14);
+}
+
+.composer-drop-overlay {
+	position: absolute;
+	inset: -6px;
+	z-index: 12;
+	border-radius: 24px;
+	border: 2px dashed var(--accent);
+	background: rgba(237, 249, 245, 0.94);
+	backdrop-filter: blur(4px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	color: var(--accent);
+	pointer-events: none;
+}
+
+.composer-drop-overlay strong {
+	font-size: 14px;
+}
+
+.composer-drop-overlay span {
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+
+.composer-image-strip {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 6px 8px 2px;
+	margin: 0;
+	list-style: none;
+}
+
+.composer-image-chip {
+	position: relative;
+	width: 58px;
+	height: 58px;
+	flex-shrink: 0;
+}
+
+.composer-image-preview {
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	overflow: hidden;
+	background: var(--bg-sidebar);
+	cursor: zoom-in;
+	display: block;
+}
+
+.composer-image-preview img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.composer-image-remove {
+	position: absolute;
+	top: -6px;
+	right: -6px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	border: 1px solid #fff;
+	background: var(--dark-pill);
+	color: #fff;
+	font-size: 13px;
+	line-height: 1;
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.composer-image-remove:hover {
+	background: #c23934;
+}
+
+.composer-image-hint {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin-left: 2px;
+}
+
+.image-lightbox-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background: rgba(15, 23, 20, 0.72);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+}
+
+.image-lightbox-scrim {
+	position: absolute;
+	inset: 0;
+	border: none;
+	padding: 0;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.image-lightbox-dialog {
+	position: relative;
+	z-index: 1;
+	background: var(--bg-stage);
+	border-radius: 16px;
+	padding: 12px;
+	max-width: min(92vw, 960px);
+	max-height: 90vh;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.image-lightbox-dialog img {
+	max-width: 100%;
+	max-height: calc(90vh - 76px);
+	object-fit: contain;
+	border-radius: 10px;
+	background: #f3f6f4;
+}
+
+.image-lightbox-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 13px;
+	color: var(--text-secondary);
 }
 
 .pill-textarea {

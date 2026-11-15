@@ -30,6 +30,25 @@ export interface MatterDto {
 	updatedAt: string;
 }
 
+export interface MessageImageDto {
+	url?: string;
+	mimeType: string;
+	name?: string;
+}
+
+export interface UploadImagePayload {
+	data: string;
+	mimeType: string;
+	name?: string;
+}
+
+export interface ComposerImageAttachment extends UploadImagePayload {
+	id: string;
+	name: string;
+	previewUrl: string;
+	sizeBytes: number;
+}
+
 export interface MatterMessageDto {
 	id: string;
 	matterId: string;
@@ -235,6 +254,7 @@ export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload
 
 export function createMatter(input: {
 	prompt: string;
+	images?: UploadImagePayload[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	observerMemberIds?: string[];
@@ -248,7 +268,7 @@ export function createMatter(input: {
 
 export function postMatterMessage(
 	matterId: string,
-	input: { prompt: string; preferredMemberId?: string; observerMemberIds?: string[] },
+	input: { prompt: string; images?: UploadImagePayload[]; preferredMemberId?: string; observerMemberIds?: string[] },
 ): Promise<{ accepted: boolean }> {
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
 		method: "POST",

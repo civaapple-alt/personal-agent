@@ -793,3 +793,68 @@ test("aborted turn skips observer evaluation", async (t) => {
 	assert.equal(workerCount, 1);
 	assert.equal(res.observerMessages?.length ?? 0, 0);
 });
+
+test("dispatchMatter forwards attached images to lead and observer workers without bloating DB metadata", async (t) => {
+	const receivedImagesByMember = new Map<string, Array<{ type: string; data: string; mimeType: string }>>();
+	const lateObserverPrompts: string[] = [];
+	const pngBase64 = Buffer.from("fake-png-bytes").toString("base64");
+
+	const f = await fixture(t, async (worker, prompt, options) => {
+		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
+		if (ctx.includes("(QA Manager)")) {
+			lateObserverPrompts.push(prompt);
+			return "[SILENT]";
+		}
+		const memberKey = ctx.includes("(Engineering Manager)") ? "engineering-manager" : "product-manager";
+		if (options.images) {
+			receivedImagesByMember.set(memberKey, options.images);
+		}
+		if (memberKey === "engineering-manager") {
+			return "[SILENT]";
+		}
+		return "已查看你上传的界面截图。";
+	});
+
+	const firstTurn = await f.orchestrator.dispatchMatter({
+		prompt: "",
+		images: [
+			{
+				type: "image",
+				data: pngBase64,
+				mimeType: "image/png",
+				name: "wireframe.png",
+				url: "/api/uploads/test-wireframe.png",
+			},
+		],
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		observerMemberIds: ["engineering-manager"],
+	});
+
+	assert.equal(firstTurn.matter.title, "图片：wireframe.png");
+	assert.deepEqual(receivedImagesByMember.get("product-manager"), [
+		{ type: "image", data: pngBase64, mimeType: "image/png" },
+	]);
+	assert.deepEqual(receivedImagesByMember.get("engineering-manager"), [
+		{ type: "image", data: pngBase64, mimeType: "image/png" },
+	]);
+
+	const storedMessages = f.store.listMessages(firstTurn.matter.id, "user");
+	const userMsg = storedMessages.find((msg) => msg.senderType === "user");
+	assert.ok(userMsg);
+	assert.equal(userMsg.content, "");
+	assert.deepEqual(userMsg.metadata?.images, [
+		{ url: "/api/uploads/test-wireframe.png", mimeType: "image/png", name: "wireframe.png" },
+	]);
+	assert.equal(JSON.stringify(userMsg.metadata).includes(pngBase64), false);
+
+	await f.orchestrator.dispatchMatter({
+		matterId: firstTurn.matter.id,
+		prompt: "请结合刚才那张图补充说明",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		observerMemberIds: ["engineering-manager", "qa-manager"],
+	});
+	assert.equal(lateObserverPrompts.length, 1);
+	assert.match(lateObserverPrompts[0]!, /\[附带 1 张图片\]/);
+});
