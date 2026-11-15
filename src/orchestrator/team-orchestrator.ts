@@ -513,10 +513,13 @@ ${this.store
 			timeoutMs: input.timeoutMs,
 		};
 		this.runs.set(matter.id, run);
-		const envTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
+		const turnEnvTimeout = Number(process.env.PA_TURN_TIMEOUT_MS);
+		const promptEnvTimeout = Number(process.env.PA_PROMPT_TIMEOUT_MS);
+		const turnDeadlineMs =
+			input.timeoutMs ?? (turnEnvTimeout > 0 ? turnEnvTimeout : promptEnvTimeout > 0 ? promptEnvTimeout : 5_400_000);
 		const deadline = setTimeout(
-			() => run.controller.abort(new Error("Matter turn timed out")),
-			input.timeoutMs ?? (envTimeout > 0 ? envTimeout : 1_800_000),
+			() => run.controller.abort(new Error(`Matter turn timed out after ${Math.round(turnDeadlineMs / 1000)}s`)),
+			turnDeadlineMs,
 		);
 		try {
 			this.store.updateMatterLead(matter.id, assignedMember.id);
