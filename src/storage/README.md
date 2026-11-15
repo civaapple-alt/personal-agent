@@ -8,6 +8,7 @@
 - `matter_execution_leases` 保存单机宿主 PID 与占用者；不是分布式租约，也不是外部动作 exactly-once 保证。
 - `recordDeliverables` 在事务中写入同轮成果和版本；版本按事项与标题形成系列。回复与事项状态在事务之后记录，不能声称整个外部执行可回滚。
 - `listRelevantMemories` 注入通用岗位经验及绑定当前工作区的私有记忆。无范围旧私有记录仍保留供查看，不应被自动扩散到其他项目。
+- `matters.observer_ids_json` 保存事项关联的旁听成员 ID 列表（空数组或旧库 `NULL` 表示无旁听）；由 `createMatter` 和 `updateMatterObservers` 维护。
 - 角色 Markdown 与私有运行数据分离；不要把数据库内容导进 [可分享角色](../../roles/README.md)。预览索引和待答对话属于服务内存，未在此持久化。
 
 改 schema 时保留既有消息、版本、会话和用户数据，验证重开数据库后的行为；不要拿用户 `.data/` 试验迁移或清空修复。

@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS matters (
 	status TEXT NOT NULL DEFAULT 'open',
 	lead_member_id TEXT REFERENCES team_members(id),
 	workspace_id TEXT REFERENCES workspace_links(id),
+	observer_ids_json TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
 );
@@ -109,6 +110,10 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		db.exec("PRAGMA journal_mode = WAL;");
 	}
 	db.exec(SCHEMA_SQL);
+	const matterColumns = db.prepare("PRAGMA table_info(matters)").all();
+	if (!matterColumns.some((column) => column.name === "observer_ids_json")) {
+		db.exec("ALTER TABLE matters ADD COLUMN observer_ids_json TEXT");
+	}
 	const columns = db.prepare("PRAGMA table_info(worker_sessions)").all();
 	if (!columns.some((column) => column.name === "context_key")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN context_key TEXT");

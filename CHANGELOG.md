@@ -9,6 +9,7 @@ All notable changes to Personal Agent are documented in this file.
 - Rewrote `docs/architecture-and-plan.md` against the implemented HTTP/SSE, per-execution Pi sessions, authenticated tool bridges, scoped state and explicit milestone delivery. Separated current limits and future work from the historical four-phase design; aligned the README document pointers.
 
 ### Added
+- Proactive meeting-room observer participation (`observerMemberIds` on matters, `PA_CAN_DELEGATE`/`PA_CAN_PUBLISH` restrictions, isolated `observer` Pi session scope, `[SILENT]` no-op filtering vs independent `user`-channel interjections tagged with `observerIntervention: true`, `PATCH /api/matters/:id` observer updates with 409 busy guard, per-speaker avatars/`旁听补充` badges in `ChatStage`, and a meeting-seat selector pill in the composer bar).
 - Persisted Pi session continuation scoped by matter, member, workspace path and conversation mode, including restart recovery, scoped handoff context, legacy session lookup and session-header validation.
 - Shipped Pi extension with real `delegate_to_member` and `publish_deliverable` tools over an authenticated per-worker loopback bridge. Internal work returns to the caller and stays in collaboration records.
 - Actual loading of the 13 initial role Skills, explicit tool selection, delayed capability handshake for dynamically registered tools, and required tool/MCP dependency checks.

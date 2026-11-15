@@ -650,3 +650,86 @@ test("failed delegation is not permanently cached so same-task retry runs a fres
 	assert.equal(engineerAttempts, 2);
 	assert.match(result.replyText, /已通过重试拿到研发经理评估/);
 });
+
+test("proactive observer chimes in with independent user bubble while silent observer writes nothing", async (t) => {
+	let pmPromptCount = 0;
+	let emPromptCount = 0;
+	let qaPromptCount = 0;
+	const f = await fixture(t, async (worker, prompt) => {
+		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
+		if (ctx.includes("(Engineering Manager)")) {
+			emPromptCount += 1;
+			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
+			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
+			assert.equal(worker.tools.has("publish_deliverable"), false);
+			assert.equal(worker.tools.has("delegate_to_member"), false);
+			assert.match(ctx, /旁听与主动发言规则/);
+			assert.match(prompt, /方案将直接同步拉取全库 10 万条记录/);
+			return "技术提醒：首屏直接同步拉取 10 万条会阻塞主线程，建议改为分页+IndexedDB 增量缓存。";
+		}
+		if (ctx.includes("(QA Manager)")) {
+			qaPromptCount += 1;
+			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
+			return "[SILENT]";
+		}
+		pmPromptCount += 1;
+		return "好的，我们方案将直接同步拉取全库 10 万条记录，先推进需求定义。";
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "请评估书架首屏加载方案",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		observerMemberIds: ["engineering-manager", "qa-manager"],
+	});
+	assert.equal(pmPromptCount, 1);
+	assert.equal(emPromptCount, 1);
+	assert.equal(qaPromptCount, 1);
+	assert.equal(result.observerMessages?.length, 1);
+	const userMessages = f.store.listMessages(result.matter.id, "user");
+	assert.equal(userMessages.length, 3);
+	assert.equal(userMessages[1]?.senderId, "product-manager");
+	assert.equal(userMessages[2]?.senderId, "engineering-manager");
+	assert.equal(userMessages[2]?.metadata?.observerIntervention, true);
+	assert.equal(userMessages[2]?.metadata?.leadMemberId, "product-manager");
+	assert.match(userMessages[2]?.content ?? "", /分页\+IndexedDB 增量缓存/);
+	assert.equal(
+		userMessages.some((msg) => msg.senderId === "qa-manager"),
+		false,
+	);
+	assert.equal(f.store.listDeliverables(result.matter.id).length, 0);
+	assert.deepEqual(f.store.getMatter(result.matter.id)?.observerMemberIds, ["engineering-manager", "qa-manager"]);
+});
+
+test("aborted turn skips observer evaluation", async (t) => {
+	let workerCount = 0;
+	let markStarted!: () => void;
+	const started = new Promise<void>((resolveStarted) => {
+		markStarted = resolveStarted;
+	});
+	const f = await fixture(t, async (_worker, _prompt, options) => {
+		workerCount += 1;
+		markStarted();
+		await new Promise((_resolve, reject) => {
+			options.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+		});
+		return "unreachable";
+	});
+	const matter = f.store.createMatter({
+		title: "Abort observer check",
+		leadMemberId: "product-manager",
+		workspaceId: f.workspace.id,
+		observerMemberIds: ["engineering-manager"],
+	});
+	const pending = f.orchestrator.dispatchMatter({
+		matterId: matter.id,
+		prompt: "开始一个将被取消的任务",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+	});
+	await started;
+	await f.orchestrator.abortMatter(matter.id);
+	const res = await pending;
+	assert.equal(res.runResult.aborted, true);
+	assert.equal(workerCount, 1);
+	assert.equal(res.observerMessages?.length ?? 0, 0);
+});

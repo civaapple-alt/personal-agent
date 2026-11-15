@@ -119,6 +119,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			},
 		},
 	]) {
+		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
 		if (tool.name === "publish_deliverable" && env.PA_CAN_PUBLISH === "false") continue;
 		pi.registerTool({
 			...tool,

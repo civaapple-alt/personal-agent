@@ -25,6 +25,7 @@ export interface MatterDto {
 	status: "open" | "waiting_user" | "delivered" | "archived";
 	leadMemberId: string | null;
 	workspaceId: string | null;
+	observerMemberIds?: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -173,6 +174,7 @@ export function createMatter(input: {
 	prompt: string;
 	preferredMemberId?: string;
 	workspaceId?: string;
+	observerMemberIds?: string[];
 	title?: string;
 }): Promise<{ matter: MatterDto; assignedMember: TeamMemberDto }> {
 	return requestJson("/api/matters", {
@@ -183,7 +185,7 @@ export function createMatter(input: {
 
 export function postMatterMessage(
 	matterId: string,
-	input: { prompt: string; preferredMemberId?: string },
+	input: { prompt: string; preferredMemberId?: string; observerMemberIds?: string[] },
 ): Promise<{ accepted: boolean }> {
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
 		method: "POST",
@@ -290,5 +292,12 @@ export function updateMatterWorkspace(matterId: string, workspaceId: string | nu
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ workspaceId }),
+	});
+}
+
+export function updateMatterObservers(matterId: string, observerMemberIds: string[]): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ observerMemberIds }),
 	});
 }

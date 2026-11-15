@@ -681,9 +681,24 @@ body {
 }
 
 .stream-sender {
-	font-size: 11px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
 	color: var(--text-muted);
 	padding: 0 4px;
+}
+
+.observer-badge {
+	display: inline-flex;
+	align-items: center;
+	border-radius: 999px;
+	padding: 1px 7px;
+	font-size: 10px;
+	font-weight: 600;
+	background: #e6f6f2;
+	color: #0f766e;
+	border: 1px solid #b5e3d8;
 }
 
 .stream-bubble {
@@ -709,6 +724,12 @@ body {
 	border-radius: 18px 18px 18px 6px;
 	max-width: min(88%, 740px);
 	overflow-x: hidden;
+}
+
+.stream-bubble.member.observer {
+	background: #f5fbf9;
+	border-color: #bfe4da;
+	border-left: 3px solid #2a9d8f;
 }
 
 .stream-bubble.system {
@@ -1029,8 +1050,78 @@ body {
 	cursor: not-allowed;
 }
 
-.select-pill.action:hover {
+.select-pill.action:hover,
+.select-pill.observer-active {
 	border-color: var(--accent);
+	color: var(--accent);
+}
+
+.observer-popover .observer-hint {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.observer-quick-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.observer-peer-list {
+	margin-top: 10px;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+	gap: 8px;
+}
+
+.observer-peer-chip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid var(--border);
+	background: var(--bg-sidebar);
+	border-radius: 12px;
+	padding: 7px 10px;
+	cursor: pointer;
+	text-align: left;
+	color: var(--text-primary);
+}
+
+.observer-peer-chip.active {
+	background: #edf9f5;
+	border-color: #6bc4b0;
+}
+
+.observer-peer-chip:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.observer-peer-text {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.observer-peer-text strong {
+	font-size: 12px;
+	line-height: 1.2;
+}
+
+.observer-peer-text small {
+	font-size: 11px;
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.observer-peer-check {
+	font-size: 12px;
+	font-weight: 700;
 	color: var(--accent);
 }
 

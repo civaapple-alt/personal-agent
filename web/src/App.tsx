@@ -15,6 +15,7 @@ import {
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
+	updateMatterObservers,
 	updateMatterWorkspace,
 } from "./api.ts";
 import { ChatStage } from "./components/ChatStage.tsx";
@@ -43,6 +44,16 @@ export function App() {
 			return window.localStorage.getItem("pa.defaultWorkspaceId") ?? "";
 		} catch {
 			return "";
+		}
+	});
+	const [draftObserverIds, setDraftObserverIds] = useState<string[] | null>(() => {
+		try {
+			const raw = window.localStorage.getItem("pa.defaultObserverIds");
+			if (!raw) return null;
+			const parsed: unknown = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : null;
+		} catch {
+			return null;
 		}
 	});
 	const [composerText, setComposerText] = useState("");
@@ -242,6 +253,7 @@ export function App() {
 		};
 		for (const evtName of [
 			"matter_started",
+			"matter_updated",
 			"dialog_requested",
 			"dialog_resolved",
 			"deliverable_updated",
@@ -358,6 +370,17 @@ export function App() {
 		composerRef.current?.focus();
 	};
 
+	const activeObserverIds: string[] = useMemo(() => {
+		const validIds = new Set((bootstrap?.members ?? []).map((m) => m.id));
+		if (selectedMatterId && matterDetail) {
+			return (matterDetail.matter.observerMemberIds ?? []).filter((id) => validIds.has(id));
+		}
+		if (draftObserverIds !== null) {
+			return draftObserverIds.filter((id) => validIds.has(id));
+		}
+		return (bootstrap?.members ?? []).filter((m) => !m.isPrimaryContact).map((m) => m.id);
+	}, [bootstrap, draftObserverIds, matterDetail, selectedMatterId]);
+
 	const handleSendPrompt = async () => {
 		const text = composerText.trim();
 		if (!text || submitting) return;
@@ -374,10 +397,13 @@ export function App() {
 					preferredMemberId,
 				});
 			} else {
+				const leadForMatter = preferredMemberId ?? headerContact?.id;
+				const observerIds = activeObserverIds.filter((id) => id !== leadForMatter);
 				const created = await createMatter({
 					prompt: text,
 					preferredMemberId,
 					workspaceId: selectedWorkspaceId || undefined,
+					observerMemberIds: observerIds,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
@@ -427,6 +453,31 @@ export function App() {
 				}
 				const wsLabel = nextId ? (workspaceName(nextId) ?? nextId) : "不绑定仓库";
 				setNoticeBanner(`已切换当前事项仓库为「${wsLabel}」`);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleUpdateObservers = (nextIds: string[]) => {
+		const leadId = headerContact?.id;
+		const cleaned = [...new Set(nextIds)].filter((id) => id !== leadId);
+		try {
+			window.localStorage.setItem("pa.defaultObserverIds", JSON.stringify(cleaned));
+		} catch {
+			// Ignore storage access errors.
+		}
+		if (!selectedMatterId) {
+			setDraftObserverIds(cleaned);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterObservers(targetMatterId, cleaned)
+			.then(async () => {
+				setNoticeBanner(cleaned.length ? `已更新会议旁听席（${cleaned.length}位同事）` : "已设为仅主负责人跟进");
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
 			})
@@ -523,6 +574,8 @@ export function App() {
 						onComposerTextChange={setComposerText}
 						onSelectWorkspace={handleSelectWorkspace}
 						onSelectMember={setSelectedMemberId}
+						activeObserverIds={activeObserverIds}
+						onUpdateObservers={handleUpdateObservers}
 						onSendPrompt={() => void handleSendPrompt()}
 						onAbortMatter={handleAbortMatter}
 						onNewMatter={startNewMatter}

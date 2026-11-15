@@ -92,6 +92,7 @@ export interface DispatchMatterInput {
 	prompt: string;
 	preferredMemberId?: string;
 	workspaceId?: string;
+	observerMemberIds?: string[];
 	deliverableType?: DeliverableType;
 	deliverableTitle?: string;
 	timeoutMs?: number;
@@ -105,6 +106,7 @@ export interface DispatchMatterResult {
 	workspace: WorkspaceLink | null;
 	replyText: string;
 	deliverable: Deliverable | null;
+	observerMessages?: MatterMessage[];
 	runResult: PromptRunResult;
 }
 
@@ -203,6 +205,55 @@ function summarizeActiveDelegations(
 	const latest =
 		focusMemberName && focusStageLabel ? `${focusMemberName}：${focusStageLabel}` : list.at(-1)!.stageLabel;
 	return list.length === 1 ? `已委托${names}（${latest}）` : `正在协同 ${names}（${latest}）`;
+}
+
+export const OBSERVER_SILENT_SENTINEL = "[SILENT]";
+
+export function isObserverSilentReply(rawText: string): boolean {
+	const trimmed = rawText.trim();
+	if (!trimmed) return true;
+	const unwrapped = trimmed.replace(/^`+|`+$/g, "").trim();
+	if (/^\[\s*SILENT\s*\](?:[\s\p{P}]|$)/iu.test(unwrapped)) return true;
+	return /^\[?\s*(?:SILENT|PASS|NOOP|无需补充|暂无异议|无需发言)\s*\]?[.!。！]*$/iu.test(unwrapped);
+}
+
+function mapChildStageLabel(childProgress: DispatchProgressEvent, defaultThinkingLabel = "思考分析"): string {
+	if (childProgress.stage === "tool" && childProgress.toolName) {
+		return childProgress.toolSummary
+			? `${formatToolAction(childProgress.toolName)} ${truncateInline(childProgress.toolSummary, 24)}`
+			: formatToolAction(childProgress.toolName);
+	}
+	if (childProgress.stage === "waiting_user") return childProgress.label;
+	if (childProgress.stage === "finalizing") return "整理结论";
+	if (childProgress.stage === "starting") return "启动中";
+	return defaultThinkingLabel;
+}
+
+function summarizeObserverProgress(
+	activeDelegations: Map<string, ActiveDelegationProgress>,
+	focusMemberName?: string,
+	focusStageLabel?: string,
+): string {
+	const list = [...activeDelegations.values()];
+	if (list.length === 0) return "旁听成员已评估完毕";
+	const names = list.map((entry) => entry.memberName).join("、");
+	const latest =
+		focusMemberName && focusStageLabel ? `${focusMemberName}：${focusStageLabel}` : list.at(-1)!.stageLabel;
+	return `团队旁听 ${names}（${latest}）`;
+}
+
+function buildObserverTaskPrompt(input: { leadMember: TeamMember; userPrompt: string; leadReply: string }): string {
+	const userPart = truncateInline(input.userPrompt.trim(), 2000);
+	const leadPart = input.leadReply.trim().slice(0, 6000);
+	return [
+		"请从你的本职岗位视角快速审视本轮讨论，判断是否需要主动插话补充：",
+		"",
+		`【用户发言】\n${userPart}`,
+		"",
+		`【主负责人 ${input.leadMember.displayName}（${input.leadMember.roleTitle}）的最新回复】\n${leadPart}`,
+		"",
+		`如果有重要风险、关键遗漏或必须提前纠正/补充的专业建议，请直接面向用户给出简洁具体的发言；如果已妥当或暂无需要补充的实质内容，请仅回复 ${OBSERVER_SILENT_SENTINEL}。`,
+	].join("\n");
 }
 
 function emptyAbortedResult(): PromptRunResult {
@@ -362,7 +413,9 @@ export class TeamOrchestrator {
 		workspace: WorkspaceLink | null;
 		taskPrompt?: string;
 		isInternalDelegation?: boolean;
+		sessionMode?: "lead" | "internal" | "observer";
 	}): string {
+		const mode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 		const sections: string[] = [
 			`你当前担任 Personal Agent 团队中的【${input.member.displayName} (${input.member.roleTitle})】。`,
 		];
@@ -396,9 +449,13 @@ export class TeamOrchestrator {
 			);
 		}
 
-		if (input.isInternalDelegation) {
+		if (mode === "internal") {
 			sections.push(
 				"## 协作模式\n这是一次团队内部的角色委托协作。请从本职视角直接给出有依据的判断、风险与结论。结果返回委托者，由主要负责人整合和决定正式交付；你不直接向用户登记成果。",
+			);
+		} else if (mode === "observer") {
+			sections.push(
+				`## 旁听与主动发言规则\n你当前作为旁听同事列席主负责人与用户的实时讨论会议。\n- 仅当从你的本职专业视角发现关键技术/测试/业务风险、可行性冲突、重要前提遗漏，或能给出主负责人尚未覆盖的关键建议时，才直接面向用户发表简洁、有依据的补充。\n- 若主负责人已妥当回应、当前属于普通澄清/闲聊或无实质增量，请仅输出 ${OBSERVER_SILENT_SENTINEL}（不要客套、附和、复述或解释原因）。\n- 只有主负责人保留正式交付归档权，你不得代为调用 publish_deliverable，也不自行发起二次团队委托。`,
 			);
 		}
 
@@ -407,9 +464,10 @@ ${this.store
 	.listMembers()
 	.map((member) => `- ${member.id}: ${member.displayName}，${member.roleTitle}`)
 	.join("\n")}`);
-		sections.push(
-			"## 自主协作与真实成果\n你负责持续推进本轮任务。需要其他岗位的专业工作时调用 delegate_to_member，提供目标、必要事实与约束，并将同事的依据整合为用户需要的结论。内部过程不向用户逐条汇报。只有缺少信息或业务判断时询问用户。不要仅声称已咨询。\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本，用 changeNote 说明本次版本的变化及依据。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。",
-		);
+		if (mode !== "observer")
+			sections.push(
+				"## 自主协作与真实成果\n你负责持续推进本轮任务。需要其他岗位的专业工作时调用 delegate_to_member，提供目标、必要事实与约束，并将同事的依据整合为用户需要的结论。内部过程不向用户逐条汇报。只有缺少信息或业务判断时询问用户。不要仅声称已咨询。\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本，用 changeNote 说明本次版本的变化及依据。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。",
+			);
 		if (input.taskPrompt) sections.push(`## 当前任务\n${input.taskPrompt}`);
 		return sections.join("\n\n");
 	}
@@ -428,12 +486,13 @@ ${this.store
 		const workspaceId = input.workspaceId ?? existing?.workspaceId;
 		const workspace = workspaceId ? this.store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !workspace) throw new Error(`Unknown workspace: ${workspaceId}`);
-		const matter =
+		let matter =
 			existing ??
 			this.store.createMatter({
 				title: input.title ?? input.prompt.slice(0, 60),
 				leadMemberId: assignedMember.id,
 				workspaceId: workspace?.id,
+				observerMemberIds: input.observerMemberIds,
 			});
 		const ownerId = randomUUID();
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
@@ -462,6 +521,9 @@ ${this.store
 		try {
 			this.store.updateMatterLead(matter.id, assignedMember.id);
 			this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
+			if (existing && input.observerMemberIds !== undefined) {
+				matter = this.store.updateMatterObservers(matter.id, input.observerMemberIds);
+			}
 			this.store.updateMatterStatus(matter.id, "open");
 			const message = this.store.appendMessage({
 				matterId: matter.id,
@@ -545,7 +607,7 @@ ${this.store
 					),
 				);
 			}
-			this.store.appendMessage({
+			const leadMessage = this.store.appendMessage({
 				matterId: matter.id,
 				channel: "user",
 				senderType: "member",
@@ -566,12 +628,35 @@ ${this.store
 				deliveries.length ? "delivered" : "open",
 				replyText.slice(0, 200),
 			);
+			const observerCandidates =
+				!aborted && !run.cancelled
+					? updatedMatter.observerMemberIds
+							.filter((id, idx, arr) => id !== assignedMember.id && arr.indexOf(id) === idx)
+							.map((id) => this.store.getMember(id))
+							.filter((member): member is TeamMember => member !== null)
+					: [];
+			const observerMessages =
+				observerCandidates.length > 0
+					? await this.runObservers({
+							matter: updatedMatter,
+							assignedMember,
+							workspace,
+							userPrompt: input.prompt,
+							leadReply: replyText,
+							leadMessageId: leadMessage.id,
+							observers: observerCandidates,
+							run,
+							signal: run.controller.signal,
+							onProgress: input.onProgress,
+						})
+					: [];
 			return {
 				matter: updatedMatter,
 				assignedMember,
 				workspace,
 				replyText,
 				deliverable: deliveries.at(-1) ?? null,
+				observerMessages,
 				runResult: { ...result, aborted },
 			};
 		} catch (error) {
@@ -760,18 +845,7 @@ ${this.store
 						});
 					},
 					onProgress: (childProgress) => {
-						const stageLabel =
-							childProgress.stage === "tool" && childProgress.toolName
-								? childProgress.toolSummary
-									? `${formatToolAction(childProgress.toolName)} ${truncateInline(childProgress.toolSummary, 24)}`
-									: formatToolAction(childProgress.toolName)
-								: childProgress.stage === "waiting_user"
-									? childProgress.label
-									: childProgress.stage === "finalizing"
-										? "整理结论"
-										: childProgress.stage === "starting"
-											? "启动中"
-											: "思考分析";
+						const stageLabel = mapChildStageLabel(childProgress);
 						run.activeDelegations.set(delegationKey, {
 							memberId: toMember.id,
 							memberName: toMember.displayName,
@@ -856,12 +930,150 @@ ${this.store
 		return await operation;
 	}
 
+	private async runObservers(input: {
+		matter: Matter;
+		assignedMember: TeamMember;
+		workspace: WorkspaceLink | null;
+		userPrompt: string;
+		leadReply: string;
+		leadMessageId: string;
+		observers: TeamMember[];
+		run: MatterRun;
+		signal: AbortSignal;
+		onProgress?: (progress: DispatchProgressEvent) => void;
+	}): Promise<MatterMessage[]> {
+		const createdMessages: MatterMessage[] = [];
+		const taskPrompt = buildObserverTaskPrompt({
+			leadMember: input.assignedMember,
+			userPrompt: input.userPrompt,
+			leadReply: input.leadReply,
+		});
+		const observerNames = input.observers.map((member) => member.displayName).join("、");
+		pushRunLog(input.run, "旁听席", `${observerNames}正在审视本轮讨论`);
+		for (const observer of input.observers) {
+			input.run.activeDelegations.set(`obs:${observer.id}`, {
+				memberId: observer.id,
+				memberName: observer.displayName,
+				stageLabel: "旁听审视中",
+			});
+		}
+		input.onProgress?.({
+			stage: "thinking",
+			label: summarizeObserverProgress(input.run.activeDelegations),
+			activeDelegations: [...input.run.activeDelegations.values()],
+			recentLogs: [...input.run.recentLogs],
+			collabUpdated: true,
+		});
+
+		await Promise.allSettled(
+			input.observers.map(async (observer) => {
+				const observerKey = `obs:${observer.id}`;
+				try {
+					if (input.signal.aborted || input.run.cancelled) return;
+					const result = await this.executeWithWorker({
+						matterId: input.matter.id,
+						member: observer,
+						workspace: input.workspace,
+						taskPrompt,
+						sessionMode: "observer",
+						excludeMessageIds: [input.run.userMessageId, input.leadMessageId],
+						run: input.run,
+						chain: [input.assignedMember.id, observer.id],
+						signal: input.signal,
+						deliveryTarget: [],
+						onProgress: (childProgress) => {
+							const stageLabel = mapChildStageLabel(childProgress, "旁听审视中");
+							input.run.activeDelegations.set(observerKey, {
+								memberId: observer.id,
+								memberName: observer.displayName,
+								stageLabel,
+							});
+							input.onProgress?.({
+								stage: childProgress.stage === "waiting_user" ? "waiting_user" : "thinking",
+								label:
+									childProgress.stage === "waiting_user"
+										? childProgress.label
+										: summarizeObserverProgress(
+												input.run.activeDelegations,
+												observer.displayName,
+												stageLabel,
+											),
+								toolName: childProgress.toolName,
+								activeDelegations: [...input.run.activeDelegations.values()],
+								recentLogs: [...input.run.recentLogs],
+							});
+						},
+					});
+					input.run.activeDelegations.delete(observerKey);
+					if (result.aborted || input.run.cancelled || input.signal.aborted) return;
+					const text = result.assistantText.trim();
+					if (isObserverSilentReply(text)) {
+						pushRunLog(input.run, observer.displayName, "旁听已阅，暂无补充");
+						input.onProgress?.({
+							stage: "thinking",
+							label: summarizeObserverProgress(input.run.activeDelegations),
+							activeDelegations: [...input.run.activeDelegations.values()],
+							recentLogs: [...input.run.recentLogs],
+						});
+						return;
+					}
+					const msg = this.store.appendMessage({
+						matterId: input.matter.id,
+						channel: "user",
+						senderType: "member",
+						senderId: observer.id,
+						content: text,
+						metadata: {
+							observerIntervention: true,
+							inReplyToUserMessageId: input.run.userMessageId,
+							leadMemberId: input.assignedMember.id,
+							toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
+							workspaceId: input.workspace?.id ?? null,
+							repoPath: resolve(input.workspace?.repoPath ?? this.defaultCwd),
+						},
+					});
+					createdMessages.push(msg);
+					pushRunLog(input.run, observer.displayName, `旁听补充：${truncateInline(text, 44)}`);
+					input.onProgress?.({
+						stage: "finalizing",
+						label: `${observer.displayName}补充了意见`,
+						activeDelegations: [...input.run.activeDelegations.values()],
+						recentLogs: [...input.run.recentLogs],
+						collabUpdated: true,
+					});
+				} catch (error) {
+					input.run.activeDelegations.delete(observerKey);
+					if (input.run.cancelled || input.signal.aborted) return;
+					const msg = error instanceof Error ? error.message : String(error);
+					pushRunLog(input.run, observer.displayName, `旁听跳过：${truncateInline(msg, 36)}`);
+					this.store.appendMessage({
+						matterId: input.matter.id,
+						channel: "notice",
+						senderType: "system",
+						senderId: observer.id,
+						content: `旁听评估未完成：${msg}`,
+						metadata: { observerFailed: true, leadMemberId: input.assignedMember.id },
+					});
+					input.onProgress?.({
+						stage: "thinking",
+						label: summarizeObserverProgress(input.run.activeDelegations),
+						activeDelegations: [...input.run.activeDelegations.values()],
+						recentLogs: [...input.run.recentLogs],
+					});
+				}
+			}),
+		);
+		return createdMessages;
+	}
+
 	private async executeWithWorker(input: {
 		matterId: string;
 		member: TeamMember;
 		workspace: WorkspaceLink | null;
 		taskPrompt: string;
-		isInternalDelegation: boolean;
+		isInternalDelegation?: boolean;
+		sessionMode?: "lead" | "internal" | "observer";
+		excludeMessageIds?: string[];
 		run: MatterRun;
 		chain: string[];
 		signal: AbortSignal;
@@ -870,12 +1082,15 @@ ${this.store
 		onProgress?: (progress: DispatchProgressEvent) => void;
 	}): Promise<PromptRunResult> {
 		input.signal.throwIfAborted();
+		const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
+		const canPublish = sessionMode === "lead";
+		const canDelegate = sessionMode !== "observer";
 		const cwd = resolve(input.workspace?.repoPath ?? this.defaultCwd);
 		const contextKey = JSON.stringify([
 			"v1",
 			input.workspace?.id ?? null,
 			cwd,
-			input.isInternalDelegation ? "internal" : "user",
+			sessionMode === "lead" ? "user" : sessionMode,
 		]);
 		const executionKey = JSON.stringify([input.member.id, contextKey]);
 		if (input.run.contexts.has(executionKey)) throw new Error("Colleague is already working in this conversation");
@@ -895,16 +1110,24 @@ ${this.store
 				? null
 				: this.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
 			const sessionFile = previous ? await validateSavedSession(previous, cwd) : undefined;
-			const requestedTools = (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
+			const baseTools = (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
+			const requestedTools =
+				sessionMode === "observer" ? baseTools.filter((tool) => tool !== "edit" && tool !== "write") : baseTools;
 			const mcpDependencies = template?.mcpDependencies ?? [];
-			const teamTools = input.isInternalDelegation
-				? ["delegate_to_member"]
-				: ["delegate_to_member", "publish_deliverable"];
+			const teamTools =
+				sessionMode === "observer"
+					? []
+					: sessionMode === "internal"
+						? ["delegate_to_member"]
+						: ["delegate_to_member", "publish_deliverable"];
 			bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 				toolSignal.throwIfAborted();
 				const releaseIdle = worker?.suspendIdleTimeout?.();
 				try {
 					if (call.tool === "delegate_to_member") {
+						if (!canDelegate) {
+							throw new Error("Observing specialists cannot delegate secondary tasks during peer review");
+						}
 						const result = await this.delegate(
 							{
 								matterId: input.matterId,
@@ -921,7 +1144,7 @@ ${this.store
 						);
 						return { memberId: result.toMember.id, answer: result.answerText };
 					}
-					if (input.isInternalDelegation)
+					if (!canPublish)
 						throw new Error(
 							"Internal specialists return results to the lead; only the lead publishes user deliverables",
 						);
@@ -970,7 +1193,8 @@ ${this.store
 				args,
 				env: {
 					...bridge.env,
-					PA_CAN_PUBLISH: String(!input.isInternalDelegation),
+					PA_CAN_PUBLISH: String(canPublish),
+					PA_CAN_DELEGATE: String(canDelegate),
 					PA_REQUIRED_TOOLS: JSON.stringify([
 						...requestedTools,
 						...teamTools,
@@ -981,7 +1205,7 @@ ${this.store
 						template,
 						memories: this.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null),
 						workspace: input.workspace,
-						isInternalDelegation: input.isInternalDelegation,
+						sessionMode,
 					}),
 				},
 			});
@@ -1004,7 +1228,7 @@ ${this.store
 							`${formatToolAction(toolName)}${toolSummary ? `：${toolSummary}` : ""}`,
 						);
 					}
-					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
+					if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
 						return;
 					}
 					if (event.type === "tool_execution_start") {
@@ -1024,7 +1248,7 @@ ${this.store
 						});
 					}
 				} else if (event.type === "agent_start") {
-					if (!input.isInternalDelegation && input.run.activeDelegations.size > 0) {
+					if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
 						return;
 					}
 					input.onProgress?.({
@@ -1087,6 +1311,7 @@ ${this.store
 			});
 			if (worker.setThinkingLevel) await worker.setThinkingLevel(input.member.thinkingLevel);
 			const messages = this.store.listMessages(input.matterId, "user");
+			const excludeIds = new Set(input.excludeMessageIds ?? [input.run.userMessageId]);
 			const afterCursor = previous?.messageCursor
 				? messages.findIndex((message) => message.id === previous.messageCursor) + 1
 				: 0;
@@ -1094,7 +1319,7 @@ ${this.store
 				.slice(afterCursor)
 				.filter(
 					(message) =>
-						message.id !== input.run.userMessageId &&
+						!excludeIds.has(message.id) &&
 						message.metadata?.workspaceId === (input.workspace?.id ?? null) &&
 						message.metadata?.repoPath === cwd &&
 						!(previous && message.senderType === "member" && message.senderId === input.member.id),

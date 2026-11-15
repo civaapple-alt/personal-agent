@@ -20,6 +20,31 @@ function nowIso(): string {
 	return new Date().toISOString();
 }
 
+function normalizeUniqueIds(ids?: string[]): string[] {
+	if (!ids) return [];
+	const seen = new Set<string>();
+	const result: string[] = [];
+	for (const id of ids) {
+		const trimmed = id.trim();
+		if (trimmed && !seen.has(trimmed)) {
+			seen.add(trimmed);
+			result.push(trimmed);
+		}
+	}
+	return result;
+}
+
+function parseUniqueIds(raw: unknown): string[] {
+	if (typeof raw !== "string" || !raw.trim()) return [];
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (!Array.isArray(parsed)) return [];
+		return normalizeUniqueIds(parsed.filter((item): item is string => typeof item === "string"));
+	} catch {
+		return [];
+	}
+}
+
 export class PersonalAgentStore {
 	private readonly db: DatabaseSync;
 
@@ -238,13 +263,15 @@ export class PersonalAgentStore {
 		summary?: string;
 		leadMemberId?: string | null;
 		workspaceId?: string | null;
+		observerMemberIds?: string[];
 	}): Matter {
 		const id = `mat_${randomUUID()}`;
 		const timestamp = nowIso();
+		const observerIds = normalizeUniqueIds(input.observerMemberIds);
 		this.db
 			.prepare(
-				`INSERT INTO matters (id, title, summary, status, lead_member_id, workspace_id, created_at, updated_at)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?)`,
+				`INSERT INTO matters (id, title, summary, status, lead_member_id, workspace_id, observer_ids_json, created_at, updated_at)
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -252,6 +279,7 @@ export class PersonalAgentStore {
 				input.summary ?? "",
 				input.leadMemberId ?? null,
 				input.workspaceId ?? null,
+				JSON.stringify(observerIds),
 				timestamp,
 				timestamp,
 			);
@@ -285,6 +313,15 @@ export class PersonalAgentStore {
 		this.db
 			.prepare("UPDATE matters SET workspace_id = ?, updated_at = ? WHERE id = ?")
 			.run(workspaceId, timestamp, matterId);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterObservers(matterId: string, observerMemberIds: string[]): Matter {
+		const timestamp = nowIso();
+		const observerIds = normalizeUniqueIds(observerMemberIds);
+		this.db
+			.prepare("UPDATE matters SET observer_ids_json = ?, updated_at = ? WHERE id = ?")
+			.run(JSON.stringify(observerIds), timestamp, matterId);
 		return this.getMatter(matterId)!;
 	}
 
@@ -597,6 +634,7 @@ export class PersonalAgentStore {
 			status: row.status as MatterStatus,
 			leadMemberId: row.lead_member_id ? String(row.lead_member_id) : null,
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+			observerMemberIds: parseUniqueIds(row.observer_ids_json),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};

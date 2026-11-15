@@ -814,3 +814,110 @@ test("mapDelegationsToMessages pairs turn delegations for running, completed, an
 	assert.equal(inferDelegationMood("思考分析"), "thinking");
 	assert.equal(getMemberThemeById([{ id: "pm" } as never, { id: "eng" } as never], "eng").bg, "#4e6df5");
 });
+
+test("HTTP API persists observerMemberIds and broadcasts proactive observer messages", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-phase3-observers-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const previewManager = new PreviewManager();
+	const dialogBroker = new DialogBroker();
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: process.cwd(),
+		noSession: true,
+		workerFactory: (workerOptions) => ({
+			async start() {
+				await reportReady(workerOptions);
+			},
+			async getState() {
+				return { sessionId: `obs_${Math.random().toString(36).slice(2)}` };
+			},
+			onNotice() {
+				return () => {};
+			},
+			setDialogHandler() {},
+			async runPromptAndWait() {
+				const ctx = workerOptions.env?.PA_MEMBER_CONTEXT ?? "";
+				const assistantText = ctx.includes("(Engineering Manager)")
+					? "技术补充：需要核查 SQLite 锁与连接复用。"
+					: ctx.includes("(QA Manager)")
+						? "[SILENT]"
+						: "我先整理产品需求范围。";
+				return {
+					disposition: "started",
+					aborted: false,
+					assistantText,
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				};
+			},
+			async stop() {},
+		}),
+	});
+
+	const workspace = store.upsertWorkspace({ name: "obs-repo", repoPath: tempRoot });
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const created = (await (
+			await fetch(`${baseUrl}/api/matters`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					prompt: "设计技术评审会议",
+					workspaceId: workspace.id,
+					observerMemberIds: ["engineering-manager", "qa-manager"],
+				}),
+			})
+		).json()) as { matter: { id: string; observerMemberIds: string[] } };
+		assert.deepEqual(created.matter.observerMemberIds, ["engineering-manager", "qa-manager"]);
+
+		let userMessages: Array<{ senderId: string; content: string; metadata?: Record<string, unknown> | null }> = [];
+		for (let i = 0; i < 40; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				userMessages: Array<{ senderId: string; content: string; metadata?: Record<string, unknown> | null }>;
+			};
+			userMessages = detail.userMessages;
+			if (userMessages.length >= 3) break;
+			await new Promise((r) => setTimeout(r, 20));
+		}
+
+		assert.equal(userMessages.length, 3);
+		assert.equal(userMessages[1]?.senderId, "product-manager");
+		assert.equal(userMessages[2]?.senderId, "engineering-manager");
+		assert.equal(userMessages[2]?.metadata?.observerIntervention, true);
+
+		const patchedRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ observerMemberIds: ["qa-manager"] }),
+		});
+		assert.equal(patchedRes.status, 200);
+		const patched = (await patchedRes.json()) as {
+			matter: { workspaceId: string | null; observerMemberIds: string[] };
+		};
+		assert.equal(patched.matter.workspaceId, workspace.id);
+		assert.deepEqual(patched.matter.observerMemberIds, ["qa-manager"]);
+	} finally {
+		await previewManager.stopAll();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});

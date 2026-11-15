@@ -65,6 +65,20 @@ function formatMemoryMap(store: PersonalAgentStore): Record<string, unknown[]> {
 	return result;
 }
 
+function parseObserverMemberIds(raw: unknown, store: PersonalAgentStore): string[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	const seen = new Set<string>();
+	const ids: string[] = [];
+	for (const item of raw) {
+		if (typeof item !== "string") continue;
+		const trimmed = item.trim();
+		if (!trimmed || seen.has(trimmed) || !store.getMember(trimmed)) continue;
+		seen.add(trimmed);
+		ids.push(trimmed);
+	}
+	return ids;
+}
+
 /**
  * Create the Phase 3 HTTP + SSE server backing the V4 workbench UI.
  */
@@ -96,6 +110,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		prompt: string;
 		preferredMemberId?: string;
 		workspaceId?: string;
+		observerMemberIds?: string[];
 		deliverableTitle?: string;
 		deliverableType?: DeliverableType;
 	}) => {
@@ -108,6 +123,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				prompt: input.prompt,
 				preferredMemberId: input.preferredMemberId,
 				workspaceId: input.workspaceId,
+				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,
 				onTextDelta: (delta) => {
@@ -249,20 +265,42 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const body = await readJsonBody(req);
+				const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
+				const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
 				const workspaceId =
 					typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0
 						? body.workspaceId.trim()
 						: null;
-				if (workspaceId && !store.getWorkspace(workspaceId)) {
+				if (hasWorkspaceUpdate && workspaceId && !store.getWorkspace(workspaceId)) {
 					sendError(res, 404, `Workspace not found: ${workspaceId}`);
 					return;
 				}
-				if (orchestrator.isMatterRunning(matterId)) {
-					sendError(res, 409, "Stop the active turn before switching workspaces");
+				const observerMemberIds = hasObserverUpdate
+					? parseObserverMemberIds(body.observerMemberIds, store)
+					: undefined;
+				if (hasObserverUpdate && !observerMemberIds) {
+					sendError(res, 400, "observerMemberIds must be an array of member IDs");
 					return;
 				}
-				const updated = store.updateMatterWorkspace(matterId, workspaceId);
-				broadcast("workspace_updated", { matterId, workspaceId });
+				if (orchestrator.isMatterRunning(matterId)) {
+					sendError(
+						res,
+						409,
+						hasWorkspaceUpdate
+							? "Stop the active turn before switching workspaces"
+							: "Stop the active turn before updating observers",
+					);
+					return;
+				}
+				let updated = existing;
+				if (hasWorkspaceUpdate) {
+					updated = store.updateMatterWorkspace(matterId, workspaceId);
+					broadcast("workspace_updated", { matterId, workspaceId });
+				}
+				if (observerMemberIds !== undefined) {
+					updated = store.updateMatterObservers(matterId, observerMemberIds);
+					broadcast("matter_updated", { matterId, observerMemberIds: updated.observerMemberIds });
+				}
 				sendJson(res, 200, { matter: updated });
 				return;
 			}
@@ -288,12 +326,14 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 						: undefined;
 				const deliverableType =
 					typeof body.deliverableType === "string" ? (body.deliverableType as DeliverableType) : undefined;
+				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 
 				const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId);
 				const matter = store.createMatter({
 					title: title ?? prompt.slice(0, 60),
 					leadMemberId: leadMember.id,
 					workspaceId: workspaceId ?? null,
+					observerMemberIds,
 				});
 
 				runDispatchInBackground({
@@ -302,6 +342,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					prompt,
 					preferredMemberId: leadMember.id,
 					workspaceId,
+					observerMemberIds,
 					deliverableTitle,
 					deliverableType,
 				});
@@ -340,12 +381,14 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					typeof body.deliverableTitle === "string" && body.deliverableTitle.trim().length > 0
 						? body.deliverableTitle.trim()
 						: undefined;
+				const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 
 				runDispatchInBackground({
 					matterId: matter.id,
 					prompt,
 					preferredMemberId,
 					workspaceId,
+					observerMemberIds,
 					deliverableTitle,
 				});
 

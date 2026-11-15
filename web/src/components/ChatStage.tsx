@@ -14,6 +14,7 @@ import {
 	type DelegationSummaryItem,
 	formatClockTime,
 	formatNoticeEventLine,
+	getMemberThemeById,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
 	type StarterTask,
@@ -50,6 +51,8 @@ interface ChatStageProps {
 	onComposerTextChange: (value: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	onSelectMember: (memberId: string) => void;
+	activeObserverIds: string[];
+	onUpdateObservers: (observerIds: string[]) => void;
 	onSendPrompt: () => void;
 	onAbortMatter: (matterId: string) => void;
 	onNewMatter: () => void;
@@ -87,6 +90,8 @@ export function ChatStage({
 	onComposerTextChange,
 	onSelectWorkspace,
 	onSelectMember,
+	activeObserverIds,
+	onUpdateObservers,
 	onSendPrompt,
 	onAbortMatter,
 	onNewMatter,
@@ -98,6 +103,7 @@ export function ChatStage({
 	const [collabTab, setCollabTab] = useState<"delegations" | "events">("delegations");
 	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
+	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -378,17 +384,32 @@ export function ChatStage({
 							{matterDetail?.userMessages.map((msg) => {
 								const isUser = msg.senderType === "user";
 								const isSystem = msg.senderType === "system";
+								const isObserverIntervention = msg.metadata?.observerIntervention === true;
+								const speakerTheme = getMemberThemeById(members, msg.senderId);
 								const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
 								const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
 								return (
 									<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
 										{!isUser && (
 											<div className="stream-sender">
-												{isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
-												{formatClockTime(msg.createdAt)}
+												{!isSystem && (
+													<BotFaceIcon
+														bg={speakerTheme.bg}
+														tilt={speakerTheme.tilt}
+														size="xs"
+														mood="idle"
+													/>
+												)}
+												<span>
+													{isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
+													{formatClockTime(msg.createdAt)}
+												</span>
+												{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 											</div>
 										)}
-										<div className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}`}>
+										<div
+											className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${isObserverIntervention ? " observer" : ""}`}
+										>
 											{isUser ? msg.content : <MarkdownView content={msg.content} />}
 										</div>
 										{renderDelegationSummary(msg.id, attachedDelegations)}
@@ -520,6 +541,71 @@ export function ChatStage({
 						</div>
 					)}
 
+					{observerMenuOpen && (
+						<div className="quick-prompts-popover observer-popover">
+							<div className="banner-row">
+								<div>
+									<strong>会议旁听成员</strong>
+									<span className="observer-hint">
+										主负责人答复后，旁听同事从本职角度审视，有关键风险或遗漏才主动补充，无异议保持静默
+									</span>
+								</div>
+								<div className="observer-quick-actions">
+									<button
+										type="button"
+										className="btn-inline"
+										disabled={isTurnRunning}
+										onClick={() => {
+											onUpdateObservers(members.filter((m) => m.id !== headerContact?.id).map((m) => m.id));
+										}}
+									>
+										全员旁听
+									</button>
+									<button
+										type="button"
+										className="btn-inline"
+										disabled={isTurnRunning}
+										onClick={() => onUpdateObservers([])}
+									>
+										清空
+									</button>
+									<button type="button" className="btn-inline" onClick={() => setObserverMenuOpen(false)}>
+										完成
+									</button>
+								</div>
+							</div>
+							<div className="observer-peer-list">
+								{members
+									.filter((m) => m.id !== headerContact?.id)
+									.map((peer) => {
+										const checked = activeObserverIds.includes(peer.id);
+										const theme = getMemberThemeById(members, peer.id);
+										return (
+											<button
+												key={peer.id}
+												type="button"
+												disabled={isTurnRunning}
+												className={`observer-peer-chip ${checked ? "active" : ""}`}
+												onClick={() => {
+													const next = checked
+														? activeObserverIds.filter((id) => id !== peer.id)
+														: [...activeObserverIds, peer.id];
+													onUpdateObservers(next);
+												}}
+											>
+												<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
+												<span className="observer-peer-text">
+													<strong>{peer.displayName}</strong>
+													<small>{peer.roleTitle}</small>
+												</span>
+												<span className="observer-peer-check">{checked ? "✓" : "+"}</span>
+											</button>
+										);
+									})}
+							</div>
+						</div>
+					)}
+
 					<div className="composer-meta-bar">
 						<select
 							className="select-pill"
@@ -552,6 +638,18 @@ export function ChatStage({
 								</option>
 							))}
 						</select>
+						<button
+							type="button"
+							className={`select-pill action ${activeObserverIds.length > 0 ? "observer-active" : ""}`}
+							onClick={() => {
+								setStarterMenuOpen(false);
+								setObserverMenuOpen((v) => !v);
+							}}
+						>
+							{activeObserverIds.length > 0
+								? `旁听：${activeObserverIds.map((id) => memberName(id)).join("、")}`
+								: "旁听：仅主负责人"}
+						</button>
 						{selectedMatterId && (
 							<button type="button" className="select-pill action" onClick={onNewMatter}>
 								+ 切到新事项
@@ -564,7 +662,10 @@ export function ChatStage({
 							type="button"
 							className="pill-plus-btn"
 							aria-label="插入示范任务"
-							onClick={() => setStarterMenuOpen((v) => !v)}
+							onClick={() => {
+								setObserverMenuOpen(false);
+								setStarterMenuOpen((v) => !v);
+							}}
 						>
 							+
 						</button>
