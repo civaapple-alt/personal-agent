@@ -14,6 +14,7 @@ import {
 	parseMessageImages,
 	parseProgressSnapshot,
 	pickDefaultWorkspaceId,
+	stripMarkdownFormatting,
 } from "../web/src/utils.ts";
 
 test("mapDelegationsToMessages pairs turn delegations for running, completed, and failed outcomes", () => {
@@ -291,6 +292,16 @@ test("parseDeliverableSummary extracts lead takeaway and scannable process/evide
 	assert.equal(inlineParsed.lead, "第一句核心结论。");
 	assert.ok(inlineParsed.details.length >= 2);
 	assert.equal(parseDeliverableSummary("   ").lead, "");
+
+	const mdSummary =
+		"## 本轮成果 (commit `6a00bd4`)\n- **TS 严格模式**：新增 `tsconfig.json`，参考 [docs](https://example.com)";
+	const mdParsed = parseDeliverableSummary(mdSummary);
+	assert.equal(mdParsed.lead, "本轮成果 (commit 6a00bd4)");
+	assert.deepEqual(mdParsed.details, ["TS 严格模式：新增 tsconfig.json，参考 docs"]);
+	assert.equal(
+		stripMarkdownFormatting("**结论**：已对齐 `my_snake_case` 与 _斜体_。"),
+		"结论：已对齐 my_snake_case 与 斜体。",
+	);
 });
 
 test("parseMessageImages extracts valid lightweight image refs from message metadata", () => {

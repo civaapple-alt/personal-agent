@@ -440,6 +440,8 @@
 .md-table th:last-child,
 .md-table td:last-child {
 	border-right: 0;
+	min-width: 88px;
+	white-space: nowrap;
 }
 .md-table tbody tr:last-child td {
 	border-bottom: 0;

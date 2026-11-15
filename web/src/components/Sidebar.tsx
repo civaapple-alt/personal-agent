@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
-import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS } from "../utils.ts";
+import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS, stripMarkdownFormatting } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 
 interface SidebarProps {
@@ -152,11 +152,13 @@ export function Sidebar({
 						const leadIdx = bootstrap?.members.findIndex((m) => m.id === matter.leadMemberId) ?? 0;
 						const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
 						const isActive = activeTab === "chats" && selectedMatterId === matter.id;
-						const previewLine = prog
-							? prog.label
-							: matter.status === "waiting_user"
-								? "等待你的确认"
-								: matter.summary || STATUS_LABELS[matter.status] || matter.status;
+						const previewLine = stripMarkdownFormatting(
+							prog
+								? prog.label
+								: matter.status === "waiting_user"
+									? "等待你的确认"
+									: matter.summary || STATUS_LABELS[matter.status] || matter.status,
+						);
 
 						return (
 							<button

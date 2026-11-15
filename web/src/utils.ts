@@ -613,9 +613,31 @@ export interface ParsedDeliverableSummary {
 	details: string[];
 }
 
+/** Strips inline Markdown markers, headings, and list prefixes for crisp plain-text previews. */
+export function stripMarkdownFormatting(text: string): string {
+	return text
+		.replace(/\r\n/g, "\n")
+		.replace(/```[^\n]*\n?/g, "")
+		.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/^\s{0,3}(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+\.\s+)/gm, "")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/\*\*([^*]+)\*\*/g, "$1")
+		.replace(/__([^_]+)__/g, "$1")
+		.replace(/\*([^*\n]+)\*/g, "$1")
+		.replace(/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:!?，。；！？])/g, "$1$2")
+		.replace(/[ \t]*\n+[ \t]*/g, " ")
+		.replace(/[ \t]{2,}/g, " ")
+		.trim();
+}
+
 /** Splits a dense deliverable changeNote/summary into a concise key-point lead and scannable process/evidence bullets. */
 export function parseDeliverableSummary(rawSummary: string, maxLeadChars = 130): ParsedDeliverableSummary {
-	const normalized = rawSummary.replace(/\r\n/g, "\n").trim();
+	const normalized = rawSummary
+		.replace(/\r\n/g, "\n")
+		.replace(/```[^\n]*\n?/g, "")
+		.replace(/^\s{0,3}(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+\.\s+)/gm, "")
+		.trim();
 	if (!normalized) return { lead: "", details: [] };
 
 	const rawParagraphs = normalized
@@ -667,7 +689,10 @@ export function parseDeliverableSummary(rawSummary: string, maxLeadChars = 130):
 		}
 	}
 
-	return { lead, details };
+	return {
+		lead: stripMarkdownFormatting(lead),
+		details: details.map((item) => stripMarkdownFormatting(item)).filter(Boolean),
+	};
 }
 
 /** Picks the first valid workspace id from ordered candidates, falling back to the first workspace. */

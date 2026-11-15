@@ -1,3 +1,13 @@
+/** Copies arbitrary text to clipboard and notifies the caller with a concise confirmation or fallback. */
+export async function copyTextToClipboard(text: string, label: string, onNotice: (msg: string) => void) {
+	try {
+		await navigator.clipboard.writeText(text);
+		onNotice(`已复制${label}`);
+	} catch {
+		onNotice(`${label}：${text}`);
+	}
+}
+
 /** Copies a collaborator's invitation URL with LAN binding hint on loopback hosts. */
 export async function copyCollaboratorInviteUrl(
 	col: { name: string; token?: string },

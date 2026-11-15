@@ -18,6 +18,7 @@ import {
 	getBotTheme,
 	MEMORY_CATEGORY_LABELS,
 	MEMORY_CATEGORY_VALUES,
+	stripMarkdownFormatting,
 } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExperienceItemCard, ManualExperienceForm } from "../ExperienceReviewPanel.tsx";
@@ -146,12 +147,19 @@ export function MemberCard({
 		}
 	};
 
+	const cleanResponsibility = template?.responsibilities
+		? stripMarkdownFormatting(template.responsibilities.split("\n")[0] ?? "")
+		: "";
+	const visibleKeywords = template?.keywords.slice(0, 3) ?? [];
+	const visibleSkills = template?.skills.slice(0, 3) ?? [];
+	const hiddenTagCount = Math.max(0, (template?.skills.length ?? 0) - visibleSkills.length);
+
 	return (
 		<div className="member-card">
 			<div className="member-card-top">
 				<div className="member-ident">
 					<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" />
-					<div>
+					<div className="member-ident-copy">
 						<div className="member-name-row">
 							<strong>{member.displayName}</strong>
 							{member.isPrimaryContact && <span className="pill live">默认主联系</span>}
@@ -169,32 +177,31 @@ export function MemberCard({
 
 			<div className="member-identity-box">
 				<div className="member-identity-row">
-					<span className="member-git-pill" title="提交代码时以此成员身份作为 Git Author 区分不同角色工作">
-						Git Author（角色）：{gitIdentity.formatted}
-					</span>
+					<span className="member-identity-label">Git Author（角色署名）</span>
 					<button
 						type="button"
 						className="btn-inline btn-xs"
 						onClick={() => (editingIdentity ? setEditingIdentity(false) : openIdentityEditor())}
 					>
-						{editingIdentity ? "收起身份编辑" : "编辑身份"}
+						{editingIdentity ? "收起编辑" : "编辑身份"}
 					</button>
+				</div>
+				<div className="member-git-pill" title={`提交代码时以此成员身份作 Git Author：${gitIdentity.formatted}`}>
+					{gitIdentity.formatted}
 				</div>
 				{activeWorkspace?.repoGitUser && (
 					<div
 						className="member-committer-line"
-						title="提交代码时从当前仓库 git config 读取真实用户作为 Git Committer 保留"
+						title={`保留当前仓库真实用户作 Git Committer：${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>`}
 					>
-						Git Committer（真实用户）：{activeWorkspace.repoGitUser.name} &lt;
-						{activeWorkspace.repoGitUser.email}&gt;
+						Committer：{activeWorkspace.repoGitUser.name} &lt;{activeWorkspace.repoGitUser.email}&gt;
 					</div>
 				)}
 				{member.identitySummary && <div className="member-summary-line">{member.identitySummary}</div>}
 				<div className="member-memory-tiers">
-					<span>三层记忆：</span>
-					<span className="pill">岗位通用 {scopeCounts.roleGeneral}</span>
-					<span className="pill">组织记忆 {scopeCounts.companyPrivate}</span>
-					<span className="pill">仓库记忆 {scopeCounts.projectPrivate}</span>
+					<span className="pill">岗位 {scopeCounts.roleGeneral}</span>
+					<span className="pill">组织 {scopeCounts.companyPrivate}</span>
+					<span className="pill">仓库 {scopeCounts.projectPrivate}</span>
 				</div>
 			</div>
 
@@ -274,38 +281,51 @@ export function MemberCard({
 				</div>
 			)}
 
-			{template?.responsibilities && <p className="member-resp">{template.responsibilities.split("\n")[0]}</p>}
+			{cleanResponsibility && (
+				<p className="member-resp" title={cleanResponsibility}>
+					{cleanResponsibility}
+				</p>
+			)}
 
-			{template && (template.keywords.length > 0 || template.skills.length > 0) && (
+			{(visibleKeywords.length > 0 || visibleSkills.length > 0) && (
 				<div className="tag-list">
-					{template.keywords.slice(0, 4).map((kw) => (
+					{visibleKeywords.map((kw) => (
 						<span key={kw} className="tag-chip">
 							#{kw}
 						</span>
 					))}
-					{template.skills.map((sk) => (
+					{visibleSkills.map((sk) => (
 						<span key={sk} className="tag-chip skill">
 							{sk}
 						</span>
 					))}
+					{hiddenTagCount > 0 && <span className="tag-chip">+{hiddenTagCount}</span>}
 				</div>
 			)}
 
-			<div className="actions-row">
-				<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
-					向 TA 派活
-				</button>
-				{!member.isPrimaryContact && (
-					<button type="button" className="btn-pill-outline btn-xs" onClick={() => void onSetPrimary(member.id)}>
-						设为主联系
+			<div className="member-card-footer">
+				<div className="member-footer-primary">
+					<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
+						向 TA 派活
 					</button>
-				)}
-				<button type="button" className="btn-pill-outline btn-xs" onClick={() => void onExportMember(member.id)}>
-					导出能力包
-				</button>
-				<button type="button" className="btn-inline" onClick={() => setExpandedMemories((prev) => !prev)}>
-					{expandedMemories ? "收起经验" : `管理经验 (${memories.length})`}
-				</button>
+					<button
+						type="button"
+						className="btn-pill-outline btn-xs"
+						onClick={() => setExpandedMemories((prev) => !prev)}
+					>
+						{expandedMemories ? "收起经验" : `管理经验 (${memories.length})`}
+					</button>
+				</div>
+				<div className="member-footer-secondary">
+					{!member.isPrimaryContact && (
+						<button type="button" className="btn-inline btn-xs" onClick={() => void onSetPrimary(member.id)}>
+							设为主联系
+						</button>
+					)}
+					<button type="button" className="btn-inline btn-xs" onClick={() => void onExportMember(member.id)}>
+						导出能力包
+					</button>
+				</div>
 			</div>
 
 			{expandedMemories && (

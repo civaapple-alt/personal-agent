@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { addWorkspace, type OrganizationDto, updateWorkspace, type WorkspaceDto } from "../api.ts";
+import { copyTextToClipboard } from "../clipboard.ts";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];
@@ -57,7 +58,7 @@ export function MaterialsView({
 
 	return (
 		<div className="subpage-scroll">
-			<div className="subpage-inner">
+			<div className="subpage-inner wide">
 				<div className="pane-header">
 					<h1>已有资料与项目仓库</h1>
 					<p>仓库自身维护的信息以仓库为准；归属同一组织的仓库可共享组织记忆并继承组织 Git 邮箱域名</p>
@@ -66,7 +67,7 @@ export function MaterialsView({
 				<div className="ui-sections-stack">
 					<section className="ui-card">
 						<h2 className="ui-card-title">登记项目 Git 工作区</h2>
-						<div className="feedback-row">
+						<div className="workspace-bind-grid">
 							<input
 								className="input-field"
 								placeholder="项目名称（如 order-service）"
@@ -80,7 +81,7 @@ export function MaterialsView({
 								onChange={(e) => setNewWsPath(e.target.value)}
 							/>
 							<select
-								className="select-sm"
+								className="select-sm select-control"
 								aria-label="新仓库所属组织"
 								value={newWsOrgChoice === "__standalone__" ? "__standalone__" : (resolvedNewOrgId ?? "")}
 								onChange={(e) => setNewWsOrgChoice(e.target.value)}
@@ -117,14 +118,16 @@ export function MaterialsView({
 						) : (
 							workspaces.map((ws) => {
 								const org = ws.orgId ? organizations.find((o) => o.id === ws.orgId) : null;
+								const isActive = selectedWorkspaceId === ws.id;
 								return (
-									<div key={ws.id} className="compact-row static">
-										<div>
+									<div key={ws.id} className={`compact-row static${isActive ? " is-active" : ""}`}>
+										<div className="ui-row-main">
 											<div className="ui-row-title">
 												<span>
 													{ws.name} ({ws.defaultBranch})
 												</span>
 												{org && <span className="pill org-pill">组织：{org.name}</span>}
+												{isActive && <span className="pill is-active">当前已选</span>}
 											</div>
 											<div className="ui-row-sub">
 												{ws.repoPath}
@@ -134,9 +137,16 @@ export function MaterialsView({
 											</div>
 										</div>
 										<div className="ui-row-actions">
+											<button
+												type="button"
+												className="btn-inline"
+												onClick={() => void copyTextToClipboard(ws.repoPath, "仓库路径", onNotice)}
+											>
+												复制路径
+											</button>
 											{organizations.length > 0 && (
 												<select
-													className="select-sm"
+													className="select-sm select-control"
 													aria-label={`设置 ${ws.name} 的所属组织`}
 													value={ws.orgId ?? ""}
 													onChange={(e) => void handleChangeWorkspaceOrg(ws.id, e.target.value)}
@@ -151,10 +161,10 @@ export function MaterialsView({
 											)}
 											<button
 												type="button"
-												className="btn-pill-outline btn-xs"
+												className={`${isActive ? "btn-pill-dark" : "btn-pill-outline"} btn-xs`}
 												onClick={() => onUseWorkspace(ws.id)}
 											>
-												{selectedWorkspaceId === ws.id ? "当前已选 · 新建任务 →" : "在此仓库派活 →"}
+												{isActive ? "当前已选 · 新建任务 →" : "在此仓库派活 →"}
 											</button>
 										</div>
 									</div>

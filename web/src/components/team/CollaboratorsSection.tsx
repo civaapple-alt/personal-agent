@@ -78,65 +78,59 @@ export function CollaboratorsSection({
 									</span>
 									{isSelf && <span className="roster-me">当前视角</span>}
 								</div>
-								<div className="ui-row-actions tight">
-									{isOwner && col.token && col.permissionRole !== "owner" && (
-										<>
-											<button
-												type="button"
-												className="btn-inline"
-												onClick={() => void copyCollaboratorInviteUrl(col, onNotice)}
-											>
-												复制邀请链接
-											</button>
-											{onPreviewAsCollaborator && (
-												<button
-													type="button"
-													className="btn-inline"
-													onClick={() => onPreviewAsCollaborator(col.token!)}
-												>
-													以此身份体验
-												</button>
-											)}
-											<button
-												type="button"
-												className="btn-inline"
-												onClick={() => {
-													void regenerateCollaboratorToken(col.id)
-														.then(async () => {
-															await onRefresh();
-															onNotice(`已重新生成「${col.name}」的邀请口令`);
-														})
-														.catch((err: unknown) =>
-															onError(err instanceof Error ? err.message : String(err)),
-														);
-												}}
-											>
-												重置口令
-											</button>
-											<button
-												type="button"
-												className="btn-inline danger"
-												onClick={() => {
-													void deleteCollaborator(col.id)
-														.then(async () => {
-															await onRefresh();
-															onNotice(`已移除协作成员「${col.name}」`);
-														})
-														.catch((err: unknown) =>
-															onError(err instanceof Error ? err.message : String(err)),
-														);
-												}}
-											>
-												移除
-											</button>
-										</>
-									)}
-								</div>
 							</div>
 							<div className="org-chip-meta">
 								<span>岗位：{col.roleTitle}</span>
 								{orgLabel && <span> · 组织：{orgLabel}</span>}
 							</div>
+							{isOwner && col.token && col.permissionRole !== "owner" && (
+								<div className="org-chip-actions">
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => void copyCollaboratorInviteUrl(col, onNotice)}
+									>
+										复制邀请链接
+									</button>
+									{onPreviewAsCollaborator && (
+										<button
+											type="button"
+											className="btn-inline"
+											onClick={() => onPreviewAsCollaborator(col.token!)}
+										>
+											以此身份体验
+										</button>
+									)}
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => {
+											void regenerateCollaboratorToken(col.id)
+												.then(async () => {
+													await onRefresh();
+													onNotice(`已重新生成「${col.name}」的邀请口令`);
+												})
+												.catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)));
+										}}
+									>
+										重置口令
+									</button>
+									<button
+										type="button"
+										className="btn-inline danger"
+										onClick={() => {
+											void deleteCollaborator(col.id)
+												.then(async () => {
+													await onRefresh();
+													onNotice(`已移除协作成员「${col.name}」`);
+												})
+												.catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)));
+										}}
+									>
+										移除
+									</button>
+								</div>
+							)}
 						</div>
 					);
 				})}
