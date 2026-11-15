@@ -1,7 +1,15 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
-import "./styles.css";
+import "./styles/tokens.css";
+import "./styles/primitives.css";
+import "./styles/shell.css";
+import "./styles/chat-stream.css";
+import "./styles/chat-composer.css";
+import "./styles/chat-roster.css";
+import "./styles/deliverables.css";
+import "./styles/views.css";
+import "./styles/responsive.css";
 
 const container = document.getElementById("root");
 if (!container) {

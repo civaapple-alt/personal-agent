@@ -160,7 +160,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					<h3 className="deliverable-title">{props.deliverable.title}</h3>
 				</div>
 				{props.siblingVersions.length > 1 && (
-					<div className="version-bar" style={{ marginTop: 0 }}>
+					<div className="version-bar compact">
 						{props.siblingVersions.map((ver) => (
 							<button
 								key={ver.id}

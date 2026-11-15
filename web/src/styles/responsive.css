@@ -1,0 +1,36 @@
+@media (prefers-reduced-motion: reduce) {
+	.bot-avatar-inner,
+	.bot-eye-pair,
+	.bot-mood-pip,
+	.bot-mood-pip span {
+		animation: none !important;
+	}
+}
+@media (max-width: 1080px) {
+	.deliverables-workspace {
+		grid-template-columns: 1fr;
+	}
+	.deliverables-master-col {
+		position: static;
+		max-height: none;
+		padding-right: 0;
+	}
+}
+@media (max-width: 960px) {
+	.bot-shell {
+		grid-template-columns: 1fr;
+		height: auto;
+		min-height: 100vh;
+	}
+	body {
+		overflow: auto;
+	}
+	.quick-prompts-list,
+	.form-grid {
+		grid-template-columns: 1fr;
+	}
+	.collab-dock-panel {
+		right: 16px;
+		width: calc(100% - 32px);
+	}
+}

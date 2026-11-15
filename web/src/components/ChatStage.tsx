@@ -1604,7 +1604,7 @@ export function ChatStage({
 									<h4>{dlg.request.title}</h4>
 									{dlg.request.message && <p>{dlg.request.message}</p>}
 									{!isOwner ? (
-										<p className="muted-hint" style={{ margin: "6px 0 0" }}>
+										<p className="muted-hint compact">
 											当前处于协同成员受限模式，工具/操作确认弹窗仅可由团队所有者处理。
 										</p>
 									) : (

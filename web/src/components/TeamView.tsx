@@ -316,7 +316,7 @@ export function TeamView({
 						<p>查看角色分工与积累经验，支持新增自定义角色，或导入导出脱敏角色能力包</p>
 					</div>
 					{isOwner && (
-						<div className="actions-row" style={{ marginTop: 0 }}>
+						<div className="actions-row compact">
 							<button
 								type="button"
 								className="btn-pill-dark"
@@ -408,7 +408,7 @@ export function TeamView({
 								/>
 								<span>设为默认主联系人</span>
 							</label>
-							<div style={{ display: "flex", gap: 8 }}>
+							<div className="ui-row-actions">
 								<button type="button" className="btn-pill-outline" onClick={() => setShowAddMember(false)}>
 									取消
 								</button>
@@ -479,12 +479,12 @@ export function TeamView({
 				<div className="org-strip-card">
 					<div className="banner-row">
 						<div>
-							<strong style={{ fontSize: 14 }}>团队同事与邀请</strong>
-							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
+							<strong className="ui-inline-head-title">团队同事与邀请</strong>
+							<span className="ui-inline-sub">
 								所有者掌管代码执行、仓库切换与角色设置；同事通过专属邀请链接加入同一房间讨论、提请 AI 与验收评价
 							</span>
 						</div>
-						<div style={{ display: "flex", gap: 8 }}>
+						<div className="ui-row-actions">
 							{!isOwner && onRestoreOwner && (
 								<button type="button" className="btn-pill-outline btn-xs" onClick={onRestoreOwner}>
 									恢复所有者身份
@@ -511,14 +511,14 @@ export function TeamView({
 							return (
 								<div key={col.id} className={`org-chip-card collab-human-card ${isSelf ? "is-default" : ""}`}>
 									<div className="org-chip-head">
-										<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+										<div className="ui-inline-head">
 											<strong>{col.name}</strong>
 											<span className={`pill ${col.permissionRole === "owner" ? "live" : ""}`}>
 												{col.permissionRole === "owner" ? "所有者" : "协同成员"}
 											</span>
 											{isSelf && <span className="roster-me">当前视角</span>}
 										</div>
-										<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+										<div className="ui-row-actions tight">
 											{isOwner && col.token && col.permissionRole !== "owner" && (
 												<>
 													<button
@@ -597,7 +597,7 @@ export function TeamView({
 
 					{showAddCollab && isOwner && (
 						<div className="org-inline-form">
-							<div style={{ fontWeight: 600, fontSize: 13 }}>新增协同同事并生成邀请链接</div>
+							<div className="ui-chip-title">新增协同同事并生成邀请链接</div>
 							<div className="form-grid">
 								<input
 									className="input-field"
@@ -612,7 +612,7 @@ export function TeamView({
 									onChange={(e) => setCollabRoleInput(e.target.value)}
 								/>
 							</div>
-							<div className="actions-row" style={{ marginTop: 4 }}>
+							<div className="actions-row tight">
 								{organizations.length > 0 && (
 									<select
 										className="select-pill"
@@ -661,8 +661,8 @@ export function TeamView({
 				<div className="org-strip-card">
 					<div className="banner-row">
 						<div>
-							<strong style={{ fontSize: 14 }}>组织身份与多仓库分组</strong>
-							<span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 8 }}>
+							<strong className="ui-inline-head-title">组织身份与多仓库分组</strong>
+							<span className="ui-inline-sub">
 								同一支全局团队成员跨组织与多仓库工作；新建仓库默认归入「默认组织」，同组织仓库共享「组织记忆」与邮箱域名
 							</span>
 						</div>
@@ -674,7 +674,7 @@ export function TeamView({
 					</div>
 
 					{organizations.length === 0 ? (
-						<div className="muted-hint" style={{ margin: 0 }}>
+						<div className="muted-hint">
 							尚未建立组织（新建仓库时会自动创建「默认组织」）。成员按「角色 Author + 仓库真实用户
 							Committer」双署名提交 Git；创建组织并在「资料与仓库」绑定后，同组织仓库共享组织记忆。
 						</div>
@@ -685,11 +685,11 @@ export function TeamView({
 								return (
 									<div key={org.id} className="org-chip-card">
 										<div className="org-chip-head">
-											<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-												<strong style={{ fontSize: 13 }}>{org.name}</strong>
+											<div className="ui-inline-head">
+												<strong className="ui-chip-title">{org.name}</strong>
 												{org.isDefault && <span className="pill live">默认组织</span>}
 											</div>
-											<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+											<div className="ui-row-actions">
 												{!org.isDefault && (
 													<button
 														type="button"
@@ -871,7 +871,7 @@ export function TeamView({
 								</div>
 
 								{editingIdentityMemberId === member.id && (
-									<div className="memory-draft-box identity-form-box" style={{ marginBottom: 10 }}>
+									<div className="memory-draft-box identity-form-box compact">
 										<div className="identity-form-hint">
 											Git 提交区分 Author（下列角色署名）与 Committer（自动沿用当前仓库真实用户）。
 										</div>
@@ -914,7 +914,7 @@ export function TeamView({
 											<summary>
 												修改显示名称与头衔（当前：{member.displayName} · {member.roleTitle}）
 											</summary>
-											<div className="form-grid" style={{ marginTop: 8 }}>
+											<div className="form-grid compact">
 												<label className="identity-field">
 													<span className="identity-field-label">团队显示名</span>
 													<input
@@ -937,7 +937,7 @@ export function TeamView({
 												</label>
 											</div>
 										</details>
-										<div className="actions-row" style={{ marginTop: 4 }}>
+										<div className="actions-row tight">
 											<button
 												type="button"
 												className="btn-pill-dark btn-xs"

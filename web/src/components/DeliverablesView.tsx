@@ -228,7 +228,7 @@ export function DeliverablesView({
 
 				{allFamilies.length === 0 ? (
 					<div className="deliverable-card">
-						<p style={{ margin: 0, color: "var(--text-secondary)" }}>
+						<p className="ui-empty-note">
 							暂无交付记录。回到对话工作台发送需求或点选示范任务，完成后成果会自动归拢到这里。
 						</p>
 					</div>
@@ -237,9 +237,7 @@ export function DeliverablesView({
 						<div className="deliverables-master-col">
 							{groupedByProject.length === 0 ? (
 								<div className="deliverable-card">
-									<p style={{ margin: 0, color: "var(--text-secondary)", fontSize: 13 }}>
-										当前筛选条件下暂无匹配成果。
-									</p>
+									<p className="ui-empty-note compact">当前筛选条件下暂无匹配成果。</p>
 								</div>
 							) : (
 								groupedByProject.map((group) => (
@@ -329,24 +327,22 @@ export function DeliverablesView({
 								/>
 							) : (
 								<div className="deliverable-card">
-									<p style={{ margin: 0, color: "var(--text-secondary)" }}>
-										请在左侧选择一条交付成果查看详情。
-									</p>
+									<p className="ui-empty-note">请在左侧选择一条交付成果查看详情。</p>
 								</div>
 							)}
 
 							{bootstrap && bootstrap.previews.length > 0 && (
 								<div className="list-section">
-									<h3 style={{ margin: "12px 0 4px", fontSize: 14 }}>独立预览服务</h3>
+									<h3 className="ui-sub-heading">独立预览服务</h3>
 									{bootstrap.previews.map((prev) => (
-										<div key={prev.id} className="compact-row" style={{ cursor: "default" }}>
+										<div key={prev.id} className="compact-row static">
 											<div>
-												<div style={{ fontWeight: 600, fontSize: 14 }}>{prev.title}</div>
-												<div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+												<div className="ui-row-title">{prev.title}</div>
+												<div className="ui-row-sub">
 													{prev.url} · 状态：{prev.status}
 												</div>
 											</div>
-											<div style={{ display: "flex", gap: 8 }}>
+											<div className="ui-row-actions">
 												{prev.status === "running" && (
 													<>
 														<a className="btn-secondary" href={prev.url} target="_blank" rel="noreferrer">

@@ -1,0 +1,75 @@
+:root {
+	/* Surfaces & Backgrounds */
+	--bg-canvas: #f8faf9;
+	--bg-sidebar: #f6f8f7;
+	--bg-stage: #ffffff;
+	--bg-card: #ffffff;
+	--surface: #f7faf8;
+	--bg-subtle: #eff3f1;
+	--bg-hover: #eaeef0;
+	--bg-accent-soft: #e4f3ef;
+
+	/* Borders */
+	--border: #e3e8e5;
+	--border-strong: #c8d2cc;
+	--border-subtle: rgba(15, 36, 28, 0.08);
+
+	/* Text */
+	--text-primary: #141d19;
+	--text-secondary: #53635c;
+	--text-muted: #85948d;
+
+	/* Brand & Interactive */
+	--accent: #0f6b60;
+	--accent-hover: #0a534a;
+	--accent-border: rgba(15, 107, 96, 0.25);
+	--dark-pill: #151b18;
+
+	/* Semantic Status */
+	--success-bg: #eef7f4;
+	--success-border: #cde5dc;
+	--success-text: #115e52;
+	--warn-bg: #fef7e6;
+	--warn-border: #edd596;
+	--warn-text: #7a5409;
+	--danger-bg: #fdecec;
+	--danger-border: rgba(180, 35, 24, 0.2);
+	--danger-text: #9e2a2b;
+	--info-bg: #eef6ff;
+	--info-border: #bfdbfe;
+	--info-text: #1d4ed8;
+	--observer-bg: #f4f1fb;
+	--observer-border: #d9cef7;
+	--observer-text: #5935b8;
+
+	/* Radii & Elevation */
+	--radius-xs: 6px;
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 16px;
+	--radius-xl: 20px;
+	--radius-pill: 999px;
+	--shadow-sm: 0 2px 8px rgba(15, 23, 20, 0.06);
+	--shadow-md: 0 8px 24px rgba(15, 23, 20, 0.08);
+	--shadow-lg: 0 18px 42px rgba(15, 23, 20, 0.14);
+
+	/* Typography & Layout */
+	--font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	--sidebar-width: 292px;
+	--header-height: 54px;
+
+	font-family: var(--font-sans);
+	color: var(--text-primary);
+	background: var(--bg-stage);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	height: 100vh;
+	overflow: hidden;
+}

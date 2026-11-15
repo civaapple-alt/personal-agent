@@ -64,7 +64,7 @@ export function MaterialsView({
 				</div>
 
 				<div className="deliverable-card">
-					<h3 style={{ margin: "0 0 10px", fontSize: 15 }}>登记项目 Git 工作区</h3>
+					<h3 className="ui-card-title">登记项目 Git 工作区</h3>
 					<div className="feedback-row">
 						<input
 							className="input-field"
@@ -106,24 +106,22 @@ export function MaterialsView({
 					{workspaces.map((ws) => {
 						const org = ws.orgId ? organizations.find((o) => o.id === ws.orgId) : null;
 						return (
-							<div key={ws.id} className="compact-row" style={{ cursor: "default" }}>
+							<div key={ws.id} className="compact-row static">
 								<div>
-									<div
-										style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}
-									>
+									<div className="ui-row-title">
 										<span>
 											{ws.name} ({ws.defaultBranch})
 										</span>
 										{org && <span className="pill org-pill">组织：{org.name}</span>}
 									</div>
-									<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+									<div className="ui-row-sub">
 										{ws.repoPath}
 										{ws.repoGitUser
 											? ` · Git Committer：${ws.repoGitUser.name} <${ws.repoGitUser.email}>`
 											: ""}
 									</div>
 								</div>
-								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+								<div className="ui-row-actions">
 									{organizations.length > 0 && (
 										<select
 											className="select-sm"

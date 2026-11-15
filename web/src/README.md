@@ -8,7 +8,7 @@
 | HTTP DTO 和请求 | [api.ts](api.ts)，与服务响应一起核对 |
 | Hash 路由与浏览器前进后退 | [hashRouter.ts](hashRouter.ts) |
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
-| 布局与共用样式/格式 | [styles.css](styles.css)、[utils.ts](utils.ts) |
+| 布局与共用样式/格式 | [styles/tokens.css](styles/tokens.css)、[styles/primitives.css](styles/primitives.css) 等分域样式，及 [utils.ts](utils.ts) |
 | 图片附件前端预处理 | [imageAttachments.ts](imageAttachments.ts)（格式校验、缩略预览与超大图缩放压缩） |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx)、[ExploringStatus](components/ExploringStatus.tsx) |
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
