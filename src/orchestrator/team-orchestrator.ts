@@ -279,11 +279,21 @@ function buildObserverContextDigest(input: {
 	}
 	if (input.history.length > 0) {
 		const lines = input.history
-			.slice(-6)
-			.map((message) => `- ${message.senderType}/${message.senderId}: ${truncateInline(message.content, 360)}`);
-		parts.push(`此前最近对话摘录：\n${lines.join("\n")}`);
+			.slice(-16)
+			.map((message) => `- ${message.senderType}/${message.senderId}: ${truncateInline(message.content, 400)}`);
+		const headerLen = parts.join("\n").length;
+		const remainingBudget = Math.max(1200, 6000 - headerLen - 32);
+		const kept: string[] = [];
+		let used = 0;
+		for (let i = lines.length - 1; i >= 0; i -= 1) {
+			const line = lines[i]!;
+			if (used + line.length + 1 > remainingBudget && kept.length > 0) break;
+			kept.unshift(line);
+			used += line.length + 1;
+		}
+		parts.push(`此前最近对话摘录：\n${kept.join("\n")}`);
 	}
-	return parts.join("\n").slice(-3500);
+	return parts.join("\n");
 }
 
 function emptyAbortedResult(): PromptRunResult {
