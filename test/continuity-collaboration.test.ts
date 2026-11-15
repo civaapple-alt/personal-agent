@@ -383,6 +383,12 @@ test("cancellation propagates into delegated worker, rejects concurrent turns, c
 	continueNormally = true;
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "停止后继续" });
 	assert.equal(f.workers[2]?.options.sessionFile, f.workers[0]?.sessionFile);
+	assert.match(f.workers[2]?.prompt ?? "", /## 上次中断状态简报/);
+	assert.match(f.workers[2]?.prompt ?? "", /用户手动停止/);
+	assert.match(f.workers[2]?.prompt ?? "", /研发经理/);
+	assert.match(f.workers[2]?.prompt ?? "", /耗时设计/);
+	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "正常完成后的下一问" });
+	assert.doesNotMatch(f.workers[3]?.prompt ?? "", /## 上次中断状态简报/);
 });
 
 test("fails clearly for missing sessions, skills or required runtime tools and cleans up startup failures", async (t) => {

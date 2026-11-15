@@ -324,6 +324,109 @@ function mapChildStageLabel(childProgress: DispatchProgressEvent, defaultThinkin
 	return defaultThinkingLabel;
 }
 
+function parseSnapshotFromMetadata(metadata: Record<string, unknown> | null): ProgressSnapshot | null {
+	const raw = metadata?.progressSnapshot;
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+	const rec = raw as Record<string, unknown>;
+	if (typeof rec.stage !== "string" || typeof rec.label !== "string") return null;
+	if (rec.outcome !== "failed" && rec.outcome !== "aborted") return null;
+	return rec as unknown as ProgressSnapshot;
+}
+
+function buildInterruptionResumeBrief(input: {
+	store: PersonalAgentStore;
+	matterId: string;
+	workspaceId: string | null;
+	repoPath: string;
+	messages: MatterMessage[];
+	afterCursor: number;
+	excludeIds: Set<string>;
+}): string {
+	const inScope = (msg: MatterMessage) =>
+		!input.excludeIds.has(msg.id) &&
+		msg.metadata?.workspaceId === input.workspaceId &&
+		msg.metadata?.repoPath === input.repoPath;
+	const recentScoped = input.messages
+		.slice(input.afterCursor)
+		.filter((msg) => inScope(msg) && !msg.metadata?.observerIntervention);
+	const lastOutcome = [...recentScoped].reverse().find((msg) => msg.senderType !== "user");
+	if (!lastOutcome) return "";
+	const isFailed = lastOutcome.metadata?.failed === true;
+	const isAborted = lastOutcome.metadata?.aborted === true;
+	if (!isFailed && !isAborted) return "";
+
+	const snapshot = parseSnapshotFromMetadata(lastOutcome.metadata);
+	const errorDetail = typeof lastOutcome.metadata?.error === "string" ? lastOutcome.metadata.error : "";
+	const cancelReason = typeof lastOutcome.metadata?.cancelReason === "string" ? lastOutcome.metadata.cancelReason : "";
+	const lines: string[] = ["## 上次中断状态简报（用于基于断点快速续跑）"];
+
+	if (isFailed) {
+		lines.push(
+			`- 中断原因：执行异常未完成${errorDetail ? `（${truncateInline(errorDetail, 120)}）` : ""}${snapshot ? `，停滞前已运行 ${snapshot.elapsedSeconds}s` : ""}`,
+		);
+	} else {
+		const reasonText = cancelReason === "shutdown" ? "服务重启/关闭中止" : "用户手动停止";
+		lines.push(`- 中断原因：${reasonText}${snapshot ? `，停止前已运行 ${snapshot.elapsedSeconds}s` : ""}`);
+	}
+
+	if (snapshot) {
+		lines.push(`- 停滞阶段：${snapshot.stage}（${truncateInline(snapshot.label, 96)}）`);
+		if (snapshot.activeDelegations && snapshot.activeDelegations.length > 0) {
+			lines.push(
+				`- 中断时仍在协同的岗位：${snapshot.activeDelegations.map((entry) => `${entry.memberName}（${entry.stageLabel}）`).join("、")}`,
+			);
+		}
+		if (snapshot.recentLogs && snapshot.recentLogs.length > 0) {
+			lines.push("- 中断前最近执行轨迹：");
+			for (const entry of snapshot.recentLogs) {
+				lines.push(`  - ${entry.memberName}：${truncateInline(entry.summary, 96)}`);
+			}
+		}
+	}
+
+	const scopedAll = input.messages.filter((msg) => inScope(msg));
+	const scopedOutcomeIdx = scopedAll.lastIndexOf(lastOutcome);
+	const turnUserStart =
+		scopedOutcomeIdx >= 0
+			? [...scopedAll.slice(0, scopedOutcomeIdx)].reverse().find((msg) => msg.senderType === "user")
+			: undefined;
+	const collabMessages = input.store
+		.listMessages(input.matterId, "internal_collab")
+		.filter((msg) => (msg.metadata?.workspaceId ?? null) === input.workspaceId);
+	const responseByReqId = new Map<string, MatterMessage>();
+	for (const msg of collabMessages) {
+		const reqId = typeof msg.metadata?.requestMessageId === "string" ? msg.metadata.requestMessageId : null;
+		if (reqId) responseByReqId.set(reqId, msg);
+	}
+	const turnDelegations = collabMessages.filter(
+		(msg) =>
+			msg.senderType === "member" &&
+			typeof msg.metadata?.toMemberId === "string" &&
+			(!turnUserStart || msg.createdAt >= turnUserStart.createdAt) &&
+			msg.createdAt <= lastOutcome.createdAt,
+	);
+	if (turnDelegations.length > 0) {
+		lines.push("- 上轮内部委托情况：");
+		for (const req of turnDelegations.slice(-6)) {
+			const toId = String(req.metadata?.toMemberId ?? "");
+			const toName = input.store.getMember(toId)?.displayName ?? toId;
+			const resp = responseByReqId.get(req.id);
+			const statusLabel = resp
+				? resp.metadata?.failed === true || resp.senderType === "system"
+					? "未完成/中断"
+					: "已完成"
+				: "未返回/中断";
+			const taskSnippet = truncateInline(req.content.replace(/^@[^:：]+[:：]\s*/, ""), 64);
+			lines.push(`  - ${toName}【${statusLabel}】：${taskSnippet}`);
+		}
+	}
+
+	lines.push(
+		"- 续跑指引：你与已接入协同岗位的原有 Pi 会话均已自动恢复；请优先核查上述断点与现场文件/进程状态，直接衔接未完成工作，避免重复已完成步骤。",
+	);
+	return lines.join("\n");
+}
+
 function summarizeObserverProgress(
 	activeDelegations: Map<string, ActiveDelegationProgress>,
 	focusMemberName?: string,
@@ -1615,7 +1718,12 @@ ${this.store
 						!excludeIds.has(message.id) &&
 						message.metadata?.workspaceId === (input.workspace?.id ?? null) &&
 						message.metadata?.repoPath === cwd &&
-						!(previous && message.senderType === "member" && message.senderId === input.member.id),
+						!(
+							previous &&
+							message.senderType === "member" &&
+							message.senderId === input.member.id &&
+							message.metadata?.aborted !== true
+						),
 				);
 			const context =
 				sessionMode === "observer"
@@ -1634,7 +1742,20 @@ ${this.store
 				sessionMode === "observer"
 					? "会前背景摘要（精简回顾）："
 					: "同事项、同工作区中尚未进入本会话的对话（有界背景）：";
-			const prompt = `${context ? `${contextHeader}\n${context}\n\n` : ""}${input.taskPrompt}`;
+			const resumeBrief =
+				sessionMode === "lead"
+					? buildInterruptionResumeBrief({
+							store: this.store,
+							matterId: input.matterId,
+							workspaceId: input.workspace?.id ?? null,
+							repoPath: cwd,
+							messages,
+							afterCursor,
+							excludeIds,
+						})
+					: "";
+			const contextBlock = context ? `${contextHeader}\n${context}` : "";
+			const prompt = [contextBlock, resumeBrief, input.taskPrompt].filter(Boolean).join("\n\n");
 			sessionRecord = this.store.recordWorkerSession({
 				memberId: input.member.id,
 				matterId: input.matterId,

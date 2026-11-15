@@ -663,6 +663,8 @@ test("Server persists partial streamed text and readable failure message in user
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 
+	let attempt = 0;
+	const seenPrompts: string[] = [];
 	const orchestrator = new TeamOrchestrator({
 		store,
 		templates,
@@ -686,15 +688,29 @@ test("Server persists partial streamed text and readable failure message in user
 					return () => {};
 				},
 				setDialogHandler() {},
-				async runPromptAndWait(_message, runOptions) {
-					eventListener?.({
-						type: "tool_execution_start",
-						toolCallId: "t-bash-1",
-						toolName: "bash",
-						args: { command: "npm test" },
-					});
-					runOptions?.onTextDelta?.("已分析部分上下文");
-					throw new Error("Timed out after 180000ms waiting for agent_settled");
+				async runPromptAndWait(message, runOptions) {
+					attempt += 1;
+					seenPrompts.push(message);
+					if (attempt === 1) {
+						eventListener?.({
+							type: "tool_execution_start",
+							toolCallId: "t-bash-1",
+							toolName: "bash",
+							args: { command: "npm test" },
+						});
+						runOptions?.onTextDelta?.("已分析部分上下文");
+						throw new Error("Timed out after 180000ms waiting for agent_settled");
+					}
+					return {
+						assistantText: "已基于上次断点完成验证",
+						assistantMessages: [],
+						disposition: "started",
+						aborted: false,
+						toolExecutions: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+					};
 				},
 				async stop() {},
 			};
@@ -745,6 +761,26 @@ test("Server persists partial streamed text and readable failure message in user
 		assert.match(snapshot.label, /执行命令.*npm test/);
 		assert.ok(snapshot.elapsedSeconds >= 0);
 		assert.ok(snapshot.recentLogs?.some((entry) => /npm test/.test(entry.summary)));
+
+		const resumeRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ prompt: "继续完成" }),
+		});
+		assert.equal(resumeRes.status, 202);
+		for (let i = 0; i < 30; i++) {
+			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
+				userMessages: Array<{ senderType: string; content: string }>;
+			};
+			if (detail.userMessages.length >= 4) break;
+			await new Promise((r) => setTimeout(r, 20));
+		}
+		assert.equal(seenPrompts.length, 2);
+		assert.match(seenPrompts[1] ?? "", /## 上次中断状态简报/);
+		assert.match(seenPrompts[1] ?? "", /Timed out after 180000ms/);
+		assert.match(seenPrompts[1] ?? "", /执行命令：npm test/);
+		assert.match(seenPrompts[1] ?? "", /已分析部分上下文/);
+		assert.match(seenPrompts[1] ?? "", /继续完成/);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

@@ -182,6 +182,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const message = error instanceof Error ? error.message : String(error);
 				const currentMatter = store.getMatter(input.matterId);
 				const leadMember = currentMatter?.leadMemberId ? store.getMember(currentMatter.leadMemberId) : null;
+				const lastUserMsg = [...store.listMessages(input.matterId, "user")]
+					.reverse()
+					.find((msg) => msg.senderType === "user");
+				const resolvedWorkspaceId =
+					lastUserMsg?.metadata && "workspaceId" in lastUserMsg.metadata
+						? ((lastUserMsg.metadata.workspaceId as string | null) ?? null)
+						: (input.workspaceId ?? currentMatter?.workspaceId ?? null);
+				const workspaceLink = resolvedWorkspaceId ? store.getWorkspace(resolvedWorkspaceId) : null;
+				const resolvedRepoPath =
+					typeof lastUserMsg?.metadata?.repoPath === "string"
+						? lastUserMsg.metadata.repoPath
+						: resolve(workspaceLink?.repoPath ?? process.cwd());
 				const progressSnapshot = lastActive
 					? buildProgressSnapshot({
 							outcome: "failed",
@@ -207,6 +219,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					metadata: {
 						failed: true,
 						error: message,
+						workspaceId: resolvedWorkspaceId,
+						repoPath: resolvedRepoPath,
 						...(progressSnapshot ? { progressSnapshot } : {}),
 					},
 				});
