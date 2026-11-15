@@ -17,10 +17,11 @@ import {
 	getMemberThemeById,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
+	parseProgressSnapshot,
 	type StarterTask,
 } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
-import { ExploringStatus } from "./ExploringStatus.tsx";
+import { ExploringStatus, ProgressSnapshotCard } from "./ExploringStatus.tsx";
 
 interface ChatStageProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
@@ -102,6 +103,7 @@ export function ChatStage({
 	const [collabOpen, setCollabOpen] = useState(false);
 	const [collabTab, setCollabTab] = useState<"delegations" | "events">("delegations");
 	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
+	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
@@ -421,6 +423,13 @@ export function ChatStage({
 								const speakerTheme = getMemberThemeById(members, msg.senderId);
 								const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
 								const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
+								const progressSnapshot = parseProgressSnapshot(msg.metadata);
+								const leadFallback =
+									!isSystem && msg.senderId
+										? memberName(msg.senderId)
+										: matterDetail?.matter.leadMemberId
+											? memberName(matterDetail.matter.leadMemberId)
+											: undefined;
 								return (
 									<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
 										{!isUser && (
@@ -445,6 +454,20 @@ export function ChatStage({
 										>
 											{isUser ? msg.content : <MarkdownView content={msg.content} />}
 										</div>
+										{progressSnapshot && (
+											<ProgressSnapshotCard
+												snapshot={progressSnapshot}
+												expanded={!collapsedSnapshots[msg.id]}
+												members={members}
+												fallbackLeadName={leadFallback}
+												onToggle={() =>
+													setCollapsedSnapshots((prev) => ({
+														...prev,
+														[msg.id]: !prev[msg.id],
+													}))
+												}
+											/>
+										)}
 										{renderDelegationSummary(msg.id, attachedDelegations)}
 										{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 									</div>

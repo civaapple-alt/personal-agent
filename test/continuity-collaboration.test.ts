@@ -366,7 +366,19 @@ test("cancellation propagates into delegated worker, rejects concurrent turns, c
 	assert.equal(cancelledChild, true);
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	assert.equal(f.store.listDeliverables(matter.id).length, 0);
-	assert.equal(f.store.listMessages(matter.id, "user").length, 2);
+	const abortedMessages = f.store.listMessages(matter.id, "user");
+	assert.equal(abortedMessages.length, 2);
+	const abortedSnap = abortedMessages[1]?.metadata?.progressSnapshot as
+		| {
+				outcome?: string;
+				stage?: string;
+				activeDelegations?: Array<{ memberId: string; memberName: string }>;
+				recentLogs?: Array<{ memberName: string; summary: string }>;
+		  }
+		| undefined;
+	assert.equal(abortedSnap?.outcome, "aborted");
+	assert.ok(abortedSnap?.activeDelegations?.some((entry) => entry.memberId === "engineering-manager"));
+	assert.ok(abortedSnap?.recentLogs?.some((entry) => /耗时设计|委托/.test(entry.summary)));
 	assert.equal(await f.orchestrator.abortMatter(matter.id), false);
 	continueNormally = true;
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "停止后继续" });

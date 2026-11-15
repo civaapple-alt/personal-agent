@@ -903,6 +903,10 @@ body {
 	animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
+.exploring-step.stopped .exploring-seg {
+	background: #d9822b;
+}
+
 .exploring-step-name {
 	font-size: 10px;
 	color: var(--text-muted);
@@ -915,6 +919,11 @@ body {
 
 .exploring-step.active .exploring-step-name {
 	color: var(--accent);
+	font-weight: 600;
+}
+
+.exploring-step.stopped .exploring-step-name {
+	color: #9a5508;
 	font-weight: 600;
 }
 
@@ -1011,6 +1020,92 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.progress-snapshot-card {
+	align-self: flex-start;
+	margin-top: 4px;
+	width: min(100%, 660px);
+	max-width: min(88%, 740px);
+	border: 1px solid #ecd4ae;
+	background: #fffcf5;
+	border-radius: 14px;
+	overflow: hidden;
+}
+
+.progress-snapshot-card.is-aborted {
+	border-color: var(--border);
+	background: var(--bg-sidebar);
+}
+
+.progress-snapshot-toggle {
+	width: 100%;
+	border: none;
+	background: transparent;
+	padding: 8px 12px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	font: inherit;
+	font-size: 12px;
+	color: var(--text-secondary);
+	cursor: pointer;
+	text-align: left;
+}
+
+.progress-snapshot-toggle:hover {
+	background: rgba(15, 36, 28, 0.03);
+}
+
+.progress-snapshot-summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+
+.progress-snapshot-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	background: #fff3e6;
+	border: 1px solid #f0cba0;
+	color: #9a5508;
+}
+
+.progress-snapshot-badge.is-aborted {
+	background: var(--bg-stage);
+	border-color: var(--border);
+	color: var(--text-secondary);
+}
+
+.progress-snapshot-duration {
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.progress-snapshot-toggle-text {
+	color: var(--accent);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.progress-snapshot-body {
+	border-top: 1px dashed #edd8b7;
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	background: var(--bg-stage);
+}
+
+.progress-snapshot-card.is-aborted .progress-snapshot-body {
+	border-top-color: var(--border);
 }
 
 .composer-dock {

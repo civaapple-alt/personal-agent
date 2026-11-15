@@ -1,4 +1,13 @@
-import type { DeliverableDto, MatterMessageDto, MatterProgressDto, TeamMemberDto, WorkspaceDto } from "./api.ts";
+import type {
+	ActiveDelegationDto,
+	DeliverableDto,
+	MatterMessageDto,
+	MatterProgressDto,
+	ProgressActivityDto,
+	ProgressSnapshotDto,
+	TeamMemberDto,
+	WorkspaceDto,
+} from "./api.ts";
 
 export const STATUS_LABELS: Record<string, string> = {
 	open: "推进中",
@@ -15,6 +24,14 @@ export const STAGE_LABELS: Record<MatterProgressDto["stage"], string> = {
 	tool: "查看/执行",
 	waiting_user: "待你确认",
 	finalizing: "整理交付",
+};
+
+export const SHORT_STAGE_LABELS: Record<MatterProgressDto["stage"], string> = {
+	starting: "准备",
+	thinking: "思考",
+	tool: "执行",
+	waiting_user: "确认",
+	finalizing: "整理",
 };
 
 export const MEMORY_SCOPE_LABELS: Record<string, string> = {
@@ -78,6 +95,66 @@ export function formatClockTime(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
 	return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+export function formatElapsedDuration(totalSeconds: number): string {
+	const safe = Math.max(0, Math.round(totalSeconds));
+	if (safe < 60) return `${safe}s`;
+	const hours = Math.floor(safe / 3600);
+	const mins = Math.floor((safe % 3600) / 60);
+	const secs = safe % 60;
+	if (hours > 0) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+	return `${mins}m ${secs}s`;
+}
+
+export function parseProgressSnapshot(
+	metadata: Record<string, unknown> | null | undefined,
+): ProgressSnapshotDto | null {
+	const raw = metadata?.progressSnapshot;
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+	const rec = raw as Record<string, unknown>;
+	const stage =
+		typeof rec.stage === "string" && STAGE_ORDER.includes(rec.stage as MatterProgressDto["stage"])
+			? (rec.stage as MatterProgressDto["stage"])
+			: null;
+	const outcome = rec.outcome === "aborted" ? "aborted" : rec.outcome === "failed" ? "failed" : null;
+	const label = typeof rec.label === "string" ? rec.label : "";
+	if (!stage || !outcome || !label) return null;
+	const activeDelegations = Array.isArray(rec.activeDelegations)
+		? rec.activeDelegations.filter(
+				(item): item is ActiveDelegationDto =>
+					Boolean(item) &&
+					typeof item === "object" &&
+					typeof (item as ActiveDelegationDto).memberId === "string" &&
+					typeof (item as ActiveDelegationDto).memberName === "string" &&
+					typeof (item as ActiveDelegationDto).stageLabel === "string",
+			)
+		: undefined;
+	const recentLogs = Array.isArray(rec.recentLogs)
+		? rec.recentLogs.filter(
+				(item): item is ProgressActivityDto =>
+					Boolean(item) &&
+					typeof item === "object" &&
+					typeof (item as ProgressActivityDto).memberName === "string" &&
+					typeof (item as ProgressActivityDto).summary === "string" &&
+					typeof (item as ProgressActivityDto).at === "string",
+			)
+		: undefined;
+	return {
+		outcome,
+		stage,
+		label,
+		toolName: typeof rec.toolName === "string" ? rec.toolName : undefined,
+		toolSummary: typeof rec.toolSummary === "string" ? rec.toolSummary : undefined,
+		startedAt: typeof rec.startedAt === "string" ? rec.startedAt : "",
+		capturedAt: typeof rec.capturedAt === "string" ? rec.capturedAt : "",
+		elapsedSeconds:
+			typeof rec.elapsedSeconds === "number" && Number.isFinite(rec.elapsedSeconds) ? rec.elapsedSeconds : 0,
+		activeDelegations: activeDelegations?.length ? activeDelegations : undefined,
+		recentLogs: recentLogs?.length ? recentLogs : undefined,
+		leadMemberId: typeof rec.leadMemberId === "string" ? rec.leadMemberId : undefined,
+		leadMemberName: typeof rec.leadMemberName === "string" ? rec.leadMemberName : undefined,
+	};
 }
 
 export interface StarterTask {

@@ -2,10 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve } from "node:path";
-import type {
-	DispatchMatterResult,
-	DispatchProgressEvent,
-	TeamOrchestrator,
+import {
+	buildProgressSnapshot,
+	type DispatchMatterResult,
+	type DispatchProgressEvent,
+	type TeamOrchestrator,
 } from "../orchestrator/team-orchestrator.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -176,8 +177,19 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				});
 			})
 			.catch((error: unknown) => {
+				const lastActive = activeRuns.get(input.matterId);
 				activeRuns.delete(input.matterId);
 				const message = error instanceof Error ? error.message : String(error);
+				const currentMatter = store.getMatter(input.matterId);
+				const leadMember = currentMatter?.leadMemberId ? store.getMember(currentMatter.leadMemberId) : null;
+				const progressSnapshot = lastActive
+					? buildProgressSnapshot({
+							outcome: "failed",
+							progress: lastActive.progress,
+							startedAtMs: lastActive.startedAt,
+							leadMember,
+						})
+					: undefined;
 				store.appendMessage({
 					matterId: input.matterId,
 					channel: "notice",
@@ -192,10 +204,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					senderType: "system",
 					senderId: "orchestrator",
 					content: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
-					metadata: { failed: true, error: message },
+					metadata: {
+						failed: true,
+						error: message,
+						...(progressSnapshot ? { progressSnapshot } : {}),
+					},
 				});
 				store.updateMatterStatus(input.matterId, "open");
-				broadcast("matter_failed", { matterId: input.matterId, error: message });
+				broadcast("matter_failed", {
+					matterId: input.matterId,
+					error: message,
+					...(progressSnapshot ? { progressSnapshot } : {}),
+				});
 			});
 	};
 

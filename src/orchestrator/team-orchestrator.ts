@@ -52,6 +52,51 @@ export interface DispatchProgressEvent {
 	collabUpdated?: boolean;
 }
 
+export interface ProgressSnapshot {
+	outcome: "failed" | "aborted";
+	stage: DispatchProgressEvent["stage"];
+	label: string;
+	toolName?: string;
+	toolSummary?: string;
+	startedAt: string;
+	capturedAt: string;
+	elapsedSeconds: number;
+	activeDelegations?: ActiveDelegationProgress[];
+	recentLogs?: ProgressActivityItem[];
+	leadMemberId?: string;
+	leadMemberName?: string;
+}
+
+/**
+ * Freeze the most recent execution progress into a JSON-serializable snapshot attached to failed or aborted turns.
+ */
+export function buildProgressSnapshot(input: {
+	outcome: "failed" | "aborted";
+	progress?: DispatchProgressEvent | null;
+	startedAtMs: number;
+	capturedAtMs?: number;
+	leadMember?: { id: string; displayName: string } | null;
+}): ProgressSnapshot {
+	const capturedAtMs = input.capturedAtMs ?? Date.now();
+	const progress = input.progress ?? {
+		stage: "starting",
+		label: input.outcome === "aborted" ? "已中止执行" : "正在准备执行环境...",
+	};
+	return {
+		outcome: input.outcome,
+		stage: progress.stage,
+		label: progress.label,
+		...(progress.toolName ? { toolName: progress.toolName } : {}),
+		...(progress.toolSummary ? { toolSummary: progress.toolSummary } : {}),
+		startedAt: new Date(input.startedAtMs).toISOString(),
+		capturedAt: new Date(capturedAtMs).toISOString(),
+		elapsedSeconds: Math.max(0, Math.round((capturedAtMs - input.startedAtMs) / 1000)),
+		...(progress.activeDelegations?.length ? { activeDelegations: progress.activeDelegations } : {}),
+		...(progress.recentLogs?.length ? { recentLogs: progress.recentLogs } : {}),
+		...(input.leadMember ? { leadMemberId: input.leadMember.id, leadMemberName: input.leadMember.displayName } : {}),
+	};
+}
+
 export interface RpcWorkerLike {
 	start(): Promise<void>;
 	stop(): Promise<void>;
@@ -161,6 +206,8 @@ interface MatterRun {
 	delegationCount: number;
 	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
 	userMessageId: string;
+	startedAt: number;
+	lastProgress?: DispatchProgressEvent;
 	timeoutMs: number;
 	deadlineAt: number | null;
 }
@@ -654,6 +701,7 @@ ${this.store
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
 		const turnDeadlineMs = resolveTurnTimeoutMs(input.timeoutMs);
 		const completion = Promise.withResolvers<void>();
+		const startedAt = Date.now();
 		const run: MatterRun = {
 			settled: completion.promise,
 			finish: () => completion.resolve(),
@@ -667,8 +715,20 @@ ${this.store
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
+			startedAt,
 			timeoutMs: turnDeadlineMs,
-			deadlineAt: turnDeadlineMs > 0 ? Date.now() + turnDeadlineMs : null,
+			deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,
+		};
+		const emitDispatchProgress = (progress: DispatchProgressEvent) => {
+			const normalized: DispatchProgressEvent = {
+				...progress,
+				activeDelegations:
+					progress.activeDelegations ??
+					(run.activeDelegations.size > 0 ? [...run.activeDelegations.values()] : undefined),
+				recentLogs: progress.recentLogs ?? (run.recentLogs.length > 0 ? [...run.recentLogs] : undefined),
+			};
+			run.lastProgress = normalized;
+			input.onProgress?.(normalized);
 		};
 		this.runs.set(matter.id, run);
 		const deadline =
@@ -710,7 +770,7 @@ ${this.store
 					signal: run.controller.signal,
 					deliveryTarget: run.deliveries,
 					onTextDelta: input.onTextDelta,
-					onProgress: input.onProgress,
+					onProgress: emitDispatchProgress,
 				});
 			} catch (error) {
 				if (!run.cancelled) throw error;
@@ -782,6 +842,16 @@ ${this.store
 					sourceUserMessageId: run.userMessageId,
 					workspaceId: workspace?.id ?? null,
 					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+					...(aborted
+						? {
+								progressSnapshot: buildProgressSnapshot({
+									outcome: "aborted",
+									progress: run.lastProgress,
+									startedAtMs: run.startedAt,
+									leadMember: assignedMember,
+								}),
+							}
+						: {}),
 				},
 			});
 			const updatedMatter = this.store.updateMatterStatus(
@@ -808,7 +878,7 @@ ${this.store
 							observers: observerCandidates,
 							run,
 							signal: run.controller.signal,
-							onProgress: input.onProgress,
+							onProgress: emitDispatchProgress,
 						})
 					: [];
 			return {
@@ -835,6 +905,12 @@ ${this.store
 						cancelReason: run.cancelReason ?? "user",
 						workspaceId: workspace?.id ?? null,
 						repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+						progressSnapshot: buildProgressSnapshot({
+							outcome: "aborted",
+							progress: run.lastProgress,
+							startedAtMs: run.startedAt,
+							leadMember: assignedMember,
+						}),
 					},
 				});
 				return {
@@ -899,6 +975,7 @@ ${this.store
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
 		const turnDeadlineMs = resolveTurnTimeoutMs(input.timeoutMs);
 		const completion = Promise.withResolvers<void>();
+		const startedAt = Date.now();
 		const run: MatterRun = {
 			settled: completion.promise,
 			finish: () => completion.resolve(),
@@ -912,8 +989,9 @@ ${this.store
 			delegationCount: 0,
 			deliveries: [],
 			userMessageId: "",
+			startedAt,
 			timeoutMs: turnDeadlineMs,
-			deadlineAt: turnDeadlineMs > 0 ? Date.now() + turnDeadlineMs : null,
+			deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,
 		};
 		this.runs.set(matter.id, run);
 		try {
@@ -1070,21 +1148,31 @@ ${this.store
 					content: `内部委托未完成：${error instanceof Error ? error.message : String(error)}`,
 					metadata: { requestMessageId: requestMessage.id, failed: true },
 				});
-				run.activeDelegations.delete(delegationKey);
+				const errMessage = error instanceof Error ? error.message : String(error);
+				const abortedOrCancelled = signal.aborted || run.cancelled;
+				if (!abortedOrCancelled) {
+					run.activeDelegations.delete(delegationKey);
+				}
 				pushRunLog(
 					run,
 					toMember.displayName,
-					`委托未完成：${truncateInline(error instanceof Error ? error.message : String(error), 36)}`,
+					run.cancelled ? "委托已中止" : `委托未完成：${truncateInline(errMessage, 36)}`,
 				);
-				const remaining = [...run.activeDelegations.values()];
+				const active = [...run.activeDelegations.values()];
 				onProgress?.({
-					stage: remaining.length > 0 ? "tool" : "thinking",
-					label:
-						remaining.length > 0
+					stage: active.length > 0 ? "tool" : "thinking",
+					label: abortedOrCancelled
+						? (run.lastProgress?.label ??
+							summarizeActiveDelegations(
+								run.activeDelegations,
+								toMember.displayName,
+								run.cancelled ? "已中止" : "未完成",
+							))
+						: active.length > 0
 							? summarizeActiveDelegations(run.activeDelegations)
 							: `${toMember.displayName}未完成委托，${fromMember.displayName}正在处理`,
-					toolName: remaining.length > 0 ? "delegate_to_member" : undefined,
-					activeDelegations: remaining,
+					toolName: active.length > 0 ? "delegate_to_member" : undefined,
+					activeDelegations: active,
 					recentLogs: [...run.recentLogs],
 					collabUpdated: true,
 				});

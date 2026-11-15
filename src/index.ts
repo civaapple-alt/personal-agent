@@ -1,4 +1,5 @@
 export {
+	buildProgressSnapshot,
 	type DelegateInput,
 	type DelegateResult,
 	type DialogContext,
@@ -8,6 +9,7 @@ export {
 	type DistillExperiencesInput,
 	type DistillExperiencesResult,
 	type OrchestratorDialogHandler,
+	type ProgressSnapshot,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 	type TeamOrchestratorOptions,

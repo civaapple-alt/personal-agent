@@ -20,10 +20,12 @@ import {
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
 import {
+	formatElapsedDuration,
 	formatNoticeEventLine,
 	getMemberThemeById,
 	inferDelegationMood,
 	mapDelegationsToMessages,
+	parseProgressSnapshot,
 } from "../web/src/utils.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
@@ -665,26 +667,38 @@ test("Server persists partial streamed text and readable failure message in user
 		store,
 		templates,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
-		workerFactory: (options) => ({
-			async start() {
-				await reportReady(options);
-			},
-			async getState() {
-				return { sessionId: "fail-session", isStreaming: false };
-			},
-			onEvent() {
-				return () => {};
-			},
-			onNotice() {
-				return () => {};
-			},
-			setDialogHandler() {},
-			async runPromptAndWait(_message, options) {
-				options?.onTextDelta?.("已分析部分上下文");
-				throw new Error("Timed out after 180000ms waiting for agent_settled");
-			},
-			async stop() {},
-		}),
+		workerFactory: (options) => {
+			let eventListener: ((evt: RpcSessionEvent) => void) | null = null;
+			return {
+				async start() {
+					await reportReady(options);
+				},
+				async getState() {
+					return { sessionId: "fail-session", isStreaming: false };
+				},
+				onEvent(listener) {
+					eventListener = listener;
+					return () => {
+						eventListener = null;
+					};
+				},
+				onNotice() {
+					return () => {};
+				},
+				setDialogHandler() {},
+				async runPromptAndWait(_message, runOptions) {
+					eventListener?.({
+						type: "tool_execution_start",
+						toolCallId: "t-bash-1",
+						toolName: "bash",
+						args: { command: "npm test" },
+					});
+					runOptions?.onTextDelta?.("已分析部分上下文");
+					throw new Error("Timed out after 180000ms waiting for agent_settled");
+				},
+				async stop() {},
+			};
+		},
 	});
 
 	const { server } = createPersonalAgentServer({
@@ -708,10 +722,10 @@ test("Server persists partial streamed text and readable failure message in user
 			})
 		).json()) as { matter: { id: string } };
 
-		let userMessages: Array<{ senderType: string; content: string }> = [];
+		let userMessages: Array<{ senderType: string; content: string; metadata?: Record<string, unknown> | null }> = [];
 		for (let i = 0; i < 30; i++) {
 			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
-				userMessages: Array<{ senderType: string; content: string }>;
+				userMessages: Array<{ senderType: string; content: string; metadata?: Record<string, unknown> | null }>;
 			};
 			userMessages = detail.userMessages;
 			if (userMessages.length >= 2) break;
@@ -723,6 +737,14 @@ test("Server persists partial streamed text and readable failure message in user
 		assert.match(userMessages[1]?.content ?? "", /已分析部分上下文/);
 		assert.match(userMessages[1]?.content ?? "", /本次执行未完成/);
 		assert.match(userMessages[1]?.content ?? "", /Timed out after 180000ms/);
+		const snapshot = parseProgressSnapshot(userMessages[1]?.metadata);
+		assert.ok(snapshot);
+		assert.equal(snapshot.outcome, "failed");
+		assert.equal(snapshot.stage, "tool");
+		assert.equal(snapshot.toolName, "bash");
+		assert.match(snapshot.label, /执行命令.*npm test/);
+		assert.ok(snapshot.elapsedSeconds >= 0);
+		assert.ok(snapshot.recentLogs?.some((entry) => /npm test/.test(entry.summary)));
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
@@ -1140,4 +1162,36 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
 	}
+});
+
+test("formatElapsedDuration and parseProgressSnapshot safely handle snapshot metadata", () => {
+	assert.equal(formatElapsedDuration(0), "0s");
+	assert.equal(formatElapsedDuration(31), "31s");
+	assert.equal(formatElapsedDuration(179), "2m 59s");
+	assert.equal(formatElapsedDuration(1800), "30m 0s");
+	assert.equal(formatElapsedDuration(3720), "1h 2m");
+
+	assert.equal(parseProgressSnapshot(null), null);
+	assert.equal(parseProgressSnapshot({}), null);
+	assert.equal(parseProgressSnapshot({ progressSnapshot: { stage: "unknown", outcome: "failed", label: "x" } }), null);
+
+	const parsed = parseProgressSnapshot({
+		progressSnapshot: {
+			outcome: "aborted",
+			stage: "tool",
+			label: "已委托研发经理",
+			elapsedSeconds: 45,
+			activeDelegations: [
+				{ memberId: "engineering-manager", memberName: "研发经理", stageLabel: "思考分析" },
+				{ broken: true },
+			],
+			recentLogs: [{ memberName: "研发经理", summary: "执行命令：npm test", at: "2026-11-15T03:10:00.000Z" }],
+		},
+	});
+	assert.ok(parsed);
+	assert.equal(parsed.outcome, "aborted");
+	assert.equal(parsed.stage, "tool");
+	assert.equal(parsed.elapsedSeconds, 45);
+	assert.equal(parsed.activeDelegations?.length, 1);
+	assert.equal(parsed.recentLogs?.length, 1);
 });

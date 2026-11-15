@@ -160,6 +160,21 @@ export interface MatterProgressDto {
 	collabUpdated?: boolean;
 }
 
+export interface ProgressSnapshotDto {
+	outcome: "failed" | "aborted";
+	stage: MatterProgressDto["stage"];
+	label: string;
+	toolName?: string;
+	toolSummary?: string;
+	startedAt: string;
+	capturedAt: string;
+	elapsedSeconds: number;
+	activeDelegations?: ActiveDelegationDto[];
+	recentLogs?: ProgressActivityDto[];
+	leadMemberId?: string;
+	leadMemberName?: string;
+}
+
 export interface ActiveRunSnapshotDto extends MatterProgressDto {
 	startedAt: number;
 	streamingDelta?: string;

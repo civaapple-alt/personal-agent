@@ -6,7 +6,7 @@
 
 - 同事项运行中消息及工作区切换返回 409；调整旁听成员（`PATCH /api/matters/:id` 仅传 `observerMemberIds`）不改动 `cwd`/会话，可在运行中即时更新。取消要交给编排核，不只广播停止事件。`POST /api/matters` 与 `POST /api/matters/:id/messages` 也支持传入有效的 `observerMemberIds`。
 - Phase 4 RSI 接口：`POST /api/deliverables/:id/feedback` 支持可选 `rating`（`positive`/`neutral`/`negative`）与 `autoDistill`（触发 `distillExperiences`），正负评价会幂等回写当前事项所注入经验的评估计数；`POST /api/rsi/distill`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 分别支持只读经验提炼、核验/改写/忽略、手动正负评估与命中追踪查询。
-- `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回当前 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端刷新（F5）后可恢复进行中的状态卡片、计时与停止按钮。
+- `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回当前 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端刷新（F5）后可恢复进行中的状态卡片、计时与停止按钮；当执行失败时，错误捕获路径会先从 `activeRuns` 提取 `ProgressSnapshot` 并连同错误原因写入 `user` 通道系统消息 `metadata.progressSnapshot`（同时通过 `matter_failed` 广播）。
 - [dialog-broker.ts](dialog-broker.ts) 在内存中等待 Extension UI 回答，HTTP 回复最终经 RPC 回写 Pi。它不是对所有命令的通用权限拦截器。
 - [preview-manager.ts](preview-manager.ts) 启停本地命令或登记外部服务链接；索引在内存中，不是部署系统，也不会因成果登记自动创建预览。
 - 退出时先停止接收请求，再取消对话、清理执行树和预览，最后关闭数据库。
