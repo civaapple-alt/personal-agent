@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS member_memories (
 	id TEXT PRIMARY KEY,
 	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
 	scope TEXT NOT NULL,
+	category TEXT NOT NULL DEFAULT 'general',
 	workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
 	content TEXT NOT NULL,
 	rationale TEXT NOT NULL DEFAULT '',
@@ -152,6 +153,7 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		}
 	};
 	ensureMemoryCol("rationale", "rationale TEXT NOT NULL DEFAULT ''");
+	ensureMemoryCol("category", "category TEXT NOT NULL DEFAULT 'general'");
 	ensureMemoryCol("source_deliverable_id", "source_deliverable_id TEXT");
 	ensureMemoryCol("status", "status TEXT");
 	ensureMemoryCol("superseded_by", "superseded_by TEXT");
@@ -165,6 +167,7 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		UPDATE member_memories
 		SET status = CASE WHEN verified = 1 THEN 'verified' ELSE 'candidate' END
 		WHERE status IS NULL OR status = '';
+		UPDATE member_memories SET category = 'general' WHERE category IS NULL OR category = '';
 		UPDATE member_memories SET updated_at = created_at WHERE updated_at IS NULL;
 	`);
 	const deliverableColumns = db.prepare("PRAGMA table_info(deliverables)").all();

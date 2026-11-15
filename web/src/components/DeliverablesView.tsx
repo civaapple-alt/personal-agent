@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { BootstrapPayload, DeliverableDto, FeedbackRating, MemoryScope } from "../api.ts";
-import { formatClockTime } from "../utils.ts";
+import type { BootstrapPayload, DeliverableDto, DistillRsiResult, FeedbackRating } from "../api.ts";
+import { collectMatterParticipantIds, formatClockTime } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
 
 interface DeliverableFamily {
@@ -25,15 +25,19 @@ interface DeliverablesViewProps {
 		deliverableId: string,
 		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
 	) => Promise<void>;
-	onDistillExperiences: (deliverable: DeliverableDto, feedback?: string, rating?: FeedbackRating) => Promise<void>;
-	onSaveMemory: (
+	onDistillExperiences: (
 		deliverable: DeliverableDto,
-		input: { content: string; scope: MemoryScope; rationale?: string; status: "candidate" | "verified" },
-	) => Promise<void>;
+		feedback?: string,
+		rating?: FeedbackRating,
+	) => Promise<DistillRsiResult | undefined>;
 	onStopPreview: (previewId: string) => Promise<void>;
 	onSelectDeliverable: (deliverableId: string, matterId?: string) => void;
 	onRequestRevision: (deliverable: DeliverableDto) => void;
 	onOpenMatterChat: (matterId: string) => void;
+	onOpenTeam: () => void;
+	onRefresh: () => Promise<void>;
+	onNotice: (message: string) => void;
+	onError: (message: string) => void;
 	onNewTask: () => void;
 }
 
@@ -47,11 +51,14 @@ export function DeliverablesView({
 	workspaceName,
 	onSubmitFeedback,
 	onDistillExperiences,
-	onSaveMemory,
 	onStopPreview,
 	onSelectDeliverable,
 	onRequestRevision,
 	onOpenMatterChat,
+	onOpenTeam,
+	onRefresh,
+	onNotice,
+	onError,
 	onNewTask,
 }: DeliverablesViewProps) {
 	const [workspaceFilter, setWorkspaceFilter] = useState<string>("all");
@@ -282,15 +289,29 @@ export function DeliverablesView({
 									deliverable={activeDeliverable}
 									siblingVersions={siblingVersions}
 									memberName={memberName(activeDeliverable.memberId)}
+									workspaceId={matterWorkspaceMap.get(activeDeliverable.matterId) ?? null}
 									workspaceName={workspaceName(matterWorkspaceMap.get(activeDeliverable.matterId) ?? null)}
-									hasWorkspace={Boolean(matterWorkspaceMap.get(activeDeliverable.matterId))}
+									members={bootstrap?.members ?? []}
+									workspaces={bootstrap?.workspaces ?? []}
+									memoriesByMember={bootstrap?.memoriesByMember ?? {}}
+									participantIds={collectMatterParticipantIds({
+										matter: bootstrap?.matters.find((m) => m.id === activeDeliverable.matterId) ?? null,
+										deliverables: (bootstrap?.deliverables ?? []).filter(
+											(d) => d.matterId === activeDeliverable.matterId,
+										),
+									})}
+									resolveMemberName={memberName}
+									resolveWorkspaceName={workspaceName}
 									viewUrl={previewUrlFor(activeDeliverable)}
 									onSubmitFeedback={onSubmitFeedback}
 									onDistillExperiences={onDistillExperiences}
 									onSelectVersion={(id) => onSelectDeliverable(id)}
 									onRequestRevision={() => onRequestRevision(activeDeliverable)}
 									onOpenMatterChat={() => onOpenMatterChat(activeDeliverable.matterId)}
-									onSaveMemory={(input) => onSaveMemory(activeDeliverable, input)}
+									onOpenTeam={onOpenTeam}
+									onRefresh={onRefresh}
+									onNotice={onNotice}
+									onError={onError}
 								/>
 							) : (
 								<div className="deliverable-card">

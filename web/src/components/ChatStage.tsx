@@ -1,8 +1,10 @@
 import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type DeliverableDto,
+	type DistillRsiResult,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	type MemberMemoryDto,
 	type PendingDialogDto,
 	type RoleTemplateDto,
 	respondToDialog,
@@ -11,6 +13,8 @@ import {
 } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
 import {
+	collectMatterMemories,
+	collectMatterParticipantIds,
 	type DelegationSummaryItem,
 	formatClockTime,
 	formatNoticeEventLine,
@@ -21,6 +25,7 @@ import {
 	type StarterTask,
 } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
+import { InlineExperienceReviewSection } from "./ExperienceReviewPanel.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "./ExploringStatus.tsx";
 
 interface ChatStageProps {
@@ -47,7 +52,9 @@ interface ChatStageProps {
 	noticeBanner: string | null;
 	starterTasks: StarterTask[];
 	templateByRoleId: Map<string, RoleTemplateDto>;
+	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	memberName: (id: string) => string;
+	workspaceName: (id: string | null) => string | null;
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	onComposerTextChange: (value: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
@@ -58,6 +65,11 @@ interface ChatStageProps {
 	onAbortMatter: (matterId: string) => void;
 	onNewMatter: () => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
+	onOpenTeam: () => void;
+	onDistillMatter: (matterId: string) => Promise<DistillRsiResult | undefined>;
+	onRefresh: () => Promise<void>;
+	onNotice: (message: string) => void;
+	onError: (message: string) => void;
 	onDismissError: () => void;
 	onDismissNotice: () => void;
 }
@@ -86,7 +98,9 @@ export function ChatStage({
 	noticeBanner,
 	starterTasks,
 	templateByRoleId,
+	memoriesByMember,
 	memberName,
+	workspaceName,
 	previewUrlFor,
 	onComposerTextChange,
 	onSelectWorkspace,
@@ -97,18 +111,25 @@ export function ChatStage({
 	onAbortMatter,
 	onNewMatter,
 	onOpenDeliverables,
+	onOpenTeam,
+	onDistillMatter,
+	onRefresh,
+	onNotice,
+	onError,
 	onDismissError,
 	onDismissNotice,
 }: ChatStageProps) {
 	const [collabOpen, setCollabOpen] = useState(false);
-	const [collabTab, setCollabTab] = useState<"delegations" | "events">("delegations");
+	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
+	const [distillingMatter, setDistillingMatter] = useState(false);
+	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
 	const [expandedDelegations, setExpandedDelegations] = useState<Record<string, boolean>>({});
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [observerMenuOpen, setObserverMenuOpen] = useState(false);
 	const [dialogInput, setDialogInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
-	const collabTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const collabTriggerRef = useRef<HTMLSpanElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
 
@@ -139,6 +160,47 @@ export function ChatStage({
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [collabOpen, starterMenuOpen, observerMenuOpen]);
+
+	const matterMemories = useMemo(
+		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
+		[memoriesByMember, matterDetail],
+	);
+	const pendingMatterMemoriesCount = useMemo(
+		() => matterMemories.filter((m) => (m.status ?? (m.verified ? "verified" : "candidate")) === "candidate").length,
+		[matterMemories],
+	);
+	const matterParticipantIds = useMemo(
+		() =>
+			matterDetail
+				? collectMatterParticipantIds({
+						matter: matterDetail.matter,
+						userMessages: matterDetail.userMessages,
+						internalCollabMessages: matterDetail.internalCollabMessages,
+						deliverables: matterDetail.deliverables,
+					})
+				: [],
+		[matterDetail],
+	);
+
+	const handleDistillCurrentMatter = async () => {
+		if (!matterDetail) return;
+		const targetMatterId = matterDetail.matter.id;
+		setDistillingMatter(true);
+		try {
+			const res = await onDistillMatter(targetMatterId);
+			if (res) {
+				const note =
+					res.createdMemories.length > 0
+						? `AI 复盘完成：已从协同轨迹为 ${Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId)))).join("、")} 提炼 ${res.createdMemories.length} 条经验。`
+						: res.skippedDuplicates > 0
+							? `AI 复盘完成：未新增重复条目（跳过 ${res.skippedDuplicates} 条相似经验）。`
+							: `AI 复盘完成：${res.summary}`;
+				setDistillNoteByMatter((prev) => ({ ...prev, [targetMatterId]: note }));
+			}
+		} finally {
+			setDistillingMatter(false);
+		}
+	};
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const messageCount = matterDetail?.userMessages.length ?? 0;
@@ -272,32 +334,46 @@ export function ChatStage({
 				</div>
 				<div className="stage-header-right">
 					{matterDetail && (
-						<button
-							ref={collabTriggerRef}
-							type="button"
-							aria-expanded={collabOpen}
-							className={`btn-pill-outline btn-xs ${collabOpen ? "active" : ""}`}
-							title="查看团队内部委托记录及底层工具调用事件"
-							onClick={() => {
-								setCollabOpen((open) => {
-									const next = !open;
-									if (
-										next &&
-										delegationsPlacement.all.length === 0 &&
-										matterDetail.noticeMessages.length > 0
-									) {
-										setCollabTab("events");
-									} else if (next) {
-										setCollabTab("delegations");
-									}
-									return next;
-								});
-							}}
-						>
-							{delegationsPlacement.all.length > 0
-								? `团队委托 (${delegationsPlacement.all.length}) · 事件 ${matterDetail.noticeMessages.length}`
-								: `过程事件 (${matterDetail.noticeMessages.length})`}
-						</button>
+						<span ref={collabTriggerRef} className="collab-header-triggers">
+							<button
+								type="button"
+								aria-expanded={collabOpen && collabTab !== "experiences"}
+								className={`btn-pill-outline btn-xs ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
+								title="查看团队内部委托记录及底层工具调用事件"
+								onClick={() => {
+									setCollabOpen((open) => {
+										const next = !open || collabTab === "experiences";
+										if (
+											next &&
+											delegationsPlacement.all.length === 0 &&
+											matterDetail.noticeMessages.length > 0
+										) {
+											setCollabTab("events");
+										} else if (next) {
+											setCollabTab("delegations");
+										}
+										return next;
+									});
+								}}
+							>
+								{delegationsPlacement.all.length > 0
+									? `团队委托 (${delegationsPlacement.all.length}) · 事件 ${matterDetail.noticeMessages.length}`
+									: `过程事件 (${matterDetail.noticeMessages.length})`}
+							</button>
+							<button
+								type="button"
+								aria-expanded={collabOpen && collabTab === "experiences"}
+								className={`btn-pill-outline btn-xs ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
+								title="在本事项上下文中提炼、查看并核验各岗位协同经验"
+								onClick={() => {
+									setCollabOpen((open) => !(open && collabTab === "experiences"));
+									setCollabTab("experiences");
+								}}
+							>
+								经验复盘 ({matterMemories.length})
+								{pendingMatterMemoriesCount > 0 ? ` · ${pendingMatterMemoriesCount} 待核验` : ""}
+							</button>
+						</span>
 					)}
 					<button
 						type="button"
@@ -328,13 +404,40 @@ export function ChatStage({
 								>
 									过程与工具事件 ({matterDetail.noticeMessages.length})
 								</button>
+								<button
+									type="button"
+									className={`collab-tab-btn ${collabTab === "experiences" ? "active" : ""}`}
+									onClick={() => setCollabTab("experiences")}
+								>
+									经验复盘 ({matterMemories.length})
+								</button>
 							</div>
 							<button type="button" className="btn-inline" onClick={() => setCollabOpen(false)}>
 								收起
 							</button>
 						</div>
 						<div className="collab-log">
-							{collabTab === "delegations" ? (
+							{collabTab === "experiences" ? (
+								<InlineExperienceReviewSection
+									matterId={matterDetail.matter.id}
+									defaultMemberId={matterDetail.matter.leadMemberId ?? selectedMemberId}
+									workspaceId={matterDetail.matter.workspaceId}
+									participantIds={matterParticipantIds}
+									memories={matterMemories}
+									members={members}
+									workspaces={workspaces}
+									memberName={memberName}
+									workspaceName={workspaceName}
+									title="本事项团队经验复盘"
+									lastDistillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
+									distilling={distillingMatter}
+									onDistill={() => void handleDistillCurrentMatter()}
+									onOpenTeam={onOpenTeam}
+									onRefresh={onRefresh}
+									onNotice={onNotice}
+									onError={onError}
+								/>
+							) : collabTab === "delegations" ? (
 								delegationsPlacement.all.length === 0 ? (
 									<p className="muted-hint">当前事项暂无团队内部委托记录。</p>
 								) : (

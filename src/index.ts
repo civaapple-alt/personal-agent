@@ -50,5 +50,5 @@ export {
 	type StartPreviewInput,
 } from "./server/preview-manager.ts";
 export { openPersonalAgentDatabase } from "./storage/database.ts";
-export { PersonalAgentStore } from "./storage/repositories.ts";
+export { normalizeMemoryCategory, PersonalAgentStore } from "./storage/repositories.ts";
 export type * from "./storage/types.ts";

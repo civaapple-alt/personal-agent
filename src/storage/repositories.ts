@@ -13,6 +13,7 @@ import type {
 	MemberMemory,
 	MemoryApplicationOutcome,
 	MemoryApplicationRecord,
+	MemoryCategory,
 	MemoryScope,
 	MemoryStatus,
 	TeamMember,
@@ -22,6 +23,20 @@ import type {
 
 function nowIso(): string {
 	return new Date().toISOString();
+}
+
+export function normalizeMemoryCategory(raw: unknown): MemoryCategory {
+	if (
+		raw === "efficiency" ||
+		raw === "troubleshooting" ||
+		raw === "collaboration" ||
+		raw === "user_correction" ||
+		raw === "domain_constraint" ||
+		raw === "general"
+	) {
+		return raw;
+	}
+	return "general";
 }
 
 function normalizeUniqueIds(ids?: string[]): string[] {
@@ -152,6 +167,7 @@ export class PersonalAgentStore {
 	addMemory(input: {
 		memberId: string;
 		scope: MemoryScope;
+		category?: MemoryCategory;
 		workspaceId?: string | null;
 		content: string;
 		rationale?: string;
@@ -166,22 +182,24 @@ export class PersonalAgentStore {
 		const timestamp = nowIso();
 		const status: MemoryStatus = input.status ?? (input.verified ? "verified" : "candidate");
 		const verified = status === "verified";
+		const category = normalizeMemoryCategory(input.category);
 		const workspaceId = input.scope === "role_general" ? null : (input.workspaceId ?? null);
 		const supersedesId = input.supersedesMemoryId ?? null;
 		this.db
 			.prepare(
 				`INSERT INTO member_memories (
-					id, member_id, scope, workspace_id, content, rationale,
+					id, member_id, scope, category, workspace_id, content, rationale,
 					source_matter_id, source_deliverable_id, status, verified,
 					superseded_by, supersedes_memory_id,
 					applied_count, positive_count, negative_count, last_applied_at,
 					created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
 			)
 			.run(
 				id,
 				input.memberId,
 				input.scope,
+				category,
 				workspaceId,
 				input.content,
 				input.rationale ?? "",
@@ -230,8 +248,10 @@ export class PersonalAgentStore {
 	updateMemory(
 		id: string,
 		patch: {
+			memberId?: string;
 			content?: string;
 			scope?: MemoryScope;
+			category?: MemoryCategory;
 			workspaceId?: string | null;
 			status?: MemoryStatus;
 			rationale?: string;
@@ -242,7 +262,12 @@ export class PersonalAgentStore {
 		const existing = this.getMemory(id);
 		if (!existing) throw new Error(`Memory not found: ${id}`);
 		const timestamp = nowIso();
+		const nextMemberId = patch.memberId !== undefined ? patch.memberId.trim() : existing.memberId;
+		if (!nextMemberId || !this.getMember(nextMemberId)) {
+			throw new Error(`Member not found: ${nextMemberId || "(empty)"}`);
+		}
 		const nextScope = patch.scope ?? existing.scope;
+		const nextCategory = patch.category !== undefined ? normalizeMemoryCategory(patch.category) : existing.category;
 		const nextWorkspaceId =
 			nextScope === "role_general"
 				? null
@@ -261,12 +286,14 @@ export class PersonalAgentStore {
 		this.db
 			.prepare(
 				`UPDATE member_memories
-				 SET scope = ?, workspace_id = ?, content = ?, rationale = ?,
+				 SET member_id = ?, scope = ?, category = ?, workspace_id = ?, content = ?, rationale = ?,
 				     status = ?, verified = ?, superseded_by = ?, supersedes_memory_id = ?, updated_at = ?
 				 WHERE id = ?`,
 			)
 			.run(
+				nextMemberId,
 				nextScope,
+				nextCategory,
 				nextWorkspaceId,
 				nextContent,
 				nextRationale,
@@ -907,6 +934,7 @@ export class PersonalAgentStore {
 			id: String(row.id),
 			memberId: String(row.member_id),
 			scope: row.scope as MemoryScope,
+			category: normalizeMemoryCategory(row.category),
 			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 			content: String(row.content),
 			rationale: typeof row.rationale === "string" ? row.rationale : "",

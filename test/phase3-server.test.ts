@@ -20,10 +20,13 @@ import {
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
 import {
+	collectMatterMemories,
+	collectMatterParticipantIds,
 	formatElapsedDuration,
 	formatNoticeEventLine,
 	getMemberThemeById,
 	inferDelegationMood,
+	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
 	parseProgressSnapshot,
 } from "../web/src/utils.ts";
@@ -1192,6 +1195,57 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		assert.equal(evalRes.status, 200);
 		const evalJson = (await evalRes.json()) as { memory: { negativeCount: number } };
 		assert.equal(evalJson.memory.negativeCount, 1);
+
+		// Create categorized memory + reassign memberId via PATCH + validate rejection of bad category/memberId
+		const manualCatRes = await fetch(`${baseUrl}/api/memories`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				memberId: "engineering-manager",
+				scope: "role_general",
+				category: "troubleshooting",
+				content: "先 check 日志 tail 再重跑",
+				rationale: "定位问题更快",
+				sourceMatterId: created.matter.id,
+				status: "candidate",
+			}),
+		});
+		assert.equal(manualCatRes.status, 201);
+		const manualCatJson = (await manualCatRes.json()) as {
+			memory: { id: string; memberId: string; category: string };
+		};
+		assert.equal(manualCatJson.memory.category, "troubleshooting");
+
+		const reassignRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				memberId: "qa-manager",
+				category: "efficiency",
+				status: "verified",
+			}),
+		});
+		assert.equal(reassignRes.status, 200);
+		const reassignJson = (await reassignRes.json()) as {
+			memory: { memberId: string; category: string; verified: boolean };
+		};
+		assert.equal(reassignJson.memory.memberId, "qa-manager");
+		assert.equal(reassignJson.memory.category, "efficiency");
+		assert.equal(reassignJson.memory.verified, true);
+
+		const badCatRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ category: "invalid_category" }),
+		});
+		assert.equal(badCatRes.status, 400);
+
+		const missingMemberRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ memberId: "non-existent-role" }),
+		});
+		assert.equal(missingMemberRes.status, 404);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
@@ -1230,4 +1284,99 @@ test("formatElapsedDuration and parseProgressSnapshot safely handle snapshot met
 	assert.equal(parsed.elapsedSeconds, 45);
 	assert.equal(parsed.activeDelegations?.length, 1);
 	assert.equal(parsed.recentLogs?.length, 1);
+});
+
+test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role experiences", () => {
+	assert.equal(MEMORY_CATEGORY_LABELS.efficiency, "提效方法");
+	assert.equal(MEMORY_CATEGORY_LABELS.troubleshooting, "问题排障");
+
+	const sorted = collectMatterMemories(
+		{
+			"product-manager": [
+				{
+					id: "m1",
+					memberId: "product-manager",
+					scope: "role_general",
+					category: "collaboration",
+					workspaceId: null,
+					content: "verified pm rule",
+					sourceMatterId: "mat-1",
+					sourceDeliverableId: null,
+					status: "verified",
+					verified: true,
+					appliedCount: 0,
+					positiveCount: 0,
+					negativeCount: 0,
+					createdAt: "2026-11-15T10:00:00.000Z",
+				},
+			],
+			"engineering-manager": [
+				{
+					id: "m2",
+					memberId: "engineering-manager",
+					scope: "role_general",
+					category: "troubleshooting",
+					workspaceId: null,
+					content: "candidate eng rule",
+					sourceMatterId: "mat-1",
+					sourceDeliverableId: "deliv-1",
+					status: "candidate",
+					verified: false,
+					appliedCount: 0,
+					positiveCount: 0,
+					negativeCount: 0,
+					createdAt: "2026-11-15T09:00:00.000Z",
+				},
+				{
+					id: "m3",
+					memberId: "engineering-manager",
+					scope: "role_general",
+					category: "general",
+					workspaceId: null,
+					content: "other matter rule",
+					sourceMatterId: "mat-other",
+					sourceDeliverableId: null,
+					status: "candidate",
+					verified: false,
+					appliedCount: 0,
+					positiveCount: 0,
+					negativeCount: 0,
+					createdAt: "2026-11-15T11:00:00.000Z",
+				},
+			],
+		},
+		"mat-1",
+		"deliv-1",
+	);
+	assert.deepEqual(
+		sorted.map((m) => m.id),
+		["m2", "m1"],
+	);
+
+	const participants = collectMatterParticipantIds({
+		matter: {
+			id: "mat-1",
+			title: "Test",
+			summary: "",
+			workspaceId: null,
+			leadMemberId: "product-manager",
+			observerMemberIds: ["qa-manager"],
+			status: "open",
+			createdAt: "2026-11-15T09:00:00.000Z",
+			updatedAt: "2026-11-15T09:00:00.000Z",
+		},
+		internalCollabMessages: [
+			{
+				id: "msg-1",
+				matterId: "mat-1",
+				channel: "internal_collab",
+				senderType: "member",
+				senderId: "product-manager",
+				content: "请研发跟进",
+				metadata: { toMemberId: "engineering-manager" },
+				createdAt: "2026-11-15T09:05:00.000Z",
+			},
+		],
+	});
+	assert.deepEqual(new Set(participants), new Set(["product-manager", "qa-manager", "engineering-manager"]));
 });

@@ -44,6 +44,13 @@ export interface MatterMessageDto {
 export type FeedbackRating = "positive" | "negative" | "neutral";
 export type MemoryScope = "role_general" | "company_private" | "project_private";
 export type MemoryStatus = "candidate" | "verified" | "superseded" | "rejected";
+export type MemoryCategory =
+	| "general"
+	| "efficiency"
+	| "troubleshooting"
+	| "collaboration"
+	| "user_correction"
+	| "domain_constraint";
 export type MemoryApplicationOutcome =
 	| "applied"
 	| "turn_succeeded"
@@ -97,6 +104,7 @@ export interface MemberMemoryDto {
 	id: string;
 	memberId: string;
 	scope: MemoryScope;
+	category: MemoryCategory;
 	workspaceId: string | null;
 	content: string;
 	rationale?: string;
@@ -275,6 +283,7 @@ export function submitDeliverableFeedback(
 				feedback?: string;
 				rating?: FeedbackRating;
 				autoDistill?: boolean;
+				scopeMode?: "team" | "single";
 		  },
 ): Promise<DeliverableFeedbackResult> {
 	const body = typeof payload === "string" ? { feedback: payload } : payload;
@@ -346,6 +355,7 @@ export function saveMemberMemory(input: {
 	memberId: string;
 	content: string;
 	scope?: MemoryScope;
+	category?: MemoryCategory;
 	workspaceId?: string;
 	sourceMatterId?: string;
 	sourceDeliverableId?: string;
@@ -363,8 +373,10 @@ export function saveMemberMemory(input: {
 export function updateMemberMemory(
 	memoryId: string,
 	input: {
+		memberId?: string;
 		content?: string;
 		scope?: MemoryScope;
+		category?: MemoryCategory;
 		workspaceId?: string | null;
 		status?: MemoryStatus;
 		rationale?: string;
@@ -406,6 +418,7 @@ export interface DistillRsiResult {
 	createdMemories: MemberMemoryDto[];
 	skippedDuplicates: number;
 	summary: string;
+	participatingMemberIds?: string[];
 }
 
 export function distillRsiExperiences(input: {
@@ -414,6 +427,7 @@ export function distillRsiExperiences(input: {
 	memberId?: string;
 	feedback?: string;
 	rating?: FeedbackRating;
+	scopeMode?: "team" | "single";
 }): Promise<DistillRsiResult> {
 	return requestJson("/api/rsi/distill", {
 		method: "POST",

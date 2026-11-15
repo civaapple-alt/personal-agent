@@ -6,7 +6,7 @@
 
 - `dispatchMatter` 选择或保留负责人、工作区与旁听成员（`observerMemberIds`），取得事项占用，保存交流并决定收尾；主成员正常回复后，列席旁听成员在 `runObservers` 中并行快速评估本轮讨论，无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。
 - `executeWithWorker` 按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话，装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。不能用最近会话或无限历史拼接替代恢复；其中旁听模式首次接入事项时只注入精简的阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色的完整过程记录或 `internal_collab` 细节。被注入的经验记录在 `memory_applications`，执行期暂存的提案仅在整轮无中止正常完成时写入 `"candidate"`。
-- `distillExperiences` 以无状态只读 reflection pass（`noSession: true`、`--no-extensions --no-skills --no-mcp --tools ""`）结合交付物与用户验收反馈提炼去重后的 `"candidate"` 经验与替代关系建议。
+- `distillExperiences` 以无状态只读 reflection pass（`noSession: true`、`--no-extensions --no-skills --no-mcp --tools ""`）默认按团队多角色模式（`scopeMode: "team"`，也可显式指定 `"single"`）聚合参与成员、完整用户纠偏、内部团队委托（`internal_collab`）、异常事件（`notice`）、中断进度快照与验收反馈，提炼跨岗位且按维度分类（`efficiency`、`troubleshooting`、`collaboration`、`user_correction`、`domain_constraint`、`general`）的去重 `"candidate"` 经验与替代关系建议。
 - `delegate` 由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者；桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
 - `abortMatter`、`shutdown` 传播取消并等待执行树清理；中止与失败路径分别通过 `buildProgressSnapshot` 保留中断时的阶段、耗时、`activeDelegations` 与最近步骤摘要，并在同一事项工作区作用域续跑时由 `executeWithWorker` 为主负责人注入结构化的「上次中断状态简报」（仅作用于紧随中断后的下一轮，恢复成功后不重复带入旧报错）。
 

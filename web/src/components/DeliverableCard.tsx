@@ -1,38 +1,50 @@
-import { useEffect, useState } from "react";
-import type { DeliverableDto, FeedbackRating, MemoryScope } from "../api.ts";
+import { useEffect, useMemo, useState } from "react";
+import type {
+	DeliverableDto,
+	DistillRsiResult,
+	FeedbackRating,
+	MemberMemoryDto,
+	TeamMemberDto,
+	WorkspaceDto,
+} from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { FEEDBACK_RATING_LABELS, formatClockTime } from "../utils.ts";
+import { collectMatterMemories, FEEDBACK_RATING_LABELS, formatClockTime } from "../utils.ts";
+import { InlineExperienceReviewSection } from "./ExperienceReviewPanel.tsx";
 
 interface DeliverableCardProps {
 	deliverable: DeliverableDto;
 	siblingVersions: DeliverableDto[];
 	memberName: string;
+	workspaceId: string | null;
 	workspaceName: string | null;
-	hasWorkspace: boolean;
+	members: TeamMemberDto[];
+	workspaces: WorkspaceDto[];
+	memoriesByMember: Record<string, MemberMemoryDto[]>;
+	participantIds: string[];
+	resolveMemberName: (id: string) => string;
+	resolveWorkspaceName: (id: string | null) => string | null;
 	viewUrl: string | null;
 	onSubmitFeedback: (
 		deliverableId: string,
 		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
 	) => Promise<void>;
-	onDistillExperiences: (deliverable: DeliverableDto, feedback?: string, rating?: FeedbackRating) => Promise<void>;
+	onDistillExperiences: (
+		deliverable: DeliverableDto,
+		feedback?: string,
+		rating?: FeedbackRating,
+	) => Promise<DistillRsiResult | undefined>;
 	onSelectVersion: (deliverableId: string) => void;
 	onRequestRevision: () => void;
 	onOpenMatterChat?: () => void;
-	onSaveMemory: (input: {
-		content: string;
-		scope: MemoryScope;
-		rationale?: string;
-		status: "candidate" | "verified";
-	}) => Promise<void>;
+	onOpenTeam?: () => void;
+	onRefresh: () => Promise<void>;
+	onNotice: (message: string) => void;
+	onError: (message: string) => void;
 	compact?: boolean;
 }
 
 export function DeliverableCard(props: DeliverableCardProps) {
 	const [memoryOpen, setMemoryOpen] = useState(false);
-	const [memoryText, setMemoryText] = useState("");
-	const [memoryRationale, setMemoryRationale] = useState("");
-	const [memoryScope, setMemoryScope] = useState<MemoryScope>("role_general");
-	const [memoryStatus, setMemoryStatus] = useState<"candidate" | "verified">("verified");
 	const [feedbackText, setFeedbackText] = useState("");
 	const [selectedRating, setSelectedRating] = useState<FeedbackRating | undefined>(
 		props.deliverable.feedbackRating ?? undefined,
@@ -40,6 +52,12 @@ export function DeliverableCard(props: DeliverableCardProps) {
 	const [autoDistill, setAutoDistill] = useState(false);
 	const [submittingFeedback, setSubmittingFeedback] = useState(false);
 	const [distilling, setDistilling] = useState(false);
+	const [lastDistillNote, setLastDistillNote] = useState<string | null>(null);
+
+	const associatedMemories = useMemo(
+		() => collectMatterMemories(props.memoriesByMember, props.deliverable.matterId, props.deliverable.id),
+		[props.memoriesByMember, props.deliverable.matterId, props.deliverable.id],
+	);
 
 	useEffect(() => {
 		setSelectedRating(props.deliverable.feedbackRating ?? undefined);
@@ -67,6 +85,23 @@ export function DeliverableCard(props: DeliverableCardProps) {
 		setDistilling(true);
 		void props
 			.onDistillExperiences(props.deliverable, feedbackText.trim() || undefined, selectedRating)
+			.then((res) => {
+				if (!res) return;
+				if (res.createdMemories.length > 0) {
+					const roleNames = Array.from(
+						new Set(res.createdMemories.map((m) => props.resolveMemberName(m.memberId))),
+					);
+					setLastDistillNote(
+						`AI 复盘完成：已为 ${roleNames.join("、")} 提炼 ${res.createdMemories.length} 条经验，可在下方直接核验通过或修改归属岗位。`,
+					);
+				} else {
+					setLastDistillNote(
+						res.skippedDuplicates > 0
+							? `AI 复盘完成：未新增重复条目（跳过 ${res.skippedDuplicates} 条相似经验）。`
+							: `AI 复盘完成：${res.summary}`,
+					);
+				}
+			})
 			.finally(() => {
 				setDistilling(false);
 			});
@@ -129,87 +164,38 @@ export function DeliverableCard(props: DeliverableCardProps) {
 						查看原对话
 					</button>
 				)}
-				<button
-					type="button"
-					className="btn-pill-outline"
-					onClick={() => {
-						setMemoryOpen((prev) => !prev);
-						if (!memoryText) {
-							setMemoryText(`关于「${props.deliverable.title}」的做法总结：${props.deliverable.summary}`);
-						}
-					}}
-				>
+				<button type="button" className="btn-pill-outline" onClick={() => setMemoryOpen((prev) => !prev)}>
 					{memoryOpen ? "收起经验沉淀" : "沉淀为角色经验"}
 				</button>
 				<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
-					{distilling ? "提炼中..." : "AI 提炼候选经验"}
+					{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
 				</button>
 			</div>
 
-			{memoryOpen && (
-				<div className="memory-draft-box">
-					<div className="memory-draft-head">
-						<strong>沉淀为「{props.memberName}」的工作习惯</strong>
-						<div className="memory-draft-controls">
-							<select
-								className="select-sm"
-								value={memoryScope}
-								onChange={(e) => setMemoryScope(e.target.value as MemoryScope)}
-							>
-								<option value="role_general">角色通用经验（跨项目可用）</option>
-								<option value="company_private" disabled={!props.hasWorkspace}>
-									个人私有经验{props.hasWorkspace ? "（仅当前工作区）" : "（需先关联仓库）"}
-								</option>
-								<option value="project_private" disabled={!props.hasWorkspace}>
-									当前项目规范{props.hasWorkspace ? "（仅当前仓库生效）" : "（需先关联仓库）"}
-								</option>
-							</select>
-							<select
-								className="select-sm"
-								value={memoryStatus}
-								onChange={(e) => setMemoryStatus(e.target.value as "candidate" | "verified")}
-							>
-								<option value="verified">直接设为已验证</option>
-								<option value="candidate">先存为待核验候选</option>
-							</select>
-						</div>
-					</div>
-					<input
-						className="input-field input-field-spaced"
-						value={memoryRationale}
-						onChange={(e) => setMemoryRationale(e.target.value)}
-						placeholder="沉淀依据/适用场景（可选，例如：用户验收时明确要求提供可运行验证命令）"
-					/>
-					<div className="feedback-row">
-						<input
-							className="input-field"
-							value={memoryText}
-							onChange={(e) => setMemoryText(e.target.value)}
-							placeholder="例如：交付工程文档时优先列出可直接执行的启动命令..."
-						/>
-						<button
-							type="button"
-							className="btn-primary btn-sm"
-							onClick={() => {
-								if (!memoryText.trim()) return;
-								void props
-									.onSaveMemory({
-										content: memoryText.trim(),
-										scope: memoryScope,
-										rationale: memoryRationale.trim() || undefined,
-										status: memoryStatus,
-									})
-									.then(() => {
-										setMemoryText("");
-										setMemoryRationale("");
-										setMemoryOpen(false);
-									});
-							}}
-						>
-							保存经验
-						</button>
-					</div>
-				</div>
+			{(associatedMemories.length > 0 || memoryOpen || lastDistillNote) && (
+				<InlineExperienceReviewSection
+					matterId={props.deliverable.matterId}
+					deliverableId={props.deliverable.id}
+					defaultMemberId={props.deliverable.memberId}
+					workspaceId={props.workspaceId}
+					participantIds={props.participantIds}
+					memories={associatedMemories}
+					members={props.members}
+					workspaces={props.workspaces}
+					memberName={props.resolveMemberName}
+					workspaceName={props.resolveWorkspaceName}
+					lastDistillNote={lastDistillNote}
+					distilling={distilling}
+					onDistill={handleDistillClick}
+					onOpenTeam={props.onOpenTeam}
+					manualOpen={memoryOpen}
+					onToggleManual={() => setMemoryOpen((prev) => !prev)}
+					defaultManualContent={`关于「${props.deliverable.title}」的可复用经验：${props.deliverable.summary}`}
+					hideEmptyPlaceholder={true}
+					onRefresh={props.onRefresh}
+					onNotice={props.onNotice}
+					onError={props.onError}
+				/>
 			)}
 
 			<div className="feedback-panel">

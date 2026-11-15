@@ -1,8 +1,11 @@
 import type {
 	ActiveDelegationDto,
 	DeliverableDto,
+	MatterDto,
 	MatterMessageDto,
 	MatterProgressDto,
+	MemberMemoryDto,
+	MemoryCategory,
 	ProgressActivityDto,
 	ProgressSnapshotDto,
 	TeamMemberDto,
@@ -35,9 +38,33 @@ export const SHORT_STAGE_LABELS: Record<MatterProgressDto["stage"], string> = {
 };
 
 export const MEMORY_SCOPE_LABELS: Record<string, string> = {
-	role_general: "角色通用经验",
-	company_private: "个人私有经验",
-	project_private: "当前项目规范",
+	role_general: "跨项目通用（所有仓库可用）",
+	company_private: "个人私有经验（仅绑定当前仓库）",
+	project_private: "当前仓库规范（仅当前仓库生效）",
+};
+
+export const MEMORY_SCOPE_SHORT_LABELS: Record<string, string> = {
+	role_general: "跨项目通用",
+	company_private: "个人私有",
+	project_private: "当前仓库规范",
+};
+
+export const MEMORY_CATEGORY_VALUES: MemoryCategory[] = [
+	"efficiency",
+	"troubleshooting",
+	"collaboration",
+	"user_correction",
+	"domain_constraint",
+	"general",
+];
+
+export const MEMORY_CATEGORY_LABELS: Record<MemoryCategory, string> = {
+	efficiency: "提效方法",
+	troubleshooting: "问题排障",
+	collaboration: "高效协同",
+	user_correction: "用户纠偏",
+	domain_constraint: "项目规范",
+	general: "通用经验",
 };
 
 export const MEMORY_STATUS_LABELS: Record<string, string> = {
@@ -433,4 +460,61 @@ export function formatNoticeEventLine(rawContent: string): string {
 		// Fall back to raw text when notice is plain string.
 	}
 	return rawContent;
+}
+
+const MEMORY_STATUS_SORT_ORDER: Record<string, number> = {
+	candidate: 0,
+	verified: 1,
+	superseded: 2,
+	rejected: 3,
+};
+
+export function collectMatterMemories(
+	memoriesByMember: Record<string, MemberMemoryDto[]>,
+	matterId: string,
+	deliverableId?: string,
+): MemberMemoryDto[] {
+	const items: MemberMemoryDto[] = [];
+	for (const list of Object.values(memoriesByMember)) {
+		for (const memory of list) {
+			if (memory.sourceMatterId === matterId || (deliverableId && memory.sourceDeliverableId === deliverableId)) {
+				items.push(memory);
+			}
+		}
+	}
+	return items.sort((a, b) => {
+		const aDeliv = deliverableId && a.sourceDeliverableId === deliverableId ? 0 : 1;
+		const bDeliv = deliverableId && b.sourceDeliverableId === deliverableId ? 0 : 1;
+		if (aDeliv !== bDeliv) return aDeliv - bDeliv;
+		const aRank = MEMORY_STATUS_SORT_ORDER[a.status] ?? 9;
+		const bRank = MEMORY_STATUS_SORT_ORDER[b.status] ?? 9;
+		if (aRank !== bRank) return aRank - bRank;
+		return b.createdAt.localeCompare(a.createdAt);
+	});
+}
+
+export function collectMatterParticipantIds(params: {
+	matter?: MatterDto | null;
+	userMessages?: MatterMessageDto[];
+	internalCollabMessages?: MatterMessageDto[];
+	deliverables?: DeliverableDto[];
+}): string[] {
+	const ids = new Set<string>();
+	if (params.matter?.leadMemberId) ids.add(params.matter.leadMemberId);
+	for (const id of params.matter?.observerMemberIds ?? []) {
+		if (id) ids.add(id);
+	}
+	for (const msg of params.userMessages ?? []) {
+		if (msg.senderType === "member" && msg.senderId) ids.add(msg.senderId);
+	}
+	for (const msg of params.internalCollabMessages ?? []) {
+		if (msg.senderType === "member" && msg.senderId) ids.add(msg.senderId);
+		const toMemberId =
+			msg.metadata && typeof msg.metadata.toMemberId === "string" ? msg.metadata.toMemberId : undefined;
+		if (toMemberId) ids.add(toMemberId);
+	}
+	for (const d of params.deliverables ?? []) {
+		if (d.memberId) ids.add(d.memberId);
+	}
+	return Array.from(ids);
 }

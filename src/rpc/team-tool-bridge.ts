@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { normalizeMemoryCategory } from "../storage/repositories.ts";
+import type { MemoryCategory } from "../storage/types.ts";
 
 export type TeamToolCall =
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string }
@@ -16,6 +18,7 @@ export type TeamToolCall =
 			tool: "propose_experience";
 			callId: string;
 			scope: "role_general" | "company_private" | "project_private";
+			category: MemoryCategory;
 			content: string;
 			rationale: string;
 			supersedesMemoryId?: string;
@@ -70,10 +73,12 @@ function parseCall(value: unknown): TeamToolCall {
 			"supersedesMemoryId" in args && typeof args.supersedesMemoryId === "string" && args.supersedesMemoryId.trim()
 				? requiredString(args.supersedesMemoryId, "supersedesMemoryId", 256)
 				: undefined;
+		const category = normalizeMemoryCategory("category" in args ? args.category : undefined);
 		return {
 			tool: value.tool,
 			callId,
 			scope,
+			category,
 			content: requiredString(args.content, "content", 2000),
 			rationale: requiredString(args.rationale, "rationale", 2000),
 			supersedesMemoryId,

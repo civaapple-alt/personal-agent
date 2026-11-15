@@ -11,10 +11,37 @@ import {
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../roles/template-loader.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { RpcExtensionUIResponsePayload, ThinkingLevel } from "../rpc/types.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { DeliverableType, FeedbackRating, MemoryScope, MemoryStatus } from "../storage/types.ts";
+import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
+import type { DeliverableType, FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus } from "../storage/types.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import type { PreviewManager } from "./preview-manager.ts";
+
+const MEMORY_CATEGORIES = new Set<MemoryCategory>([
+	"general",
+	"efficiency",
+	"troubleshooting",
+	"collaboration",
+	"user_correction",
+	"domain_constraint",
+]);
+
+function broadcastDistilledMemories(
+	broadcast: (event: string, data: unknown) => void,
+	fallbackMemberId: string,
+	createdMemories: Array<{ memberId: string }>,
+): void {
+	if (createdMemories.length === 0) return;
+	const memberIds = Array.from(new Set(createdMemories.map((m) => m.memberId)));
+	for (const targetMemberId of memberIds) {
+		broadcast("memory_updated", {
+			memberId: targetMemberId,
+			createdMemories: createdMemories.filter((m) => m.memberId === targetMemberId),
+		});
+	}
+	if (!memberIds.includes(fallbackMemberId)) {
+		broadcast("memory_updated", { memberId: fallbackMemberId, createdMemories: [] });
+	}
+}
 
 export interface PersonalAgentServerOptions {
 	store: PersonalAgentStore;
@@ -517,33 +544,33 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				);
 				let evaluatedMemoryIds: string[] = [];
 				if (rating === "positive" || rating === "negative") {
+					// 跨岗位统一按事项回收：所有曾在该事项注入过的角色经验都会按最终验收反馈计分
 					const evaluated = store.evaluateMatterMemories({
 						matterId: existing.matterId,
-						memberId: existing.memberId,
 						deliverableId: existing.id,
 						outcome: rating === "positive" ? "feedback_positive" : "feedback_negative",
 						note: feedback,
 					});
 					evaluatedMemoryIds = evaluated.map((m) => m.id);
 					if (evaluatedMemoryIds.length > 0) {
-						broadcast("memory_updated", { memberId: existing.memberId, evaluatedMemoryIds });
+						const affectedMembers = Array.from(new Set([existing.memberId, ...evaluated.map((m) => m.memberId)]));
+						for (const affectedMemberId of affectedMembers) {
+							broadcast("memory_updated", { memberId: affectedMemberId, evaluatedMemoryIds });
+						}
 					}
 				}
 				let distilledMemories: unknown[] = [];
 				if (body.autoDistill === true) {
+					const scopeMode = body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined;
 					const distilled = await orchestrator.distillExperiences({
 						matterId: existing.matterId,
 						deliverableId: existing.id,
 						feedback,
 						rating: rating ?? null,
+						scopeMode,
 					});
 					distilledMemories = distilled.createdMemories;
-					if (distilled.createdMemories.length > 0) {
-						broadcast("memory_updated", {
-							memberId: distilled.member.id,
-							createdMemories: distilled.createdMemories,
-						});
-					}
+					broadcastDistilledMemories(broadcast, distilled.member.id, distilled.createdMemories);
 				}
 				broadcast("deliverable_updated", {
 					deliverableId,
@@ -722,8 +749,22 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					sendError(res, 400, "memberId and content are required");
 					return;
 				}
+				if (!store.getMember(memberId)) {
+					sendError(res, 404, `Member not found: ${memberId}`);
+					return;
+				}
 				if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
 					sendError(res, 400, `Unsupported memory scope: ${scope}`);
+					return;
+				}
+				const category =
+					body.category === undefined
+						? "general"
+						: typeof body.category === "string" && MEMORY_CATEGORIES.has(body.category as MemoryCategory)
+							? normalizeMemoryCategory(body.category)
+							: null;
+				if (!category) {
+					sendError(res, 400, `Unsupported memory category: ${String(body.category)}`);
 					return;
 				}
 				const workspaceId =
@@ -749,6 +790,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				const memory = store.addMemory({
 					memberId,
 					scope,
+					category,
 					workspaceId,
 					content,
 					rationale: typeof body.rationale === "string" ? body.rationale.trim() : "",
@@ -816,9 +858,25 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const body = await readJsonBody(req);
+				const memberId =
+					typeof body.memberId === "string" && body.memberId.trim() ? body.memberId.trim() : undefined;
+				if (memberId && !store.getMember(memberId)) {
+					sendError(res, 404, `Member not found: ${memberId}`);
+					return;
+				}
 				const scope = typeof body.scope === "string" ? (body.scope as MemoryScope) : undefined;
 				if (scope && scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
 					sendError(res, 400, `Unsupported memory scope: ${scope}`);
+					return;
+				}
+				const category =
+					body.category === undefined
+						? undefined
+						: typeof body.category === "string" && MEMORY_CATEGORIES.has(body.category as MemoryCategory)
+							? (body.category as MemoryCategory)
+							: null;
+				if (category === null) {
+					sendError(res, 400, `Unsupported memory category: ${String(body.category)}`);
 					return;
 				}
 				const workspaceId =
@@ -843,8 +901,10 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const memory = store.updateMemory(memoryId, {
+					memberId,
 					content: typeof body.content === "string" ? body.content : undefined,
 					scope,
+					category,
 					workspaceId,
 					status,
 					rationale: typeof body.rationale === "string" ? body.rationale : undefined,
@@ -855,6 +915,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 								? body.supersedesMemoryId
 								: undefined,
 				});
+				if (existing.memberId !== memory.memberId) {
+					broadcast("memory_updated", { memberId: existing.memberId, memory });
+				}
 				broadcast("memory_updated", { memberId: memory.memberId, memory });
 				sendJson(res, 200, { memory });
 				return;
@@ -879,19 +942,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					body.rating === "positive" || body.rating === "negative" || body.rating === "neutral"
 						? body.rating
 						: undefined;
+				const scopeMode = body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined;
 				const result = await orchestrator.distillExperiences({
 					matterId,
 					deliverableId,
 					memberId,
 					feedback,
 					rating,
+					scopeMode,
 				});
-				if (result.createdMemories.length > 0) {
-					broadcast("memory_updated", {
-						memberId: result.member.id,
-						createdMemories: result.createdMemories,
-					});
-				}
+				broadcastDistilledMemories(broadcast, result.member.id, result.createdMemories);
 				sendJson(res, 200, { ok: true, ...result });
 				return;
 			}

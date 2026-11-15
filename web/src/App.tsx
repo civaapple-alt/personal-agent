@@ -4,17 +4,16 @@ import {
 	type BootstrapPayload,
 	createMatter,
 	type DeliverableDto,
+	type DistillRsiResult,
 	distillRsiExperiences,
 	type FeedbackRating,
 	fetchBootstrap,
 	fetchMatterDetail,
 	type MatterDetailPayload,
 	type MatterProgressDto,
-	type MemoryScope,
 	type PreviewServiceDto,
 	postMatterMessage,
 	type RoleTemplateDto,
-	saveMemberMemory,
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
@@ -531,18 +530,24 @@ export function App() {
 		}
 	};
 
-	const handleDistillExperiences = async (deliv: DeliverableDto, feedback?: string, rating?: FeedbackRating) => {
+	const runRsiDistill = async (input: {
+		matterId: string;
+		deliverableId?: string;
+		feedback?: string;
+		rating?: FeedbackRating;
+	}): Promise<DistillRsiResult | undefined> => {
 		try {
 			const res = await distillRsiExperiences({
-				matterId: deliv.matterId,
-				deliverableId: deliv.id,
-				memberId: deliv.memberId,
-				feedback,
-				rating,
+				matterId: input.matterId,
+				deliverableId: input.deliverableId,
+				feedback: input.feedback,
+				rating: input.rating,
+				scopeMode: "team",
 			});
 			if (res.createdMemories.length > 0) {
+				const roleNames = Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId))));
 				setNoticeBanner(
-					`已为「${res.member.displayName}」提炼 ${res.createdMemories.length} 条候选经验，可在「团队岗位」中核验`,
+					`已为 ${roleNames.join("、")} 提炼 ${res.createdMemories.length} 条经验，可在当前界面直接核验通过或修改归属`,
 				);
 			} else {
 				setNoticeBanner(
@@ -555,35 +560,20 @@ export function App() {
 			if (selectedMatterId) {
 				await refreshDetail(selectedMatterId);
 			}
+			return res;
 		} catch (err) {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
+			return undefined;
 		}
 	};
 
-	const handleSaveMemoryForDeliverable = async (
-		deliv: DeliverableDto,
-		input: { content: string; scope: MemoryScope; rationale?: string; status: "candidate" | "verified" },
-	) => {
-		try {
-			const matterWsId = bootstrap?.matters.find((m) => m.id === deliv.matterId)?.workspaceId ?? null;
-			await saveMemberMemory({
-				memberId: deliv.memberId,
-				content: input.content,
-				scope: input.scope,
-				workspaceId: input.scope === "role_general" ? undefined : (matterWsId ?? undefined),
-				sourceMatterId: deliv.matterId,
-				sourceDeliverableId: deliv.id,
-				rationale: input.rationale,
-				status: input.status,
-				verified: input.status === "verified",
-			});
-			const label = input.status === "candidate" ? "待核验候选经验" : "已验证经验";
-			setNoticeBanner(`已沉淀为「${memberName(deliv.memberId)}」的${label}`);
-			await refreshBootstrap();
-		} catch (err) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
+	const handleDistillExperiences = (deliv: DeliverableDto, feedback?: string, rating?: FeedbackRating) =>
+		runRsiDistill({
+			matterId: deliv.matterId,
+			deliverableId: deliv.id,
+			feedback,
+			rating,
+		});
 
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
 	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
@@ -641,7 +631,9 @@ export function App() {
 						noticeBanner={noticeBanner}
 						starterTasks={starterTasks}
 						templateByRoleId={templateByRoleId}
+						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						memberName={memberName}
+						workspaceName={workspaceName}
 						previewUrlFor={previewUrlFor}
 						onComposerTextChange={setComposerText}
 						onSelectWorkspace={handleSelectWorkspace}
@@ -652,6 +644,11 @@ export function App() {
 						onAbortMatter={handleAbortMatter}
 						onNewMatter={startNewMatter}
 						onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
+						onOpenTeam={() => navigateRoute({ tab: "team" })}
+						onDistillMatter={(matterId) => runRsiDistill({ matterId })}
+						onRefresh={refreshBootstrap}
+						onNotice={(msg) => setNoticeBanner(msg)}
+						onError={(msg) => setErrorBanner(msg)}
 						onDismissError={() => setErrorBanner(null)}
 						onDismissNotice={() => setNoticeBanner(null)}
 					/>
@@ -668,7 +665,6 @@ export function App() {
 						workspaceName={workspaceName}
 						onSubmitFeedback={handleDeliverableFeedback}
 						onDistillExperiences={handleDistillExperiences}
-						onSaveMemory={handleSaveMemoryForDeliverable}
 						onStopPreview={async (previewId) => {
 							await stopPreview(previewId);
 							await refreshBootstrap();
@@ -682,6 +678,10 @@ export function App() {
 							setComposerText(`修改「${deliverable.title}」：`);
 						}}
 						onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
+						onOpenTeam={() => navigateRoute({ tab: "team" })}
+						onRefresh={refreshBootstrap}
+						onNotice={(msg) => setNoticeBanner(msg)}
+						onError={(msg) => setErrorBanner(msg)}
 						onNewTask={startNewMatter}
 					/>
 				)}
@@ -701,6 +701,8 @@ export function App() {
 							setSelectedMemberId(memberId);
 							startNewMatter();
 						}}
+						onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
+						onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 					/>
 				)}
 
