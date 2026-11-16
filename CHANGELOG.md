@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-16
+
+本地发布版本，统一包元数据为 0.5.0。包含跨项目岗位团队工作台、作用域会话接续与真实委托、旁听、显式阶段成果和基础 RSI 链路，并补齐组织隔离、文件来源发布及真实任务演示。发布范围、启动方式和已知限制见 [0.5.0 发布说明](docs/releases/v0.5.0.md)。
+
 ### Observer demo
 
 - Add `demo:observer`, a real-Pi, isolated five-turn task covering selected late-joining observers, an intentional conflicting proposal, lead follow-up and stage publication, independent quiet review, and disabling observation.

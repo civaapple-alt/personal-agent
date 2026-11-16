@@ -1,5 +1,7 @@
 # Personal Agent
 
+当前版本：**0.5.0**。本地标签为 `v0.5.0`；源码包、预构建包及升级边界见 [发布说明](docs/releases/v0.5.0.md)。
+
 面向跨项目工作的 **AI 角色团队**：成员拥有稳定的岗位身份，按需要组建团队，跨多个产品与仓库工作。初始提供市场与营销、产品、研发、测试四个示例角色；已具备基础 RSI 经验提案、复盘与人工核验链路；长期自主成长与公开人才市场仍是后续目标。
 
 - 当前已基于 **Pi (`pi --mode rpc`)** 实现工作台、持久会话接续、模型可调用的内部委托与显式成果归档。
@@ -56,7 +58,7 @@ npm run start:web
 - 只改文档可运行 `npm run check:docs`；隔离启动检查使用 `npm run check:startup`（需要先构建，不调用模型）。
 - 完整说明和针对性验证选择见 [scripts](scripts/README.md) 与 [test](test/README.md)。
 
-`npm run demo:rpc`、`npm run demo:team` 和 `npm run demo:rsi` 会调用真实模型，不属于默认检查；范围、临时数据与证据约定见 [demo](src/demo/README.md)。
+`demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner`、`demo:review` 和 `demo:observer` 会调用真实模型，不属于默认检查；使用 `npm run <命令>` 显式执行，范围、临时数据与证据约定见 [demo](src/demo/README.md)。
 
 ## 阶段进展
 

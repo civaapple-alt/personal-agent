@@ -3,5 +3,6 @@ dist/
 web/dist/
 .pi/
 .data/
+.releases/
 *.tsbuildinfo
 .DS_Store
