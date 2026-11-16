@@ -126,6 +126,7 @@ flowchart TB
 | --- | --- |
 | [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../src/server/auth.ts)、[sse](../src/server/sse.ts)、[uploads](../src/server/uploads.ts)、[dispatch-runner](../src/server/dispatch-runner.ts) 与 [routes](../src/server/routes/matters.ts) 维护 |
 | [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 事项生命周期与归档；[worker-runner](../src/orchestrator/worker-runner.ts)、[delegation-runner](../src/orchestrator/delegation-runner.ts)、[observer-runner](../src/orchestrator/observer-runner.ts)、[distiller](../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
+| [`matter-initiation.ts`](../src/orchestrator/matter-initiation.ts)、[`meta-architect.ts`](../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
 | [`execution-context.ts`](../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
 | [`team-extension.ts`](../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
 | [`team-tool-bridge.ts`](../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
@@ -138,10 +139,10 @@ flowchart TB
 | 对象 | 当前存储与关系 | 尚不包含的能力 |
 | --- | --- | --- |
 | `Organization` | 组织 ID、名称、默认标记（`isDefault`）、默认 Git 邮箱域名（`gitEmailDomain`）与组织简介，用来串联同一组织下的多个项目仓库；团队成员为跨组织全局复用 | 组织成员权限隔离、成员加入/退出审批流、企业 SSO |
-| `RoleTemplate` | Markdown 定义职责、方法、工具依赖、协作和验证约定，可导入导出 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
-| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏） | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
+| `RoleTemplate` | Markdown 定义职责、方法、`antiJobs`（不做边界）、工具依赖、协作和验证约定；内置模板位于 `roles/`，工作台自建/调整角色持久化于 `.data/roles/`，内置 `role-architect` 作为系统元角色与业务池隔离 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
+| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏）；非默认业务成员支持经 `DELETE /api/members/:id` 安全删除并联动清理记忆与旁听引用 | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
 | `MemberMemory` | 成员经验与记忆、`scope`（`role_general`/`company_private`/`project_private`）与 `orgId`/`workspaceId` 绑定、`category`、`status`、`rationale`、来源事项/成果、替代链及命中/正负评估计数 | 后台夜间无人值守复盘调度与多组织权限鉴权 |
-| `Matter` | 事项标题、摘要、组织/工作区、负责人、AI 参与范围、旁听开关、人类协作名单与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
+| `Matter` | 事项标题、摘要、组织/工作区、负责人、AI 参与模式与范围（支持 `solo` / `lead_consult` / `lead_review` / `human_first` 与按人 `observerMemberIds`）、旁听开关、人类协作名单与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
 | `MatterMessage` | `user`、`internal_collab`、`notice` 三个通道及元数据（如 `observerIntervention`、`progressSnapshot`、截断安全的工具摘要 JSON） | 完整逐事件审计库；并非每个 Pi 流式事件都落入 SQLite |
 | `Deliverable` | 所属事项、发布成员、类型、正文或路径、链接、版本、反馈及 `feedbackRating` | 自动业务验收、统一文件托管、自动绑定 Git 提交或会话快照 |
 | `WorkspaceLink` | 工作区 ID、所属组织 `orgId`、仓库路径、默认分支等登记信息 | 动态 Git 状态快照或自动工作树管理 |
@@ -315,10 +316,10 @@ sequenceDiagram
 
 | 工作面 | 已有基础 | 验证边界 |
 | --- | --- | --- |
-| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
-| 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
+| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
+| 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、单兵 `solo`/定向旁听运行时收窄、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
 | 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、多角色经验复盘/取消、上下文直接核验替代与效果回写 | 连续过程交流不新增交付、多角色 AI 提炼、取消与评估 API 均有离线测试覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
-| 角色复用 | Markdown 导入导出、不同角色 ID 组建团队、实际 Skill 装载（含 `technical-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |
+| 角色复用与建队 | Markdown 导入导出、`.data/roles/` 运行时隔离、不同角色 ID 组建与安全删除、内置 Meta-Bot「角色架构师」（对话建队、团队协作体检与事项中途介入补人）、实际 Skill 装载（含 `technical-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |
 
 早期四阶段路线已产出上述基础，阶段四中的 **RSI 经验提炼—核验—应用—验收回写闭环** 已打通首版工程链路；仍未完成的部分明确为持久后台定时自驱循环、公开人才市场与自动依赖安装。下列顺序是后续工程建议，不是已实现承诺或本次功能范围。
 
@@ -355,6 +356,8 @@ sequenceDiagram
 上述方向尚未完成，持续成长也不能由一次测试通过或一份 `SKILL.md` 的存在证明。
 
 ## 7. 核对方式与演进记录
+
+立项评估、角色架构师与管理界面收口（`v0.5.0` 之后演进）：新增立项适配评估与缺口诊断（`matter-initiation.ts`）、内置元角色「角色架构师」（`meta-architect.ts`，无工具只读规划、`teams/healthcheck` 协作体检与事项中途介入补人）、运行时角色隔离目录 `.data/roles/`、非默认成员安全删除（`DELETE /api/members/:id`）、团队/资料页管理动作与慢速 AI 操作弹窗化/二次确认。`npm run check`、`npm run build`、112 项 `npm test`、`npm run check:startup` 与 `npm run check:docs` 均通过（使用隔离临时库与受控 Worker，未触发真实模型调用或真实浏览器端到端走查）。
 
 事项旁听真实任务：新增 `demo:observer`，使用隔离资源执行五轮主任务与三次选定测试经理旁听，验证后加入前情、意见接续、独立静默、关闭和阶段交付边界。运行/行为检查及本例独立旁听审阅通过，保留阶段方案待澄清的时间口径等备注；首轮发现并修正了纯引号包装导致的控制输入误判，原始失败未覆盖。107 项测试、代码检查、构建、源码/编译入口启动与文档检查通过，详见[旁听实机记录](observer-demo.md#实机验证跟进)。
 

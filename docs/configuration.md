@@ -42,7 +42,8 @@
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
 | `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话持久目录（`--session-dir`） | 按事项、成员、工作区路径与会话模式精确记录 `sessionFile` 与 `piSessionId` |
-| `roles/` | 可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`）；在工作台新建或导入角色会落盘至此 |
+| `roles/` | 内置可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`），保存仓库自带的基础模板 |
+| `.data/roles/` | 运行时自建/调整角色目录 | 工作台新建、导入、架构师应用或修改后的角色模板 `.md` 写盘至此（使用自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时回退至测试临时目录），启动按 ID 与 `roles/` 合并覆盖，不污染仓库模板 |
 | `skills/<name>/SKILL.md` | 角色引用的技能说明文件 | 供启动参数 `--skill` 显式挂载 |
 | `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
 
@@ -100,10 +101,12 @@
 | `thinkingLevel` | 必填 | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | 思考深度；内置四角色默认 `high` |
 | `shareable` | 可选 | 布尔，默认 `true` | 是否允许作为通用岗位定义导出 |
 | `isPrimaryContact` | 可选 | 布尔，默认 `false` | 是否为新安装默认主要联系人（无关键词命中时兜底） |
+| `roleKind` | 可选 | `"architect"` 或省略 | 为 `"architect"` 时标识系统元角色（如内置「角色架构师」），与普通业务团队名录隔离 |
 | `keywords` | 可选 | 字符串数组 `[]` | 仅用于**新建事项未指定成员**时的初始关键词匹配评分 |
-| `tools` | 可选 | 字符串数组 `[]` | 声明启用工具；`mcp` 分类标记会在装配时过滤；`TeamOrchestrator` 未读取到声明时兜底 `["read", "bash", "edit", "write"]`；工作台 `POST /api/members` 新建角色默认写入 `["read", "bash"]` |
+| `tools` | 可选 | 字符串数组 `[]` | 声明启用工具；`mcp` 分类标记会在装配时过滤；`TeamOrchestrator` 未读取到声明时兜底 `["read", "bash", "edit", "write"]`；通过架构师/快速设计官新建的非研发角色按最小权限默认收缩至只读或无工具 |
 | `skills` | 可选 | 字符串数组 `[]` | 技能清单。解析顺序：绝对路径 → 含 `/` 时相对角色文件目录 → `skills/<name>/SKILL.md` |
 | `mcpDependencies` | 可选 | 字符串数组 `[]` | 声明依赖的 MCP 服务名，启动前校验存在对应 `mcp__<name>__*` 工具 |
+| `antiJobs` | 可选 | 字符串数组 `[]` | 显式「不做清单 / 边界约束」（One Job + Explicit Anti-Jobs）；每轮通过 `before_agent_start` 与单兵模式上下文注入提醒 |
 
 ### 正文结构要求
 
