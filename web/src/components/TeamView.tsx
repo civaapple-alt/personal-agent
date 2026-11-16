@@ -10,6 +10,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../api.ts";
+import { filterBusinessMembers } from "../architectApi.ts";
 import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberPackageForms } from "./team/MemberPackageForms.tsx";
@@ -66,13 +67,13 @@ export function TeamView({
 	onOpenDeliverable,
 }: TeamViewProps) {
 	const isOwner = currentUser?.permissionRole !== "collaborator";
-	const [showAddMember, setShowAddMember] = useState(false);
 	const [showImportMember, setShowImportMember] = useState(false);
 	const [exportedPackage, setExportedPackage] = useState<{
 		id: string;
 		filename: string;
 		markdown: string;
 	} | null>(null);
+	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
 
 	const matterWorkspaceById = useMemo(
 		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
@@ -110,36 +111,22 @@ export function TeamView({
 						<div className="actions-row compact">
 							{onOpenArchitectMatter && (
 								<button type="button" className="btn-pill-dark" onClick={onOpenArchitectMatter}>
-									请角色架构师对话规划 / 体检
+									对话规划 / 协作体检
 								</button>
 							)}
 							{onOpenArchitect && (
 								<button
 									type="button"
 									className={onOpenArchitectMatter ? "btn-pill-outline" : "btn-pill-dark"}
-									onClick={onOpenArchitect}
+									onClick={() => {
+										setShowImportMember(false);
+										onOpenArchitect();
+									}}
 								>
-									+ 快速表单设计角色
+									+ 快速创建角色
 								</button>
 							)}
-							<button
-								type="button"
-								className={onOpenArchitect ? "btn-pill-outline" : "btn-pill-dark"}
-								onClick={() => {
-									setShowAddMember((v) => !v);
-									setShowImportMember(false);
-								}}
-							>
-								+ 新增角色
-							</button>
-							<button
-								type="button"
-								className="btn-pill-outline"
-								onClick={() => {
-									setShowImportMember((v) => !v);
-									setShowAddMember(false);
-								}}
-							>
+							<button type="button" className="btn-pill-outline" onClick={() => setShowImportMember((v) => !v)}>
 								导入角色包
 							</button>
 						</div>
@@ -148,10 +135,10 @@ export function TeamView({
 
 				<div className="ui-sections-stack">
 					<MemberPackageForms
-						showAddMember={showAddMember}
+						showAddMember={false}
 						showImportMember={showImportMember}
 						exportedPackage={exportedPackage}
-						onCloseAddMember={() => setShowAddMember(false)}
+						onCloseAddMember={() => {}}
 						onCloseImportMember={() => setShowImportMember(false)}
 						onCloseExportedPackage={() => setExportedPackage(null)}
 						onRefresh={onRefresh}
@@ -183,12 +170,15 @@ export function TeamView({
 					<section className="ui-section">
 						<div className="ui-section-head">
 							<div>
-								<h2 className="ui-section-title">AI 团队成员（{members.length}）</h2>
-								<p className="ui-section-desc">各岗位独立维护角色规范、Git 提交者署名与三层成长记忆</p>
+								<h2 className="ui-section-title">AI 业务团队成员（{businessMembers.length}）</h2>
+								<p className="ui-section-desc">
+									各岗位独立维护角色规范、Git
+									提交者署名与三层成长记忆（内置元角色「角色架构师」仅用于建队与体检对话，可从左侧直达）
+								</p>
 							</div>
 						</div>
 						<div className="team-grid">
-							{members.map((member, idx) => (
+							{businessMembers.map((member, idx) => (
 								<MemberCard
 									key={member.id}
 									member={member}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
-import { isArchitectMember } from "../architectApi.ts";
+import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS, stripMarkdownFormatting } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
@@ -45,6 +45,27 @@ export function Sidebar({
 	onSwitchOrLogout,
 }: SidebarProps) {
 	const [searchOpen, setSearchOpen] = useState(false);
+
+	const allMembers = bootstrap?.members ?? [];
+	const businessMembers = filterBusinessMembers(allMembers);
+	const architectMember = allMembers.find((m) => isArchitectMember(m)) ?? null;
+	const getWorkingMood = (memberId: string): RoleMood => {
+		for (const [mId, prog] of Object.entries(progressByMatter)) {
+			const delegated = prog.activeDelegations?.find((entry) => entry.memberId === memberId);
+			if (delegated) return inferDelegationMood(delegated.stageLabel);
+			const matter = bootstrap?.matters.find((m) => m.id === mId);
+			if (matter?.leadMemberId === memberId) return prog.stage;
+		}
+		return "idle";
+	};
+	const architectIdx = architectMember ? allMembers.findIndex((m) => m.id === architectMember.id) : -1;
+	const architectTheme = getBotTheme(architectIdx >= 0 ? architectIdx : 0);
+	const architectMood = architectMember ? getWorkingMood(architectMember.id) : "idle";
+	const architectSelected =
+		Boolean(architectMember) &&
+		activeTab === "chats" &&
+		!selectedMatterId &&
+		selectedMemberId === architectMember?.id;
 
 	return (
 		<aside className={`bot-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
@@ -105,46 +126,52 @@ export function Sidebar({
 			)}
 
 			<div className="roster-strip">
-				{bootstrap?.members.map((member, idx) => {
-					const theme = getBotTheme(idx);
+				{businessMembers.map((member) => {
+					const idx = allMembers.findIndex((m) => m.id === member.id);
+					const theme = getBotTheme(idx >= 0 ? idx : 0);
 					const isSelected = activeTab === "chats" && !selectedMatterId && selectedMemberId === member.id;
-					let workingMood: RoleMood = "idle";
-					for (const [mId, prog] of Object.entries(progressByMatter)) {
-						const delegated = prog.activeDelegations?.find((entry) => entry.memberId === member.id);
-						if (delegated) {
-							workingMood = inferDelegationMood(delegated.stageLabel);
-							break;
-						}
-						const matter = bootstrap.matters.find((m) => m.id === mId);
-						if (matter?.leadMemberId === member.id) {
-							workingMood = prog.stage;
-							break;
-						}
-					}
+					const workingMood = getWorkingMood(member.id);
 					const isWorking = workingMood !== "idle";
-					const isArchitect = isArchitectMember(member);
 					return (
 						<button
 							key={member.id}
 							type="button"
-							className={`roster-tile ${isSelected ? "active" : ""}${isArchitect ? " is-architect" : ""}`}
+							className={`roster-tile ${isSelected ? "active" : ""}`}
 							onClick={() => onToggleMember(member.id)}
-							title={
-								isArchitect
-									? `${member.displayName} · 建队规划与协作体检（点击发起角色架构对话）`
-									: `${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`
-							}
+							title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
 						>
 							<span className="roster-avatar-wrap">
 								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
 								{isWorking && <span className="roster-working-dot" />}
 							</span>
 							<span className="roster-name">{member.displayName}</span>
-							{isArchitect && <span className="roster-meta-tag">建队·体检</span>}
 						</button>
 					);
 				})}
 			</div>
+
+			{architectMember && (
+				<div className="architect-sidebar-wrap">
+					<button
+						type="button"
+						className={`architect-sidebar-entry ${architectSelected ? "active" : ""}`}
+						onClick={() => onToggleMember(ROLE_ARCHITECT_MEMBER_ID)}
+						title="角色架构师 · 规划 1~N 个新角色或做团队协作体检（进入独立对话）"
+					>
+						<span className="roster-avatar-wrap">
+							<BotFaceIcon bg={architectTheme.bg} tilt={architectTheme.tilt} size="xs" mood={architectMood} />
+							{architectMood !== "idle" && <span className="roster-working-dot" />}
+						</span>
+						<span className="architect-sidebar-copy">
+							<strong>{architectMember.displayName}</strong>
+							<small>规划角色分工 · 协作体检</small>
+						</span>
+						<span className="architect-sidebar-arrow" aria-hidden="true">
+							{architectSelected ? "已选" : "→"}
+						</span>
+					</button>
+				</div>
+			)}
 
 			<div className="matter-scroll">
 				<div className="sidebar-section-label">
@@ -201,7 +228,7 @@ export function Sidebar({
 					className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
 					onClick={() => onNavigate({ tab: "team" })}
 				>
-					<span>我的团队 · {bootstrap?.members.length ?? 0} 位</span>
+					<span>我的团队 · {businessMembers.length} 位</span>
 					<span className="pill">能力包</span>
 				</button>
 				<button

@@ -14,6 +14,7 @@ interface ComposerDockProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	composerMode: "discussion" | "dispatch";
 	isOwner: boolean;
+	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
 	sendBlockedByTurn: boolean;
 	submitting: boolean;
@@ -50,6 +51,7 @@ export function ComposerDock({
 	composerRef,
 	composerMode,
 	isOwner,
+	isArchitectMode = false,
 	isTurnRunning,
 	sendBlockedByTurn,
 	submitting,
@@ -209,35 +211,43 @@ export function ComposerDock({
 					</div>
 				)}
 
-				<div className="composer-mode-bar">
-					<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
-						<button
-							type="button"
-							role="tab"
-							aria-selected={composerMode === "discussion"}
-							className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
-							onClick={() => onComposerModeChange("discussion")}
-						>
-							团队聊天讨论
-						</button>
-						<button
-							type="button"
-							role="tab"
-							aria-selected={composerMode === "dispatch"}
-							className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
-							onClick={() => onComposerModeChange("dispatch")}
-						>
-							{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
-						</button>
+				{isArchitectMode ? (
+					<div className="composer-mode-bar">
+						<span className="composer-mode-hint">
+							<strong>角色架构师只读规划</strong> · 所有新建或权限调整仅生成提案确认卡，经你勾选后才生效
+						</span>
 					</div>
-					<span className="composer-mode-hint">
-						{composerMode === "discussion"
-							? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
-							: isOwner
-								? "正式指派 AI 团队分析、修改并生成交付成果"
-								: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
-					</span>
-				</div>
+				) : (
+					<div className="composer-mode-bar">
+						<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
+							<button
+								type="button"
+								role="tab"
+								aria-selected={composerMode === "discussion"}
+								className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
+								onClick={() => onComposerModeChange("discussion")}
+							>
+								团队聊天讨论
+							</button>
+							<button
+								type="button"
+								role="tab"
+								aria-selected={composerMode === "dispatch"}
+								className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
+								onClick={() => onComposerModeChange("dispatch")}
+							>
+								{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
+							</button>
+						</div>
+						<span className="composer-mode-hint">
+							{composerMode === "discussion"
+								? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
+								: isOwner
+									? "正式指派 AI 团队分析、修改并生成交付成果"
+									: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
+						</span>
+					</div>
+				)}
 
 				<div className="composer-meta-bar">
 					<select
@@ -384,15 +394,17 @@ export function ComposerDock({
 						onKeyDown={handleComposerKeyDown}
 						onPaste={handleComposerPaste}
 						placeholder={
-							composerMode === "discussion"
-								? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送）..."
-								: !isOwner
-									? "写下希望 AI 协助处理的内容，提交后由团队所有者一键确认并派发..."
-									: isTurnRunning
-										? "当前 AI 回合仍在推进，可切到「团队聊天讨论」或等待完成后继续..."
-										: selectedMatterId
-											? "继续给 AI 团队安排工作、拖拽或粘贴图片，或提出修改（Enter 发送）..."
-											: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
+							isArchitectMode
+								? "描述你们的工作流程、职责卡点，或直接下达团队体检指令（Enter 发送）..."
+								: composerMode === "discussion"
+									? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送）..."
+									: !isOwner
+										? "写下希望 AI 协助处理的内容，提交后由团队所有者一键确认并派发..."
+										: isTurnRunning
+											? "当前 AI 回合仍在推进，可切到「团队聊天讨论」或等待完成后继续..."
+											: selectedMatterId
+												? "继续给 AI 团队安排工作、拖拽或粘贴图片，或提出修改（Enter 发送）..."
+												: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
 						}
 					/>
 					{activeMatterProgress && selectedMatterId && isOwner && (
@@ -408,18 +420,28 @@ export function ComposerDock({
 					)}
 					<button
 						type="button"
-						className={`pill-send-btn pill-send-labeled ${composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
-						aria-label={composerMode === "discussion" ? "发送讨论" : isOwner ? "派发 AI" : "提请 AI"}
+						className={`pill-send-btn pill-send-labeled ${isArchitectMode ? "dispatch" : composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
+						aria-label={
+							isArchitectMode
+								? "发送给架构师"
+								: composerMode === "discussion"
+									? "发送讨论"
+									: isOwner
+										? "派发 AI"
+										: "提请 AI"
+						}
 						disabled={sendBlockedByTurn || submitting || (!composerText.trim() && pendingImages.length === 0)}
 						onClick={onSendPrompt}
 					>
 						{submitting
 							? "发送中..."
-							: composerMode === "discussion"
-								? "发讨论"
-								: isOwner
-									? "派发 AI"
-									: "提请 AI"}
+							: isArchitectMode
+								? "发送"
+								: composerMode === "discussion"
+									? "发讨论"
+									: isOwner
+										? "派发 AI"
+										: "提请 AI"}
 					</button>
 				</div>
 			</section>

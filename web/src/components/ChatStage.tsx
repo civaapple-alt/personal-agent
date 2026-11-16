@@ -18,6 +18,7 @@ import type {
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../api.ts";
+import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
 import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
@@ -458,6 +459,10 @@ export function ChatStage({
 	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
 		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
 	);
+	const isArchitectMode = selectedMatterId
+		? Boolean(matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId))
+		: isArchitectMemberId(selectedMemberId, members, templateByRoleId);
+	const businessCount = filterBusinessMembers(members, templateByRoleId).length;
 
 	return (
 		<div className="chat-stage">
@@ -471,7 +476,7 @@ export function ChatStage({
 				activeMatterProgress={activeMatterProgress}
 				allActiveHumans={allActiveHumans}
 				inGroupAiMembers={inGroupAiMembers}
-				totalAiMembersCount={members.length}
+				totalAiMembersCount={businessCount}
 				leadAi={leadAi}
 				nonLeadGroupAiMembers={nonLeadGroupAiMembers}
 				observerAis={observerAis}
@@ -634,6 +639,7 @@ export function ChatStage({
 					onComposerTextChange(text);
 					composerRef.current?.focus();
 				}}
+				onOpenQuickCreator={() => onOpenArchitect()}
 				onLaunchWithNewRoles={onLaunchWithNewRoles}
 				onAbortMatter={onAbortMatter}
 			/>
@@ -667,6 +673,7 @@ export function ChatStage({
 				composerRef={composerRef}
 				composerMode={composerMode}
 				isOwner={isOwner}
+				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}
 				sendBlockedByTurn={sendBlockedByTurn}
 				submitting={submitting}

@@ -20,6 +20,7 @@ import {
 	getMemberThemeById,
 	parseMessageImages,
 	parseProgressSnapshot,
+	stripMarkdownFormatting,
 } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
@@ -77,6 +78,7 @@ interface MessageFeedProps {
 	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
 	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
 	onFillComposer?: (text: string) => void;
+	onOpenQuickCreator?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	onAbortMatter: (matterId: string) => void;
 }
@@ -122,6 +124,7 @@ export function MessageFeed({
 	onDismissRoleProposals,
 	onSendQuickPrompt,
 	onFillComposer,
+	onOpenQuickCreator,
 	onLaunchWithNewRoles,
 	onAbortMatter,
 }: MessageFeedProps) {
@@ -189,70 +192,93 @@ export function MessageFeed({
 						<p>
 							{selectedMemberId === "auto"
 								? "先描述目标，系统会评估最合适的角色与参与方式；也可在下方按团队习惯自由搭配阵型"
-								: (templateByRoleId.get(headerContact?.templateId ?? "")?.responsibilities.split("\n")[0] ??
-									"直接输入任务开始协作")}
+								: selectedIsArchitect
+									? "梳理你们的真实工作流，按需规划 1~N 个职责互不重叠的专职 AI 角色，或给当前团队做一次协作与权限体检"
+									: stripMarkdownFormatting(
+											templateByRoleId
+												.get(headerContact?.templateId ?? "")
+												?.responsibilities.split("\n")[0] ?? "直接输入任务开始协作",
+										)}
 						</p>
-						<div className="hero-context-bar">
-							{selectedOrganization && <span className="pill org-pill">组织：{selectedOrganization.name}</span>}
-							<span className="pill">
-								{selectedWorkspace ? `仓库：${selectedWorkspace.name}` : "通用工作区（不绑定仓库）"}
-							</span>
-							{selectedWorkspace?.repoGitUser && (
-								<span
-									className="pill"
-									title="执行 Git 提交时以角色署名作 Author，同时保留此仓库真实 Git 用户作 Committer"
-								>
-									Git 真实提交者：{selectedWorkspace.repoGitUser.name}
+						{!selectedIsArchitect && (
+							<div className="hero-context-bar">
+								{selectedOrganization && (
+									<span className="pill org-pill">组织：{selectedOrganization.name}</span>
+								)}
+								<span className="pill">
+									{selectedWorkspace ? `仓库：${selectedWorkspace.name}` : "通用工作区（不绑定仓库）"}
 								</span>
-							)}
-						</div>
-						{isOwner && selectedIsArchitect && (
-							<div className="architect-hero-scenarios">
-								<button
-									type="button"
-									className="architect-scenario-card"
-									onClick={() => onFillComposer?.("请按我们的实际工作流规划 1~N 个角色：\n1. 目标：")}
-								>
-									<div className="architect-scenario-icon" aria-hidden="true">
-										<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
-											<circle cx="5.5" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-											<circle cx="14.5" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-											<circle cx="14.5" cy="14.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-											<path d="M7.6 9.1 12.4 6.4M7.6 10.9l4.8 2.7" stroke="currentColor" strokeWidth="1.5" />
-										</svg>
-									</div>
-									<div className="architect-scenario-copy">
-										<strong>按工作流规划 1~N 个角色分工</strong>
-										<small>从流程里拆出职责不重叠的专职角色与人类确认节点</small>
-									</div>
-								</button>
-								<button
-									type="button"
-									className="architect-scenario-card"
-									onClick={() =>
-										onSendQuickPrompt?.(
-											"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、近期运行摩擦有哪些，并给出结构化收窄或调整提案。",
-											{ preferredMemberId: ROLE_ARCHITECT_MEMBER_ID },
-										)
-									}
-								>
-									<div className="architect-scenario-icon is-health" aria-hidden="true">
-										<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
-											<path
-												d="M3 10.5h3.2l2-4.5 3.1 8 2.2-3.5H17"
-												stroke="currentColor"
-												strokeWidth="1.6"
-												strokeLinecap="round"
-												strokeLinejoin="round"
-											/>
-										</svg>
-									</div>
-									<div className="architect-scenario-copy">
-										<strong>对当前团队做一次协作体检</strong>
-										<small>直接发起诊断：扫描成员工具权限过宽、边界重合与摩擦信号</small>
-									</div>
-								</button>
+								{selectedWorkspace?.repoGitUser && (
+									<span
+										className="pill"
+										title="执行 Git 提交时以角色署名作 Author，同时保留此仓库真实 Git 用户作 Committer"
+									>
+										Git 真实提交者：{selectedWorkspace.repoGitUser.name}
+									</span>
+								)}
 							</div>
+						)}
+						{isOwner && selectedIsArchitect && (
+							<>
+								<div className="architect-hero-scenarios">
+									<button
+										type="button"
+										className="architect-scenario-card"
+										onClick={() => onFillComposer?.("请按我们的实际工作流规划 1~N 个角色：\n1. 目标：")}
+									>
+										<div className="architect-scenario-icon" aria-hidden="true">
+											<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+												<circle cx="5.5" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+												<circle cx="14.5" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+												<circle cx="14.5" cy="14.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+												<path
+													d="M7.6 9.1 12.4 6.4M7.6 10.9l4.8 2.7"
+													stroke="currentColor"
+													strokeWidth="1.5"
+												/>
+											</svg>
+										</div>
+										<div className="architect-scenario-copy">
+											<strong>按工作流规划 1~N 个角色分工</strong>
+											<small>从流程里拆出职责不重叠的专职角色与人类确认节点</small>
+										</div>
+									</button>
+									<button
+										type="button"
+										className="architect-scenario-card"
+										onClick={() =>
+											onSendQuickPrompt?.(
+												"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、近期运行摩擦有哪些，并给出结构化收窄或调整提案。",
+												{ preferredMemberId: ROLE_ARCHITECT_MEMBER_ID },
+											)
+										}
+									>
+										<div className="architect-scenario-icon is-health" aria-hidden="true">
+											<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+												<path
+													d="M3 10.5h3.2l2-4.5 3.1 8 2.2-3.5H17"
+													stroke="currentColor"
+													strokeWidth="1.6"
+													strokeLinecap="round"
+													strokeLinejoin="round"
+												/>
+											</svg>
+										</div>
+										<div className="architect-scenario-copy">
+											<strong>对当前团队做一次协作体检</strong>
+											<small>直接发起诊断：扫描成员工具权限过宽、边界重合与摩擦信号</small>
+										</div>
+									</button>
+								</div>
+								{onOpenQuickCreator && (
+									<div className="architect-quick-alt">
+										<span>只需新增 1 个明确分工的角色？</span>
+										<button type="button" className="btn-inline" onClick={onOpenQuickCreator}>
+											打开快速创建卡片 →
+										</button>
+									</div>
+								)}
+							</>
 						)}
 						{isOwner && !selectedIsArchitect && onOpenDemo && (
 							<div className="inner-demo-entry">

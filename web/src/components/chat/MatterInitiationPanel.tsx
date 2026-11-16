@@ -63,23 +63,7 @@ export function MatterInitiationPanel({
 }: MatterInitiationPanelProps) {
 	const [expandedRoster, setExpandedRoster] = useState(false);
 
-	if (!isOwner) return null;
-
-	if (isArchitectMemberId(selectedMemberId, members, templateByRoleId)) {
-		return (
-			<section className="initiation-panel" aria-label="角色架构师专属模式">
-				<div className="initiation-mode-row">
-					<span className="initiation-assess-note">
-						<strong>角色架构师专属对话</strong> ·
-						只读分析团队角色配置，结构化新增/收窄提案将生成在回复卡片中由你勾选生效。
-					</span>
-					<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
-						改用快速卡片表单 →
-					</button>
-				</div>
-			</section>
-		);
-	}
+	if (!isOwner || isArchitectMemberId(selectedMemberId, members, templateByRoleId)) return null;
 
 	const businessMembers = filterBusinessMembers(members, templateByRoleId);
 	const allAiIds = businessMembers.map((m) => m.id);
