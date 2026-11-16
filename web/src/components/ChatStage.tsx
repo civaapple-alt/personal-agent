@@ -1,15 +1,18 @@
 import { type RefObject, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
+	CollaborationPresetMode,
 	CollaboratorDto,
 	ComposerImageAttachment,
 	DeliverableDto,
 	DistillRsiResult,
 	InnerMatterStep,
 	MatterDetailPayload,
+	MatterInitiationAssessmentDto,
 	MatterProgressDto,
 	MemberMemoryDto,
 	OrganizationDto,
 	PendingDialogDto,
+	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
 	WorkspaceDto,
@@ -24,6 +27,7 @@ import {
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
 import { ComposerDock } from "./chat/ComposerDock.tsx";
 import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
+import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
 
@@ -73,10 +77,22 @@ interface ChatStageProps {
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
+	observerMemberIds: string[];
 	observersEnabled: boolean;
+	draftPresetMode: CollaborationPresetMode;
+	draftAiMemberIds: string[] | null;
+	draftCollaboratorIds: string[];
+	initiationAssessment: MatterInitiationAssessmentDto | null;
+	initiationAssessing: boolean;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
+	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
+	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
+	onApplyPresetMode: (mode: CollaborationPresetMode, leadId?: string | null) => void;
+	onApplyInitiationRecommendation: () => void;
+	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
 	onToggleObserversEnabled: (enabled: boolean) => void;
+	onUpdateMatterObservers: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
@@ -143,10 +159,22 @@ export function ChatStage({
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
+	observerMemberIds,
 	observersEnabled,
+	draftPresetMode,
+	draftAiMemberIds,
+	draftCollaboratorIds,
+	initiationAssessment,
+	initiationAssessing,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
+	onUpdateDraftAiMemberIds,
+	onUpdateDraftCollaboratorIds,
+	onApplyPresetMode,
+	onApplyInitiationRecommendation,
+	onOpenArchitect,
 	onToggleObserversEnabled,
+	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
 	onApproveAiRequest,
 	onDismissAiRequest,
@@ -369,7 +397,7 @@ export function ChatStage({
 
 	const ownerCollab = collaborators.find((c) => c.permissionRole === "owner") ?? null;
 	const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
-	const assignedCollabIds = matterDetail?.matter.collaboratorIds ?? [];
+	const assignedCollabIds = matterDetail ? (matterDetail.matter.collaboratorIds ?? []) : draftCollaboratorIds;
 	const messageHumanAuthorIds = useMemo(() => {
 		const ids = new Set<string>();
 		for (const msg of matterDetail?.userMessages ?? []) {
@@ -403,7 +431,13 @@ export function ChatStage({
 	}, [leadAi, matterAiMemberIds, members]);
 	const nonLeadGroupAiMembers = inGroupAiMembers.filter((m) => m.id !== leadAi?.id);
 	const removedAiMembers = members.filter((m) => !inGroupAiMembers.some((g) => g.id === m.id));
-	const observerAis = observersEnabled ? nonLeadGroupAiMembers : [];
+	const observerAis = observersEnabled
+		? observerMemberIds.length > 0
+			? nonLeadGroupAiMembers.filter((m) => observerMemberIds.includes(m.id))
+			: matterDetail
+				? []
+				: nonLeadGroupAiMembers
+		: [];
 	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
 		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
 	);
@@ -506,6 +540,7 @@ export function ChatStage({
 					onChangeLeadMember={onChangeLeadMember}
 					onUpdateMatterAiMembers={onUpdateMatterAiMembers}
 					onToggleObserversEnabled={onToggleObserversEnabled}
+					onUpdateMatterObservers={onUpdateMatterObservers}
 					onUpdateMatterCollaborators={onUpdateMatterCollaborators}
 				/>
 			)}
@@ -577,6 +612,29 @@ export function ChatStage({
 				onAbortMatter={onAbortMatter}
 			/>
 
+			{!selectedMatterId && (
+				<MatterInitiationPanel
+					isOwner={isOwner}
+					members={members}
+					nonOwnerCollaborators={nonOwnerCollaborators}
+					templateByRoleId={templateByRoleId}
+					selectedMemberId={selectedMemberId}
+					draftPresetMode={draftPresetMode}
+					draftAiMemberIds={draftAiMemberIds}
+					draftObserverMemberIds={observerMemberIds}
+					draftCollaboratorIds={draftCollaboratorIds}
+					assessment={initiationAssessment}
+					assessing={initiationAssessing}
+					onSelectLeadMember={onChangeLeadMember}
+					onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
+					onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
+					onUpdateDraftObserverIds={onUpdateMatterObservers}
+					onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
+					onApplyRecommendation={onApplyInitiationRecommendation}
+					onOpenArchitect={onOpenArchitect}
+				/>
+			)}
+
 			<ComposerDock
 				composerDockRef={composerDockRef}
 				composerRef={composerRef}
@@ -603,6 +661,7 @@ export function ChatStage({
 				onSelectWorkspace={onSelectWorkspace}
 				onNewMatter={onNewMatter}
 				onChangeLeadMember={onChangeLeadMember}
+				onApplyPresetMode={onApplyPresetMode}
 				onComposerTextChange={onComposerTextChange}
 				onAddImages={onAddImages}
 				onRemoveImage={onRemoveImage}

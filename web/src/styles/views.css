@@ -345,3 +345,107 @@
 .workspace-bind-grid .btn-pill-dark {
 	height: 36px;
 }
+
+/* Role Architect modal (guided One Job + Anti-Jobs design) */
+.architect-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	background: rgba(15, 23, 20, 0.48);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+}
+.architect-modal-scrim {
+	position: absolute;
+	inset: 0;
+	border: none;
+	padding: 0;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+}
+.architect-modal-card {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	max-width: 760px;
+	max-height: 90vh;
+	overflow-y: auto;
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	padding: 20px 22px;
+	box-shadow: var(--shadow-lg);
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.architect-modal-title {
+	margin: 6px 0 0;
+}
+.architect-gap-banner {
+	font-size: var(--text-xs);
+}
+.architect-form-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.architect-quick-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 2px 0 4px;
+}
+.architect-chip-btn {
+	cursor: pointer;
+	background: var(--bg-sidebar);
+	border: 1px solid var(--border);
+}
+.architect-chip-btn:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.architect-preview-box {
+	border-top: 1px solid var(--border);
+	padding-top: 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.architect-preview-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-sm);
+}
+.architect-preview-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+.architect-preview-pane {
+	border: 1px solid var(--border);
+	background: var(--bg-sidebar);
+	border-radius: var(--radius-sm);
+	padding: 10px 12px;
+	min-width: 0;
+}
+.architect-preview-pane h4 {
+	margin: 0 0 6px;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+}
+.architect-preview-pane pre {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: inherit;
+	font-size: var(--text-xs);
+	line-height: 1.5;
+	color: var(--text-primary);
+}

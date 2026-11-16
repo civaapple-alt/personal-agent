@@ -131,6 +131,7 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 		tools: optionalStringArray(meta, "tools"),
 		skills: optionalStringArray(meta, "skills"),
 		mcpDependencies: optionalStringArray(meta, "mcpDependencies"),
+		...(optionalStringArray(meta, "antiJobs").length > 0 ? { antiJobs: optionalStringArray(meta, "antiJobs") } : {}),
 		sections: extractSections(body),
 		rawBody: body,
 		sourcePath,
@@ -176,6 +177,7 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		`tools: ${formatList(template.tools)}`,
 		`skills: ${formatList(template.skills)}`,
 		`mcpDependencies: ${formatList(template.mcpDependencies)}`,
+		...(template.antiJobs && template.antiJobs.length > 0 ? [`antiJobs: ${formatList(template.antiJobs)}`] : []),
 		"---",
 	].join("\n");
 

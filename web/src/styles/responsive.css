@@ -139,4 +139,18 @@
 	.feedback-row > .btn-pill-dark {
 		width: 100%;
 	}
+	.architect-modal-backdrop {
+		padding: 10px;
+	}
+	.architect-modal-card {
+		padding: 14px;
+		max-height: 94vh;
+	}
+	.architect-preview-grid {
+		grid-template-columns: 1fr;
+	}
+	.initiation-mode-pills .choice-chip {
+		font-size: var(--text-micro);
+		padding: 4px 9px;
+	}
 }

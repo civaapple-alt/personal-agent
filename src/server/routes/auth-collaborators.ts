@@ -92,6 +92,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				tools: t.tools,
 				keywords: t.keywords,
 				shareable: t.shareable,
+				antiJobs: t.antiJobs ?? [],
 				responsibilities: t.sections.responsibilitiesAndBoundaries,
 			})),
 			workspaces: store.listWorkspaces().map(enrichWorkspace),

@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Added & Refined
+- **Matter Initiation Framing, Scoped Participation & Role Architect (`dr-eggbot-v2` 启发)**:
+  - **立项适配评估与缺口识别 (`src/orchestrator/matter-initiation.ts`, `POST /api/matters/assess`)**：发起新事项前评估当前团队角色匹配度、推荐参与方式（单兵直办 `solo` / 主责+指定协同 `lead_consult` / 主责+定向旁听 `lead_review` / 人类先对齐 `human_first`）及人类协同人选；识别出职责覆盖缺口时不再静默兜底给默认产品经理，而是明确提示并引导按需设计或转为人类先讨论。
+  - **精细化参与人数与运行时约束 (`MatterRepo`, `worker-runner.ts`, `prompts.ts`, `MatterRosterPopover.tsx`)**：修复 `createMatter` 同时传入 `observersEnabled` 与 `observerMemberIds` 时覆写为全员旁听的问题，支持发起前与运行中对单个非主责 AI 切换定向旁听；事项收窄为单兵模式（1 AI）时，在 `--tools` 与系统提示词同步禁用 `delegate_to_member` 并注入单兵引导与显式 `antiJobs`（不做清单）。
+  - **引导式角色设计官 (`src/roles/role-architect.ts`, `POST /api/members/design`, `RoleArchitectModal.tsx`, `MemberCard.tsx`)**：不内置静态行业角色预设库，提供面向团队自身流程的 4 问设计向导（One Job / Explicit Anti-Jobs & 静默原则 / 协作站位 / 最小工具集），默认收紧非工程角色工具权限（不再硬编码 `bash`），并在 `buildStarterTasks` 中补全非代码工作流与人类先讨论起手式。
+
 ## [0.5.0] - 2026-11-16
 
 本地发布版本，统一包元数据为 0.5.0。包含跨项目岗位团队工作台、作用域会话接续与真实委托、旁听、显式阶段成果和基础 RSI 链路，并补齐组织隔离、文件来源发布及真实任务演示。发布范围、启动方式和已知限制见 [0.5.0 发布说明](docs/releases/v0.5.0.md)。

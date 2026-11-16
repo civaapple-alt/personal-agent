@@ -203,6 +203,11 @@ export interface MemoryApplicationDto {
 	createdAt: string;
 }
 
+export type CollaborationPresetMode = "solo" | "lead_consult" | "lead_review" | "human_first";
+export type RoleFitStatus = "matched" | "ambiguous" | "gap_detected";
+export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
+export type RoleWorkspaceScope = "read_write_code" | "read_only_repo" | "no_repo_docs";
+
 export interface RoleTemplateDto {
 	id: string;
 	name: string;
@@ -212,7 +217,53 @@ export interface RoleTemplateDto {
 	tools: string[];
 	keywords: string[];
 	shareable: boolean;
+	antiJobs?: string[];
 	responsibilities: string;
+}
+
+export interface MatterInitiationCandidateDto {
+	memberId: string;
+	displayName: string;
+	roleTitle: string;
+	score: number;
+	matchedSignals: string[];
+	tools: string[];
+}
+
+export interface RoleGapSuggestionDto {
+	missingRoleTitle: string;
+	suggestedJob: string;
+	suggestedAntiJobs: string[];
+	suggestedInteractionStyle: RoleInteractionStyle;
+	suggestedWorkspaceScope: RoleWorkspaceScope;
+	reason: string;
+}
+
+export interface MatterInitiationAssessmentDto {
+	fitStatus: RoleFitStatus;
+	headline: string;
+	explanation: string;
+	recommendedMode: CollaborationPresetMode;
+	recommendedLeadId: string | null;
+	recommendedAiMemberIds: string[];
+	recommendedObserverIds: string[];
+	candidates: MatterInitiationCandidateDto[];
+	gapSuggestion?: RoleGapSuggestionDto;
+}
+
+export interface RoleArchitectDraftDto {
+	template: RoleTemplateDto & {
+		defaultProvider: string;
+		defaultModel: string;
+		thinkingLevel: string;
+		isPrimaryContact: boolean;
+		sections: Record<string, string>;
+	};
+	markdown: string;
+	antiJobs: string[];
+	toolSummary: string;
+	recommendedParticipation: RoleInteractionStyle;
+	designNotes: string[];
 }
 
 export interface ActiveDelegationDto {
@@ -331,6 +382,18 @@ export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload
 
 export function openInnerMatterDemo(): Promise<{ matter: MatterDto }> {
 	return requestJson("/api/demos/inner-matter", { method: "POST", body: "{}" });
+}
+
+export function assessMatterInitiation(input: {
+	prompt: string;
+	hasImages?: boolean;
+	workspaceId?: string;
+	preferredMemberId?: string;
+}): Promise<MatterInitiationAssessmentDto> {
+	return requestJson("/api/matters/assess", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
 }
 
 export function createMatter(input: {
@@ -491,12 +554,34 @@ export function stopPreview(previewId: string): Promise<{ preview: PreviewServic
 	});
 }
 
+export function designRoleDraft(input: {
+	oneJob: string;
+	antiJobs?: string[];
+	quietWhen?: string;
+	interactionStyle?: RoleInteractionStyle;
+	workspaceScope?: RoleWorkspaceScope;
+	roleName?: string;
+	roleTitle?: string;
+	keywords?: string[];
+	workflowRules?: string;
+	constraints?: string;
+	isPrimaryContact?: boolean;
+}): Promise<RoleArchitectDraftDto> {
+	return requestJson("/api/members/design", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
 export function createMember(input: {
 	name: string;
 	title: string;
 	responsibilities?: string;
 	keywords?: string[];
 	skills?: string[];
+	tools?: string[];
+	antiJobs?: string[];
+	sections?: Record<string, string>;
 	model?: string;
 	provider?: string;
 	thinkingLevel?: string;

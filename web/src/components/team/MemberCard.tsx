@@ -202,6 +202,25 @@ export function MemberCard({
 					<span className="pill">岗位 {scopeCounts.roleGeneral}</span>
 					<span className="pill">组织 {scopeCounts.companyPrivate}</span>
 					<span className="pill">仓库 {scopeCounts.projectPrivate}</span>
+					<span
+						className="pill"
+						title={
+							template?.tools.length
+								? `声明工具：${template.tools.join(", ")}`
+								: "无文件系统或命令行工具（纯分析与文稿协同）"
+						}
+					>
+						{template?.tools.includes("edit") || template?.tools.includes("bash")
+							? "读写与命令"
+							: template?.tools.includes("read")
+								? "只读核查"
+								: "纯思考文稿"}
+					</span>
+					{(template?.antiJobs?.length ?? 0) > 0 && (
+						<span className="pill" title={template!.antiJobs!.join("；")}>
+							边界 {template!.antiJobs!.length}
+						</span>
+					)}
 				</div>
 			</div>
 

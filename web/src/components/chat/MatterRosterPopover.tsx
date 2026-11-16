@@ -33,6 +33,7 @@ interface MatterRosterPopoverProps {
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onToggleObserversEnabled: (enabled: boolean) => void;
+	onUpdateMatterObservers?: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 }
 
@@ -66,6 +67,7 @@ export function MatterRosterPopover({
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onToggleObserversEnabled,
+	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
 }: MatterRosterPopoverProps) {
 	const query = rosterSearch.trim().toLowerCase();
@@ -76,13 +78,8 @@ export function MatterRosterPopover({
 	const filteredHumanTiles = matterHumanParticipants.filter((col) => matchesQuery(col.name, col.roleTitle, "同事"));
 	const filteredAiTiles = inGroupAiMembers.filter((ai) => {
 		const isLead = ai.id === leadAi?.id;
-		const roleLabel = isLead
-			? "负责人"
-			: observersEnabled
-				? "旁听"
-				: specialistIds.includes(ai.id)
-					? "协同"
-					: "协作成员";
+		const isObs = observerAis.some((obs) => obs.id === ai.id);
+		const roleLabel = isLead ? "负责人" : isObs ? "定向旁听" : specialistIds.includes(ai.id) ? "协同" : "协作成员";
 		return matchesQuery(ai.displayName, ai.roleTitle, roleLabel);
 	});
 	const hasRemovable =
@@ -307,49 +304,69 @@ export function MatterRosterPopover({
 						{filteredAiTiles.map((ai) => {
 							const theme = getMemberThemeById(members, ai.id);
 							const isLead = ai.id === leadAi?.id;
+							const isObs = observerAis.some((obs) => obs.id === ai.id);
 							const canRemoveAi = rosterMode === "remove" && isOwner && !isLead;
 							const canPromoteLead = rosterMode === "view" && isOwner && !isLead && !isTurnRunning;
+							const canToggleObserver =
+								rosterMode === "view" && isOwner && !isLead && Boolean(onUpdateMatterObservers);
 							const tagLabel = isLead
 								? "负责人"
-								: observersEnabled
-									? "旁听"
+								: isObs
+									? "定向旁听"
 									: specialistIds.includes(ai.id)
 										? "协同"
 										: "协作成员";
-							const tagClass = isLead ? "lead" : observersEnabled ? "observer" : "";
+							const tagClass = isLead ? "lead" : isObs ? "observer" : "";
 							return (
-								<button
-									key={`ai-${ai.id}`}
-									type="button"
-									className={`wechat-member-tile ${canRemoveAi || canPromoteLead ? "interactive" : ""}`}
-									title={
-										canRemoveAi
-											? `移出 ${ai.displayName}`
-											: isLead
-												? `${ai.displayName} · 当前事项负责人`
-												: isTurnRunning
-													? `${ai.displayName}（当前回合执行中，完成后可切换负责人）`
-													: isOwner
-														? `点击将「${ai.displayName}」设为当前事项负责人`
-														: `${ai.displayName} · ${tagLabel}`
-									}
-									onClick={() => {
-										if (canRemoveAi) {
-											onUpdateMatterAiMembers(
-												inGroupAiMembers.map((m) => m.id).filter((id) => id !== ai.id),
-											);
-										} else if (canPromoteLead) {
-											onChangeLeadMember(ai.id);
+								<div key={`ai-${ai.id}`} className="wechat-member-tile-wrap">
+									<button
+										type="button"
+										className={`wechat-member-tile ${canRemoveAi || canPromoteLead ? "interactive" : ""}`}
+										title={
+											canRemoveAi
+												? `移出 ${ai.displayName}`
+												: isLead
+													? `${ai.displayName} · 当前事项负责人`
+													: isTurnRunning
+														? `${ai.displayName}（当前回合执行中，完成后可切换负责人）`
+														: isOwner
+															? `点击将「${ai.displayName}」设为当前事项负责人`
+															: `${ai.displayName} · ${tagLabel}`
 										}
-									}}
-								>
-									<div className={`wechat-avatar-box ai ${isLead ? "is-lead" : ""}`}>
-										<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-										{canRemoveAi && <span className="wechat-remove-badge">−</span>}
-									</div>
-									<span className="wechat-tile-name">{ai.displayName}</span>
-									<span className={`wechat-tile-tag ${tagClass}`}>{tagLabel}</span>
-								</button>
+										onClick={() => {
+											if (canRemoveAi) {
+												onUpdateMatterAiMembers(
+													inGroupAiMembers.map((m) => m.id).filter((id) => id !== ai.id),
+												);
+											} else if (canPromoteLead) {
+												onChangeLeadMember(ai.id);
+											}
+										}}
+									>
+										<div className={`wechat-avatar-box ai ${isLead ? "is-lead" : ""}`}>
+											<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
+											{canRemoveAi && <span className="wechat-remove-badge">−</span>}
+										</div>
+										<span className="wechat-tile-name">{ai.displayName}</span>
+										<span className={`wechat-tile-tag ${tagClass}`}>{tagLabel}</span>
+									</button>
+									{canToggleObserver && (
+										<button
+											type="button"
+											className={`wechat-obs-chip ${isObs ? "active" : ""}`}
+											title={isObs ? "取消定向旁听（保留为内部可协同成员）" : "设为本事项定向旁听成员"}
+											onClick={() => {
+												const currentObs = observerAis.map((o) => o.id);
+												const nextObs = isObs
+													? currentObs.filter((id) => id !== ai.id)
+													: [...currentObs, ai.id];
+												onUpdateMatterObservers?.(nextObs);
+											}}
+										>
+											{isObs ? "旁听中" : "+ 旁听"}
+										</button>
+									)}
+								</div>
 							);
 						})}
 

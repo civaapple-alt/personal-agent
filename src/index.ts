@@ -1,5 +1,13 @@
 export { resolveRepoGitUserIdentity } from "./orchestrator/execution-context.ts";
 export {
+	assessMatterInitiation,
+	type CollaborationPresetMode,
+	type MatterInitiationAssessment,
+	type MatterInitiationCandidate,
+	type RoleFitStatus,
+	type RoleGapSuggestion,
+} from "./orchestrator/matter-initiation.ts";
+export {
 	buildProgressSnapshot,
 	type DelegateInput,
 	type DelegateResult,
@@ -17,6 +25,14 @@ export {
 	type TeamOrchestratorOptions,
 	type WorkerFactory,
 } from "./orchestrator/team-orchestrator.ts";
+export {
+	buildRoleDesignDraft,
+	normalizeRoleTools,
+	type RoleArchitectDraft,
+	type RoleDesignBriefInput,
+	type RoleInteractionStyle,
+	type RoleWorkspaceScope,
+} from "./roles/role-architect.ts";
 export {
 	loadRoleTemplatesFromDir,
 	parseRoleTemplateMarkdown,

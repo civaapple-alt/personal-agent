@@ -12,7 +12,8 @@
 - 并发、工作区切换与图片上传：
   - 同事项运行中发送消息、切换工作区及切换事项负责人（`leadMemberId`）返回 409；调整全局旁听开关（`observersEnabled`）、
     AI 参与名单（`aiMemberIds`）或旁听列表（`observerMemberIds`）可在运行中即时更新。取消要交给编排核，不只广播停止事件。
-  - `POST /api/matters` 支持传入 `aiMemberIds`、`observersEnabled` 与可选 `images`（`POST /api/matters/:id/messages`
+  - `POST /api/matters/assess` 结合当前团队职责与工作区状态评估立项匹配度、推荐参与模式及角色缺口。
+  - `POST /api/matters` 支持传入 `aiMemberIds`、`observersEnabled`、定向 `observerMemberIds`、`collaboratorIds` 与可选 `images`（`POST /api/matters/:id/messages`
     同样支持可选 `observerMemberIds` 与 `images`）：
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
   - 图片落盘 `uploadsDir`（默认 `.data/uploads`，测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问，消息仅存轻量引用 `metadata.images`。
@@ -22,7 +23,7 @@
     `PATCH /api/organizations/:id` 与 `POST /api/organizations/:id/default` 管理组织字段与默认组织切换。
   - 字段覆盖名称、Git 邮箱域名、`isDefault` 与简介；`POST /api/workspaces` 省略 `orgId` 自动归入默认组织
     （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
-  - `POST /api/members` 与 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
+  - `POST /api/members/design` 提供只读引导式角色边界设计草案（One Job / Anti-Jobs / 最小工具集）；`POST /api/members` 支持显式传入 `tools`、`antiJobs` 与分段职责并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
 - 多人类受限协作与显式讨论隔离（方案 B）：
   - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式

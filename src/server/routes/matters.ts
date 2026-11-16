@@ -237,6 +237,33 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		return true;
 	}
 
+	if (method === "POST" && pathname === "/api/matters/assess") {
+		const body = await readJsonBody(req);
+		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+		const workspaceId =
+			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
+		const preferredMemberId =
+			typeof body.preferredMemberId === "string" && body.preferredMemberId.trim().length > 0
+				? body.preferredMemberId.trim()
+				: undefined;
+		if (workspaceId && !store.getWorkspace(workspaceId)) {
+			sendError(res, 404, `Workspace not found: ${workspaceId}`);
+			return true;
+		}
+		if (preferredMemberId && !store.getMember(preferredMemberId)) {
+			sendError(res, 404, `Member not found: ${preferredMemberId}`);
+			return true;
+		}
+		const assessment = orchestrator.assessInitiation({
+			prompt,
+			hasImages: body.hasImages === true,
+			hasWorkspace: Boolean(workspaceId),
+			preferredMemberId,
+		});
+		sendJson(res, 200, assessment);
+		return true;
+	}
+
 	if (method === "POST" && pathname === "/api/matters") {
 		const body = await readJsonBody(req);
 		const mode = body.mode === "discussion" ? "discussion" : body.mode === "ai_request" ? "ai_request" : "dispatch";

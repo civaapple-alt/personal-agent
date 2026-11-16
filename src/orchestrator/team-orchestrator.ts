@@ -8,6 +8,7 @@ import type { Deliverable, Matter, MemberMemory, Organization, TeamMember, Works
 import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { validateDelivery } from "./execution-context.ts";
+import { assessMatterInitiation, type MatterInitiationAssessment } from "./matter-initiation.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import {
@@ -156,6 +157,22 @@ export class TeamOrchestrator {
 		if (matter.leadMemberId) allowed.add(matter.leadMemberId);
 		const filtered = all.filter((member) => allowed.has(member.id));
 		return filtered.length > 0 ? filtered : all;
+	}
+
+	/**
+	 * Evaluate a draft matter before launch for role fit, recommended team size/mode, and role gaps.
+	 */
+	assessInitiation(input: {
+		prompt: string;
+		hasImages?: boolean;
+		hasWorkspace?: boolean;
+		preferredMemberId?: string;
+	}): MatterInitiationAssessment {
+		return assessMatterInitiation({
+			...input,
+			members: this.store.listMembers(),
+			templatesByRoleId: this.templatesById,
+		});
 	}
 
 	/**

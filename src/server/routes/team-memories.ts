@@ -1,5 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	buildRoleDesignDraft,
+	normalizeRoleTools,
+	type RoleInteractionStyle,
+	type RoleWorkspaceScope,
+} from "../../roles/role-architect.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../../roles/template-loader.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
@@ -18,6 +24,54 @@ import {
 export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, rolesDir, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
+
+	if (method === "POST" && pathname === "/api/members/design") {
+		if (!requireOwner(res, actor)) return true;
+		const body = await readJsonBody(req);
+		const oneJob = typeof body.oneJob === "string" ? body.oneJob.trim() : "";
+		if (!oneJob) {
+			sendError(res, 400, "oneJob is required");
+			return true;
+		}
+		const antiJobs = Array.isArray(body.antiJobs)
+			? body.antiJobs.map(String).filter(Boolean)
+			: typeof body.antiJobs === "string"
+				? body.antiJobs
+						.split(/[\n;；]+/)
+						.map((s) => s.trim())
+						.filter(Boolean)
+				: undefined;
+		const keywords = Array.isArray(body.keywords) ? body.keywords.map(String).filter(Boolean) : undefined;
+		const interactionStyle =
+			body.interactionStyle === "lead_direct" ||
+			body.interactionStyle === "consult_specialist" ||
+			body.interactionStyle === "risk_observer" ||
+			body.interactionStyle === "mixed"
+				? (body.interactionStyle as RoleInteractionStyle)
+				: undefined;
+		const workspaceScope =
+			body.workspaceScope === "read_write_code" ||
+			body.workspaceScope === "read_only_repo" ||
+			body.workspaceScope === "no_repo_docs"
+				? (body.workspaceScope as RoleWorkspaceScope)
+				: undefined;
+		const draft = buildRoleDesignDraft({
+			oneJob,
+			antiJobs,
+			quietWhen: typeof body.quietWhen === "string" ? body.quietWhen : undefined,
+			interactionStyle,
+			workspaceScope,
+			roleName: typeof body.roleName === "string" ? body.roleName : undefined,
+			roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : undefined,
+			keywords,
+			workflowRules: typeof body.workflowRules === "string" ? body.workflowRules : undefined,
+			constraints: typeof body.constraints === "string" ? body.constraints : undefined,
+			isPrimaryContact: body.isPrimaryContact === true,
+			existingMemberIds: store.listMembers().map((m) => m.id),
+		});
+		sendJson(res, 200, draft);
+		return true;
+	}
 
 	if (method === "POST" && pathname === "/api/members") {
 		if (!requireOwner(res, actor)) return true;
@@ -48,26 +102,48 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 						.filter(Boolean)
 				: [];
 		const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
+		const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
+		const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
 		const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
 		const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
 		const thinkingLevel = (typeof body.thinkingLevel === "string" ? body.thinkingLevel : "high") as ThinkingLevel;
 		const isPrimaryContact = body.isPrimaryContact === true;
+		const customSections =
+			body.sections && typeof body.sections === "object" ? (body.sections as Record<string, unknown>) : {};
+		const skillsAndMethods =
+			typeof customSections.skillsAndMethods === "string" && customSections.skillsAndMethods.trim()
+				? customSections.skillsAndMethods.trim()
+				: "- 围绕明确问题开展调研或核查，交付可验证的结果。";
+		const toolsAndEnvironment =
+			typeof customSections.toolsAndEnvironment === "string" && customSections.toolsAndEnvironment.trim()
+				? customSections.toolsAndEnvironment.trim()
+				: tools.length === 0
+					? "- 纯分析与文稿协同，不挂载文件编辑与终端工具。"
+					: `- 使用已声明的最小必要工具（${tools.join(", ")}）。`;
+		const collaborationConventions =
+			typeof customSections.collaborationConventions === "string" && customSections.collaborationConventions.trim()
+				? customSections.collaborationConventions.trim()
+				: "- 平时静默推进，关键节点请用户确认，内部协作留痕。";
+		const deliveryAndVerification =
+			typeof customSections.deliveryAndVerification === "string" && customSections.deliveryAndVerification.trim()
+				? customSections.deliveryAndVerification.trim()
+				: "- 产出结构化说明或可执行验证结果。";
 
 		const rawBody = [
 			"## 职责与边界",
 			responsibilities,
 			"",
 			"## 技能与工作方法",
-			"- 围绕明确问题开展调研或实现，交付可验证的结果。",
+			skillsAndMethods,
 			"",
 			"## 工具与环境依赖",
-			"- 按需调用文档读取与工作区工具。",
+			toolsAndEnvironment,
 			"",
 			"## 协作和沟通约定",
-			"- 平时静默推进，关键节点请用户确认，内部协作留痕。",
+			collaborationConventions,
 			"",
 			"## 交付与验证方式",
-			"- 产出结构化说明或可执行验证结果。",
+			deliveryAndVerification,
 		].join("\n");
 
 		const template: RoleTemplate = {
@@ -81,15 +157,16 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			thinkingLevel,
 			isPrimaryContact,
 			keywords,
-			tools: ["read", "bash"],
+			tools,
 			skills,
 			mcpDependencies: [],
+			...(antiJobs.length > 0 ? { antiJobs } : {}),
 			sections: {
 				responsibilitiesAndBoundaries: responsibilities,
-				skillsAndMethods: "- 围绕明确问题开展调研或实现，交付可验证的结果。",
-				toolsAndEnvironment: "- 按需调用文档读取与工作区工具。",
-				collaborationConventions: "- 平时静默推进，关键节点请用户确认，内部协作留痕。",
-				deliveryAndVerification: "- 产出结构化说明或可执行验证结果。",
+				skillsAndMethods,
+				toolsAndEnvironment,
+				collaborationConventions,
+				deliveryAndVerification,
 			},
 			rawBody,
 		};

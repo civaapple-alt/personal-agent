@@ -1,5 +1,11 @@
 import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject, useRef, useState } from "react";
-import type { ComposerImageAttachment, MatterProgressDto, OrganizationDto, WorkspaceDto } from "../../api.ts";
+import type {
+	CollaborationPresetMode,
+	ComposerImageAttachment,
+	MatterProgressDto,
+	OrganizationDto,
+	WorkspaceDto,
+} from "../../api.ts";
 import { MAX_COMPOSER_IMAGES } from "../../imageAttachments.ts";
 import type { StarterTask } from "../../utils.ts";
 
@@ -29,6 +35,7 @@ interface ComposerDockProps {
 	onSelectWorkspace: (workspaceId: string) => void;
 	onNewMatter: () => void;
 	onChangeLeadMember: (memberId: string) => void;
+	onApplyPresetMode?: (mode: CollaborationPresetMode, leadId?: string | null) => void;
 	onComposerTextChange: (value: string) => void;
 	onAddImages: (files: FileList | File[]) => void;
 	onRemoveImage: (imageId: string) => void;
@@ -64,6 +71,7 @@ export function ComposerDock({
 	onSelectWorkspace,
 	onNewMatter,
 	onChangeLeadMember,
+	onApplyPresetMode,
 	onComposerTextChange,
 	onAddImages,
 	onRemoveImage,
@@ -182,7 +190,12 @@ export function ComposerDock({
 									type="button"
 									className="quick-prompt-item"
 									onClick={() => {
-										if (task.memberId) onChangeLeadMember(task.memberId);
+										if (task.collaborationPreset && onApplyPresetMode) {
+											onApplyPresetMode(task.collaborationPreset, task.memberId ?? null);
+										} else {
+											if (task.memberId) onChangeLeadMember(task.memberId);
+											if (task.suggestedMode) onComposerModeChange(task.suggestedMode);
+										}
 										onComposerTextChange(task.prompt);
 										onCloseStarterMenu();
 										composerRef.current?.focus();

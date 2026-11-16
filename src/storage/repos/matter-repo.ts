@@ -45,17 +45,24 @@ export class MatterRepo {
 			storedAiIds = [input.leadMemberId, ...storedAiIds];
 		}
 		const effectiveAiIds = this.resolveEffectiveAiIds(storedAiIds);
+		const hasExplicitObserverList = input.observerMemberIds !== undefined;
 		const explicitObserverIds = normalizeUniqueIds(input.observerMemberIds).filter(
 			(memberId) => effectiveAiIds.includes(memberId) && memberId !== (input.leadMemberId ?? null),
 		);
-		const observersEnabled =
-			typeof input.observersEnabled === "boolean" ? input.observersEnabled : explicitObserverIds.length > 0;
 		const observerIds =
-			typeof input.observersEnabled === "boolean"
-				? input.observersEnabled
-					? this.computeAutoObservers(effectiveAiIds, input.leadMemberId ?? null)
-					: []
-				: explicitObserverIds;
+			input.observersEnabled === false
+				? []
+				: hasExplicitObserverList
+					? explicitObserverIds
+					: input.observersEnabled === true
+						? this.computeAutoObservers(effectiveAiIds, input.leadMemberId ?? null)
+						: [];
+		const observersEnabled =
+			input.observersEnabled === false
+				? false
+				: hasExplicitObserverList
+					? observerIds.length > 0
+					: input.observersEnabled === true;
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspace = input.workspaceId ? this.orgRepo.getWorkspace(input.workspaceId) : null;
 		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);

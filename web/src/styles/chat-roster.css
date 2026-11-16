@@ -346,3 +346,29 @@
 	background: var(--accent);
 	border-color: var(--accent);
 }
+.wechat-member-tile-wrap {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+.wechat-obs-chip {
+	border: 1px solid var(--border);
+	background: var(--bg-stage);
+	color: var(--text-secondary);
+	font-size: 10px;
+	line-height: 1.3;
+	padding: 1px 7px;
+	border-radius: 999px;
+	cursor: pointer;
+}
+.wechat-obs-chip:hover {
+	border-color: var(--observer-border);
+	color: var(--observer-text);
+}
+.wechat-obs-chip.active {
+	border-color: var(--observer-border);
+	background: var(--observer-soft);
+	color: var(--observer-text);
+	font-weight: 600;
+}

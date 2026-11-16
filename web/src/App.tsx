@@ -27,10 +27,12 @@ import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
+import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
 import { type NavTab, parseHashRoute } from "./hashRouter.ts";
 import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
 import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts";
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
+import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useRsiDistill } from "./hooks/useRsiDistill.ts";
 import { MAX_COMPOSER_IMAGES, prepareComposerImages } from "./imageAttachments.ts";
 import { buildStarterTasks, getBotTheme } from "./utils.ts";
@@ -364,8 +366,21 @@ export function App() {
 		[bootstrap, selectedWorkspace],
 	);
 
+	const initiation = useMatterInitiationState({
+		selectedMatterId,
+		composerText,
+		composerImageCount: composerImages.length,
+		selectedWorkspaceId,
+		selectedMemberId,
+		members: bootstrap?.members ?? [],
+		setSelectedMemberId,
+		setComposerMode,
+		setDraftAiMemberIds,
+		setDraftObserversEnabled,
+	});
+
 	const startNewMatter = () => {
-		setDraftAiMemberIds(null);
+		initiation.resetInitiationState();
 		setSelectedMemberId("auto");
 		navigateRoute({ tab: "chats", isNewMatter: true });
 		composerRef.current?.focus();
@@ -513,6 +528,8 @@ export function App() {
 		selectedWorkspace,
 		selectedOrgId,
 		draftAiMemberIds,
+		draftObserverMemberIds: initiation.draftObserverMemberIds,
+		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		draftObserversEnabled,
 		headerContact,
 		explicitNewMatterRef,
@@ -526,7 +543,9 @@ export function App() {
 		setSelectedWorkspaceId,
 		setSelectedOrgId,
 		setDraftAiMemberIds,
+		setDraftObserverMemberIds: initiation.setDraftObserverMemberIds,
 		setDraftObserversEnabled,
+		onResetInitiation: initiation.resetInitiationState,
 		setErrorBanner,
 		setNoticeBanner,
 		navigateRoute,
@@ -707,10 +726,26 @@ export function App() {
 						onSelectOrganization={actions.handleSelectOrganization}
 						onSelectWorkspace={actions.handleSelectWorkspace}
 						matterAiMemberIds={matterAiMemberIds}
+						observerMemberIds={
+							matterDetail ? (matterDetail.matter.observerMemberIds ?? []) : initiation.draftObserverMemberIds
+						}
 						observersEnabled={observersEnabled}
+						draftPresetMode={initiation.draftPresetMode}
+						draftAiMemberIds={draftAiMemberIds}
+						draftCollaboratorIds={initiation.draftCollaboratorIds}
+						initiationAssessment={initiation.assessment}
+						initiationAssessing={initiation.assessing}
 						onChangeLeadMember={actions.handleChangeLeadMember}
 						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
+						onUpdateDraftAiMemberIds={setDraftAiMemberIds}
+						onUpdateDraftCollaboratorIds={initiation.setDraftCollaboratorIds}
+						onApplyPresetMode={(mode, leadId) =>
+							initiation.applyPresetMode(mode, leadId ? { leadId } : undefined)
+						}
+						onApplyInitiationRecommendation={initiation.applyAssessmentRecommendation}
+						onOpenArchitect={initiation.openArchitectForGap}
 						onToggleObserversEnabled={actions.handleToggleObserversEnabled}
+						onUpdateMatterObservers={actions.handleUpdateMatterObservers}
 						onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
 						onApproveAiRequest={(matterId, messageId) => void actions.handleApproveAiRequest(matterId, messageId)}
 						onDismissAiRequest={(matterId, messageId) => void actions.handleDismissAiRequest(matterId, messageId)}
@@ -787,6 +822,7 @@ export function App() {
 							setSelectedMemberId(memberId);
 							startNewMatter();
 						}}
+						onOpenArchitect={() => initiation.openArchitectForGap()}
 						onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
 						onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 					/>
@@ -807,6 +843,31 @@ export function App() {
 					/>
 				)}
 			</main>
+
+			<RoleArchitectModal
+				open={initiation.architectOpen}
+				seedGap={initiation.architectSeed}
+				onClose={() => initiation.setArchitectOpen(false)}
+				onCreated={async (member) => {
+					await refreshBootstrap();
+					if (activeTab === "chats" && !selectedMatterId) {
+						setSelectedMemberId(member.id);
+						setDraftAiMemberIds((prev) =>
+							initiation.draftPresetMode === "solo"
+								? [member.id]
+								: prev
+									? Array.from(new Set([member.id, ...prev]))
+									: [member.id],
+						);
+						if (initiation.draftPresetMode === "human_first") {
+							initiation.setDraftPresetMode("solo");
+							setComposerMode("dispatch");
+						}
+					}
+				}}
+				onNotice={(msg) => setNoticeBanner(msg)}
+				onError={(msg) => setErrorBanner(msg)}
+			/>
 		</div>
 	);
 }

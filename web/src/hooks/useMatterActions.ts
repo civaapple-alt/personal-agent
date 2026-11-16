@@ -14,6 +14,7 @@ import {
 	updateMatterAiMembers,
 	updateMatterCollaborators,
 	updateMatterLead,
+	updateMatterObservers,
 	updateMatterObserversEnabled,
 	updateMatterOrganization,
 	updateMatterWorkspace,
@@ -52,6 +53,8 @@ interface UseMatterActionsParams {
 	selectedWorkspace: WorkspaceDto | null;
 	selectedOrgId: string;
 	draftAiMemberIds: string[] | null;
+	draftObserverMemberIds?: string[];
+	draftCollaboratorIds?: string[];
 	draftObserversEnabled: boolean;
 	headerContact: TeamMemberDto | null;
 	explicitNewMatterRef: MutableRefObject<boolean>;
@@ -65,7 +68,9 @@ interface UseMatterActionsParams {
 	setSelectedWorkspaceId: (v: string) => void;
 	setSelectedOrgId: (v: string) => void;
 	setDraftAiMemberIds: (v: string[] | null) => void;
+	setDraftObserverMemberIds?: (v: string[]) => void;
 	setDraftObserversEnabled: (v: boolean) => void;
+	onResetInitiation?: () => void;
 	setErrorBanner: (msg: string | null) => void;
 	setNoticeBanner: (msg: string | null) => void;
 	navigateRoute: (next: HashRoute, options?: { replace?: boolean }) => void;
@@ -87,6 +92,8 @@ export function useMatterActions({
 	selectedWorkspace,
 	selectedOrgId,
 	draftAiMemberIds,
+	draftObserverMemberIds = [],
+	draftCollaboratorIds = [],
 	draftObserversEnabled,
 	headerContact,
 	explicitNewMatterRef,
@@ -100,7 +107,9 @@ export function useMatterActions({
 	setSelectedWorkspaceId,
 	setSelectedOrgId,
 	setDraftAiMemberIds,
+	setDraftObserverMemberIds,
 	setDraftObserversEnabled,
+	onResetInitiation,
 	setErrorBanner,
 	setNoticeBanner,
 	navigateRoute,
@@ -138,11 +147,14 @@ export function useMatterActions({
 					workspaceId: selectedWorkspaceId || undefined,
 					orgId: selectedOrgId || null,
 					aiMemberIds: draftAiMemberIds,
-					observersEnabled: draftObserversEnabled,
+					observersEnabled: draftObserverMemberIds.length > 0 ? true : draftObserversEnabled,
+					observerMemberIds: draftObserverMemberIds.length > 0 ? draftObserverMemberIds : undefined,
+					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
 				setSelectedMemberId("auto");
+				onResetInitiation?.();
 				navigateRoute({ tab: "chats", matterId: created.matter.id });
 				if (effectiveMode === "discussion") {
 					setNoticeBanner("已创建事项并发送首条团队讨论");
@@ -327,6 +339,7 @@ export function useMatterActions({
 		writeStoredSetting("pa.defaultObserversEnabled", enabled ? "true" : "false");
 		if (!selectedMatterId) {
 			setDraftObserversEnabled(enabled);
+			if (!enabled) setDraftObserverMemberIds?.([]);
 			setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
 			return;
 		}
@@ -334,6 +347,28 @@ export function useMatterActions({
 		void updateMatterObserversEnabled(targetMatterId, enabled)
 			.then(async () => {
 				setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleUpdateMatterObservers = (observerIds: string[]) => {
+		const deduped = [...new Set(observerIds)];
+		if (!selectedMatterId) {
+			setDraftObserverMemberIds?.(deduped);
+			setDraftObserversEnabled(deduped.length > 0);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterObservers(targetMatterId, deduped)
+			.then(async () => {
+				setNoticeBanner(
+					deduped.length > 0 ? `已设定 ${deduped.length} 位定向旁听成员` : "已取消全部旁听，保留内部按需协同",
+				);
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
 			})
@@ -378,6 +413,7 @@ export function useMatterActions({
 		handleChangeLeadMember,
 		handleUpdateMatterAiMembers,
 		handleToggleObserversEnabled,
+		handleUpdateMatterObservers,
 		handleDeliverableFeedback,
 	};
 }

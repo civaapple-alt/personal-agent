@@ -84,8 +84,10 @@ export async function executeWithWorkerPass(
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const canPublish = sessionMode === "lead";
-	const canDelegate = sessionMode !== "observer";
 	const matter = deps.store.getMatter(input.matterId);
+	const matterAiMembers = deps.resolveMatterAiMembers(matter);
+	const isSoloMatter = sessionMode === "lead" && matterAiMembers.length <= 1;
+	const canDelegate = sessionMode !== "observer" && !isSoloMatter;
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
@@ -124,7 +126,9 @@ export async function executeWithWorkerPass(
 				? []
 				: sessionMode === "internal"
 					? ["delegate_to_member", "propose_experience"]
-					: ["delegate_to_member", "publish_deliverable", "propose_experience"];
+					: isSoloMatter
+						? ["publish_deliverable", "propose_experience"]
+						: ["delegate_to_member", "publish_deliverable", "propose_experience"];
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
 			category: MemoryCategory;

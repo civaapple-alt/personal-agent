@@ -164,10 +164,10 @@ export function MessageFeed({
 				{!selectedMatterId || (!matterDetail && !activeMatterProgress) ? (
 					<div className="welcome-hero">
 						<BotFaceIcon bg={headerTheme.bg} size="lg" />
-						<h1>{selectedMemberId === "auto" ? "有什么可以帮你？" : memberName(selectedMemberId)}</h1>
+						<h1>{selectedMemberId === "auto" ? "今天要推进什么事？" : memberName(selectedMemberId)}</h1>
 						<p>
 							{selectedMemberId === "auto"
-								? "直接描述目标，系统会自动分配最合适的同事推进"
+								? "先描述目标，系统会评估最合适的角色与参与方式；也可在下方按团队习惯自由搭配阵型"
 								: (templateByRoleId.get(headerContact?.templateId ?? "")?.responsibilities.split("\n")[0] ??
 									"直接输入任务开始协作")}
 						</p>

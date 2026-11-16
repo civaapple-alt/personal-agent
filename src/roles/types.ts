@@ -26,6 +26,7 @@ export interface RoleTemplate {
 	tools: string[];
 	skills: string[];
 	mcpDependencies: string[];
+	antiJobs?: string[];
 	sections: RoleTemplateSections;
 	rawBody: string;
 	sourcePath?: string;
