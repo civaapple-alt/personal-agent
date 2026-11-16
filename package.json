@@ -21,7 +21,8 @@
     "check:startup": "node scripts/check-server-startup.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "demo:rsi": "node src/demo/rsi-smoke.ts",
-    "demo:inner": "node src/demo/inner-matter-smoke.ts"
+    "demo:inner": "node src/demo/inner-matter-smoke.ts",
+    "demo:review": "node src/demo/publication-review-smoke.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",

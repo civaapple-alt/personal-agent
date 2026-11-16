@@ -40,6 +40,7 @@
 - 只有主成员在形成可审阅阶段成果、明确版本或实质变化时，才通过 `publish_deliverable` 结合 [technical-writing](../../skills/technical-writing/SKILL.md) 归档正式成果：
   - 输出精简的 1–3 句 `changeNote` 与「核心结论 → 正文内容 → 交付过程与验证依据」结构。
   - 过程回复与澄清只留对话，草稿须整轮成功后才归档；工具权限和最终写入都要保持这些规则，不能只在角色提示词里约定。
+  - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../docs/publication-review.md)检查。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。
 

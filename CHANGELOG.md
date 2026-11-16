@@ -4,8 +4,15 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Record the built-in demo artifact review and prioritize evidence accuracy and design/acceptance consistency. Clarify that four recorded stages establish workflow evidence, not accepted output quality or a tested business application.
+
 ### Added
 
+- Add lead-only pre-publication review guidance and `demo:review`, an isolated real-Pi baseline/current comparison with fixed contradictory design inputs, tool-order evidence, preserved history and an independent full-text review rubric. Mechanical checks do not automatically certify output quality.
+- First real comparison observed specialist consultation before publication, but retained final-document state/migration contradictions. Record the failures and counterexamples rather than treating tool success as quality acceptance.
+- Label the demo's default revision feedback as a fictional usage scenario rather than an actual trial; preserve any feedback already saved by the user.
 - Added an opt-in built-in feedback-box matter with a separate Git workspace at `.data/inner-matter`, an isolated demo organization, and four editable prompts for discussion, real specialist consultation, V1 delivery and feedback-driven V2 revision. Preparation calls no model and fabricates no history or deliverables.
 - Preserve existing files, Git state, feedback and versions on reopen. Derive guide progress from normal persisted execution evidence; keep existing acceptance text and ratings when preparing revision input.
 - Added isolated regression coverage, source/compiled startup checks for the demo endpoint, and opt-in `demo:inner` real-Pi walkthrough with retained evidence.
