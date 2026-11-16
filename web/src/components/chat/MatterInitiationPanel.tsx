@@ -7,6 +7,7 @@ import type {
 	RoleTemplateDto,
 	TeamMemberDto,
 } from "../../api.ts";
+import { filterBusinessMembers, isArchitectMemberId } from "../../architectApi.ts";
 import { formatRoleToolTierLabel } from "../../utils.ts";
 
 interface MatterInitiationPanelProps {
@@ -28,6 +29,7 @@ interface MatterInitiationPanelProps {
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
 	onApplyRecommendation: () => void;
 	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
+	onStartArchitectMatter?: (seedText?: string) => void;
 }
 
 const PRESET_OPTIONS: Array<{ id: CollaborationPresetMode; label: string; hint: string }> = [
@@ -57,19 +59,37 @@ export function MatterInitiationPanel({
 	onUpdateDraftCollaboratorIds,
 	onApplyRecommendation,
 	onOpenArchitect,
+	onStartArchitectMatter,
 }: MatterInitiationPanelProps) {
 	const [expandedRoster, setExpandedRoster] = useState(false);
 
 	if (!isOwner) return null;
 
-	const allAiIds = members.map((m) => m.id);
+	if (isArchitectMemberId(selectedMemberId, members, templateByRoleId)) {
+		return (
+			<section className="initiation-panel" aria-label="角色架构师专属模式">
+				<div className="initiation-mode-row">
+					<span className="initiation-assess-note">
+						<strong>角色架构师专属对话</strong> ·
+						只读分析团队角色配置，结构化新增/收窄提案将生成在回复卡片中由你勾选生效。
+					</span>
+					<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
+						改用快速卡片表单 →
+					</button>
+				</div>
+			</section>
+		);
+	}
+
+	const businessMembers = filterBusinessMembers(members, templateByRoleId);
+	const allAiIds = businessMembers.map((m) => m.id);
 	const effectiveAiIds = draftAiMemberIds === null ? allAiIds : draftAiMemberIds;
-	const primaryMember = members.find((m) => m.isPrimaryContact) ?? members[0] ?? null;
+	const primaryMember = businessMembers.find((m) => m.isPrimaryContact) ?? businessMembers[0] ?? null;
 	const effectiveLeadId =
-		selectedMemberId !== "auto" && members.some((m) => m.id === selectedMemberId)
+		selectedMemberId !== "auto" && businessMembers.some((m) => m.id === selectedMemberId)
 			? selectedMemberId
 			: (assessment?.recommendedLeadId ?? primaryMember?.id ?? null);
-	const effectiveLead = members.find((m) => m.id === effectiveLeadId) ?? null;
+	const effectiveLead = businessMembers.find((m) => m.id === effectiveLeadId) ?? null;
 
 	const activeConsultCount =
 		draftPresetMode === "solo" || draftPresetMode === "human_first"
@@ -146,12 +166,19 @@ export function MatterInitiationPanel({
 					<div className="initiation-roster-group">
 						<div className="initiation-roster-label">
 							<span>AI 角色站位（点击非主责卡片可切换：协同 / 定向旁听 / 移出）</span>
-							<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
-								+ 按流程设计新角色
-							</button>
+							<span className="actions-row compact">
+								{onStartArchitectMatter && (
+									<button type="button" className="btn-inline" onClick={() => onStartArchitectMatter()}>
+										+ 请架构师对话建角色
+									</button>
+								)}
+								<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
+									快速建角色
+								</button>
+							</span>
 						</div>
 						<div className="initiation-chip-grid">
-							{members.map((member) => {
+							{businessMembers.map((member) => {
 								const isLead = member.id === effectiveLeadId;
 								const inGroup = effectiveAiIds.includes(member.id);
 								const isObserver =
@@ -249,12 +276,27 @@ export function MatterInitiationPanel({
 							<div className="initiation-assess-actions">
 								{assessment.fitStatus === "gap_detected" ? (
 									<>
+										{onStartArchitectMatter && (
+											<button
+												type="button"
+												className="btn-pill-dark btn-xs"
+												onClick={() =>
+													onStartArchitectMatter(
+														assessment.gapSuggestion
+															? `我打算发起一项新任务，当前缺少「${assessment.gapSuggestion.missingRoleTitle}」（${assessment.gapSuggestion.suggestedJob}），请帮我设计最小可行角色与参与阵型。`
+															: undefined,
+													)
+												}
+											>
+												请架构师对话规划角色
+											</button>
+										)}
 										<button
 											type="button"
-											className="btn-pill-dark btn-xs"
+											className={onStartArchitectMatter ? "btn-pill-outline btn-xs" : "btn-pill-dark btn-xs"}
 											onClick={() => onOpenArchitect(assessment.gapSuggestion)}
 										>
-											设计并补齐专职角色
+											快速表单补齐
 										</button>
 										<button
 											type="button"

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { Matter, MatterMessage, MatterMessageChannel, MatterMessageSenderType, MatterStatus } from "../types.ts";
 import { mapMatterRow, mapMessageRow, normalizeUniqueIds, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
@@ -18,11 +19,14 @@ export class MatterRepo {
 	}
 
 	private resolveEffectiveAiIds(aiMemberIds: string[] | null): string[] {
-		return aiMemberIds ?? this.memberRepo.listMembers().map((member) => member.id);
+		if (aiMemberIds !== null) return aiMemberIds;
+		const all = this.memberRepo.listMembers().map((member) => member.id);
+		const business = all.filter((id) => id !== ROLE_ARCHITECT_MEMBER_ID);
+		return business.length > 0 ? business : all;
 	}
 
 	private computeAutoObservers(effectiveAiIds: string[], leadMemberId: string | null): string[] {
-		return effectiveAiIds.filter((id) => id !== leadMemberId);
+		return effectiveAiIds.filter((id) => id !== leadMemberId && id !== ROLE_ARCHITECT_MEMBER_ID);
 	}
 
 	createMatter(input: {
@@ -41,7 +45,9 @@ export class MatterRepo {
 		const timestamp = nowIso();
 		let storedAiIds =
 			input.aiMemberIds === undefined || input.aiMemberIds === null ? null : normalizeUniqueIds(input.aiMemberIds);
-		if (storedAiIds !== null && input.leadMemberId && !storedAiIds.includes(input.leadMemberId)) {
+		if (storedAiIds === null && input.leadMemberId === ROLE_ARCHITECT_MEMBER_ID) {
+			storedAiIds = [ROLE_ARCHITECT_MEMBER_ID];
+		} else if (storedAiIds !== null && input.leadMemberId && !storedAiIds.includes(input.leadMemberId)) {
 			storedAiIds = [input.leadMemberId, ...storedAiIds];
 		}
 		const effectiveAiIds = this.resolveEffectiveAiIds(storedAiIds);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	assessMatterInitiation,
 	type CollaborationPresetMode,
@@ -6,6 +6,7 @@ import {
 	type RoleGapSuggestionDto,
 	type TeamMemberDto,
 } from "../api.ts";
+import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
 
 interface UseMatterInitiationParams {
 	selectedMatterId: string | null;
@@ -42,10 +43,13 @@ export function useMatterInitiationState({
 	const [architectSeed, setArchitectSeed] = useState<RoleGapSuggestionDto | null>(null);
 	const seqRef = useRef(0);
 
+	const businessMembers = useMemo(() => filterBusinessMembers(members), [members]);
 	const fallbackLeadId =
-		selectedMemberId !== "auto" && members.some((m) => m.id === selectedMemberId)
+		selectedMemberId !== "auto" &&
+		!isArchitectMemberId(selectedMemberId, members) &&
+		businessMembers.some((m) => m.id === selectedMemberId)
 			? selectedMemberId
-			: (members.find((m) => m.isPrimaryContact)?.id ?? members[0]?.id ?? null);
+			: (businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null);
 
 	useEffect(() => {
 		if (selectedMatterId) {
@@ -109,21 +113,21 @@ export function useMatterInitiationState({
 				return;
 			}
 			if (mode === "lead_consult") {
-				const allIds = members.map((m) => m.id);
+				const allIds = businessMembers.map((m) => m.id);
 				setDraftAiMemberIds(options?.aiIds?.length ? options.aiIds : allIds.length > 0 ? allIds : null);
 				setDraftObserverMemberIds([]);
 				setDraftObserversEnabled(false);
 				return;
 			}
 			// lead_review: targeted observers (default 1 QA/reviewer if none specified yet)
-			const allIds = members.map((m) => m.id);
+			const allIds = businessMembers.map((m) => m.id);
 			const defaultObserver =
 				options?.observerIds && options.observerIds.length > 0
 					? options.observerIds.filter((id) => id !== leadId)
 					: (() => {
 							const qaOrOther =
-								members.find((m) => m.id !== leadId && m.templateId === "qa-manager") ??
-								members.find((m) => m.id !== leadId);
+								businessMembers.find((m) => m.id !== leadId && m.templateId === "qa-manager") ??
+								businessMembers.find((m) => m.id !== leadId);
 							return qaOrOther ? [qaOrOther.id] : [];
 						})();
 			const nextAiIds = options?.aiIds?.length
@@ -133,7 +137,14 @@ export function useMatterInitiationState({
 			setDraftObserverMemberIds(defaultObserver);
 			setDraftObserversEnabled(defaultObserver.length > 0);
 		},
-		[fallbackLeadId, members, setComposerMode, setDraftAiMemberIds, setDraftObserversEnabled, setSelectedMemberId],
+		[
+			businessMembers,
+			fallbackLeadId,
+			setComposerMode,
+			setDraftAiMemberIds,
+			setDraftObserversEnabled,
+			setSelectedMemberId,
+		],
 	);
 
 	const applyAssessmentRecommendation = useCallback(() => {

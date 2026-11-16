@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
@@ -9,7 +10,12 @@ import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { validateDelivery } from "./execution-context.ts";
 import { assessMatterInitiation, type MatterInitiationAssessment } from "./matter-initiation.ts";
-import { type MetaArchitectChatInput, type MetaArchitectChatResult, runMetaArchitectChat } from "./meta-architect.ts";
+import {
+	buildArchitectMessageProposals,
+	type MetaArchitectChatInput,
+	type MetaArchitectChatResult,
+	runMetaArchitectChat,
+} from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import {
@@ -153,9 +159,19 @@ export class TeamOrchestrator {
 		return member;
 	}
 
+	private isArchitectMember(member: TeamMember | null | undefined): boolean {
+		if (!member) return false;
+		return isArchitectRoleTemplate(
+			this.templatesById.get(member.templateId) ?? this.templatesById.get(member.id) ?? { id: member.id },
+		);
+	}
+
 	private resolveMatterAiMembers(matter: Matter | null): TeamMember[] {
 		const all = this.store.listMembers();
-		if (!matter || matter.aiMemberIds === null) return all;
+		if (!matter || matter.aiMemberIds === null) {
+			const business = all.filter((member) => !this.isArchitectMember(member) || member.id === matter?.leadMemberId);
+			return business.length > 0 ? business : all;
+		}
 		const allowed = new Set(matter.aiMemberIds);
 		if (matter.leadMemberId) allowed.add(matter.leadMemberId);
 		const filtered = all.filter((member) => allowed.has(member.id));
@@ -186,10 +202,6 @@ export class TeamOrchestrator {
 		if (allMembers.length === 0) {
 			throw new Error("No team members registered in store");
 		}
-		const allowedSet = allowedMemberIds ? new Set(allowedMemberIds) : null;
-		const members = allowedSet ? allMembers.filter((member) => allowedSet.has(member.id)) : allMembers;
-		const pool = members.length > 0 ? members : allMembers;
-
 		if (preferredMemberId) {
 			const explicit = this.store.getMember(preferredMemberId);
 			if (!explicit) {
@@ -197,6 +209,12 @@ export class TeamOrchestrator {
 			}
 			return explicit;
 		}
+
+		const allowedSet = allowedMemberIds ? new Set(allowedMemberIds) : null;
+		const members = allowedSet ? allMembers.filter((member) => allowedSet.has(member.id)) : allMembers;
+		const basePool = members.length > 0 ? members : allMembers;
+		const businessPool = basePool.filter((member) => !this.isArchitectMember(member));
+		const pool = businessPool.length > 0 ? businessPool : basePool;
 
 		const lowerPrompt = prompt.toLowerCase();
 		let bestMember: TeamMember | null = null;
@@ -220,7 +238,7 @@ export class TeamOrchestrator {
 		}
 
 		const primary = this.store.getPrimaryContact();
-		if (primary && (!allowedSet || allowedSet.has(primary.id))) {
+		if (primary && !this.isArchitectMember(primary) && (!allowedSet || allowedSet.has(primary.id))) {
 			return primary;
 		}
 		return pool[0]!;
@@ -349,8 +367,15 @@ export class TeamOrchestrator {
 						turnDeadlineMs,
 					)
 				: undefined;
+		const assignedIsArchitect = this.isArchitectMember(assignedMember);
+		const isMidMatterArchitectConsult = Boolean(
+			existing &&
+				assignedIsArchitect &&
+				existing.leadMemberId &&
+				!this.isArchitectMember(this.store.getMember(existing.leadMemberId)),
+		);
 		try {
-			if (matter.leadMemberId !== assignedMember.id) {
+			if (!isMidMatterArchitectConsult && matter.leadMemberId !== assignedMember.id) {
 				matter = this.store.updateMatterLead(matter.id, assignedMember.id);
 			}
 			this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
@@ -371,6 +396,8 @@ export class TeamOrchestrator {
 				metadata: {
 					workspaceId: workspace?.id ?? null,
 					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+					...(assignedIsArchitect ? { targetMemberId: assignedMember.id } : {}),
+					...(isMidMatterArchitectConsult ? { isMidMatterConsult: true } : {}),
 					...(input.author
 						? {
 								authorId: input.author.collaboratorId,
@@ -400,7 +427,7 @@ export class TeamOrchestrator {
 					chain: [assignedMember.id],
 					signal: run.controller.signal,
 					effectsTarget: run.effects,
-					onTextDelta: input.onTextDelta,
+					onTextDelta: assignedIsArchitect ? undefined : input.onTextDelta,
 					onProgress: emitDispatchProgress,
 				});
 			} catch (error) {
@@ -410,9 +437,16 @@ export class TeamOrchestrator {
 			const aborted = result.aborted || run.cancelled;
 			if (!aborted) run.controller.signal.throwIfAborted();
 			const rawReply = result.assistantText.trim();
+			const architectParsed =
+				!aborted && assignedIsArchitect
+					? buildArchitectMessageProposals(rawReply, this.store, this.templatesById, {
+							promptText: input.prompt,
+							isMidMatterConsult: isMidMatterArchitectConsult,
+						})
+					: null;
 			const replyText = aborted
 				? formatAbortedReply(rawReply, run.cancelReason)
-				: rawReply || "本轮未返回正文，请继续追问；执行记录保留在协作过程中。";
+				: architectParsed?.replyText || rawReply || "本轮未返回正文，请继续追问；执行记录保留在协作过程中。";
 			// Keep explicit document exports supported by API callers. Chat has no implicit export.
 			if (
 				!aborted &&
@@ -493,6 +527,7 @@ export class TeamOrchestrator {
 					sourceUserMessageId: run.userMessageId,
 					workspaceId: workspace?.id ?? null,
 					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+					...(architectParsed?.roleProposals ? { roleProposals: architectParsed.roleProposals } : {}),
 					...(aborted
 						? {
 								progressSnapshot: buildProgressSnapshot({
@@ -511,7 +546,7 @@ export class TeamOrchestrator {
 				replyText.slice(0, 200),
 			);
 			const observerCandidates =
-				!aborted && !run.cancelled
+				!aborted && !run.cancelled && !assignedIsArchitect
 					? updatedMatter.observerMemberIds
 							.filter((id, idx, arr) => id !== assignedMember.id && arr.indexOf(id) === idx)
 							.map((id) => this.store.getMember(id))
@@ -720,6 +755,7 @@ export class TeamOrchestrator {
 				workerFactory: this.workerFactory,
 				getDialogHandler: () => this.dialogHandler,
 				getTemplateForMember: (member) => this.getTemplateForMember(member),
+				getTemplatesById: () => this.templatesById,
 				resolveMatterAiMembers: (matter) => this.resolveMatterAiMembers(matter),
 				requireMatter: (matterId) => this.requireMatter(matterId),
 				delegate: (dInput, run, workspace, chain, signal, effectsTarget, onProgress) =>

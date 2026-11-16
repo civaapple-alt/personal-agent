@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../rpc/team-tool-bridge.ts";
@@ -14,6 +15,7 @@ import {
 	validateSavedSession,
 } from "./execution-context.ts";
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
+import { buildArchitectMatterContext } from "./meta-architect.ts";
 import {
 	buildInterruptionResumeBrief,
 	buildMemberSystemPrompt,
@@ -46,6 +48,7 @@ export interface WorkerRunnerDeps {
 	workerFactory: WorkerFactory;
 	getDialogHandler: () => OrchestratorDialogHandler | undefined;
 	getTemplateForMember: (member: TeamMember) => RoleTemplate | undefined;
+	getTemplatesById?: () => Map<string, RoleTemplate>;
 	resolveMatterAiMembers: (matter: Matter | null) => TeamMember[];
 	requireMatter: (matterId: string) => Matter;
 	delegate: (
@@ -112,17 +115,21 @@ export async function executeWithWorkerPass(
 	const signal = AbortSignal.any([input.signal, controller.signal]);
 	try {
 		const template = deps.getTemplateForMember(input.member);
-		const skillPaths = await resolveRoleSkills(template);
+		const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
+		const skillPaths = isArchitect ? [] : await resolveRoleSkills(template);
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
 		const sessionFile = previous ? await validateSavedSession(previous, cwd) : undefined;
-		const baseTools = (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
+		const baseTools = isArchitect
+			? []
+			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
 		const requestedTools =
 			sessionMode === "observer" ? baseTools.filter((tool) => tool !== "edit" && tool !== "write") : baseTools;
-		const mcpDependencies = template?.mcpDependencies ?? [];
-		const teamTools =
-			sessionMode === "observer"
+		const mcpDependencies = isArchitect ? [] : (template?.mcpDependencies ?? []);
+		const teamTools = isArchitect
+			? []
+			: sessionMode === "observer"
 				? []
 				: sessionMode === "internal"
 					? ["delegate_to_member", "propose_experience"]
@@ -291,9 +298,9 @@ export async function executeWithWorkerPass(
 				PA_MEMBER_NAME: input.member.displayName,
 				PA_MEMBER_TITLE: input.member.roleTitle,
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
-				PA_CAN_PUBLISH: String(canPublish),
-				PA_CAN_DELEGATE: String(canDelegate),
-				PA_CAN_EXPERIENCE: String(sessionMode !== "observer"),
+				PA_CAN_PUBLISH: String(canPublish && !isArchitect),
+				PA_CAN_DELEGATE: String(canDelegate && !isArchitect),
+				PA_CAN_EXPERIENCE: String(sessionMode !== "observer" && !isArchitect),
 				PA_REQUIRED_TOOLS: JSON.stringify([
 					...requestedTools,
 					...teamTools,
@@ -308,6 +315,18 @@ export async function executeWithWorkerPass(
 					repoGitUser,
 					sessionMode,
 					teamMembers: deps.resolveMatterAiMembers(matter),
+					...(isArchitect && deps.getTemplatesById
+						? {
+								extraGuidance: buildArchitectMatterContext(
+									{ store: deps.store, templatesById: deps.getTemplatesById() },
+									{
+										isMidMatterConsult: Boolean(
+											matter?.leadMemberId && matter.leadMemberId !== input.member.id,
+										),
+									},
+								),
+							}
+						: {}),
 				}),
 			},
 		});

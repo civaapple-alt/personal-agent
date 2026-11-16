@@ -2,7 +2,7 @@
 
 本目录是解析器，不存放团队角色内容。可分享的角色资产在顶层 [roles/](../../roles/README.md)，运行经验在 [storage](../storage/README.md)。
 
-[types.ts](types.ts) 定义 `RoleTemplate`（含可选 `antiJobs` 不做清单）与五个正文段落；[template-loader.ts](template-loader.ts) 提供解析、目录加载和 Markdown 序列化；[role-architect.ts](role-architect.ts) 基于单一核心职责（One Job）、显式 Anti-Jobs 与最小工具权责按需生成角色草案，不绑定静态行业模板库。
+[types.ts](types.ts) 定义 `RoleTemplate`（含可选 `roleKind` 区分业务与架构师元角色、可选 `antiJobs` 不做清单）与五个正文段落；[template-loader.ts](template-loader.ts) 提供解析、目录加载和 Markdown 序列化；[role-architect.ts](role-architect.ts) 基于单一核心职责（One Job）、显式 Anti-Jobs 与最小工具权责按需生成角色草案，并导出内置元角色模板 `BUILTIN_ROLE_ARCHITECT_TEMPLATE` 与辅助判定。
 
 frontmatter 是本项目支持的简单字段/数组格式，不是完整 YAML 解析器。
 

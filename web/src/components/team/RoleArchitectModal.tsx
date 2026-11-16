@@ -23,6 +23,7 @@ interface RoleArchitectModalProps {
 	matterPrompt?: string;
 	workspaceId?: string | null;
 	onClose: () => void;
+	onOpenArchitectMatter?: () => void;
 	onCreated: (member: TeamMemberDto) => Promise<void> | void;
 	onCreatedBatch?: (members: TeamMemberDto[], formation?: MetaArchitectFormationSuggestionDto) => Promise<void> | void;
 	onAppliedAdjustments?: () => Promise<void> | void;
@@ -62,6 +63,7 @@ export function RoleArchitectModal({
 	matterPrompt,
 	workspaceId,
 	onClose,
+	onOpenArchitectMatter,
 	onCreated,
 	onCreatedBatch,
 	onAppliedAdjustments,
@@ -191,9 +193,23 @@ export function RoleArchitectModal({
 						<h2 className="ui-card-title architect-modal-title">定制团队角色</h2>
 						<span className="pill">当前 {members.length} 位成员</span>
 					</div>
-					<button type="button" className="btn-inline" onClick={onClose}>
-						关闭
-					</button>
+					<div className="actions-row compact">
+						{onOpenArchitectMatter && (
+							<button
+								type="button"
+								className="btn-pill-outline btn-xs"
+								onClick={() => {
+									onClose();
+									onOpenArchitectMatter();
+								}}
+							>
+								在持久化对话中规划/体检 →
+							</button>
+						)}
+						<button type="button" className="btn-inline" onClick={onClose}>
+							关闭
+						</button>
+					</div>
 				</div>
 
 				{members.length > 0 && (

@@ -2,6 +2,7 @@ import { networkInterfaces } from "node:os";
 import { delimiter, dirname, resolve } from "node:path";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
@@ -31,7 +32,7 @@ async function main(): Promise<void> {
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
-	const templates = await loadRoleTemplatesFromDir(resolve(rootDir, "roles"));
+	const templates = [...(await loadRoleTemplatesFromDir(resolve(rootDir, "roles"))), BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 

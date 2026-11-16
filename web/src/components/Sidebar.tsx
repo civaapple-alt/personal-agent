@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
+import { isArchitectMember } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS, stripMarkdownFormatting } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
@@ -121,19 +122,25 @@ export function Sidebar({
 						}
 					}
 					const isWorking = workingMood !== "idle";
+					const isArchitect = isArchitectMember(member);
 					return (
 						<button
 							key={member.id}
 							type="button"
-							className={`roster-tile ${isSelected ? "active" : ""}`}
+							className={`roster-tile ${isSelected ? "active" : ""}${isArchitect ? " is-architect" : ""}`}
 							onClick={() => onToggleMember(member.id)}
-							title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
+							title={
+								isArchitect
+									? `${member.displayName} · 建队规划与协作体检（点击发起角色架构对话）`
+									: `${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`
+							}
 						>
 							<span className="roster-avatar-wrap">
 								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
 								{isWorking && <span className="roster-working-dot" />}
 							</span>
 							<span className="roster-name">{member.displayName}</span>
+							{isArchitect && <span className="roster-meta-tag">建队·体检</span>}
 						</button>
 					);
 				})}

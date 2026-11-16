@@ -212,6 +212,7 @@ export interface RoleTemplateDto {
 	id: string;
 	name: string;
 	title: string;
+	roleKind?: "business" | "architect";
 	version: string;
 	skills: string[];
 	tools: string[];
@@ -678,6 +679,33 @@ export function applyMemberAdjustments(
 		method: "POST",
 		body: JSON.stringify({ adjustments }),
 	});
+}
+
+export interface ApplyMatterRoleProposalsPayload {
+	action?: "apply" | "dismiss";
+	members?: CreateMemberPayload[];
+	adjustments?: ApplyMemberAdjustmentPayload[];
+	matterJoinMode?: "none" | "consult" | "observer" | "lead";
+}
+
+export function applyMatterRoleProposals(
+	matterId: string,
+	messageId: string,
+	input: ApplyMatterRoleProposalsPayload,
+): Promise<{
+	ok: boolean;
+	createdMembers: TeamMemberDto[];
+	updatedMembers: TeamMemberDto[];
+	message: MatterMessageDto | null;
+	matter: MatterDto;
+}> {
+	return requestJson(
+		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/apply-role-proposals`,
+		{
+			method: "POST",
+			body: JSON.stringify(input),
+		},
+	);
 }
 
 export function updateMemberIdentity(

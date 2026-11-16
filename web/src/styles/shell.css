@@ -111,6 +111,26 @@
 	color: var(--text-primary);
 	font-weight: 600;
 }
+.roster-tile.is-architect {
+	border-style: dashed;
+	border-color: rgba(15, 118, 110, 0.28);
+	background: rgba(240, 253, 250, 0.55);
+}
+.roster-tile.is-architect.active {
+	border-style: solid;
+	border-color: var(--accent-border);
+	background: var(--bg-stage);
+}
+.roster-meta-tag {
+	font-size: 10px;
+	line-height: 1.2;
+	padding: 1px 5px;
+	border-radius: var(--radius-pill);
+	background: var(--surface-accent-soft);
+	color: #0b574e;
+	font-weight: 600;
+	margin-top: -2px;
+}
 .bot-avatar {
 	position: relative;
 	border-radius: 13px;

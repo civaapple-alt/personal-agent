@@ -21,6 +21,7 @@ import {
 	submitDeliverableFeedback,
 	type TeamMemberDto,
 } from "./api.ts";
+import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
 import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
@@ -386,24 +387,50 @@ export function App() {
 		composerRef.current?.focus();
 	};
 
+	const startArchitectMatter = (seedText?: string) => {
+		initiation.resetInitiationState();
+		setSelectedMemberId(ROLE_ARCHITECT_MEMBER_ID);
+		setDraftAiMemberIds([ROLE_ARCHITECT_MEMBER_ID]);
+		initiation.setDraftPresetMode("solo");
+		setDraftObserversEnabled(false);
+		if (seedText !== undefined) {
+			setComposerText(seedText);
+		}
+		navigateRoute({ tab: "chats", isNewMatter: true });
+		composerRef.current?.focus();
+	};
+
+	const launchNewMatterWithMembers = (memberIds: string[]) => {
+		if (memberIds.length === 0) return;
+		initiation.resetInitiationState();
+		setSelectedMemberId(memberIds[0]!);
+		setDraftAiMemberIds(memberIds);
+		initiation.setDraftPresetMode(memberIds.length === 1 ? "solo" : "lead_consult");
+		setDraftObserversEnabled(false);
+		navigateRoute({ tab: "chats", isNewMatter: true });
+		composerRef.current?.focus();
+	};
+
 	const matterAiMemberIds: string[] = useMemo(() => {
-		const allIds = (bootstrap?.members ?? []).map((m) => m.id);
-		const validIds = new Set(allIds);
+		const allMembers = bootstrap?.members ?? [];
+		const allBusinessIds = filterBusinessMembers(allMembers, templateByRoleId).map((m) => m.id);
+		const validIds = new Set(allMembers.map((m) => m.id));
 		const leadId = headerContact?.id;
+		const defaultIds = isArchitectMemberId(leadId, allMembers, templateByRoleId) ? [leadId!] : allBusinessIds;
 		const raw =
 			selectedMatterId && matterDetail
 				? matterDetail.matter.aiMemberIds === null || matterDetail.matter.aiMemberIds === undefined
-					? allIds
+					? defaultIds
 					: matterDetail.matter.aiMemberIds
 				: draftAiMemberIds === null
-					? allIds
+					? defaultIds
 					: draftAiMemberIds;
 		const filtered = raw.filter((id) => validIds.has(id));
 		if (leadId && validIds.has(leadId) && !filtered.includes(leadId)) {
 			return [leadId, ...filtered];
 		}
-		return filtered.length > 0 ? filtered : allIds;
-	}, [bootstrap, draftAiMemberIds, headerContact?.id, matterDetail, selectedMatterId]);
+		return filtered.length > 0 ? filtered : defaultIds;
+	}, [bootstrap, draftAiMemberIds, headerContact?.id, matterDetail, selectedMatterId, templateByRoleId]);
 
 	const observersEnabled: boolean = useMemo(() => {
 		if (selectedMatterId && matterDetail) {
@@ -630,12 +657,21 @@ export function App() {
 				}}
 				onToggleMember={(memberId) => {
 					setMobileNavOpen(false);
+					const nextSelected =
+						activeTab === "chats" && selectedMatterId === null && selectedMemberId === memberId
+							? "auto"
+							: memberId;
+					const pickingArchitect = isArchitectMemberId(nextSelected, bootstrap?.members, templateByRoleId);
 					if (activeTab !== "chats" || selectedMatterId !== null) {
-						setDraftAiMemberIds(null);
-						setSelectedMemberId(memberId);
 						navigateRoute({ tab: "chats", isNewMatter: true });
+					}
+					setSelectedMemberId(nextSelected);
+					if (pickingArchitect) {
+						setDraftAiMemberIds([nextSelected]);
+						initiation.setDraftPresetMode("solo");
+						setDraftObserversEnabled(false);
 					} else {
-						setSelectedMemberId((prev) => (prev === memberId ? "auto" : memberId));
+						setDraftAiMemberIds(null);
 					}
 					composerRef.current?.focus();
 				}}
@@ -749,6 +785,12 @@ export function App() {
 						onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
 						onApproveAiRequest={(matterId, messageId) => void actions.handleApproveAiRequest(matterId, messageId)}
 						onDismissAiRequest={(matterId, messageId) => void actions.handleDismissAiRequest(matterId, messageId)}
+						onApplyRoleProposals={actions.handleApplyRoleProposals}
+						onDismissRoleProposals={actions.handleDismissRoleProposals}
+						onSendQuickPrompt={(prompt, opts) => void actions.handleSendQuickPrompt(prompt, opts)}
+						onConsultArchitect={() => void actions.handleConsultArchitect()}
+						onStartArchitectMatter={startArchitectMatter}
+						onLaunchWithNewRoles={launchNewMatterWithMembers}
 						onSendPrompt={() => void actions.handleSendPrompt()}
 						onAbortMatter={actions.handleAbortMatter}
 						onNewMatter={startNewMatter}
@@ -819,10 +861,15 @@ export function App() {
 						onPreviewAsCollaborator={(token) => void handleInviteLogin(token)}
 						onRestoreOwner={() => void handleLogoutOrRestore()}
 						onAssignTask={(memberId) => {
-							setSelectedMemberId(memberId);
 							startNewMatter();
+							setSelectedMemberId(memberId);
+							if (isArchitectMemberId(memberId, bootstrap?.members, templateByRoleId)) {
+								setDraftAiMemberIds([memberId]);
+								initiation.setDraftPresetMode("solo");
+							}
 						}}
 						onOpenArchitect={() => initiation.openArchitectForGap()}
+						onOpenArchitectMatter={() => startArchitectMatter()}
 						onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
 						onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 					/>
@@ -853,6 +900,7 @@ export function App() {
 				matterPrompt={activeTab === "chats" && !selectedMatterId ? composerText : undefined}
 				workspaceId={selectedWorkspaceId || null}
 				onClose={() => initiation.setArchitectOpen(false)}
+				onOpenArchitectMatter={() => startArchitectMatter()}
 				onCreated={async (member) => {
 					await refreshBootstrap();
 					if (activeTab === "chats" && !selectedMatterId) {

@@ -1,3 +1,4 @@
+import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
 import type {
@@ -230,6 +231,7 @@ export function buildMemberSystemPrompt(input: {
 	isInternalDelegation?: boolean;
 	sessionMode?: "lead" | "internal" | "observer";
 	teamMembers: TeamMember[];
+	extraGuidance?: string;
 }): string {
 	const mode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const organization = input.organization ?? null;
@@ -328,10 +330,14 @@ export function buildMemberSystemPrompt(input: {
 		);
 	}
 
+	const isArchitect = isArchitectRoleTemplate(input.template ?? { id: input.member.id });
 	sections.push(
 		`## 当前团队\n${input.teamMembers.map((member) => `- ${member.id}: ${member.displayName}，${member.roleTitle}`).join("\n")}`,
 	);
-	if (mode !== "observer") {
+	if (input.extraGuidance) {
+		sections.push(input.extraGuidance);
+	}
+	if (mode !== "observer" && !isArchitect) {
 		const isSoloMatter = mode === "lead" && input.teamMembers.length <= 1;
 		const collabLine = isSoloMatter
 			? "本事项采用「单兵专办」配置（仅你 1 位 AI 成员参与，不进行跨岗位内部委托）。请直接在本职边界内核查事实、独立推进并给出完整结论；若判断诉求明显超出自身岗位职责或缺少必要角色，请直说原因与建议补充的角色方向。"
@@ -341,8 +347,8 @@ export function buildMemberSystemPrompt(input: {
 				"\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本。成果表达遵循「简练、有重点、有过程」：changeNote 控制在 1–3 句讲清本版结论、核心改动与关键依据；document 正文先给核心结论与重点清单，再分节写清主体内容，最后用精简的「交付过程与验证依据」小结交代关键核查、数据结论与遗留边界（不贴整段原始日志）。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。\n若在执行、排障或用户纠偏过程中总结出明确可复用的**效率突破、问题排障定位法、岗位协同契约或项目硬规范**（不只是进度记录），可调用 propose_experience 附带合适 category 与 scope 记录为待验证候选经验。",
 		);
 	}
-	if (mode === "lead") sections.push(PUBLICATION_REVIEW_GUIDANCE);
-	if (mode === "lead")
+	if (mode === "lead" && !isArchitect) sections.push(PUBLICATION_REVIEW_GUIDANCE);
+	if (mode === "lead" && !isArchitect)
 		sections.push(
 			"## 文档发布来源\n文档已经保存为工作区文件时，publish_deliverable 必须传 sourcePath，由宿主读取最终正文；不要再次传 content 改写另一份。只有没有落盘文件的文档才直接传 content。来源文件登记后如有修改，完成前须重新登记同标题的最终文件。",
 		);

@@ -1,6 +1,8 @@
 import type { MutableRefObject } from "react";
 import {
+	type ApplyMatterRoleProposalsPayload,
 	abortMatter,
+	applyMatterRoleProposals,
 	approveAiRequest,
 	type BootstrapPayload,
 	type ComposerImageAttachment,
@@ -20,6 +22,7 @@ import {
 	updateMatterWorkspace,
 	type WorkspaceDto,
 } from "../api.ts";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute } from "../hashRouter.ts";
 
 /** Reads a string setting from localStorage, returning `fallback` on storage unavailability. */
@@ -116,12 +119,15 @@ export function useMatterActions({
 	refreshBootstrap,
 	refreshDetail,
 }: UseMatterActionsParams) {
-	const handleSendPrompt = async () => {
-		const text = composerText.trim();
-		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
+	const sendPromptInternal = async (
+		rawText: string,
+		imagesPayload: Array<{ data: string; mimeType: string; name?: string }>,
+		options?: { preferredMemberId?: string; clearComposer?: boolean; forceDispatch?: boolean },
+	) => {
+		const text = rawText.trim();
 		if ((!text && imagesPayload.length === 0) || submitting) return;
 		const effectiveMode: MatterSendMode =
-			composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
+			!options?.forceDispatch && composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
@@ -133,12 +139,17 @@ export function useMatterActions({
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
+					preferredMemberId: options?.preferredMemberId,
 				});
 				if (effectiveMode === "ai_request") {
 					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
+				} else if (options?.preferredMemberId === ROLE_ARCHITECT_MEMBER_ID) {
+					setNoticeBanner("已请「角色架构师」结合当前事项诊断分工与权限，生成提案后可勾选应用");
 				}
 			} else {
-				const preferredForCreate = selectedMemberId === "auto" ? undefined : selectedMemberId;
+				const preferredForCreate =
+					options?.preferredMemberId ?? (selectedMemberId === "auto" ? undefined : selectedMemberId);
+				const isArchitectCreate = preferredForCreate === ROLE_ARCHITECT_MEMBER_ID;
 				const created = await createMatter({
 					mode: effectiveMode,
 					prompt: text,
@@ -146,9 +157,17 @@ export function useMatterActions({
 					preferredMemberId: preferredForCreate,
 					workspaceId: selectedWorkspaceId || undefined,
 					orgId: selectedOrgId || null,
-					aiMemberIds: draftAiMemberIds,
-					observersEnabled: draftObserverMemberIds.length > 0 ? true : draftObserversEnabled,
-					observerMemberIds: draftObserverMemberIds.length > 0 ? draftObserverMemberIds : undefined,
+					aiMemberIds: isArchitectCreate ? [ROLE_ARCHITECT_MEMBER_ID] : draftAiMemberIds,
+					observersEnabled: isArchitectCreate
+						? false
+						: draftObserverMemberIds.length > 0
+							? true
+							: draftObserversEnabled,
+					observerMemberIds: isArchitectCreate
+						? []
+						: draftObserverMemberIds.length > 0
+							? draftObserverMemberIds
+							: undefined,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 				});
 				targetMatterId = created.matter.id;
@@ -164,8 +183,10 @@ export function useMatterActions({
 					setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
 				}
 			}
-			setComposerText("");
-			setComposerImages([]);
+			if (options?.clearComposer) {
+				setComposerText("");
+				setComposerImages([]);
+			}
 			await refreshBootstrap();
 			if (targetMatterId) {
 				await refreshDetail(targetMatterId);
@@ -174,6 +195,67 @@ export function useMatterActions({
 			setErrorBanner(err instanceof Error ? err.message : String(err));
 		} finally {
 			setSubmitting(false);
+		}
+	};
+
+	const handleSendPrompt = async () => {
+		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
+		await sendPromptInternal(composerText, imagesPayload, { clearComposer: true });
+	};
+
+	const handleSendQuickPrompt = async (prompt: string, options?: { preferredMemberId?: string }) => {
+		await sendPromptInternal(prompt, [], {
+			preferredMemberId: options?.preferredMemberId,
+			clearComposer: false,
+			forceDispatch: true,
+		});
+	};
+
+	const handleConsultArchitect = async (customPrompt?: string) => {
+		const text =
+			customPrompt?.trim() ||
+			"请结合本事项当前推进上下文与团队现有角色配置，诊断是否缺少专职角色、存在职责重叠或工具权限过宽，并给出可勾选应用的角色提案。";
+		await sendPromptInternal(text, [], {
+			preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+			clearComposer: false,
+			forceDispatch: true,
+		});
+	};
+
+	const handleApplyRoleProposals = async (
+		matterId: string,
+		messageId: string,
+		payload: ApplyMatterRoleProposalsPayload,
+	) => {
+		setErrorBanner(null);
+		try {
+			const res = await applyMatterRoleProposals(matterId, messageId, payload);
+			const parts: string[] = [];
+			if (res.createdMembers.length > 0) {
+				parts.push(`已创建 ${res.createdMembers.map((m) => `「${m.displayName}」`).join("、")}`);
+			}
+			if (res.updatedMembers.length > 0) {
+				parts.push(`已更新 ${res.updatedMembers.map((m) => `「${m.displayName}」`).join("、")}`);
+			}
+			if (payload.matterJoinMode && payload.matterJoinMode !== "none" && res.createdMembers.length > 0) {
+				parts.push("并已加入当前事项协作");
+			}
+			setNoticeBanner(parts.join("，") || "角色提案已生效");
+			await refreshBootstrap();
+			await refreshDetail(matterId);
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleDismissRoleProposals = async (matterId: string, messageId: string) => {
+		setErrorBanner(null);
+		try {
+			await applyMatterRoleProposals(matterId, messageId, { action: "dismiss" });
+			setNoticeBanner("已忽略该组角色建议");
+			await refreshDetail(matterId);
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
 		}
 	};
 
@@ -404,6 +486,10 @@ export function useMatterActions({
 
 	return {
 		handleSendPrompt,
+		handleSendQuickPrompt,
+		handleConsultArchitect,
+		handleApplyRoleProposals,
+		handleDismissRoleProposals,
 		handleApproveAiRequest,
 		handleDismissAiRequest,
 		handleUpdateMatterCollaborators,

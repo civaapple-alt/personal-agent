@@ -28,7 +28,7 @@
 ## 对话、旁听、图片与运行快照
 
 - 新建事项时，[MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 与 [useMatterInitiationState](hooks/useMatterInitiationState.ts) 提供发起前协作阵型配置（单兵直办 / 主责+指定协同 / 主责+定向旁听 / 人类先讨论定调）、人类协同同事与 AI 站位微调，以及对 `/api/matters/assess` 的实时适配诊断与缺口补齐引导；已建事项可在 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 内对单个非主责 AI 切换定向旁听。
-- 团队页面与立项缺口提示共享 [RoleArchitectModal](components/team/RoleArchitectModal.tsx) 与 [MetaArchitectChatPane](components/team/MetaArchitectChatPane.tsx)，支持「Meta-Bot 多轮对话规划（1~N 个角色 + 团队体检 + 勾选批量创建并自动装配新事项阵型）」与「快速 4 问离线直出」；[buildStarterTasks](utils.ts) 在未绑仓库时优先呈现讨论对齐与非研发起手示例。
+- 团队页面与侧边栏均支持直接启动「角色架构师」持久化对话事项（含 [RoleProposalCard](components/chat/RoleProposalCard.tsx) 消息内联确认卡与 [architectApi.ts](architectApi.ts) 判定辅助），同时在业务事项进行中支持经 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 中途请入架构师诊断并一键将新建角色加入当前事项；保留 [RoleArchitectModal](components/team/RoleArchitectModal.tsx) 与 [MetaArchitectChatPane](components/team/MetaArchitectChatPane.tsx) 离线快速 4 问直出入口；[buildStarterTasks](utils.ts) 在未绑仓库时优先呈现讨论对齐与非研发起手示例。
 - 新建事项欢迎页的“体验内置演示”按需调用准备接口，再打开演示事项。[InnerDemoGuide](components/chat/InnerDemoGuide.tsx) 只填入可修改的提问；[innerDemo.ts](innerDemo.ts) 依据真实消息、委托与版本计算进度。第四步沿正常验收接口保留已有反馈，再填入修订要求，不自动发给模型。
 
 - [BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作。

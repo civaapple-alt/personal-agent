@@ -1,5 +1,6 @@
 import { type RefObject, type UIEvent, useState } from "react";
 import {
+	type ApplyMatterRoleProposalsPayload,
 	type DeliverableDto,
 	type InnerMatterStep,
 	type MatterDetailPayload,
@@ -11,6 +12,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../../api.ts";
+import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEMBER_ID } from "../../architectApi.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
 import {
 	type DelegationSummaryItem,
@@ -23,6 +25,7 @@ import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
+import { RoleProposalCard } from "./RoleProposalCard.tsx";
 
 interface MessageFeedProps {
 	onOpenDemo?: () => void;
@@ -66,6 +69,15 @@ interface MessageFeedProps {
 	onOpenDeliverables: (deliverableId?: string) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
+	onApplyRoleProposals?: (
+		matterId: string,
+		messageId: string,
+		payload: ApplyMatterRoleProposalsPayload,
+	) => Promise<void>;
+	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
+	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
+	onFillComposer?: (text: string) => void;
+	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	onAbortMatter: (matterId: string) => void;
 }
 
@@ -106,10 +118,19 @@ export function MessageFeed({
 	onOpenDeliverables,
 	onApproveAiRequest,
 	onDismissAiRequest,
+	onApplyRoleProposals,
+	onDismissRoleProposals,
+	onSendQuickPrompt,
+	onFillComposer,
+	onLaunchWithNewRoles,
 	onAbortMatter,
 }: MessageFeedProps) {
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [dialogInput, setDialogInput] = useState("");
+	const selectedIsArchitect = isArchitectMemberId(selectedMemberId, members, templateByRoleId);
+	const isArchitectMatter = Boolean(
+		matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId),
+	);
 
 	const renderDeliverablePill = (deliv: DeliverableDto) => {
 		const url = previewUrlFor(deliv);
@@ -185,7 +206,55 @@ export function MessageFeed({
 								</span>
 							)}
 						</div>
-						{isOwner && onOpenDemo && (
+						{isOwner && selectedIsArchitect && (
+							<div className="architect-hero-scenarios">
+								<button
+									type="button"
+									className="architect-scenario-card"
+									onClick={() => onFillComposer?.("请按我们的实际工作流规划 1~N 个角色：\n1. 目标：")}
+								>
+									<div className="architect-scenario-icon" aria-hidden="true">
+										<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+											<circle cx="5.5" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+											<circle cx="14.5" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+											<circle cx="14.5" cy="14.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+											<path d="M7.6 9.1 12.4 6.4M7.6 10.9l4.8 2.7" stroke="currentColor" strokeWidth="1.5" />
+										</svg>
+									</div>
+									<div className="architect-scenario-copy">
+										<strong>按工作流规划 1~N 个角色分工</strong>
+										<small>从流程里拆出职责不重叠的专职角色与人类确认节点</small>
+									</div>
+								</button>
+								<button
+									type="button"
+									className="architect-scenario-card"
+									onClick={() =>
+										onSendQuickPrompt?.(
+											"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、近期运行摩擦有哪些，并给出结构化收窄或调整提案。",
+											{ preferredMemberId: ROLE_ARCHITECT_MEMBER_ID },
+										)
+									}
+								>
+									<div className="architect-scenario-icon is-health" aria-hidden="true">
+										<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+											<path
+												d="M3 10.5h3.2l2-4.5 3.1 8 2.2-3.5H17"
+												stroke="currentColor"
+												strokeWidth="1.6"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
+										</svg>
+									</div>
+									<div className="architect-scenario-copy">
+										<strong>对当前团队做一次协作体检</strong>
+										<small>直接发起诊断：扫描成员工具权限过宽、边界重合与摩擦信号</small>
+									</div>
+								</button>
+							</div>
+						)}
+						{isOwner && !selectedIsArchitect && onOpenDemo && (
 							<div className="inner-demo-entry">
 								<button type="button" className="btn-pill-outline" disabled={demoOpening} onClick={onOpenDemo}>
 									{demoOpening ? "正在准备演示…" : "体验内置演示"}
@@ -226,6 +295,7 @@ export function MessageFeed({
 							const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
 							const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
 							const progressSnapshot = parseProgressSnapshot(msg.metadata);
+							const roleProposals = !isUser && !isSystem ? parseRoleProposalsFromMetadata(msg.metadata) : null;
 							const leadFallback =
 								!isSystem && msg.senderId
 									? memberName(msg.senderId)
@@ -364,6 +434,27 @@ export function MessageFeed({
 										items={attachedDelegations}
 										memberName={memberName}
 									/>
+									{roleProposals && matterDetail && onApplyRoleProposals && onDismissRoleProposals && (
+										<RoleProposalCard
+											matterId={matterDetail.matter.id}
+											messageId={msg.id}
+											proposals={roleProposals}
+											isArchitectMatter={isArchitectMatter}
+											isOwner={isOwner}
+											isTurnRunning={isTurnRunning}
+											members={members}
+											memberName={memberName}
+											onApply={onApplyRoleProposals}
+											onDismiss={onDismissRoleProposals}
+											onQuickReply={
+												onSendQuickPrompt
+													? (text) =>
+															onSendQuickPrompt(text, { preferredMemberId: ROLE_ARCHITECT_MEMBER_ID })
+													: undefined
+											}
+											onLaunchWithNewRoles={onLaunchWithNewRoles}
+										/>
+									)}
 									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 								</div>
 							);

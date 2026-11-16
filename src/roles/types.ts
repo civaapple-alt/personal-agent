@@ -8,14 +8,17 @@ export interface RoleTemplateSections {
 	deliveryAndVerification: string;
 }
 
+export type RoleKind = "business" | "architect";
+
 /**
- * Shareable role capability definition loaded from `roles/*.md`.
+ * Shareable role capability definition loaded from `roles/*.md` or built-in meta roles.
  * Intentionally excludes company-private or project-private memories.
  */
 export interface RoleTemplate {
 	id: string;
 	name: string;
 	title: string;
+	roleKind?: RoleKind;
 	version: string;
 	shareable: boolean;
 	defaultProvider: string;

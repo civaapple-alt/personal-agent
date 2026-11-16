@@ -142,10 +142,181 @@ async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<s
 		: registered;
 }
 
+async function materializeMembersBatch(ctx: ServerRouteContext, rawList: unknown[]): Promise<TeamMember[]> {
+	const payloads: Record<string, unknown>[] = [];
+	for (const item of rawList) {
+		if (!item || typeof item !== "object" || Array.isArray(item)) {
+			throw new HttpRequestError(400, "Each item in members must be an object");
+		}
+		const rec = item as Record<string, unknown>;
+		const name = typeof rec.name === "string" ? rec.name.trim() : "";
+		const title = typeof rec.title === "string" ? rec.title.trim() : "";
+		if (!name || !title) {
+			throw new HttpRequestError(400, "Each member requires non-empty name and title");
+		}
+		payloads.push(rec);
+	}
+	const created: TeamMember[] = [];
+	for (const payload of payloads) {
+		created.push(await materializeMemberFromBody(ctx, payload));
+	}
+	return created;
+}
+
+async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): Promise<TeamMember[]> {
+	const { store, orchestrator, rolesDir } = ctx;
+	const planned: Array<{ prev: RoleTemplate; next: RoleTemplate }> = [];
+	for (const item of rawList) {
+		if (!item || typeof item !== "object" || Array.isArray(item)) {
+			throw new HttpRequestError(400, "Each item in adjustments must be an object");
+		}
+		const rec = item as Record<string, unknown>;
+		const memberId = typeof rec.memberId === "string" ? rec.memberId.trim() : "";
+		const member = memberId ? store.getMember(memberId) : null;
+		if (!member) {
+			throw new HttpRequestError(
+				memberId ? 404 : 400,
+				memberId ? `Member not found: ${memberId}` : "memberId is required",
+			);
+		}
+		const prev = orchestrator.getTemplateForMember(member);
+		if (!prev) {
+			throw new HttpRequestError(404, `Role template not found for member: ${memberId}`);
+		}
+		const patch: RoleTemplatePatch = {
+			...(Array.isArray(rec.tools) ? { tools: rec.tools.map(String) } : {}),
+			...(Array.isArray(rec.addAntiJobs) ? { addAntiJobs: rec.addAntiJobs.map(String).filter(Boolean) } : {}),
+			...(typeof rec.workflowNote === "string" && rec.workflowNote.trim()
+				? { workflowNote: rec.workflowNote.trim() }
+				: {}),
+		};
+		if (patch.tools === undefined && (!patch.addAntiJobs || patch.addAntiJobs.length === 0) && !patch.workflowNote) {
+			throw new HttpRequestError(400, `Adjustment for ${memberId} has no changes to apply`);
+		}
+		planned.push({ prev, next: applyRoleTemplatePatch(prev, patch) });
+	}
+	const updatedMembers: TeamMember[] = [];
+	for (const { next } of planned) {
+		if (rolesDir) {
+			await mkdir(rolesDir, { recursive: true });
+			await writeFile(join(rolesDir, `${next.id}.md`), serializeRoleTemplateMarkdown(next), "utf8");
+		}
+		updatedMembers.push(orchestrator.registerRoleTemplate(next));
+	}
+	return updatedMembers;
+}
+
 /** Handle AI team members, role architect Meta-Bot, role template import/export, memories, and RSI distillation. */
 export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, rolesDir, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
+
+	const proposalApplyMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/apply-role-proposals$/);
+	if (method === "POST" && proposalApplyMatch) {
+		if (!requireOwner(res, actor)) return true;
+		const matterId = decodeURIComponent(proposalApplyMatch[1]!);
+		const messageId = decodeURIComponent(proposalApplyMatch[2]!);
+		let matter = store.getMatter(matterId);
+		if (!matter) {
+			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		const targetMsg = store.getMessage(messageId);
+		if (!targetMsg || targetMsg.matterId !== matterId) {
+			sendError(res, 404, `Message not found: ${messageId}`);
+			return true;
+		}
+		const existingProposals =
+			targetMsg.metadata?.roleProposals &&
+			typeof targetMsg.metadata.roleProposals === "object" &&
+			!Array.isArray(targetMsg.metadata.roleProposals)
+				? (targetMsg.metadata.roleProposals as Record<string, unknown>)
+				: null;
+		if (!existingProposals) {
+			sendError(res, 409, "Message does not carry role proposals");
+			return true;
+		}
+
+		const body = await readJsonBody(req);
+		const action = body.action === "dismiss" ? "dismiss" : "apply";
+		if (action === "dismiss") {
+			if (existingProposals.status === "applied") {
+				sendError(res, 409, "Applied role proposals cannot be dismissed");
+				return true;
+			}
+			const updatedMsg = store.updateMessageMetadata(messageId, {
+				...(targetMsg.metadata ?? {}),
+				roleProposals: { ...existingProposals, status: "dismissed" },
+			});
+			if (updatedMsg) {
+				broadcast("matter_message", { matterId, message: updatedMsg, matter });
+			}
+			sendJson(res, 200, { ok: true, createdMembers: [], updatedMembers: [], message: updatedMsg, matter });
+			return true;
+		}
+
+		if (existingProposals.status === "applied") {
+			sendError(res, 409, "Role proposals have already been applied");
+			return true;
+		}
+		const matterJoinMode =
+			body.matterJoinMode === "consult" || body.matterJoinMode === "observer" || body.matterJoinMode === "lead"
+				? body.matterJoinMode
+				: "none";
+		if (matterJoinMode !== "none" && orchestrator.isMatterRunning(matterId)) {
+			sendError(res, 409, "Cannot update active matter roster while a turn is running");
+			return true;
+		}
+		const rawMembers = Array.isArray(body.members) ? body.members : [];
+		const rawAdjustments = Array.isArray(body.adjustments) ? body.adjustments : [];
+		if (rawMembers.length + rawAdjustments.length === 0) {
+			sendError(res, 400, "Select at least one role blueprint or adjustment to apply");
+			return true;
+		}
+		if (rawMembers.length > 8 || rawAdjustments.length > 8) {
+			sendError(res, 400, "At most 8 members or adjustments may be applied in one batch");
+			return true;
+		}
+
+		const createdMembers = rawMembers.length > 0 ? await materializeMembersBatch(ctx, rawMembers) : [];
+		const updatedMembers = rawAdjustments.length > 0 ? await applyRoleAdjustmentsBatch(ctx, rawAdjustments) : [];
+		const newIds = createdMembers.map((m) => m.id);
+		let matterMutated = false;
+		if (matterJoinMode !== "none" && newIds.length > 0) {
+			if (matter.aiMemberIds !== null) {
+				matter = store.updateMatterAiMembers(matter.id, [...matter.aiMemberIds, ...newIds]);
+				matterMutated = true;
+			}
+			if (matterJoinMode === "observer") {
+				matter = store.updateMatterObservers(matter.id, [...matter.observerMemberIds, ...newIds]);
+				matterMutated = true;
+			} else if (matterJoinMode === "lead") {
+				matter = store.updateMatterLead(matter.id, newIds[0]!);
+				matterMutated = true;
+			}
+		}
+
+		const updatedMsg = store.updateMessageMetadata(messageId, {
+			...(targetMsg.metadata ?? {}),
+			roleProposals: {
+				...existingProposals,
+				status: "applied",
+				appliedMemberIds: newIds,
+				appliedAdjustmentIds: updatedMembers.map((m) => m.id),
+				appliedMatterJoinMode: matterJoinMode,
+			},
+		});
+		const changedMemberIds = [...newIds, ...updatedMembers.map((m) => m.id)];
+		broadcast("team_updated", { memberIds: changedMemberIds });
+		if (matterMutated) {
+			broadcast("matter_updated", { matterId: matter.id, reason: "role_proposals_joined" });
+		}
+		if (updatedMsg) {
+			broadcast("matter_message", { matterId: matter.id, message: updatedMsg, matter });
+		}
+		sendJson(res, 200, { ok: true, createdMembers, updatedMembers, message: updatedMsg, matter });
+		return true;
+	}
 
 	if (method === "POST" && pathname === "/api/members/architect/chat") {
 		if (!requireOwner(res, actor)) return true;
@@ -195,25 +366,7 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 400, "members must be an array of 1 to 8 role payloads");
 			return true;
 		}
-		const payloads: Record<string, unknown>[] = [];
-		for (const item of rawList) {
-			if (!item || typeof item !== "object" || Array.isArray(item)) {
-				sendError(res, 400, "Each item in members must be an object");
-				return true;
-			}
-			const rec = item as Record<string, unknown>;
-			const name = typeof rec.name === "string" ? rec.name.trim() : "";
-			const title = typeof rec.title === "string" ? rec.title.trim() : "";
-			if (!name || !title) {
-				sendError(res, 400, "Each member requires non-empty name and title");
-				return true;
-			}
-			payloads.push(rec);
-		}
-		const created: TeamMember[] = [];
-		for (const payload of payloads) {
-			created.push(await materializeMemberFromBody(ctx, payload));
-		}
+		const created = await materializeMembersBatch(ctx, rawList);
 		broadcast("team_updated", { memberIds: created.map((m) => m.id) });
 		sendJson(res, 201, { members: created });
 		return true;
@@ -227,49 +380,7 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 400, "adjustments must be an array of 1 to 8 role updates");
 			return true;
 		}
-		const planned: Array<{ prev: RoleTemplate; next: RoleTemplate }> = [];
-		for (const item of rawList) {
-			if (!item || typeof item !== "object" || Array.isArray(item)) {
-				sendError(res, 400, "Each item in adjustments must be an object");
-				return true;
-			}
-			const rec = item as Record<string, unknown>;
-			const memberId = typeof rec.memberId === "string" ? rec.memberId.trim() : "";
-			const member = memberId ? store.getMember(memberId) : null;
-			if (!member) {
-				sendError(res, memberId ? 404 : 400, memberId ? `Member not found: ${memberId}` : "memberId is required");
-				return true;
-			}
-			const prev = orchestrator.getTemplateForMember(member);
-			if (!prev) {
-				sendError(res, 404, `Role template not found for member: ${memberId}`);
-				return true;
-			}
-			const patch: RoleTemplatePatch = {
-				...(Array.isArray(rec.tools) ? { tools: rec.tools.map(String) } : {}),
-				...(Array.isArray(rec.addAntiJobs) ? { addAntiJobs: rec.addAntiJobs.map(String).filter(Boolean) } : {}),
-				...(typeof rec.workflowNote === "string" && rec.workflowNote.trim()
-					? { workflowNote: rec.workflowNote.trim() }
-					: {}),
-			};
-			if (
-				patch.tools === undefined &&
-				(!patch.addAntiJobs || patch.addAntiJobs.length === 0) &&
-				!patch.workflowNote
-			) {
-				sendError(res, 400, `Adjustment for ${memberId} has no changes to apply`);
-				return true;
-			}
-			planned.push({ prev, next: applyRoleTemplatePatch(prev, patch) });
-		}
-		const updatedMembers: TeamMember[] = [];
-		for (const { next } of planned) {
-			if (rolesDir) {
-				await mkdir(rolesDir, { recursive: true });
-				await writeFile(join(rolesDir, `${next.id}.md`), serializeRoleTemplateMarkdown(next), "utf8");
-			}
-			updatedMembers.push(orchestrator.registerRoleTemplate(next));
-		}
+		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, rawList);
 		broadcast("team_updated", { memberIds: updatedMembers.map((m) => m.id) });
 		sendJson(res, 200, { members: updatedMembers });
 		return true;

@@ -6,6 +6,7 @@ import test from "node:test";
 import {
 	applyRoleTemplatePatch,
 	assessMatterInitiation,
+	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
 	createPersonalAgentServer,
 	DialogBroker,
@@ -15,6 +16,8 @@ import {
 	PreviewManager,
 	parseMetaArchitectResponse,
 	parseRoleTemplateMarkdown,
+	ROLE_ARCHITECT_MEMBER_ID,
+	type RoleProposalPayload,
 	type RpcWorkerLike,
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
@@ -565,6 +568,246 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 		assert.equal(formatRoleToolTierLabel(["read"]), "只读");
 		assert.equal(formatRoleToolTierLabel([]), "纯文稿");
 		assert.deepEqual(applyRoleTemplatePatch(pmTpl, { tools: [] }).tools, []);
+	} finally {
+		await orchestrator.shutdown();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+test("Built-in Role Architect acts as a persistent AI role without polluting auto routing or observers, and supports mid-matter role joining", async () => {
+	const tmp = mkdtempSync(join(tmpdir(), "pa-unified-architect-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const businessTemplates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const templates = [...businessTemplates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
+	const capturedRuns: Array<{ memberId: string; args: string[]; context: string; prompt: string }> = [];
+
+	const workerFactory = (opts: { args?: string[]; env?: Record<string, string | undefined> }): RpcWorkerLike => {
+		const memberId = opts.env?.PA_MEMBER_ID ?? "";
+		const context = opts.env?.PA_MEMBER_CONTEXT ?? "";
+		const args = opts.args ?? [];
+		return {
+			start: async () => reportReady(opts, memberId === ROLE_ARCHITECT_MEMBER_ID ? [] : ["read"]),
+			stop: async () => {},
+			onNotice: () => () => {},
+			setDialogHandler: () => {},
+			getState: async () => ({
+				sessionId: `sess-${memberId}-${Date.now()}`,
+				sessionFile: join(tmp, `${memberId}-${Date.now()}.jsonl`),
+				model: { id: "kimi-for-coding", provider: "kimi-coding" },
+				thinkingLevel: "high",
+				isStreaming: false,
+				pendingMessageCount: 0,
+			}),
+			runPromptAndWait: async (prompt) => {
+				capturedRuns.push({ memberId, args, context, prompt });
+				if (memberId === ROLE_ARCHITECT_MEMBER_ID) {
+					const replyJson = prompt.includes("体检")
+						? {
+								reply: "已检查现有分工与工具权限，建议收窄产品经理权限。",
+								followUpQuestions: ["是否直接补一位法务风控官？"],
+								healthFindings: [
+									{ status: "warn", title: "工具权限过宽", detail: "产品经理当前含命令执行权限。" },
+								],
+								roleAdjustments: [
+									{
+										memberId: "product-manager",
+										suggestedTools: ["read"],
+										addAntiJobs: ["不执行 shell 命令或修改源码"],
+										rationale: "收敛为只读核查",
+									},
+								],
+								blueprints: [],
+							}
+						: {
+								reply: "结合当前卡点，建议补充 1 位合同合规官加入协同。",
+								followUpQuestions: [],
+								blueprints: [
+									{
+										name: "合同合规官",
+										title: "Compliance Reviewer",
+										oneJob: "审阅本事项涉及的合作协议条款合规风险并给出修改意见",
+										antiJobs: ["不替代人类最终商业拍板"],
+										interactionStyle: "risk_observer",
+										workspaceScope: "no_repo_docs",
+										rationale: "补齐当前法律条文核查缺口",
+									},
+								],
+							};
+					return {
+						assistantText: JSON.stringify(replyJson),
+						assistantMessages: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+						aborted: false,
+						toolExecutions: [],
+						disposition: "started",
+					};
+				}
+				return {
+					assistantText: "我是业务主责角色，当前推进到合作协议审阅环节。",
+					assistantMessages: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+					aborted: false,
+					toolExecutions: [],
+					disposition: "started",
+				};
+			},
+		};
+	};
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tmp,
+		workerFactory,
+	});
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		rolesDir: join(tmp, "roles"),
+		dialogBroker,
+		previewManager,
+	});
+
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const addr = server.address();
+	assert.ok(addr && typeof addr !== "string");
+	const url = `http://127.0.0.1:${addr.port}`;
+
+	try {
+		// 1. Isolation invariants: keyword auto-routing and auto-observers never pick role-architect
+		const routed = orchestrator.routeMemberForRequest("请帮我分析权限、分工、工作流和角色边界问题");
+		assert.notEqual(routed.id, ROLE_ARCHITECT_MEMBER_ID);
+
+		const defaultBusinessMatter = store.createMatter({
+			title: "普通业务事项",
+			leadMemberId: businessTemplates[0]!.id,
+			observersEnabled: true,
+		});
+		assert.ok(!defaultBusinessMatter.observerMemberIds.includes(ROLE_ARCHITECT_MEMBER_ID));
+
+		// 2. Persistent Architect Matter: chat directly with role-architect & persist RoleProposalPayload
+		const archTurn = await orchestrator.dispatchMatter({
+			prompt: "请给当前团队做一次协作体检",
+			preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+		});
+		assert.equal(archTurn.matter.leadMemberId, ROLE_ARCHITECT_MEMBER_ID);
+		assert.deepEqual(archTurn.matter.aiMemberIds, [ROLE_ARCHITECT_MEMBER_ID]);
+		assert.equal(archTurn.observerMessages?.length ?? 0, 0);
+		assert.equal(archTurn.replyText, "已检查现有分工与工具权限，建议收窄产品经理权限。");
+		const archRun = capturedRuns.at(-1)!;
+		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "");
+		assert.ok(archRun.context.includes("当前已有业务 AI 成员"));
+		const archPersistedMsg = store
+			.listMessages(archTurn.matter.id, "user")
+			.find((m) => m.senderType === "member" && m.senderId === ROLE_ARCHITECT_MEMBER_ID)!;
+		const archProposals = archPersistedMsg.metadata?.roleProposals as RoleProposalPayload;
+		assert.equal(archProposals.status, "pending");
+		assert.equal(archProposals.healthFindings?.length, 1);
+		assert.equal(archProposals.roleAdjustments?.[0]?.memberId, "product-manager");
+
+		// 3. Mid-matter consult inside an ongoing business matter: keeps original lead and enables join on confirm
+		const pmId = "product-manager";
+		const bizMatter = store.createMatter({
+			title: "推进对外合作协议",
+			leadMemberId: pmId,
+			aiMemberIds: [pmId],
+			observersEnabled: false,
+		});
+		const postBizMsg = await fetch(`${url}/api/matters/${bizMatter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				mode: "dispatch",
+				prompt: "这一步卡在合同条文风险核查了，请架构师帮我们加个角色",
+				preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+			}),
+		});
+		assert.equal(postBizMsg.status, 202);
+
+		interface ConsultDetailPayload {
+			matter: { leadMemberId: string; aiMemberIds: string[] | null; observerMemberIds: string[] };
+			userMessages: Array<{ id: string; senderType: string; senderId: string; metadata?: Record<string, unknown> }>;
+		}
+		let detailAfterConsult: ConsultDetailPayload | null = null;
+		for (let i = 0; i < 40; i += 1) {
+			const res = (await (await fetch(`${url}/api/matters/${bizMatter.id}`)).json()) as ConsultDetailPayload;
+			const archReply = res.userMessages.find(
+				(m) => m.senderType === "member" && m.senderId === ROLE_ARCHITECT_MEMBER_ID,
+			);
+			if (archReply) {
+				detailAfterConsult = res;
+				break;
+			}
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		assert.ok(detailAfterConsult !== null);
+		assert.equal(detailAfterConsult.matter.leadMemberId, pmId);
+		const proposalMsg = detailAfterConsult.userMessages.find(
+			(m) => m.senderType === "member" && m.senderId === ROLE_ARCHITECT_MEMBER_ID,
+		)!;
+		const consultProposals = proposalMsg.metadata?.roleProposals as RoleProposalPayload;
+		assert.equal(consultProposals.isMidMatterConsult, true);
+		assert.equal(consultProposals.blueprints.length, 1);
+
+		const blueprintDraft = consultProposals.blueprints[0]!.draft;
+		const applyRes = await fetch(
+			`${url}/api/matters/${bizMatter.id}/messages/${proposalMsg.id}/apply-role-proposals`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					action: "apply",
+					matterJoinMode: "observer",
+					members: [
+						{
+							name: blueprintDraft.template.name,
+							title: blueprintDraft.template.title,
+							responsibilities: blueprintDraft.template.sections.responsibilitiesAndBoundaries,
+							keywords: blueprintDraft.template.keywords,
+							tools: blueprintDraft.template.tools,
+							antiJobs: blueprintDraft.antiJobs,
+							sections: blueprintDraft.template.sections,
+						},
+					],
+					adjustments: [
+						{
+							memberId: "product-manager",
+							tools: ["read"],
+							addAntiJobs: ["不直接签署对外法律文件"],
+						},
+					],
+				}),
+			},
+		);
+		assert.equal(applyRes.status, 200);
+		const appliedBody = (await applyRes.json()) as {
+			createdMembers: Array<{ id: string }>;
+			updatedMembers: Array<{ id: string }>;
+			matter: { leadMemberId: string; aiMemberIds: string[] | null; observerMemberIds: string[] };
+		};
+		assert.equal(appliedBody.createdMembers.length, 1);
+		const newRoleId = appliedBody.createdMembers[0]!.id;
+		assert.equal(appliedBody.matter.leadMemberId, pmId);
+		assert.ok(appliedBody.matter.aiMemberIds?.includes(newRoleId));
+		assert.ok(appliedBody.matter.observerMemberIds.includes(newRoleId));
+
+		// Duplicate apply on the same message returns 409 Conflict
+		const dupRes = await fetch(`${url}/api/matters/${bizMatter.id}/messages/${proposalMsg.id}/apply-role-proposals`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ action: "apply", members: [] }),
+		});
+		assert.equal(dupRes.status, 409);
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

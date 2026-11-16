@@ -9,6 +9,9 @@ All notable changes to Personal Agent are documented in this file.
   - **立项适配评估与缺口识别 (`src/orchestrator/matter-initiation.ts`, `POST /api/matters/assess`)**：发起新事项前评估当前团队角色匹配度、推荐参与方式（单兵直办 `solo` / 主责+指定协同 `lead_consult` / 主责+定向旁听 `lead_review` / 人类先对齐 `human_first`）及人类协同人选；识别出职责覆盖缺口时不再静默兜底给默认产品经理，而是明确提示并引导按需设计或转为人类先讨论。
   - **精细化参与人数与运行时约束 (`MatterRepo`, `worker-runner.ts`, `prompts.ts`, `MatterRosterPopover.tsx`)**：修复 `createMatter` 同时传入 `observersEnabled` 与 `observerMemberIds` 时覆写为全员旁听的问题，支持发起前与运行中对单个非主责 AI 切换定向旁听；事项收窄为单兵模式（1 AI）时，在 `--tools` 与系统提示词同步禁用 `delegate_to_member` 并注入单兵引导与显式 `antiJobs`（不做清单）。
   - **Meta-Bot 对话式角色架构师与团队体检闭环 (`src/orchestrator/meta-architect.ts`, `POST /api/members/architect/chat`, `POST /api/members/batch`, `POST /api/members/adjustments/apply`, `MetaArchitectChatPane.tsx`)**：对照 `dr-eggbot-v2` 升级为可多轮追问、无工具只读隔离运行（`--tools ""`）的 Meta-Bot 架构师；按流程规划时可产出 `1~N` 个互补角色及建议人机协作阵型，团队体检时返回结构化健康检查卡（`healthFindings`）与可勾选执行的已有成员调整提案（`roleAdjustments`，支持收窄工具权限或补充 Anti-Jobs 并写入角色定义，屏蔽无关事项阵型），所有变更均需用户勾选确认后生效。同时将角色工具权责标签拆分为 `可改代码` / `含命令` / `只读` / `纯文稿` 四档（`formatRoleToolTierLabel`）。
+  - **将「角色架构师」统一为一等 AI 角色与事项中途建角 (`BUILTIN_ROLE_ARCHITECT_TEMPLATE`, `POST /api/matters/:id/messages/:msgId/apply-role-proposals`, `RoleProposalCard.tsx`, `MatterRosterPopover.tsx`)**：
+    - `角色架构师` 现作为内置元角色直接呈现在侧边栏名录与工作台对话体系中（不加入 `roles/` 业务模板目录，亦从普通业务事项的自动关键词路由、默认全员 AI 池与自动旁听列表中隔离）；点击即可创建支持完整持久化的建队规划与团队体检事项。
+    - 任意进行中的业务事项均可通过右上角「协作成员 → 请角色架构师介入补人」中途请入架构师只读诊断；回复自动解析为内联提案确认卡（`metadata.roleProposals`），所有者勾选确认后不仅应用角色新增/权限收窄，还可一键以「内部协同 / 定向旁听 / 主责接手」身份直接将新角色加入当前事项继续推进。
   - **引导式角色设计官 (`src/roles/role-architect.ts`, `POST /api/members/design`, `RoleArchitectModal.tsx`, `MemberCard.tsx`)**：保留离线可用的快速 4 问规则直出（One Job / Explicit Anti-Jobs & 静默原则 / 协作站位 / 最小工具集），默认收紧非工程角色工具权限（不再硬编码 `bash`），并在 `buildStarterTasks` 中补全非代码工作流与人类先讨论起手式。
 
 ## [0.5.0] - 2026-11-16

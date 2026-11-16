@@ -35,6 +35,7 @@ interface TeamViewProps {
 	onRestoreOwner?: () => void;
 	onAssignTask: (memberId: string) => void;
 	onOpenArchitect?: () => void;
+	onOpenArchitectMatter?: () => void;
 	onOpenMatter?: (matterId: string) => void;
 	onOpenDeliverable?: (deliverableId: string) => void;
 }
@@ -60,6 +61,7 @@ export function TeamView({
 	onRestoreOwner,
 	onAssignTask,
 	onOpenArchitect,
+	onOpenArchitectMatter,
 	onOpenMatter,
 	onOpenDeliverable,
 }: TeamViewProps) {
@@ -106,9 +108,18 @@ export function TeamView({
 					</div>
 					{isOwner && (
 						<div className="actions-row compact">
+							{onOpenArchitectMatter && (
+								<button type="button" className="btn-pill-dark" onClick={onOpenArchitectMatter}>
+									请角色架构师对话规划 / 体检
+								</button>
+							)}
 							{onOpenArchitect && (
-								<button type="button" className="btn-pill-dark" onClick={onOpenArchitect}>
-									+ 引导设计角色
+								<button
+									type="button"
+									className={onOpenArchitectMatter ? "btn-pill-outline" : "btn-pill-dark"}
+									onClick={onOpenArchitect}
+								>
+									+ 快速表单设计角色
 								</button>
 							)}
 							<button

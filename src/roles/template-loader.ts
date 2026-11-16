@@ -116,11 +116,13 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 	if (!VALID_THINKING_LEVELS.has(thinkingRaw)) {
 		throw new Error(`Invalid thinkingLevel "${thinkingRaw}"${sourcePath ? ` in ${sourcePath}` : ""}`);
 	}
+	const roleKind = meta.roleKind === "architect" ? "architect" : undefined;
 
 	return {
 		id: requireString(meta, "id", sourcePath),
 		name: requireString(meta, "name", sourcePath),
 		title: requireString(meta, "title", sourcePath),
+		...(roleKind ? { roleKind } : {}),
 		version: requireString(meta, "version", sourcePath),
 		shareable: typeof meta.shareable === "boolean" ? meta.shareable : true,
 		defaultProvider: requireString(meta, "defaultProvider", sourcePath),
@@ -167,6 +169,7 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		`id: ${template.id}`,
 		`name: ${template.name}`,
 		`title: ${template.title}`,
+		...(template.roleKind === "architect" ? ["roleKind: architect"] : []),
 		`version: ${template.version}`,
 		`shareable: ${String(template.shareable)}`,
 		`defaultProvider: ${template.defaultProvider}`,

@@ -1,4 +1,8 @@
-import type { RoleInteractionStyle, RoleWorkspaceScope } from "../roles/role-architect.ts";
+import {
+	isArchitectRoleTemplate,
+	type RoleInteractionStyle,
+	type RoleWorkspaceScope,
+} from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamMember } from "../storage/types.ts";
 
@@ -183,7 +187,36 @@ export function assessMatterInitiation(input: {
 }): MatterInitiationAssessment {
 	const prompt = input.prompt.trim();
 	const lowerPrompt = prompt.toLowerCase();
-	const members = input.members;
+	const allMembers = input.members;
+	const explicitMember = input.preferredMemberId
+		? (allMembers.find((m) => m.id === input.preferredMemberId) ?? null)
+		: null;
+	if (
+		explicitMember &&
+		isArchitectRoleTemplate(
+			input.templatesByRoleId.get(explicitMember.templateId) ??
+				input.templatesByRoleId.get(explicitMember.id) ?? { id: explicitMember.id },
+		)
+	) {
+		return {
+			fitStatus: "matched",
+			headline: `将由「${explicitMember.displayName}」负责角色规划与协作体检`,
+			explanation: "角色架构师只读诊断团队结构并生成可勾选的角色提案，不会直接改动代码或业务职责文件。",
+			recommendedMode: "solo",
+			recommendedLeadId: explicitMember.id,
+			recommendedAiMemberIds: [explicitMember.id],
+			recommendedObserverIds: [],
+			candidates: [],
+		};
+	}
+
+	const businessMembers = allMembers.filter(
+		(m) =>
+			!isArchitectRoleTemplate(
+				input.templatesByRoleId.get(m.templateId) ?? input.templatesByRoleId.get(m.id) ?? { id: m.id },
+			),
+	);
+	const members = businessMembers.length > 0 ? businessMembers : allMembers;
 	const primary = members.find((m) => m.isPrimaryContact) ?? members[0] ?? null;
 
 	const candidates = members
@@ -197,9 +230,6 @@ export function assessMatterInitiation(input: {
 		)
 		.sort((a, b) => b.score - a.score);
 
-	const explicitMember = input.preferredMemberId
-		? (members.find((m) => m.id === input.preferredMemberId) ?? null)
-		: null;
 	const topCandidate = candidates[0] ?? null;
 	const secondCandidate = candidates[1] ?? null;
 	const leadId =

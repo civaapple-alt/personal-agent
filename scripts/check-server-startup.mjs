@@ -38,7 +38,8 @@ try {
 			}
 			const base = `http://127.0.0.1:${port}`;
 			const bootstrap = await (await fetch(`${base}/api/bootstrap`)).json();
-			assert.equal(bootstrap.members.length, 4);
+			assert.equal(bootstrap.members.filter((m) => m.id !== "role-architect").length, 4);
+			assert.ok(bootstrap.members.some((m) => m.id === "role-architect"));
 			assert.equal(bootstrap.matters.length, 0);
 			assert.equal(bootstrap.deliverables.length, 0);
 			assert.equal(bootstrap.innerDemoAvailable, true);

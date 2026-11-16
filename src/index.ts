@@ -17,6 +17,7 @@ export {
 	type MetaArchitectMessage,
 	type MetaArchitectRoleAdjustment,
 	parseMetaArchitectResponse,
+	type RoleProposalPayload,
 	runMetaArchitectChat,
 } from "./orchestrator/meta-architect.ts";
 export {
@@ -39,8 +40,11 @@ export {
 } from "./orchestrator/team-orchestrator.ts";
 export {
 	applyRoleTemplatePatch,
+	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
+	isArchitectRoleTemplate,
 	normalizeRoleTools,
+	ROLE_ARCHITECT_MEMBER_ID,
 	type RoleArchitectDraft,
 	type RoleDesignBriefInput,
 	type RoleInteractionStyle,

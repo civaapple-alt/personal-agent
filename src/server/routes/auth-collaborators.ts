@@ -87,6 +87,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				id: t.id,
 				name: t.name,
 				title: t.title,
+				roleKind: t.roleKind ?? (t.id === "role-architect" ? "architect" : "business"),
 				version: t.version,
 				skills: t.skills,
 				tools: t.tools,

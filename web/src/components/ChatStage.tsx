@@ -1,5 +1,6 @@
 import { type RefObject, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
+	ApplyMatterRoleProposalsPayload,
 	CollaborationPresetMode,
 	CollaboratorDto,
 	ComposerImageAttachment,
@@ -96,6 +97,16 @@ interface ChatStageProps {
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
+	onApplyRoleProposals?: (
+		matterId: string,
+		messageId: string,
+		payload: ApplyMatterRoleProposalsPayload,
+	) => Promise<void>;
+	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
+	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
+	onConsultArchitect?: () => void;
+	onStartArchitectMatter?: (seedText?: string) => void;
+	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	onSendPrompt: () => void;
 	onAbortMatter: (matterId: string) => void;
 	onNewMatter: () => void;
@@ -178,6 +189,12 @@ export function ChatStage({
 	onUpdateMatterCollaborators,
 	onApproveAiRequest,
 	onDismissAiRequest,
+	onApplyRoleProposals,
+	onDismissRoleProposals,
+	onSendQuickPrompt,
+	onConsultArchitect,
+	onStartArchitectMatter,
+	onLaunchWithNewRoles,
 	onSendPrompt,
 	onAbortMatter,
 	onNewMatter,
@@ -542,6 +559,7 @@ export function ChatStage({
 					onToggleObserversEnabled={onToggleObserversEnabled}
 					onUpdateMatterObservers={onUpdateMatterObservers}
 					onUpdateMatterCollaborators={onUpdateMatterCollaborators}
+					onConsultArchitect={onConsultArchitect}
 				/>
 			)}
 
@@ -609,6 +627,14 @@ export function ChatStage({
 				onOpenDeliverables={onOpenDeliverables}
 				onApproveAiRequest={onApproveAiRequest}
 				onDismissAiRequest={onDismissAiRequest}
+				onApplyRoleProposals={onApplyRoleProposals}
+				onDismissRoleProposals={onDismissRoleProposals}
+				onSendQuickPrompt={onSendQuickPrompt}
+				onFillComposer={(text) => {
+					onComposerTextChange(text);
+					composerRef.current?.focus();
+				}}
+				onLaunchWithNewRoles={onLaunchWithNewRoles}
 				onAbortMatter={onAbortMatter}
 			/>
 
@@ -632,6 +658,7 @@ export function ChatStage({
 					onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
 					onApplyRecommendation={onApplyInitiationRecommendation}
 					onOpenArchitect={onOpenArchitect}
+					onStartArchitectMatter={onStartArchitectMatter}
 				/>
 			)}
 

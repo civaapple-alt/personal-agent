@@ -686,3 +686,219 @@
 	.inner-demo-steps { display: block; }
 	.inner-demo-steps li:not([data-current="true"]) { display: none; }
 }
+.architect-hero-scenarios {
+	margin-top: 16px;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	max-width: 580px;
+	margin-inline: auto;
+}
+.architect-scenario-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	text-align: left;
+	padding: 12px 14px;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--border);
+	background: var(--bg-card);
+	cursor: pointer;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+.architect-scenario-card:hover {
+	border-color: var(--accent-border);
+	background: #f6fcfa;
+}
+.architect-scenario-icon {
+	width: 32px;
+	height: 32px;
+	border-radius: var(--radius-sm);
+	display: grid;
+	place-items: center;
+	background: var(--surface-accent-soft);
+	color: #0b574e;
+	flex-shrink: 0;
+}
+.architect-scenario-icon.is-health {
+	background: #eef2ff;
+	color: #3730a3;
+}
+.architect-scenario-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.architect-scenario-copy strong {
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+}
+.architect-scenario-copy small {
+	font-size: var(--text-micro);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+.role-proposal-card {
+	margin-top: 10px;
+	padding: 12px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	background: var(--bg-card);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-width: 720px;
+}
+.architect-findings-list,
+.architect-blueprints {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+}
+.architect-blueprints-head strong {
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+}
+.architect-finding-card {
+	padding: 8px 10px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--border);
+	background: var(--bg-sidebar);
+}
+.architect-finding-card.is-warn {
+	border-color: var(--warn-border);
+	background: var(--warn-bg);
+}
+.architect-finding-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-xs);
+}
+.architect-finding-card p {
+	margin: 4px 0 0;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+.architect-finding-badge {
+	font-size: var(--text-micro);
+	font-weight: 600;
+	padding: 1px 7px;
+	border-radius: var(--radius-pill);
+}
+.architect-finding-badge.is-ok {
+	background: var(--surface-accent-soft);
+	color: #0b574e;
+}
+.architect-finding-badge.is-warn {
+	background: rgba(180, 83, 9, 0.14);
+	color: var(--warn-text);
+}
+.architect-blueprint-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--border);
+	background: var(--bg-sidebar);
+	cursor: pointer;
+}
+.architect-blueprint-card.selected {
+	border-color: var(--accent-border);
+	background: #f6fcfa;
+}
+.architect-blueprint-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.architect-blueprint-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-xs);
+}
+.architect-blueprint-top small {
+	color: var(--text-secondary);
+	font-weight: 400;
+}
+.architect-blueprint-body p {
+	margin: 0;
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+	line-height: 1.45;
+}
+.architect-blueprint-anti,
+.architect-blueprint-rationale {
+	font-size: var(--text-micro);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+.architect-formation-box {
+	padding: 8px 10px;
+	border-radius: var(--radius-sm);
+	border: 1px dashed var(--accent-border);
+	background: #f8fffe;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+.architect-quick-replies {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.role-proposal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding-top: 8px;
+	border-top: 1px solid var(--border);
+}
+.role-proposal-join-select {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+}
+.role-proposal-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+.role-proposal-status-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-xs);
+	padding: 6px 10px;
+	border-radius: var(--radius-sm);
+}
+.role-proposal-status-bar.applied {
+	background: #ecfdf5;
+	color: #047857;
+	border: 1px solid #a7f3d0;
+}
+.role-proposal-status-bar.dismissed {
+	background: #f8fafc;
+	color: var(--text-muted);
+	border: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+	.architect-hero-scenarios {
+		grid-template-columns: 1fr;
+	}
+}
