@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
 import {
 	buildRoleDesignDraft,
 	normalizeRoleTools,
@@ -10,9 +11,9 @@ import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../../
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
-import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus } from "../../storage/types.ts";
+import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMember } from "../../storage/types.ts";
 import { requireOwner } from "../auth.ts";
-import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
+import { HttpRequestError, readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
 	broadcastDistilledMemories,
 	MEMORY_CATEGORIES,
@@ -20,10 +21,201 @@ import {
 	type ServerRouteContext,
 } from "./context.ts";
 
-/** Handle AI team members, role template import/export, memories, and RSI distillation. */
+async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<string, unknown>): Promise<TeamMember> {
+	const { store, orchestrator, rolesDir } = ctx;
+	const name = typeof body.name === "string" ? body.name.trim() : "";
+	const title = typeof body.title === "string" ? body.title.trim() : "";
+	if (!name || !title) {
+		throw new HttpRequestError(400, "name and title are required");
+	}
+	const responsibilities =
+		typeof body.responsibilities === "string" && body.responsibilities.trim().length > 0
+			? body.responsibilities.trim()
+			: `- 承担 ${name} 的核心岗位职责与交付产出。`;
+	const existingIds = new Set(store.listMembers().map((m) => m.id));
+	let rawId =
+		typeof body.id === "string" && body.id.trim().length > 0
+			? body.id.trim()
+			: title
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, "-")
+					.replace(/^-|-$/g, "") || `role-${Date.now()}`;
+	if (!body.id && existingIds.has(rawId)) {
+		let idx = 2;
+		while (existingIds.has(`${rawId}-${idx}`)) idx += 1;
+		rawId = `${rawId}-${idx}`;
+	}
+	const keywords = Array.isArray(body.keywords)
+		? body.keywords.map(String).filter(Boolean)
+		: typeof body.keywords === "string"
+			? body.keywords
+					.split(/[,，\s]+/)
+					.map((s) => s.trim())
+					.filter(Boolean)
+			: [];
+	const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
+	const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
+	const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
+	const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
+	const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
+	const thinkingLevel = (typeof body.thinkingLevel === "string" ? body.thinkingLevel : "high") as ThinkingLevel;
+	const isPrimaryContact = body.isPrimaryContact === true;
+	const customSections =
+		body.sections && typeof body.sections === "object" ? (body.sections as Record<string, unknown>) : {};
+	const skillsAndMethods =
+		typeof customSections.skillsAndMethods === "string" && customSections.skillsAndMethods.trim()
+			? customSections.skillsAndMethods.trim()
+			: "- 围绕明确问题开展调研或核查，交付可验证的结果。";
+	const toolsAndEnvironment =
+		typeof customSections.toolsAndEnvironment === "string" && customSections.toolsAndEnvironment.trim()
+			? customSections.toolsAndEnvironment.trim()
+			: tools.length === 0
+				? "- 纯分析与文稿协同，不挂载文件编辑与终端工具。"
+				: `- 使用已声明的最小必要工具（${tools.join(", ")}）。`;
+	const collaborationConventions =
+		typeof customSections.collaborationConventions === "string" && customSections.collaborationConventions.trim()
+			? customSections.collaborationConventions.trim()
+			: "- 平时静默推进，关键节点请用户确认，内部协作留痕。";
+	const deliveryAndVerification =
+		typeof customSections.deliveryAndVerification === "string" && customSections.deliveryAndVerification.trim()
+			? customSections.deliveryAndVerification.trim()
+			: "- 产出结构化说明或可执行验证结果。";
+
+	const rawBody = [
+		"## 职责与边界",
+		responsibilities,
+		"",
+		"## 技能与工作方法",
+		skillsAndMethods,
+		"",
+		"## 工具与环境依赖",
+		toolsAndEnvironment,
+		"",
+		"## 协作和沟通约定",
+		collaborationConventions,
+		"",
+		"## 交付与验证方式",
+		deliveryAndVerification,
+	].join("\n");
+
+	const template: RoleTemplate = {
+		id: rawId,
+		name,
+		title,
+		version: "1.0.0",
+		shareable: true,
+		defaultProvider: provider,
+		defaultModel: model,
+		thinkingLevel,
+		isPrimaryContact,
+		keywords,
+		tools,
+		skills,
+		mcpDependencies: [],
+		...(antiJobs.length > 0 ? { antiJobs } : {}),
+		sections: {
+			responsibilitiesAndBoundaries: responsibilities,
+			skillsAndMethods,
+			toolsAndEnvironment,
+			collaborationConventions,
+			deliveryAndVerification,
+		},
+		rawBody,
+	};
+
+	if (rolesDir) {
+		await mkdir(rolesDir, { recursive: true });
+		await writeFile(join(rolesDir, `${rawId}.md`), serializeRoleTemplateMarkdown(template), "utf8");
+	}
+
+	const registered = orchestrator.registerRoleTemplate(template);
+	return typeof body.gitName === "string" ||
+		typeof body.gitEmail === "string" ||
+		typeof body.identitySummary === "string"
+		? store.updateMemberIdentity(registered.id, {
+				gitName: typeof body.gitName === "string" ? body.gitName : undefined,
+				gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
+				identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
+			})
+		: registered;
+}
+
+/** Handle AI team members, role architect Meta-Bot, role template import/export, memories, and RSI distillation. */
 export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, rolesDir, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
+
+	if (method === "POST" && pathname === "/api/members/architect/chat") {
+		if (!requireOwner(res, actor)) return true;
+		const body = await readJsonBody(req);
+		const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+		const messages: MetaArchitectMessage[] = rawMessages
+			.map((item) => {
+				if (!item || typeof item !== "object") return null;
+				const rec = item as Record<string, unknown>;
+				const role = rec.role === "assistant" ? "assistant" : rec.role === "user" ? "user" : null;
+				const content = typeof rec.content === "string" ? rec.content.trim() : "";
+				return role && content ? { role, content } : null;
+			})
+			.filter((m): m is MetaArchitectMessage => m !== null);
+		if (messages.length === 0) {
+			sendError(res, 400, "messages array with at least one message is required");
+			return true;
+		}
+		const workspaceId =
+			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
+		if (workspaceId && !store.getWorkspace(workspaceId)) {
+			sendError(res, 404, `Workspace not found: ${workspaceId}`);
+			return true;
+		}
+		const cancellation = responseCancellation(res);
+		try {
+			const result = await orchestrator.chatWithRoleArchitect({
+				messages,
+				matterPrompt: typeof body.matterPrompt === "string" ? body.matterPrompt.trim() || undefined : undefined,
+				workspaceId,
+				includeHealthcheck: body.includeHealthcheck === true,
+				signal: cancellation.signal,
+			});
+			if (res.destroyed || cancellation.signal.aborted) return true;
+			sendJson(res, 200, result);
+		} finally {
+			cancellation.dispose();
+		}
+		return true;
+	}
+
+	if (method === "POST" && pathname === "/api/members/batch") {
+		if (!requireOwner(res, actor)) return true;
+		const body = await readJsonBody(req);
+		const rawList = Array.isArray(body.members) ? body.members : [];
+		if (rawList.length === 0 || rawList.length > 8) {
+			sendError(res, 400, "members must be an array of 1 to 8 role payloads");
+			return true;
+		}
+		const payloads: Record<string, unknown>[] = [];
+		for (const item of rawList) {
+			if (!item || typeof item !== "object" || Array.isArray(item)) {
+				sendError(res, 400, "Each item in members must be an object");
+				return true;
+			}
+			const rec = item as Record<string, unknown>;
+			const name = typeof rec.name === "string" ? rec.name.trim() : "";
+			const title = typeof rec.title === "string" ? rec.title.trim() : "";
+			if (!name || !title) {
+				sendError(res, 400, "Each member requires non-empty name and title");
+				return true;
+			}
+			payloads.push(rec);
+		}
+		const created: TeamMember[] = [];
+		for (const payload of payloads) {
+			created.push(await materializeMemberFromBody(ctx, payload));
+		}
+		broadcast("team_updated", { memberIds: created.map((m) => m.id) });
+		sendJson(res, 201, { members: created });
+		return true;
+	}
 
 	if (method === "POST" && pathname === "/api/members/design") {
 		if (!requireOwner(res, actor)) return true;
@@ -76,117 +268,7 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 	if (method === "POST" && pathname === "/api/members") {
 		if (!requireOwner(res, actor)) return true;
 		const body = await readJsonBody(req);
-		const name = typeof body.name === "string" ? body.name.trim() : "";
-		const title = typeof body.title === "string" ? body.title.trim() : "";
-		const responsibilities =
-			typeof body.responsibilities === "string" && body.responsibilities.trim().length > 0
-				? body.responsibilities.trim()
-				: `- 承担 ${name} 的核心岗位职责与交付产出。`;
-		if (!name || !title) {
-			sendError(res, 400, "name and title are required");
-			return true;
-		}
-		const rawId =
-			typeof body.id === "string" && body.id.trim().length > 0
-				? body.id.trim()
-				: title
-						.toLowerCase()
-						.replace(/[^a-z0-9]+/g, "-")
-						.replace(/^-|-$/g, "") || `role-${Date.now()}`;
-		const keywords = Array.isArray(body.keywords)
-			? body.keywords.map(String).filter(Boolean)
-			: typeof body.keywords === "string"
-				? body.keywords
-						.split(/[,，\s]+/)
-						.map((s) => s.trim())
-						.filter(Boolean)
-				: [];
-		const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
-		const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
-		const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
-		const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
-		const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
-		const thinkingLevel = (typeof body.thinkingLevel === "string" ? body.thinkingLevel : "high") as ThinkingLevel;
-		const isPrimaryContact = body.isPrimaryContact === true;
-		const customSections =
-			body.sections && typeof body.sections === "object" ? (body.sections as Record<string, unknown>) : {};
-		const skillsAndMethods =
-			typeof customSections.skillsAndMethods === "string" && customSections.skillsAndMethods.trim()
-				? customSections.skillsAndMethods.trim()
-				: "- 围绕明确问题开展调研或核查，交付可验证的结果。";
-		const toolsAndEnvironment =
-			typeof customSections.toolsAndEnvironment === "string" && customSections.toolsAndEnvironment.trim()
-				? customSections.toolsAndEnvironment.trim()
-				: tools.length === 0
-					? "- 纯分析与文稿协同，不挂载文件编辑与终端工具。"
-					: `- 使用已声明的最小必要工具（${tools.join(", ")}）。`;
-		const collaborationConventions =
-			typeof customSections.collaborationConventions === "string" && customSections.collaborationConventions.trim()
-				? customSections.collaborationConventions.trim()
-				: "- 平时静默推进，关键节点请用户确认，内部协作留痕。";
-		const deliveryAndVerification =
-			typeof customSections.deliveryAndVerification === "string" && customSections.deliveryAndVerification.trim()
-				? customSections.deliveryAndVerification.trim()
-				: "- 产出结构化说明或可执行验证结果。";
-
-		const rawBody = [
-			"## 职责与边界",
-			responsibilities,
-			"",
-			"## 技能与工作方法",
-			skillsAndMethods,
-			"",
-			"## 工具与环境依赖",
-			toolsAndEnvironment,
-			"",
-			"## 协作和沟通约定",
-			collaborationConventions,
-			"",
-			"## 交付与验证方式",
-			deliveryAndVerification,
-		].join("\n");
-
-		const template: RoleTemplate = {
-			id: rawId,
-			name,
-			title,
-			version: "1.0.0",
-			shareable: true,
-			defaultProvider: provider,
-			defaultModel: model,
-			thinkingLevel,
-			isPrimaryContact,
-			keywords,
-			tools,
-			skills,
-			mcpDependencies: [],
-			...(antiJobs.length > 0 ? { antiJobs } : {}),
-			sections: {
-				responsibilitiesAndBoundaries: responsibilities,
-				skillsAndMethods,
-				toolsAndEnvironment,
-				collaborationConventions,
-				deliveryAndVerification,
-			},
-			rawBody,
-		};
-
-		if (rolesDir) {
-			await mkdir(rolesDir, { recursive: true });
-			await writeFile(join(rolesDir, `${rawId}.md`), serializeRoleTemplateMarkdown(template), "utf8");
-		}
-
-		const registered = orchestrator.registerRoleTemplate(template);
-		const member =
-			typeof body.gitName === "string" ||
-			typeof body.gitEmail === "string" ||
-			typeof body.identitySummary === "string"
-				? store.updateMemberIdentity(registered.id, {
-						gitName: typeof body.gitName === "string" ? body.gitName : undefined,
-						gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
-						identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
-					})
-				: registered;
+		const member = await materializeMemberFromBody(ctx, body);
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 201, { member });
 		return true;

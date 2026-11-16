@@ -9,6 +9,7 @@ import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { validateDelivery } from "./execution-context.ts";
 import { assessMatterInitiation, type MatterInitiationAssessment } from "./matter-initiation.ts";
+import { type MetaArchitectChatInput, type MetaArchitectChatResult, runMetaArchitectChat } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import {
@@ -70,6 +71,8 @@ export class TeamOrchestrator {
 	private readonly runs = new Map<string, MatterRun>();
 	private readonly distillations = new Map<string, Set<AbortController>>();
 	private readonly distillationTasks = new Set<Promise<void>>();
+	private readonly architectControllers = new Set<AbortController>();
+	private readonly architectTasks = new Set<Promise<void>>();
 	private shuttingDown = false;
 	private readonly extensions: string[];
 
@@ -594,8 +597,15 @@ export class TeamOrchestrator {
 		for (const matterId of this.distillations.keys()) {
 			this.abortDistillation(matterId);
 		}
+		for (const controller of this.architectControllers) {
+			controller.abort(new Error("Role architect session was aborted"));
+		}
 		const runs = [...this.runs.entries()];
-		await Promise.allSettled([...this.distillationTasks, ...runs.map(([id]) => this.abortMatter(id, "shutdown"))]);
+		await Promise.allSettled([
+			...this.distillationTasks,
+			...this.architectTasks,
+			...runs.map(([id]) => this.abortMatter(id, "shutdown")),
+		]);
 		await Promise.allSettled(runs.map(([, run]) => run.settled));
 	}
 
@@ -760,6 +770,37 @@ export class TeamOrchestrator {
 			controllers.delete(controller);
 			if (!controllers.size) this.distillations.delete(input.matterId);
 			this.distillationTasks.delete(completion.promise);
+			completion.resolve();
+		}
+	}
+
+	/** Run an isolated multi-turn Role Architect Meta-Bot conversation (read-only, proposes 1..N blueprints). */
+	async chatWithRoleArchitect(input: MetaArchitectChatInput): Promise<MetaArchitectChatResult> {
+		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
+		const controller = new AbortController();
+		const completion = Promise.withResolvers<void>();
+		const onCallerAbort = () => controller.abort(new Error("Role architect session was aborted"));
+		input.signal?.throwIfAborted();
+		input.signal?.addEventListener("abort", onCallerAbort, { once: true });
+		this.architectControllers.add(controller);
+		this.architectTasks.add(completion.promise);
+		try {
+			return await runMetaArchitectChat(
+				{
+					store: this.store,
+					defaultCwd: this.defaultCwd,
+					workerFactory: this.workerFactory,
+					templatesById: this.templatesById,
+				},
+				{ ...input, signal: controller.signal },
+			);
+		} catch (error) {
+			if (controller.signal.aborted) throw new Error("Role architect session was aborted", { cause: error });
+			throw error;
+		} finally {
+			input.signal?.removeEventListener("abort", onCallerAbort);
+			this.architectControllers.delete(controller);
+			this.architectTasks.delete(completion.promise);
 			completion.resolve();
 		}
 	}

@@ -8,6 +8,16 @@ export {
 	type RoleGapSuggestion,
 } from "./orchestrator/matter-initiation.ts";
 export {
+	collectTeamFrictionDigest,
+	type MetaArchitectBlueprintProposal,
+	type MetaArchitectChatInput,
+	type MetaArchitectChatResult,
+	type MetaArchitectFormationSuggestion,
+	type MetaArchitectMessage,
+	parseMetaArchitectResponse,
+	runMetaArchitectChat,
+} from "./orchestrator/meta-architect.ts";
+export {
 	buildProgressSnapshot,
 	type DelegateInput,
 	type DelegateResult,

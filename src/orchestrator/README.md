@@ -5,7 +5,7 @@
 - [team-orchestrator.ts](team-orchestrator.ts) 拥有一轮用户任务的生命周期，并由 [types.ts](types.ts)、[prompts.ts](prompts.ts)、
   [matter-initiation.ts](matter-initiation.ts)、[worker-runner.ts](worker-runner.ts)、[delegation-runner.ts](delegation-runner.ts)、
   [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担立项适配诊断、提示词装配、Worker 执行、内部委托、旁听与复盘。
-  - `assessInitiation`（[matter-initiation.ts](matter-initiation.ts)）在立项前评估角色匹配度、建议参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及潜在角色缺口；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](worker-runner.ts) 与 [prompts.ts](prompts.ts) 在运行时与提示词同步关闭 `delegate_to_member` 并注入 `antiJobs` 边界约束。
+  - `assessInitiation`（[matter-initiation.ts](matter-initiation.ts)）在立项前评估角色匹配度、建议参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及潜在角色缺口；`chatWithRoleArchitect`（[meta-architect.ts](meta-architect.ts)）通过无工具隔离对话运行 Meta-Bot 角色架构师（可选附带团队运行摩擦摘要），产出待用户勾选的 1~N 个角色草案（不经确认不自动创建）；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](worker-runner.ts) 与 [prompts.ts](prompts.ts) 在运行时与提示词同步关闭 `delegate_to_member` 并注入 `antiJobs` 边界约束。
 - [execution-context.ts](execution-context.ts) 负责 Skill 路径、保存会话身份与成果文件/URL 校验。`prepareDelivery` 从文档 `sourcePath` 读取正文并记录快照，`validateDelivery` 在成功提交前核对文件内容与路径未变；纯文本 `content` 文档不绑定文件。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
   筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。

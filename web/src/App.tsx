@@ -847,6 +847,8 @@ export function App() {
 			<RoleArchitectModal
 				open={initiation.architectOpen}
 				seedGap={initiation.architectSeed}
+				matterPrompt={activeTab === "chats" && !selectedMatterId ? composerText : undefined}
+				workspaceId={selectedWorkspaceId || null}
 				onClose={() => initiation.setArchitectOpen(false)}
 				onCreated={async (member) => {
 					await refreshBootstrap();
@@ -863,6 +865,24 @@ export function App() {
 							initiation.setDraftPresetMode("solo");
 							setComposerMode("dispatch");
 						}
+					}
+				}}
+				onCreatedBatch={async (createdMembers, formation) => {
+					await refreshBootstrap();
+					if (activeTab === "chats" && !selectedMatterId && createdMembers.length > 0) {
+						const leadCandidate = createdMembers[0]!;
+						const newIds = createdMembers.map((m) => m.id);
+						const allMemberIds = Array.from(new Set([...(formation?.existingMemberIds ?? []), ...newIds]));
+						const observerIds = formation?.observerMemberIds ?? [];
+						const targetMode =
+							formation?.mode ??
+							(createdMembers.length === 1 && allMemberIds.length === 1 ? "solo" : "lead_consult");
+						setSelectedMemberId(leadCandidate.id);
+						initiation.applyPresetMode(targetMode, {
+							leadId: leadCandidate.id,
+							aiIds: allMemberIds,
+							observerIds,
+						});
 					}
 				}}
 				onNotice={(msg) => setNoticeBanner(msg)}

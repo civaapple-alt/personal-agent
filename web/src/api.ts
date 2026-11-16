@@ -266,6 +266,31 @@ export interface RoleArchitectDraftDto {
 	designNotes: string[];
 }
 
+export interface MetaArchitectMessageDto {
+	role: "user" | "assistant";
+	content: string;
+}
+
+export interface MetaArchitectBlueprintProposalDto {
+	draft: RoleArchitectDraftDto;
+	rationale: string;
+}
+
+export interface MetaArchitectFormationSuggestionDto {
+	mode: CollaborationPresetMode;
+	existingMemberIds: string[];
+	observerMemberIds: string[];
+	rationale: string;
+}
+
+export interface MetaArchitectChatResultDto {
+	reply: string;
+	followUpQuestions: string[];
+	blueprints: MetaArchitectBlueprintProposalDto[];
+	recommendedFormation?: MetaArchitectFormationSuggestionDto;
+	usedHealthcheck: boolean;
+}
+
 export interface ActiveDelegationDto {
 	memberId: string;
 	memberName: string;
@@ -573,7 +598,23 @@ export function designRoleDraft(input: {
 	});
 }
 
-export function createMember(input: {
+export function chatWithRoleArchitect(
+	input: {
+		messages: MetaArchitectMessageDto[];
+		matterPrompt?: string;
+		workspaceId?: string | null;
+		includeHealthcheck?: boolean;
+	},
+	signal?: AbortSignal,
+): Promise<MetaArchitectChatResultDto> {
+	return requestJson("/api/members/architect/chat", {
+		method: "POST",
+		body: JSON.stringify(input),
+		signal,
+	});
+}
+
+export interface CreateMemberPayload {
 	name: string;
 	title: string;
 	responsibilities?: string;
@@ -589,10 +630,19 @@ export function createMember(input: {
 	gitName?: string;
 	gitEmail?: string;
 	identitySummary?: string;
-}): Promise<{ member: TeamMemberDto }> {
+}
+
+export function createMember(input: CreateMemberPayload): Promise<{ member: TeamMemberDto }> {
 	return requestJson("/api/members", {
 		method: "POST",
 		body: JSON.stringify(input),
+	});
+}
+
+export function createMembersBatch(members: CreateMemberPayload[]): Promise<{ members: TeamMemberDto[] }> {
+	return requestJson("/api/members/batch", {
+		method: "POST",
+		body: JSON.stringify({ members }),
 	});
 }
 

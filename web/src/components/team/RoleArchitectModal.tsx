@@ -2,18 +2,23 @@ import { useEffect, useState } from "react";
 import {
 	createMember,
 	designRoleDraft,
+	type MetaArchitectFormationSuggestionDto,
 	type RoleArchitectDraftDto,
 	type RoleGapSuggestionDto,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
 	type TeamMemberDto,
 } from "../../api.ts";
+import { MetaArchitectChatPane } from "./MetaArchitectChatPane.tsx";
 
 interface RoleArchitectModalProps {
 	open: boolean;
 	seedGap?: RoleGapSuggestionDto | null;
+	matterPrompt?: string;
+	workspaceId?: string | null;
 	onClose: () => void;
 	onCreated: (member: TeamMemberDto) => Promise<void> | void;
+	onCreatedBatch?: (members: TeamMemberDto[], formation?: MetaArchitectFormationSuggestionDto) => Promise<void> | void;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
 }
@@ -29,7 +34,18 @@ const ANTI_JOB_SUGGESTIONS = [
  * Guided role designer inspired by `dr-eggbot-v2`:
  * clarifies one job, explicit anti-jobs, interaction style, and least-privilege tools instead of preset industry bloat.
  */
-export function RoleArchitectModal({ open, seedGap, onClose, onCreated, onNotice, onError }: RoleArchitectModalProps) {
+export function RoleArchitectModal({
+	open,
+	seedGap,
+	matterPrompt,
+	workspaceId,
+	onClose,
+	onCreated,
+	onCreatedBatch,
+	onNotice,
+	onError,
+}: RoleArchitectModalProps) {
+	const [architectMode, setArchitectMode] = useState<"meta_chat" | "quick_form">("meta_chat");
 	const [oneJob, setOneJob] = useState("");
 	const [antiJobsText, setAntiJobsText] = useState("");
 	const [quietWhen, setQuietWhen] = useState("");
@@ -46,6 +62,7 @@ export function RoleArchitectModal({ open, seedGap, onClose, onCreated, onNotice
 
 	useEffect(() => {
 		if (!open) return;
+		setArchitectMode("meta_chat");
 		setDraft(null);
 		if (seedGap) {
 			setOneJob(seedGap.suggestedJob);
@@ -163,6 +180,27 @@ export function RoleArchitectModal({ open, seedGap, onClose, onCreated, onNotice
 					最小工具权限原则：不套用泛行业预设，先定清晰职责与“不做清单”，再加入团队。
 				</p>
 
+				<div className="architect-tabs" role="tablist" aria-label="设计方式切换">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={architectMode === "meta_chat"}
+						className={`choice-chip ${architectMode === "meta_chat" ? "active" : ""}`}
+						onClick={() => setArchitectMode("meta_chat")}
+					>
+						Meta-Bot 对话设计（可规划 1~N 个角色）
+					</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={architectMode === "quick_form"}
+						className={`choice-chip ${architectMode === "quick_form" ? "active" : ""}`}
+						onClick={() => setArchitectMode("quick_form")}
+					>
+						快速 4 问规则直出（离线可用）
+					</button>
+				</div>
+
 				{seedGap && (
 					<div className="notice-card architect-gap-banner">
 						<strong>来自事项立项的缺口识别：</strong>
@@ -170,194 +208,220 @@ export function RoleArchitectModal({ open, seedGap, onClose, onCreated, onNotice
 					</div>
 				)}
 
-				<div className="architect-form-body">
-					<label className="identity-field">
-						<span className="identity-field-label">1. 它唯一核心要干的一件事是什么？（One Job）</span>
-						<textarea
-							rows={2}
-							className="composer-input"
-							placeholder="例如：只负责上线前的合同/对外条款合规风控；或者只负责汇总每日实验反馈并提炼 TOP3 痛点。"
-							value={oneJob}
-							onChange={(e) => {
-								setOneJob(e.target.value);
-								setDraft(null);
-							}}
-						/>
-					</label>
-
-					<div className="form-grid">
-						<label className="identity-field">
-							<span className="identity-field-label">2. 它在团队中以什么方式配合？（参与站位）</span>
-							<select
-								className="select-sm select-control"
-								value={interactionStyle}
-								onChange={(e) => {
-									setInteractionStyle(e.target.value as RoleInteractionStyle);
-									setDraft(null);
-								}}
-							>
-								<option value="lead_direct">可作事项主责（直接统筹并交付结果）</option>
-								<option value="consult_specialist">仅作内部顾问（按需受委托给专业意见）</option>
-								<option value="risk_observer">定向旁听把关（仅发现重大风险时插话）</option>
-								<option value="mixed">灵活协作（可主责也可被咨询）</option>
-							</select>
-						</label>
-
-						<label className="identity-field">
-							<span className="identity-field-label">3. 最小必要工作区工具权限（不留多余工具）</span>
-							<select
-								className="select-sm select-control"
-								value={workspaceScope}
-								onChange={(e) => {
-									setWorkspaceScope(e.target.value as RoleWorkspaceScope);
-									setDraft(null);
-								}}
-							>
-								<option value="no_repo_docs">纯思考与文稿（无文件系统/命令工具）</option>
-								<option value="read_only_repo">只读核查工作区（仅 read，不改代码）</option>
-								<option value="read_write_code">读写源码与命令（read / edit / write / bash）</option>
-							</select>
-						</label>
-					</div>
-
-					<div className="identity-field">
-						<span className="identity-field-label">
-							4. 明确绝对不能越界做什么？（Anti-Jobs & 静默原则，每行一条）
-						</span>
-						<div className="architect-quick-chips">
-							{ANTI_JOB_SUGGESTIONS.map((rule) => (
-								<button
-									key={rule}
-									type="button"
-									className="tag-chip architect-chip-btn"
-									onClick={() => appendAntiJobSuggestion(rule)}
-								>
-									+ {rule}
-								</button>
-							))}
-						</div>
-						<textarea
-							rows={3}
-							className="composer-input"
-							placeholder="每行写一条不做边界，例如：不替人类拍板商业报价；无关键风险时保持静默。"
-							value={antiJobsText}
-							onChange={(e) => {
-								setAntiJobsText(e.target.value);
-								setDraft(null);
-							}}
-						/>
-					</div>
-
-					<div className="form-grid">
-						<label className="identity-field">
-							<span className="identity-field-label">团队研发/管理流程补充约束（可选）</span>
-							<input
-								className="input-field"
-								placeholder="如：涉及线上变更前必须先经人工确认；汇报控制在 3 条要点内"
-								value={workflowRules}
-								onChange={(e) => {
-									setWorkflowRules(e.target.value);
-									setDraft(null);
-								}}
-							/>
-						</label>
-						<label className="identity-field">
-							<span className="identity-field-label">什么时候应该保持静默？（可选）</span>
-							<input
-								className="input-field"
-								placeholder="如：无新增风险点或常规讨论时不插话"
-								value={quietWhen}
-								onChange={(e) => {
-									setQuietWhen(e.target.value);
-									setDraft(null);
-								}}
-							/>
-						</label>
-					</div>
-
-					<div className="ui-row-actions">
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={!oneJob.trim() || generating}
-							onClick={() => void handleGenerateDraft()}
-						>
-							{generating ? "生成设计草案…" : draft ? "重新生成草案" : "生成角色边界草案 →"}
-						</button>
-					</div>
-				</div>
-
-				{draft && (
-					<div className="architect-preview-box">
-						<div className="architect-preview-head">
-							<strong>角色设计审查（确认边界后再加入团队）</strong>
-							<span className="pill">{draft.toolSummary}</span>
-						</div>
-
-						<div className="form-grid">
+				{architectMode === "meta_chat" ? (
+					<MetaArchitectChatPane
+						open={open}
+						seedGap={seedGap}
+						matterPrompt={matterPrompt}
+						workspaceId={workspaceId}
+						onCreatedBatch={async (members, formation) => {
+							if (onCreatedBatch) {
+								await onCreatedBatch(members, formation);
+							} else if (members[0]) {
+								await onCreated(members[0]);
+							}
+						}}
+						onClose={onClose}
+						onSwitchQuickForm={() => setArchitectMode("quick_form")}
+						onNotice={onNotice}
+						onError={onError}
+					/>
+				) : (
+					<>
+						<div className="architect-form-body">
 							<label className="identity-field">
-								<span className="identity-field-label">角色名称</span>
-								<input className="input-field" value={roleName} onChange={(e) => setRoleName(e.target.value)} />
-							</label>
-							<label className="identity-field">
-								<span className="identity-field-label">英文/职位头衔</span>
-								<input
-									className="input-field"
-									value={roleTitle}
-									onChange={(e) => setRoleTitle(e.target.value)}
+								<span className="identity-field-label">1. 它唯一核心要干的一件事是什么？（One Job）</span>
+								<textarea
+									rows={2}
+									className="composer-input"
+									placeholder="例如：只负责上线前的合同/对外条款合规风控；或者只负责汇总每日实验反馈并提炼 TOP3 痛点。"
+									value={oneJob}
+									onChange={(e) => {
+										setOneJob(e.target.value);
+										setDraft(null);
+									}}
 								/>
 							</label>
-						</div>
 
-						<label className="identity-field">
-							<span className="identity-field-label">自动 routing 关键词（逗号分隔）</span>
-							<input
-								className="input-field"
-								value={keywordsText}
-								onChange={(e) => setKeywordsText(e.target.value)}
-							/>
-						</label>
+							<div className="form-grid">
+								<label className="identity-field">
+									<span className="identity-field-label">2. 它在团队中以什么方式配合？（参与站位）</span>
+									<select
+										className="select-sm select-control"
+										value={interactionStyle}
+										onChange={(e) => {
+											setInteractionStyle(e.target.value as RoleInteractionStyle);
+											setDraft(null);
+										}}
+									>
+										<option value="lead_direct">可作事项主责（直接统筹并交付结果）</option>
+										<option value="consult_specialist">仅作内部顾问（按需受委托给专业意见）</option>
+										<option value="risk_observer">定向旁听把关（仅发现重大风险时插话）</option>
+										<option value="mixed">灵活协作（可主责也可被咨询）</option>
+									</select>
+								</label>
 
-						<div className="architect-preview-grid">
-							<div className="architect-preview-pane">
-								<h4>职责与明确不做（Anti-Jobs）</h4>
-								<pre>{draft.template.sections.responsibilitiesAndBoundaries}</pre>
+								<label className="identity-field">
+									<span className="identity-field-label">3. 最小必要工作区工具权限（不留多余工具）</span>
+									<select
+										className="select-sm select-control"
+										value={workspaceScope}
+										onChange={(e) => {
+											setWorkspaceScope(e.target.value as RoleWorkspaceScope);
+											setDraft(null);
+										}}
+									>
+										<option value="no_repo_docs">纯思考与文稿（无文件系统/命令工具）</option>
+										<option value="read_only_repo">只读核查工作区（仅 read，不改代码）</option>
+										<option value="read_write_code">读写源码与命令（read / edit / write / bash）</option>
+									</select>
+								</label>
 							</div>
-							<div className="architect-preview-pane">
-								<h4>协作约定与交付边界</h4>
-								<pre>
-									{[
-										draft.template.sections.collaborationConventions,
-										draft.template.sections.deliveryAndVerification,
-									].join("\n")}
-								</pre>
-							</div>
-						</div>
 
-						<div className="form-footer">
-							<label className="checkbox-label">
-								<input
-									type="checkbox"
-									checked={isPrimaryContact}
-									onChange={(e) => setIsPrimaryContact(e.target.checked)}
+							<div className="identity-field">
+								<span className="identity-field-label">
+									4. 明确绝对不能越界做什么？（Anti-Jobs & 静默原则，每行一条）
+								</span>
+								<div className="architect-quick-chips">
+									{ANTI_JOB_SUGGESTIONS.map((rule) => (
+										<button
+											key={rule}
+											type="button"
+											className="tag-chip architect-chip-btn"
+											onClick={() => appendAntiJobSuggestion(rule)}
+										>
+											+ {rule}
+										</button>
+									))}
+								</div>
+								<textarea
+									rows={3}
+									className="composer-input"
+									placeholder="每行写一条不做边界，例如：不替人类拍板商业报价；无关键风险时保持静默。"
+									value={antiJobsText}
+									onChange={(e) => {
+										setAntiJobsText(e.target.value);
+										setDraft(null);
+									}}
 								/>
-								<span>设为默认主联系人</span>
-							</label>
+							</div>
+
+							<div className="form-grid">
+								<label className="identity-field">
+									<span className="identity-field-label">团队研发/管理流程补充约束（可选）</span>
+									<input
+										className="input-field"
+										placeholder="如：涉及线上变更前必须先经人工确认；汇报控制在 3 条要点内"
+										value={workflowRules}
+										onChange={(e) => {
+											setWorkflowRules(e.target.value);
+											setDraft(null);
+										}}
+									/>
+								</label>
+								<label className="identity-field">
+									<span className="identity-field-label">什么时候应该保持静默？（可选）</span>
+									<input
+										className="input-field"
+										placeholder="如：无新增风险点或常规讨论时不插话"
+										value={quietWhen}
+										onChange={(e) => {
+											setQuietWhen(e.target.value);
+											setDraft(null);
+										}}
+									/>
+								</label>
+							</div>
+
 							<div className="ui-row-actions">
-								<button type="button" className="btn-pill-outline" onClick={onClose}>
-									取消
-								</button>
 								<button
 									type="button"
 									className="btn-pill-dark"
-									disabled={!roleName.trim() || !roleTitle.trim() || saving}
-									onClick={() => void handleConfirmCreate()}
+									disabled={!oneJob.trim() || generating}
+									onClick={() => void handleGenerateDraft()}
 								>
-									{saving ? "加入团队中…" : "确认创建并启用该角色"}
+									{generating ? "生成设计草案…" : draft ? "重新生成草案" : "生成角色边界草案 →"}
 								</button>
 							</div>
 						</div>
-					</div>
+
+						{draft && (
+							<div className="architect-preview-box">
+								<div className="architect-preview-head">
+									<strong>角色设计审查（确认边界后再加入团队）</strong>
+									<span className="pill">{draft.toolSummary}</span>
+								</div>
+
+								<div className="form-grid">
+									<label className="identity-field">
+										<span className="identity-field-label">角色名称</span>
+										<input
+											className="input-field"
+											value={roleName}
+											onChange={(e) => setRoleName(e.target.value)}
+										/>
+									</label>
+									<label className="identity-field">
+										<span className="identity-field-label">英文/职位头衔</span>
+										<input
+											className="input-field"
+											value={roleTitle}
+											onChange={(e) => setRoleTitle(e.target.value)}
+										/>
+									</label>
+								</div>
+
+								<label className="identity-field">
+									<span className="identity-field-label">自动 routing 关键词（逗号分隔）</span>
+									<input
+										className="input-field"
+										value={keywordsText}
+										onChange={(e) => setKeywordsText(e.target.value)}
+									/>
+								</label>
+
+								<div className="architect-preview-grid">
+									<div className="architect-preview-pane">
+										<h4>职责与明确不做（Anti-Jobs）</h4>
+										<pre>{draft.template.sections.responsibilitiesAndBoundaries}</pre>
+									</div>
+									<div className="architect-preview-pane">
+										<h4>协作约定与交付边界</h4>
+										<pre>
+											{[
+												draft.template.sections.collaborationConventions,
+												draft.template.sections.deliveryAndVerification,
+											].join("\n")}
+										</pre>
+									</div>
+								</div>
+
+								<div className="form-footer">
+									<label className="checkbox-label">
+										<input
+											type="checkbox"
+											checked={isPrimaryContact}
+											onChange={(e) => setIsPrimaryContact(e.target.checked)}
+										/>
+										<span>设为默认主联系人</span>
+									</label>
+									<div className="ui-row-actions">
+										<button type="button" className="btn-pill-outline" onClick={onClose}>
+											取消
+										</button>
+										<button
+											type="button"
+											className="btn-pill-dark"
+											disabled={!roleName.trim() || !roleTitle.trim() || saving}
+											onClick={() => void handleConfirmCreate()}
+										>
+											{saving ? "加入团队中…" : "确认创建并启用该角色"}
+										</button>
+									</div>
+								</div>
+							</div>
+						)}
+					</>
 				)}
 			</div>
 		</div>

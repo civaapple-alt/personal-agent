@@ -311,3 +311,209 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 		rmSync(tmp, { recursive: true, force: true });
 	}
 });
+
+test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N least-privilege roles without auto-creating, and batches creation on confirm", async () => {
+	const tmp = mkdtempSync(join(tmpdir(), "pa-meta-bot-"));
+	const rolesDir = join(tmp, "roles");
+	const db = openPersonalAgentDatabase(join(tmp, "agent.db"));
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const observedPrompts: Array<{ args: string[]; prompt: string }> = [];
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tmp,
+		noSession: true,
+		workerFactory: (options) => ({
+			onNotice: () => () => {},
+			setDialogHandler: () => {},
+			start: async () => {},
+			runPromptAndWait: async (promptText) => {
+				observedPrompts.push({ args: options.args ?? [], prompt: promptText });
+				const isSecondTurn = promptText.includes("只读核查客户访谈，不需要改代码");
+				if (!isSecondTurn) {
+					return {
+						disposition: "started",
+						aborted: false,
+						assistantText: JSON.stringify({
+							reply: "收到！在给你拆解角色前先确认两件事：\n1. 新角色需要修改代码仓库，还是仅做访谈分析与风险审阅？\n2. 审阅角色是否只在发现严重逻辑漏洞时插话？",
+							followUpQuestions: ["只读核查客户访谈，不需要改代码；审阅无风险时保持静默"],
+							blueprints: [],
+						}),
+						assistantMessages: [],
+						toolExecutions: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+					};
+				}
+				return {
+					disposition: "started",
+					aborted: false,
+					assistantText: JSON.stringify({
+						reply: "已按你们的流程拆成「研究主理 + 静默逻辑把关」两个互补角色，默认都不带 bash/edit 工具；请勾选确认后入队。",
+						followUpQuestions: [],
+						recommendedFormation: {
+							mode: "lead_review",
+							existingMemberIds: ["product-manager", "qa-manager"],
+							observerMemberIds: ["qa-manager"],
+							rationale: "1 位研究主理出结论 + 1 位静默把关，不拉开发旁听。",
+						},
+						blueprints: [
+							{
+								name: "用户访谈提炼官",
+								title: "Interview Synthesizer",
+								oneJob: "只从客户访谈原文提炼真实痛点、使用频次与原话证据",
+								antiJobs: ["不编造未出现的需求", "不直接替团队决定研发排期"],
+								interactionStyle: "lead_direct",
+								workspaceScope: "no_repo_docs",
+								keywords: ["访谈", "痛点", "原话"],
+								rationale: "聚焦证据提炼主线工作",
+							},
+							{
+								name: "逻辑漏洞审阅员",
+								title: "Logic Gap Reviewer",
+								oneJob: "只检查结论推导中的样本偏差与因果跳跃风险",
+								antiJobs: ["无实质漏洞时保持静默", "不重写整份研究报告"],
+								quietWhen: "样本依据充分且无明显偏差时输出 [SILENT]",
+								interactionStyle: "risk_observer",
+								workspaceScope: "read_only_repo",
+								keywords: ["样本偏差", "逻辑漏洞"],
+								rationale: "作为轻量旁听防过早下结论",
+							},
+						],
+					}),
+					assistantMessages: [],
+					toolExecutions: [],
+					notices: [],
+					dialogs: [],
+					events: [],
+				};
+			},
+			abort: async () => {},
+			stop: async () => {},
+			getState: async () => ({ sessionId: `meta_${Math.random().toString(36).slice(2)}` }),
+		}),
+	});
+
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		rolesDir,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const url = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const initialCount = store.listMembers().length;
+
+		// Turn 1: Meta-Bot asks clarifying Intake questions with toolless isolation (--tools "") and team healthcheck digest
+		const turn1Resp = await fetch(`${url}/api/members/architect/chat`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "我们要做一轮客户需求调研，顺便帮我看下当前团队有没有重叠。" }],
+				includeHealthcheck: true,
+			}),
+		});
+		assert.equal(turn1Resp.status, 200);
+		const turn1 = (await turn1Resp.json()) as {
+			reply: string;
+			followUpQuestions: string[];
+			blueprints: unknown[];
+			usedHealthcheck: boolean;
+		};
+		assert.equal(turn1.usedHealthcheck, true);
+		assert.equal(turn1.blueprints.length, 0);
+		assert.equal(turn1.followUpQuestions.length, 1);
+		assert.ok(observedPrompts[0]!.args.includes("--tools"));
+		const toolsVal = observedPrompts[0]!.args[observedPrompts[0]!.args.indexOf("--tools") + 1];
+		assert.equal(toolsVal, "");
+		assert.ok(observedPrompts[0]!.prompt.includes("团队近期运行摩擦与健康摘要"));
+		assert.equal(store.listMembers().length, initialCount);
+
+		// Turn 2: Proposes 2 complementary roles + recommended formation; STILL does not auto-create any member
+		const turn2 = (await (
+			await fetch(`${url}/api/members/architect/chat`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					messages: [
+						{ role: "user", content: "我们要做一轮客户需求调研，顺便帮我看下当前团队有没有重叠。" },
+						{ role: "assistant", content: turn1.reply },
+						{ role: "user", content: "只读核查客户访谈，不需要改代码；审阅无风险时保持静默。" },
+					],
+				}),
+			})
+		).json()) as {
+			blueprints: Array<{
+				draft: {
+					template: {
+						name: string;
+						title: string;
+						tools: string[];
+						keywords: string[];
+						sections: Record<string, string>;
+					};
+					antiJobs: string[];
+				};
+			}>;
+			recommendedFormation?: { mode: string; observerMemberIds: string[] };
+		};
+		assert.equal(turn2.blueprints.length, 2);
+		assert.deepEqual(turn2.blueprints[0]!.draft.template.tools, []);
+		assert.deepEqual(turn2.blueprints[1]!.draft.template.tools, ["read"]);
+		assert.equal(turn2.recommendedFormation?.mode, "lead_review");
+		assert.deepEqual(turn2.recommendedFormation?.observerMemberIds, ["qa-manager"]);
+		assert.equal(store.listMembers().length, initialCount);
+
+		// Confirm creation only when user submits chosen blueprints via /api/members/batch
+		const batchRes = (await (
+			await fetch(`${url}/api/members/batch`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					members: turn2.blueprints.map((item) => ({
+						name: item.draft.template.name,
+						title: item.draft.template.title,
+						responsibilities: item.draft.template.sections.responsibilitiesAndBoundaries,
+						keywords: item.draft.template.keywords,
+						tools: item.draft.template.tools,
+						antiJobs: item.draft.antiJobs,
+						sections: item.draft.template.sections,
+					})),
+				}),
+			})
+		).json()) as { members: Array<{ id: string; displayName: string }> };
+		assert.equal(batchRes.members.length, 2);
+		assert.equal(store.listMembers().length, initialCount + 2);
+
+		// Non-owner collaborator cannot invoke Meta-Bot or batch member creation
+		const col = (await (
+			await fetch(`${url}/api/collaborators`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "Guest", roleTitle: "成员" }),
+			})
+		).json()) as { collaborator: { token: string } };
+		const forbiddenChat = await fetch(`${url}/api/members/architect/chat`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "x-pa-token": col.collaborator.token },
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+		assert.equal(forbiddenChat.status, 403);
+	} finally {
+		await orchestrator.shutdown();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
