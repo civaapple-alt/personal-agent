@@ -4,13 +4,12 @@ import {
 	designRoleDraft,
 	type RoleArchitectDraftDto,
 	type RoleGapSuggestionDto,
-	type RoleInteractionStyle,
 	type RoleTemplateDto,
 	type RoleWorkspaceScope,
 	type TeamMemberDto,
 } from "../../api.ts";
 import { filterBusinessMembers } from "../../architectApi.ts";
-import { formatRoleToolTierLabel, getMemberThemeById } from "../../utils.ts";
+import { formatRoleToolTierLabel, getMemberThemeById, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
 interface RoleArchitectModalProps {
@@ -25,16 +24,6 @@ interface RoleArchitectModalProps {
 	onError: (message: string) => void;
 }
 
-const INTERACTION_CARDS: Array<{
-	id: RoleInteractionStyle;
-	title: string;
-	sub: string;
-}> = [
-	{ id: "lead_direct", title: "直接牵头", sub: "面向人沟通并交付" },
-	{ id: "consult_specialist", title: "幕后专才", sub: "仅被请教时出主意" },
-	{ id: "risk_observer", title: "静默旁听", sub: "无风险时不主动插话" },
-];
-
 const SCOPE_CARDS: Array<{
 	id: RoleWorkspaceScope;
 	title: string;
@@ -42,12 +31,20 @@ const SCOPE_CARDS: Array<{
 }> = [
 	{ id: "no_repo_docs", title: "纯思考文稿", sub: "不接触项目文件" },
 	{ id: "read_only_repo", title: "只看项目文件", sub: "核查资料，不改源码" },
-	{ id: "read_write_code", title: "可改代码运行", sub: "编辑代码并跑测试" },
+	{ id: "read_write_code", title: "可改代码运行", sub: "读写文件并跑命令" },
 ];
 
 const BOUNDARY_CHIPS = ["不直接修改代码", "无关键风险时静默", "不替团队拍板最终决策", "不编造未核查的数据"];
 
-/** Single-purpose offline 3-choice quick card role creator (conversational planning/healthcheck now lives in Role Architect matters). */
+function cleanSectionLines(text: string | undefined): string[] {
+	if (!text) return [];
+	return text
+		.split(/\r?\n/)
+		.map((line) => stripMarkdownFormatting(line.trim()))
+		.filter(Boolean);
+}
+
+/** Single-purpose offline quick role creator focusing on role identity, One Job, tool scope, keywords, and preview. */
 export function RoleArchitectModal({
 	open,
 	seedGap,
@@ -62,7 +59,6 @@ export function RoleArchitectModal({
 	const [oneJob, setOneJob] = useState("");
 	const [selectedBoundaries, setSelectedBoundaries] = useState<string[]>([]);
 	const [extraBoundary, setExtraBoundary] = useState("");
-	const [interactionStyle, setInteractionStyle] = useState<RoleInteractionStyle>("consult_specialist");
 	const [workspaceScope, setWorkspaceScope] = useState<RoleWorkspaceScope>("read_only_repo");
 	const [workflowRules, setWorkflowRules] = useState("");
 	const [roleName, setRoleName] = useState("");
@@ -80,9 +76,6 @@ export function RoleArchitectModal({
 			setOneJob(seedGap.suggestedJob);
 			setSelectedBoundaries(seedGap.suggestedAntiJobs.slice(0, 3));
 			setExtraBoundary(seedGap.suggestedAntiJobs.slice(3).join("\n"));
-			setInteractionStyle(
-				seedGap.suggestedInteractionStyle === "mixed" ? "lead_direct" : seedGap.suggestedInteractionStyle,
-			);
 			setWorkspaceScope(seedGap.suggestedWorkspaceScope);
 			setRoleName(seedGap.missingRoleTitle);
 			setRoleTitle("");
@@ -93,7 +86,6 @@ export function RoleArchitectModal({
 			setOneJob("");
 			setSelectedBoundaries([]);
 			setExtraBoundary("");
-			setInteractionStyle("consult_specialist");
 			setWorkspaceScope("read_only_repo");
 			setWorkflowRules("");
 			setRoleName("");
@@ -122,7 +114,7 @@ export function RoleArchitectModal({
 			const res = await designRoleDraft({
 				oneJob: oneJob.trim(),
 				antiJobs: Array.from(new Set([...selectedBoundaries, ...extraLines])),
-				interactionStyle,
+				interactionStyle: seedGap?.suggestedInteractionStyle ?? "mixed",
 				workspaceScope,
 				roleName: roleName.trim() || undefined,
 				roleTitle: roleTitle.trim() || undefined,
@@ -149,6 +141,7 @@ export function RoleArchitectModal({
 		setSaving(true);
 		try {
 			const res = await createMember({
+				id: draft.template.title === roleTitle.trim() ? draft.template.id : undefined,
 				name: roleName.trim(),
 				title: roleTitle.trim(),
 				responsibilities: draft.template.sections.responsibilitiesAndBoundaries,
@@ -172,10 +165,16 @@ export function RoleArchitectModal({
 		}
 	};
 
+	const previewCoreJob =
+		cleanSectionLines(draft?.template.sections.responsibilitiesAndBoundaries).find(
+			(line) => !line.startsWith("不做 / 边界"),
+		) ?? oneJob.trim();
+	const previewMethods = cleanSectionLines(draft?.template.sections.skillsAndMethods);
+
 	return (
 		<div className="architect-modal-backdrop">
 			<button type="button" className="architect-modal-scrim" aria-label="关闭弹窗" onClick={onClose} />
-			<div className="architect-modal-card" role="dialog" aria-modal="true" aria-label="角色设计工作室">
+			<div className="architect-modal-card" role="dialog" aria-modal="true" aria-label="快速创建角色">
 				<div className="banner-row">
 					<div className="architect-header-title-wrap">
 						<h2 className="ui-card-title architect-modal-title">快速创建单个角色</h2>
@@ -191,7 +190,7 @@ export function RoleArchitectModal({
 									onOpenArchitectMatter();
 								}}
 							>
-								需要规划 1~N 个角色 / 团队体检？进对话 →
+								按工作流规划多个角色？进对话 →
 							</button>
 						)}
 						<button type="button" className="btn-inline" onClick={onClose}>
@@ -224,11 +223,38 @@ export function RoleArchitectModal({
 				)}
 
 				<div className="architect-form-body">
+					<div className="form-grid">
+						<label className="identity-field">
+							<span className="identity-field-label">角色名称（可选，不填按职责提炼）</span>
+							<input
+								className="input-field"
+								placeholder="例如：发布部署官 / 合同风控官"
+								value={roleName}
+								onChange={(e) => {
+									setRoleName(e.target.value);
+									setDraft(null);
+								}}
+							/>
+						</label>
+						<label className="identity-field">
+							<span className="identity-field-label">英文头衔（可选，决定标识与 Git 邮箱）</span>
+							<input
+								className="input-field"
+								placeholder="例如：Release Ops / Compliance Reviewer"
+								value={roleTitle}
+								onChange={(e) => {
+									setRoleTitle(e.target.value);
+									setDraft(null);
+								}}
+							/>
+						</label>
+					</div>
+
 					<label className="identity-field">
-						<span className="identity-field-label">它专职负责哪件事？</span>
+						<span className="identity-field-label">它专职负责哪件事？（One Job）</span>
 						<input
 							className="input-field"
-							placeholder="例如：上线前合同风险把关 / 每日访谈痛点提炼"
+							placeholder="例如：检查 CI 通过后的发布配置与上线执行；或：只负责合同条款合规核查"
 							value={oneJob}
 							onChange={(e) => {
 								setOneJob(e.target.value);
@@ -238,58 +264,10 @@ export function RoleArchitectModal({
 					</label>
 
 					<div className="architect-section-block">
-						<span className="identity-field-label">在团队中怎么配合</span>
-						<div className="architect-option-grid">
-							{INTERACTION_CARDS.map((card) => (
-								<button
-									key={card.id}
-									type="button"
-									className={`architect-option-card ${interactionStyle === card.id ? "active" : ""}`}
-									onClick={() => {
-										setInteractionStyle(card.id);
-										setDraft(null);
-									}}
-								>
-									<span className="architect-option-icon" aria-hidden="true">
-										{card.id === "lead_direct" ? (
-											<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
-												<circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5" />
-												<path
-													d="M4.5 16.5c.8-2.6 3-4 5.5-4s4.7 1.4 5.5 4"
-													stroke="currentColor"
-													strokeWidth="1.5"
-													strokeLinecap="round"
-												/>
-											</svg>
-										) : card.id === "consult_specialist" ? (
-											<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
-												<path
-													d="M4 5.5h12v7H8l-4 3v-10Z"
-													stroke="currentColor"
-													strokeWidth="1.5"
-													strokeLinejoin="round"
-												/>
-											</svg>
-										) : (
-											<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
-												<path
-													d="M2.5 10s3-5 7.5-5 7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5Z"
-													stroke="currentColor"
-													strokeWidth="1.5"
-												/>
-												<circle cx="10" cy="10" r="2" stroke="currentColor" strokeWidth="1.5" />
-											</svg>
-										)}
-									</span>
-									<strong>{card.title}</strong>
-									<small>{card.sub}</small>
-								</button>
-							))}
+						<div className="banner-row">
+							<span className="identity-field-label">允许使用的工具权限范围</span>
+							<span className="muted-tiny">参与方式（主责 / 协同 / 旁听）可在每次发起或推进事项时灵活指派</span>
 						</div>
-					</div>
-
-					<div className="architect-section-block">
-						<span className="identity-field-label">允许使用的权限范围</span>
 						<div className="architect-option-grid">
 							{SCOPE_CARDS.map((card) => (
 								<button
@@ -369,29 +347,32 @@ export function RoleArchitectModal({
 						</div>
 					</div>
 
-					<details className="identity-rename-details">
-						<summary>自定义附加约束或团队规则（可选）</summary>
-						<div className="architect-advanced-grid">
+					<div className="architect-advanced-grid">
+						<label className="identity-field">
+							<span className="identity-field-label">团队流程 / 门槛要求（可选）</span>
 							<input
 								className="input-field"
-								placeholder="附加不做项（如：不直接对外报价）"
-								value={extraBoundary}
-								onChange={(e) => {
-									setExtraBoundary(e.target.value);
-									setDraft(null);
-								}}
-							/>
-							<input
-								className="input-field"
-								placeholder="团队流程要求（如：变更前须人确认）"
+								placeholder="如：须 CI 通过后方可部署"
 								value={workflowRules}
 								onChange={(e) => {
 									setWorkflowRules(e.target.value);
 									setDraft(null);
 								}}
 							/>
-						</div>
-					</details>
+						</label>
+						<label className="identity-field">
+							<span className="identity-field-label">附加不做边界（可选）</span>
+							<input
+								className="input-field"
+								placeholder="如：不直接改动生产数据库"
+								value={extraBoundary}
+								onChange={(e) => {
+									setExtraBoundary(e.target.value);
+									setDraft(null);
+								}}
+							/>
+						</label>
+					</div>
 
 					<div className="ui-row-actions">
 						<button
@@ -407,8 +388,13 @@ export function RoleArchitectModal({
 					{draft && (
 						<div className="architect-preview-box">
 							<div className="architect-preview-head">
-								<strong>确认角色名称与边界</strong>
-								<span className="pill">{draft.toolSummary}</span>
+								<strong>确认并微调新角色配置</strong>
+								<div className="architect-preview-badges">
+									<span className="pill">ID：{draft.template.id}</span>
+									<span className="pill">
+										工具：{draft.template.tools.length > 0 ? draft.template.tools.join(", ") : "无工具"}
+									</span>
+								</div>
 							</div>
 
 							<div className="form-grid">
@@ -421,7 +407,7 @@ export function RoleArchitectModal({
 									/>
 								</label>
 								<label className="identity-field">
-									<span className="identity-field-label">头衔</span>
+									<span className="identity-field-label">英文头衔</span>
 									<input
 										className="input-field"
 										value={roleTitle}
@@ -430,8 +416,39 @@ export function RoleArchitectModal({
 								</label>
 							</div>
 
-							<div className="architect-preview-pane">
-								<pre>{draft.template.sections.responsibilitiesAndBoundaries}</pre>
+							<label className="identity-field">
+								<span className="identity-field-label">自动派活触发关键词（逗号分隔）</span>
+								<input
+									className="input-field"
+									placeholder="如：部署, CI, 发布, release"
+									value={keywordsText}
+									onChange={(e) => setKeywordsText(e.target.value)}
+								/>
+							</label>
+
+							<div className="architect-preview-grid">
+								<div className="architect-preview-pane">
+									<h4>核心职责与工作约定</h4>
+									<p className="architect-preview-copy">{previewCoreJob}</p>
+									{previewMethods.length > 0 && (
+										<ul className="architect-preview-list">
+											{previewMethods.map((line) => (
+												<li key={line}>{line}</li>
+											))}
+										</ul>
+									)}
+								</div>
+								<div className="architect-preview-pane">
+									<h4>不做边界（Anti-Jobs）与权限</h4>
+									<p className="architect-preview-copy">{draft.toolSummary}</p>
+									{draft.antiJobs.length > 0 && (
+										<ul className="architect-preview-list">
+											{draft.antiJobs.map((rule) => (
+												<li key={rule}>{rule}</li>
+											))}
+										</ul>
+									)}
+								</div>
 							</div>
 
 							<div className="form-footer">

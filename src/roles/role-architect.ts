@@ -75,17 +75,32 @@ function deriveRoleNameAndTitle(input: RoleDesignBriefInput): { name: string; ti
 		"专项顾问";
 	if (trimmedTitle) return { name: inferredName, title: trimmedTitle };
 
-	const asciiWords = `${job} ${inferredName}`
+	const rawText = `${job} ${inferredName}`;
+	const asciiWords = rawText
 		.toLowerCase()
 		.match(/[a-z][a-z0-9-]{1,24}/g)
 		?.slice(0, 3);
+	const domainTitle = /(?:部署|上线|发布|ci|cd)/i.test(rawText)
+		? "Release Ops"
+		: /(?:运维|监控|排障|告警)/i.test(rawText)
+			? "Ops Engineer"
+			: /(?:法务|合同|合规|隐私)/i.test(rawText)
+				? "Compliance Reviewer"
+				: /(?:交互|视觉|设计|ui|ux)/i.test(rawText)
+					? "Design Specialist"
+					: /(?:财务|预算|税务|成本)/i.test(rawText)
+						? "Finance Analyst"
+						: /(?:客服|售后|工单)/i.test(rawText)
+							? "Support Specialist"
+							: null;
 	const styleSuffix =
 		input.interactionStyle === "risk_observer"
 			? "Reviewer"
 			: input.interactionStyle === "consult_specialist"
 				? "Specialist"
-				: "Coordinator";
-	const fallbackTitle = asciiWords?.length ? `${asciiWords.join("-")} ${styleSuffix}` : `Workflow ${styleSuffix}`;
+				: "Specialist";
+	const fallbackTitle =
+		domainTitle ?? (asciiWords?.length ? `${asciiWords.join("-")} ${styleSuffix}` : `Workflow ${styleSuffix}`);
 	return { name: inferredName, title: fallbackTitle };
 }
 
@@ -175,7 +190,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	if (!oneJob) {
 		throw new Error("oneJob is required to design a role");
 	}
-	const interactionStyle: RoleInteractionStyle = input.interactionStyle ?? "consult_specialist";
+	const interactionStyle: RoleInteractionStyle = input.interactionStyle ?? "mixed";
 	const workspaceScope: RoleWorkspaceScope = input.workspaceScope ?? "read_only_repo";
 	const { name, title } = deriveRoleNameAndTitle(input);
 	const id = slugifyRoleId(input.roleId?.trim() || title, input.existingMemberIds ?? []);
@@ -209,12 +224,16 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 			? "- 默认作为关键风险旁听审视者列席；仅当发现明显冲突或遗漏时简洁插话，其余时刻保持安静。"
 			: interactionStyle === "consult_specialist"
 				? "- 作为内部专才接受主负责人按需咨询，内部讨论留痕并把可验证判断交给主负责人整合。"
-				: "- 可作为事项主负责人承接需求，在明确边界内推进并在关键业务取舍处向人确认。";
+				: interactionStyle === "lead_direct"
+					? "- 可作为事项主负责人承接需求，在明确边界内推进并在关键业务取舍处向人确认。"
+					: "- 既可独立担任事项主责推进并在关键节点向人确认，也可作为内部协同或旁听成员按事项需要参与。";
 	const deliverySection = input.constraints?.trim()
 		? `- 交付与验收要求：${input.constraints.trim()}`
 		: interactionStyle === "lead_direct"
 			? "- 形成明确阶段结果时通过正式成果归档，附简练 `changeNote` 与核查依据；普通讨论不归档。"
-			: "- 返回结构化专业意见、核查依据与风险清单，不代替主负责人自行签发正式成果。";
+			: interactionStyle === "mixed"
+				? "- 给出有依据的结构化核查或执行结果；在具体事项中担任主责且产出阶段成果时再正式归档。"
+				: "- 返回结构化专业意见、核查依据与风险清单，不代替主负责人自行签发正式成果。";
 
 	const sections = {
 		responsibilitiesAndBoundaries: responsibilitiesLines.join("\n"),

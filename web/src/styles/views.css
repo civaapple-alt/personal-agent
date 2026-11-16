@@ -423,6 +423,28 @@
 	flex-wrap: wrap;
 	font-size: var(--text-sm);
 }
+.architect-preview-badges {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.architect-preview-copy {
+	margin: 0 0 6px;
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+	line-height: 1.5;
+}
+.architect-preview-list {
+	margin: 0;
+	padding-left: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--text-micro);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
 .architect-preview-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
