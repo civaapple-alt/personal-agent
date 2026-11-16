@@ -14,6 +14,7 @@
 RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误不能伪装为空正文成功。
 
 工具调用者的事项、成员与工作区由 [编排核](../orchestrator/README.md)绑定，模型参数不能改写身份。
+文档发布参数为 `sourcePath` 或 `content` 二选一：文件来源只允许 `document`，校验后由宿主读取；桥接拒绝同时传两份正文来源，不自行猜测正文对应哪个文件。文件快照与提交校验属于编排模块。
 声明的 Skill/扩展/MCP 不是装载成功证据，实际工具清单必须通过核查。构建后扩展从 `dist/` 的对应文件加载，保持源代码与编译入口均可用。
 
 从仓库根运行 `node --test test/pi-rpc-worker.test.ts test/team-tool-bridge.test.ts`。

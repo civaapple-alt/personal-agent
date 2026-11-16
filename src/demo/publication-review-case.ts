@@ -1,9 +1,9 @@
 /** Synthetic, fixed regression input. Never copies the user's demo or database. */
 export const PUBLICATION_REVIEW_CASE = {
-	id: "publication-review-v1",
+	id: "publication-review-v2",
 	title: "反馈方案 · 一致性验证",
 	prompt:
-		"请阅读 README.md、docs/context.md 和 deliverables/ 下的两个版本。下一阶段需要让研发和测试能依据方案实施与验收，请整理成可审阅的 V3 完整方案，保存为 deliverables/feedback-box-v3.md，沿用准确标题‘反馈方案 · 一致性验证’通过 publish_deliverable 发布 document 全文，changeNote 说明变化及依据。保留原有 V1/V2。本轮只做设计，不编码、不安装依赖、不提交 Git。",
+		"请阅读 README.md、docs/context.md 和 deliverables/ 下的两个版本。下一阶段需要让研发和测试能依据方案实施与验收，请整理成可审阅的 V3 完整方案，保存为 deliverables/feedback-box-v3.md，沿用准确标题‘反馈方案 · 一致性验证’通过 publish_deliverable 以 document 类型和 sourcePath='deliverables/feedback-box-v3.md' 发布，由宿主读取已保存的全文，不再传 content，changeNote 说明变化及依据。保留原有 V1/V2。本轮只做设计，不编码、不安装依赖、不提交 Git。",
 	files: {
 		"README.md":
 			"# 反馈方案设计\n\n这是独立验证用的虚构资料，仅限当前工作区。先读 docs/context.md，再看已有版本。当前没有业务应用实现，也没有运行验收记录。\n",

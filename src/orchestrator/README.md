@@ -5,7 +5,7 @@
 - [team-orchestrator.ts](team-orchestrator.ts) 拥有一轮用户任务的生命周期，并由 [types.ts](types.ts)、[prompts.ts](prompts.ts)、
   [worker-runner.ts](worker-runner.ts)、[delegation-runner.ts](delegation-runner.ts)、
   [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担提示词装配、Worker 执行、内部委托、旁听与复盘。
-- [execution-context.ts](execution-context.ts) 负责 Skill 路径、保存会话身份与成果文件/URL 校验。
+- [execution-context.ts](execution-context.ts) 负责 Skill 路径、保存会话身份与成果文件/URL 校验。`prepareDelivery` 从文档 `sourcePath` 读取正文并记录快照，`validateDelivery` 在成功提交前核对文件内容与路径未变；纯文本 `content` 文档不绑定文件。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
   筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。
 
@@ -40,6 +40,7 @@
 - 只有主成员在形成可审阅阶段成果、明确版本或实质变化时，才通过 `publish_deliverable` 结合 [technical-writing](../../skills/technical-writing/SKILL.md) 归档正式成果：
   - 输出精简的 1–3 句 `changeNote` 与「核心结论 → 正文内容 → 交付过程与验证依据」结构。
   - 过程回复与澄清只留对话，草稿须整轮成功后才归档；工具权限和最终写入都要保持这些规则，不能只在角色提示词里约定。
+  - 已落盘文档使用 `sourcePath`，宿主直接读取正文；不同时传 `content`。来源变化后须重新登记最终文件，同轮同标题文档替换草稿，跨轮保留版本。文件快照一致性不代表正文语义正确。
   - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../docs/publication-review.md)检查。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。

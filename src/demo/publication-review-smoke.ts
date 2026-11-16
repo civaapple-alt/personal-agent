@@ -155,12 +155,27 @@ async function run(policy: "baseline" | "current") {
 			})),
 		);
 		const consulted = specialistsBeforePublication(traces);
+		const fileSourceUsed = traces.some((trace) => {
+			const args = trace.args;
+			return (
+				trace.memberId === "product-manager" &&
+				trace.toolName === "publish_deliverable" &&
+				trace.isError === false &&
+				args !== null &&
+				typeof args === "object" &&
+				"sourcePath" in args &&
+				typeof args.sourcePath === "string" &&
+				!("content" in args) &&
+				resolve(workspace, args.sourcePath) === join(workspace, "deliverables/feedback-box-v3.md")
+			);
+		});
 		const checks = {
 			executionSucceeded: !error && result?.runResult.aborted === false,
 			historicalVersionsPreserved: preserved.every((item) => item.fileUnchanged && item.indexUnchanged),
 			exactlyOneV3:
 				fresh.length === 1 && fresh[0]?.title === PUBLICATION_REVIEW_CASE.title && fresh[0]?.version === 3,
-			fileMatchesPublication: v3 !== null && fresh.length === 1 && fresh[0]?.contentOrPath.trim() === v3.trim(),
+			fileSourceUsed,
+			fileMatchesPublication: v3 !== null && fresh.length === 1 && fresh[0]?.contentOrPath === v3,
 			specialistsBeforePublication: ["engineering-manager", "qa-manager"].every((id) => consulted.includes(id)),
 			noOutstandingLease: db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n === 0,
 		};

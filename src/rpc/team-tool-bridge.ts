@@ -5,15 +5,16 @@ import type { MemoryCategory } from "../storage/types.ts";
 
 export type TeamToolCall =
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string }
-	| {
+	| ({
 			tool: "publish_deliverable";
 			callId: string;
-			type: "document" | "artifact" | "prototype_image" | "service_url";
 			title: string;
-			content: string;
 			summary: string;
 			changeNote: string;
-	  }
+	  } & (
+			| { type: "document"; sourcePath: string; content?: never }
+			| { type: "document" | "artifact" | "prototype_image" | "service_url"; content: string; sourcePath?: never }
+	  ))
 	| {
 			tool: "propose_experience";
 			callId: string;
@@ -45,7 +46,7 @@ function parseCall(value: unknown): TeamToolCall {
 			task: requiredString(args.task, "task", 16_000),
 		};
 	}
-	if (value.tool === "publish_deliverable" && "type" in args && "title" in args && "content" in args) {
+	if (value.tool === "publish_deliverable" && "type" in args && "title" in args) {
 		const changeNote =
 			"changeNote" in args
 				? requiredString(args.changeNote, "changeNote", 2000)
@@ -54,15 +55,22 @@ function parseCall(value: unknown): TeamToolCall {
 		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url") {
 			throw new Error("Unsupported deliverable type");
 		}
-		return {
+		const metadata: Pick<
+			Extract<TeamToolCall, { tool: "publish_deliverable" }>,
+			"tool" | "callId" | "title" | "changeNote" | "summary"
+		> = {
 			tool: value.tool,
 			callId,
-			type,
 			title: requiredString(args.title, "title", 200),
-			content: requiredString(args.content, "content"),
 			changeNote,
 			summary: "summary" in args && typeof args.summary === "string" ? args.summary.slice(0, 1000) : "",
 		};
+		if ("sourcePath" in args) {
+			if (type !== "document") throw new Error("sourcePath is only supported for document deliverables");
+			if ("content" in args) throw new Error("Provide exactly one of sourcePath or content, not both");
+			return { ...metadata, type, sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) };
+		}
+		return { ...metadata, type, content: requiredString("content" in args ? args.content : undefined, "content") };
 	}
 	if (value.tool === "propose_experience" && "scope" in args && "content" in args && "rationale" in args) {
 		const scope = args.scope;

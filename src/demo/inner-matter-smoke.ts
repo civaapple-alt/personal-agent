@@ -63,9 +63,22 @@ try {
 			assert.ok(
 				turn.runResult.toolExecutions.some((tool) => tool.toolName === "publish_deliverable" && !tool.isError),
 			);
+			const content = await readFile(
+				join(workspace, `deliverables/feedback-box-v${turn.deliverable!.version}.md`),
+				"utf8",
+			);
+			assert.equal(turn.deliverable?.contentOrPath, content);
 			assert.ok(
-				(await readFile(join(workspace, `deliverables/feedback-box-v${turn.deliverable!.version}.md`), "utf8"))
-					.length > 0,
+				turn.runResult.toolExecutions.some(
+					(tool) =>
+						tool.toolName === "publish_deliverable" &&
+						!tool.isError &&
+						tool.args !== null &&
+						typeof tool.args === "object" &&
+						"sourcePath" in tool.args &&
+						typeof tool.args.sourcePath === "string" &&
+						!("content" in tool.args),
+				),
 			);
 		}
 		console.log(`PASS ${step.label}: ${store.listDeliverables(matter.id).length} formal versions`);

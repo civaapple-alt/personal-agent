@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Publish saved documents with mutually exclusive `sourcePath`/inline `content` inputs. The host reads exact UTF-8 file text and checks its path/content snapshot again before successful commit, rejecting stale, missing or redirected sources rather than archiving divergent text.
+- Replace a same-title document draft on re-publication within a turn while retaining cross-turn versions. Keep existing inline documents and other deliverable types supported.
+- Make inner/review demos publish through file sources and check exact text equality; preserve the failed paired run and add regressions for source validation, history snapshots, stale/deleted files, symlinks and re-publication.
+
 ### Documentation
 
 - Record the built-in demo artifact review and prioritize evidence accuracy and design/acceptance consistency. Clarify that four recorded stages establish workflow evidence, not accepted output quality or a tested business application.

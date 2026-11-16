@@ -411,6 +411,7 @@ export class TeamOrchestrator {
 						type: "document",
 						title: input.deliverableTitle,
 						content: rawReply,
+						source: { kind: "inline" },
 						summary: rawReply.slice(0, 200),
 					},
 				});

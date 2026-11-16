@@ -8,9 +8,9 @@ import type { ImageContent } from "../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
 import type { Matter, MemoryCategory, MemoryScope, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import {
+	prepareDelivery,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
-	validateDelivery,
 	validateSavedSession,
 } from "./execution-context.ts";
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
@@ -210,9 +210,17 @@ export async function executeWithWorkerPass(
 					throw new Error(
 						"Internal specialists return results to the lead; only the lead publishes user deliverables",
 					);
-				const draft = await validateDelivery(call, cwd);
+				const draft = await prepareDelivery(call, cwd);
 				toolSignal.throwIfAborted();
-				if (
+				const previousDocument = deliveries.findIndex(
+					(entry) =>
+						entry.memberId === input.member.id &&
+						entry.draft.type === "document" &&
+						draft.type === "document" &&
+						entry.draft.title === draft.title,
+				);
+				if (previousDocument >= 0) deliveries[previousDocument] = { memberId: input.member.id, cwd, draft };
+				else if (
 					!deliveries.some(
 						(entry) =>
 							entry.memberId === input.member.id &&
@@ -221,7 +229,14 @@ export async function executeWithWorkerPass(
 					)
 				)
 					deliveries.push({ memberId: input.member.id, cwd, draft });
-				return { staged: true, title: draft.title, note: "本轮成功结束后归档" };
+				return {
+					staged: true,
+					title: draft.title,
+					...(draft.type === "document" && draft.source.kind === "workspace_file"
+						? { sourcePath: draft.source.path, contentSha256: draft.source.sha256 }
+						: {}),
+					note: "本轮成功结束后归档；如修改来源文件，须重新发布最终文件以更新草稿快照",
+				};
 			} finally {
 				releaseIdle?.();
 			}
@@ -302,6 +317,9 @@ export async function executeWithWorkerPass(
 					event.type === "tool_execution_start" && rawArgs
 						? {
 								...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
+								...(typeof rawArgs.sourcePath === "string"
+									? { sourcePath: rawArgs.sourcePath.slice(0, 240) }
+									: {}),
 								...(typeof rawArgs.command === "string"
 									? { command: rawArgs.command.replace(/\s+/g, " ").trim().slice(0, 240) }
 									: {}),

@@ -100,13 +100,18 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "publish_deliverable",
 			label: "登记成果",
 			description:
-				"Publish a reviewable milestone, an explicitly requested version, or a substantial change for the user. Write concisely with key takeaways and traceable verification/collaboration process (lead with conclusions, keep changeNote to 1-3 clear sentences without raw log walls). document: structured Markdown in content; artifact/prototype_image: existing workspace file path; service_url: http(s) URL. Give a stable title for versioning. Ordinary conversation, clarification, progress updates and minor discussion edits stay in chat. Do not decide from response length or number of turns. Specialist consultations return to the lead rather than becoming user deliverables. Staged results are finalized only when this user turn succeeds.",
+				"Publish a reviewable milestone, an explicitly requested version, or a substantial change for the user. Keep changeNote to 1-3 concise sentences with key changes and evidence. For a document saved in the workspace, use sourcePath ONLY: the host reads its exact UTF-8 text, snapshots it, and rejects changes before turn completion unless you publish again. Do not regenerate that document in content. For a document without a saved file, use content ONLY for full Markdown text. Never supply both. artifact/prototype_image: existing workspace file path in content; service_url: http(s) URL in content. Use a stable title for versioning; re-publishing a same-title document within this turn replaces its draft. Ordinary conversation and progress stay in chat; specialists return to the lead. Staged results are finalized only when this user turn succeeds.",
 			parameters: {
 				type: "object",
 				properties: {
 					type: { type: "string", enum: ["document", "artifact", "prototype_image", "service_url"] },
 					title: { type: "string" },
 					content: { type: "string" },
+					sourcePath: {
+						type: "string",
+						description:
+							"Document only: final UTF-8 file inside the workspace, at most 1 MiB. Supply sourcePath instead of content.",
+					},
 					summary: { type: "string" },
 					changeNote: {
 						type: "string",
@@ -114,7 +119,15 @@ export default function teamExtension(pi: PiExtensionApi): void {
 							"Concise 1-3 sentence summary of this version's conclusion, key changes, and verification/process basis (shown at top of deliverable card).",
 					},
 				},
-				required: ["type", "title", "content", "changeNote"],
+				required: ["type", "title", "changeNote"],
+				oneOf: [
+					{
+						properties: { type: { const: "document" } },
+						required: ["sourcePath"],
+						not: { required: ["content"] },
+					},
+					{ required: ["content"], not: { required: ["sourcePath"] } },
+				],
 				additionalProperties: false,
 			},
 		},

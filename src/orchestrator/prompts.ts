@@ -332,6 +332,10 @@ export function buildMemberSystemPrompt(input: {
 		);
 	}
 	if (mode === "lead") sections.push(PUBLICATION_REVIEW_GUIDANCE);
+	if (mode === "lead")
+		sections.push(
+			"## 文档发布来源\n文档已经保存为工作区文件时，publish_deliverable 必须传 sourcePath，由宿主读取最终正文；不要再次传 content 改写另一份。只有没有落盘文件的文档才直接传 content。来源文件登记后如有修改，完成前须重新登记同标题的最终文件。",
+		);
 	if (input.taskPrompt) sections.push(`## 当前任务\n${input.taskPrompt}`);
 	return sections.join("\n\n");
 }
