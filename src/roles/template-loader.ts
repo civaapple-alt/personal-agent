@@ -4,7 +4,27 @@ import { join } from "node:path";
 import type { ThinkingLevel } from "../rpc/types.ts";
 import type { RoleTemplate, RoleTemplateSections } from "./types.ts";
 
-const VALID_THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export function parseRoleThinkingLevel(value: unknown): ThinkingLevel {
+	if (
+		value === "off" ||
+		value === "minimal" ||
+		value === "low" ||
+		value === "medium" ||
+		value === "high" ||
+		value === "xhigh" ||
+		value === "max"
+	)
+		return value;
+	throw new Error(`Invalid thinkingLevel: ${String(value)}`);
+}
+
+/** Role IDs are filenames as well as stable runtime keys. */
+export function validateRoleTemplateId(id: string): string {
+	if (id.length > 128 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id) || id === "readme") {
+		throw new Error("Role id must be a lowercase kebab-case identifier of at most 128 characters, excluding readme");
+	}
+	return id;
+}
 
 function parseInlineArray(rawValue: string): string[] {
 	const inner = rawValue.slice(1, -1).trim();
@@ -113,14 +133,11 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 	const body = normalized.slice(closingIdx + 5).trim();
 	const meta = parseFrontmatter(frontmatterRaw);
 
-	const thinkingRaw = requireString(meta, "thinkingLevel", sourcePath) as ThinkingLevel;
-	if (!VALID_THINKING_LEVELS.has(thinkingRaw)) {
-		throw new Error(`Invalid thinkingLevel "${thinkingRaw}"${sourcePath ? ` in ${sourcePath}` : ""}`);
-	}
+	const thinkingRaw = parseRoleThinkingLevel(requireString(meta, "thinkingLevel", sourcePath));
 	const roleKind = meta.roleKind === "architect" ? "architect" : undefined;
 
 	return {
-		id: requireString(meta, "id", sourcePath),
+		id: validateRoleTemplateId(requireString(meta, "id", sourcePath)),
 		name: requireString(meta, "name", sourcePath),
 		title: requireString(meta, "title", sourcePath),
 		...(roleKind ? { roleKind } : {}),

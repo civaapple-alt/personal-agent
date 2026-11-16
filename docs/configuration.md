@@ -43,7 +43,7 @@
 | `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话持久目录（`--session-dir`） | 按事项、成员、工作区路径与会话模式精确记录 `sessionFile` 与 `piSessionId` |
 | `roles/` | 内置可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`），保存仓库自带的基础模板 |
-| `.data/roles/` | 运行时自建/调整角色目录 | 工作台新建、导入、架构师应用或修改后的角色模板 `.md` 写盘至此（使用自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时回退至测试临时目录），启动按 ID 与 `roles/` 合并覆盖，不污染仓库模板 |
+| `.data/roles/` | 运行时自建/调整角色目录 | 工作台新建、导入、架构师应用或修改后的角色模板 `.md` 写盘至此。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建系统临时目录，正常退出后清理。启动按 ID 与 `roles/` 合并，并跳过数据库中已标记删除的模板 |
 | `skills/<name>/SKILL.md` | 角色引用的技能说明文件 | 供启动参数 `--skill` 显式挂载 |
 | `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
 
@@ -92,7 +92,7 @@
 
 | 字段 | 是否必填 | 默认 / 合法值 | 说明 |
 | --- | --- | --- | --- |
-| `id` | 必填 | 唯一字符串 | 成员主键，决定与历史消息、会话、私有记忆的关联 |
+| `id` | 必填 | 最长 128 字符的小写字母、数字和连接短横线，如 `contract-reviewer`；不接受 `readme` | 成员主键与文件名；新建冲突返回 409，导入同 ID 可更新业务模板，内置 `role-architect` 不可覆盖 |
 | `name` | 必填 | 字符串 | 团队展示名（如「产品经理」） |
 | `title` | 必填 | 字符串 | 岗位英文头衔（如 `Product Manager`） |
 | `version` | 必填 | 版本串（如 `1.0.0`） | 模板版本号 |

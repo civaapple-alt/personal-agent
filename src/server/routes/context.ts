@@ -25,6 +25,7 @@ export interface ServerRouteContext {
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
 	rolesDir?: string;
+	withRoleMutation: <T>(action: () => Promise<T>) => Promise<T>;
 	uploadsDir?: string;
 	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>;
 	activeRuns: Map<string, ActiveRunState>;

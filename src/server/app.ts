@@ -40,6 +40,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	const sse = createSseHub();
 	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
+	let roleMutationTail = Promise.resolve();
 
 	const offDialog = dialogBroker.onEvent((evt) => {
 		sse.broadcast(evt.type, evt);
@@ -57,6 +58,14 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		previewManager,
 		dialogBroker,
 		rolesDir,
+		withRoleMutation: (action) => {
+			const result = roleMutationTail.then(action);
+			roleMutationTail = result.then(
+				() => undefined,
+				() => undefined,
+			);
+			return result;
+		},
 		uploadsDir,
 		memoryUploads,
 		activeRuns,

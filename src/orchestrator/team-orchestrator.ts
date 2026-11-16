@@ -110,6 +110,7 @@ export class TeamOrchestrator {
 		const primaryId =
 			this.store.getPrimaryContact()?.id ?? templates.find((template) => template.isPrimaryContact)?.id;
 		for (const tpl of templates) {
+			if (this.store.isRoleTemplateRemoved(tpl.id)) continue;
 			this.templatesById.set(tpl.id, tpl);
 			const member = this.store.upsertMember({
 				id: tpl.id,

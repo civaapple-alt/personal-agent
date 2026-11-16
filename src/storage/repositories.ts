@@ -65,6 +65,9 @@ export class PersonalAgentStore {
 	deleteMember(memberId: string) {
 		return this.members.deleteMember(memberId);
 	}
+	isRoleTemplateRemoved(templateId: string) {
+		return this.members.isRoleTemplateRemoved(templateId);
+	}
 
 	// ---- Memories ----
 	addMemory(input: AddMemoryInput) {

@@ -10,6 +10,7 @@
 | 文档文件来源、精确正文、越界/编码/大小、变更拒绝及重复登记 | [document-publication.test.ts](document-publication.test.ts) |
 | 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
 | 立项适配诊断、单兵/定向旁听边界与引导式角色设计（Role Architect） | [matter-initiation-and-architect.test.ts](matter-initiation-and-architect.test.ts) |
+| 角色路径与 ID 冲突、批量提案校验、并发应用、符号链接和删除后重新打开数据库 | [member-management.test.ts](member-management.test.ts) |
 | Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
 | RSI 工作区证据、失败分支、替代关系、版本评价与退出清理 | [rsi-boundaries.test.ts](rsi-boundaries.test.ts) |
 | HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |

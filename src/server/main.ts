@@ -1,5 +1,6 @@
-import { networkInterfaces } from "node:os";
-import { delimiter, dirname, resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { networkInterfaces, tmpdir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
@@ -33,7 +34,8 @@ async function main(): Promise<void> {
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
 	const builtinRolesDir = resolve(rootDir, "roles");
-	const customRolesDir = dbPath === ":memory:" ? builtinRolesDir : resolve(dirname(resolve(dbPath)), "roles");
+	const temporaryRolesDir = dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-roles-")) : undefined;
+	const customRolesDir = temporaryRolesDir ?? resolve(dirname(resolve(dbPath)), "roles");
 	const templates = [
 		...(await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir)),
 		BUILTIN_ROLE_ARCHITECT_TEMPLATE,
@@ -107,6 +109,7 @@ async function main(): Promise<void> {
 		await previewManager.stopAll();
 		await closed;
 		db.close();
+		if (temporaryRolesDir) await rm(temporaryRolesDir, { recursive: true, force: true });
 		process.exit(0);
 	};
 

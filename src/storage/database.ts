@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS team_members (
 	updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS removed_role_templates (
+	template_id TEXT PRIMARY KEY,
+	removed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS workspace_links (
 	id TEXT PRIMARY KEY,
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,

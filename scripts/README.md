@@ -5,7 +5,7 @@
 | 脚本与命令 | 输入、输出及执行边界 |
 | --- | --- |
 | [build-web.mjs](build-web.mjs)：`npm run build:web` | 将 `web/src/main.tsx` 和 HTML 构建到 `web/dist/`，不调用模型。`npm run build` 另外先编译后端 |
-| [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；为源码/编译入口分别使用临时数据库和端口，检查 bootstrap、内置演示准备、首页与 SIGTERM 退出。演示文件位于临时数据库同级目录，不派发 AI 或调用模型 |
+| [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；源码/编译入口分别检查文件与内存数据库，使用临时工作目录、模板副本和端口。检查 bootstrap、文件库的演示准备、内存库的角色创建隔离、首页与 SIGTERM 退出，不派发 AI 或调用模型 |
 | [check-docs.mjs](check-docs.mjs)：`npm run check:docs` | 零额外依赖，核对各级 README/AGENTS 的本地链接、章节锚点、npm 脚本与直接 Node 文件入口；只读取文件，不联网或运行文档中的命令 |
 | [package-release.mjs](package-release.mjs)：`npm run package:release` | 从干净、已提交的 HEAD 生成 `.releases/v<版本>/` 的源码包、预构建包、manifest 与 SHA256SUMS。在临时源码快照中借用已安装依赖构建，移除依赖链接后打包，再解压检查源码/编译入口启动。不包含用户数据，不调用模型，不创建标签或对外发布；同版本同提交重复执行只核验已有产物，不覆盖它们 |
 

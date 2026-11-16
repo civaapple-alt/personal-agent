@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Member management reliability
+
+- Validate role IDs before using them as filenames. Reject invalid thinking levels and multiline creation metadata, protect the built-in architect from replacement, and return 409 for explicit creation ID conflicts. Role files use staged writes and atomic replacement instead of following an existing destination symlink.
+- Prevalidate member creation and role adjustments together before applying a proposal. Serialize role mutations within one server, reject repeated adjustments, and prevent duplicate or dismissed proposals from being applied. Validation failures leave the team unchanged; this is not a crash-safe transaction across SQLite and the filesystem.
+- Persist role deletion markers so startup does not recreate removed baseline roles. Explicit creation/import restores a removed role; primary contact, architect and historical delivery/lead protections remain in place.
+- Isolate `PA_DB_PATH=:memory:` role writes in a temporary directory. Add seven offline regressions for invalid paths, collisions, partial validation, concurrent application, symlink writes and database reopen; expand startup checks to source/compiled entry points with file and memory databases.
+
 ### Added & Refined
 - **Matter Initiation Framing, Scoped Participation & Role Architect (`dr-eggbot-v2` 启发)**:
   - **立项适配评估与缺口识别 (`src/orchestrator/matter-initiation.ts`, `POST /api/matters/assess`)**：发起新事项前评估当前团队角色匹配度、推荐参与方式（单兵直办 `solo` / 主责+指定协同 `lead_consult` / 主责+定向旁听 `lead_review` / 人类先对齐 `human_first`）及人类协同人选；识别出职责覆盖缺口时不再静默兜底给默认产品经理，而是明确提示并引导按需设计或转为人类先讨论。

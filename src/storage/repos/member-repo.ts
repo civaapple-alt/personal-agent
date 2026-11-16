@@ -63,6 +63,7 @@ export class MemberRepo {
 					timestamp,
 					input.id,
 				);
+			this.db.prepare("DELETE FROM removed_role_templates WHERE template_id = ?").run(input.templateId);
 			return this.getMember(input.id)!;
 		}
 
@@ -90,7 +91,12 @@ export class MemberRepo {
 				timestamp,
 				timestamp,
 			);
+		this.db.prepare("DELETE FROM removed_role_templates WHERE template_id = ?").run(input.templateId);
 		return this.getMember(input.id)!;
+	}
+
+	isRoleTemplateRemoved(templateId: string): boolean {
+		return Boolean(this.db.prepare("SELECT 1 FROM removed_role_templates WHERE template_id = ?").get(templateId));
 	}
 
 	updateMemberIdentity(
@@ -216,6 +222,9 @@ export class MemberRepo {
 			this.db.prepare("DELETE FROM worker_sessions WHERE member_id = ?").run(memberId);
 			this.db.prepare("DELETE FROM member_memories WHERE member_id = ?").run(memberId);
 			this.db.prepare("DELETE FROM team_members WHERE id = ?").run(memberId);
+			this.db
+				.prepare("INSERT OR REPLACE INTO removed_role_templates (template_id, removed_at) VALUES (?, ?)")
+				.run(existing.templateId, timestamp);
 			this.db.exec("COMMIT");
 			return existing;
 		} catch (error) {

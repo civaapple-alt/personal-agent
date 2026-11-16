@@ -1,15 +1,22 @@
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
 import {
 	applyRoleTemplatePatch,
 	buildRoleDesignDraft,
 	normalizeRoleTools,
+	ROLE_ARCHITECT_MEMBER_ID,
 	type RoleInteractionStyle,
 	type RoleTemplatePatch,
 	type RoleWorkspaceScope,
 } from "../../roles/role-architect.ts";
-import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../../roles/template-loader.ts";
+import {
+	parseRoleTemplateMarkdown,
+	parseRoleThinkingLevel,
+	serializeRoleTemplateMarkdown,
+	validateRoleTemplateId,
+} from "../../roles/template-loader.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
@@ -23,8 +30,24 @@ import {
 	type ServerRouteContext,
 } from "./context.ts";
 
-async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<string, unknown>): Promise<TeamMember> {
-	const { store, orchestrator, rolesDir } = ctx;
+interface PlannedMember {
+	template: RoleTemplate;
+	identity: Parameters<ServerRouteContext["store"]["updateMemberIdentity"]>[1];
+}
+
+async function saveRoleTemplate(rolesDir: string | undefined, template: RoleTemplate): Promise<void> {
+	if (!rolesDir) return;
+	await mkdir(rolesDir, { recursive: true });
+	const temporary = join(rolesDir, `.${template.id}-${randomUUID()}.tmp`);
+	try {
+		await writeFile(temporary, serializeRoleTemplateMarkdown(template), { encoding: "utf8", flag: "wx" });
+		await rename(temporary, join(rolesDir, `${template.id}.md`));
+	} finally {
+		await rm(temporary, { force: true });
+	}
+}
+
+function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<string>): PlannedMember {
 	const name = typeof body.name === "string" ? body.name.trim() : "";
 	const title = typeof body.title === "string" ? body.title.trim() : "";
 	if (!name || !title) {
@@ -34,7 +57,6 @@ async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<s
 		typeof body.responsibilities === "string" && body.responsibilities.trim().length > 0
 			? body.responsibilities.trim()
 			: `- 承担 ${name} 的核心岗位职责与交付产出。`;
-	const existingIds = new Set(store.listMembers().map((m) => m.id));
 	let rawId =
 		typeof body.id === "string" && body.id.trim().length > 0
 			? body.id.trim()
@@ -47,6 +69,15 @@ async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<s
 		while (existingIds.has(`${rawId}-${idx}`)) idx += 1;
 		rawId = `${rawId}-${idx}`;
 	}
+	try {
+		validateRoleTemplateId(rawId);
+	} catch (error) {
+		throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+	}
+	if (rawId === ROLE_ARCHITECT_MEMBER_ID || existingIds.has(rawId)) {
+		throw new HttpRequestError(409, `Role id already exists or is reserved: ${rawId}`);
+	}
+	existingIds.add(rawId);
 	const keywords = Array.isArray(body.keywords)
 		? body.keywords.map(String).filter(Boolean)
 		: typeof body.keywords === "string"
@@ -60,7 +91,15 @@ async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<s
 	const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
 	const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
 	const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
-	const thinkingLevel = (typeof body.thinkingLevel === "string" ? body.thinkingLevel : "high") as ThinkingLevel;
+	let thinkingLevel: ThinkingLevel;
+	try {
+		thinkingLevel = parseRoleThinkingLevel(body.thinkingLevel ?? "high");
+	} catch (error) {
+		throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+	}
+	if ([name, title, model, provider, ...keywords, ...skills, ...antiJobs].some((value) => /[\r\n]/.test(value))) {
+		throw new HttpRequestError(400, "Role metadata fields and array entries must each fit on one line");
+	}
 	const isPrimaryContact = body.isPrimaryContact === true;
 	const customSections =
 		body.sections && typeof body.sections === "object" ? (body.sections as Record<string, unknown>) : {};
@@ -125,47 +164,43 @@ async function materializeMemberFromBody(ctx: ServerRouteContext, body: Record<s
 		rawBody,
 	};
 
-	if (rolesDir) {
-		await mkdir(rolesDir, { recursive: true });
-		await writeFile(join(rolesDir, `${rawId}.md`), serializeRoleTemplateMarkdown(template), "utf8");
-	}
-
-	const registered = orchestrator.registerRoleTemplate(template);
-	return typeof body.gitName === "string" ||
-		typeof body.gitEmail === "string" ||
-		typeof body.identitySummary === "string"
-		? store.updateMemberIdentity(registered.id, {
-				gitName: typeof body.gitName === "string" ? body.gitName : undefined,
-				gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
-				identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
-			})
-		: registered;
+	return {
+		template,
+		identity: {
+			gitName: typeof body.gitName === "string" ? body.gitName : undefined,
+			gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
+			identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
+		},
+	};
 }
 
-async function materializeMembersBatch(ctx: ServerRouteContext, rawList: unknown[]): Promise<TeamMember[]> {
-	const payloads: Record<string, unknown>[] = [];
+function planMembersBatch(ctx: ServerRouteContext, rawList: unknown[]): PlannedMember[] {
+	const existingIds = new Set(ctx.store.listMembers().map((member) => member.id));
+	const planned: PlannedMember[] = [];
 	for (const item of rawList) {
 		if (!item || typeof item !== "object" || Array.isArray(item)) {
 			throw new HttpRequestError(400, "Each item in members must be an object");
 		}
 		const rec = item as Record<string, unknown>;
-		const name = typeof rec.name === "string" ? rec.name.trim() : "";
-		const title = typeof rec.title === "string" ? rec.title.trim() : "";
-		if (!name || !title) {
-			throw new HttpRequestError(400, "Each member requires non-empty name and title");
-		}
-		payloads.push(rec);
+		planned.push(planMemberFromBody(rec, existingIds));
 	}
+	return planned;
+}
+
+async function materializeMembersBatch(ctx: ServerRouteContext, planned: PlannedMember[]): Promise<TeamMember[]> {
 	const created: TeamMember[] = [];
-	for (const payload of payloads) {
-		created.push(await materializeMemberFromBody(ctx, payload));
+	for (const { template, identity } of planned) {
+		await saveRoleTemplate(ctx.rolesDir, template);
+		const member = ctx.orchestrator.registerRoleTemplate(template);
+		created.push(ctx.store.updateMemberIdentity(member.id, identity));
 	}
 	return created;
 }
 
-async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): Promise<TeamMember[]> {
-	const { store, orchestrator, rolesDir } = ctx;
-	const planned: Array<{ prev: RoleTemplate; next: RoleTemplate }> = [];
+function planRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): RoleTemplate[] {
+	const { store, orchestrator } = ctx;
+	const planned: RoleTemplate[] = [];
+	const seen = new Set<string>();
 	for (const item of rawList) {
 		if (!item || typeof item !== "object" || Array.isArray(item)) {
 			throw new HttpRequestError(400, "Each item in adjustments must be an object");
@@ -183,6 +218,10 @@ async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unkno
 		if (!prev) {
 			throw new HttpRequestError(404, `Role template not found for member: ${memberId}`);
 		}
+		if (memberId === ROLE_ARCHITECT_MEMBER_ID || seen.has(memberId)) {
+			throw new HttpRequestError(409, `Reserved or repeated role adjustment: ${memberId}`);
+		}
+		seen.add(memberId);
 		const patch: RoleTemplatePatch = {
 			...(Array.isArray(rec.tools) ? { tools: rec.tools.map(String) } : {}),
 			...(Array.isArray(rec.addAntiJobs) ? { addAntiJobs: rec.addAntiJobs.map(String).filter(Boolean) } : {}),
@@ -193,14 +232,16 @@ async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unkno
 		if (patch.tools === undefined && (!patch.addAntiJobs || patch.addAntiJobs.length === 0) && !patch.workflowNote) {
 			throw new HttpRequestError(400, `Adjustment for ${memberId} has no changes to apply`);
 		}
-		planned.push({ prev, next: applyRoleTemplatePatch(prev, patch) });
+		planned.push(applyRoleTemplatePatch(prev, patch));
 	}
+	return planned;
+}
+
+async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, planned: RoleTemplate[]): Promise<TeamMember[]> {
+	const { orchestrator, rolesDir } = ctx;
 	const updatedMembers: TeamMember[] = [];
-	for (const { next } of planned) {
-		if (rolesDir) {
-			await mkdir(rolesDir, { recursive: true });
-			await writeFile(join(rolesDir, `${next.id}.md`), serializeRoleTemplateMarkdown(next), "utf8");
-		}
+	for (const next of planned) {
+		await saveRoleTemplate(rolesDir, next);
 		updatedMembers.push(orchestrator.registerRoleTemplate(next));
 	}
 	return updatedMembers;
@@ -208,6 +249,18 @@ async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unkno
 
 /** Handle AI team members, role architect Meta-Bot, role template import/export, memories, and RSI distillation. */
 export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
+	const mutation =
+		(r.method !== "GET" &&
+			/^\/api\/members(?:\/|$)/.test(r.pathname) &&
+			r.pathname !== "/api/members/architect/chat" &&
+			r.pathname !== "/api/members/design") ||
+		(r.method === "POST" && r.pathname.endsWith("/apply-role-proposals"));
+	return mutation
+		? ctx.withRoleMutation(() => handleTeamMemoryRoutesUnlocked(ctx, r))
+		: handleTeamMemoryRoutesUnlocked(ctx, r);
+}
+
+async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, rolesDir, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
 
@@ -255,8 +308,8 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			return true;
 		}
 
-		if (existingProposals.status === "applied") {
-			sendError(res, 409, "Role proposals have already been applied");
+		if (existingProposals.status !== "pending") {
+			sendError(res, 409, "Only pending role proposals may be applied");
 			return true;
 		}
 		const matterJoinMode =
@@ -278,8 +331,10 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			return true;
 		}
 
-		const createdMembers = rawMembers.length > 0 ? await materializeMembersBatch(ctx, rawMembers) : [];
-		const updatedMembers = rawAdjustments.length > 0 ? await applyRoleAdjustmentsBatch(ctx, rawAdjustments) : [];
+		const memberPlans = planMembersBatch(ctx, rawMembers);
+		const adjustmentPlans = planRoleAdjustmentsBatch(ctx, rawAdjustments);
+		const createdMembers = await materializeMembersBatch(ctx, memberPlans);
+		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, adjustmentPlans);
 		const newIds = createdMembers.map((m) => m.id);
 		let matterMutated = false;
 		if (matterJoinMode !== "none" && newIds.length > 0) {
@@ -366,7 +421,7 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 400, "members must be an array of 1 to 8 role payloads");
 			return true;
 		}
-		const created = await materializeMembersBatch(ctx, rawList);
+		const created = await materializeMembersBatch(ctx, planMembersBatch(ctx, rawList));
 		broadcast("team_updated", { memberIds: created.map((m) => m.id) });
 		sendJson(res, 201, { members: created });
 		return true;
@@ -380,7 +435,7 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 400, "adjustments must be an array of 1 to 8 role updates");
 			return true;
 		}
-		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, rawList);
+		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, planRoleAdjustmentsBatch(ctx, rawList));
 		broadcast("team_updated", { memberIds: updatedMembers.map((m) => m.id) });
 		sendJson(res, 200, { members: updatedMembers });
 		return true;
@@ -437,7 +492,8 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 	if (method === "POST" && pathname === "/api/members") {
 		if (!requireOwner(res, actor)) return true;
 		const body = await readJsonBody(req);
-		const member = await materializeMemberFromBody(ctx, body);
+		const [member] = await materializeMembersBatch(ctx, planMembersBatch(ctx, [body]));
+		if (!member) throw new Error("Member creation returned no result");
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 201, { member });
 		return true;
@@ -522,11 +578,16 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 400, "markdown is required");
 			return true;
 		}
-		const parsed = parseRoleTemplateMarkdown(markdown);
-		if (rolesDir) {
-			await mkdir(rolesDir, { recursive: true });
-			await writeFile(join(rolesDir, `${parsed.id}.md`), serializeRoleTemplateMarkdown(parsed), "utf8");
+		let parsed: RoleTemplate;
+		try {
+			parsed = parseRoleTemplateMarkdown(markdown);
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
 		}
+		if (parsed.id === ROLE_ARCHITECT_MEMBER_ID) {
+			throw new HttpRequestError(409, "Built-in role architect cannot be replaced by an imported role");
+		}
+		await saveRoleTemplate(rolesDir, parsed);
 		const member = orchestrator.registerRoleTemplate(parsed);
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 201, { member });
