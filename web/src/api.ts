@@ -732,6 +732,12 @@ export function setPrimaryMember(memberId: string): Promise<{ member: TeamMember
 	});
 }
 
+export function deleteMember(memberId: string): Promise<{ ok: boolean; deletedMemberId: string }> {
+	return requestJson(`/api/members/${encodeURIComponent(memberId)}`, {
+		method: "DELETE",
+	});
+}
+
 export function exportMemberPackage(memberId: string): Promise<{
 	id: string;
 	filename: string;

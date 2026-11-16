@@ -23,7 +23,7 @@
     `PATCH /api/organizations/:id` 与 `POST /api/organizations/:id/default` 管理组织字段与默认组织切换。
   - 字段覆盖名称、Git 邮箱域名、`isDefault` 与简介；`POST /api/workspaces` 省略 `orgId` 自动归入默认组织
     （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
-  - `POST /api/members/architect/chat`（所有者专属，无工具隔离、支持中断与团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 提供离线规则草案；`POST /api/members` 与 `POST /api/members/batch` 支持显式传入 `tools`、`antiJobs` 与分段职责，并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
+  - `POST /api/members/architect/chat`（所有者专属，无工具隔离、支持中断与团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 提供离线规则草案；`POST /api/members`、`POST /api/members/batch` 支持显式传入 `tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 支持移除无历史交付或主责引用的非主联系成员；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
 - 多人类受限协作与显式讨论隔离（方案 B）：
   - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式

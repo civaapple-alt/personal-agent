@@ -159,6 +159,16 @@ export class TeamOrchestrator {
 		return member;
 	}
 
+	unregisterRoleTemplate(memberId: string): TeamMember {
+		if (this.runs.size > 0) {
+			throw new Error("有事项正在执行中，请等待当前回合完成后再删除成员");
+		}
+		const deleted = this.store.deleteMember(memberId);
+		this.templatesById.delete(deleted.templateId);
+		this.templatesById.delete(deleted.id);
+		return deleted;
+	}
+
 	private isArchitectMember(member: TeamMember | null | undefined): boolean {
 		if (!member) return false;
 		return isArchitectRoleTemplate(

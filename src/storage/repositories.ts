@@ -62,6 +62,9 @@ export class PersonalAgentStore {
 	setPrimaryContact(memberId: string) {
 		return this.members.setPrimaryContact(memberId);
 	}
+	deleteMember(memberId: string) {
+		return this.members.deleteMember(memberId);
+	}
 
 	// ---- Memories ----
 	addMemory(input: AddMemoryInput) {

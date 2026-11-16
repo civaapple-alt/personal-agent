@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type { TeamMember } from "../types.ts";
 import { defaultMemberGitName, mapMemberRow, nowIso } from "./helpers.ts";
@@ -161,5 +162,65 @@ export class MemberRepo {
 			.prepare("UPDATE team_members SET is_primary_contact = 1, updated_at = ? WHERE id = ?")
 			.run(timestamp, memberId);
 		return this.getMember(memberId)!;
+	}
+
+	deleteMember(memberId: string): TeamMember {
+		const existing = this.getMember(memberId);
+		if (!existing) {
+			throw new Error(`Member not found: ${memberId}`);
+		}
+		if (memberId === ROLE_ARCHITECT_MEMBER_ID) {
+			throw new Error("内置元角色「角色架构师」不支持删除");
+		}
+		if (existing.isPrimaryContact) {
+			throw new Error("默认主联系人不可直接删除，请先将其他成员设为主联系");
+		}
+
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			const leadRow = this.db
+				.prepare("SELECT COUNT(*) AS count FROM matters WHERE lead_member_id = ?")
+				.get(memberId) as { count?: number } | undefined;
+			const delivRow = this.db
+				.prepare("SELECT COUNT(*) AS count FROM deliverables WHERE member_id = ?")
+				.get(memberId) as { count?: number } | undefined;
+			const leadCount = Number(leadRow?.count ?? 0);
+			const delivCount = Number(delivRow?.count ?? 0);
+			if (leadCount > 0 || delivCount > 0) {
+				throw new Error(
+					`该角色已作为主负责人关联 ${leadCount} 个事项或留存 ${delivCount} 项交付成果，不可直接删除`,
+				);
+			}
+
+			const matterRows = this.db
+				.prepare("SELECT id, ai_member_ids_json, observer_ids_json FROM matters")
+				.all() as Array<{ id: string; ai_member_ids_json: string | null; observer_ids_json: string | null }>;
+			const timestamp = nowIso();
+			for (const row of matterRows) {
+				const rawAi = row.ai_member_ids_json ? (JSON.parse(row.ai_member_ids_json) as string[]) : null;
+				const rawObs = row.observer_ids_json ? (JSON.parse(row.observer_ids_json) as string[]) : [];
+				const aiChanged = Boolean(rawAi?.includes(memberId));
+				const obsChanged = rawObs.includes(memberId);
+				if (aiChanged || obsChanged) {
+					const nextAi = rawAi && aiChanged ? rawAi.filter((id) => id !== memberId) : rawAi;
+					const nextObs = obsChanged ? rawObs.filter((id) => id !== memberId) : rawObs;
+					this.db
+						.prepare(
+							"UPDATE matters SET ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?",
+						)
+						.run(nextAi === null ? null : JSON.stringify(nextAi), JSON.stringify(nextObs), timestamp, row.id);
+				}
+			}
+
+			this.db.prepare("DELETE FROM memory_applications WHERE member_id = ?").run(memberId);
+			this.db.prepare("DELETE FROM worker_sessions WHERE member_id = ?").run(memberId);
+			this.db.prepare("DELETE FROM member_memories WHERE member_id = ?").run(memberId);
+			this.db.prepare("DELETE FROM team_members WHERE id = ?").run(memberId);
+			this.db.exec("COMMIT");
+			return existing;
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
 	}
 }

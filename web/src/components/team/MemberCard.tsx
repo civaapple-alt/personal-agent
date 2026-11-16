@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+	deleteMember,
 	type MemberMemoryDto,
 	type MemoryCategory,
 	type MemoryScope,
@@ -82,6 +83,8 @@ export function MemberCard({
 	const [editGitName, setEditGitName] = useState("");
 	const [editGitEmail, setEditGitEmail] = useState("");
 	const [editIdentitySummary, setEditIdentitySummary] = useState("");
+	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [deletingMember, setDeletingMember] = useState(false);
 
 	const [expandedMemories, setExpandedMemories] = useState(false);
 	const [memoryFilter, setMemoryFilter] = useState<MemoryFilterTab>("all");
@@ -341,6 +344,40 @@ export function MemberCard({
 					<button type="button" className="btn-inline btn-xs" onClick={() => void onExportMember(member.id)}>
 						导出能力包
 					</button>
+					{!member.isPrimaryContact &&
+						(confirmDelete ? (
+							<>
+								<button
+									type="button"
+									className="btn-inline btn-xs"
+									disabled={deletingMember}
+									onClick={() => {
+										setDeletingMember(true);
+										void deleteMember(member.id)
+											.then(async () => {
+												onNotice(`已移除成员「${member.displayName}」`);
+												await onRefresh();
+											})
+											.catch((err: unknown) => {
+												onError(err instanceof Error ? err.message : String(err));
+											})
+											.finally(() => {
+												setDeletingMember(false);
+												setConfirmDelete(false);
+											});
+									}}
+								>
+									{deletingMember ? "移除中…" : "确认移除"}
+								</button>
+								<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmDelete(false)}>
+									取消
+								</button>
+							</>
+						) : (
+							<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmDelete(true)}>
+								移除角色
+							</button>
+						))}
 				</div>
 			</div>
 

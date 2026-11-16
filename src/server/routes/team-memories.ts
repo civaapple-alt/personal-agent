@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
 import {
@@ -461,6 +461,28 @@ export async function handleTeamMemoryRoutes(ctx: ServerRouteContext, r: RouteRe
 		});
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 200, { member });
+		return true;
+	}
+
+	if (method === "DELETE" && memberPatchMatch) {
+		if (!requireOwner(res, actor)) return true;
+		const memberId = decodeURIComponent(memberPatchMatch[1]!);
+		const existing = store.getMember(memberId);
+		if (!existing) {
+			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		try {
+			const deleted = orchestrator.unregisterRoleTemplate(memberId);
+			if (rolesDir) {
+				await unlink(join(rolesDir, `${deleted.id}.md`)).catch(() => {});
+			}
+			broadcast("team_updated", { removedMemberId: deleted.id });
+			broadcast("matter_updated", { reason: "member_deleted", memberId: deleted.id });
+			sendJson(res, 200, { ok: true, deletedMemberId: deleted.id });
+		} catch (error) {
+			sendError(res, 409, error instanceof Error ? error.message : String(error));
+		}
 		return true;
 	}
 

@@ -832,6 +832,15 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		const merged = await loadRoleTemplatesWithCustomDir(resolve("roles"), join(tmp, "roles"));
 		assert.ok(merged.some((t) => t.id === "product-manager"));
 		assert.ok(merged.some((t) => t.id === newRoleId));
+
+		// 5. Delete custom member cleanly; protect primary contact and role-architect
+		const delPrimaryRes = await fetch(`${url}/api/members/product-manager`, { method: "DELETE" });
+		assert.equal(delPrimaryRes.status, 409);
+		const delArchRes = await fetch(`${url}/api/members/${ROLE_ARCHITECT_MEMBER_ID}`, { method: "DELETE" });
+		assert.equal(delArchRes.status, 409);
+		const delNewRes = await fetch(`${url}/api/members/${newRoleId}`, { method: "DELETE" });
+		assert.equal(delNewRes.status, 200);
+		assert.equal(store.getMember(newRoleId), null);
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
