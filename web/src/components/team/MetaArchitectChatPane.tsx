@@ -12,6 +12,8 @@ import {
 interface MetaArchitectChatPaneProps {
 	open: boolean;
 	seedGap?: RoleGapSuggestionDto | null;
+	memberCount: number;
+	matterCount: number;
 	matterPrompt?: string;
 	workspaceId?: string | null;
 	onCreatedBatch: (members: TeamMemberDto[], formation?: MetaArchitectFormationSuggestionDto) => Promise<void> | void;
@@ -33,10 +35,12 @@ const FORMATION_MODE_LABELS: Record<string, string> = {
 	human_first: "人类先讨论定调",
 };
 
-/** Conversational Meta-Bot intake & multi-role blueprint proposer (read-only until user checks and confirms creation). */
+/** Conversational Meta-Bot intake & multi-role blueprint proposer with visual workflow starters and team audit card. */
 export function MetaArchitectChatPane({
 	open,
 	seedGap,
+	memberCount,
+	matterCount,
 	matterPrompt,
 	workspaceId,
 	onCreatedBatch,
@@ -54,6 +58,7 @@ export function MetaArchitectChatPane({
 	const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
 	const [formation, setFormation] = useState<MetaArchitectFormationSuggestionDto | undefined>(undefined);
 	const abortRef = useRef<AbortController | null>(null);
+	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
 	useEffect(() => {
 		if (!open) {
@@ -67,17 +72,20 @@ export function MetaArchitectChatPane({
 		setFormation(undefined);
 		setLocalError(null);
 		if (seedGap) {
-			setInputText(
-				`我想处理的事情缺乏合适角色：${seedGap.reason}\n请结合现有团队评估，应该补 1 个还是多个角色（各自唯一职责、不做清单和最小工具是什么），以及如何与人类配合？`,
-			);
+			setInputText(`我想处理的事缺对应角色：${seedGap.reason}\n请评估应该补充 1 个还是多个角色，以及各自不做什么。`);
 		} else if (matterPrompt?.trim()) {
-			setInputText(
-				`我准备发起一个新事项：「${matterPrompt.trim().slice(0, 180)}」。请帮我诊断需要几个什么角色、谁主责谁静默旁听，如果现有团队不够请设计补充角色。`,
-			);
+			setInputText(`新事项想法：「${matterPrompt.trim().slice(0, 140)}」，帮我看看需要几个人配合，是否缺角色。`);
 		} else {
 			setInputText("");
 		}
 	}, [open, seedGap, matterPrompt]);
+
+	const prefillWorkflowTemplate = () => {
+		setInputText(
+			"我们有这样一个工作流程：\n1. 目标与输入：\n2. 希望拆出几个角色、谁只静默把关：\n3. 人类同事在哪一步拍板：",
+		);
+		window.setTimeout(() => textareaRef.current?.focus(), 0);
+	};
 
 	const sendMessage = async (overrideText?: string, includeHealthcheck = false) => {
 		const text = (overrideText ?? inputText).trim();
@@ -117,10 +125,10 @@ export function MetaArchitectChatPane({
 			}
 		} catch (err: unknown) {
 			if (controller.signal.aborted) {
-				setLocalError("已取消本次架构师推敲。");
+				setLocalError("已停止本次设计对话。");
 			} else {
 				const msg = err instanceof Error ? err.message : String(err);
-				setLocalError(`调用本机模型失败：${msg}（如当前环境未配置模型，可切换「快速 4 问规则直出」）`);
+				setLocalError(`模型调用失败：${msg}`);
 			}
 		} finally {
 			abortRef.current = null;
@@ -170,7 +178,7 @@ export function MetaArchitectChatPane({
 				isPrimaryContact: item.draft.template.isPrimaryContact,
 			}));
 			const res = await createMembersBatch(payload);
-			onNotice(`Meta-Bot 设计已落地：新加入 ${res.members.map((m) => `「${m.displayName}」`).join("、")}`);
+			onNotice(`已创建 ${res.members.map((m) => `「${m.displayName}」`).join("、")}`);
 			await onCreatedBatch(res.members, formation);
 			onClose();
 		} catch (err: unknown) {
@@ -182,47 +190,57 @@ export function MetaArchitectChatPane({
 
 	return (
 		<div className="meta-architect-pane">
-			<div className="meta-quick-starters">
-				<button
-					type="button"
-					className="tag-chip architect-chip-btn"
-					disabled={sending}
-					onClick={() =>
-						void sendMessage(
-							"请帮我梳理下面这个工作流，告诉我需要几个互不重叠的 AI 角色、各自的不做清单（Anti-Jobs）以及人类在什么节点拍板：",
-						)
-					}
-				>
-					+ 按工作流规划 1~N 个角色分工
-				</button>
-				<button
-					type="button"
-					className="tag-chip architect-chip-btn"
-					disabled={sending}
-					onClick={() =>
-						void sendMessage(
-							"请结合团队近期运行摩擦和已有成员职责，做一次健康体检：看有没有职责臃肿、工具过剩或需要新增/调整防越界清单的地方。",
-							true,
-						)
-					}
-				>
-					+ 对当前团队做一次协作体检
-				</button>
-			</div>
-
-			<div className="meta-chat-thread" aria-live="polite">
-				{turns.length === 0 ? (
-					<div className="meta-empty-hint">
-						<strong>对话说明：</strong>
-						<span>
-							描述你的目标或团队流程（例如：“我们做新产品验证，希望有人只做客户访谈提炼、另一个只挑逻辑漏洞且平时保持静默”）。架构师会先用
-							2~3 个关键追问厘清边界，再给出一组最小权限角色草案供你勾选确认。
+			{turns.length === 0 ? (
+				<div className="meta-entry-grid">
+					<button type="button" className="meta-entry-card" onClick={prefillWorkflowTemplate}>
+						<span className="meta-entry-icon" aria-hidden="true">
+							<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+								<circle cx="4.5" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+								<circle cx="15.5" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+								<circle cx="15.5" cy="14.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+								<path d="M6.7 9.2 13.3 6.2M6.7 10.8 13.3 13.8" stroke="currentColor" strokeWidth="1.5" />
+							</svg>
 						</span>
-					</div>
-				) : (
-					turns.map((turn) => (
+						<span className="meta-entry-copy">
+							<strong>按工作流配 1~N 个角色</strong>
+							<small>填入流程模板再补全，一次拆出互不越界的多角分工</small>
+						</span>
+					</button>
+					<button
+						type="button"
+						className="meta-entry-card"
+						disabled={sending}
+						onClick={() =>
+							void sendMessage(
+								"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、并给出精简或补充建议。",
+								true,
+							)
+						}
+					>
+						<span className="meta-entry-icon health" aria-hidden="true">
+							<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+								<path
+									d="M3 10h3.2l2.1-4.8 3.2 9.6 2.1-4.8H17"
+									stroke="currentColor"
+									strokeWidth="1.6"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+							</svg>
+						</span>
+						<span className="meta-entry-copy">
+							<strong>给现有团队做协作体检</strong>
+							<small>
+								扫描 {memberCount} 位成员与近 {matterCount} 个事项的摩擦及冗余权限
+							</small>
+						</span>
+					</button>
+				</div>
+			) : (
+				<div className="meta-chat-thread" aria-live="polite">
+					{turns.map((turn) => (
 						<div key={turn.id} className={`meta-turn-bubble ${turn.role}`}>
-							<div className="meta-turn-role">{turn.role === "user" ? "我" : "Role Architect (Meta-Bot)"}</div>
+							<div className="meta-turn-role">{turn.role === "user" ? "我" : "角色设计官"}</div>
 							<div className="meta-turn-text">{turn.content}</div>
 							{turn.followUpQuestions && turn.followUpQuestions.length > 0 && (
 								<div className="meta-followup-row">
@@ -240,25 +258,28 @@ export function MetaArchitectChatPane({
 								</div>
 							)}
 						</div>
-					))
-				)}
-				{sending && <div className="meta-turn-loading">Meta-Bot 正在分析团队职责边界与最小权限…</div>}
-			</div>
+					))}
+					{sending && <div className="meta-turn-loading">正在分析团队职责与边界…</div>}
+				</div>
+			)}
+
+			{turns.length === 0 && sending && <div className="meta-turn-loading">正在体检现有团队与近期运行记录…</div>}
 
 			{localError && (
 				<div className="approval-card meta-error-bar">
 					<span>{localError}</span>
 					<button type="button" className="btn-inline" onClick={onSwitchQuickForm}>
-						改用快速 4 问规则直出 →
+						切换「快速卡片创建」 →
 					</button>
 				</div>
 			)}
 
 			<div className="meta-composer-row">
 				<textarea
-					rows={2}
+					ref={textareaRef}
+					rows={turns.length === 0 ? 3 : 2}
 					className="composer-input"
-					placeholder="告诉架构师你们的工作流程、希望拆出几个角色、谁只旁听不插手、或者回答上面的追问…"
+					placeholder="写一句需求或流程（点上方卡片可填入模板）"
 					value={inputText}
 					onChange={(e) => setInputText(e.target.value)}
 					onKeyDown={(e) => {
@@ -271,7 +292,7 @@ export function MetaArchitectChatPane({
 				<div className="meta-composer-actions">
 					{sending ? (
 						<button type="button" className="btn-pill-outline btn-xs" onClick={() => abortRef.current?.abort()}>
-							停止推敲
+							停止
 						</button>
 					) : (
 						<button
@@ -280,7 +301,7 @@ export function MetaArchitectChatPane({
 							disabled={!inputText.trim()}
 							onClick={() => void sendMessage()}
 						>
-							发送给架构师
+							发送
 						</button>
 					)}
 				</div>
@@ -290,7 +311,7 @@ export function MetaArchitectChatPane({
 				<div className="meta-proposals-tray">
 					{formation && (
 						<div className="notice-card meta-formation-note">
-							<strong>推荐协作阵型 · {FORMATION_MODE_LABELS[formation.mode] ?? formation.mode}：</strong>
+							<strong>建议阵型 · {FORMATION_MODE_LABELS[formation.mode] ?? formation.mode}：</strong>
 							<span>{formation.rationale || "按拟定人数与站位协同"}</span>
 						</div>
 					)}
@@ -298,8 +319,9 @@ export function MetaArchitectChatPane({
 					{proposals.length > 0 && (
 						<>
 							<div className="architect-preview-head">
-								<strong>待你勾选确认的角色草案（共 {proposals.length} 位，绝不自动创建）</strong>
-								<span className="muted-hint">已勾选 {selectedIndexes.size} 位</span>
+								<strong>
+									勾选要加入团队的新角色（{selectedIndexes.size}/{proposals.length}）
+								</strong>
 							</div>
 							<div className="meta-blueprint-grid">
 								{proposals.map((item, idx) => {
@@ -337,7 +359,7 @@ export function MetaArchitectChatPane({
 							</div>
 							<div className="form-footer">
 								<button type="button" className="btn-pill-outline" onClick={onClose}>
-									暂不创建
+									取消
 								</button>
 								<button
 									type="button"
@@ -345,7 +367,7 @@ export function MetaArchitectChatPane({
 									disabled={selectedIndexes.size === 0 || saving}
 									onClick={() => void handleConfirmSelected()}
 								>
-									{saving ? "正在批量加入团队…" : `确认创建所选 ${selectedIndexes.size} 个角色`}
+									{saving ? "正在创建…" : `创建所选角色 (${selectedIndexes.size})`}
 								</button>
 							</div>
 						</>

@@ -847,6 +847,9 @@ export function App() {
 			<RoleArchitectModal
 				open={initiation.architectOpen}
 				seedGap={initiation.architectSeed}
+				members={bootstrap?.members ?? []}
+				templateByRoleId={templateByRoleId}
+				matterCount={bootstrap?.matters.length ?? 0}
 				matterPrompt={activeTab === "chats" && !selectedMatterId ? composerText : undefined}
 				workspaceId={selectedWorkspaceId || null}
 				onClose={() => initiation.setArchitectOpen(false)}
