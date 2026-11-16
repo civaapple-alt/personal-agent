@@ -216,93 +216,100 @@ export function ComposerDock({
 						<span className="composer-mode-hint">
 							<strong>角色架构师只读规划</strong> · 所有新建或权限调整仅生成提案确认卡，经你勾选后才生效
 						</span>
+						{selectedMatterId && (
+							<button type="button" className="select-pill action" onClick={onNewMatter}>
+								+ 切到新事项
+							</button>
+						)}
 					</div>
 				) : (
-					<div className="composer-mode-bar">
-						<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
-							<button
-								type="button"
-								role="tab"
-								aria-selected={composerMode === "discussion"}
-								className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
-								onClick={() => onComposerModeChange("discussion")}
-							>
-								团队聊天讨论
-							</button>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={composerMode === "dispatch"}
-								className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
-								onClick={() => onComposerModeChange("dispatch")}
-							>
-								{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
-							</button>
+					<>
+						<div className="composer-mode-bar">
+							<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
+								<button
+									type="button"
+									role="tab"
+									aria-selected={composerMode === "discussion"}
+									className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
+									onClick={() => onComposerModeChange("discussion")}
+								>
+									团队聊天讨论
+								</button>
+								<button
+									type="button"
+									role="tab"
+									aria-selected={composerMode === "dispatch"}
+									className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
+									onClick={() => onComposerModeChange("dispatch")}
+								>
+									{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
+								</button>
+							</div>
+							<span className="composer-mode-hint">
+								{composerMode === "discussion"
+									? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
+									: isOwner
+										? "正式指派 AI 团队分析、修改并生成交付成果"
+										: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
+							</span>
 						</div>
-						<span className="composer-mode-hint">
-							{composerMode === "discussion"
-								? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
-								: isOwner
-									? "正式指派 AI 团队分析、修改并生成交付成果"
-									: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
-						</span>
-					</div>
-				)}
 
-				<div className="composer-meta-bar">
-					<select
-						className="select-pill"
-						aria-label="所属组织"
-						value={effectiveOrgId ?? ""}
-						disabled={isTurnRunning || !isOwner}
-						title={
-							!isOwner
-								? "仅团队所有者可切换组织"
-								: isTurnRunning
-									? "当前回合正在执行，请先停止后再切换组织"
-									: "选择本次事项所属组织"
-						}
-						onChange={(e) => onSelectOrganization(e.target.value)}
-					>
-						{organizations.map((org) => (
-							<option key={org.id} value={org.id}>
-								组织：{org.name}
-								{org.isDefault ? "（默认）" : ""}
-							</option>
-						))}
-						<option value="">不归属组织</option>
-					</select>
-					<select
-						className="select-pill"
-						aria-label="项目仓库"
-						value={selectedWorkspaceId}
-						disabled={isTurnRunning || !isOwner}
-						title={
-							!isOwner
-								? "仅团队所有者可切换项目仓库"
-								: isTurnRunning
-									? "当前回合正在执行，请先停止后再切换仓库"
-									: undefined
-						}
-						onChange={(e) => onSelectWorkspace(e.target.value)}
-					>
-						<option value="">
-							{effectiveOrgId && orgFilteredWorkspaces.length === 0
-								? "不绑定仓库（该组织暂无仓库）"
-								: "不绑定仓库"}
-						</option>
-						{orgFilteredWorkspaces.map((ws) => (
-							<option key={ws.id} value={ws.id}>
-								仓库：{ws.name}
-							</option>
-						))}
-					</select>
-					{selectedMatterId && (
-						<button type="button" className="select-pill action" onClick={onNewMatter}>
-							+ 切到新事项
-						</button>
-					)}
-				</div>
+						<div className="composer-meta-bar">
+							<select
+								className="select-pill"
+								aria-label="所属组织"
+								value={effectiveOrgId ?? ""}
+								disabled={isTurnRunning || !isOwner}
+								title={
+									!isOwner
+										? "仅团队所有者可切换组织"
+										: isTurnRunning
+											? "当前回合正在执行，请先停止后再切换组织"
+											: "选择本次事项所属组织"
+								}
+								onChange={(e) => onSelectOrganization(e.target.value)}
+							>
+								{organizations.map((org) => (
+									<option key={org.id} value={org.id}>
+										组织：{org.name}
+										{org.isDefault ? "（默认）" : ""}
+									</option>
+								))}
+								<option value="">不归属组织</option>
+							</select>
+							<select
+								className="select-pill"
+								aria-label="项目仓库"
+								value={selectedWorkspaceId}
+								disabled={isTurnRunning || !isOwner}
+								title={
+									!isOwner
+										? "仅团队所有者可切换项目仓库"
+										: isTurnRunning
+											? "当前回合正在执行，请先停止后再切换仓库"
+											: undefined
+								}
+								onChange={(e) => onSelectWorkspace(e.target.value)}
+							>
+								<option value="">
+									{effectiveOrgId && orgFilteredWorkspaces.length === 0
+										? "不绑定仓库（该组织暂无仓库）"
+										: "不绑定仓库"}
+								</option>
+								{orgFilteredWorkspaces.map((ws) => (
+									<option key={ws.id} value={ws.id}>
+										仓库：{ws.name}
+									</option>
+								))}
+							</select>
+							{selectedMatterId && (
+								<button type="button" className="select-pill action" onClick={onNewMatter}>
+									+ 切到新事项
+								</button>
+							)}
+						</div>
+					</>
+				)}
 
 				{pendingImages.length > 0 && (
 					<ul className="composer-image-strip" aria-label="待发送图片">
@@ -348,19 +355,21 @@ export function ComposerDock({
 							e.target.value = "";
 						}}
 					/>
-					<button
-						type="button"
-						aria-expanded={starterMenuOpen}
-						className="pill-plus-btn"
-						aria-label="插入示范任务"
-						title="插入示范任务"
-						onClick={() => {
-							onCloseRoster();
-							onToggleStarterMenu();
-						}}
-					>
-						+
-					</button>
+					{!isArchitectMode && (
+						<button
+							type="button"
+							aria-expanded={starterMenuOpen}
+							className="pill-plus-btn"
+							aria-label="插入示范任务"
+							title="插入示范任务"
+							onClick={() => {
+								onCloseRoster();
+								onToggleStarterMenu();
+							}}
+						>
+							+
+						</button>
+					)}
 					<button
 						type="button"
 						className="pill-upload-btn"
@@ -395,7 +404,7 @@ export function ComposerDock({
 						onPaste={handleComposerPaste}
 						placeholder={
 							isArchitectMode
-								? "描述你们的工作流程、职责卡点，或直接下达团队体检指令（Enter 发送）..."
+								? "描述你们的工作流程或角色缺口，由架构师拆出专职角色与边界（Enter 发送）..."
 								: composerMode === "discussion"
 									? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送）..."
 									: !isOwner

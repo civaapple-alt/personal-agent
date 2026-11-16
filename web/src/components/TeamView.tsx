@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
 	type CollaboratorDto,
 	exportMemberPackage,
 	type MatterDto,
 	type MemberMemoryDto,
+	type MetaArchitectChatResultDto,
 	type OrganizationDto,
 	type RoleTemplateDto,
 	setPrimaryMember,
@@ -15,6 +16,7 @@ import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberPackageForms } from "./team/MemberPackageForms.tsx";
 import { OrganizationsSection } from "./team/OrganizationsSection.tsx";
+import { TeamHealthcheckPanel, triggerTeamHealthcheck } from "./team/TeamHealthcheckPanel.tsx";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -73,7 +75,29 @@ export function TeamView({
 		filename: string;
 		markdown: string;
 	} | null>(null);
+	const [healthcheckRunning, setHealthcheckRunning] = useState(false);
+	const [healthcheckResult, setHealthcheckResult] = useState<MetaArchitectChatResultDto | null>(null);
+	const healthcheckAbortRef = useRef<AbortController | null>(null);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
+
+	const handleRunHealthcheck = async () => {
+		if (healthcheckRunning) return;
+		healthcheckAbortRef.current?.abort();
+		const ac = new AbortController();
+		healthcheckAbortRef.current = ac;
+		setHealthcheckRunning(true);
+		setHealthcheckResult(null);
+		try {
+			const res = await triggerTeamHealthcheck(ac.signal);
+			setHealthcheckResult(res);
+		} catch (err: unknown) {
+			if (!(err instanceof DOMException && err.name === "AbortError")) {
+				onError(err instanceof Error ? err.message : String(err));
+			}
+		} finally {
+			setHealthcheckRunning(false);
+		}
+	};
 
 	const matterWorkspaceById = useMemo(
 		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
@@ -111,7 +135,7 @@ export function TeamView({
 						<div className="actions-row compact">
 							{onOpenArchitectMatter && (
 								<button type="button" className="btn-pill-dark" onClick={onOpenArchitectMatter}>
-									对话规划 / 协作体检
+									对话规划角色
 								</button>
 							)}
 							{onOpenArchitect && (
@@ -173,10 +197,30 @@ export function TeamView({
 								<h2 className="ui-section-title">AI 业务团队成员（{businessMembers.length}）</h2>
 								<p className="ui-section-desc">
 									各岗位独立维护角色规范、Git
-									提交者署名与三层成长记忆（内置元角色「角色架构师」仅用于建队与体检对话，可从左侧直达）
+									提交者署名与三层成长记忆（内置「角色架构师」仅用于建队对话，可从左侧直达）
 								</p>
 							</div>
+							{isOwner && (
+								<button
+									type="button"
+									className="btn-pill-outline btn-xs"
+									disabled={healthcheckRunning}
+									onClick={() => void handleRunHealthcheck()}
+								>
+									{healthcheckRunning ? "正在体检…" : "团队协作体检"}
+								</button>
+							)}
 						</div>
+						<TeamHealthcheckPanel
+							result={healthcheckResult}
+							running={healthcheckRunning}
+							onClose={() => setHealthcheckResult(null)}
+							onCancel={() => healthcheckAbortRef.current?.abort()}
+							onApplied={onRefresh}
+							onOpenArchitectChat={onOpenArchitectMatter}
+							onNotice={onNotice}
+							onError={onError}
+						/>
 						<div className="team-grid">
 							{businessMembers.map((member, idx) => (
 								<MemberCard

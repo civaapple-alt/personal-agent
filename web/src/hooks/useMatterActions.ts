@@ -155,8 +155,8 @@ export function useMatterActions({
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
 					preferredMemberId: preferredForCreate,
-					workspaceId: selectedWorkspaceId || undefined,
-					orgId: selectedOrgId || null,
+					workspaceId: isArchitectCreate ? undefined : selectedWorkspaceId || undefined,
+					orgId: isArchitectCreate ? null : selectedOrgId || null,
 					aiMemberIds: isArchitectCreate ? [ROLE_ARCHITECT_MEMBER_ID] : draftAiMemberIds,
 					observersEnabled: isArchitectCreate
 						? false

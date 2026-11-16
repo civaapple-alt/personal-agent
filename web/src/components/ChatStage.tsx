@@ -472,6 +472,7 @@ export function ChatStage({
 				headerTheme={headerTheme}
 				headerContact={headerContact}
 				matterDetail={matterDetail}
+				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}
 				activeMatterProgress={activeMatterProgress}
 				allActiveHumans={allActiveHumans}

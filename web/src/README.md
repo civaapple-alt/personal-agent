@@ -28,7 +28,7 @@
 ## 对话、旁听、图片与运行快照
 
 - 新建事项时，[MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 与 [useMatterInitiationState](hooks/useMatterInitiationState.ts) 提供发起前协作阵型配置（单兵直办 / 主责+指定协同 / 主责+定向旁听 / 人类先讨论定调）、人类协同同事与 AI 站位微调，以及对 `/api/matters/assess` 的实时适配诊断与缺口补齐引导；已建事项可在 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 内对单个非主责 AI 切换定向旁听。
-- 团队页面与侧边栏均支持直接启动「角色架构师」持久化对话事项（侧边栏独立条呈现在业务成员网格下方，欢迎页提供按工作流规划/协作体检入口与干净的架构师对话输入条，消息流内嵌 [RoleProposalCard](components/chat/RoleProposalCard.tsx) 与 [architectApi.ts](architectApi.ts)）；业务事项进行中支持经 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 中途请入架构师诊断并一键将新建角色加入当前事项；[RoleArchitectModal](components/team/RoleArchitectModal.tsx) 专注保留轻量离线 3 选 1 快速建角色卡片（与 [TeamView](components/TeamView.tsx) 顶部 3 按钮精简协作）；[buildStarterTasks](utils.ts) 在未绑仓库时优先呈现讨论对齐与非研发起手示例。
+- 团队页面与侧边栏均支持直接启动「角色架构师」持久化对话事项（侧边栏独立条呈现在业务成员网格下方，架构师对话默认全局名录不绑定具体代码仓库、隐藏底部组织/仓库选择器，欢迎页专注按工作流规划角色与示范填充，消息流内嵌 [RoleProposalCard](components/chat/RoleProposalCard.tsx) 与 [architectApi.ts](architectApi.ts)）；「团队协作体检」保留在 [TeamView](components/TeamView.tsx) 通过 [TeamHealthcheckPanel](components/team/TeamHealthcheckPanel.tsx) 就地运行并勾选应用收窄提案（不写入最近事项列表）；业务事项进行中支持经 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 中途请入架构师诊断并一键将新建角色加入当前事项；[RoleArchitectModal](components/team/RoleArchitectModal.tsx) 专注保留轻量离线 3 选 1 快速建角色卡片；[buildStarterTasks](utils.ts) 在未绑仓库时优先呈现讨论对齐与非研发起手示例。
 - 新建事项欢迎页的“体验内置演示”按需调用准备接口，再打开演示事项。[InnerDemoGuide](components/chat/InnerDemoGuide.tsx) 只填入可修改的提问；[innerDemo.ts](innerDemo.ts) 依据真实消息、委托与版本计算进度。第四步沿正常验收接口保留已有反馈，再填入修订要求，不自动发给模型。
 
 - [BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作。

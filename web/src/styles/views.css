@@ -822,3 +822,15 @@
 	flex-wrap: wrap;
 	gap: 6px;
 }
+.healthcheck-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.healthcheck-summary {
+	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--text-primary);
+	line-height: 1.55;
+}

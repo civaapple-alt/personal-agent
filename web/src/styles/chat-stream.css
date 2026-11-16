@@ -686,58 +686,20 @@
 	.inner-demo-steps { display: block; }
 	.inner-demo-steps li:not([data-current="true"]) { display: none; }
 }
-.architect-hero-scenarios {
-	margin-top: 16px;
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 10px;
-	max-width: 580px;
-	margin-inline: auto;
-}
-.architect-scenario-card {
-	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	text-align: left;
-	padding: 12px 14px;
-	border-radius: var(--radius-md);
-	border: 1px solid var(--border);
-	background: var(--bg-card);
-	cursor: pointer;
-	transition: border-color 0.15s ease, background 0.15s ease;
-}
-.architect-scenario-card:hover {
-	border-color: var(--accent-border);
-	background: #f6fcfa;
-}
-.architect-scenario-icon {
-	width: 32px;
-	height: 32px;
-	border-radius: var(--radius-sm);
-	display: grid;
-	place-items: center;
-	background: var(--surface-accent-soft);
-	color: #0b574e;
-	flex-shrink: 0;
-}
-.architect-scenario-icon.is-health {
-	background: #eef2ff;
-	color: #3730a3;
-}
-.architect-scenario-copy {
+.architect-workflow-chips {
+	margin-top: 14px;
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
-	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	max-width: 560px;
+	margin-inline: auto;
 }
-.architect-scenario-copy strong {
-	font-size: var(--text-xs);
-	color: var(--text-primary);
-}
-.architect-scenario-copy small {
-	font-size: var(--text-micro);
-	color: var(--text-secondary);
+.architect-workflow-chips .choice-chip {
+	white-space: normal;
+	text-align: left;
 	line-height: 1.45;
+	padding: 8px 14px;
 }
 .role-proposal-card {
 	margin-top: 10px;
@@ -896,11 +858,6 @@
 	background: #f8fafc;
 	color: var(--text-muted);
 	border: 1px solid var(--border);
-}
-@media (max-width: 640px) {
-	.architect-hero-scenarios {
-		grid-template-columns: 1fr;
-	}
 }
 .architect-quick-alt {
 	margin-top: 12px;

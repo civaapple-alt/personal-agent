@@ -15,6 +15,7 @@ interface ChatStageHeaderProps {
 	headerTheme: { bg: string; tilt: string };
 	headerContact: TeamMemberDto | null;
 	matterDetail: MatterDetailPayload | null;
+	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
 	activeMatterProgress: MatterProgressDto | null;
 	allActiveHumans: CollaboratorDto[];
@@ -51,6 +52,7 @@ export function ChatStageHeader({
 	headerTheme,
 	headerContact,
 	matterDetail,
+	isArchitectMode = false,
 	isTurnRunning,
 	activeMatterProgress,
 	allActiveHumans,
@@ -82,30 +84,38 @@ export function ChatStageHeader({
 	return (
 		<header className="stage-header">
 			<div className="stage-header-left">
-				{selectedOrganization && (
-					<span
-						className="pill org-pill"
-						title={
-							selectedOrganization.description ||
-							`所属组织：${selectedOrganization.name}（同组织共享组织记忆与默认 Git 域名）`
-						}
-					>
-						组织：{selectedOrganization.name}
-					</span>
-				)}
-				{selectedWorkspace ? (
-					<span
-						className="pill"
-						title={
-							selectedWorkspace.repoGitUser
-								? `Git Committer（真实用户保留）：${selectedWorkspace.repoGitUser.name} <${selectedWorkspace.repoGitUser.email}>`
-								: selectedWorkspace.repoPath
-						}
-					>
-						仓库：{selectedWorkspace.name}
+				{isArchitectMode ? (
+					<span className="pill" title="角色架构师以团队全局成员配置工作，不绑定具体代码仓库">
+						团队建队规划 · 全局名录
 					</span>
 				) : (
-					<span className="pill">{selectedOrganization ? "未绑定仓库" : "通用工作区"}</span>
+					<>
+						{selectedOrganization && (
+							<span
+								className="pill org-pill"
+								title={
+									selectedOrganization.description ||
+									`所属组织：${selectedOrganization.name}（同组织共享组织记忆与默认 Git 域名）`
+								}
+							>
+								组织：{selectedOrganization.name}
+							</span>
+						)}
+						{selectedWorkspace ? (
+							<span
+								className="pill"
+								title={
+									selectedWorkspace.repoGitUser
+										? `Git Committer（真实用户保留）：${selectedWorkspace.repoGitUser.name} <${selectedWorkspace.repoGitUser.email}>`
+										: selectedWorkspace.repoPath
+								}
+							>
+								仓库：{selectedWorkspace.name}
+							</span>
+						) : (
+							<span className="pill">{selectedOrganization ? "未绑定仓库" : "通用工作区"}</span>
+						)}
+					</>
 				)}
 			</div>
 			<div className="stage-center-pill">

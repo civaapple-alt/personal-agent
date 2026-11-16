@@ -193,7 +193,7 @@ export function MessageFeed({
 							{selectedMemberId === "auto"
 								? "先描述目标，系统会评估最合适的角色与参与方式；也可在下方按团队习惯自由搭配阵型"
 								: selectedIsArchitect
-									? "梳理你们的真实工作流，按需规划 1~N 个职责互不重叠的专职 AI 角色，或给当前团队做一次协作与权限体检"
+									? "描述你们的真实工作流或协作卡点，我来帮你拆解出职责单一、边界清晰的 AI 角色与人机配合方式"
 									: stripMarkdownFormatting(
 											templateByRoleId
 												.get(headerContact?.templateId ?? "")
@@ -220,59 +220,24 @@ export function MessageFeed({
 						)}
 						{isOwner && selectedIsArchitect && (
 							<>
-								<div className="architect-hero-scenarios">
-									<button
-										type="button"
-										className="architect-scenario-card"
-										onClick={() => onFillComposer?.("请按我们的实际工作流规划 1~N 个角色：\n1. 目标：")}
-									>
-										<div className="architect-scenario-icon" aria-hidden="true">
-											<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
-												<circle cx="5.5" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-												<circle cx="14.5" cy="5.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-												<circle cx="14.5" cy="14.5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
-												<path
-													d="M7.6 9.1 12.4 6.4M7.6 10.9l4.8 2.7"
-													stroke="currentColor"
-													strokeWidth="1.5"
-												/>
-											</svg>
-										</div>
-										<div className="architect-scenario-copy">
-											<strong>按工作流规划 1~N 个角色分工</strong>
-											<small>从流程里拆出职责不重叠的专职角色与人类确认节点</small>
-										</div>
-									</button>
-									<button
-										type="button"
-										className="architect-scenario-card"
-										onClick={() =>
-											onSendQuickPrompt?.(
-												"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、近期运行摩擦有哪些，并给出结构化收窄或调整提案。",
-												{ preferredMemberId: ROLE_ARCHITECT_MEMBER_ID },
-											)
-										}
-									>
-										<div className="architect-scenario-icon is-health" aria-hidden="true">
-											<svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
-												<path
-													d="M3 10.5h3.2l2-4.5 3.1 8 2.2-3.5H17"
-													stroke="currentColor"
-													strokeWidth="1.6"
-													strokeLinecap="round"
-													strokeLinejoin="round"
-												/>
-											</svg>
-										</div>
-										<div className="architect-scenario-copy">
-											<strong>对当前团队做一次协作体检</strong>
-											<small>直接发起诊断：扫描成员工具权限过宽、边界重合与摩擦信号</small>
-										</div>
-									</button>
+								<div className="architect-workflow-chips">
+									{[
+										"我们做新产品验证，想拆 1 个只梳理用户反馈痛点、1 个上线前只读挑漏洞且平时静默的角色",
+										"平时开发经常到验收才发现遗漏，帮我按现有成员配一套前置把关角色和参与边界",
+									].map((sample) => (
+										<button
+											key={sample}
+											type="button"
+											className="choice-chip"
+											onClick={() => onFillComposer?.(sample)}
+										>
+											{sample}
+										</button>
+									))}
 								</div>
 								{onOpenQuickCreator && (
 									<div className="architect-quick-alt">
-										<span>只需新增 1 个明确分工的角色？</span>
+										<span>只需新增 1 个明确分工的小角色？</span>
 										<button type="button" className="btn-inline" onClick={onOpenQuickCreator}>
 											打开快速创建卡片 →
 										</button>

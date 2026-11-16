@@ -164,7 +164,7 @@ export function Sidebar({
 						</span>
 						<span className="architect-sidebar-copy">
 							<strong>{architectMember.displayName}</strong>
-							<small>规划角色分工 · 协作体检</small>
+							<small>按流程定制角色与边界</small>
 						</span>
 						<span className="architect-sidebar-arrow" aria-hidden="true">
 							{architectSelected ? "已选" : "→"}
