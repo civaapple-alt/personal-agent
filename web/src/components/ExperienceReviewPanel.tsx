@@ -672,6 +672,7 @@ export function InlineExperienceReviewSection({
 }: InlineExperienceReviewSectionProps) {
 	const [internalManualOpen, setInternalManualOpen] = useState(false);
 	const [batchApproving, setBatchApproving] = useState(false);
+	const [confirmDistill, setConfirmDistill] = useState(false);
 	const isManualOpen = manualOpen ?? internalManualOpen;
 	const toggleManual = onToggleManual ?? (() => setInternalManualOpen((prev) => !prev));
 
@@ -709,23 +710,39 @@ export function InlineExperienceReviewSection({
 					)}
 				</div>
 				<div className="memory-draft-controls">
-					{onDistill && (
-						<>
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
-								disabled={distilling}
-								onClick={onDistill}
-							>
-								{distilling ? "AI 复盘提炼中..." : "AI 复盘提炼团队经验"}
-							</button>
-							{distilling && onCancelDistill && (
-								<button type="button" className="btn-stop-pill" onClick={onCancelDistill}>
-									取消提炼
+					{onDistill &&
+						(distilling ? (
+							<>
+								<button type="button" className="btn-pill-outline btn-xs" disabled>
+									AI 复盘提炼中...
 								</button>
-							)}
-						</>
-					)}
+								{onCancelDistill && (
+									<button type="button" className="btn-stop-pill" onClick={onCancelDistill}>
+										取消提炼
+									</button>
+								)}
+							</>
+						) : confirmDistill ? (
+							<>
+								<button
+									type="button"
+									className="btn-pill-dark btn-xs"
+									onClick={() => {
+										setConfirmDistill(false);
+										onDistill();
+									}}
+								>
+									确认 AI 复盘提炼
+								</button>
+								<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmDistill(false)}>
+									取消
+								</button>
+							</>
+						) : (
+							<button type="button" className="btn-pill-outline btn-xs" onClick={() => setConfirmDistill(true)}>
+								AI 复盘提炼团队经验
+							</button>
+						))}
 					{showManualToggle && (
 						<button type="button" className="btn-pill-outline btn-xs" onClick={toggleManual}>
 							{isManualOpen ? "收起手动录入" : "+ 手动录入"}

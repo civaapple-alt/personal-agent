@@ -1,10 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	type CollaboratorDto,
 	exportMemberPackage,
 	type MatterDto,
 	type MemberMemoryDto,
-	type MetaArchitectChatResultDto,
 	type OrganizationDto,
 	type RoleTemplateDto,
 	setPrimaryMember,
@@ -14,9 +13,10 @@ import {
 import { filterBusinessMembers } from "../architectApi.ts";
 import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
+import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "./team/MemberPackageForms.tsx";
 import { OrganizationsSection } from "./team/OrganizationsSection.tsx";
-import { TeamHealthcheckPanel, triggerTeamHealthcheck } from "./team/TeamHealthcheckPanel.tsx";
+import { TeamHealthcheckPanel } from "./team/TeamHealthcheckPanel.tsx";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -75,29 +75,14 @@ export function TeamView({
 		filename: string;
 		markdown: string;
 	} | null>(null);
-	const [healthcheckRunning, setHealthcheckRunning] = useState(false);
-	const [healthcheckResult, setHealthcheckResult] = useState<MetaArchitectChatResultDto | null>(null);
-	const healthcheckAbortRef = useRef<AbortController | null>(null);
+	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
+	const [inspectState, setInspectState] = useState<{ memberId: string; tab: "identity" | "memories" } | null>(null);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
-
-	const handleRunHealthcheck = async () => {
-		if (healthcheckRunning) return;
-		healthcheckAbortRef.current?.abort();
-		const ac = new AbortController();
-		healthcheckAbortRef.current = ac;
-		setHealthcheckRunning(true);
-		setHealthcheckResult(null);
-		try {
-			const res = await triggerTeamHealthcheck(ac.signal);
-			setHealthcheckResult(res);
-		} catch (err: unknown) {
-			if (!(err instanceof DOMException && err.name === "AbortError")) {
-				onError(err instanceof Error ? err.message : String(err));
-			}
-		} finally {
-			setHealthcheckRunning(false);
-		}
-	};
+	const inspectedMember = useMemo(
+		() => (inspectState ? (members.find((m) => m.id === inspectState.memberId) ?? null) : null),
+		[inspectState, members],
+	);
+	const inspectedIndex = inspectedMember ? businessMembers.findIndex((m) => m.id === inspectedMember.id) : -1;
 
 	const matterWorkspaceById = useMemo(
 		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
@@ -204,23 +189,12 @@ export function TeamView({
 								<button
 									type="button"
 									className="btn-pill-outline btn-xs"
-									disabled={healthcheckRunning}
-									onClick={() => void handleRunHealthcheck()}
+									onClick={() => setHealthcheckOpen(true)}
 								>
-									{healthcheckRunning ? "正在体检…" : "团队协作体检"}
+									团队协作体检
 								</button>
 							)}
 						</div>
-						<TeamHealthcheckPanel
-							result={healthcheckResult}
-							running={healthcheckRunning}
-							onClose={() => setHealthcheckResult(null)}
-							onCancel={() => healthcheckAbortRef.current?.abort()}
-							onApplied={onRefresh}
-							onOpenArchitectChat={onOpenArchitectMatter}
-							onNotice={onNotice}
-							onError={onError}
-						/>
 						<div className="team-grid">
 							{businessMembers.map((member, idx) => (
 								<MemberCard
@@ -229,21 +203,12 @@ export function TeamView({
 									index={idx}
 									template={templateByRoleId.get(member.templateId)}
 									memories={memoriesByMember[member.id] ?? []}
-									members={members}
-									workspaces={workspaces}
-									organizations={organizations}
 									activeWorkspace={activeWorkspace}
 									activeOrg={activeOrg}
-									defaultWorkspaceId={defaultWorkspaceId}
-									matterWorkspaceById={matterWorkspaceById}
-									memberName={memberName}
-									workspaceName={workspaceName}
-									organizationName={organizationName}
 									onAssignTask={onAssignTask}
 									onSetPrimary={handleSetPrimary}
 									onExportMember={handleExportMember}
-									onOpenMatter={onOpenMatter}
-									onOpenDeliverable={onOpenDeliverable}
+									onInspectMember={(memberId, tab) => setInspectState({ memberId, tab })}
 									onRefresh={onRefresh}
 									onNotice={onNotice}
 									onError={onError}
@@ -253,6 +218,41 @@ export function TeamView({
 					</section>
 				</div>
 			</div>
+
+			<TeamHealthcheckPanel
+				open={healthcheckOpen}
+				memberCount={businessMembers.length}
+				matterCount={matters.length}
+				onClose={() => setHealthcheckOpen(false)}
+				onApplied={onRefresh}
+				onOpenArchitectChat={onOpenArchitectMatter}
+				onNotice={onNotice}
+				onError={onError}
+			/>
+
+			<MemberInspectorModal
+				member={inspectedMember}
+				memberIndex={inspectedIndex}
+				template={inspectedMember ? templateByRoleId.get(inspectedMember.templateId) : undefined}
+				memories={inspectedMember ? (memoriesByMember[inspectedMember.id] ?? []) : []}
+				initialTab={inspectState?.tab ?? "identity"}
+				members={members}
+				workspaces={workspaces}
+				organizations={organizations}
+				activeWorkspace={activeWorkspace}
+				activeOrg={activeOrg}
+				defaultWorkspaceId={defaultWorkspaceId}
+				matterWorkspaceById={matterWorkspaceById}
+				memberName={memberName}
+				workspaceName={workspaceName}
+				organizationName={organizationName}
+				onClose={() => setInspectState(null)}
+				onOpenMatter={onOpenMatter}
+				onOpenDeliverable={onOpenDeliverable}
+				onRefresh={onRefresh}
+				onNotice={onNotice}
+				onError={onError}
+			/>
 		</div>
 	);
 }
