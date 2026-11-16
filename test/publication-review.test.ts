@@ -14,18 +14,29 @@ test("review evidence requires completed successful lead consultations before a 
 		...input,
 	});
 	const publish = trace({ toolName: "publish_deliverable", started: 5, ended: 6 });
-	assert.deepEqual(specialistsBeforePublication([trace({}), publish]), ["engineering-manager"]);
+	publish.args = { title: "设计方案" };
+	assert.deepEqual(specialistsBeforePublication([trace({}), publish], "设计方案"), ["engineering-manager"]);
 	assert.deepEqual(
-		specialistsBeforePublication([
-			trace({ isError: true }),
-			trace({ memberId: "qa-manager" }),
-			trace({ ended: undefined }),
-			trace({ ended: 7 }),
-			trace({ args: { memberId: 1 } }),
-			publish,
-		]),
+		specialistsBeforePublication(
+			[
+				trace({ isError: true }),
+				trace({ memberId: "qa-manager" }),
+				trace({ ended: undefined }),
+				trace({ ended: 7 }),
+				trace({ args: { memberId: 1 } }),
+				publish,
+			],
+			"设计方案",
+		),
 		[],
 	);
-	assert.deepEqual(specialistsBeforePublication([trace({})]), []);
-	assert.deepEqual(specialistsBeforePublication([trace({}), { ...publish, isError: true }]), []);
+	assert.deepEqual(specialistsBeforePublication([trace({})], "设计方案"), []);
+	assert.deepEqual(specialistsBeforePublication([trace({}), { ...publish, isError: true }], "设计方案"), []);
+	assert.deepEqual(
+		specialistsBeforePublication(
+			[publish, trace({ started: 7, ended: 8 }), { ...publish, started: 9, ended: 10 }],
+			"设计方案",
+		),
+		["engineering-manager"],
+	);
 });

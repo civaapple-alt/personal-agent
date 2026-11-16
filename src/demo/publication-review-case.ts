@@ -1,5 +1,21 @@
+export type ReviewScenarioId = "autonomous" | "required" | "solo";
+export type CollaborationExpectation = { kind: "optional" } | { kind: "required"; memberIds: string[] };
+export interface ReviewCriterion {
+	id: string;
+	question: string;
+}
+export interface ReviewScenario {
+	id: ReviewScenarioId;
+	version: string;
+	title: string;
+	prompt: string;
+	files: Record<string, string>;
+	collaboration: CollaborationExpectation;
+	rubric: ReviewCriterion[];
+}
+
 /** Synthetic, fixed regression input. Never copies the user's demo or database. */
-export const PUBLICATION_REVIEW_CASE = {
+const complexInput = {
 	id: "publication-review-v2",
 	title: "反馈方案 · 一致性验证",
 	prompt:
@@ -60,3 +76,38 @@ export const PUBLICATION_REVIEW_RUBRIC = [
 			"保留完成时间的重开条目再次启动时，是否避免被 count(done)==count(resolvedAt非空) 全库断言误判？迁移有版本/旧记录范围及重复执行规则。",
 	},
 ];
+
+const autonomous: ReviewScenario = {
+	...complexInput,
+	id: "autonomous",
+	version: "publication-review-v3",
+	collaboration: { kind: "optional" },
+	rubric: PUBLICATION_REVIEW_RUBRIC,
+};
+const required: ReviewScenario = {
+	...autonomous,
+	id: "required",
+	prompt: `${autonomous.prompt}\n这是明确要求的跨岗位设计复核：请实际委托 engineering-manager 核查技术规则与迁移，并委托 qa-manager 核查验收条件，在两位同事成功返回后整合并发布最终稿。`,
+	collaboration: { kind: "required", memberIds: ["engineering-manager", "qa-manager"] },
+};
+const solo: ReviewScenario = {
+	id: "solo",
+	version: "publication-review-v3",
+	title: "反馈方案 · 一致性验证",
+	prompt:
+		"请阅读 README.md、docs/context.md 与 deliverables/ 的两版通知，只修正文案中的小组人数与反馈录入称谓，形成简洁的 V3 通知。保存到 deliverables/feedback-box-v3.md，以准确标题‘反馈方案 · 一致性验证’、document 类型与 sourcePath='deliverables/feedback-box-v3.md' 发布，不传 content。此项可由产品经理自行完成；按需咨询即可，不新增功能、技术设计或实施计划。保留 V1/V2，不编码、不安装依赖、不提交 Git。",
+	files: {
+		"README.md":
+			"# 内部通知文案\n虚构的文案修订练习，只有设计稿，没有业务应用或试用结果。事实以 docs/context.md 为准。\n",
+		"docs/context.md":
+			"# 已确认事实\n小组为 5 人，由一位负责人手动录入反馈。统一使用‘负责人’称谓。当前只整理通知文案，不变更产品功能。没有实现、试用或验收记录。\n",
+		"deliverables/feedback-box-v1.md": "# 通知 V1\n5 人小组由负责人手动录入反馈，仅为待实施安排。\n",
+		"deliverables/feedback-box-v2.md": "# 通知 V2\n15 人小组由管理员手动录入反馈，仅为待实施安排。\n",
+	},
+	collaboration: { kind: "optional" },
+	rubric: [
+		{ id: "facts", question: "最终通知是否使用 5 人与负责人手动录入，且未编造已试用或验收事实？" },
+		{ id: "scope", question: "是否保持文案修订范围，没有新增功能、技术设计或实施计划？" },
+	],
+};
+export const REVIEW_SCENARIOS: Record<ReviewScenarioId, ReviewScenario> = { autonomous, required, solo };

@@ -1,14 +1,31 @@
 # 验证阶段发布前的负责人复核
 
-本项验证检查主负责人能否发现方案中的事实错误与规则矛盾，向同事澄清，并在保留历史的前提下形成一致的新版本。普通讨论仍只留在对话中，不增加用户审批步骤。
+本项验证分别检查发布链路、按场景要求协作的行为，以及最终正文质量。它是开发验证工具，不在日常产品中增加会签或逐次人工审批。
 
 ## 运行对照
 
-在仓库根运行 `npm run demo:review`。它会使用本机 Pi 发出真实模型请求并消耗 token，不属于离线测试。
+命令在仓库根运行。执行场景会使用本机 Pi 发出真实模型请求并消耗 token，不属于离线测试；查看帮助和离线汇总不调用模型。
 
-脚本创建系统临时目录，依次运行两组独立的工作区、数据库与新会话。两组使用相同的合成 V1/V2、任务、岗位定义与模型配置，thinking 均设为 `off`。基线组只移除本轮新增的负责人复核方法，当前组保留该方法；这是方法对照，不是重放旧提交的全部运行环境。脚本不读取或修改 `.data/inner-matter`、用户运行数据库及已登记业务仓库。
+```bash
+npm run demo:review
+npm run demo:review -- --scenario required
+npm run demo:review -- --scenario solo
+npm run demo:review -- --scenario all
+npm run demo:review -- --scenario autonomous --repeat 3
+npm run demo:review -- --help
+```
 
-V1/V2 是明确标注的合成输入，不属于本次模型产出。任务只要求形成可供下一阶段使用的 V3，没有逐条告诉模型矛盾位置或要求固定次数的咨询。以下问题需要主负责人自行识别：
+默认只运行 `autonomous` 的一组基线/当前方法配对。`--repeat` 支持 1–10，每次使用全新的数据库、工作区和会话；同一场景相邻重复轮次交换两种方法的先后顺序。`all --repeat 3` 会执行三个场景的三次配对，即 18 轮主任务，额外同事调用按场景和模型决策发生。控制台在执行前打印主任务数量。
+
+| 场景 | 要回答的问题 | 专业协作要求 |
+| --- | --- | --- |
+| `autonomous` | 面对矛盾设计稿，负责人会怎样自行判断、修订与协作？ | 记录行为，不因未咨询直接判失败；质量另行审阅 |
+| `required` | 已明确要求研发与测试核查时，是否真实委托、整合并发布？ | 两位岗位均须在最终成功登记之前返回，否则本场景协作失败 |
+| `solo` | 只修正通知人数与称谓，能否保持范围并正确交付？ | 产品经理可自行完成，按需咨询即可 |
+
+脚本创建系统临时目录。每个场景的两组使用相同的合成 V1/V2、任务、岗位定义与模型配置，thinking 均设为 `off`。基线组只移除新增的负责人复核方法，仍可以自主咨询；当前组保留该方法，也没有宿主强制会签。这是方法对照，不是重放旧提交的全部运行环境。脚本不读取或修改 `.data/inner-matter`、用户运行数据库及已登记业务仓库。
+
+V1/V2 是明确标注的合成输入，不属于本次模型产出。复杂场景没有逐条告诉模型矛盾位置；只有 `required` 显式要求两位岗位参与。复杂场景的正文审阅标准为：
 
 | 问题 | 审阅标准 |
 | --- | --- |
@@ -19,24 +36,38 @@ V1/V2 是明确标注的合成输入，不属于本次模型产出。任务只�
 
 ## 查看证据
 
-控制台输出证据目录。先读 `case.json`，核对输入摘要、配置与审阅问题，再比较两组结果：
+控制台输出证据目录。先读 `case.json`，核对每个场景的输入、协作要求、配置哈希与审阅问题，再比较三层结果：
 
-- `baseline/` 与 `current/` 中的 `workspace/deliverables/feedback-box-v3.md` 是实际生成的正文。
-- 各组 `evidence.json` 保存工具时序、实际内部咨询、正式发布正文、历史保留检查和错误。
-- `proof.db` 与 `sessions/` 保留本次隔离运行的记录。
-- `comparison.json` 只汇总机械检查结果；`review.md` 初始为待审阅，需引用完整产物及协作内容填写结论。
+- 每轮目录为 `<场景>/repeat-<次数>/<baseline或current>/`，`workspace/` 保存模型处理的合成资料。
+- `evidence.json` 保存原始检查、实际工具时序与内部咨询；`proof.db`、`sessions/` 保留执行记录。
+- `published.md` 是宿主从数据库正式版本导出的最终正文快照。质量审阅针对这份快照，不采用模型回复里的“已通过”自评。
+- `quality-review.json` 初始逐项为 `pending`。独立审阅者填写姓名、各项 `pass` 或 `fail`、解释及引用；`evidence` 每条须有从 1 开始的 `line` 与该行完整原文 `text`。保留原有正文哈希，不重写最终稿来配合评分。
+- `newIssues` 保存修订中发现的新增问题，同样提供解释和行号引用；`severity=blocker` 会使质量判为失败，即使已有标准均通过。
+- `summary.json` 与 `summary.md` 分开报告 `publication`、`collaboration`、`quality`。统计保留每组全部轮数，未审阅、无效和缺失记录分别计数；`pairs` 仅在双方标准均完成审阅后列出已修正、退步和仍失败的标准，以及新增阻塞问题数。
 
-机械检查包括 V1/V2 文件及索引是否保留、V3 是否正确发布、是否实际使用 `sourcePath`、文件与发布正文是否精确一致、两位专业同事是否在发布前成功返回以及有无残留占用。它们不判断正文是否正确。质量复核应同时检查咨询是否指出具体问题、澄清是否落实到正文和验收条款，不能仅引用模型自己的“已核查”声明。
+`publication` 检查执行成功、V1/V2 保留、单个 V3、实际文件来源、精确正文匹配与占用清理。`collaboration` 按场景报告 `pass`、`fail` 或 `not_required`，同时保留实际咨询岗位和缺少的岗位。`not_required` 不代表质量通过。
 
-退出码 `0` 只表示两组执行成功且当前组机械检查通过；基线未咨询同事可作为对照结果保留，不使脚本失败。`review.md` 仍需独立审阅，不能根据退出码宣称质量通过。
+完成独立审阅后运行离线汇总，仅刷新汇总文件，保留正文、执行证据和审阅输入：
 
-单次配对存在模型随机性。两组都通过不能证明本轮改进有效；当前组仍有遗漏时，应保留失败证据并继续修正。更多任务或多次重复运行才能检验稳定性。
+```bash
+npm run demo:review -- --summarize <证据目录>
+```
+
+汇总会验证审阅对应最终正文哈希、每项标准恰好出现一次、结论有解释且引用行与原文完全匹配。旧正文的审阅、缺项、无效引用和改动过的发布快照均不能得到质量通过。这些校验确认记录来源和完整性，不自动证明审阅者的语义判断正确。
+
+退出码 `0` 表示各组各层均通过，且质量已有有效的独立审阅记录；`1` 表示至少一组存在发布失败、未满足本场景明确协作要求、质量失败或无效审阅；`2` 表示尚未观察到上述失败，但质量仍未完成审阅。新执行结束通常先显示 `INCOMPLETE` 并返回 `2`。基线失败属于对照结果，不代表当前方法一定退步，差异须查看逐组结果和 `pairs`。
+
+单次配对存在模型随机性。两组都通过不能证明方法有效；当前组仍有遗漏时，应保留失败证据。重复统计只报告观测次数及审阅结论，不自动宣布稳定提升。不要通过放宽判定、删掉失败轮次或把咨询次数作为质量得分来制造改善。
 
 ## 当前实现边界
 
 [负责人复核方法](../src/orchestrator/publication-review.ts) 只进入主负责人的系统上下文，不增加专用审批状态、强制固定岗位参与或语义自动验收。宿主现有的权限、文件校验与成功收尾规则继续生效。是否真正改进，需要上述运行与独立审阅证据。
 
-验证输入和审阅标准在 [publication-review-case.ts](../src/demo/publication-review-case.ts)，真实执行入口在 [publication-review-smoke.ts](../src/demo/publication-review-smoke.ts)。工具时序判定的离线反例见 [publication-review.test.ts](../test/publication-review.test.ts)。
+验证输入和审阅标准在 [publication-review-case.ts](../src/demo/publication-review-case.ts)，真实执行入口在 [publication-review-smoke.ts](../src/demo/publication-review-smoke.ts)。参数与重复计划、审阅记录校验及离线汇总分别在 [options](../src/demo/publication-review-options.ts)、[quality](../src/demo/publication-review-quality.ts)、[report](../src/demo/publication-review-report.ts)。工具时序与完整评估反例见 [publication-review.test.ts](../test/publication-review.test.ts)、[publication-review-evaluation.test.ts](../test/publication-review-evaluation.test.ts)。
+
+以下保留早期脚本的原始结果；当时把所有场景统一要求两位同事参与，退出码也只反映机械检查。新版本采用上述场景标准与三层结果，不改写旧证据。
+
+三层版本已通过 102 项离线测试、代码检查与构建；三个场景各一次真实配对正在验证，证据目录为 `/var/folders/nq/4dbss1_n7n5g160x6_x9_gn40000gn/T/personal-agent-publication-review-CnXLAd`。阶段性审阅已发现自主场景当前组的迁移与状态不变量仍有矛盾，相关失败已保留，不将已完成的执行检查算成正文质量通过。完整实机结果在审阅结束后追加。
 
 ## 2026-11-16 首轮结果：咨询发生，质量尚未达标
 

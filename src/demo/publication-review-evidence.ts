@@ -9,13 +9,17 @@ export interface ReviewToolTrace {
 }
 
 /** Mechanical facts only. Content quality remains an independent full-text review. */
-export function specialistsBeforePublication(traces: ReviewToolTrace[]): string[] {
-	const published = traces.find(
+export function specialistsBeforePublication(traces: ReviewToolTrace[], title: string): string[] {
+	const published = traces.findLast(
 		(trace) =>
 			trace.memberId === "product-manager" &&
 			trace.toolName === "publish_deliverable" &&
 			trace.ended !== undefined &&
-			trace.isError === false,
+			trace.isError === false &&
+			trace.args !== null &&
+			typeof trace.args === "object" &&
+			"title" in trace.args &&
+			trace.args.title === title,
 	);
 	if (!published) return [];
 	return [
@@ -37,4 +41,22 @@ export function specialistsBeforePublication(traces: ReviewToolTrace[]): string[
 			}),
 		),
 	];
+}
+
+import type { CollaborationExpectation } from "./publication-review-case.ts";
+
+export type CollaborationResult = {
+	status: "pass" | "fail" | "not_required";
+	expectation: CollaborationExpectation;
+	consulted: string[];
+	missing: string[];
+};
+export function assessCollaboration(expectation: CollaborationExpectation, consulted: string[]): CollaborationResult {
+	const missing = expectation.kind === "required" ? expectation.memberIds.filter((id) => !consulted.includes(id)) : [];
+	return {
+		status: expectation.kind === "optional" ? "not_required" : missing.length ? "fail" : "pass",
+		expectation,
+		consulted,
+		missing,
+	};
 }

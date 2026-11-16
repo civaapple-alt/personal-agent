@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Review evaluation
+
+- Split `demo:review` into publication checks, scenario-specific collaboration, and independent final-document quality judgments. Add autonomous, explicitly required cross-role, and solo copy-edit scenarios without imposing a product-wide sign-off workflow.
+- Add isolated repeated pairs with alternating policy order, per-scenario counts and reviewed criterion differences. Pending, invalid and missing reviews remain visible; consultation frequency is not a quality score.
+- Bind independent reviews to final published snapshots and validate criterion coverage, explanations and exact line citations, including new blocking issues. Add model-free `--help` and `--summarize`; exit 2 means incomplete review, 1 means observed failures, and 0 requires all layers reviewed and passed. Preserve earlier evidence unchanged.
+
 ### Fixed
 
 - Publish saved documents with mutually exclusive `sourcePath`/inline `content` inputs. The host reads exact UTF-8 file text and checks its path/content snapshot again before successful commit, rejecting stale, missing or redirected sources rather than archiving divergent text.
