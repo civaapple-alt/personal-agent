@@ -80,6 +80,7 @@ export function RoleProposalCard({
 				.map((idx) => proposals.blueprints[idx])
 				.filter((bp): bp is NonNullable<typeof bp> => Boolean(bp))
 				.map(({ draft }) => ({
+					id: draft.template.id,
 					name: draft.template.name,
 					title: draft.template.title,
 					responsibilities: draft.template.sections.responsibilitiesAndBoundaries,

@@ -634,6 +634,7 @@ export function chatWithRoleArchitect(
 }
 
 export interface CreateMemberPayload {
+	id?: string;
 	name: string;
 	title: string;
 	responsibilities?: string;

@@ -659,6 +659,51 @@
 	gap: 6px;
 	flex-wrap: wrap;
 }
+.initiation-roster-drawer.compact {
+	padding: 10px 12px;
+	gap: 8px;
+}
+.initiation-compact-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.initiation-lead-picker {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	font-weight: 600;
+	flex-shrink: 0;
+}
+.initiation-inline-chips {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	flex: 1;
+	min-width: 0;
+}
+.choice-chip.is-observer.active {
+	border-color: var(--observer-border);
+	background: var(--observer-soft);
+	color: var(--observer-text);
+}
+.initiation-compact-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-top: 6px;
+	border-top: 1px dashed var(--border);
+}
+.initiation-mini-label {
+	font-size: var(--text-micro);
+	color: var(--text-muted);
+}
 .initiation-assessment-bar {
 	border: 1px solid var(--accent-border);
 	background: #f3fbf8;

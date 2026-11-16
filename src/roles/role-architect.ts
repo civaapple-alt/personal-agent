@@ -10,6 +10,7 @@ export interface RoleDesignBriefInput {
 	quietWhen?: string;
 	interactionStyle?: RoleInteractionStyle;
 	workspaceScope?: RoleWorkspaceScope;
+	roleId?: string;
 	roleName?: string;
 	roleTitle?: string;
 	keywords?: string[];
@@ -59,10 +60,19 @@ function slugifyRoleId(rawTitle: string, existingIds: string[]): string {
 function deriveRoleNameAndTitle(input: RoleDesignBriefInput): { name: string; title: string } {
 	const trimmedName = input.roleName?.trim();
 	const trimmedTitle = input.roleTitle?.trim();
-	if (trimmedName && trimmedTitle) return { name: trimmedName, title: trimmedTitle };
+	if (trimmedName && trimmedTitle) {
+		return {
+			name: trimmedName.length > 16 && /[\u4e00-\u9fff]/.test(trimmedTitle) ? trimmedTitle : trimmedName,
+			title: trimmedTitle,
+		};
+	}
 
 	const job = input.oneJob.trim();
-	const inferredName = trimmedName || job.replace(/[。；，,.!！?？].*$/, "").slice(0, 14) || "专项顾问";
+	const inferredName =
+		trimmedName ||
+		(trimmedTitle && trimmedTitle.length <= 14 ? trimmedTitle : "") ||
+		job.replace(/[。；，,.!！?？(（].*$/, "").slice(0, 12) ||
+		"专项顾问";
 	if (trimmedTitle) return { name: inferredName, title: trimmedTitle };
 
 	const asciiWords = `${job} ${inferredName}`
@@ -168,7 +178,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	const interactionStyle: RoleInteractionStyle = input.interactionStyle ?? "consult_specialist";
 	const workspaceScope: RoleWorkspaceScope = input.workspaceScope ?? "read_only_repo";
 	const { name, title } = deriveRoleNameAndTitle(input);
-	const id = slugifyRoleId(title, input.existingMemberIds ?? []);
+	const id = slugifyRoleId(input.roleId?.trim() || title, input.existingMemberIds ?? []);
 	const { tools, summary: toolSummary } = resolveToolsForScope(workspaceScope);
 	const antiJobs = buildDefaultAntiJobs({
 		interactionStyle,

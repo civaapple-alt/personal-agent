@@ -406,27 +406,6 @@ export function MatterRosterPopover({
 					<div className="wechat-roster-rows">
 						<div className="wechat-roster-row">
 							<span>事项负责人</span>
-							{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
-								<div className="wechat-roster-row">
-									<span>角色缺口或需收窄？</span>
-									<button
-										type="button"
-										className="wechat-row-action"
-										disabled={isTurnRunning}
-										title={
-											isTurnRunning
-												? "请等待当前回合完成后邀请架构师"
-												: "请角色架构师结合本事项对话临时会诊并生成可加入角色"
-										}
-										onClick={() => {
-											onClose();
-											onConsultArchitect();
-										}}
-									>
-										请角色架构师介入补人 ›
-									</button>
-								</div>
-							)}
 							{isOwner ? (
 								<select
 									className="wechat-row-select"
@@ -453,27 +432,6 @@ export function MatterRosterPopover({
 									<small className="wechat-row-sub">（{observerAis.length} 位）</small>
 								)}
 							</span>
-							{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
-								<div className="wechat-roster-row">
-									<span>角色缺口或需收窄？</span>
-									<button
-										type="button"
-										className="wechat-row-action"
-										disabled={isTurnRunning}
-										title={
-											isTurnRunning
-												? "请等待当前回合完成后邀请架构师"
-												: "请角色架构师结合本事项对话临时会诊并生成可加入角色"
-										}
-										onClick={() => {
-											onClose();
-											onConsultArchitect();
-										}}
-									>
-										请角色架构师介入补人 ›
-									</button>
-								</div>
-							)}
 							{isOwner ? (
 								<button
 									type="button"
@@ -496,27 +454,6 @@ export function MatterRosterPopover({
 								</span>
 							)}
 						</div>
-						{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
-							<div className="wechat-roster-row">
-								<span>角色缺口或需收窄？</span>
-								<button
-									type="button"
-									className="wechat-row-action"
-									disabled={isTurnRunning}
-									title={
-										isTurnRunning
-											? "请等待当前回合完成后邀请架构师"
-											: "请角色架构师结合本事项对话临时会诊并生成可加入角色"
-									}
-									onClick={() => {
-										onClose();
-										onConsultArchitect();
-									}}
-								>
-									请角色架构师介入补人 ›
-								</button>
-							</div>
-						)}
 						{isOwner ? (
 							<div className="wechat-roster-row">
 								<span>团队同事</span>
@@ -543,6 +480,27 @@ export function MatterRosterPopover({
 							<div className="wechat-roster-row">
 								<span>协同权限</span>
 								<span className="wechat-row-val">AI 执行需所有者确认</span>
+							</div>
+						)}
+						{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
+							<div className="wechat-roster-row is-architect-row">
+								<span>缺少角色或需调整？</span>
+								<button
+									type="button"
+									className="wechat-row-action"
+									disabled={isTurnRunning}
+									title={
+										isTurnRunning
+											? "请等待当前回合完成后邀请架构师"
+											: "请角色架构师结合本事项对话诊断并生成可加入的新角色"
+									}
+									onClick={() => {
+										onClose();
+										onConsultArchitect();
+									}}
+								>
+									请角色架构师介入 ›
+								</button>
 							</div>
 						)}
 					</div>

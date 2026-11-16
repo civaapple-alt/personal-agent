@@ -8,7 +8,6 @@ import type {
 	TeamMemberDto,
 } from "../../api.ts";
 import { filterBusinessMembers, isArchitectMemberId } from "../../architectApi.ts";
-import { formatRoleToolTierLabel } from "../../utils.ts";
 
 interface MatterInitiationPanelProps {
 	isOwner: boolean;
@@ -33,13 +32,12 @@ interface MatterInitiationPanelProps {
 }
 
 const PRESET_OPTIONS: Array<{ id: CollaborationPresetMode; label: string; hint: string }> = [
-	{ id: "solo", label: "单兵直办 · 1 AI", hint: "仅 1 位专才直接完成，无跨岗委托与旁听" },
-	{ id: "lead_consult", label: "主责 + 指定协同", hint: "1 位主责统筹，仅向勾选的同事内部请教" },
-	{ id: "lead_review", label: "主责 + 定向旁听", hint: "精准指定 1~2 位关键角色做风险旁听" },
-	{ id: "human_first", label: "人类先讨论定调", hint: "团队成员先对齐约束与分工，拍板后再派 AI" },
+	{ id: "solo", label: "单人直办", hint: "仅 1 位主责 AI 直接完成，无跨岗委托与旁听" },
+	{ id: "lead_consult", label: "按需协同", hint: "主责 AI 牵头，仅向保留的同僚按需内部请教" },
+	{ id: "lead_review", label: "旁听把关", hint: "保留主责执行，同时指定关键角色进行风险旁听" },
 ];
 
-/** Pre-launch workflow framing bar for configuring human/AI team size, participation roles, and assessing role gaps. */
+/** Compact pre-launch collaboration framing bar with lightweight expandable participant pills. */
 export function MatterInitiationPanel({
 	isOwner,
 	members,
@@ -74,15 +72,28 @@ export function MatterInitiationPanel({
 			? selectedMemberId
 			: (assessment?.recommendedLeadId ?? primaryMember?.id ?? null);
 	const effectiveLead = businessMembers.find((m) => m.id === effectiveLeadId) ?? null;
+	const otherMembers = businessMembers.filter((m) => m.id !== effectiveLeadId);
 
-	const activeConsultCount =
-		draftPresetMode === "solo" || draftPresetMode === "human_first"
-			? 0
-			: effectiveAiIds.filter((id) => id !== effectiveLeadId && !draftObserverMemberIds.includes(id)).length;
+	const participatingAiCount =
+		draftPresetMode === "solo"
+			? effectiveLeadId
+				? 1
+				: 0
+			: effectiveAiIds.filter((id) => businessMembers.some((m) => m.id === id)).length;
 	const activeObserverCount =
 		draftPresetMode === "lead_review"
 			? draftObserverMemberIds.filter((id) => id !== effectiveLeadId && effectiveAiIds.includes(id)).length
 			: 0;
+
+	const summaryText = expandedRoster
+		? "收起"
+		: [
+				`${participatingAiCount} AI`,
+				activeObserverCount > 0 ? `${activeObserverCount} 旁听` : null,
+				draftCollaboratorIds.length > 0 ? `${draftCollaboratorIds.length} 同事` : null,
+			]
+				.filter(Boolean)
+				.join(" · ");
 
 	const cycleMemberStanding = (member: TeamMemberDto) => {
 		if (member.id === effectiveLeadId) return;
@@ -95,7 +106,6 @@ export function MatterInitiationPanel({
 			onUpdateDraftObserverIds([]);
 			return;
 		}
-
 		if (!inGroup) {
 			onUpdateDraftAiMemberIds(
 				Array.from(new Set([...(effectiveLeadId ? [effectiveLeadId] : []), ...effectiveAiIds, member.id])),
@@ -106,7 +116,6 @@ export function MatterInitiationPanel({
 			onUpdateDraftObserverIds(Array.from(new Set([...draftObserverMemberIds, member.id])));
 			return;
 		}
-		// Remove from matter AI scope
 		const nextAi = effectiveAiIds.filter((id) => id !== member.id);
 		onUpdateDraftAiMemberIds(nextAi.length > 0 ? nextAi : effectiveLeadId ? [effectiveLeadId] : [member.id]);
 		if (isObserver) {
@@ -123,7 +132,7 @@ export function MatterInitiationPanel({
 	};
 
 	return (
-		<section className="initiation-panel" aria-label="立项参与方式与角色适配">
+		<section className="initiation-panel" aria-label="立项参与方式">
 			<div className="initiation-mode-row">
 				<div className="initiation-mode-pills">
 					{PRESET_OPTIONS.map((opt) => (
@@ -139,94 +148,63 @@ export function MatterInitiationPanel({
 					))}
 				</div>
 				<button type="button" className="btn-inline" onClick={() => setExpandedRoster((v) => !v)}>
-					{expandedRoster
-						? "收起站位配置"
-						: `配置参与人选（${draftPresetMode === "human_first" ? `人类 ${1 + draftCollaboratorIds.length}` : `1 主责 · ${activeConsultCount} 协同 · ${activeObserverCount} 旁听`}）`}
+					{expandedRoster ? "收起 ▴" : `调整人选（${summaryText}）▾`}
 				</button>
 			</div>
 
 			{expandedRoster && (
-				<div className="initiation-roster-drawer">
-					<div className="initiation-roster-group">
-						<div className="initiation-roster-label">
-							<span>AI 角色站位（点击非主责卡片可切换：协同 / 定向旁听 / 移出）</span>
-							<span className="actions-row compact">
-								{onStartArchitectMatter && (
-									<button type="button" className="btn-inline" onClick={() => onStartArchitectMatter()}>
-										+ 请架构师对话建角色
-									</button>
-								)}
-								<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
-									快速建角色
-								</button>
-							</span>
-						</div>
-						<div className="initiation-chip-grid">
-							{businessMembers.map((member) => {
-								const isLead = member.id === effectiveLeadId;
-								const inGroup = effectiveAiIds.includes(member.id);
-								const isObserver =
-									draftPresetMode === "lead_review" && draftObserverMemberIds.includes(member.id) && !isLead;
-								const tmpl = templateByRoleId.get(member.templateId);
-								const toolTag = formatRoleToolTierLabel(tmpl?.tools);
-								const standing =
-									draftPresetMode === "human_first"
-										? isLead
-											? "待命主责"
-											: "待命"
-										: isLead
-											? "主责"
-											: !inGroup
-												? "不参与"
-												: isObserver
-													? "定向旁听"
-													: "内部协同";
+				<div className="initiation-roster-drawer compact">
+					<div className="initiation-compact-row">
+						<label className="initiation-lead-picker">
+							<span>主责：</span>
+							<select
+								className="wechat-row-select"
+								aria-label="新事项主责 AI"
+								value={effectiveLeadId ?? ""}
+								onChange={(e) => {
+									const nextLead = e.target.value;
+									if (!nextLead) return;
+									onSelectLeadMember(nextLead);
+									if (draftPresetMode === "solo") {
+										onUpdateDraftAiMemberIds([nextLead]);
+									} else if (!effectiveAiIds.includes(nextLead)) {
+										onUpdateDraftAiMemberIds([nextLead, ...effectiveAiIds]);
+									}
+								}}
+							>
+								{businessMembers.map((m) => (
+									<option key={m.id} value={m.id}>
+										{m.displayName}
+									</option>
+								))}
+							</select>
+						</label>
 
+						<div className="initiation-inline-chips">
+							{otherMembers.map((member) => {
+								const inGroup = draftPresetMode !== "solo" && effectiveAiIds.includes(member.id);
+								const isObserver =
+									draftPresetMode === "lead_review" && inGroup && draftObserverMemberIds.includes(member.id);
+								const badge = !inGroup ? "不参与" : isObserver ? "旁听" : "协同";
 								return (
-									<div
+									<button
 										key={member.id}
-										className={`initiation-member-chip ${isLead ? "is-lead" : !inGroup ? "is-excluded" : isObserver ? "is-observer" : ""}`}
+										type="button"
+										className={`choice-chip ${inGroup ? "active" : ""}${isObserver ? " is-observer" : ""}`}
+										title="点击切换：协同 / 旁听 / 不参与"
+										onClick={() => cycleMemberStanding(member)}
 									>
-										<div className="initiation-member-top">
-											<button
-												type="button"
-												className="initiation-member-main"
-												onClick={() => cycleMemberStanding(member)}
-												title={isLead ? "当前为主责负责人" : "点击切换该成员在本事项的参与站位"}
-											>
-												<strong>{member.displayName}</strong>
-												<span className="initiation-standing-badge">{standing}</span>
-											</button>
-											{!isLead && draftPresetMode !== "human_first" && (
-												<button
-													type="button"
-													className="btn-inline"
-													onClick={() => {
-														onSelectLeadMember(member.id);
-														if (!inGroup) {
-															onUpdateDraftAiMemberIds([...effectiveAiIds, member.id]);
-														}
-													}}
-												>
-													设为主责
-												</button>
-											)}
-										</div>
-										<span className="initiation-member-meta">
-											{member.roleTitle} · {toolTag}
-										</span>
-									</div>
+										{member.displayName} · {badge}
+									</button>
 								);
 							})}
 						</div>
 					</div>
 
-					{nonOwnerCollaborators.length > 0 && (
-						<div className="initiation-roster-group">
-							<div className="initiation-roster-label">
-								<span>预先拉入人类协同同事（含所有者共 {1 + draftCollaboratorIds.length} 人）</span>
-							</div>
+					<div className="initiation-compact-footer">
+						{nonOwnerCollaborators.length > 0 ? (
 							<div className="initiation-human-row">
+								<span className="initiation-mini-label">人类同事：</span>
 								{nonOwnerCollaborators.map((col) => {
 									const selected = draftCollaboratorIds.includes(col.id);
 									return (
@@ -237,13 +215,24 @@ export function MatterInitiationPanel({
 											onClick={() => toggleHumanCollaborator(col.id)}
 										>
 											{selected ? "✓ " : "+ "}
-											{col.name}（{col.roleTitle}）
+											{col.name}
 										</button>
 									);
 								})}
 							</div>
-						</div>
-					)}
+						) : (
+							<span className="initiation-mini-label">提示：点击成员标签可切换协同、旁听或不参与</span>
+						)}
+						{onStartArchitectMatter ? (
+							<button type="button" className="btn-inline" onClick={() => onStartArchitectMatter()}>
+								缺少专职角色？请角色架构师规划 →
+							</button>
+						) : (
+							<button type="button" className="btn-inline" onClick={() => onOpenArchitect()}>
+								+ 快速建角色
+							</button>
+						)}
+					</div>
 				</div>
 			)}
 
@@ -272,7 +261,7 @@ export function MatterInitiationPanel({
 													)
 												}
 											>
-												请架构师对话规划角色
+												请架构师规划角色
 											</button>
 										)}
 										<button
@@ -280,7 +269,7 @@ export function MatterInitiationPanel({
 											className={onStartArchitectMatter ? "btn-pill-outline btn-xs" : "btn-pill-dark btn-xs"}
 											onClick={() => onOpenArchitect(assessment.gapSuggestion)}
 										>
-											快速表单补齐
+											快速建角色
 										</button>
 										<button
 											type="button"
@@ -290,14 +279,7 @@ export function MatterInitiationPanel({
 												onApplyPresetMode("solo");
 											}}
 										>
-											暂由「{effectiveLead?.displayName ?? "主联系人"}」先梳理
-										</button>
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => onApplyPresetMode("human_first")}
-										>
-											转为人类先讨论
+											先由{effectiveLead?.displayName ?? "主联系人"}接手
 										</button>
 									</>
 								) : (

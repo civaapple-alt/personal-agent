@@ -57,7 +57,9 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 3px;
+	width: 100%;
 	min-width: 0;
+	overflow: hidden;
 	background: transparent;
 	border: none;
 	padding: 0;
@@ -159,6 +161,15 @@
 	gap: 10px;
 	font-size: var(--text-xs);
 	color: var(--text-primary);
+}
+.wechat-roster-row > span:first-child {
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.wechat-roster-row.is-architect-row {
+	padding-top: 8px;
+	margin-top: 2px;
+	border-top: 1px dashed var(--border);
 }
 .wechat-row-action {
 	border: none;
@@ -351,6 +362,9 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 4px;
+	width: 100%;
+	min-width: 0;
+	overflow: hidden;
 }
 .wechat-obs-chip {
 	border: 1px solid var(--border);

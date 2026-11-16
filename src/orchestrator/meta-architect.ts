@@ -301,6 +301,7 @@ export function parseMetaArchitectResponse(
 			quietWhen: typeof bp.quietWhen === "string" ? bp.quietWhen : undefined,
 			interactionStyle: normalizeStyle(bp.interactionStyle),
 			workspaceScope: normalizeScope(bp.workspaceScope),
+			roleId: typeof bp.id === "string" ? bp.id : undefined,
 			roleName: typeof bp.name === "string" ? bp.name : undefined,
 			roleTitle: typeof bp.title === "string" ? bp.title : undefined,
 			keywords,
