@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import {
 	buildRoleDesignDraft,
+	normalizeRoleTools,
 	type RoleArchitectDraft,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
@@ -19,6 +20,22 @@ export interface MetaArchitectMessage {
 
 export interface MetaArchitectBlueprintProposal {
 	draft: RoleArchitectDraft;
+	rationale: string;
+}
+
+export interface MetaArchitectHealthFinding {
+	status: "ok" | "warn";
+	title: string;
+	detail: string;
+}
+
+export interface MetaArchitectRoleAdjustment {
+	memberId: string;
+	memberName: string;
+	currentTools: string[];
+	suggestedTools?: string[];
+	addAntiJobs?: string[];
+	workflowNote?: string;
 	rationale: string;
 }
 
@@ -41,6 +58,8 @@ export interface MetaArchitectChatInput {
 export interface MetaArchitectChatResult {
 	reply: string;
 	followUpQuestions: string[];
+	healthFindings?: MetaArchitectHealthFinding[];
+	roleAdjustments?: MetaArchitectRoleAdjustment[];
 	blueprints: MetaArchitectBlueprintProposal[];
 	recommendedFormation?: MetaArchitectFormationSuggestion;
 	usedHealthcheck: boolean;
@@ -110,6 +129,7 @@ function normalizePresetMode(raw: unknown): CollaborationPresetMode {
 export function parseMetaArchitectResponse(
 	rawText: string,
 	existingMembers: TeamMember[],
+	options?: { templatesById?: Map<string, RoleTemplate>; isHealthcheck?: boolean },
 ): Omit<MetaArchitectChatResult, "usedHealthcheck"> {
 	const cleaned = rawText.trim();
 	const jsonBlock = cleaned
@@ -152,9 +172,10 @@ export function parseMetaArchitectResponse(
 				.slice(0, 3)
 		: [];
 
+	const memberById = new Map(existingMembers.map((m) => [m.id, m]));
 	const validExistingIds = new Set(existingMembers.map((m) => m.id));
 	let recommendedFormation: MetaArchitectFormationSuggestion | undefined;
-	if (rec.recommendedFormation && typeof rec.recommendedFormation === "object") {
+	if (!options?.isHealthcheck && rec.recommendedFormation && typeof rec.recommendedFormation === "object") {
 		const fm = rec.recommendedFormation as Record<string, unknown>;
 		const existingIds = Array.isArray(fm.existingMemberIds)
 			? fm.existingMemberIds.map(String).filter((id) => validExistingIds.has(id))
@@ -172,6 +193,62 @@ export function parseMetaArchitectResponse(
 			};
 		}
 	}
+
+	const healthFindings: MetaArchitectHealthFinding[] = Array.isArray(rec.healthFindings)
+		? rec.healthFindings
+				.slice(0, 5)
+				.map((item): MetaArchitectHealthFinding | null => {
+					if (!item || typeof item !== "object") return null;
+					const entry = item as Record<string, unknown>;
+					const title = typeof entry.title === "string" ? entry.title.trim() : "";
+					const detail = typeof entry.detail === "string" ? entry.detail.trim() : "";
+					if (!title && !detail) return null;
+					return {
+						status: entry.status === "ok" ? "ok" : "warn",
+						title: title || "检查项",
+						detail: detail || title,
+					};
+				})
+				.filter((item): item is MetaArchitectHealthFinding => item !== null)
+		: [];
+
+	const roleAdjustments: MetaArchitectRoleAdjustment[] = Array.isArray(rec.roleAdjustments)
+		? rec.roleAdjustments
+				.slice(0, 8)
+				.map((item): MetaArchitectRoleAdjustment | null => {
+					if (!item || typeof item !== "object") return null;
+					const entry = item as Record<string, unknown>;
+					const memberId = typeof entry.memberId === "string" ? entry.memberId.trim() : "";
+					const member = memberById.get(memberId);
+					if (!member) return null;
+					const tpl = options?.templatesById?.get(member.templateId) ?? options?.templatesById?.get(member.id);
+					const currentTools = tpl?.tools ?? [];
+					const suggestedTools = Array.isArray(entry.suggestedTools)
+						? normalizeRoleTools(entry.suggestedTools.map(String))
+						: undefined;
+					const addAntiJobs = Array.isArray(entry.addAntiJobs)
+						? entry.addAntiJobs.map((s) => String(s).trim()).filter(Boolean)
+						: undefined;
+					const workflowNote =
+						typeof entry.workflowNote === "string" && entry.workflowNote.trim()
+							? entry.workflowNote.trim()
+							: undefined;
+					const rationale = typeof entry.rationale === "string" ? entry.rationale.trim() : "";
+					if (suggestedTools === undefined && (!addAntiJobs || addAntiJobs.length === 0) && !workflowNote) {
+						return null;
+					}
+					return {
+						memberId: member.id,
+						memberName: member.displayName,
+						currentTools,
+						...(suggestedTools !== undefined ? { suggestedTools } : {}),
+						...(addAntiJobs && addAntiJobs.length > 0 ? { addAntiJobs } : {}),
+						...(workflowNote ? { workflowNote } : {}),
+						rationale,
+					};
+				})
+				.filter((item): item is MetaArchitectRoleAdjustment => item !== null)
+		: [];
 
 	const rawBlueprints = Array.isArray(rec.blueprints) ? rec.blueprints.slice(0, 4) : [];
 	const reservedIds = existingMembers.map((m) => m.id);
@@ -208,7 +285,14 @@ export function parseMetaArchitectResponse(
 		});
 	}
 
-	return { reply, followUpQuestions, blueprints, recommendedFormation };
+	return {
+		reply,
+		followUpQuestions,
+		...(healthFindings.length > 0 ? { healthFindings } : {}),
+		...(roleAdjustments.length > 0 ? { roleAdjustments } : {}),
+		blueprints,
+		recommendedFormation,
+	};
 }
 
 export interface MetaArchitectDeps {
@@ -262,37 +346,41 @@ export async function runMetaArchitectChat(
 		"2. **Explicit Anti-Jobs（明确不做清单）+ 静默原则**：每个非代码/审核/旁听角色必须明确写出绝不越权做的事，以及无实质增量时何时保持静默（[SILENT]）。",
 		"3. **Least-Privilege Tools（最小权限工具，不留多余工具）**：`workspaceScope` 只能选 `no_repo_docs`（纯思考文稿，零工具）、`read_only_repo`（仅只读核查）或 `read_write_code`（确需改代码跑命令才给）。",
 		"4. **控制人数与避免重复造人**：优先复用现有合适成员；若确实缺 1 个或多个互补角色，可以一次在 `blueprints` 中规划 1~4 个职责互不重叠的新角色（例如起草者 + 独立风控旁听者），并说明他们和人类员工如何配合。",
-		"5. **多轮追问 vs 立即给草案**：如果用户目标还缺少关键流程边界（例如：谁最终拍板、要不要改代码、需不需要有人静默把关），先提出 2~3 个短追问（`blueprints` 留空数组 `[]`）；一旦工作流清晰，或用户明确要求出草案/体检建议，直接给出 `blueprints` 与 `recommendedFormation`，等待用户勾选确认（绝不擅自创建）。",
+		"5. **多轮追问 vs 立即给草案**：如果用户目标还缺少关键流程边界（例如：谁最终拍板、要不要改代码、需不需要有人静默把关），先提出 2~3 个短追问（`blueprints` 留空数组 `[]`）；一旦工作流清晰，或用户明确要求出草案/体检建议，直接给出结构化方案等待用户勾选确认（绝不擅自创建或修改）。",
+		"6. **团队协作体检专项规则**：当用户在做团队协作体检（查看现有分工重叠、工具过宽、运行摩擦）时：",
+		"   - `reply` 只保留 1 句简明总结，**严禁把 ①②③④ 塞成一整段密文字**；",
+		'   - 把各维度检查结果拆成清晰的 `healthFindings` 数组（每项标注 `status: "ok" | "warn"`、简短 `title` 与 1 句 `detail`）；',
+		"   - 如需收窄已有成员的 `tools` 或追加 `antiJobs` / `workflowNote`，必须放入 `roleAdjustments`（供用户勾选确认后自动修改对应角色），**不要只在话术里写“确认收窄”而不给结构化提案**；",
+		"   - 纯团队体检时 `recommendedFormation` 必须置为 `null`（不要输出假造的“几人参与体检复盘”事项阵型）。",
 		"",
 		"## 严格输出格式（仅返回合法 JSON，不要附带其它 markdown 围栏外文本）",
 		JSON.stringify(
 			{
-				reply: "简洁、直接的中文回复（有追问就问在点子上，有方案就点明分工理由）",
-				followUpQuestions: ["可选的短回答建议1", "建议2"],
-				recommendedFormation: {
-					mode: "solo | lead_consult | lead_review | human_first",
-					existingMemberIds: ["可复用的现有成员id"],
-					observerMemberIds: ["建议定向旁听的现有成员id"],
-					rationale: "一句说明参与人数与人机分工方式",
-				},
-				blueprints: [
+				reply: "1~2 句简洁中文总评或追问",
+				followUpQuestions: ["可选短回复1", "短回复2"],
+				healthFindings: [
 					{
-						name: "中文角色名",
-						title: "English Role Title",
-						oneJob: "唯一核心职责",
-						antiJobs: ["不做事项1", "不做事项2"],
-						quietWhen: "何时保持静默",
-						interactionStyle: "lead_direct | consult_specialist | risk_observer | mixed",
-						workspaceScope: "no_repo_docs | read_only_repo | read_write_code",
-						keywords: ["关键词1", "关键词2"],
-						workflowRules: "团队流程约束（可选）",
-						rationale: "为什么需要这个角色以及为什么不能并入已有角色",
+						status: "ok | warn",
+						title: "检查维度简短标题（例如：职责重叠度 / 工具权限过宽）",
+						detail: "一句具体依据与结论",
 					},
 				],
+				roleAdjustments: [
+					{
+						memberId: "已有成员id（例如 product-manager）",
+						suggestedTools: ["read"],
+						addAntiJobs: ["仅梳理范围与验收，不执行命令行脚本"],
+						workflowNote: "重发委托时需附带清晰背景简报（可选）",
+						rationale: "一句说明为什么要做此收窄或补充边界",
+					},
+				],
+				recommendedFormation: null,
+				blueprints: [],
 			},
 			null,
 			2,
 		),
+		"（说明：如果是按新工作流规划新角色而非团队体检，可省略 `healthFindings` / `roleAdjustments`，改填 `blueprints` 与 `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }`。）",
 	].join("\n");
 
 	const prompt = [
@@ -336,7 +424,10 @@ export async function runMetaArchitectChat(
 	if (result.aborted || input.signal.aborted) {
 		throw new Error("Role architect session was aborted");
 	}
-	const parsed = parseMetaArchitectResponse(result.assistantText, members);
+	const parsed = parseMetaArchitectResponse(result.assistantText, members, {
+		templatesById: deps.templatesById,
+		isHealthcheck: Boolean(input.includeHealthcheck),
+	});
 	return {
 		...parsed,
 		usedHealthcheck: Boolean(input.includeHealthcheck),

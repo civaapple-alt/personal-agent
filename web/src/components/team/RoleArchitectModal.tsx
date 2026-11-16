@@ -10,7 +10,7 @@ import {
 	type RoleWorkspaceScope,
 	type TeamMemberDto,
 } from "../../api.ts";
-import { getMemberThemeById } from "../../utils.ts";
+import { formatRoleToolTierLabel, getMemberThemeById } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { MetaArchitectChatPane } from "./MetaArchitectChatPane.tsx";
 
@@ -25,6 +25,7 @@ interface RoleArchitectModalProps {
 	onClose: () => void;
 	onCreated: (member: TeamMemberDto) => Promise<void> | void;
 	onCreatedBatch?: (members: TeamMemberDto[], formation?: MetaArchitectFormationSuggestionDto) => Promise<void> | void;
+	onAppliedAdjustments?: () => Promise<void> | void;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
 }
@@ -51,12 +52,6 @@ const SCOPE_CARDS: Array<{
 
 const BOUNDARY_CHIPS = ["不直接修改代码", "无关键风险时静默", "不替团队拍板最终决策", "不编造未核查的数据"];
 
-function formatToolShortBadge(tools: string[] | undefined): string {
-	if (!tools || tools.length === 0) return "纯文稿";
-	if (tools.includes("edit") || tools.includes("bash")) return "可改代码";
-	return "只读";
-}
-
 /** Visual role architect studio combining Meta-Bot workflow planning/audit and 3-choice visual quick card creation. */
 export function RoleArchitectModal({
 	open,
@@ -69,6 +64,7 @@ export function RoleArchitectModal({
 	onClose,
 	onCreated,
 	onCreatedBatch,
+	onAppliedAdjustments,
 	onNotice,
 	onError,
 }: RoleArchitectModalProps) {
@@ -209,7 +205,7 @@ export function RoleArchitectModal({
 								<div key={member.id} className="architect-roster-pill">
 									<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="sm" />
 									<span>{member.displayName}</span>
-									<small>{formatToolShortBadge(tpl?.tools)}</small>
+									<small>{formatRoleToolTierLabel(tpl?.tools)}</small>
 								</div>
 							);
 						})}
@@ -259,6 +255,7 @@ export function RoleArchitectModal({
 								await onCreated(createdMembers[0]);
 							}
 						}}
+						onAppliedAdjustments={onAppliedAdjustments}
 						onClose={onClose}
 						onSwitchQuickForm={() => setArchitectMode("quick_form")}
 						onNotice={onNotice}

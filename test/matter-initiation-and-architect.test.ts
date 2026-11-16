@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import {
+	applyRoleTemplatePatch,
 	assessMatterInitiation,
 	buildRoleDesignDraft,
 	createPersonalAgentServer,
@@ -12,12 +13,13 @@ import {
 	openPersonalAgentDatabase,
 	PersonalAgentStore,
 	PreviewManager,
+	parseMetaArchitectResponse,
 	parseRoleTemplateMarkdown,
 	type RpcWorkerLike,
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
 } from "../src/index.ts";
-import { buildStarterTasks } from "../web/src/utils.ts";
+import { buildStarterTasks, formatRoleToolTierLabel } from "../web/src/utils.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 test("RoleArchitect enforces One Job, Explicit Anti-Jobs, and least-privilege tools across round-trips", async () => {
@@ -510,6 +512,59 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
 		});
 		assert.equal(forbiddenChat.status, 403);
+
+		// Healthcheck parses structured findings + actionable roleAdjustments (ignoring recommendedFormation) and applies them cleanly
+		const parsedHealth = parseMetaArchitectResponse(
+			JSON.stringify({
+				reply: "职责清晰，建议收窄非工程岗命令行权限。",
+				healthFindings: [
+					{ status: "ok", title: "职责重叠度低", detail: "四位分工明确。" },
+					{ status: "warn", title: "工具权限过宽", detail: "产品经理无需 bash。" },
+				],
+				roleAdjustments: [
+					{
+						memberId: "product-manager",
+						suggestedTools: ["read"],
+						addAntiJobs: ["不直接运行终端命令或改动源码"],
+						rationale: "收敛为只读核查",
+					},
+				],
+				recommendedFormation: {
+					mode: "lead_review",
+					existingMemberIds: ["product-manager"],
+					observerMemberIds: [],
+				},
+				blueprints: [],
+			}),
+			store.listMembers(),
+			{ isHealthcheck: true },
+		);
+		assert.equal(parsedHealth.recommendedFormation, undefined);
+		assert.equal(parsedHealth.healthFindings?.length, 2);
+		assert.equal(parsedHealth.roleAdjustments?.[0]?.memberId, "product-manager");
+
+		const applyRes = await fetch(`${url}/api/members/adjustments/apply`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				adjustments: [
+					{
+						memberId: "product-manager",
+						tools: parsedHealth.roleAdjustments![0]!.suggestedTools,
+						addAntiJobs: parsedHealth.roleAdjustments![0]!.addAntiJobs,
+					},
+				],
+			}),
+		});
+		assert.equal(applyRes.status, 200);
+		const pmTpl = orchestrator.getTemplateForMember(store.getMember("product-manager")!)!;
+		assert.deepEqual(pmTpl.tools, ["read"]);
+		assert.ok(pmTpl.antiJobs?.includes("不直接运行终端命令或改动源码"));
+		assert.equal(formatRoleToolTierLabel(["read", "bash", "mcp"]), "含命令");
+		assert.equal(formatRoleToolTierLabel(["read", "edit", "write", "bash"]), "可改代码");
+		assert.equal(formatRoleToolTierLabel(["read"]), "只读");
+		assert.equal(formatRoleToolTierLabel([]), "纯文稿");
+		assert.deepEqual(applyRoleTemplatePatch(pmTpl, { tools: [] }).tools, []);
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

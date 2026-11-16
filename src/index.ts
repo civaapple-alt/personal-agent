@@ -13,7 +13,9 @@ export {
 	type MetaArchitectChatInput,
 	type MetaArchitectChatResult,
 	type MetaArchitectFormationSuggestion,
+	type MetaArchitectHealthFinding,
 	type MetaArchitectMessage,
+	type MetaArchitectRoleAdjustment,
 	parseMetaArchitectResponse,
 	runMetaArchitectChat,
 } from "./orchestrator/meta-architect.ts";
@@ -36,11 +38,13 @@ export {
 	type WorkerFactory,
 } from "./orchestrator/team-orchestrator.ts";
 export {
+	applyRoleTemplatePatch,
 	buildRoleDesignDraft,
 	normalizeRoleTools,
 	type RoleArchitectDraft,
 	type RoleDesignBriefInput,
 	type RoleInteractionStyle,
+	type RoleTemplatePatch,
 	type RoleWorkspaceScope,
 } from "./roles/role-architect.ts";
 export {

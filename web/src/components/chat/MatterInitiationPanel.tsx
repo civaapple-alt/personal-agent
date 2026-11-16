@@ -7,6 +7,7 @@ import type {
 	RoleTemplateDto,
 	TeamMemberDto,
 } from "../../api.ts";
+import { formatRoleToolTierLabel } from "../../utils.ts";
 
 interface MatterInitiationPanelProps {
 	isOwner: boolean;
@@ -156,12 +157,7 @@ export function MatterInitiationPanel({
 								const isObserver =
 									draftPresetMode === "lead_review" && draftObserverMemberIds.includes(member.id) && !isLead;
 								const tmpl = templateByRoleId.get(member.templateId);
-								const toolTag =
-									tmpl?.tools.includes("edit") || tmpl?.tools.includes("bash")
-										? "读写代码"
-										: tmpl?.tools.includes("read")
-											? "只读核查"
-											: "纯思考文稿";
+								const toolTag = formatRoleToolTierLabel(tmpl?.tools);
 								const standing =
 									draftPresetMode === "human_first"
 										? isLead

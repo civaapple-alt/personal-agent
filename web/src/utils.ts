@@ -776,3 +776,11 @@ export function parseMessageImages(metadata: Record<string, unknown> | null | un
 	}
 	return images;
 }
+
+/** Formats declared RoleTemplate tool lists into concise 4-tier permission badges. */
+export function formatRoleToolTierLabel(tools: string[] | undefined): string {
+	if (!tools || tools.length === 0) return "纯文稿";
+	if (tools.includes("edit") || tools.includes("write")) return "可改代码";
+	if (tools.includes("bash")) return "含命令";
+	return "只读";
+}

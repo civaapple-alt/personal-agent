@@ -15,6 +15,7 @@ import {
 	countMemberMemoriesByScope,
 	defaultMemberGitName,
 	formatMemberGitIdentity,
+	formatRoleToolTierLabel,
 	getBotTheme,
 	MEMORY_CATEGORY_LABELS,
 	MEMORY_CATEGORY_VALUES,
@@ -210,11 +211,7 @@ export function MemberCard({
 								: "无文件系统或命令行工具（纯分析与文稿协同）"
 						}
 					>
-						{template?.tools.includes("edit") || template?.tools.includes("bash")
-							? "读写与命令"
-							: template?.tools.includes("read")
-								? "只读核查"
-								: "纯思考文稿"}
+						{formatRoleToolTierLabel(template?.tools)}
 					</span>
 					{(template?.antiJobs?.length ?? 0) > 0 && (
 						<span className="pill" title={template!.antiJobs!.join("；")}>

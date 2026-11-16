@@ -889,6 +889,7 @@ export function App() {
 					}
 				}}
 				onNotice={(msg) => setNoticeBanner(msg)}
+				onAppliedAdjustments={refreshBootstrap}
 				onError={(msg) => setErrorBanner(msg)}
 			/>
 		</div>

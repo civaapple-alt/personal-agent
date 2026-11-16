@@ -283,9 +283,27 @@ export interface MetaArchitectFormationSuggestionDto {
 	rationale: string;
 }
 
+export interface MetaArchitectHealthFindingDto {
+	status: "ok" | "warn";
+	title: string;
+	detail: string;
+}
+
+export interface MetaArchitectRoleAdjustmentDto {
+	memberId: string;
+	memberName: string;
+	currentTools: string[];
+	suggestedTools?: string[];
+	addAntiJobs?: string[];
+	workflowNote?: string;
+	rationale: string;
+}
+
 export interface MetaArchitectChatResultDto {
 	reply: string;
 	followUpQuestions: string[];
+	healthFindings?: MetaArchitectHealthFindingDto[];
+	roleAdjustments?: MetaArchitectRoleAdjustmentDto[];
 	blueprints: MetaArchitectBlueprintProposalDto[];
 	recommendedFormation?: MetaArchitectFormationSuggestionDto;
 	usedHealthcheck: boolean;
@@ -643,6 +661,22 @@ export function createMembersBatch(members: CreateMemberPayload[]): Promise<{ me
 	return requestJson("/api/members/batch", {
 		method: "POST",
 		body: JSON.stringify({ members }),
+	});
+}
+
+export interface ApplyMemberAdjustmentPayload {
+	memberId: string;
+	tools?: string[];
+	addAntiJobs?: string[];
+	workflowNote?: string;
+}
+
+export function applyMemberAdjustments(
+	adjustments: ApplyMemberAdjustmentPayload[],
+): Promise<{ members: TeamMemberDto[] }> {
+	return requestJson("/api/members/adjustments/apply", {
+		method: "POST",
+		body: JSON.stringify({ adjustments }),
 	});
 }
 

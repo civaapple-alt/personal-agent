@@ -256,3 +256,58 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		designNotes,
 	};
 }
+
+export interface RoleTemplatePatch {
+	tools?: string[];
+	addAntiJobs?: string[];
+	workflowNote?: string;
+}
+
+/**
+ * Applies explicit least-privilege tool narrowing or Anti-Job boundary updates to an existing RoleTemplate
+ * while preserving unrelated sections and instructions.
+ */
+export function applyRoleTemplatePatch(template: RoleTemplate, patch: RoleTemplatePatch): RoleTemplate {
+	const nextTools = patch.tools !== undefined ? normalizeRoleTools(patch.tools) : [...template.tools];
+	const nextAntiJobs = [...(template.antiJobs ?? [])];
+	let nextResp = template.sections.responsibilitiesAndBoundaries.trim();
+
+	for (const rawRule of patch.addAntiJobs ?? []) {
+		const rule = rawRule.replace(/^[-*]\s*/, "").trim();
+		if (!rule) continue;
+		if (!nextAntiJobs.includes(rule)) nextAntiJobs.push(rule);
+		if (!nextResp.includes(rule)) {
+			nextResp = `${nextResp}${nextResp ? "\n" : ""}- **不做 / 边界**：${rule}`;
+		}
+	}
+
+	let nextConventions = template.sections.collaborationConventions.trim();
+	const workflowNote = patch.workflowNote?.trim();
+	if (workflowNote && !nextConventions.includes(workflowNote)) {
+		nextConventions = `${nextConventions}${nextConventions ? "\n" : ""}- ${workflowNote}`;
+	}
+
+	const nextSections = {
+		...template.sections,
+		responsibilitiesAndBoundaries: nextResp,
+		collaborationConventions: nextConventions,
+	};
+
+	const rawBody = [
+		`## 职责与边界\n${nextSections.responsibilitiesAndBoundaries}`,
+		`## 技能与工作方法\n${nextSections.skillsAndMethods}`,
+		`## 工具与环境依赖\n${nextSections.toolsAndEnvironment}`,
+		`## 协作和沟通约定\n${nextSections.collaborationConventions}`,
+		`## 交付与验证方式\n${nextSections.deliveryAndVerification}`,
+	]
+		.filter((block) => !block.endsWith("\n"))
+		.join("\n\n");
+
+	return {
+		...template,
+		tools: nextTools,
+		...(nextAntiJobs.length > 0 ? { antiJobs: nextAntiJobs } : {}),
+		sections: nextSections,
+		rawBody,
+	};
+}
