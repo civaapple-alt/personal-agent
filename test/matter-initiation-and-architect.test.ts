@@ -11,6 +11,7 @@ import {
 	createPersonalAgentServer,
 	DialogBroker,
 	loadRoleTemplatesFromDir,
+	loadRoleTemplatesWithCustomDir,
 	openPersonalAgentDatabase,
 	PersonalAgentStore,
 	PreviewManager,
@@ -808,6 +809,29 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 			body: JSON.stringify({ action: "apply", members: [] }),
 		});
 		assert.equal(dupRes.status, 409);
+
+		// 4. Short name & explicit kebab ID derivation + custom roles dir merge never mutating repo roles/
+		const parsedNamed = parseMetaArchitectResponse(
+			JSON.stringify({
+				reply: "建议新增交互与视觉设计师。",
+				blueprints: [
+					{
+						id: "ux-designer",
+						title: "交互与视觉设计师",
+						oneJob: "围绕真实使用场景起草交互流程、状态与视觉方向",
+						interactionStyle: "consult_specialist",
+						workspaceScope: "read_only_repo",
+					},
+				],
+			}),
+			store.listMembers(),
+		);
+		assert.equal(parsedNamed.blueprints[0]!.draft.template.id, "ux-designer");
+		assert.equal(parsedNamed.blueprints[0]!.draft.template.name, "交互与视觉设计师");
+
+		const merged = await loadRoleTemplatesWithCustomDir(resolve("roles"), join(tmp, "roles"));
+		assert.ok(merged.some((t) => t.id === "product-manager"));
+		assert.ok(merged.some((t) => t.id === newRoleId));
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

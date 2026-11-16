@@ -25,6 +25,15 @@ const MODE_LABELS: Record<string, string> = {
 	human_first: "人类先讨论定调",
 };
 
+function extractOneJobSummary(responsibilities = ""): string {
+	const coreLine = responsibilities
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.find((line) => line.length > 0 && !line.includes("不做 / 边界"));
+	if (!coreLine) return responsibilities;
+	return coreLine.replace(/^[-*]\s*(?:\*\*核心唯一职责\*\*[：:]\s*)?/, "").trim();
+}
+
 /** Inline interactive proposal confirmation card rendered below Role Architect messages. */
 export function RoleProposalCard({
 	matterId,
@@ -214,7 +223,7 @@ export function RoleProposalCard({
 										</strong>
 										<span className="pill">{bp.draft.toolSummary}</span>
 									</div>
-									<p>{bp.draft.template.sections.responsibilitiesAndBoundaries}</p>
+									<p>{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}</p>
 									{bp.draft.antiJobs.length > 0 && (
 										<div className="architect-blueprint-anti">
 											<strong>不做边界：</strong>

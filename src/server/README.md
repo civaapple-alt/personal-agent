@@ -1,6 +1,6 @@
 # HTTP、SSE 与本机服务
 
-[main.ts](main.ts) 负责启动装配：角色、数据库、编排核、对话 broker、预览管理器及静态网页。
+[main.ts](main.ts) 负责启动装配：合并仓库基线 `roles/` 与运行期自定义 `.data/roles/`（不再把运行时新建/微调的角色写入版本库 `roles/` 目录）、内置 `role-architect`、数据库、编排核、对话 broker、预览管理器及静态网页。
 默认端口 4310、`PA_HOST` 默认 `127.0.0.1`，`PORT`、`PA_HOST`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 读取以此文件为准；
 日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 

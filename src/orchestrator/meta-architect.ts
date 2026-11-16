@@ -302,8 +302,16 @@ export function parseMetaArchitectResponse(
 			interactionStyle: normalizeStyle(bp.interactionStyle),
 			workspaceScope: normalizeScope(bp.workspaceScope),
 			roleId: typeof bp.id === "string" ? bp.id : undefined,
-			roleName: typeof bp.name === "string" ? bp.name : undefined,
-			roleTitle: typeof bp.title === "string" ? bp.title : undefined,
+			roleName:
+				typeof bp.name === "string"
+					? bp.name
+					: typeof bp.roleName === "string"
+						? bp.roleName
+						: typeof bp.displayName === "string"
+							? bp.displayName
+							: undefined,
+			roleTitle:
+				typeof bp.title === "string" ? bp.title : typeof bp.roleTitle === "string" ? bp.roleTitle : undefined,
 			keywords,
 			workflowRules: typeof bp.workflowRules === "string" ? bp.workflowRules : undefined,
 			constraints: typeof bp.constraints === "string" ? bp.constraints : undefined,
@@ -377,7 +385,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 		null,
 		2,
 	),
-	"（说明：如果是按新工作流规划新角色而非团队体检，可省略 `healthFindings` / `roleAdjustments`，改填 `blueprints` 与 `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }`。）",
+	'（说明：如果是按新工作流规划新角色而非团队体检，可省略 `healthFindings` / `roleAdjustments`，改填 `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }` 与 `blueprints: [{ id: "英文kebab-id如ux-designer", name: "2~6字中文短角色名如交互设计师", title: "English Title如UX Designer", oneJob: "一句话唯一核心职责", antiJobs: ["明确不做边界1"], interactionStyle: "consult_specialist | risk_observer | lead_direct", workspaceScope: "read_only_repo | no_repo_docs | read_write_code", rationale: "定位理由" }]`。务必给每个 blueprint 提供简短中文 `name` 与英文 `id`/`title`，切勿把长句职责填进 `name`。）',
 ].join("\n");
 
 /** Builds read-only live roster, health digest, and JSON proposal contract for an in-matter Role Architect turn. */

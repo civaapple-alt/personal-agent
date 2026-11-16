@@ -3,7 +3,7 @@ import { delimiter, dirname, resolve } from "node:path";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
-import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
+import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { createPersonalAgentServer } from "./app.ts";
@@ -32,7 +32,12 @@ async function main(): Promise<void> {
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
-	const templates = [...(await loadRoleTemplatesFromDir(resolve(rootDir, "roles"))), BUILTIN_ROLE_ARCHITECT_TEMPLATE];
+	const builtinRolesDir = resolve(rootDir, "roles");
+	const customRolesDir = dbPath === ":memory:" ? builtinRolesDir : resolve(dirname(resolve(dbPath)), "roles");
+	const templates = [
+		...(await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir)),
+		BUILTIN_ROLE_ARCHITECT_TEMPLATE,
+	];
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 
@@ -70,7 +75,7 @@ async function main(): Promise<void> {
 		previewManager,
 		dialogBroker,
 		webDistDir: resolve(rootDir, "web/dist"),
-		rolesDir: resolve(rootDir, "roles"),
+		rolesDir: customRolesDir,
 		uploadsDir: resolve(rootDir, ".data/uploads"),
 		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
 	});

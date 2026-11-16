@@ -53,6 +53,7 @@ export {
 } from "./roles/role-architect.ts";
 export {
 	loadRoleTemplatesFromDir,
+	loadRoleTemplatesWithCustomDir,
 	parseRoleTemplateMarkdown,
 	serializeRoleTemplateMarkdown,
 } from "./roles/template-loader.ts";

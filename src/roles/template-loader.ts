@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ThinkingLevel } from "../rpc/types.ts";
@@ -157,6 +158,22 @@ export async function loadRoleTemplatesFromDir(dirPath: string): Promise<RoleTem
 		templates.push(parseRoleTemplateMarkdown(content, fullPath));
 	}
 	return templates;
+}
+
+/**
+ * Load shareable baseline templates from `builtinDir` merged with user-customized `.md` roles in `customDir` (override by ID).
+ */
+export async function loadRoleTemplatesWithCustomDir(builtinDir: string, customDir?: string): Promise<RoleTemplate[]> {
+	const merged = new Map<string, RoleTemplate>();
+	for (const tpl of await loadRoleTemplatesFromDir(builtinDir)) {
+		merged.set(tpl.id, tpl);
+	}
+	if (customDir && customDir !== builtinDir && existsSync(customDir)) {
+		for (const tpl of await loadRoleTemplatesFromDir(customDir)) {
+			merged.set(tpl.id, tpl);
+		}
+	}
+	return [...merged.values()];
 }
 
 /**
