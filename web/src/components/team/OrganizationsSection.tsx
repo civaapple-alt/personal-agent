@@ -6,6 +6,7 @@ import {
 	updateOrganization,
 	type WorkspaceDto,
 } from "../../api.ts";
+import { ModalDialog } from "../ModalDialog.tsx";
 
 interface OrganizationsSectionProps {
 	isOwner: boolean;
@@ -30,6 +31,7 @@ export function OrganizationsSection({
 	const [orgNameInput, setOrgNameInput] = useState("");
 	const [orgDomainInput, setOrgDomainInput] = useState("");
 	const [orgDescInput, setOrgDescInput] = useState("");
+	const [saving, setSaving] = useState(false);
 
 	const openCreateOrgForm = () => {
 		setEditingOrgId(null);
@@ -47,8 +49,15 @@ export function OrganizationsSection({
 		setShowOrgForm(true);
 	};
 
+	const closeOrgModal = () => {
+		if (saving) return;
+		setShowOrgForm(false);
+		setEditingOrgId(null);
+	};
+
 	const handleSaveOrg = async () => {
-		if (!orgNameInput.trim()) return;
+		if (!orgNameInput.trim() || saving) return;
+		setSaving(true);
 		try {
 			if (editingOrgId) {
 				await updateOrganization(editingOrgId, {
@@ -70,6 +79,8 @@ export function OrganizationsSection({
 			await onRefresh();
 		} catch (err: unknown) {
 			onError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setSaving(false);
 		}
 	};
 
@@ -143,65 +154,63 @@ export function OrganizationsSection({
 				</div>
 			)}
 
-			{showOrgForm && (
-				<div className="memory-draft-box identity-form-box">
-					<div className="memory-draft-head">
-						<strong>{editingOrgId ? "编辑组织身份" : "新建组织身份"}</strong>
-					</div>
-					<div className="form-grid">
-						<label className="identity-field">
-							<span className="identity-field-label">组织名称</span>
-							<input
-								className="input-field"
-								aria-label="组织名称"
-								placeholder="如：Acme Engineering"
-								value={orgNameInput}
-								onChange={(e) => setOrgNameInput(e.target.value)}
-							/>
-						</label>
-						<label className="identity-field">
-							<span className="identity-field-label">默认 Git 邮箱域名（可选）</span>
-							<input
-								className="input-field"
-								aria-label="组织 Git 邮箱域名"
-								placeholder="如：acme.dev"
-								value={orgDomainInput}
-								onChange={(e) => setOrgDomainInput(e.target.value)}
-							/>
-						</label>
-					</div>
-					<label className="identity-field">
-						<span className="identity-field-label">组织背景与共同准则（可选，执行时自动注入上下文）</span>
-						<input
-							className="input-field"
-							aria-label="组织简介"
-							placeholder="简要描述组织规范、协作边界或业务背景"
-							value={orgDescInput}
-							onChange={(e) => setOrgDescInput(e.target.value)}
-						/>
-					</label>
-					<div className="actions-row">
-						<button
-							type="button"
-							className="btn-pill-dark btn-xs"
-							disabled={!orgNameInput.trim()}
-							onClick={() => void handleSaveOrg()}
-						>
-							保存组织
-						</button>
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => {
-								setShowOrgForm(false);
-								setEditingOrgId(null);
-							}}
-						>
+			<ModalDialog
+				open={showOrgForm}
+				title={editingOrgId ? "编辑组织身份" : "新建组织身份"}
+				subtitle="归属同一组织的工作区会共享「组织记忆」与默认 Git 邮箱域名。"
+				size="sm"
+				closeDisabled={saving}
+				onClose={closeOrgModal}
+				footer={
+					<>
+						<button type="button" className="btn-pill-outline" disabled={saving} onClick={closeOrgModal}>
 							取消
 						</button>
-					</div>
+						<button
+							type="button"
+							className="btn-pill-dark"
+							disabled={!orgNameInput.trim() || saving}
+							onClick={() => void handleSaveOrg()}
+						>
+							{saving ? "保存中..." : "保存组织"}
+						</button>
+					</>
+				}
+			>
+				<div className="form-grid">
+					<label className="identity-field">
+						<span className="identity-field-label">组织名称</span>
+						<input
+							className="input-field"
+							aria-label="组织名称"
+							placeholder="如：Acme Engineering"
+							value={orgNameInput}
+							onChange={(e) => setOrgNameInput(e.target.value)}
+						/>
+					</label>
+					<label className="identity-field">
+						<span className="identity-field-label">默认 Git 邮箱域名（可选）</span>
+						<input
+							className="input-field"
+							aria-label="组织 Git 邮箱域名"
+							placeholder="如：acme.dev"
+							value={orgDomainInput}
+							onChange={(e) => setOrgDomainInput(e.target.value)}
+						/>
+					</label>
 				</div>
-			)}
+				<label className="identity-field">
+					<span className="identity-field-label">组织背景与共同准则（可选，执行时自动注入上下文）</span>
+					<textarea
+						rows={3}
+						className="composer-input"
+						aria-label="组织简介"
+						placeholder="简要描述组织规范、协作边界或业务背景"
+						value={orgDescInput}
+						onChange={(e) => setOrgDescInput(e.target.value)}
+					/>
+				</label>
+			</ModalDialog>
 		</section>
 	);
 }

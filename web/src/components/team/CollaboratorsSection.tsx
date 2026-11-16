@@ -7,6 +7,7 @@ import {
 	regenerateCollaboratorToken,
 } from "../../api.ts";
 import { copyCollaboratorInviteUrl } from "../../clipboard.ts";
+import { ModalDialog } from "../ModalDialog.tsx";
 
 interface CollaboratorsSectionProps {
 	isOwner: boolean;
@@ -20,7 +21,7 @@ interface CollaboratorsSectionProps {
 	onRestoreOwner?: () => void;
 }
 
-/** Manages human collaborators and LAN invitation links for restricted multi-human collaboration. */
+/** Manages human collaborators and LAN invitation links; creation uses a centered modal to preserve page layout. */
 export function CollaboratorsSection({
 	isOwner,
 	currentUser,
@@ -36,6 +37,37 @@ export function CollaboratorsSection({
 	const [collabNameInput, setCollabNameInput] = useState("");
 	const [collabRoleInput, setCollabRoleInput] = useState("");
 	const [collabOrgInput, setCollabOrgInput] = useState("");
+	const [submitting, setSubmitting] = useState(false);
+
+	const closeAddModal = () => {
+		if (submitting) return;
+		setShowAddCollab(false);
+		setCollabNameInput("");
+		setCollabRoleInput("");
+		setCollabOrgInput("");
+	};
+
+	const handleCreateCollaborator = async () => {
+		if (!collabNameInput.trim() || submitting) return;
+		setSubmitting(true);
+		try {
+			const res = await createCollaborator({
+				name: collabNameInput.trim(),
+				roleTitle: collabRoleInput.trim() || "协同同事",
+				orgId: collabOrgInput || null,
+			});
+			setCollabNameInput("");
+			setCollabRoleInput("");
+			setCollabOrgInput("");
+			setShowAddCollab(false);
+			await onRefresh();
+			onNotice(`已创建同事「${res.collaborator.name}」并生成专属邀请链接`);
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setSubmitting(false);
+		}
+	};
 
 	return (
 		<section className="org-strip-card">
@@ -53,11 +85,7 @@ export function CollaboratorsSection({
 						</button>
 					)}
 					{isOwner && (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => setShowAddCollab((prev) => !prev)}
-						>
+						<button type="button" className="btn-pill-outline btn-xs" onClick={() => setShowAddCollab(true)}>
 							+ 新增邀请同事
 						</button>
 					)}
@@ -136,67 +164,67 @@ export function CollaboratorsSection({
 				})}
 			</div>
 
-			{showAddCollab && isOwner && (
-				<div className="org-inline-form">
-					<div className="ui-chip-title">新增协同同事并生成邀请链接</div>
-					<div className="form-grid">
-						<input
-							className="input-field"
-							placeholder="同事姓名（如：李四）"
-							value={collabNameInput}
-							onChange={(e) => setCollabNameInput(e.target.value)}
-						/>
-						<input
-							className="input-field"
-							placeholder="岗位/分工（如：后端研发、设计、测试）"
-							value={collabRoleInput}
-							onChange={(e) => setCollabRoleInput(e.target.value)}
-						/>
-					</div>
-					<div className="actions-row tight">
-						{organizations.length > 0 && (
-							<select
-								className="select-pill"
-								value={collabOrgInput}
-								onChange={(e) => setCollabOrgInput(e.target.value)}
-							>
-								<option value="">组织：默认 / 不指定</option>
-								{organizations.map((org) => (
-									<option key={org.id} value={org.id}>
-										组织：{org.name}
-									</option>
-								))}
-							</select>
-						)}
+			<ModalDialog
+				open={showAddCollab && isOwner}
+				title="新增协同同事并生成邀请链接"
+				subtitle="保存后自动生成局域网专属访问链接，同事打开即可参与讨论、提请 AI 与验收评价。"
+				size="sm"
+				closeDisabled={submitting}
+				onClose={closeAddModal}
+				footer={
+					<>
+						<button type="button" className="btn-pill-outline" disabled={submitting} onClick={closeAddModal}>
+							取消
+						</button>
 						<button
 							type="button"
 							className="btn-pill-dark"
-							disabled={!collabNameInput.trim()}
-							onClick={() => {
-								void createCollaborator({
-									name: collabNameInput.trim(),
-									roleTitle: collabRoleInput.trim() || "协同同事",
-									orgId: collabOrgInput || null,
-								})
-									.then(async (res) => {
-										setCollabNameInput("");
-										setCollabRoleInput("");
-										setCollabOrgInput("");
-										setShowAddCollab(false);
-										await onRefresh();
-										onNotice(`已创建同事「${res.collaborator.name}」并生成专属邀请链接`);
-									})
-									.catch((err: unknown) => onError(err instanceof Error ? err.message : String(err)));
-							}}
+							disabled={!collabNameInput.trim() || submitting}
+							onClick={() => void handleCreateCollaborator()}
 						>
-							保存并生成邀请
+							{submitting ? "创建中..." : "保存并生成邀请"}
 						</button>
-						<button type="button" className="btn-pill-outline" onClick={() => setShowAddCollab(false)}>
-							取消
-						</button>
-					</div>
+					</>
+				}
+			>
+				<div className="form-grid">
+					<label className="identity-field">
+						<span className="identity-field-label">同事姓名</span>
+						<input
+							className="input-field"
+							placeholder="如：李四"
+							value={collabNameInput}
+							onChange={(e) => setCollabNameInput(e.target.value)}
+						/>
+					</label>
+					<label className="identity-field">
+						<span className="identity-field-label">岗位 / 分工</span>
+						<input
+							className="input-field"
+							placeholder="如：后端研发、设计、测试"
+							value={collabRoleInput}
+							onChange={(e) => setCollabRoleInput(e.target.value)}
+						/>
+					</label>
 				</div>
-			)}
+				{organizations.length > 0 && (
+					<label className="identity-field">
+						<span className="identity-field-label">所属组织（可选）</span>
+						<select
+							className="select-sm select-control"
+							value={collabOrgInput}
+							onChange={(e) => setCollabOrgInput(e.target.value)}
+						>
+							<option value="">默认 / 不指定</option>
+							{organizations.map((org) => (
+								<option key={org.id} value={org.id}>
+									{org.name}
+								</option>
+							))}
+						</select>
+					</label>
+				)}
+			</ModalDialog>
 		</section>
 	);
 }

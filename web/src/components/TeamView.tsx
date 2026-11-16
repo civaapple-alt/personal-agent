@@ -144,10 +144,8 @@ export function TeamView({
 
 				<div className="ui-sections-stack">
 					<MemberPackageForms
-						showAddMember={false}
 						showImportMember={showImportMember}
 						exportedPackage={exportedPackage}
-						onCloseAddMember={() => {}}
 						onCloseImportMember={() => setShowImportMember(false)}
 						onCloseExportedPackage={() => setExportedPackage(null)}
 						onRefresh={onRefresh}
