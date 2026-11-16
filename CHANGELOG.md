@@ -8,6 +8,7 @@ All notable changes to Personal Agent are documented in this file.
 
 - Add `demo:observer`, a real-Pi, isolated five-turn task covering selected late-joining observers, an intentional conflicting proposal, lead follow-up and stage publication, independent quiet review, and disabling observation.
 - Retain original worker replies, session/loadout evidence and a full transcript. Separate runtime/behavior checks from independent quality review, reject empty/failed evaluations as successful silence, and support model-free `--help` / `--summarize`.
+- Real validation completed five lead turns and three observer assessments with late-join context, risk intervention, lead continuation, quiet review and disabling checks passing. Independent observer review passed with retained design caveats; source/compiled offline summaries match and 107 offline tests pass. Preserve the initial presentation-wrapper false negative and validate proposal text separately from recording wrappers.
 
 ### Review evaluation
 
