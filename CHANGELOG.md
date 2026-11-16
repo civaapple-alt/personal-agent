@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Observer demo
+
+- Add `demo:observer`, a real-Pi, isolated five-turn task covering selected late-joining observers, an intentional conflicting proposal, lead follow-up and stage publication, independent quiet review, and disabling observation.
+- Retain original worker replies, session/loadout evidence and a full transcript. Separate runtime/behavior checks from independent quality review, reject empty/failed evaluations as successful silence, and support model-free `--help` / `--summarize`.
+
 ### Review evaluation
 
 - Split `demo:review` into publication checks, scenario-specific collaboration, and independent final-document quality judgments. Add autonomous, explicitly required cross-role, and solo copy-edit scenarios without imposing a product-wide sign-off workflow.

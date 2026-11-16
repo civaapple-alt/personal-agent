@@ -7,6 +7,7 @@
 | 产品定位、用户约束与交付原则 | [产品方向确认稿](product-direction.md) |
 | 体验需求讨论、专业协作、阶段交付与反馈修订 | [内置演示事项](inner-matter-demo.md) |
 | 对照验证负责人是否在发布前澄清矛盾、修订方案 | [发布前复核验证](publication-review.md) |
+| 验证事项 AI 成员旁听、主动提醒、静默和关闭 | [旁听真实任务演示](observer-demo.md) |
 | 当前模块关系、技术栈、限制与下一阶段建议 | [当前架构与后续计划](architecture-and-plan.md) |
 | 会话、真实工具委托、能力装配、取消、归档和迁移细节 | [连续上下文与内部角色协作](runtime-collaboration.md) |
 | 环境变量、超时阈值、角色字段与旁听/运行默认参数 | [配置参考](configuration.md) |
