@@ -28,7 +28,8 @@
     "demo:architect": "node src/demo/role-design-smoke.ts --scenario architect",
     "demo:roles": "node src/demo/role-design-smoke.ts --scenario builtin",
     "demo:decision": "node src/demo/decision-smoke.ts",
-    "demo:pstack": "node src/demo/pstack-smoke.ts"
+    "demo:pstack": "node src/demo/pstack-smoke.ts",
+    "demo:pstack:selection": "node src/demo/pstack-selection-smoke.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",

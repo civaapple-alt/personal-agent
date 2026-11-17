@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Natural pstack method selection
+
+- Add isolated `demo:pstack:selection` with five natural requests that never name the expected methods. Keep the current runtime guidance unchanged; report actual method reads, read-only integrity and independently reviewed answers separately. Include genuine session continuity and conflicting old proposals for the context-recovery case.
+- Preserve raw turns and hash-bound review templates, support model-free summarization and single-case runs, and restrict demo reads to its own temporary project/sessions and approved methods. Offline regressions cover prompt leakage, read boundaries, full-source evidence, binary hashes and pending/invalid reviews. Missing target selection is reported without calling the answer semantically wrong.
+- Run all five natural cases with unchanged production guidance: the mode is read in four target turns, none of the five named target Skills is observed, and three other principles are selected. Runtime integrity and session continuity pass; separate host-side, unblinded review passes four answers and fails the technical design for conflicting expiry and permanent uniqueness rules. Retain the failed baseline and fix the demo guard's missing-file feedback separately, without claiming a routing or quality improvement.
 ### pstack in the Pi inner loop
 
 - Add optional `PA_PSTACK_DIR` / `pstackDir` integration with a complete external pstack pack, reusing the cross-harness mirror's actual mode, playbooks and principles. Register a bounded Markdown method reader in Pi, expose source hashes and require the method tool in the runtime capability handshake. General business tools and team permissions stay scoped to the existing role and matter.

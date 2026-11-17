@@ -14,6 +14,7 @@
 | [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:roles` | 四轮分别验证产品、研发、测试与市场判断；合成数据中的计数缺陷应被测试岗位报告为失败，运行通过不等于质量通过。两命令的 `--help`/`--summarize` 不调用模型，见[角色真实任务验证](../../docs/role-design-demo.md) |
 | [decision-smoke.ts](decision-smoke.ts)，`npm run demo:decision` | 在隔离临时工作区调用真实 Pi 模型跑通 3 场景立项阵型决策（纯讨论、否定条款下的法务缺口、带只读查仓的研发+旁听决策）与 1 场景 AI 角色设计，并留存 `decision-report.json`；`--help` 不调用模型 |
 | [pstack-smoke.ts](pstack-smoke.ts)，`npm run demo:pstack -- --source <目录>` | 在临时方法副本、项目、数据库与会话中验证无文件工具的产品岗位实际读取模式，以及研发读取模式和原则、修复真实合成缺陷并通过固定测试；保留 `report.json`，未满足实际读取条件也判失败。`--help` 不调用模型，见[pstack 运行说明](../../docs/pstack-runtime.md) |
+| [pstack-selection-smoke.ts](pstack-selection-smoke.ts)，`npm run demo:pstack:selection -- --source <目录>` | 五类不点名方法的自然任务，独立保留方法观察、执行完整性和哈希/行号绑定的回答审阅；不把未选目标方法等同回答错误。完整一轮六次主负责人调用，`--case` 可单选，`--help`/`--summarize` 不调用模型，见[选择验证](../../docs/pstack-selection.md) |
 
 [inner-matter-definition.ts](inner-matter-definition.ts) 是网页内置演示的纯定义，不是会自动运行的 CLI。四步体验及按需初始化规则见[内置演示事项](../../docs/inner-matter-demo.md)。
 

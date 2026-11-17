@@ -18,6 +18,7 @@
 | 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
 | Bot、Plugin、Skill 的关系与两套工程方法包 | [pstack、Cole Skills 与 Bot/Plugin 对照](references/bot-plugin-and-skill-packs.md) |
 | 在 Pi 内循环装载 poteto-mode、playbook 和原则 | [pstack 实际装载与验证](pstack-runtime.md) |
+| 用户不点名时是否主动选择 how、why、teach、recall、architect | [自然任务选择验证](pstack-selection.md) |
 | 角色架构师与 dr eggbot 的差距及验证建议 | [dr eggbot 对照](references/dr-eggbot-v2.md) |
 | 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
 | 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
