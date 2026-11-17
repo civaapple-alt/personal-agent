@@ -221,7 +221,14 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 											</button>
 										)}
 										{onRequestModelAssessment && hasPromptText && !confirmModel && (
-											<button type="button" className="btn-inline" onClick={() => setConfirmModel(true)}>
+											<button
+												type="button"
+												className="btn-pill-outline btn-xs"
+												onClick={() => {
+													setReadRepoForDecision(hasWorkspace);
+													setConfirmModel(true);
+												}}
+											>
 												{isModelResult ? "重新 AI 决策" : "请 AI 决策阵型"}
 											</button>
 										)}

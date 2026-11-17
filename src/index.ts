@@ -33,6 +33,11 @@ export {
 	runTypedPiDecision,
 } from "./orchestrator/pi-decision.ts";
 export {
+	designRoleDraftWithModel,
+	type RoleDesignDecisionPayload,
+	validateRoleDesignDecision,
+} from "./orchestrator/role-design-decision.ts";
+export {
 	buildProgressSnapshot,
 	type DelegateInput,
 	type DelegateResult,

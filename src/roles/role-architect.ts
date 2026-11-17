@@ -62,6 +62,7 @@ export interface RoleArchitectDraft {
 	designNotes: string[];
 	capabilityReport?: RoleCapabilityReport;
 	verificationPlanState: "specified" | "missing";
+	designSource?: "rules" | "model";
 }
 
 const VALID_ROLE_TOOLS = new Set(["read", "edit", "write", "bash", "mcp"]);
@@ -79,7 +80,8 @@ export function normalizeRoleTools(tools: string[] | undefined): string[] {
 	return result;
 }
 
-function slugifyRoleId(rawTitle: string, existingIds: string[]): string {
+/** Derives a collision-safe kebab-case role ID from title or slug text. */
+export function slugifyRoleId(rawTitle: string, existingIds: string[]): string {
 	const base =
 		rawTitle
 			.toLowerCase()

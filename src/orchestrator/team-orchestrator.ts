@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
+import {
+	isArchitectRoleTemplate,
+	type RoleArchitectDraft,
+	type RoleDesignBriefInput,
+} from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
@@ -22,6 +26,7 @@ import {
 } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
+import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import {
 	buildProgressSnapshot,
 	type DelegateInput,
@@ -880,6 +885,23 @@ export class TeamOrchestrator {
 					timeoutMs: input.timeoutMs,
 					signal,
 				},
+			),
+		);
+	}
+
+	/** Generate a structured, capability-aware role design draft using an isolated typed Pi LLM call. */
+	async designRoleWithModel(
+		input: RoleDesignBriefInput & { timeoutMs?: number; signal?: AbortSignal },
+	): Promise<RoleArchitectDraft> {
+		return this.runTrackedAuxTask("Role design decision was aborted", input.signal, (signal) =>
+			designRoleDraftWithModel(
+				{
+					defaultCwd: this.defaultCwd,
+					workerFactory: this.workerFactory,
+					members: this.store.listMembers(),
+					templatesByRoleId: this.templatesById,
+				},
+				{ ...input, signal },
 			),
 		);
 	}

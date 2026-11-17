@@ -58,7 +58,7 @@ npm run start:web
 - 只改文档可运行 `npm run check:docs`；隔离启动检查使用 `npm run check:startup`（需要先构建，不调用模型）。
 - 完整说明和针对性验证选择见 [scripts](scripts/README.md) 与 [test](test/README.md)。
 
-`demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner`、`demo:review`、`demo:observer`、`demo:architect` 和 `demo:roles` 会调用真实模型，不属于默认检查；使用 `npm run <命令>` 显式执行，范围、临时数据与证据约定见 [demo](src/demo/README.md)。
+`demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner`、`demo:review`、`demo:observer`、`demo:architect`、`demo:roles` 和 `demo:decision` 会调用真实模型，不属于默认检查；使用 `npm run <命令>` 显式执行，范围、临时数据与证据约定见 [demo](src/demo/README.md)。
 
 ## 阶段进展
 

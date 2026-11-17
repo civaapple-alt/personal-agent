@@ -277,6 +277,7 @@ export interface RoleArchitectDraftDto {
 		mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
 	};
 	verificationPlanState?: "specified" | "missing";
+	designSource?: "rules" | "model";
 }
 
 export interface MetaArchitectMessageDto {
@@ -624,26 +625,31 @@ export function stopPreview(previewId: string): Promise<{ preview: PreviewServic
 	});
 }
 
-export function designRoleDraft(input: {
-	oneJob: string;
-	antiJobs?: string[];
-	quietWhen?: string;
-	interactionStyle?: RoleInteractionStyle;
-	workspaceScope?: RoleWorkspaceScope;
-	roleName?: string;
-	roleTitle?: string;
-	keywords?: string[];
-	workflowRules?: string;
-	constraints?: string;
-	skills?: string[];
-	mcpDependencies?: string[];
-	communicationStyle?: string;
-	verificationPlan?: string | { task: string; successCriteria: string; boundaryCheck: string };
-	isPrimaryContact?: boolean;
-}): Promise<RoleArchitectDraftDto> {
+export function designRoleDraft(
+	input: {
+		oneJob: string;
+		antiJobs?: string[];
+		quietWhen?: string;
+		interactionStyle?: RoleInteractionStyle;
+		workspaceScope?: RoleWorkspaceScope;
+		roleName?: string;
+		roleTitle?: string;
+		keywords?: string[];
+		workflowRules?: string;
+		constraints?: string;
+		skills?: string[];
+		mcpDependencies?: string[];
+		communicationStyle?: string;
+		verificationPlan?: string | { task: string; successCriteria: string; boundaryCheck: string };
+		isPrimaryContact?: boolean;
+		mode?: "rules" | "model";
+	},
+	signal?: AbortSignal,
+): Promise<RoleArchitectDraftDto> {
 	return requestJson("/api/members/design", {
 		method: "POST",
 		body: JSON.stringify(input),
+		signal,
 	});
 }
 

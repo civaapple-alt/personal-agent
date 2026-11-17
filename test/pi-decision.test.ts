@@ -15,6 +15,7 @@ import {
 	runTypedPiDecision,
 	TeamOrchestrator,
 	validateInitiationModelDecision,
+	validateRoleDesignDecision,
 } from "../src/index.ts";
 
 test("Typed Pi initiation decision model enforces schema, repo-read flag, owner auth, and abort cancellation", async () => {
@@ -255,6 +256,133 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 			/aborted|Abort/i,
 		);
 		assert.equal(observedRuns[observedRuns.length - 1]!.aborted, true);
+	} finally {
+		await orchestrator.shutdown();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+test("AI Role Designer validates installed skills, structured verificationPlan, and POST /api/members/design mode=model", async () => {
+	const tmp = mkdtempSync(join(tmpdir(), "pa-role-design-decision-"));
+	const rolesDir = join(tmp, "roles");
+	const db = openPersonalAgentDatabase(join(tmp, "agent.db"));
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	let malformed = false;
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tmp,
+		noSession: true,
+		workerFactory: () => ({
+			onNotice: () => () => {},
+			setDialogHandler: () => {},
+			start: async () => {},
+			getState: async () => ({ sessionId: "design-session" }),
+			runPromptAndWait: async () => ({
+				disposition: "started",
+				assistantText: malformed
+					? "invalid-non-json"
+					: JSON.stringify({
+							id: "release-ops",
+							name: "发布运维专员",
+							title: "Release Ops Specialist",
+							oneJob: "每次版本上线前核对 CI 状态、版本号与 CHANGELOG 同步。",
+							antiJobs: ["不直接修改业务功能代码", "无实质阻塞时保持简短"],
+							quietWhen: "无发布风险时保持安静",
+							keywords: ["发布", "CI", "上线", "release"],
+							skills: ["repo-analysis", "nonexistent-fake-skill"],
+							interactionStyle: "risk_observer",
+							workspaceScope: "read_only_repo",
+							communicationStyle: "先结论后清单。",
+							workflowRules: "只核查仓库发版资产。",
+							verificationPlan: {
+								task: "检查 v0.5.0 CHANGELOG 与 package.json 版本一致",
+								successCriteria: "明确指出一致或不一致行",
+								boundaryCheck: "未执行修改文件操作",
+							},
+							designRationale: "仅需只读核查仓库发版物。",
+						}),
+				aborted: false,
+				stopReason: "stop",
+				assistantMessages: [],
+				toolExecutions: [],
+				notices: [],
+				dialogs: [],
+				events: [],
+			}),
+			abort: async () => {},
+			stop: async () => {},
+		}),
+	});
+
+	assert.equal(
+		validateRoleDesignDecision(
+			{
+				name: "短名",
+				title: "Short Title",
+				oneJob: "单职责",
+				antiJobs: ["不做越权"],
+				keywords: ["测试"],
+				skills: [],
+				verificationPlan: { task: "t", successCriteria: "", boundaryCheck: "b" },
+			},
+			{
+				explicit: { oneJob: "单职责" },
+				existingMemberIds: ["product-manager"],
+				installedSkills: new Set(["repo-analysis"]),
+			},
+		),
+		null,
+	);
+
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		dialogBroker,
+		previewManager,
+		rolesDir,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const url = `http://127.0.0.1:${address.port}`;
+
+	try {
+		const res = await fetch(`${url}/api/members/design`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				oneJob: "发布前检查版本号与 CHANGELOG",
+				mode: "model",
+			}),
+		});
+		assert.equal(res.status, 200);
+		const body = (await res.json()) as {
+			designSource: string;
+			verificationPlanState: string;
+			template: { id: string; name: string; title: string; skills: string[]; tools: string[] };
+		};
+		assert.equal(body.designSource, "model");
+		assert.equal(body.verificationPlanState, "specified");
+		assert.equal(body.template.id, "release-ops");
+		assert.equal(body.template.name, "发布运维专员");
+		assert.deepEqual(body.template.skills, ["repo-analysis"]);
+		assert.deepEqual(body.template.tools, ["read"]);
+
+		malformed = true;
+		const badRes = await fetch(`${url}/api/members/design`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ oneJob: "检查发版", mode: "model" }),
+		});
+		assert.equal(badRes.status, 502);
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

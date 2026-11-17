@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	createMember,
 	designRoleDraft,
@@ -68,11 +68,22 @@ export function RoleArchitectModal({
 	const [isPrimaryContact, setIsPrimaryContact] = useState(false);
 	const [draft, setDraft] = useState<RoleArchitectDraftDto | null>(null);
 	const [generating, setGenerating] = useState(false);
+	const [generatingMode, setGeneratingMode] = useState<"rules" | "model" | null>(null);
+	const [confirmAiDesign, setConfirmAiDesign] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const designAbortRef = useRef<AbortController | null>(null);
 
 	useEffect(() => {
-		if (!open) return;
+		if (!open) {
+			designAbortRef.current?.abort();
+			designAbortRef.current = null;
+			setGenerating(false);
+			setGeneratingMode(null);
+			setConfirmAiDesign(false);
+			return;
+		}
 		setDraft(null);
+		setConfirmAiDesign(false);
 		if (seedGap) {
 			setOneJob(seedGap.suggestedJob);
 			setSelectedBoundaries(seedGap.suggestedAntiJobs.slice(0, 3));
@@ -104,37 +115,59 @@ export function RoleArchitectModal({
 		setSelectedBoundaries((prev) => (prev.includes(rule) ? prev.filter((item) => item !== rule) : [...prev, rule]));
 	};
 
-	const handleGenerateDraft = async () => {
+	const handleGenerateDraft = async (mode: "rules" | "model") => {
 		if (!oneJob.trim() || generating) return;
+		designAbortRef.current?.abort();
+		const controller = new AbortController();
+		designAbortRef.current = controller;
 		setGenerating(true);
+		setGeneratingMode(mode);
+		setConfirmAiDesign(false);
 		const extraLines = extraBoundary
 			.split("\n")
 			.map((s) => s.trim())
 			.filter(Boolean);
 		try {
-			const res = await designRoleDraft({
-				oneJob: oneJob.trim(),
-				antiJobs: Array.from(new Set([...selectedBoundaries, ...extraLines])),
-				interactionStyle: seedGap?.suggestedInteractionStyle ?? "mixed",
-				workspaceScope,
-				roleName: roleName.trim() || undefined,
-				roleTitle: roleTitle.trim() || undefined,
-				keywords: keywordsText
-					.split(/[,，\s]+/)
-					.map((s) => s.trim())
-					.filter(Boolean),
-				workflowRules: workflowRules.trim() || undefined,
-				isPrimaryContact,
-			});
+			const res = await designRoleDraft(
+				{
+					oneJob: oneJob.trim(),
+					antiJobs: Array.from(new Set([...selectedBoundaries, ...extraLines])),
+					interactionStyle: seedGap?.suggestedInteractionStyle ?? "mixed",
+					workspaceScope,
+					roleName: roleName.trim() || undefined,
+					roleTitle: roleTitle.trim() || undefined,
+					keywords: keywordsText
+						.split(/[,，\s]+/)
+						.map((s) => s.trim())
+						.filter(Boolean),
+					workflowRules: workflowRules.trim() || undefined,
+					isPrimaryContact,
+					mode,
+				},
+				controller.signal,
+			);
+			if (controller.signal.aborted) return;
 			setDraft(res);
 			setRoleName(res.template.name);
 			setRoleTitle(res.template.title);
 			setKeywordsText(res.template.keywords.join(", "));
 		} catch (err: unknown) {
+			if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
 			onError(err instanceof Error ? err.message : String(err));
 		} finally {
+			if (designAbortRef.current === controller) {
+				designAbortRef.current = null;
+			}
 			setGenerating(false);
+			setGeneratingMode(null);
 		}
+	};
+
+	const handleCancelAiDesign = () => {
+		designAbortRef.current?.abort();
+		designAbortRef.current = null;
+		setGenerating(false);
+		setGeneratingMode(null);
 	};
 
 	const handleConfirmCreate = async () => {
@@ -377,21 +410,64 @@ export function RoleArchitectModal({
 					</div>
 
 					<div className="ui-row-actions">
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={!oneJob.trim() || generating}
-							onClick={() => void handleGenerateDraft()}
-						>
-							{generating ? "生成预览中…" : draft ? "刷新预览" : "生成预览 →"}
-						</button>
+						{generating && generatingMode === "model" ? (
+							<>
+								<button type="button" className="btn-pill-dark" disabled>
+									AI 正在设计角色草案…
+								</button>
+								<button type="button" className="btn-stop-pill" onClick={handleCancelAiDesign}>
+									取消生成
+								</button>
+							</>
+						) : (
+							<>
+								<button
+									type="button"
+									className="btn-pill-dark"
+									disabled={!oneJob.trim() || generating}
+									onClick={() => setConfirmAiDesign(true)}
+								>
+									AI 智能设计草案
+								</button>
+								<button
+									type="button"
+									className="btn-pill-outline"
+									disabled={!oneJob.trim() || generating}
+									onClick={() => void handleGenerateDraft("rules")}
+								>
+									{generating ? "生成中…" : "规则快速直出"}
+								</button>
+							</>
+						)}
 					</div>
+					{confirmAiDesign && !generating && (
+						<div className="notice-card architect-gap-banner">
+							<span>
+								将调用 Pi 决策模型结合团队现有人选与已安装 Skills 生成名称、英文头衔、边界与验证计划（约数秒）：
+							</span>
+							<div className="ui-row-actions">
+								<button
+									type="button"
+									className="btn-pill-dark btn-xs"
+									onClick={() => void handleGenerateDraft("model")}
+								>
+									确认 AI 设计
+								</button>
+								<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmAiDesign(false)}>
+									取消
+								</button>
+							</div>
+						</div>
+					)}
 
 					{draft && (
 						<div className="architect-preview-box">
 							<div className="architect-preview-head">
 								<strong>确认并微调新角色配置</strong>
 								<div className="architect-preview-badges">
+									<span className={`pill ${draft.designSource === "model" ? "live" : ""}`}>
+										{draft.designSource === "model" ? "AI 角色设计" : "本地规则草案"}
+									</span>
 									<span className="pill">ID：{draft.template.id}</span>
 									<span className="pill">
 										工具：{draft.template.tools.length > 0 ? draft.template.tools.join(", ") : "无工具"}

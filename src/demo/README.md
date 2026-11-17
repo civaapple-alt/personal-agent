@@ -12,6 +12,7 @@
 | [observer-smoke.ts](observer-smoke.ts)，根命令 `npm run demo:observer` | 五轮真实任务覆盖点名旁听、后加入前情、风险提醒、意见回到负责人、独立事项静默与关闭；保留原始旁听回复及阶段成果，未审阅返回 2。`--summarize <目录>` 离线刷新，详见[旁听演示](../../docs/observer-demo.md) |
 | [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:architect` | 两轮真实任务：架构师设计角色、沿已有提案 API 创建，再由新角色实际只读核查矛盾；保留验证计划、能力声明与实际文件/工具证据，独立语义审阅前返回 2 |
 | [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:roles` | 四轮分别验证产品、研发、测试与市场判断；合成数据中的计数缺陷应被测试岗位报告为失败，运行通过不等于质量通过。两命令的 `--help`/`--summarize` 不调用模型，见[角色真实任务验证](../../docs/role-design-demo.md) |
+| [decision-smoke.ts](decision-smoke.ts)，`npm run demo:decision` | 在隔离临时工作区调用真实 Pi 模型跑通 3 场景立项阵型决策（纯讨论、否定条款下的法务缺口、带只读查仓的研发+旁听决策）与 1 场景 AI 角色设计，并留存 `decision-report.json`；`--help` 不调用模型 |
 
 [inner-matter-definition.ts](inner-matter-definition.ts) 是网页内置演示的纯定义，不是会自动运行的 CLI。四步体验及按需初始化规则见[内置演示事项](../../docs/inner-matter-demo.md)。
 

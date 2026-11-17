@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
+import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import { assessRoleCapabilities } from "../../roles/capabilities.ts";
 import {
 	applyRoleTemplatePatch,
@@ -476,7 +477,8 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			body.workspaceScope === "no_repo_docs"
 				? (body.workspaceScope as RoleWorkspaceScope)
 				: undefined;
-		const draft = buildRoleDesignDraft({
+		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
+		const designInput = {
 			oneJob,
 			antiJobs,
 			quietWhen: typeof body.quietWhen === "string" ? body.quietWhen : undefined,
@@ -497,8 +499,34 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			verificationPlan: normalizeRoleVerificationPlan(body.verificationPlan),
 			isPrimaryContact: body.isPrimaryContact === true,
 			existingMemberIds: store.listMembers().map((m) => m.id),
+		};
+		if (mode === "model") {
+			const cancellation = responseCancellation(res);
+			try {
+				const draft = await orchestrator.designRoleWithModel({
+					...designInput,
+					signal: cancellation.signal,
+				});
+				if (res.destroyed || cancellation.signal.aborted) return true;
+				sendJson(res, 200, draft);
+			} catch (err) {
+				if (res.destroyed || cancellation.signal.aborted) return true;
+				if (err instanceof PiDecisionError) {
+					sendError(res, err.kind === "aborted" ? 499 : 502, err.message);
+					return true;
+				}
+				sendError(res, 502, err instanceof Error ? err.message : String(err));
+			} finally {
+				cancellation.dispose();
+			}
+			return true;
+		}
+		const draft = buildRoleDesignDraft(designInput);
+		sendJson(res, 200, {
+			...draft,
+			designSource: "rules",
+			capabilityReport: await assessRoleCapabilities(draft.template),
 		});
-		sendJson(res, 200, { ...draft, capabilityReport: await assessRoleCapabilities(draft.template) });
 		return true;
 	}
 
