@@ -41,6 +41,7 @@ async function fixture(t: test.TestContext) {
 test("release path policy protects nested credentials, databases and generated directories while allowing env examples", () => {
 	const paths = [
 		".data/agent.db",
+		".notes/prototypes/README.md",
 		"config/.env.production",
 		".npmrc",
 		"keys/id_rsa",
@@ -63,7 +64,20 @@ test("release path policy protects nested credentials, databases and generated d
 		{ encoding: "utf8" },
 	);
 	assert.equal(result.status, 0, result.stderr);
-	assert.deepEqual(JSON.parse(result.stdout), [true, true, true, true, true, true, true, true, false, false, false]);
+	assert.deepEqual(JSON.parse(result.stdout), [
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		false,
+		false,
+		false,
+	]);
 });
 
 test("current snapshot checks reject tracked credentials and public scope flags unresolved images", async (t) => {

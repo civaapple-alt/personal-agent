@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Local notes isolation
+
+- Move early V1–V4 prototypes (`docs/prototypes/`) and third-party/reference notes (`docs/references/`, including the three unconfirmed reference `.webp` images) out of Git tracking into gitignored `.notes/`, block `.notes/` in `scripts/release-policy.mjs` (`forbiddenReleasePath`), and update public documentation links and `v0.6.0.md` status accordingly. Pre-move commits remain in local Git history unless a clean public snapshot or history rewrite is used.
+
 ### Open-source documentation
 
 - Make local Pi CLI an explicit required AI runtime dependency, point users to pi.dev for product information and platform-specific installers, and place Pi setup before workbench startup. Keep the tested Pi version separate from installation requirements and from Personal Agent platform validation.

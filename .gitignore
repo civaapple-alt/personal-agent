@@ -3,6 +3,7 @@ dist/
 web/dist/
 .pi/
 .data/
+.notes/
 .releases/
 *.tsbuildinfo
 .DS_Store

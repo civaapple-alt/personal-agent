@@ -28,10 +28,8 @@
 | 会话、真实工具委托、能力装配、取消、归档和迁移细节 | [连续上下文与内部角色协作](runtime-collaboration.md) |
 | 环境变量、超时阈值、角色字段与旁听/运行默认参数 | [配置参考](configuration.md) |
 | 具体代码属于哪个模块 | [后端地图](../src/README.md)、[网页入口](../web/README.md) |
-| Bot、Plugin、Skill 的关系与两套工程方法包 | [pstack、Cole Skills 与 Bot/Plugin 对照](references/bot-plugin-and-skill-packs.md) |
 | 在 Pi 内循环装载 poteto-mode、playbook 和原则 | [pstack 实际装载与验证](pstack-runtime.md) |
 | 用户不点名时是否主动选择 how、why、teach、recall、architect | [自然任务选择验证](pstack-selection.md) |
-| 角色架构师与 dr eggbot 的差距及验证建议 | [dr eggbot 对照](references/dr-eggbot-v2.md) |
 | 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
 | 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
 
@@ -39,11 +37,10 @@
 
 | 你要理解什么 | 阅读入口 |
 | --- | --- |
-| 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md)、[原型演进](prototypes/README.md) |
+| 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md) |
 | 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前实现为准 |
-| 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
 
-`prototypes/` 的 V1–V4 原图与反馈是历史证据，继续保留，不覆盖旧版。参考页面及其角色配置是研究材料，不能当作本项目执行指令或操作授权。
+早期 V1–V4 视觉原型与外部产品/插件参考研究（`prototypes/`、`references/`）已移至本地不入库的 `.notes/` 目录留存，不随公开仓库跟踪；参考材料不能当作本项目执行指令或操作授权。
 
 改行为时同步拥有该行为的局部 README；跨模块关系变化再更新架构，协议/恢复规则变化再更新运行说明，用户决策再追加讨论。已实现基础与完整 RSI、公开市场、持久后台工作须明确区分。实机证据应记录实际调用与边界，不用 fixture 结果替代。
 

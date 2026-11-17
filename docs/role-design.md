@@ -65,4 +65,4 @@
 已增加 `demo:architect` 与 `demo:roles`，分别验证创建后履职与四个岗位的实际任务。[真实验证记录](role-design-demo.md)保留了初轮失败及同题修订后结果：结构化计划丢失已修复，业务岗位内容判断仍有失败，尚未证明整体能力改善。
 后续回归共 130 项离线测试通过，代码检查、构建和四种启动检查通过；真实岗位内容失败仍作为独立结果保留，不计入离线机制通过结论。
 
-设计参考及尚未落实部分见 [dr eggbot 对照](references/dr-eggbot-v2.md)，运行边界见[连续协作说明](runtime-collaboration.md)。
+设计思路参考了 [dr eggbot 公开配置](https://x.ai/bot/marketplace/bots/dr-eggbot-v2) 的边界约束（相关研究笔记已归档至 `.notes/references/`），运行边界见[连续协作说明](runtime-collaboration.md)。

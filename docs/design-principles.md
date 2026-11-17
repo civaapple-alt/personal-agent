@@ -2,7 +2,7 @@
 
 Personal Agent 希望减少用户同时充当产品、研发、测试与市场岗位的负担。稳定的岗位负责持续理解事情和推进工作，使用者聚焦目标、必要决策和成果验收。
 
-本文解释设计取舍；模块和数据流见[架构说明](architecture-and-plan.md)，讨论及原型演进分别保留在[讨论记录](product-discussion.md)和[V1–V4 原型](prototypes/README.md)。
+本文解释设计取舍；模块和数据流见[架构说明](architecture-and-plan.md)，讨论脉络保留在[讨论记录](product-discussion.md)（早期 V1–V4 图像演进已归档至本地 `.notes/prototypes/`）。
 
 ## 岗位稳定，工作可以跨项目
 
@@ -42,7 +42,7 @@ Bot 或岗位定义回答“谁负责什么”；Skill 描述“一类工作怎�
 
 Personal Agent 外层管理事项范围、真实委托、会话及成果；Pi 内层运行模型推理与工具循环。可选 pstack 包提供模式、playbook 和原则，进入这个内循环，不替代成员身份与事项编排。
 
-本地 `technical-writing` 是已归属标注的适配方法。完整 pstack 由操作者另行提供，没有自动插件安装、跨宿主完整适配或版本依赖解析。具体研究与装载证据见[Bot/Plugin 对照](references/bot-plugin-and-skill-packs.md)和[pstack 运行说明](pstack-runtime.md)。
+本地 `technical-writing` 是已归属标注的适配方法。完整 pstack 由操作者另行提供，没有自动插件安装、跨宿主完整适配或版本依赖解析。具体装载机制与验证证据见[pstack 运行说明](pstack-runtime.md)。
 
 ## 能力约束由运行结构落实
 

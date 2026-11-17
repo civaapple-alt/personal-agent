@@ -16,4 +16,4 @@ npm run start:web
 
 - `npm run check` 包含前后端类型与规范检查，`npm run build:web` 验证资源构建。
 - 网页呈现变化还需实际查看相应页面；离线服务测试不代表视觉体验已验证。
-- V1–V4 设计演进保存在 [docs/prototypes](../docs/prototypes/README.md)，当前双栏界面以实现为准。
+- V1–V4 早期视觉原型演进已整理至本地不跟踪的 `.notes/prototypes/` 目录，当前双栏界面以实现为准。
