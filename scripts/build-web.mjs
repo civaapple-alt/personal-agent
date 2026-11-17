@@ -23,4 +23,5 @@ await build({
 });
 
 copyFileSync(resolve(rootDir, "web/index.html"), resolve(outDir, "index.html"));
+for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) copyFileSync(resolve(rootDir, name), resolve(outDir, name));
 console.log("Built V4 web UI into web/dist");

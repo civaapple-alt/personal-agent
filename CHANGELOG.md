@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### 0.6.0 MIT preparation
+
+- Set development metadata to 0.6.0 and MIT while retaining npm `private: true`; no 0.6.0 tag or public release is created. Add the project license, upstream pstack adaptation attribution and bundled React runtime notices.
+- Preserve local prototype/research history, use official reference links, and exclude three unconfirmed third-party images from Git archives. Archive exclusions do not remove them from repository history; public-history scope remains a release decision.
+- Add a read-only current/history audit with redacted finite credential checks and a stricter public-scope option. Share private-path guards with the packager, require legal notices in archives, and copy notices into web output. Generalize developer-specific paths and prior business-project names in current documentation.
+- Add `package:release -- --preview` for commit-scoped source/prebuilt previews, isolated builds and extracted startup checks without occupying the final version directory, changing tags or publishing externally.
 ### Natural pstack method selection
 
 - Add isolated `demo:pstack:selection` with five natural requests that never name the expected methods. Keep the current runtime guidance unchanged; report actual method reads, read-only integrity and independently reviewed answers separately. Include genuine session continuity and conflicting old proposals for the context-recovery case.

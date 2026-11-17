@@ -4,21 +4,25 @@ import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { forbiddenReleasePath } from "./release-policy.mjs";
 
 const exec = promisify(execFile);
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--help") {
 	console.log(
-		"npm run package:release\nPackage clean HEAD into .releases/v<VERSION>/ with source/prebuilt archives, manifest and SHA256SUMS.\nBuilds in a disposable snapshot using installed dependencies, then checks the extracted archives without model calls. Does not create tags or publish externally.",
+		"npm run package:release [-- --preview]\nPackage clean HEAD into .releases/v<VERSION>/ with source/prebuilt archives, manifest and SHA256SUMS. --preview uses .releases/previews/v<VERSION>-<commit>/ instead of the final artifact directory.\nBuilds in a disposable snapshot using installed dependencies, then checks the extracted archives without model calls. Does not create tags or publish externally.",
 	);
 } else {
-	assert.equal(args.length, 0, "Only --help is supported");
-	await main();
+	assert.ok(
+		args.length === 0 || (args.length === 1 && args[0] === "--preview"),
+		"Only --help or --preview is supported",
+	);
+	await main(args[0] === "--preview");
 }
 
-async function main() {
+async function main(preview) {
 	const root = process.cwd();
 	const run = async (cmd, argv, cwd = root, env = process.env) => {
 		const result = await exec(cmd, argv, { cwd, env, maxBuffer: 16 * 1024 * 1024 });
@@ -29,6 +33,10 @@ async function main() {
 	assert.match(pkg.version, /^\d+\.\d+\.\d+$/, "Release requires a numeric version");
 	assert.equal(lock.version, pkg.version, "Lockfile version differs");
 	assert.equal(lock.packages[""].version, pkg.version, "Lockfile root package version differs");
+	assert.equal(pkg.license, "MIT", "Declare the source license before packaging");
+	assert.equal(lock.packages[""].license, pkg.license, "Lockfile root license differs");
+	for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+		assert.ok((await readFile(join(root, name), "utf8")).trim(), `Missing ${name}`);
 	assert.equal(
 		await run("git", ["status", "--porcelain", "--untracked-files=no"]),
 		"",
@@ -36,17 +44,16 @@ async function main() {
 	);
 	const commit = await run("git", ["rev-parse", "HEAD"]);
 	const tracked = (await run("git", ["ls-files", "-z"])).split("\0").filter(Boolean);
+	for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"])
+		assert.ok(tracked.includes(name), `Commit ${name} before packaging`);
 	assert.ok(
-		!tracked.some(
-			(path) =>
-				/^(?:\.data|\.pi|\.releases|node_modules|dist|web\/dist)(?:\/|$)/.test(path) ||
-				path === ".env" ||
-				path === ".npmrc",
-		),
+		!tracked.some(forbiddenReleasePath),
 		"Runtime data, credentials or generated files must not be tracked in the source snapshot",
 	);
 	const version = pkg.version;
-	const directory = join(root, ".releases", `v${version}`);
+	const directory = preview
+		? join(root, ".releases", "previews", `v${version}-${commit.slice(0, 12)}`)
+		: join(root, ".releases", `v${version}`);
 	const sourceName = `personal-agent-${version}-source.tar.gz`;
 	const prebuiltName = `personal-agent-${version}-prebuilt.tar.gz`;
 	const checksum = async (path) =>
@@ -63,6 +70,7 @@ async function main() {
 		const manifest = JSON.parse(await readFile(join(directory, "manifest.json"), "utf8"));
 		assert.equal(manifest.version, version, "Existing release version differs");
 		assert.equal(manifest.commit, commit, "Existing release belongs to another commit; not overwritten");
+		assert.equal(manifest.kind ?? "local-release", preview ? "preview" : "local-release", "Artifact kind differs");
 		assert.deepEqual(
 			manifest.files.map((file) => file.name),
 			[sourceName, prebuiltName],
@@ -70,7 +78,7 @@ async function main() {
 		for (const file of manifest.files)
 			assert.equal(await checksum(join(directory, file.name)), file.sha256, "Existing archive checksum differs");
 		assert.equal(await readFile(join(directory, "SHA256SUMS"), "utf8"), await checksumText(directory, manifest));
-		console.log(`Verified existing release: ${directory}`);
+		console.log(`Verified existing ${preview ? "preview" : "release"}: ${directory}`);
 		return;
 	} catch (error) {
 		if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
@@ -85,14 +93,14 @@ async function main() {
 		);
 	}
 	assert.ok((await stat(join(root, "node_modules"))).isDirectory(), "Install build dependencies with npm ci first");
-	const parent = join(root, ".releases");
+	const parent = dirname(directory);
 	await mkdir(parent, { recursive: true });
 	const pending = join(parent, `.v${version}-${randomUUID()}`);
 	await mkdir(pending);
 	const temporary = await mkdtemp(join(tmpdir(), "personal-agent-release-"));
 	try {
 		const prefix = `personal-agent-${version}`;
-		console.log(`Packaging ${version} from ${commit}`);
+		console.log(`Packaging ${preview ? "preview " : ""}${version} from ${commit}`);
 		await run("git", [
 			"archive",
 			"--format=tar.gz",
@@ -127,6 +135,7 @@ async function main() {
 				sha256: await checksum(join(pending, name)),
 			});
 		const manifest = {
+			kind: preview ? "preview" : "local-release",
 			version,
 			commit,
 			createdAt: new Date().toISOString(),
@@ -149,7 +158,7 @@ async function main() {
 			"Tracked files changed during packaging",
 		);
 		await rename(pending, directory);
-		console.log(`Local release artifacts: ${directory}`);
+		console.log(`Local ${preview ? "preview" : "release"} artifacts: ${directory}`);
 	} finally {
 		await rm(temporary, { recursive: true, force: true });
 		await rm(pending, { recursive: true, force: true });

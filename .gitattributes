@@ -1,0 +1,2 @@
+# Keep third-party research images in local history, not in distributable archives.
+docs/references/grok-bot/*.webp export-ignore

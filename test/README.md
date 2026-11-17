@@ -16,6 +16,7 @@
 | 五个角色方法装载、能力组合、体检来源、设计到导出一致性与缺失依赖提前失败 | [role-capabilities.test.ts](role-capabilities.test.ts) |
 | pstack 模式/原则按需读取、方法目录、路径/大小/取消与岗位能力握手 | [pstack-runtime.test.ts](pstack-runtime.test.ts) |
 | 自然任务不泄露方法名称、临时读取范围、完整正文证据、质量分层及无模型汇总 | [pstack-selection.test.ts](pstack-selection.test.ts) |
+| 开源元数据、私有路径、历史凭据脱敏、素材归档排除与原型保留 | [open-source.test.ts](open-source.test.ts) |
 | 角色真实演示的待审阅/失败区分、输入哈希、原文引用、离线帮助和目录保护 | [role-design-demo.test.ts](role-design-demo.test.ts) |
 | Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
 | RSI 工作区证据、失败分支、替代关系、版本评价与退出清理 | [rsi-boundaries.test.ts](rsi-boundaries.test.ts) |

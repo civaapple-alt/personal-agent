@@ -1,6 +1,7 @@
 {
   "name": "personal-agent",
-  "version": "0.5.0",
+  "version": "0.6.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "Role-based cross-project AI team orchestrated over Pi RPC",
@@ -20,6 +21,7 @@
     "demo:team": "node src/demo/team-smoke.ts",
     "check:startup": "node scripts/check-server-startup.mjs",
     "check:docs": "node scripts/check-docs.mjs",
+    "check:opensource": "node scripts/check-open-source.mjs",
     "package:release": "node scripts/package-release.mjs",
     "demo:rsi": "node src/demo/rsi-smoke.ts",
     "demo:inner": "node src/demo/inner-matter-smoke.ts",

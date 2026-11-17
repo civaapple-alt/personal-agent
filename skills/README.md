@@ -2,6 +2,8 @@
 
 这里是供本项目执行器加载的 Pi Skills，不是自动学习结果。每个叶目录的 `SKILL.md` 是方法正文；按本次任务需要阅读，不为叶目录另复制同义 README。
 
+本地 `technical-writing` 是 pstack 写作方法的项目适配版，额外约定成果字段与阅读结构；上游 MIT 归属见[第三方说明](../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method)。可选完整 pstack 方法包由运维者另行配置，不随本仓库复制或自动安装。
+
 | 岗位方向 | 具体方法 |
 | --- | --- |
 | 通用 | [技术与成果写作规范](technical-writing/SKILL.md) |

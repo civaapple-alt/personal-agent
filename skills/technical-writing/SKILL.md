@@ -5,6 +5,8 @@ description: "Deliverable & technical-writing clarity standard: concise phrasing
 
 # 技术与成果写作规范（简练 · 有重点 · 有过程）
 
+来源：改编自 [pstack technical-writing](https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing)，加入本项目成果字段与阅读结构约定。上游归属和 MIT 许可见[第三方说明](../../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method)。
+
 目标：让疲惫的阅读者在**第一遍**就能看懂核心结论、改动重点与验证依据，不在密集文字墙里找答案。
 
 ## 三条总原则
