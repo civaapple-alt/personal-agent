@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### CI, cross-platform & UI polish
+
+- Add `.github/workflows/ci.yml` (`ubuntu-latest` and `macos-latest` full offline gates plus `package:release -- --preview` dry runs; `windows-latest` check, build, startup smoke, docs, and opensource audit) and GitHub Bug/Feature/PR templates (`.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`).
+- Add Windows directory `"junction"` symlink handling in `scripts/check-server-startup.mjs` and `scripts/package-release.mjs`, plus IPC `"shutdown"` handling in `src/server/main.ts` alongside POSIX `SIGINT`/`SIGTERM`.
+- Fix `:disabled` button contrast in `web/src/styles/primitives.css`, allow multiline and new-matter `.pill-composer` textareas in `web/src/styles/chat-composer.css` to span full inner width above the action bar, and tune `.team-grid` in `web/src/styles/views.css` to render 3 columns at `1280px` desktop width.
+- Verify the isolated sandbox workbench in Chromium across desktop (`1280x840`) and mobile (`420x840`) viewports with 0 console/HTTP errors, and add sanitized screenshots (`docs/assets/workbench-home.png`, `docs/assets/workbench-team.png`) to `README.md`.
+
 ### Local notes isolation
 
 - Move early V1–V4 prototypes (`docs/prototypes/`) and third-party/reference notes (`docs/references/`, including the three unconfirmed reference `.webp` images) out of Git tracking into gitignored `.notes/`, block `.notes/` in `scripts/release-policy.mjs` (`forbiddenReleasePath`), and update public documentation links and `v0.6.0.md` status accordingly. Pre-move commits remain in local Git history unless a clean public snapshot or history rewrite is used.

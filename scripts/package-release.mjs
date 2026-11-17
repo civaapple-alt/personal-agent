@@ -112,7 +112,11 @@ async function main(preview) {
 		const snapshot = join(temporary, prefix);
 		const snapshotPackage = JSON.parse(await readFile(join(snapshot, "package.json"), "utf8"));
 		assert.equal(snapshotPackage.version, version);
-		await symlink(join(root, "node_modules"), join(snapshot, "node_modules"), "dir");
+		await symlink(
+			join(root, "node_modules"),
+			join(snapshot, "node_modules"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
 		console.log(await run("npm", ["run", "build"], snapshot, { ...process.env, NODE_ENV: "production" }));
 		await unlink(join(snapshot, "node_modules"));
 		await run("tar", ["-czf", join(pending, prebuiltName), "-C", temporary, prefix], root, {

@@ -21,11 +21,11 @@ try {
 		const cwd = join(directory, String(port));
 		await mkdir(join(cwd, "web"), { recursive: true });
 		await cp(resolve("roles"), join(cwd, "roles"), { recursive: true });
-		await symlink(resolve("web/dist"), join(cwd, "web/dist"), "dir");
+		await symlink(resolve("web/dist"), join(cwd, "web/dist"), process.platform === "win32" ? "junction" : "dir");
 		const child = spawn(process.execPath, [resolve(entry)], {
 			cwd,
 			env: { ...process.env, PORT: String(port), PA_DB_PATH: memory ? ":memory:" : join(directory, `${port}.db`) },
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: ["ignore", "pipe", "pipe", "ipc"],
 		});
 		let output = "";
 		child.stdout.on("data", (chunk) => {
@@ -68,7 +68,11 @@ try {
 				assert.equal(detail.deliverables.length, 0);
 			}
 			assert.equal((await fetch(base)).status, 200);
-			child.kill("SIGTERM");
+			if (process.platform === "win32" && child.connected) {
+				child.send("shutdown");
+			} else {
+				child.kill("SIGTERM");
+			}
 			const result = await Promise.race([
 				exited,
 				new Promise((_, reject) => {

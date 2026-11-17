@@ -116,6 +116,11 @@ async function main(): Promise<void> {
 
 	process.once("SIGINT", () => void shutdown());
 	process.once("SIGTERM", () => void shutdown());
+	if (typeof process.send === "function") {
+		process.on("message", (msg) => {
+			if (msg === "shutdown") void shutdown();
+		});
+	}
 }
 
 main().catch((error) => {

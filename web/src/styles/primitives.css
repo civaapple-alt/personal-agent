@@ -45,7 +45,7 @@
 	align-items: center;
 	gap: 6px;
 }
-.btn-pill-dark:hover {
+.btn-pill-dark:hover:not(:disabled) {
 	background: #28342e;
 }
 .btn-pill-outline {
@@ -58,7 +58,7 @@
 	font-weight: 500;
 	cursor: pointer;
 }
-.btn-pill-outline:hover {
+.btn-pill-outline:hover:not(:disabled) {
 	background: var(--bg-sidebar);
 	border-color: var(--text-primary);
 }
@@ -67,6 +67,13 @@
 	background: var(--bg-accent-soft);
 	color: var(--accent);
 	font-weight: 600;
+}
+.btn-pill-dark:disabled,
+.btn-pill-outline:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
 }
 .btn-xs {
 	padding: 5px 11px;
@@ -108,8 +115,13 @@
 	flex-shrink: 0;
 	text-decoration: none;
 }
-.btn-inline:hover {
+.btn-inline:hover:not(:disabled) {
 	text-decoration: underline;
+}
+.btn-inline:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	text-decoration: none;
 }
 .success-banner {
 	margin-bottom: 12px;

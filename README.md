@@ -19,6 +19,14 @@
 
 普通交流不会在每轮结束后自动变成交付物。日常视图聚焦成果和关键沟通，内部委托与过程按需查看，也不要求你为每次过程交流审批。
 
+### 界面示例
+
+以下截图采集自无真实模型请求的本地沙箱工作台（示例用户 `Demo User`、虚拟演示仓库）：
+
+![Personal Agent 新建事项与多岗位协作工作台首页](docs/assets/workbench-home.png)
+
+![Personal Agent 业务团队成员与多组织管理视图](docs/assets/workbench-team.png)
+
 ## 当前能力和限制
 
 | 领域 | 已有能力 | 当前限制 |
