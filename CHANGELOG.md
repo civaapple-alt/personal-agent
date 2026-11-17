@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Revisit dr eggbot's public listing against the implemented Role Architect. Document gaps in skill/dependency composition, evidence-linked healthchecks and real-task verification, with a proposed isolated smoke scenario; no runtime capability or scheduled task is added.
+
 ### Member management reliability
 
 - Validate role IDs before using them as filenames. Reject invalid thinking levels and multiline creation metadata, protect the built-in architect from replacement, and return 409 for explicit creation ID conflicts. Role files use staged writes and atomic replacement instead of following an existing destination symlink.
