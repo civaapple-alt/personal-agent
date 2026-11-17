@@ -247,7 +247,7 @@ export function ComposerDock({
 						)}
 					</div>
 				) : (
-					<>
+					<div className={!selectedMatterId ? "composer-unified-bar" : undefined}>
 						<div className="composer-mode-bar">
 							<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
 								<button
@@ -269,13 +269,15 @@ export function ComposerDock({
 									{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
 								</button>
 							</div>
-							<span className="composer-mode-hint">
-								{composerMode === "discussion"
-									? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
-									: isOwner
-										? "按目标推进；形成阶段结果时再交付"
-										: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
-							</span>
+							{selectedMatterId && (
+								<span className="composer-mode-hint">
+									{composerMode === "discussion"
+										? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
+										: isOwner
+											? "按目标推进；形成阶段结果时再交付"
+											: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
+								</span>
+							)}
 						</div>
 
 						<div className="composer-meta-bar">
@@ -332,7 +334,7 @@ export function ComposerDock({
 								</button>
 							)}
 						</div>
-					</>
+					</div>
 				)}
 
 				{pendingImages.length > 0 && (

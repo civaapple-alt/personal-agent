@@ -508,6 +508,19 @@
 	resize: vertical;
 	font-family: inherit;
 }
+.composer-unified-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.composer-unified-bar .composer-mode-bar {
+	margin-bottom: 0;
+}
+.composer-unified-bar .composer-meta-bar {
+	padding: 0;
+}
 .composer-mode-bar {
 	display: flex;
 	align-items: center;
@@ -609,16 +622,26 @@
 .chat-stage.is-new-matter .welcome-hero h1 { font-size: var(--text-xl); }
 .chat-stage.is-new-matter .inner-demo-entry { margin: 4px 0 0; }
 .chat-stage.is-new-matter > .composer-dock { flex: 0 0 auto; background: none; padding-top: 6px; }
-.chat-stage.is-new-matter .composer-dock-inner { max-width: 780px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); gap: 14px; background: var(--bg-card); }
+.chat-stage.is-new-matter .composer-dock-inner { max-width: 760px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); gap: 12px; background: var(--bg-card); box-shadow: var(--shadow-sm); }
 .chat-stage.is-new-matter .composer-mode-hint { display: none; }
+.chat-stage.is-new-matter .composer-meta-bar .select-pill { background: transparent; border-color: transparent; padding: 4px 6px; color: var(--text-secondary); }
+.chat-stage.is-new-matter .composer-meta-bar .select-pill:hover:not(:disabled) { background: var(--bg-sidebar); color: var(--text-primary); }
 .chat-stage.is-new-matter .pill-composer {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	border-radius: 18px;
-	padding: 12px 12px 10px 14px;
+	border-radius: 14px;
+	border-color: var(--border);
+	background: #fbfdfc;
+	box-shadow: none;
+	padding: 10px 12px 10px 14px;
 }
-.chat-stage.is-new-matter .pill-textarea { min-height: 88px; max-height: 220px; }
+.chat-stage.is-new-matter .pill-composer:focus-within {
+	border-color: var(--accent);
+	background: var(--bg-stage);
+	box-shadow: 0 0 0 2px rgba(15, 107, 96, 0.1);
+}
+.chat-stage.is-new-matter .pill-textarea { min-height: 82px; max-height: 220px; }
 @media (max-width: 600px) {
  .initiation-role-rows { grid-template-columns: 1fr; }
  .initiation-role-row select { min-height: 44px; }

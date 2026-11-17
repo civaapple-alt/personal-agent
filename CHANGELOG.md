@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### UI cognitive load reduction
+
+- Simplify `MemberCard` on `#/team` by removing nested Git/memory count boxes and multi-row tag walls in favor of role identity, primary duty summary, a single-line tool/boundary/model caption, `向 TA 派活`, `详情与经验`, and a `···` action menu (putting full responsibilities, Skills, Anti-Jobs, Git Author identity, and memories inside `MemberInspectorModal`).
+- Reorder `#/team` (`TeamView`) so `AI 业务团队成员` sits at the top of the page while `CollaboratorsSection` and `OrganizationsSection` sit below as collapsible summary strips.
+- Remove duplicate header org/workspace pills on new-matter creation (`ChatStageHeader`), merge the new-matter mode switch and borderless org/workspace selects into one top bar inside `ComposerDock`, center `.stage-center-pill` symmetrically, unify `Sidebar` footer badges (`我的团队` numeric count and solid border on the `角色架构师` entry), and refresh `docs/assets/workbench-home.png` and `docs/assets/workbench-team.png`.
+
 ### CI, cross-platform & UI polish
 
 - Add `.github/workflows/ci.yml` (`ubuntu-latest` and `macos-latest` full offline gates plus `package:release -- --preview` dry runs; `windows-latest` check, build, startup smoke, docs, and opensource audit) and GitHub Bug/Feature/PR templates (`.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`).

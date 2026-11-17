@@ -228,8 +228,8 @@ export function Sidebar({
 					className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
 					onClick={() => onNavigate({ tab: "team" })}
 				>
-					<span>我的团队 · {businessMembers.length} 位</span>
-					<span className="pill">能力包</span>
+					<span>我的团队</span>
+					<span className="pill">{businessMembers.length}</span>
 				</button>
 				<button
 					type="button"

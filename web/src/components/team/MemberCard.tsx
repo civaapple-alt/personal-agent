@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	deleteMember,
 	type MemberMemoryDto,
@@ -7,13 +7,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../../api.ts";
-import {
-	countMemberMemoriesByScope,
-	formatMemberGitIdentity,
-	formatRoleToolTierLabel,
-	getBotTheme,
-	stripMarkdownFormatting,
-} from "../../utils.ts";
+import { formatMemberGitIdentity, formatRoleToolTierLabel, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
 interface MemberCardProps {
@@ -32,13 +26,12 @@ interface MemberCardProps {
 	onError: (message: string) => void;
 }
 
-/** Compact, uniform AI team member card; detailed identity editing and memory curation open in a focused modal. */
+/** Light, scannable AI role card; Git identity, skills, and memory curation open in MemberInspectorModal. */
 export function MemberCard({
 	member,
 	index,
 	template,
 	memories,
-	activeWorkspace,
 	activeOrg,
 	onAssignTask,
 	onSetPrimary,
@@ -48,11 +41,33 @@ export function MemberCard({
 	onNotice,
 	onError,
 }: MemberCardProps) {
+	const [menuOpen, setMenuOpen] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [deletingMember, setDeletingMember] = useState(false);
+	const menuRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!menuOpen) {
+			setConfirmDelete(false);
+			return;
+		}
+		const handlePointerDown = (e: PointerEvent) => {
+			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+				setMenuOpen(false);
+			}
+		};
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setMenuOpen(false);
+		};
+		document.addEventListener("pointerdown", handlePointerDown);
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("pointerdown", handlePointerDown);
+			document.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [menuOpen]);
 
 	const theme = getBotTheme(index);
-	const scopeCounts = countMemberMemoriesByScope(memories);
 	const gitIdentity = formatMemberGitIdentity(member, activeOrg);
 	const verifiedCount = memories.filter((m) => m.status === "verified" || (!m.status && m.verified)).length;
 	const candidateCount = memories.filter((m) => m.status === "candidate" || (!m.status && !m.verified)).length;
@@ -60,9 +75,7 @@ export function MemberCard({
 	const cleanResponsibility = template?.responsibilities
 		? stripMarkdownFormatting(template.responsibilities.split("\n")[0] ?? "")
 		: "";
-	const visibleKeywords = template?.keywords.slice(0, 3) ?? [];
-	const visibleSkills = template?.skills.slice(0, 3) ?? [];
-	const hiddenTagCount = Math.max(0, (template?.skills.length ?? 0) - visibleSkills.length);
+	const antiJobsCount = template?.antiJobs?.length ?? 0;
 
 	return (
 		<div className="member-card">
@@ -72,62 +85,21 @@ export function MemberCard({
 					<div className="member-ident-copy">
 						<div className="member-name-row">
 							<strong>{member.displayName}</strong>
-							{member.isPrimaryContact && <span className="pill live">默认主联系</span>}
+							{member.isPrimaryContact && <span className="pill live">主联系</span>}
 						</div>
-						<div className="member-sub">
-							{member.roleTitle} · {member.model}
+						<div className="member-sub" title={`${member.roleTitle} · ${member.model}`}>
+							{member.roleTitle}
 						</div>
 					</div>
 				</div>
-				<div className="member-memory-badges">
-					{candidateCount > 0 && <span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>}
-					<span className="pill">{verifiedCount} 已验证</span>
-				</div>
-			</div>
-
-			<div className="member-identity-box">
-				<div className="member-identity-row">
-					<span className="member-identity-label">Git Author（角色署名）</span>
-					<button
-						type="button"
-						className="btn-inline btn-xs"
-						onClick={() => onInspectMember(member.id, "identity")}
-					>
-						编辑身份
-					</button>
-				</div>
-				<div className="member-git-pill" title={`提交代码时以此成员身份作 Git Author：${gitIdentity.formatted}`}>
-					{gitIdentity.formatted}
-				</div>
-				{activeWorkspace?.repoGitUser && (
-					<div
-						className="member-committer-line"
-						title={`保留当前仓库真实用户作 Git Committer：${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>`}
-					>
-						Committer：{activeWorkspace.repoGitUser.name} &lt;{activeWorkspace.repoGitUser.email}&gt;
+				{(candidateCount > 0 || verifiedCount > 0) && (
+					<div className="member-memory-badges">
+						{candidateCount > 0 && (
+							<span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>
+						)}
+						{verifiedCount > 0 && <span className="pill">{verifiedCount} 经验</span>}
 					</div>
 				)}
-				{member.identitySummary && <div className="member-summary-line">{member.identitySummary}</div>}
-				<div className="member-memory-tiers">
-					<span className="pill">岗位 {scopeCounts.roleGeneral}</span>
-					<span className="pill">组织 {scopeCounts.companyPrivate}</span>
-					<span className="pill">仓库 {scopeCounts.projectPrivate}</span>
-					<span
-						className="pill"
-						title={
-							template?.tools.length
-								? `声明工具：${template.tools.join(", ")}`
-								: "无文件系统或命令行工具（纯分析与文稿协同）"
-						}
-					>
-						{formatRoleToolTierLabel(template?.tools)}
-					</span>
-					{(template?.antiJobs?.length ?? 0) > 0 && (
-						<span className="pill" title={template!.antiJobs!.join("；")}>
-							边界 {template!.antiJobs!.length}
-						</span>
-					)}
-				</div>
 			</div>
 
 			{cleanResponsibility && (
@@ -135,22 +107,22 @@ export function MemberCard({
 					{cleanResponsibility}
 				</p>
 			)}
+			{member.identitySummary && <div className="member-summary-line">{member.identitySummary}</div>}
 
-			{(visibleKeywords.length > 0 || visibleSkills.length > 0) && (
-				<div className="tag-list">
-					{visibleKeywords.map((kw) => (
-						<span key={kw} className="tag-chip">
-							#{kw}
-						</span>
-					))}
-					{visibleSkills.map((sk) => (
-						<span key={sk} className="tag-chip skill">
-							{sk}
-						</span>
-					))}
-					{hiddenTagCount > 0 && <span className="tag-chip">+{hiddenTagCount}</span>}
-				</div>
-			)}
+			<div
+				className="member-meta-line"
+				title={`Git Author：${gitIdentity.formatted}${template?.tools.length ? ` · 工具：${template.tools.join(", ")}` : ""}`}
+			>
+				<span>{formatRoleToolTierLabel(template?.tools)}</span>
+				{antiJobsCount > 0 && (
+					<>
+						<span aria-hidden="true">·</span>
+						<span>{antiJobsCount} 条边界</span>
+					</>
+				)}
+				<span aria-hidden="true">·</span>
+				<span className="member-meta-model">{member.model}</span>
+			</div>
 
 			<div className="member-card-footer">
 				<div className="member-footer-primary">
@@ -162,52 +134,95 @@ export function MemberCard({
 						className="btn-pill-outline btn-xs"
 						onClick={() => onInspectMember(member.id, "memories")}
 					>
-						管理经验 ({memories.length})
+						详情与经验{memories.length > 0 ? ` (${memories.length})` : ""}
 					</button>
 				</div>
-				<div className="member-footer-secondary">
-					{!member.isPrimaryContact && (
-						<button type="button" className="btn-inline btn-xs" onClick={() => void onSetPrimary(member.id)}>
-							设为主联系
-						</button>
-					)}
-					<button type="button" className="btn-inline btn-xs" onClick={() => void onExportMember(member.id)}>
-						导出能力包
+				<div className="member-more-wrap" ref={menuRef}>
+					<button
+						type="button"
+						className={`icon-btn member-more-btn${menuOpen ? " active" : ""}`}
+						aria-label={`${member.displayName} 更多操作`}
+						aria-expanded={menuOpen}
+						onClick={() => setMenuOpen((v) => !v)}
+					>
+						···
 					</button>
-					{!member.isPrimaryContact &&
-						(confirmDelete ? (
-							<>
+					{menuOpen && (
+						<div className="member-more-popover" role="menu">
+							<button
+								type="button"
+								className="member-more-item"
+								role="menuitem"
+								onClick={() => {
+									setMenuOpen(false);
+									onInspectMember(member.id, "identity");
+								}}
+							>
+								身份与 Git 署名
+							</button>
+							{!member.isPrimaryContact && (
 								<button
 									type="button"
-									className="btn-inline btn-xs"
-									disabled={deletingMember}
+									className="member-more-item"
+									role="menuitem"
 									onClick={() => {
-										setDeletingMember(true);
-										void deleteMember(member.id)
-											.then(async () => {
-												onNotice(`已移除成员「${member.displayName}」`);
-												await onRefresh();
-											})
-											.catch((err: unknown) => {
-												onError(err instanceof Error ? err.message : String(err));
-											})
-											.finally(() => {
-												setDeletingMember(false);
-												setConfirmDelete(false);
-											});
+										setMenuOpen(false);
+										void onSetPrimary(member.id);
 									}}
 								>
-									{deletingMember ? "移除中…" : "确认移除"}
+									设为默认主联系
 								</button>
-								<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmDelete(false)}>
-									取消
-								</button>
-							</>
-						) : (
-							<button type="button" className="btn-inline btn-xs" onClick={() => setConfirmDelete(true)}>
-								移除角色
+							)}
+							<button
+								type="button"
+								className="member-more-item"
+								role="menuitem"
+								onClick={() => {
+									setMenuOpen(false);
+									void onExportMember(member.id);
+								}}
+							>
+								导出能力包
 							</button>
-						))}
+							{!member.isPrimaryContact &&
+								(confirmDelete ? (
+									<div className="member-more-confirm">
+										<button
+											type="button"
+											className="member-more-item danger"
+											disabled={deletingMember}
+											onClick={() => {
+												setDeletingMember(true);
+												void deleteMember(member.id)
+													.then(async () => {
+														setMenuOpen(false);
+														onNotice(`已移除成员「${member.displayName}」`);
+														await onRefresh();
+													})
+													.catch((err: unknown) => {
+														onError(err instanceof Error ? err.message : String(err));
+													})
+													.finally(() => {
+														setDeletingMember(false);
+														setConfirmDelete(false);
+													});
+											}}
+										>
+											{deletingMember ? "移除中…" : "确认移除角色"}
+										</button>
+									</div>
+								) : (
+									<button
+										type="button"
+										className="member-more-item danger"
+										role="menuitem"
+										onClick={() => setConfirmDelete(true)}
+									>
+										移除角色
+									</button>
+								))}
+						</div>
+					)}
 				</div>
 			</div>
 		</div>

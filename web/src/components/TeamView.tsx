@@ -114,7 +114,7 @@ export function TeamView({
 				<div className="pane-header-row">
 					<div className="pane-header">
 						<h1>我的团队</h1>
-						<p>查看角色分工与积累经验，支持新增自定义角色，或导入导出脱敏角色能力包</p>
+						<p>查看岗位分工与经验沉淀，支持按需创建角色或导入导出能力包</p>
 					</div>
 					{isOwner && (
 						<div className="actions-row compact">
@@ -153,35 +153,11 @@ export function TeamView({
 						onError={onError}
 					/>
 
-					<CollaboratorsSection
-						isOwner={isOwner}
-						currentUser={currentUser}
-						collaborators={collaborators}
-						organizations={organizations}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-						onPreviewAsCollaborator={onPreviewAsCollaborator}
-						onRestoreOwner={onRestoreOwner}
-					/>
-
-					<OrganizationsSection
-						isOwner={isOwner}
-						organizations={organizations}
-						workspaces={workspaces}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-					/>
-
 					<section className="ui-section">
 						<div className="ui-section-head">
-							<div>
+							<div className="team-members-heading">
 								<h2 className="ui-section-title">AI 业务团队成员（{businessMembers.length}）</h2>
-								<p className="ui-section-desc">
-									各岗位独立维护角色规范、Git
-									提交者署名与三层成长记忆（内置「角色架构师」仅用于建队对话，可从左侧直达）
-								</p>
+								<p className="ui-section-desc">点开「详情与经验」可查看 Git 署名、禁用边界与三层记忆</p>
 							</div>
 							{isOwner && (
 								<button
@@ -214,6 +190,27 @@ export function TeamView({
 							))}
 						</div>
 					</section>
+
+					<CollaboratorsSection
+						isOwner={isOwner}
+						currentUser={currentUser}
+						collaborators={collaborators}
+						organizations={organizations}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+						onPreviewAsCollaborator={onPreviewAsCollaborator}
+						onRestoreOwner={onRestoreOwner}
+					/>
+
+					<OrganizationsSection
+						isOwner={isOwner}
+						organizations={organizations}
+						workspaces={workspaces}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+					/>
 				</div>
 			</div>
 

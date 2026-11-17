@@ -258,6 +258,30 @@ export function MemberInspectorModal({
 							/>
 						</label>
 
+						{template &&
+							(template.responsibilities || template.skills.length > 0 || template.keywords.length > 0) && (
+								<div className="architect-preview-pane">
+									<h4>核心职责与能力标签</h4>
+									{template.responsibilities && (
+										<p className="architect-preview-copy">{template.responsibilities}</p>
+									)}
+									{(template.keywords.length > 0 || template.skills.length > 0) && (
+										<div className="tag-list">
+											{template.keywords.map((kw) => (
+												<span key={kw} className="tag-chip">
+													#{kw}
+												</span>
+											))}
+											{template.skills.map((sk) => (
+												<span key={sk} className="tag-chip skill">
+													{sk}
+												</span>
+											))}
+										</div>
+									)}
+								</div>
+							)}
+
 						{template?.antiJobs && template.antiJobs.length > 0 && (
 							<div className="architect-preview-pane">
 								<h4>当前不做边界（Anti-Jobs）</h4>

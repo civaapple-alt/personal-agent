@@ -75,9 +75,9 @@
 	margin: 0;
 	font-size: var(--text-sm);
 	color: var(--text-secondary);
-	line-height: 1.55;
+	line-height: 1.6;
 	display: -webkit-box;
-	-webkit-line-clamp: 2;
+	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 }
@@ -245,85 +245,124 @@
 	font-size: var(--text-micro);
 	color: var(--text-muted);
 }
-.member-identity-box {
-	background: var(--bg-sidebar);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
-	padding: 10px 12px;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
+.member-summary-line {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	line-height: 1.45;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
-.member-identity-row {
+.member-meta-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+.member-meta-model {
+	font-family: var(--font-mono);
+	font-size: var(--text-micro);
+}
+.member-card-footer {
+	margin-top: auto;
+	padding-top: 10px;
+	border-top: 1px solid rgba(15, 36, 28, 0.06);
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	flex-wrap: nowrap;
 }
-.member-identity-label {
-	font-size: var(--text-micro);
-	font-weight: 600;
-	color: var(--text-muted);
-	white-space: nowrap;
-}
-.member-git-pill {
-	font-family: var(--font-mono);
-	font-size: var(--text-micro);
-	color: #0b574e;
-	background: #edf9f5;
-	border: 1px solid rgba(15, 107, 96, 0.2);
-	padding: 4px 8px;
-	border-radius: var(--radius-xs);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	min-width: 0;
-	max-width: 100%;
-	display: block;
-}
-.member-summary-line {
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
-	line-height: 1.45;
-}
-.member-committer-line {
-	font-family: var(--font-mono);
-	font-size: var(--text-micro);
-	color: var(--text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.member-memory-tiers {
+.member-footer-primary {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	flex-wrap: wrap;
 }
-.member-memory-tiers .pill {
-	font-size: var(--text-micro);
-	padding: 2px 8px;
-	white-space: nowrap;
+.member-more-wrap {
+	position: relative;
+	flex-shrink: 0;
 }
-.member-card-footer {
-	margin-top: auto;
-	padding-top: 8px;
-	border-top: 1px solid rgba(15, 36, 28, 0.06);
+.member-more-btn {
+	width: 28px;
+	height: 28px;
+	font-size: 13px;
+	letter-spacing: 0.5px;
+	border-color: transparent;
+	background: transparent;
+}
+.member-more-btn:hover,
+.member-more-btn.active {
+	border-color: var(--border);
+	background: var(--bg-sidebar);
+}
+.member-more-popover {
+	position: absolute;
+	right: 0;
+	bottom: calc(100% + 6px);
+	z-index: 30;
+	min-width: 148px;
+	padding: 5px;
+	background: var(--bg-card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-md);
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 2px;
 }
-.member-footer-primary,
-.member-footer-secondary {
+.member-more-item {
+	border: none;
+	background: transparent;
+	color: var(--text-primary);
+	font-size: var(--text-xs);
+	font-weight: 500;
+	text-align: left;
+	padding: 7px 10px;
+	border-radius: var(--radius-xs);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.member-more-item:hover:not(:disabled) {
+	background: var(--bg-subtle);
+}
+.member-more-item.danger {
+	color: var(--danger-text);
+}
+.member-more-item.danger:hover:not(:disabled) {
+	background: var(--danger-bg);
+}
+.member-more-confirm {
+	border-top: 1px solid var(--border);
+	margin-top: 2px;
+	padding-top: 2px;
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	flex-direction: column;
+}
+.team-members-heading {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
 	flex-wrap: wrap;
 }
-.member-footer-secondary {
-	gap: 12px;
+.team-members-heading .ui-section-desc {
+	margin: 0;
+}
+.team-admin-head {
+	align-items: center;
+}
+.team-admin-summary {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.team-admin-meta {
+	font-size: var(--text-xs);
+	color: var(--text-muted);
 }
 .collab-humans-list {
 	display: grid;

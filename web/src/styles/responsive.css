@@ -93,6 +93,13 @@
 	.stage-center-pill {
 		display: none;
 	}
+	.stage-header-left {
+		flex: 0 1 auto;
+	}
+	.stage-header-right {
+		flex: 0 0 auto;
+		margin-left: auto;
+	}
 	.workspace-bind-grid {
 		grid-template-columns: 1fr;
 	}
