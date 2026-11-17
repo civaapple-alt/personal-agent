@@ -1,4 +1,4 @@
-// Read-only, dependency-free validation of README/AGENTS navigation and command references.
+// Read-only, dependency-free validation of repository Markdown navigation and command references.
 import assert from "node:assert/strict";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -6,13 +6,13 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const ignored = new Set(["node_modules", "dist", ".git", ".data", ".pi"]);
-async function navigationFiles(directory) {
+async function markdownFiles(directory) {
 	const paths = [];
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
 		if (entry.name.startsWith(".") || ignored.has(entry.name)) continue;
 		const path = join(directory, entry.name);
-		if (entry.isDirectory()) paths.push(...(await navigationFiles(path)));
-		else if (entry.isFile() && (entry.name === "README.md" || entry.name === "AGENTS.md")) paths.push(path);
+		if (entry.isDirectory()) paths.push(...(await markdownFiles(path)));
+		else if (entry.isFile() && entry.name.endsWith(".md")) paths.push(path);
 	}
 	return paths;
 }
@@ -34,7 +34,7 @@ function headings(source) {
 const { scripts } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 let links = 0;
 let commands = 0;
-const files = await navigationFiles(root);
+const files = await markdownFiles(root);
 const navigation = new Map(files.map((path) => [path, []]));
 for (const path of files) {
 	const source = await readFile(path, "utf8");
@@ -86,6 +86,6 @@ while (pending.length) {
 	pending.push(...navigation.get(path));
 }
 for (const path of files) assert.ok(reached.has(path), `Navigation unreachable from root: ${path}`);
-console.log(`PASS ${files.length} README/AGENTS files, ${links} local links, ${commands} command references`);
+console.log(`PASS ${files.length} Markdown files, ${links} local links, ${commands} command references`);
 console.log(`PASS all ${reached.size} guides reachable from root navigation`);
 console.log("File/command existence only; no commands, remote URLs, diagrams or model requests executed.");

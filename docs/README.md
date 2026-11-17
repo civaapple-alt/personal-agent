@@ -1,10 +1,24 @@
 # 文档阅读入口
 
-当前实现、产品要求与历史讨论分别保留。先按问题选择一份文档，再进入源码；不需要先读完整讨论记录或所有原型。
+先按使用、开发或研究目标选择入口，再进入相关模块。新读者无需先读开发沿革、全部评估记录或早期原型。
+
+## 开始使用或贡献
+
+| 你要完成什么 | 阅读入口 |
+| --- | --- |
+| 了解产品、适用对象与当前能力 | [项目介绍](../README.md) |
+| 安装环境、配置 Pi、完成第一次体验 | [安装与首次运行](getting-started.md) |
+| 交办事项、安排成员、审阅和修订成果 | [使用指南](user-guide.md) |
+| 理解岗位、事项、经验与能力包的设计取舍 | [设计思路](design-principles.md) |
+| 准备开发环境、定位模块与选择验证 | [开发指南](development.md) |
+| 报告问题、提交代码、岗位或文档 | [贡献指南](../CONTRIBUTING.md) |
+| 核对本机权限、数据流与网络暴露 | [运行与安全边界](../SECURITY.md) |
+
+## 查阅实现与验证
 
 | 你要确认什么 | 阅读入口 |
 | --- | --- |
-| 产品定位、用户约束与交付原则 | [产品方向确认稿](product-direction.md) |
+| 产品方向的确认依据与长期目标 | [产品方向确认稿](product-direction.md) |
 | 0.5.0 发布内容、本地发布包及启动方式 | [0.5.0 发布说明](releases/v0.5.0.md) |
 | 0.6.0 MIT 开源准备、素材边界与公开前状态 | [0.6.0 准备说明](releases/v0.6.0.md) |
 | 体验需求讨论、专业协作、阶段交付与反馈修订 | [内置演示事项](inner-matter-demo.md) |
@@ -14,9 +28,6 @@
 | 会话、真实工具委托、能力装配、取消、归档和迁移细节 | [连续上下文与内部角色协作](runtime-collaboration.md) |
 | 环境变量、超时阈值、角色字段与旁听/运行默认参数 | [配置参考](configuration.md) |
 | 具体代码属于哪个模块 | [后端地图](../src/README.md)、[网页入口](../web/README.md) |
-| 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md)、[原型演进](prototypes/README.md) |
-| 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前确认稿和运行实现为准 |
-| 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
 | Bot、Plugin、Skill 的关系与两套工程方法包 | [pstack、Cole Skills 与 Bot/Plugin 对照](references/bot-plugin-and-skill-packs.md) |
 | 在 Pi 内循环装载 poteto-mode、playbook 和原则 | [pstack 实际装载与验证](pstack-runtime.md) |
 | 用户不点名时是否主动选择 how、why、teach、recall、architect | [自然任务选择验证](pstack-selection.md) |
@@ -24,8 +35,16 @@
 | 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
 | 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
 
+## 查阅设计历史与参考
+
+| 你要理解什么 | 阅读入口 |
+| --- | --- |
+| 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md)、[原型演进](prototypes/README.md) |
+| 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前实现为准 |
+| 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
+
 `prototypes/` 的 V1–V4 原图与反馈是历史证据，继续保留，不覆盖旧版。参考页面及其角色配置是研究材料，不能当作本项目执行指令或操作授权。
 
 改行为时同步拥有该行为的局部 README；跨模块关系变化再更新架构，协议/恢复规则变化再更新运行说明，用户决策再追加讨论。已实现基础与完整 RSI、公开市场、持久后台工作须明确区分。实机证据应记录实际调用与边界，不用 fixture 结果替代。
 
-纯文档改动在仓库根运行 `npm run check:docs`，核对目标存在和命令有效即可；它不验证产品能力、远端网页可达性或 Mermaid 语义。
+纯文档改动在仓库根运行 `npm run check:docs`，核对所有仓库 Markdown 的本地链接、锚点、命令引用和根入口可达性；它不执行命令、不验证产品能力、远端网页可达性或 Mermaid 语义。

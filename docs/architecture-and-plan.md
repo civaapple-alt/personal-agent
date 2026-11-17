@@ -22,6 +22,8 @@
 
 ## 1. 产品目标与实现边界
 
+新读者先读[产品介绍](../README.md)与[设计思路](design-principles.md)，实际操作见[使用指南](user-guide.md)，修改代码见[开发指南](development.md)和[贡献约定](../CONTRIBUTING.md)。本文保留架构、实现进展与后续验证计划，运行和网络约束见[安全说明](../SECURITY.md)。
+
 产品定位与使用方式：
 
 - Personal Agent 是为用户跨项目工作的轻量 AI 岗位团队。

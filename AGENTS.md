@@ -2,6 +2,8 @@
 
 本项目是跨项目工作的轻量 AI 岗位团队，使用 TypeScript/Node、React 和本机 Pi RPC。当前能力及后续计划见[文档入口](docs/README.md)，不要把长期自主运行、完整 RSI 或人才市场写成已完成。
 
+人类贡献者从[贡献指南](CONTRIBUTING.md)和[开发指南](docs/development.md)开始；执行环境、私有数据及网络边界见[安全说明](SECURITY.md)。
+
 ## 按任务阅读
 
 先读最近相关目录的 README，再按其中链接进入源码或运行说明，无须每次通读产品讨论和全部 Skills。

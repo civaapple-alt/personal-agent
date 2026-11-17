@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Open-source documentation
+
+- Reorganize the project README around the product, a concrete collaboration example, current capabilities and limits, and reader-specific entry points. Add installation, everyday use, design rationale, development, contribution and security guides.
+- Document Pi/model setup, actual participation modes, version feedback, partial data-path overrides, local execution privileges and network exposure. Clarify early product questions against current implementation; retain historical prototypes and evaluation failures.
+- Record remaining publication prerequisites without inventing a repository URL, private security contact or support commitment. Documentation changes do not establish new runtime capabilities or model-quality improvements.
+- Extend the read-only documentation check to all repository Markdown, including usage and contribution guides, role methods and historical references, with local-link, anchor, command and root-navigation checks.
+
 ### 0.6.0 MIT preparation
 
 - Set development metadata to 0.6.0 and MIT while retaining npm `private: true`; no 0.6.0 tag or public release is created. Add the project license, upstream pstack adaptation attribution and bundled React runtime notices.

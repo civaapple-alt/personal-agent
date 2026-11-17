@@ -48,6 +48,8 @@
 | `skills/<name>/SKILL.md` | 角色引用的技能说明文件 | 供启动参数 `--skill` 显式挂载 |
 | `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
 
+`PA_DB_PATH` 不迁移全部运行目录：自建角色与内置演示跟随数据库位置，会话与上传仍分别固定在启动目录的 `.data/pi-sessions` 与 `.data/uploads`。备份与升级步骤见[使用指南](user-guide.md#保存与备份运行资料)。
+
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。
 - 若数据库中存在旧表结构，[database.ts](../src/storage/database.ts) 仅做幂等增量迁移，不改写历史消息或成果：
