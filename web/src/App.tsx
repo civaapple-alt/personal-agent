@@ -77,9 +77,7 @@ export function App() {
 		readStoredSetting("pa.defaultWorkspaceId"),
 	);
 	const [draftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
-	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(
-		() => readStoredSetting("pa.defaultObserversEnabled") === "true",
-	);
+	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(false);
 	const [composerText, setComposerText] = useState("");
 	const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
 	const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
@@ -572,6 +570,11 @@ export function App() {
 		setDraftAiMemberIds,
 		setDraftObserverMemberIds: initiation.setDraftObserverMemberIds,
 		setDraftObserversEnabled,
+		onSyncDraftPresetForObservers: (hasObservers: boolean) => {
+			initiation.setDraftPresetMode((prev) =>
+				hasObservers ? "lead_review" : prev === "lead_review" ? "lead_consult" : prev,
+			);
+		},
 		onResetInitiation: initiation.resetInitiationState,
 		setErrorBanner,
 		setNoticeBanner,
@@ -771,6 +774,7 @@ export function App() {
 						draftCollaboratorIds={initiation.draftCollaboratorIds}
 						initiationAssessment={initiation.assessment}
 						initiationAssessing={initiation.assessing}
+						initiationAssessmentError={initiation.assessmentError}
 						onChangeLeadMember={actions.handleChangeLeadMember}
 						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
 						onUpdateDraftAiMemberIds={setDraftAiMemberIds}

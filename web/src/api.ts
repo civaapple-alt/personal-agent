@@ -442,15 +442,19 @@ export function openInnerMatterDemo(): Promise<{ matter: MatterDto }> {
 	return requestJson("/api/demos/inner-matter", { method: "POST", body: "{}" });
 }
 
-export function assessMatterInitiation(input: {
-	prompt: string;
-	hasImages?: boolean;
-	workspaceId?: string;
-	preferredMemberId?: string;
-}): Promise<MatterInitiationAssessmentDto> {
+export function assessMatterInitiation(
+	input: {
+		prompt: string;
+		hasImages?: boolean;
+		workspaceId?: string;
+		preferredMemberId?: string;
+	},
+	signal?: AbortSignal,
+): Promise<MatterInitiationAssessmentDto> {
 	return requestJson("/api/matters/assess", {
 		method: "POST",
 		body: JSON.stringify(input),
+		signal,
 	});
 }
 

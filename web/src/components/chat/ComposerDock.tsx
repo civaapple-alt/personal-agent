@@ -1,4 +1,12 @@
-import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject, useRef, useState } from "react";
+import {
+	type ClipboardEvent,
+	type DragEvent,
+	type KeyboardEvent,
+	type ReactNode,
+	type RefObject,
+	useRef,
+	useState,
+} from "react";
 import type {
 	CollaborationPresetMode,
 	ComposerImageAttachment,
@@ -10,6 +18,7 @@ import { MAX_COMPOSER_IMAGES } from "../../imageAttachments.ts";
 import type { StarterTask } from "../../utils.ts";
 
 interface ComposerDockProps {
+	initiationPanel?: ReactNode;
 	composerDockRef: RefObject<HTMLDivElement | null>;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	composerMode: "discussion" | "dispatch";
@@ -47,6 +56,7 @@ interface ComposerDockProps {
 
 /** Bottom message input bar with mode switcher, org/workspace context selectors, starter tasks, and image attachment support. */
 export function ComposerDock({
+	initiationPanel,
 	composerDockRef,
 	composerRef,
 	composerMode,
@@ -249,7 +259,7 @@ export function ComposerDock({
 								{composerMode === "discussion"
 									? "成员间自由同步想法，不触发 AI 执行（下次派发 AI 时会自动参考这段讨论）"
 									: isOwner
-										? "正式指派 AI 团队分析、修改并生成交付成果"
+										? "按目标推进；形成阶段结果时再交付"
 										: "发送 AI 提请卡片，待团队所有者一键确认后派发执行"}
 							</span>
 						</div>
@@ -453,6 +463,7 @@ export function ComposerDock({
 										: "提请 AI"}
 					</button>
 				</div>
+				{initiationPanel}
 			</section>
 		</div>
 	);

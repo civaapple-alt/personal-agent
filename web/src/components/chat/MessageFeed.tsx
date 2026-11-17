@@ -187,11 +187,11 @@ export function MessageFeed({
 
 				{!selectedMatterId || (!matterDetail && !activeMatterProgress) ? (
 					<div className="welcome-hero">
-						<BotFaceIcon bg={headerTheme.bg} size="lg" />
+						<BotFaceIcon bg={headerTheme.bg} size={!selectedMatterId && !selectedIsArchitect ? "md" : "lg"} />
 						<h1>{selectedMemberId === "auto" ? "今天要推进什么事？" : memberName(selectedMemberId)}</h1>
 						<p>
 							{selectedMemberId === "auto"
-								? "先描述目标，系统会评估最合适的角色与参与方式；也可在下方按团队习惯自由搭配阵型"
+								? "描述目标和希望得到的结果，参与方式可以按需调整。"
 								: selectedIsArchitect
 									? "描述你们的真实工作流或协作卡点，我来帮你拆解出职责单一、边界清晰的 AI 角色与人机配合方式"
 									: stripMarkdownFormatting(
@@ -200,7 +200,7 @@ export function MessageFeed({
 												?.responsibilities.split("\n")[0] ?? "直接输入任务开始协作",
 										)}
 						</p>
-						{!selectedIsArchitect && (
+						{!selectedIsArchitect && selectedMatterId && (
 							<div className="hero-context-bar">
 								{selectedOrganization && (
 									<span className="pill org-pill">组织：{selectedOrganization.name}</span>
@@ -247,10 +247,9 @@ export function MessageFeed({
 						)}
 						{isOwner && !selectedIsArchitect && onOpenDemo && (
 							<div className="inner-demo-entry">
-								<button type="button" className="btn-pill-outline" disabled={demoOpening} onClick={onOpenDemo}>
+								<button type="button" className="btn-inline" disabled={demoOpening} onClick={onOpenDemo}>
 									{demoOpening ? "正在准备演示…" : "体验内置演示"}
 								</button>
-								<p>需求讨论 → 专业协作 → 阶段交付 → 反馈修订</p>
 							</div>
 						)}
 					</div>

@@ -125,6 +125,9 @@ function scoreMember(
 	}
 
 	const respTokens = (template?.sections.responsibilitiesAndBoundaries ?? "")
+		.split("\n")
+		.filter((line) => !/(?:不负责|不做|禁止|不直接|不替代|不能)/.test(line))
+		.join("\n")
 		.split(/[\s,，、。；：\-*]+/)
 		.map((token) => token.trim().toLowerCase())
 		.filter((token) => token.length >= 2 && token.length <= 8);
@@ -147,7 +150,7 @@ function scoreMember(
 		(tools.includes("edit") || tools.includes("write") || tools.includes("bash"))
 	) {
 		score += 1;
-		matchedSignals.push("具备代码读写能力");
+		matchedSignals.push("具备仓库操作工具（不是职责证明）");
 	}
 	if (!hasWorkspace && !promptNeedsCoding && !tools.includes("edit") && !tools.includes("write")) {
 		score += 0.5;
@@ -258,7 +261,7 @@ export function assessMatterInitiation(input: {
 		? "human_first"
 		: recommendedObserverIds.length > 0
 			? "lead_review"
-			: recommendedAiMemberIds.length > 1 || isMultiRole
+			: recommendedAiMemberIds.length > 1
 				? "lead_consult"
 				: "solo";
 
@@ -280,7 +283,15 @@ export function assessMatterInitiation(input: {
 			(c) =>
 				c.score >= 3 &&
 				(matchedSpecialRule.patterns.some((p) => p.test(`${c.displayName} ${c.roleTitle}`)) ||
-					c.matchedSignals.some((s) => s.startsWith("关键词:"))),
+					matchedSpecialRule.patterns.some((pattern) =>
+						pattern.test(
+							input.templatesByRoleId
+								.get(c.memberId)
+								?.sections.responsibilitiesAndBoundaries.split("\n")
+								.filter((line) => !/(?:不负责|不做|禁止|不直接|不替代|不能)/.test(line))
+								.join("\n") ?? "",
+						),
+					)),
 		);
 
 	if (matchedSpecialRule && !domainAlreadyCovered && !explicitMember) {
@@ -304,38 +315,10 @@ export function assessMatterInitiation(input: {
 		};
 	}
 
-	const strongestKeywordScore = candidates.reduce((max, item) => {
-		const keywordHits = item.matchedSignals.filter((s) => !s.startsWith("具备") && !s.startsWith("职责:")).length;
-		return Math.max(max, keywordHits);
-	}, 0);
-
-	if (!explicitMember && prompt.length >= 16 && strongestKeywordScore === 0 && (topCandidate?.score ?? 0) < 2) {
-		return {
-			fitStatus: "gap_detected",
-			headline: "当前团队暂无明显对口的专职 AI 角色",
-			explanation:
-				"这段需求未命中现有成员的核心关键词与职责范围；如果你们经常处理此类事务，建议按团队工作方式先设计一个专职角色，或先切到「人类先讨论」定调。",
-			recommendedMode: wantsHumanFirst ? "human_first" : "solo",
-			recommendedLeadId: leadId,
-			recommendedAiMemberIds: leadId ? [leadId] : [],
-			recommendedObserverIds: [],
-			candidates,
-			gapSuggestion: {
-				missingRoleTitle: "专项协作顾问",
-				suggestedJob: `围绕「${prompt.slice(0, 36)}」这类需求承担清晰单一的梳理、分析或把关职责。`,
-				suggestedAntiJobs: ["不越权替团队做最终业务拍板", "不在无依据时自行改动无关文件"],
-				suggestedInteractionStyle: "lead_direct",
-				suggestedWorkspaceScope: input.hasWorkspace ? "read_only_repo" : "no_repo_docs",
-				reason: "现有团队成员关键词与职责说明均未明确匹配当前任务场景。",
-			},
-		};
-	}
-
 	const leadMember = members.find((m) => m.id === leadId) ?? primary;
 	const isAmbiguous =
 		!explicitMember &&
-		(topCandidate?.score ?? 0) > 0 &&
-		(secondCandidate?.score ?? 0) >= (topCandidate?.score ?? 0) - 0.5;
+		((topCandidate?.score ?? 0) < 1.5 || (secondCandidate?.score ?? 0) >= (topCandidate?.score ?? 0) - 0.5);
 	const modeLabel =
 		recommendedMode === "human_first"
 			? "建议人类团队先讨论对齐，拍板后再派发 AI"
@@ -345,13 +328,25 @@ export function assessMatterInitiation(input: {
 					? `建议主责统筹 + 指定协同（共 ${finalAiMemberIds.length} 位 AI）`
 					: "建议单兵直办（仅 1 位对口 AI 独立推进）";
 
+	const leadCandidate = candidates.find((candidate) => candidate.memberId === leadId);
+	const leadReason = explicitMember
+		? `主责沿用你的选择「${explicitMember.displayName}」`
+		: topCandidate && topCandidate.score >= 1.5
+			? `按文字线索建议「${leadMember?.displayName ?? "主联系人"}」：${leadCandidate?.matchedSignals.join("、") || "暂无额外线索"}`
+			: `没有明确岗位线索，先由默认联系人「${leadMember?.displayName ?? "未设置"}」了解需求`;
+	const modeReason = wantsHumanFirst
+		? "命中先讨论、对齐或业务拍板线索，建议先不执行 AI"
+		: recommendedObserverIds.length
+			? `命中风险线索「${prompt.match(HIGH_RISK_CUES[0]!)?.[0] ?? "风险"}」，建议增加定向旁听`
+			: finalAiMemberIds.length > 1
+				? "匹配到其他岗位，主责可按需请教，并非全员同时执行"
+				: isMultiRole
+					? "存在协同线索，但暂无具体对口协同人选，先由主责澄清"
+					: "未命中跨岗位或风险线索，先由一位主责处理";
 	return {
 		fitStatus: isAmbiguous ? "ambiguous" : "matched",
-		headline: leadMember ? `匹配「${leadMember.displayName}」牵头 · ${modeLabel}` : modeLabel,
-		explanation:
-			topCandidate && topCandidate.matchedSignals.length > 0
-				? `匹配依据：${topCandidate.matchedSignals.join("、")}。你可在下方微调参与人数或把特定成员设为旁听把关。`
-				: "当前团队可直接承接；可按需收窄为单兵直办，或勾选特定旁听成员。",
+		headline: leadMember ? `建议由「${leadMember.displayName}」牵头 · ${modeLabel}` : modeLabel,
+		explanation: `${leadReason}。${modeReason}。这是本地文字规则，不调用模型、不读取仓库内容或验证成员能力${input.hasImages ? "，也未识别图片内容" : ""}。`,
 		recommendedMode,
 		recommendedLeadId: leadId,
 		recommendedAiMemberIds: finalAiMemberIds,

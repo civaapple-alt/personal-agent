@@ -539,206 +539,47 @@
 }
 
 /* Pre-dispatch initiation workflow framing & role-fit bar */
-.initiation-panel {
-	width: 100%;
-	max-width: var(--content-max-w);
-	margin: 0 auto 8px;
-	padding: 0 var(--page-pad-x);
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-.initiation-mode-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	flex-wrap: wrap;
-}
-.initiation-mode-pills {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-}
-.initiation-roster-drawer {
-	background: var(--bg-card);
-	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
-	padding: 12px 14px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	box-shadow: var(--shadow-sm);
-}
-.initiation-roster-group {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-.initiation-roster-label {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	flex-wrap: wrap;
-	font-size: var(--text-xs);
-	font-weight: 600;
-	color: var(--text-secondary);
-}
-.initiation-chip-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
-	gap: 8px;
-}
-.initiation-member-chip {
-	border: 1px solid var(--border);
-	background: var(--bg-sidebar);
-	border-radius: var(--radius-sm);
-	padding: 8px 10px;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	min-width: 0;
-}
-.initiation-member-chip.is-lead {
-	border-color: var(--accent-border);
-	background: var(--surface-accent-soft);
-}
-.initiation-member-chip.is-observer {
-	border-color: var(--observer-border);
-	background: var(--observer-soft);
-}
-.initiation-member-chip.is-excluded {
-	opacity: 0.6;
-}
-.initiation-member-top {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 6px;
-}
-.initiation-member-main {
-	border: none;
-	background: transparent;
-	padding: 0;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
-	min-width: 0;
-	font: inherit;
-	color: var(--text-primary);
-	text-align: left;
-}
-.initiation-member-main strong {
-	font-size: var(--text-xs);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.initiation-standing-badge {
-	font-size: var(--text-micro);
-	padding: 1px 6px;
-	border-radius: var(--radius-pill);
-	background: rgba(15, 23, 20, 0.06);
-	color: var(--text-secondary);
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-.initiation-member-meta {
-	font-size: var(--text-micro);
-	color: var(--text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.initiation-human-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-}
-.initiation-roster-drawer.compact {
-	padding: 10px 12px;
-	gap: 8px;
-}
-.initiation-compact-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	flex-wrap: wrap;
-}
-.initiation-lead-picker {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
-	font-weight: 600;
-	flex-shrink: 0;
-}
-.initiation-inline-chips {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex-wrap: wrap;
-	flex: 1;
-	min-width: 0;
-}
-.choice-chip.is-observer.active {
-	border-color: var(--observer-border);
-	background: var(--observer-soft);
-	color: var(--observer-text);
-}
-.initiation-compact-footer {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	flex-wrap: wrap;
-	padding-top: 6px;
-	border-top: 1px dashed var(--border);
-}
-.initiation-mini-label {
-	font-size: var(--text-micro);
-	color: var(--text-muted);
-}
-.initiation-assessment-bar {
-	border: 1px solid var(--accent-border);
-	background: #f3fbf8;
-	border-radius: var(--radius-md);
-	padding: 10px 12px;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	flex-wrap: wrap;
-}
-.initiation-assessment-bar.is-gap {
-	border-color: var(--warn-border);
-	background: var(--warn-bg);
-}
-.initiation-assess-copy {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	min-width: 0;
-	flex: 1 1 280px;
-}
-.initiation-assess-copy strong {
-	font-size: var(--text-xs);
-	color: var(--text-primary);
-}
-.initiation-assess-copy span,
-.initiation-assess-note {
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
-	line-height: 1.45;
-}
-.initiation-assess-actions {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
+/* Creation keeps actual settings separate from optional rule suggestions. */
+.initiation-panel { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); min-width: 0; }
+.initiation-current-row, .initiation-recommendation-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.initiation-current-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.initiation-current-copy strong { font-size: var(--text-sm); }
+.initiation-current-copy span, .initiation-assess-note { font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; }
+.initiation-current-row > button { flex-shrink: 0; }
+.initiation-assessment-bar { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-sidebar); font-size: var(--text-xs); color: var(--text-secondary); }
+.initiation-assessment-bar.is-gap { background: var(--warn-bg); }
+.initiation-recommendation-row > button { flex-shrink: 0; }
+.initiation-basis { margin-top: 8px; }
+.initiation-basis summary { width: fit-content; cursor: pointer; color: var(--accent); }
+.initiation-basis p { margin: 8px 0 0; line-height: 1.65; }
+.initiation-roster-drawer { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 14px; }
+.initiation-mode-pills, .initiation-human-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: none; margin: 0; padding: 0; min-inline-size: 0; }
+.initiation-lead-picker { display: flex; align-items: center; gap: 12px; font-size: var(--text-sm); }
+.initiation-lead-picker select { flex: 1; min-width: 0; }
+.initiation-role-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; }
+.initiation-role-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: var(--text-xs); min-width: 0; }
+.initiation-role-row > span { overflow-wrap: anywhere; }
+.initiation-role-row select { max-width: 130px; min-height: 34px; }
+.initiation-compact-footer { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.initiation-mini-label { font-size: var(--text-xs); color: var(--text-muted); }
+.initiation-panel :is(button, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.chat-stage.is-new-matter { overflow-y: auto; padding-bottom: 40px; }
+.chat-stage.is-new-matter > .chat-stream-scroll { flex: 0 0 auto; overflow: visible; padding-bottom: 0; }
+.chat-stage.is-new-matter .welcome-hero { padding: clamp(20px, 6vh, 56px) 16px 18px; gap: 8px; }
+.chat-stage.is-new-matter .welcome-hero h1 { font-size: var(--text-xl); }
+.chat-stage.is-new-matter .inner-demo-entry { margin: 4px 0 0; }
+.chat-stage.is-new-matter > .composer-dock { flex: 0 0 auto; background: none; padding-top: 6px; }
+.chat-stage.is-new-matter .composer-dock-inner { max-width: 780px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); gap: 14px; background: var(--bg-card); }
+.chat-stage.is-new-matter .composer-mode-hint { display: none; }
+.chat-stage.is-new-matter .pill-composer { border-radius: 16px; align-items: flex-end; padding-top: 10px; padding-bottom: 10px; }
+.chat-stage.is-new-matter .pill-textarea { min-height: 88px; }
+@media (max-width: 600px) {
+ .initiation-role-rows { grid-template-columns: 1fr; }
+ .initiation-role-row select { min-height: 44px; }
+ .initiation-current-row { align-items: flex-start; }
+ .initiation-current-row > button, .initiation-recommendation-row > button { min-height: 36px; }
+ .chat-stage.is-new-matter .composer-dock-inner { padding: 12px; }
+ .chat-stage.is-new-matter .welcome-hero { padding-top: 20px; }
+ .chat-stage.is-new-matter .pill-textarea { min-height: 76px; }
 }

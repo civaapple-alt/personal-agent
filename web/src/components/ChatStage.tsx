@@ -86,6 +86,7 @@ interface ChatStageProps {
 	draftCollaboratorIds: string[];
 	initiationAssessment: MatterInitiationAssessmentDto | null;
 	initiationAssessing: boolean;
+	initiationAssessmentError?: string | null;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
@@ -178,6 +179,7 @@ export function ChatStage({
 	draftCollaboratorIds,
 	initiationAssessment,
 	initiationAssessing,
+	initiationAssessmentError,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateDraftAiMemberIds,
@@ -465,7 +467,7 @@ export function ChatStage({
 	const businessCount = filterBusinessMembers(members, templateByRoleId).length;
 
 	return (
-		<div className="chat-stage">
+		<div className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}`}>
 			<ChatStageHeader
 				selectedOrganization={selectedOrganization}
 				selectedWorkspace={selectedWorkspace}
@@ -645,31 +647,34 @@ export function ChatStage({
 				onAbortMatter={onAbortMatter}
 			/>
 
-			{!selectedMatterId && (
-				<MatterInitiationPanel
-					isOwner={isOwner}
-					members={members}
-					nonOwnerCollaborators={nonOwnerCollaborators}
-					templateByRoleId={templateByRoleId}
-					selectedMemberId={selectedMemberId}
-					draftPresetMode={draftPresetMode}
-					draftAiMemberIds={draftAiMemberIds}
-					draftObserverMemberIds={observerMemberIds}
-					draftCollaboratorIds={draftCollaboratorIds}
-					assessment={initiationAssessment}
-					assessing={initiationAssessing}
-					onSelectLeadMember={onChangeLeadMember}
-					onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
-					onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
-					onUpdateDraftObserverIds={onUpdateMatterObservers}
-					onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
-					onApplyRecommendation={onApplyInitiationRecommendation}
-					onOpenArchitect={onOpenArchitect}
-					onStartArchitectMatter={onStartArchitectMatter}
-				/>
-			)}
-
 			<ComposerDock
+				initiationPanel={
+					!selectedMatterId ? (
+						<MatterInitiationPanel
+							isOwner={isOwner}
+							composerMode={composerMode}
+							members={members}
+							nonOwnerCollaborators={nonOwnerCollaborators}
+							templateByRoleId={templateByRoleId}
+							selectedMemberId={selectedMemberId}
+							draftPresetMode={draftPresetMode}
+							draftAiMemberIds={draftAiMemberIds}
+							draftObserverMemberIds={observerMemberIds}
+							draftCollaboratorIds={draftCollaboratorIds}
+							assessment={initiationAssessment}
+							assessing={initiationAssessing}
+							assessmentError={initiationAssessmentError}
+							onSelectLeadMember={onChangeLeadMember}
+							onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
+							onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
+							onUpdateDraftObserverIds={onUpdateMatterObservers}
+							onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
+							onApplyRecommendation={onApplyInitiationRecommendation}
+							onOpenArchitect={onOpenArchitect}
+							onStartArchitectMatter={onStartArchitectMatter}
+						/>
+					) : undefined
+				}
 				composerDockRef={composerDockRef}
 				composerRef={composerRef}
 				composerMode={composerMode}

@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### New matter initiation UX & rule transparency
+
+- Refine `assessMatterInitiation` (`src/orchestrator/matter-initiation.ts`) so negative `不做`/`不负责` clauses are excluded from positive keyword matching and domain coverage checks, drop generic false-positive gap alerts when no concrete domain gap rule matches, keep single-lead tasks scoped to `solo` when appropriate, and surface transparent human-readable local-rule basis notes (no LLM call or repo inspection).
+- Rework new-matter creation layout (`ChatStage.tsx`, `ComposerDock.tsx`, `MatterInitiationPanel.tsx`, `useMatterInitiationState.ts`, `useMatterActions.ts`, `chat-composer.css`) into a centered creation card: clearly display actual active participation setup alongside optional local-rule suggestions with collapsible basis details (`为什么这样建议？`), fold granular AI/human toggles behind `调整参与方式`, pass `AbortSignal` + fallback notice on `/api/matters/assess`, sync observer state cleanly without stale `pa.defaultObserversEnabled` overrides, and scope `lead_review` presets to lead + targeted observers only.
+
 ### Role methods and capability composition
 
 - Update all four baseline business roles and the built-in architect to definition version 1.1.0 with concrete methods, communication, Anti-Jobs and evidence-based handoff criteria. Enrich the product, engineering, QA and market methods and add the architect's actual `role-design` method.

@@ -186,6 +186,36 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 	});
 	assert.equal(alignAssess.recommendedMode, "human_first");
 
+	// Negative "不负责/不做" lines must not count as positive skill/domain coverage, and non-gap prompts stay solo when single-lead suffices.
+	const seededMembers = store.listMembers();
+	const pmTpl = templatesMap.get("product-manager");
+	const negativeCoverageTemplates = new Map(templatesMap);
+	if (pmTpl) {
+		negativeCoverageTemplates.set("product-manager", {
+			...pmTpl,
+			sections: {
+				...pmTpl.sections,
+				responsibilitiesAndBoundaries: `${pmTpl.sections.responsibilitiesAndBoundaries}\n- 不负责：合同、法务条款审核与合规签署。`,
+			},
+		});
+	}
+	const negativeCheck = assessMatterInitiation({
+		prompt: "请审核这份客户合同条款和法务合规边界",
+		members: seededMembers,
+		templatesByRoleId: negativeCoverageTemplates,
+	});
+	assert.equal(negativeCheck.fitStatus, "gap_detected");
+
+	const soloCheck = assessMatterInitiation({
+		prompt: "请列出这批需求的优先级清单",
+		members: seededMembers,
+		templatesByRoleId: templatesMap,
+		preferredMemberId: "product-manager",
+	});
+	assert.equal(soloCheck.recommendedMode, "solo");
+	assert.deepEqual(soloCheck.recommendedAiMemberIds, ["product-manager"]);
+	assert.notEqual(soloCheck.fitStatus, "gap_detected");
+
 	const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: tmp, noSession: true });
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();

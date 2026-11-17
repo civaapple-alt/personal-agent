@@ -39,6 +39,7 @@ export function useMatterInitiationState({
 	const [draftCollaboratorIds, setDraftCollaboratorIds] = useState<string[]>([]);
 	const [assessment, setAssessment] = useState<MatterInitiationAssessmentDto | null>(null);
 	const [assessing, setAssessing] = useState(false);
+	const [assessmentError, setAssessmentError] = useState<string | null>(null);
 	const [architectOpen, setArchitectOpen] = useState(false);
 	const [architectSeed, setArchitectSeed] = useState<RoleGapSuggestionDto | null>(null);
 	const seqRef = useRef(0);
@@ -52,6 +53,11 @@ export function useMatterInitiationState({
 			: (businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null);
 
 	useEffect(() => {
+		const seq = ++seqRef.current;
+		let active = true;
+		const controller = new AbortController();
+		setAssessment(null);
+		setAssessmentError(null);
 		if (selectedMatterId) {
 			setAssessment(null);
 			setAssessing(false);
@@ -63,32 +69,39 @@ export function useMatterInitiationState({
 			setAssessing(false);
 			return;
 		}
-		const seq = ++seqRef.current;
 		setAssessing(true);
 		const timer = window.setTimeout(() => {
-			void assessMatterInitiation({
-				prompt: trimmed,
-				hasImages: composerImageCount > 0,
-				workspaceId: selectedWorkspaceId || undefined,
-				preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
-			})
+			void assessMatterInitiation(
+				{
+					prompt: trimmed,
+					hasImages: composerImageCount > 0,
+					workspaceId: selectedWorkspaceId || undefined,
+					preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
+				},
+				controller.signal,
+			)
 				.then((result) => {
-					if (seqRef.current === seq) {
+					if (active && seqRef.current === seq) {
 						setAssessment(result);
 					}
 				})
 				.catch(() => {
-					if (seqRef.current === seq) {
+					if (active && seqRef.current === seq) {
 						setAssessment(null);
+						setAssessmentError("参与建议暂不可用，仍可按当前安排发送。");
 					}
 				})
 				.finally(() => {
-					if (seqRef.current === seq) {
+					if (active && seqRef.current === seq) {
 						setAssessing(false);
 					}
 				});
 		}, 280);
-		return () => window.clearTimeout(timer);
+		return () => {
+			active = false;
+			controller.abort();
+			window.clearTimeout(timer);
+		};
 	}, [selectedMatterId, composerText, composerImageCount, selectedWorkspaceId, selectedMemberId]);
 
 	const applyPresetMode = useCallback(
@@ -119,8 +132,7 @@ export function useMatterInitiationState({
 				setDraftObserversEnabled(false);
 				return;
 			}
-			// lead_review: targeted observers (default 1 QA/reviewer if none specified yet)
-			const allIds = businessMembers.map((m) => m.id);
+			// lead_review: targeted observers, without enrolling unrelated members.
 			const defaultObserver =
 				options?.observerIds && options.observerIds.length > 0
 					? options.observerIds.filter((id) => id !== leadId)
@@ -132,7 +144,7 @@ export function useMatterInitiationState({
 						})();
 			const nextAiIds = options?.aiIds?.length
 				? Array.from(new Set([...(leadId ? [leadId] : []), ...options.aiIds, ...defaultObserver]))
-				: allIds;
+				: [...(leadId ? [leadId] : []), ...defaultObserver];
 			setDraftAiMemberIds(nextAiIds.length > 0 ? nextAiIds : null);
 			setDraftObserverMemberIds(defaultObserver);
 			setDraftObserversEnabled(defaultObserver.length > 0);
@@ -180,6 +192,7 @@ export function useMatterInitiationState({
 		draftCollaboratorIds,
 		assessment,
 		assessing,
+		assessmentError,
 		architectOpen,
 		architectSeed,
 		setDraftObserverMemberIds,

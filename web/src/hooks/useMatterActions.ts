@@ -73,6 +73,7 @@ interface UseMatterActionsParams {
 	setDraftAiMemberIds: (v: string[] | null) => void;
 	setDraftObserverMemberIds?: (v: string[]) => void;
 	setDraftObserversEnabled: (v: boolean) => void;
+	onSyncDraftPresetForObservers?: (hasObservers: boolean) => void;
 	onResetInitiation?: () => void;
 	setErrorBanner: (msg: string | null) => void;
 	setNoticeBanner: (msg: string | null) => void;
@@ -112,6 +113,7 @@ export function useMatterActions({
 	setDraftAiMemberIds,
 	setDraftObserverMemberIds,
 	setDraftObserversEnabled,
+	onSyncDraftPresetForObservers,
 	onResetInitiation,
 	setErrorBanner,
 	setNoticeBanner,
@@ -422,6 +424,7 @@ export function useMatterActions({
 		if (!selectedMatterId) {
 			setDraftObserversEnabled(enabled);
 			if (!enabled) setDraftObserverMemberIds?.([]);
+			onSyncDraftPresetForObservers?.(enabled);
 			setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
 			return;
 		}
@@ -443,6 +446,7 @@ export function useMatterActions({
 		if (!selectedMatterId) {
 			setDraftObserverMemberIds?.(deduped);
 			setDraftObserversEnabled(deduped.length > 0);
+			onSyncDraftPresetForObservers?.(deduped.length > 0);
 			return;
 		}
 		const targetMatterId = selectedMatterId;
