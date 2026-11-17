@@ -6,6 +6,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ### Open-source documentation
 
+- Make local Pi CLI an explicit required AI runtime dependency, point users to pi.dev for product information and platform-specific installers, and place Pi setup before workbench startup. Keep the tested Pi version separate from installation requirements and from Personal Agent platform validation.
 - Reorganize the project README around the product, a concrete collaboration example, current capabilities and limits, and reader-specific entry points. Add installation, everyday use, design rationale, development, contribution and security guides.
 - Document Pi/model setup, actual participation modes, version feedback, partial data-path overrides, local execution privileges and network exposure. Clarify early product questions against current implementation; retain historical prototypes and evaluation failures.
 - Record remaining publication prerequisites without inventing a repository URL, private security contact or support commitment. Documentation changes do not establish new runtime capabilities or model-quality improvements.
