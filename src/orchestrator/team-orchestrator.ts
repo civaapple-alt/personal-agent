@@ -9,7 +9,11 @@ import type { Deliverable, Matter, MemberMemory, Organization, TeamMember, Works
 import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { validateDelivery } from "./execution-context.ts";
-import { assessMatterInitiation, type MatterInitiationAssessment } from "./matter-initiation.ts";
+import {
+	assessMatterInitiation,
+	assessMatterInitiationWithModel,
+	type MatterInitiationAssessment,
+} from "./matter-initiation.ts";
 import {
 	buildArchitectMessageProposals,
 	type MetaArchitectChatInput,
@@ -821,34 +825,77 @@ export class TeamOrchestrator {
 		}
 	}
 
-	/** Run an isolated multi-turn Role Architect Meta-Bot conversation (read-only, proposes 1..N blueprints). */
-	async chatWithRoleArchitect(input: MetaArchitectChatInput): Promise<MetaArchitectChatResult> {
+	private async runTrackedAuxTask<T>(
+		abortMessage: string,
+		callerSignal: AbortSignal | undefined,
+		task: (signal: AbortSignal) => Promise<T>,
+	): Promise<T> {
 		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
 		const controller = new AbortController();
 		const completion = Promise.withResolvers<void>();
-		const onCallerAbort = () => controller.abort(new Error("Role architect session was aborted"));
-		input.signal?.throwIfAborted();
-		input.signal?.addEventListener("abort", onCallerAbort, { once: true });
+		const onCallerAbort = () => controller.abort(new Error(abortMessage));
+		callerSignal?.throwIfAborted();
+		callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
 		this.architectControllers.add(controller);
 		this.architectTasks.add(completion.promise);
 		try {
-			return await runMetaArchitectChat(
+			return await task(controller.signal);
+		} catch (error) {
+			if (controller.signal.aborted) throw new Error(abortMessage, { cause: error });
+			throw error;
+		} finally {
+			callerSignal?.removeEventListener("abort", onCallerAbort);
+			this.architectControllers.delete(controller);
+			this.architectTasks.delete(completion.promise);
+			completion.resolve();
+		}
+	}
+
+	/** Run an isolated, schema-enforced Pi LLM decision call for matter initiation fit and team formation. */
+	async assessInitiationWithModel(input: {
+		prompt: string;
+		hasImages?: boolean;
+		workspaceId?: string | null;
+		preferredMemberId?: string;
+		readRepo?: boolean;
+		timeoutMs?: number;
+		signal?: AbortSignal;
+	}): Promise<MatterInitiationAssessment> {
+		const workspace = input.workspaceId ? this.store.getWorkspace(input.workspaceId) : null;
+		return this.runTrackedAuxTask("Initiation decision was aborted", input.signal, (signal) =>
+			assessMatterInitiationWithModel(
+				{
+					defaultCwd: this.defaultCwd,
+					workerFactory: this.workerFactory,
+					members: this.store.listMembers(),
+					templatesByRoleId: this.templatesById,
+				},
+				{
+					prompt: input.prompt,
+					hasImages: input.hasImages,
+					workspacePath: workspace?.repoPath ?? null,
+					workspaceName: workspace?.name ?? null,
+					preferredMemberId: input.preferredMemberId,
+					readRepo: input.readRepo,
+					timeoutMs: input.timeoutMs,
+					signal,
+				},
+			),
+		);
+	}
+
+	/** Run an isolated multi-turn Role Architect Meta-Bot conversation (read-only, proposes 1..N blueprints). */
+	async chatWithRoleArchitect(input: MetaArchitectChatInput): Promise<MetaArchitectChatResult> {
+		return this.runTrackedAuxTask("Role architect session was aborted", input.signal, (signal) =>
+			runMetaArchitectChat(
 				{
 					store: this.store,
 					defaultCwd: this.defaultCwd,
 					workerFactory: this.workerFactory,
 					templatesById: this.templatesById,
 				},
-				{ ...input, signal: controller.signal },
-			);
-		} catch (error) {
-			if (controller.signal.aborted) throw new Error("Role architect session was aborted", { cause: error });
-			throw error;
-		} finally {
-			input.signal?.removeEventListener("abort", onCallerAbort);
-			this.architectControllers.delete(controller);
-			this.architectTasks.delete(completion.promise);
-			completion.resolve();
-		}
+				{ ...input, signal },
+			),
+		);
 	}
 }

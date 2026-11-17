@@ -12,7 +12,7 @@
 - 并发、工作区切换与图片上传：
   - 同事项运行中发送消息、切换工作区及切换事项负责人（`leadMemberId`）返回 409；调整全局旁听开关（`observersEnabled`）、
     AI 参与名单（`aiMemberIds`）或旁听列表（`observerMemberIds`）可在运行中即时更新。取消要交给编排核，不只广播停止事件。
-  - `POST /api/matters/assess` 结合当前团队职责与工作区状态评估立项匹配度、推荐参与模式及角色缺口。
+  - `POST /api/matters/assess` 默认以 `mode: "rules"` 执行即时本地规则预判；传入 `mode: "model"`（仅所有者可调用，支持 `readRepo: true` 只读查看工作区与连接断开自动 `responseCancellation` 中止）通过 Pi 类型化决策模型返回强校验的推荐阵型与把握度。
   - `POST /api/matters` 支持传入 `aiMemberIds`、`observersEnabled`、定向 `observerMemberIds`、`collaboratorIds` 与可选 `images`（`POST /api/matters/:id/messages`
     同样支持可选 `observerMemberIds` 与 `images`）：
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。

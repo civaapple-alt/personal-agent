@@ -1,10 +1,11 @@
 import { resolve } from "node:path";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
+import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import type { PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
 import type { Collaborator, DeliverableType, Matter } from "../../storage/types.ts";
 import { requireOwner, toDispatchAuthor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
+import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import { loadStoredImagesFromRefs, parseIncomingImages, persistUploadedImages } from "../uploads.ts";
 import { parseCollaboratorIds, parseObserverMemberIds, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
@@ -239,6 +240,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 
 	if (method === "POST" && pathname === "/api/matters/assess") {
 		const body = await readJsonBody(req);
+		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
@@ -252,6 +254,37 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		if (preferredMemberId && !store.getMember(preferredMemberId)) {
 			sendError(res, 404, `Member not found: ${preferredMemberId}`);
+			return true;
+		}
+		if (mode === "model") {
+			if (!requireOwner(res, actor)) return true;
+			if (!prompt) {
+				sendError(res, 400, "prompt is required when mode is model");
+				return true;
+			}
+			const cancellation = responseCancellation(res);
+			try {
+				const assessment = await orchestrator.assessInitiationWithModel({
+					prompt,
+					hasImages: body.hasImages === true,
+					workspaceId,
+					preferredMemberId,
+					readRepo: body.readRepo === true,
+					signal: cancellation.signal,
+				});
+				if (res.destroyed || cancellation.signal.aborted) return true;
+				sendJson(res, 200, assessment);
+			} catch (err) {
+				if (res.destroyed || cancellation.signal.aborted) return true;
+				if (err instanceof PiDecisionError) {
+					sendError(res, err.kind === "aborted" ? 499 : 502, err.message);
+					return true;
+				}
+				const message = err instanceof Error ? err.message : String(err);
+				sendError(res, 502, message);
+			} finally {
+				cancellation.dispose();
+			}
 			return true;
 		}
 		const assessment = orchestrator.assessInitiation({

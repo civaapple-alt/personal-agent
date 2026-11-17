@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Typed Pi LLM Decision Model for Initiation Assessment (`typesafe-ai` style)
+
+- Add a reusable typed structured decision runner over Pi RPC ([src/orchestrator/pi-decision.ts](src/orchestrator/pi-decision.ts): `runTypedPiDecision`, `extractJsonObject`, `PiDecisionError`), executing isolated stateless turns (`noSession: true`, `thinkingLevel: "low"`, `--no-extensions`, `--no-skills`, `--no-mcp`, `--tools ""` or optional read-only `["read"]`), enforcing schema + live business member ID validation, and propagating `AbortSignal` cleanup.
+- Add `assessMatterInitiationWithModel` (`src/orchestrator/matter-initiation.ts`, `TeamOrchestrator.assessInitiationWithModel`) and upgrade `POST /api/matters/assess` (`src/server/routes/matters.ts`) to support explicit owner-only `mode: "model"` + optional `readRepo: true` with `responseCancellation`, strict `validateInitiationModelDecision` rejection of invalid enums or hallucinated member IDs (502), and provenance metadata (`assessmentSource`, `confidence`, `usedRepoRead`), while keeping `mode: "rules"` instant for typing.
+- Add opt-in `请 AI 决策阵型` control in [MatterInitiationPanel.tsx](web/src/components/chat/MatterInitiationPanel.tsx) / [useMatterInitiationState.ts](web/src/hooks/useMatterInitiationState.ts) with explicit secondary confirmation, optional read-only repo inspection toggle, live `取消分析` abort button, provenance badges (`AI 决策建议` vs `本地规则`), and non-destructive fallback preserving local rule suggestions on error.
+
 ### New matter initiation UX & rule transparency
 
 - Refine `assessMatterInitiation` (`src/orchestrator/matter-initiation.ts`) so negative `不做`/`不负责` clauses are excluded from positive keyword matching and domain coverage checks, drop generic false-positive gap alerts when no concrete domain gap rule matches, keep single-lead tasks scoped to `solo` when appropriate, and surface transparent human-readable local-rule basis notes (no LLM call or repo inspection).

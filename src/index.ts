@@ -1,11 +1,15 @@
 export { resolveRepoGitUserIdentity } from "./orchestrator/execution-context.ts";
 export {
 	assessMatterInitiation,
+	assessMatterInitiationWithModel,
 	type CollaborationPresetMode,
+	type DecisionConfidence,
+	type InitiationAssessmentSource,
 	type MatterInitiationAssessment,
 	type MatterInitiationCandidate,
 	type RoleFitStatus,
 	type RoleGapSuggestion,
+	validateInitiationModelDecision,
 } from "./orchestrator/matter-initiation.ts";
 export {
 	collectTeamFrictionDigest,
@@ -20,6 +24,14 @@ export {
 	type RoleProposalPayload,
 	runMetaArchitectChat,
 } from "./orchestrator/meta-architect.ts";
+export {
+	extractJsonObject,
+	PiDecisionError,
+	type PiDecisionErrorKind,
+	type PiDecisionResult,
+	type PiDecisionSpec,
+	runTypedPiDecision,
+} from "./orchestrator/pi-decision.ts";
 export {
 	buildProgressSnapshot,
 	type DelegateInput,

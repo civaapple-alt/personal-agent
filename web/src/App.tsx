@@ -775,6 +775,8 @@ export function App() {
 						initiationAssessment={initiation.assessment}
 						initiationAssessing={initiation.assessing}
 						initiationAssessmentError={initiation.assessmentError}
+						initiationModelAssessing={initiation.modelAssessing}
+						initiationModelAssessmentError={initiation.modelAssessmentError}
 						onChangeLeadMember={actions.handleChangeLeadMember}
 						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
 						onUpdateDraftAiMemberIds={setDraftAiMemberIds}
@@ -783,6 +785,8 @@ export function App() {
 							initiation.applyPresetMode(mode, leadId ? { leadId } : undefined)
 						}
 						onApplyInitiationRecommendation={initiation.applyAssessmentRecommendation}
+						onRequestModelAssessment={(opts) => void initiation.requestModelAssessment(opts)}
+						onCancelModelAssessment={initiation.cancelModelAssessment}
 						onOpenArchitect={initiation.openArchitectForGap}
 						onToggleObserversEnabled={actions.handleToggleObserversEnabled}
 						onUpdateMatterObservers={actions.handleUpdateMatterObservers}

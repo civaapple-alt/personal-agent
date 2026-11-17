@@ -40,9 +40,13 @@ export function useMatterInitiationState({
 	const [assessment, setAssessment] = useState<MatterInitiationAssessmentDto | null>(null);
 	const [assessing, setAssessing] = useState(false);
 	const [assessmentError, setAssessmentError] = useState<string | null>(null);
+	const [modelAssessing, setModelAssessing] = useState(false);
+	const [modelAssessmentError, setModelAssessmentError] = useState<string | null>(null);
 	const [architectOpen, setArchitectOpen] = useState(false);
 	const [architectSeed, setArchitectSeed] = useState<RoleGapSuggestionDto | null>(null);
 	const seqRef = useRef(0);
+	const modelSeqRef = useRef(0);
+	const modelControllerRef = useRef<AbortController | null>(null);
 
 	const businessMembers = useMemo(() => filterBusinessMembers(members), [members]);
 	const fallbackLeadId =
@@ -56,6 +60,10 @@ export function useMatterInitiationState({
 		const seq = ++seqRef.current;
 		let active = true;
 		const controller = new AbortController();
+		modelControllerRef.current?.abort();
+		modelControllerRef.current = null;
+		setModelAssessing(false);
+		setModelAssessmentError(null);
 		setAssessment(null);
 		setAssessmentError(null);
 		if (selectedMatterId) {
@@ -171,18 +179,76 @@ export function useMatterInitiationState({
 		});
 	}, [applyPresetMode, assessment, setSelectedMemberId]);
 
+	const cancelModelAssessment = useCallback(() => {
+		modelSeqRef.current += 1;
+		modelControllerRef.current?.abort();
+		modelControllerRef.current = null;
+		setModelAssessing(false);
+	}, []);
+
+	const requestModelAssessment = useCallback(
+		async (options?: { readRepo?: boolean }) => {
+			const trimmed = composerText.trim();
+			if (selectedMatterId || !trimmed) return;
+			const seq = ++modelSeqRef.current;
+			modelControllerRef.current?.abort();
+			const controller = new AbortController();
+			modelControllerRef.current = controller;
+			setModelAssessing(true);
+			setModelAssessmentError(null);
+			try {
+				const result = await assessMatterInitiation(
+					{
+						prompt: trimmed,
+						hasImages: composerImageCount > 0,
+						workspaceId: selectedWorkspaceId || undefined,
+						preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
+						mode: "model",
+						readRepo: options?.readRepo === true && Boolean(selectedWorkspaceId),
+					},
+					controller.signal,
+				);
+				if (!controller.signal.aborted && modelSeqRef.current === seq) {
+					setAssessment(result);
+					setAssessmentError(null);
+				}
+			} catch (err: unknown) {
+				if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+					return;
+				}
+				if (modelSeqRef.current === seq) {
+					const message = err instanceof Error ? err.message : String(err);
+					setModelAssessmentError(`AI 决策模型暂不可用（${message}），已保留本地规则建议`);
+				}
+			} finally {
+				if (modelSeqRef.current === seq) {
+					if (modelControllerRef.current === controller) {
+						modelControllerRef.current = null;
+					}
+					setModelAssessing(false);
+				}
+			}
+		},
+		[composerImageCount, composerText, selectedMatterId, selectedMemberId, selectedWorkspaceId],
+	);
+
 	const openArchitectForGap = useCallback((gap?: RoleGapSuggestionDto) => {
 		setArchitectSeed(gap ?? null);
 		setArchitectOpen(true);
 	}, []);
 
 	const resetInitiationState = useCallback(() => {
+		modelSeqRef.current += 1;
+		modelControllerRef.current?.abort();
+		modelControllerRef.current = null;
 		setDraftPresetMode("lead_consult");
 		setDraftAiMemberIds(null);
 		setDraftObserverMemberIds([]);
 		setDraftObserversEnabled(false);
 		setDraftCollaboratorIds([]);
 		setAssessment(null);
+		setModelAssessing(false);
+		setModelAssessmentError(null);
 		setComposerMode("dispatch");
 	}, [setComposerMode, setDraftAiMemberIds, setDraftObserversEnabled]);
 
@@ -193,6 +259,8 @@ export function useMatterInitiationState({
 		assessment,
 		assessing,
 		assessmentError,
+		modelAssessing,
+		modelAssessmentError,
 		architectOpen,
 		architectSeed,
 		setDraftObserverMemberIds,
@@ -202,6 +270,8 @@ export function useMatterInitiationState({
 		setArchitectSeed,
 		applyPresetMode,
 		applyAssessmentRecommendation,
+		requestModelAssessment,
+		cancelModelAssessment,
 		openArchitectForGap,
 		resetInitiationState,
 	};

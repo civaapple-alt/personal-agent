@@ -87,12 +87,16 @@ interface ChatStageProps {
 	initiationAssessment: MatterInitiationAssessmentDto | null;
 	initiationAssessing: boolean;
 	initiationAssessmentError?: string | null;
+	initiationModelAssessing?: boolean;
+	initiationModelAssessmentError?: string | null;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode, leadId?: string | null) => void;
 	onApplyInitiationRecommendation: () => void;
+	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
+	onCancelModelAssessment?: () => void;
 	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
 	onToggleObserversEnabled: (enabled: boolean) => void;
 	onUpdateMatterObservers: (observerIds: string[]) => void;
@@ -180,12 +184,16 @@ export function ChatStage({
 	initiationAssessment,
 	initiationAssessing,
 	initiationAssessmentError,
+	initiationModelAssessing = false,
+	initiationModelAssessmentError,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateDraftAiMemberIds,
 	onUpdateDraftCollaboratorIds,
 	onApplyPresetMode,
 	onApplyInitiationRecommendation,
+	onRequestModelAssessment,
+	onCancelModelAssessment,
 	onOpenArchitect,
 	onToggleObserversEnabled,
 	onUpdateMatterObservers,
@@ -653,6 +661,8 @@ export function ChatStage({
 						<MatterInitiationPanel
 							isOwner={isOwner}
 							composerMode={composerMode}
+							hasWorkspace={Boolean(selectedWorkspaceId)}
+							hasPromptText={Boolean(composerText.trim())}
 							members={members}
 							nonOwnerCollaborators={nonOwnerCollaborators}
 							templateByRoleId={templateByRoleId}
@@ -664,12 +674,16 @@ export function ChatStage({
 							assessment={initiationAssessment}
 							assessing={initiationAssessing}
 							assessmentError={initiationAssessmentError}
+							modelAssessing={initiationModelAssessing}
+							modelAssessmentError={initiationModelAssessmentError}
 							onSelectLeadMember={onChangeLeadMember}
 							onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
 							onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
 							onUpdateDraftObserverIds={onUpdateMatterObservers}
 							onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
 							onApplyRecommendation={onApplyInitiationRecommendation}
+							onRequestModelAssessment={onRequestModelAssessment}
+							onCancelModelAssessment={onCancelModelAssessment}
 							onOpenArchitect={onOpenArchitect}
 							onStartArchitectMatter={onStartArchitectMatter}
 						/>

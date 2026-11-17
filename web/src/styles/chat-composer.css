@@ -549,6 +549,20 @@
 .initiation-assessment-bar { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-sidebar); font-size: var(--text-xs); color: var(--text-secondary); }
 .initiation-assessment-bar.is-gap { background: var(--warn-bg); }
 .initiation-recommendation-row > button { flex-shrink: 0; }
+.initiation-recommend-text { min-width: 0; }
+.initiation-recommend-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.initiation-model-confirm {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--border);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.initiation-repo-check { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.initiation-model-error { margin: 8px 0 0; color: var(--warn-text); line-height: 1.45; }
 .initiation-basis { margin-top: 8px; }
 .initiation-basis summary { width: fit-content; cursor: pointer; color: var(--accent); }
 .initiation-basis p { margin: 8px 0 0; line-height: 1.65; }

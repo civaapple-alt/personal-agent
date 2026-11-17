@@ -17,6 +17,7 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { resolveRoleSkills } from "./execution-context.ts";
 import type { CollaborationPresetMode } from "./matter-initiation.ts";
+import { extractJsonObject } from "./pi-decision.ts";
 import { collectTeamHealthEvidence, formatTeamHealthEvidence, type TeamHealthEvidence } from "./team-health.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
 
@@ -179,13 +180,8 @@ export function parseMetaArchitectResponse(
 	},
 ): Omit<MetaArchitectChatResult, "usedHealthcheck"> {
 	const cleaned = rawText.trim();
-	const jsonBlock = cleaned
-		.replace(/^```(?:json)?\s*/i, "")
-		.replace(/\s*```$/i, "")
-		.trim();
-	const start = jsonBlock.indexOf("{");
-	const end = jsonBlock.lastIndexOf("}");
-	if (start === -1 || end <= start) {
+	const parsed = extractJsonObject(rawText);
+	if (!parsed) {
 		return {
 			reply: cleaned || "请补充说明你期望的工作流程、参与边界，或需要拆分的具体环节。",
 			followUpQuestions: [],
@@ -193,21 +189,7 @@ export function parseMetaArchitectResponse(
 		};
 	}
 
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(jsonBlock.slice(start, end + 1));
-	} catch {
-		return {
-			reply: cleaned,
-			followUpQuestions: [],
-			blueprints: [],
-		};
-	}
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-		return { reply: cleaned, followUpQuestions: [], blueprints: [] };
-	}
-
-	const rec = parsed as Record<string, unknown>;
+	const rec = parsed;
 	const reply =
 		typeof rec.reply === "string" && rec.reply.trim()
 			? rec.reply.trim()

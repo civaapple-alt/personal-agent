@@ -241,6 +241,9 @@ export interface RoleGapSuggestionDto {
 	reason: string;
 }
 
+export type InitiationAssessmentSource = "rules" | "model";
+export type DecisionConfidence = "high" | "medium" | "low";
+
 export interface MatterInitiationAssessmentDto {
 	fitStatus: RoleFitStatus;
 	headline: string;
@@ -251,6 +254,9 @@ export interface MatterInitiationAssessmentDto {
 	recommendedObserverIds: string[];
 	candidates: MatterInitiationCandidateDto[];
 	gapSuggestion?: RoleGapSuggestionDto;
+	assessmentSource?: InitiationAssessmentSource;
+	confidence?: DecisionConfidence;
+	usedRepoRead?: boolean;
 }
 
 export interface RoleArchitectDraftDto {
@@ -448,6 +454,8 @@ export function assessMatterInitiation(
 		hasImages?: boolean;
 		workspaceId?: string;
 		preferredMemberId?: string;
+		mode?: "rules" | "model";
+		readRepo?: boolean;
 	},
 	signal?: AbortSignal,
 ): Promise<MatterInitiationAssessmentDto> {

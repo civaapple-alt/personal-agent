@@ -16,6 +16,8 @@ interface MatterInitiationPanelProps {
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
 	composerMode: "discussion" | "dispatch";
+	hasWorkspace?: boolean;
+	hasPromptText?: boolean;
 	draftPresetMode: CollaborationPresetMode;
 	draftAiMemberIds: string[] | null;
 	draftObserverMemberIds: string[];
@@ -23,12 +25,16 @@ interface MatterInitiationPanelProps {
 	assessment: MatterInitiationAssessmentDto | null;
 	assessing: boolean;
 	assessmentError?: string | null;
+	modelAssessing?: boolean;
+	modelAssessmentError?: string | null;
 	onSelectLeadMember: (memberId: string) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftObserverIds: (ids: string[]) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
 	onApplyRecommendation: () => void;
+	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
+	onCancelModelAssessment?: () => void;
 	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
 	onStartArchitectMatter?: (seedText?: string) => void;
 }
@@ -41,9 +47,11 @@ const PRESET_OPTIONS: Array<{ id: CollaborationPresetMode; label: string; hint: 
 ];
 const sameIds = (a: string[], b: string[]) => [...new Set(a)].sort().join("\0") === [...new Set(b)].sort().join("\0");
 
-/** Actual send configuration stays primary; the rule recommendation is explicit and optional. */
+/** Actual send configuration stays primary; optional local rule or explicit Pi LLM decision sits beside it. */
 export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const [expanded, setExpanded] = useState(false);
+	const [confirmModel, setConfirmModel] = useState(false);
+	const [readRepoForDecision, setReadRepoForDecision] = useState(false);
 	const rosterId = useId();
 	const {
 		isOwner,
@@ -51,6 +59,8 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		templateByRoleId,
 		selectedMemberId,
 		composerMode,
+		hasWorkspace = false,
+		hasPromptText = false,
 		draftPresetMode,
 		draftAiMemberIds,
 		draftObserverMemberIds,
@@ -58,12 +68,16 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		assessment,
 		assessing,
 		assessmentError,
+		modelAssessing = false,
+		modelAssessmentError,
 		onSelectLeadMember,
 		onApplyPresetMode,
 		onUpdateDraftAiMemberIds,
 		onUpdateDraftObserverIds,
 		onUpdateDraftCollaboratorIds,
 		onApplyRecommendation,
+		onRequestModelAssessment,
+		onCancelModelAssessment,
 		onOpenArchitect,
 		onStartArchitectMatter,
 		nonOwnerCollaborators,
@@ -118,6 +132,12 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		assessment?.recommendedMode === "human_first"
 			? "先讨论，再决定是否安排 AI"
 			: `${name(assessment?.recommendedLeadId ?? null)}${assessment?.recommendedMode === "solo" ? "独立处理" : assessment?.recommendedMode === "lead_review" ? "牵头，增加定向旁听" : "牵头，按需请教相关成员"}`;
+	const isModelResult = assessment?.assessmentSource === "model";
+	const confidenceLabel =
+		assessment?.confidence === "high" ? "高把握" : assessment?.confidence === "low" ? "低把握" : "中把握";
+	const showAssessmentBar =
+		assessing || assessment || assessmentError || modelAssessing || modelAssessmentError || confirmModel;
+
 	return (
 		<section className="initiation-panel" aria-label="新事项参与安排">
 			<div className="initiation-current-row">
@@ -141,12 +161,21 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 					{expanded ? "收起设置" : "调整参与方式"}
 				</button>
 			</div>
-			{(assessing || assessment || assessmentError) && (
+			{showAssessmentBar && (
 				<section
 					className={`initiation-assessment-bar${assessment?.fitStatus === "gap_detected" ? " is-gap" : ""}`}
 					aria-label="参与建议"
 				>
-					{assessing ? (
+					{modelAssessing ? (
+						<div className="initiation-recommendation-row">
+							<span className="initiation-assess-note">正在通过 Pi 决策模型分析需求与角色边界…</span>
+							{onCancelModelAssessment && (
+								<button type="button" className="btn-inline" onClick={onCancelModelAssessment}>
+									取消分析
+								</button>
+							)}
+						</div>
+					) : assessing ? (
 						<span className="initiation-assess-note">正在匹配文字建议…</span>
 					) : assessmentError ? (
 						<span className="initiation-assess-note">{assessmentError}</span>
@@ -154,38 +183,89 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						assessment && (
 							<>
 								<div className="initiation-recommendation-row">
-									<span>
-										{applied
-											? "当前安排已采用建议"
-											: assessment.fitStatus === "gap_detected"
-												? "岗位覆盖待确认"
-												: `可选建议：${recommendation}`}
+									<span className="initiation-recommend-text">
+										{applied ? (
+											"当前安排已采用建议"
+										) : assessment.fitStatus === "gap_detected" ? (
+											isModelResult ? (
+												`AI 决策：岗位覆盖待确认 · ${assessment.gapSuggestion?.missingRoleTitle ?? "建议补齐角色"}`
+											) : (
+												"岗位覆盖待确认"
+											)
+										) : (
+											<>
+												{isModelResult ? `AI 决策建议（${confidenceLabel}）` : "可选建议（本地规则）"}：
+												{recommendation}
+											</>
+										)}
 									</span>
-									{!applied && assessment.fitStatus !== "gap_detected" && (
-										<button type="button" className="btn-inline" onClick={onApplyRecommendation}>
-											使用建议
-										</button>
-									)}
-									{assessment.fitStatus === "gap_detected" && (
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() =>
-												onStartArchitectMatter
-													? onStartArchitectMatter(
-															`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
-														)
-													: onOpenArchitect(assessment.gapSuggestion)
-											}
-										>
-											请架构师协助
-										</button>
-									)}
+									<div className="initiation-recommend-actions">
+										{!applied && assessment.fitStatus !== "gap_detected" && (
+											<button type="button" className="btn-inline" onClick={onApplyRecommendation}>
+												使用建议
+											</button>
+										)}
+										{assessment.fitStatus === "gap_detected" && (
+											<button
+												type="button"
+												className="btn-inline"
+												onClick={() =>
+													onStartArchitectMatter
+														? onStartArchitectMatter(
+																`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
+															)
+														: onOpenArchitect(assessment.gapSuggestion)
+												}
+											>
+												请架构师协助
+											</button>
+										)}
+										{onRequestModelAssessment && hasPromptText && !confirmModel && (
+											<button type="button" className="btn-inline" onClick={() => setConfirmModel(true)}>
+												{isModelResult ? "重新 AI 决策" : "请 AI 决策阵型"}
+											</button>
+										)}
+									</div>
 								</div>
+								{confirmModel && hasPromptText && (
+									<div className="initiation-model-confirm">
+										<span>将调用 Pi 决策模型评估团队分工与阵型（约数秒）：</span>
+										{hasWorkspace && (
+											<label className="initiation-repo-check">
+												<input
+													type="checkbox"
+													checked={readRepoForDecision}
+													onChange={(e) => setReadRepoForDecision(e.target.checked)}
+												/>
+												<span>只读参考仓库入口文件</span>
+											</label>
+										)}
+										<div className="initiation-recommend-actions">
+											<button
+												type="button"
+												className="btn-pill-dark btn-xs"
+												onClick={() => {
+													setConfirmModel(false);
+													onRequestModelAssessment?.({ readRepo: readRepoForDecision });
+												}}
+											>
+												确认分析
+											</button>
+											<button type="button" className="btn-inline" onClick={() => setConfirmModel(false)}>
+												取消
+											</button>
+										</div>
+									</div>
+								)}
+								{modelAssessmentError && <p className="initiation-model-error">{modelAssessmentError}</p>}
 								<details className="initiation-basis">
 									<summary>为什么这样建议？</summary>
 									<p>{assessment.explanation}</p>
-									<p>建议不会自动替换当前设置。未命中关键词不代表成员一定无法胜任。</p>
+									<p>
+										{isModelResult
+											? `由 Pi 决策模型基于职责与不做边界判断${assessment.usedRepoRead ? "（已开启只读仓库参考）" : "（未读取仓库文件）"}。建议不会自动替换当前设置。`
+											: "以上为本地文字规则预判，不调用模型、不读取仓库；建议不会自动替换当前设置，未命中关键词不代表成员无法胜任。"}
+									</p>
 								</details>
 							</>
 						)
