@@ -132,6 +132,8 @@ export interface TeamOrchestratorOptions {
 	onDialog?: OrchestratorDialogHandler;
 	/** Operator-approved Pi extensions supplying declared custom/MCP tools. */
 	extensions?: string[];
+	/** Explicit complete pstack source pack; not inherited from the outer coding assistant. */
+	pstackDir?: string;
 }
 
 export interface PromptImageAttachment extends ImageContent {
@@ -265,6 +267,7 @@ const TOOL_LABELS: Record<string, string> = {
 	delegate_to_member: "委托团队成员",
 	publish_deliverable: "提交成果",
 	propose_experience: "提炼候选经验",
+	load_pstack_skill: "读取 pstack 方法",
 };
 
 function parseTimeoutEnv(raw: string | undefined): number | undefined {
@@ -303,6 +306,9 @@ export function truncateInline(text: string, maxLen = 52): string {
 export function summarizeToolArgs(args: unknown): string {
 	if (!args || typeof args !== "object") return "";
 	const record = args as Record<string, unknown>;
+	if (typeof record.name === "string" && record.name.trim()) {
+		return truncateInline(`${record.name}${typeof record.resource === "string" ? ` / ${record.resource}` : ""}`, 52);
+	}
 	if (typeof record.path === "string" && record.path.trim()) {
 		const parts = record.path.trim().split("/").filter(Boolean);
 		const compact = parts.length > 2 ? parts.slice(-2).join("/") : record.path.trim();

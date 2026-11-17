@@ -49,6 +49,7 @@ async function main(): Promise<void> {
 		defaultCwd: rootDir,
 		noSession: false,
 		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
+		pstackDir: process.env.PA_PSTACK_DIR?.trim() || undefined,
 		sessionDir: resolve(rootDir, ".data/pi-sessions"),
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});

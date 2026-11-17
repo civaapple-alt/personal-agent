@@ -13,6 +13,7 @@
 
 按问题找入口：
 
+- `pstackDir` 可为正常岗位执行配置完整 pstack 方法包；[pstack.ts](../roles/pstack.ts) 检查来源并提供方法指引，[pstack-extension.ts](../rpc/pstack-extension.ts) 在 Pi 内按需读取模式、原则和 playbook。方法工具需通过握手，不增加岗位业务工具权限；独立 JSON 决策和反思不自动接入。启用与实机证据见[pstack 运行说明](../../docs/pstack-runtime.md)。
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案；只有模型新增的 Skill 限于已安装目录，显式缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 

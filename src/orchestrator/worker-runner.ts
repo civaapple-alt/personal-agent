@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildPstackGuidance, preparePstackRuntime } from "../roles/pstack.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -45,6 +46,7 @@ export interface WorkerRunnerDeps {
 	sessionDir: string | undefined;
 	noSession: boolean;
 	extensions: string[];
+	pstackDir?: string;
 	workerFactory: WorkerFactory;
 	getDialogHandler: () => OrchestratorDialogHandler | undefined;
 	getTemplateForMember: (member: TeamMember) => RoleTemplate | undefined;
@@ -117,6 +119,8 @@ export async function executeWithWorkerPass(
 		const template = deps.getTemplateForMember(input.member);
 		const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
 		const skillPaths = await resolveRoleSkills(template);
+		const pstack = deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
+		const methodTools = pstack ? ["load_pstack_skill"] : [];
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
@@ -269,9 +273,23 @@ export async function executeWithWorkerPass(
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
+		if (pstack)
+			args.push(
+				"--skill",
+				pstack.modePath,
+				"--extension",
+				fileURLToPath(
+					new URL(
+						import.meta.url.endsWith(".js") ? "../rpc/pstack-extension.js" : "../rpc/pstack-extension.ts",
+						import.meta.url,
+					),
+				),
+			);
 		args.push(
 			"--tools",
-			[...requestedTools, ...teamTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(","),
+			[...requestedTools, ...teamTools, ...methodTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(
+				",",
+			),
 		);
 
 		const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
@@ -291,6 +309,7 @@ export async function executeWithWorkerPass(
 			args,
 			env: {
 				...bridge.env,
+				...(pstack ? { PA_PSTACK_DIR: pstack.root } : {}),
 				GIT_AUTHOR_NAME: gitIdentity.gitName,
 				GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
 				GIT_COMMITTER_NAME: committerName,
@@ -305,30 +324,32 @@ export async function executeWithWorkerPass(
 				PA_REQUIRED_TOOLS: JSON.stringify([
 					...requestedTools,
 					...teamTools,
+					...methodTools,
 					...mcpDependencies.map((name) => `mcp__${name}__*`),
 				]),
-				PA_MEMBER_CONTEXT: buildMemberSystemPrompt({
-					member: input.member,
-					template,
-					memories: relevantMemories,
-					workspace: input.workspace,
-					organization,
-					repoGitUser,
-					sessionMode,
-					teamMembers: deps.resolveMatterAiMembers(matter),
-					...(isArchitect && deps.getTemplatesById
-						? {
-								extraGuidance: await buildArchitectMatterContext(
-									{ store: deps.store, templatesById: deps.getTemplatesById() },
-									{
-										isMidMatterConsult: Boolean(
-											matter?.leadMemberId && matter.leadMemberId !== input.member.id,
-										),
-									},
-								),
-							}
-						: {}),
-				}),
+				PA_MEMBER_CONTEXT:
+					buildMemberSystemPrompt({
+						member: input.member,
+						template,
+						memories: relevantMemories,
+						workspace: input.workspace,
+						organization,
+						repoGitUser,
+						sessionMode,
+						teamMembers: deps.resolveMatterAiMembers(matter),
+						...(isArchitect && deps.getTemplatesById
+							? {
+									extraGuidance: await buildArchitectMatterContext(
+										{ store: deps.store, templatesById: deps.getTemplatesById() },
+										{
+											isMidMatterConsult: Boolean(
+												matter?.leadMemberId && matter.leadMemberId !== input.member.id,
+											),
+										},
+									),
+								}
+							: {}),
+					}) + (pstack ? `\n\n${buildPstackGuidance(pstack, sessionMode)}` : ""),
 			},
 		});
 		input.run.workers.add(worker);
@@ -340,6 +361,12 @@ export async function executeWithWorkerPass(
 				const compactArgs =
 					event.type === "tool_execution_start" && rawArgs
 						? {
+								...(toolName === "load_pstack_skill" && typeof rawArgs.name === "string"
+									? { name: rawArgs.name.slice(0, 128) }
+									: {}),
+								...(toolName === "load_pstack_skill" && typeof rawArgs.resource === "string"
+									? { resource: rawArgs.resource.slice(0, 240) }
+									: {}),
 								...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
 								...(typeof rawArgs.sourcePath === "string"
 									? { sourcePath: rawArgs.sourcePath.slice(0, 240) }
@@ -436,7 +463,7 @@ export async function executeWithWorkerPass(
 		signal.throwIfAborted();
 		const state = await worker.getState();
 		const tools = await bridge.waitReady();
-		const missing = [...requestedTools, ...teamTools].filter((name) => !tools.includes(name));
+		const missing = [...requestedTools, ...teamTools, ...methodTools].filter((name) => !tools.includes(name));
 		for (const dependency of mcpDependencies)
 			if (!tools.some((name) => name.startsWith(`mcp__${dependency}__`))) missing.push(`MCP:${dependency}`);
 		if (missing.length) throw new Error(`Required capabilities unavailable: ${missing.join(", ")}`);
@@ -449,6 +476,16 @@ export async function executeWithWorkerPass(
 				method: "runtime_ready",
 				tools,
 				skills: skillPaths,
+				...(pstack
+					? {
+							pstack: {
+								version: pstack.version,
+								root: pstack.root,
+								modeSha256: pstack.modeSha256,
+								availableSkillCount: pstack.skills.length,
+							},
+						}
+					: {}),
 				resumed: Boolean(sessionFile),
 				piSessionId: state.sessionId,
 			}),

@@ -58,7 +58,9 @@ npm run start:web
 - 只改文档可运行 `npm run check:docs`；隔离启动检查使用 `npm run check:startup`（需要先构建，不调用模型）。
 - 完整说明和针对性验证选择见 [scripts](scripts/README.md) 与 [test](test/README.md)。
 
-`demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner`、`demo:review`、`demo:observer`、`demo:architect`、`demo:roles` 和 `demo:decision` 会调用真实模型，不属于默认检查；使用 `npm run <命令>` 显式执行，范围、临时数据与证据约定见 [demo](src/demo/README.md)。
+`demo:rpc`、`demo:team`、`demo:rsi`、`demo:inner`、`demo:review`、`demo:observer`、`demo:architect`、`demo:roles`、`demo:decision` 和 `demo:pstack` 会调用真实模型，不属于默认检查；使用 `npm run <命令>` 显式执行，范围、临时数据与证据约定见 [demo](src/demo/README.md)。
+
+岗位可通过 `PA_PSTACK_DIR` 指定完整方法包，在 Pi 内循环按需读取 `poteto-mode`、playbook 和原则。使用方式与实机结果见[pstack 运行说明](docs/pstack-runtime.md)。
 
 ## 阶段进展
 

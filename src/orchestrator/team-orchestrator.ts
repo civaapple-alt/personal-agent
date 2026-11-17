@@ -90,10 +90,12 @@ export class TeamOrchestrator {
 	private readonly architectTasks = new Set<Promise<void>>();
 	private shuttingDown = false;
 	private readonly extensions: string[];
+	private readonly pstackDir: string | undefined;
 
 	constructor(options: TeamOrchestratorOptions) {
 		this.store = options.store;
 		this.extensions = options.extensions ?? [];
+		this.pstackDir = options.pstackDir;
 		this.defaultCwd = options.defaultCwd ?? process.cwd();
 		this.sessionDir = options.sessionDir;
 		this.noSession = options.noSession ?? false;
@@ -772,6 +774,7 @@ export class TeamOrchestrator {
 				sessionDir: this.sessionDir,
 				noSession: this.noSession,
 				extensions: this.extensions,
+				pstackDir: this.pstackDir,
 				workerFactory: this.workerFactory,
 				getDialogHandler: () => this.dialogHandler,
 				getTemplateForMember: (member) => this.getTemplateForMember(member),

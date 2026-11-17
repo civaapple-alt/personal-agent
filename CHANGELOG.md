@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### pstack in the Pi inner loop
+
+- Add optional `PA_PSTACK_DIR` / `pstackDir` integration with a complete external pstack pack, reusing the cross-harness mirror's actual mode, playbooks and principles. Register a bounded Markdown method reader in Pi, expose source hashes and require the method tool in the runtime capability handshake. General business tools and team permissions stay scoped to the existing role and matter.
+- Add isolated `demo:pstack` with a no-filesystem product discussion and a real deterministic countdown defect, fixed tests, source preservation and actual method-read checks. Retain the first failure: the code was repaired, but named principles had not been read. Improve resource navigation and per-worker read state, then rerun the same tasks; method reads alone are not quality evidence.
+- Retain the second failed run after navigation-only changes. Resolve the root-cause and verification leaf methods as real resources when loading the bug-fix playbook; the third same-task run passes. Re-evaluate all three with full source text plus hashes: the first two still fail. All three repaired the defect, so this establishes method delivery rather than improved repair quality or stable autonomous method selection.
+
 ### Bot and plugin research
 
 - Compare local pstack 0.15.42 and Cole Skills 1.10.1 with their public manifests and Grok Bot/plugin pages. Document reusable methods, platform dependencies, project-specific verification templates, and the distinction between persistent members and packaged subagent definitions. Record proposed adoption steps without installing packages or claiming runtime or quality improvements.

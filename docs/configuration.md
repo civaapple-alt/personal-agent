@@ -15,6 +15,7 @@
 | `PA_HOST` | `127.0.0.1` | [服务入口](../src/server/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../src/server/main.ts) → [编排核](../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
+| `PA_PSTACK_DIR` | 未设置（不启用） | [服务入口](../src/server/main.ts) → [执行装配](../src/orchestrator/worker-runner.ts) | 完整 pstack 包根目录，包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`；显式装配模式入口及只读方法工具，详见 [pstack 内循环](pstack-runtime.md) |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
 | `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) / [编排核](../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
 | `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / `publish_deliverable` / 对话框等待期间自动暂停 |
@@ -64,6 +65,7 @@
 - 固定参数：`--mode rpc --no-extensions --no-skills`，再按顺序显式传入：
   - 团队扩展（源码或构建后的 `team-extension`）与 `PA_PI_EXTENSIONS`
   - 角色声明的 `--skill` 路径，以及限定可用工具清单的 `--tools`
+  - 配置 `PA_PSTACK_DIR` 时增加模式入口、`pstack-extension` 与 `load_pstack_skill`；不隐式增加其他业务或 MCP 工具
 - MCP 开关：当角色 `mcpDependencies` 为空时附加 `--no-mcp`；非空时附加 `--extension builtin:mcp`，并在工具列表中声明对应 `mcp__<server>__*` 前缀。
 - 会话接续：未开启 `noSession` 且存在同上下文记录时，先由 [execution-context.ts](../src/orchestrator/execution-context.ts) 校验 JSONL。
   - 核查首行 `sessionId` 与真实 `cwd` 通过后传入 `--session <sessionFile>`，绝不使用 `--continue`。

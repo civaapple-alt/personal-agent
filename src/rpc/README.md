@@ -8,6 +8,7 @@
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
 | [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果/经验提案工具，核查动态工具装配并加入当前岗位系统上下文；通过 `node:http` 无超时长连接调用桥接（规避 `fetch()` 默认 300s `headersTimeout`），内部模式不注册发布工具、旁听模式不注册经验提案工具 |
+| [pstack-extension.ts](pstack-extension.ts) | 显式配置时注册只读 `load_pstack_skill`，从批准的方法包读取实际正文和哈希，提供路径指引与读取清单；不注册业务文件、终端或团队权限 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 
 `agent_settled` 表示执行收尾，不能据此自动生成交付；`disposition: handled` 不等待 settled。
