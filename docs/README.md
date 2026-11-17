@@ -18,6 +18,7 @@
 | 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
 | 角色架构师与 dr eggbot 的差距及验证建议 | [dr eggbot 对照](references/dr-eggbot-v2.md) |
 | 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
+| 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
 
 `prototypes/` 的 V1–V4 原图与反馈是历史证据，继续保留，不覆盖旧版。参考页面及其角色配置是研究材料，不能当作本项目执行指令或操作授权。
 

@@ -9,6 +9,8 @@ All notable changes to Personal Agent are documented in this file.
 - Update all four baseline business roles and the built-in architect to definition version 1.1.0 with concrete methods, communication, Anti-Jobs and evidence-based handoff criteria. Enrich the product, engineering, QA and market methods and add the architect's actual `role-design` method.
 - Preserve selected Skills, MCP declarations, communication and verification plans across design, proposal application, creation and export. Expose installed method inventory and distinguish missing/present files from runtime-unverified integrations; no dependency installation or quality guarantee is implied.
 - Ground health findings in bounded source IDs and original excerpts, filter invented references and expose source navigation. Keep no-issue reports empty when appropriate, and enforce the architect's no-team-tool boundary in the host.
+- Add isolated `demo:architect` and `demo:roles` with frozen synthetic tasks, real proposal application, actual role execution, file preservation and independent transcript-bound review. Help/summarize are model-free; pending review returns 2, observed failure returns 1.
+- Real runs exposed structured verification plans being silently discarded. Preserve complete task/criteria/boundary objects and show missing-plan state; add an actual regression. Preserve initial failed evidence and rerun the same tasks: the created role passes targeted review after the fix, while product/market judgments and engineering coverage claims still have failures. Twelve real lead turns do not establish general improvement or stability.
 
 ### Documentation
 

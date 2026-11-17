@@ -12,6 +12,7 @@ export function RoleCapabilityDetails({ draft }: { draft: RoleArchitectDraftDto 
 				<p>外部集成：{draft.template.mcpDependencies?.join("、")}，待运行核查。</p>
 			)}
 			<p>验证约定：{draft.template.sections.deliveryAndVerification}</p>
+			{draft.verificationPlanState === "missing" && <p>尚未提供具体验证任务，履职前需补全。</p>}
 			<small>技能文件存在与依赖声明不代表履职已验证。</small>
 		</div>
 	);

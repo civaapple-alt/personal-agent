@@ -10,6 +10,8 @@
 | [inner-matter-smoke.ts](inner-matter-smoke.ts)，根命令 `npm run demo:inner` | 在临时 Git 工作区跑完内置四步场景，核对真实委托、前两轮零交付、反馈后的 V1/V2 与文件来源发布的精确正文一致性，保留 `turns.json` 和数据库 |
 | [publication-review-smoke.ts](publication-review-smoke.ts)，根命令 `npm run demo:review` | 默认一次自主场景配对，支持 `--scenario required/solo/all`、`--repeat N`；分开报告发布、场景协作与正文质量，独立审阅后用 `--summarize <目录>` 离线汇总。未审阅返回 2，不算通过。详见[评估说明](../../docs/publication-review.md) |
 | [observer-smoke.ts](observer-smoke.ts)，根命令 `npm run demo:observer` | 五轮真实任务覆盖点名旁听、后加入前情、风险提醒、意见回到负责人、独立事项静默与关闭；保留原始旁听回复及阶段成果，未审阅返回 2。`--summarize <目录>` 离线刷新，详见[旁听演示](../../docs/observer-demo.md) |
+| [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:architect` | 两轮真实任务：架构师设计角色、沿已有提案 API 创建，再由新角色实际只读核查矛盾；保留验证计划、能力声明与实际文件/工具证据，独立语义审阅前返回 2 |
+| [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:roles` | 四轮分别验证产品、研发、测试与市场判断；合成数据中的计数缺陷应被测试岗位报告为失败，运行通过不等于质量通过。两命令的 `--help`/`--summarize` 不调用模型，见[角色真实任务验证](../../docs/role-design-demo.md) |
 
 [inner-matter-definition.ts](inner-matter-definition.ts) 是网页内置演示的纯定义，不是会自动运行的 CLI。四步体验及按需初始化规则见[内置演示事项](../../docs/inner-matter-demo.md)。
 

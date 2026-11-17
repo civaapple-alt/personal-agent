@@ -270,6 +270,7 @@ export interface RoleArchitectDraftDto {
 		skills: Array<{ name: string; state: "file_present" | "missing" }>;
 		mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
 	};
+	verificationPlanState?: "specified" | "missing";
 }
 
 export interface MetaArchitectMessageDto {
@@ -625,7 +626,7 @@ export function designRoleDraft(input: {
 	skills?: string[];
 	mcpDependencies?: string[];
 	communicationStyle?: string;
-	verificationPlan?: string;
+	verificationPlan?: string | { task: string; successCriteria: string; boundaryCheck: string };
 	isPrimaryContact?: boolean;
 }): Promise<RoleArchitectDraftDto> {
 	return requestJson("/api/members/design", {

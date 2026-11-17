@@ -7,6 +7,7 @@ import {
 	applyRoleTemplatePatch,
 	buildRoleDesignDraft,
 	normalizeRoleTools,
+	normalizeRoleVerificationPlan,
 	ROLE_ARCHITECT_MEMBER_ID,
 	type RoleInteractionStyle,
 	type RoleTemplatePatch,
@@ -493,7 +494,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 				? body.mcpDependencies.filter((value): value is string => typeof value === "string")
 				: [],
 			communicationStyle: typeof body.communicationStyle === "string" ? body.communicationStyle : undefined,
-			verificationPlan: typeof body.verificationPlan === "string" ? body.verificationPlan : undefined,
+			verificationPlan: normalizeRoleVerificationPlan(body.verificationPlan),
 			isPrimaryContact: body.isPrimaryContact === true,
 			existingMemberIds: store.listMembers().map((m) => m.id),
 		});

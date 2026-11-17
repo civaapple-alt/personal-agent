@@ -24,7 +24,9 @@
     "demo:rsi": "node src/demo/rsi-smoke.ts",
     "demo:inner": "node src/demo/inner-matter-smoke.ts",
     "demo:review": "node src/demo/publication-review-smoke.ts",
-    "demo:observer": "node src/demo/observer-smoke.ts"
+    "demo:observer": "node src/demo/observer-smoke.ts",
+    "demo:architect": "node src/demo/role-design-smoke.ts --scenario architect",
+    "demo:roles": "node src/demo/role-design-smoke.ts --scenario builtin"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",

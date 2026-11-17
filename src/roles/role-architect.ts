@@ -4,6 +4,35 @@ import type { RoleCapabilityReport, RoleTemplate } from "./types.ts";
 export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
 export type RoleWorkspaceScope = "read_write_code" | "read_only_repo" | "no_repo_docs";
 
+export interface RoleVerificationPlan {
+	task: string;
+	successCriteria: string;
+	boundaryCheck: string;
+}
+
+/** Accept either concise prose or a complete structured plan; never stringify unknown objects. */
+export function normalizeRoleVerificationPlan(value: unknown): string | undefined {
+	if (typeof value === "string") return value.trim() || undefined;
+	if (
+		!value ||
+		typeof value !== "object" ||
+		!("task" in value) ||
+		!("successCriteria" in value) ||
+		!("boundaryCheck" in value)
+	)
+		return undefined;
+	if (
+		typeof value.task !== "string" ||
+		typeof value.successCriteria !== "string" ||
+		typeof value.boundaryCheck !== "string" ||
+		!value.task.trim() ||
+		!value.successCriteria.trim() ||
+		!value.boundaryCheck.trim()
+	)
+		return undefined;
+	return `验证任务：${value.task.trim()}\n通过条件：${value.successCriteria.trim()}\n边界检查：${value.boundaryCheck.trim()}`;
+}
+
 export interface RoleDesignBriefInput {
 	oneJob: string;
 	antiJobs?: string[];
@@ -19,7 +48,7 @@ export interface RoleDesignBriefInput {
 	skills?: string[];
 	mcpDependencies?: string[];
 	communicationStyle?: string;
-	verificationPlan?: string;
+	verificationPlan?: string | RoleVerificationPlan;
 	isPrimaryContact?: boolean;
 	existingMemberIds?: string[];
 }
@@ -32,6 +61,7 @@ export interface RoleArchitectDraft {
 	recommendedParticipation: RoleInteractionStyle;
 	designNotes: string[];
 	capabilityReport?: RoleCapabilityReport;
+	verificationPlanState: "specified" | "missing";
 }
 
 const VALID_ROLE_TOOLS = new Set(["read", "edit", "write", "bash", "mcp"]);
@@ -238,7 +268,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	]
 		.filter(Boolean)
 		.join("\n");
-	const verificationPlan = input.verificationPlan?.trim() || input.constraints?.trim();
+	const verificationPlan = normalizeRoleVerificationPlan(input.verificationPlan) || input.constraints?.trim();
 	const deliverySection = verificationPlan
 		? `- 交付与验收要求：${verificationPlan}`
 		: interactionStyle === "lead_direct"
@@ -290,6 +320,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 
 	return {
 		template,
+		verificationPlanState: verificationPlan ? "specified" : "missing",
 		markdown: serializeRoleTemplateMarkdown(template),
 		antiJobs,
 		toolSummary,

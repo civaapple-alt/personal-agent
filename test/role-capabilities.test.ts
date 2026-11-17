@@ -9,7 +9,11 @@ import { parseMetaArchitectResponse } from "../src/orchestrator/meta-architect.t
 import { collectTeamHealthEvidence } from "../src/orchestrator/team-health.ts";
 import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
 import { assessRoleCapabilities, listRoleSkillCatalog } from "../src/roles/capabilities.ts";
-import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
+import {
+	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
+	buildRoleDesignDraft,
+	normalizeRoleVerificationPlan,
+} from "../src/roles/role-architect.ts";
 import {
 	loadRoleTemplatesFromDir,
 	parseRoleTemplateMarkdown,
@@ -70,6 +74,22 @@ test("Architect preserves selected capabilities, communication and concrete veri
 		],
 		mcpDependencies: [{ name: "external-docs", state: "runtime_check_required" }],
 	});
+});
+
+test("Structured verification plans retain tasks, result conditions and boundaries instead of falling back silently", () => {
+	const plan = { task: "读取原文件", successCriteria: "指出版本矛盾", boundaryCheck: "不修改原文件" };
+	const result = parseMetaArchitectResponse(
+		JSON.stringify({ blueprints: [{ oneJob: "核对发布", verificationPlan: plan }] }),
+		[],
+	);
+	const draft = result.blueprints[0]?.draft;
+	assert.equal(draft?.verificationPlanState, "specified");
+	assert.match(
+		draft?.template.sections.deliveryAndVerification ?? "",
+		/读取原文件[\s\S]*指出版本矛盾[\s\S]*不修改原文件/,
+	);
+	assert.equal(normalizeRoleVerificationPlan({ task: "缺少标准" }), undefined);
+	assert.equal(buildRoleDesignDraft({ oneJob: "核对发布" }).verificationPlanState, "missing");
 });
 
 test("Team health findings resolve only actual source IDs and preserve source records", async () => {

@@ -6,6 +6,7 @@ import {
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
 	normalizeRoleTools,
+	normalizeRoleVerificationPlan,
 	type RoleArchitectDraft,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
@@ -349,7 +350,7 @@ export function parseMetaArchitectResponse(
 				? bp.mcpDependencies.filter((value): value is string => typeof value === "string")
 				: [],
 			communicationStyle: typeof bp.communicationStyle === "string" ? bp.communicationStyle : undefined,
-			verificationPlan: typeof bp.verificationPlan === "string" ? bp.verificationPlan : undefined,
+			verificationPlan: normalizeRoleVerificationPlan(bp.verificationPlan),
 			existingMemberIds: reservedIds,
 		});
 		reservedIds.push(draft.template.id);
@@ -388,6 +389,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"4. **控制人数与避免重复造人**：优先复用现有合适成员；若确实缺 1 个或多个互补角色，可以一次在 `blueprints` 中规划 1~4 个职责互不重叠的新角色（例如起草者 + 独立风控旁听者），并说明他们和人类员工如何配合。",
 	"5. 仅追问会改变工作目标、能力或验收的缺口，最多三个；已明确的内容不重复问，信息足够时直接给最小方案。蓝图可携带 skills、mcpDependencies、communicationStyle 和 verificationPlan。选择适用的已安装 Skill；缺少依赖明确说明，不编造集成已可用。",
 	"- 创建后的验证计划要有真实小任务、结果标准和职责边界；没有实际运行不得声称角色已验证。具体设计方法见显式加载的 role-design Skill。",
+	"  verificationPlan 可为简短文本，或完整对象 { task, successCriteria, boundaryCheck }，三个字段均为非空文本；没有验证计划时明确说明缺口。",
 	"6. **团队协作体检专项规则**：当用户在做团队协作体检（查看现有分工重叠、工具过宽、运行摩擦）时：",
 	"   - `reply` 只保留 1 句简明总结，**严禁把 ①②③④ 塞成一整段密文字**；",
 	'   - 把各维度检查结果拆成清晰的 `healthFindings` 数组（每项标注 `status: "ok" | "warn"`、简短 `title` 与 1 句 `detail`）；',
