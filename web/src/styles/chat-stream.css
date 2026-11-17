@@ -128,8 +128,15 @@
 	color: var(--text-primary);
 	border: 1px solid var(--border);
 	border-radius: 18px 18px 18px 6px;
-	max-width: min(88%, 740px);
+	max-width: min(92%, 760px);
 	overflow-x: hidden;
+}
+.stream-bubble.member .md-table {
+	font-size: var(--text-xs);
+}
+.stream-bubble.member .md-table th,
+.stream-bubble.member .md-table td {
+	padding: 7px 10px;
 }
 .stream-bubble.member.observer {
 	background: #f5fbf9;
@@ -141,7 +148,7 @@
 	color: #7a4908;
 	border: 1px solid #f2d5a7;
 	border-radius: 18px 18px 18px 6px;
-	max-width: min(88%, 740px);
+	max-width: min(92%, 760px);
 	overflow-x: hidden;
 }
 .inline-approval-card {

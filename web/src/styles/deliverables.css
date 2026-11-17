@@ -351,11 +351,12 @@
 	flex-direction: column;
 	gap: 8px;
 	min-width: 0;
+	line-height: 1.65;
 }
 .md-h1,
 .md-h2,
 .md-h3 {
-	margin: 4px 0 0;
+	margin: 6px 0 0;
 	font-weight: 700;
 	line-height: 1.35;
 }
@@ -395,6 +396,8 @@
 	background: rgba(15, 36, 28, 0.08);
 	padding: 1px 5px;
 	border-radius: 4px;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 .md-quote {
 	margin: 0;
@@ -406,6 +409,7 @@
 .md-link {
 	color: var(--accent);
 	text-decoration: underline;
+	overflow-wrap: anywhere;
 }
 .md-del {
 	color: var(--text-muted);
@@ -428,7 +432,7 @@
 	width: 100%;
 	border-collapse: collapse;
 	font-size: var(--text-sm);
-	line-height: 1.5;
+	line-height: 1.55;
 }
 .md-table th,
 .md-table td {
@@ -436,21 +440,30 @@
 	border-bottom: 1px solid var(--border);
 	border-right: 1px solid rgba(15, 36, 28, 0.06);
 	vertical-align: top;
+	text-align: left;
+	min-width: 84px;
+	overflow-wrap: break-word;
+	word-break: break-word;
+}
+.md-table th:first-child:nth-last-child(2),
+.md-table td:first-child:nth-last-child(2) {
+	width: 26%;
+	min-width: 112px;
+	max-width: 220px;
 }
 .md-table th:last-child,
 .md-table td:last-child {
 	border-right: 0;
-	min-width: 88px;
-	white-space: nowrap;
+	min-width: 96px;
 }
 .md-table tbody tr:last-child td {
 	border-bottom: 0;
 }
 .md-table th {
 	background: rgba(15, 36, 28, 0.045);
+	font-size: var(--text-xs);
 	font-weight: 600;
 	color: var(--text-primary);
-	white-space: nowrap;
 }
 .md-table tbody tr:nth-child(even) td {
 	background: rgba(15, 36, 28, 0.015);

@@ -101,13 +101,18 @@
 	gap: 10px;
 	background: var(--bg-stage);
 	border: 1px solid #d5ded9;
-	border-radius: 26px;
-	padding: 9px 10px 9px 12px;
+	border-radius: 24px;
+	padding: 8px 10px 8px 12px;
 	box-shadow: 0 4px 20px rgba(15, 36, 28, 0.06);
+	transition: border-radius 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.pill-composer.is-multiline {
+	border-radius: 18px;
+	padding: 10px 10px 10px 14px;
 }
 .pill-composer:focus-within {
 	border-color: var(--accent);
-	box-shadow: 0 6px 24px rgba(15, 107, 96, 0.1);
+	box-shadow: 0 0 0 2px rgba(15, 107, 96, 0.14), 0 6px 24px rgba(15, 107, 96, 0.1);
 }
 .pill-plus-btn {
 	width: 34px;
@@ -280,16 +285,22 @@
 }
 .pill-textarea {
 	flex: 1;
+	min-width: 0;
 	border: none;
 	outline: none;
 	resize: none;
 	background: transparent;
 	font-family: inherit;
 	font-size: var(--text-base);
-	line-height: 1.5;
+	line-height: 1.55;
 	color: var(--text-primary);
-	padding: 6px 2px;
-	max-height: 150px;
+	padding: 5px 2px;
+	min-height: 32px;
+	max-height: 180px;
+}
+.pill-textarea:focus,
+.pill-textarea:focus-visible {
+	outline: none;
 }
 .pill-send-btn {
 	width: 36px;
@@ -587,7 +598,7 @@
 .chat-stage.is-new-matter .composer-dock-inner { max-width: 780px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); gap: 14px; background: var(--bg-card); }
 .chat-stage.is-new-matter .composer-mode-hint { display: none; }
 .chat-stage.is-new-matter .pill-composer { border-radius: 16px; align-items: flex-end; padding-top: 10px; padding-bottom: 10px; }
-.chat-stage.is-new-matter .pill-textarea { min-height: 88px; }
+.chat-stage.is-new-matter .pill-textarea { min-height: 88px; max-height: 220px; }
 @media (max-width: 600px) {
  .initiation-role-rows { grid-template-columns: 1fr; }
  .initiation-role-row select { min-height: 44px; }

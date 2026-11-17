@@ -48,7 +48,7 @@
 - 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及
   [utils.ts](utils.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
 - [ChatStage](components/ChatStage.tsx) 支持在输入框点击图片按钮、拖拽图片到输入区或通过 `Ctrl/Cmd+V` 粘贴截图
-  （最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）。
+  （最多 6 张，支持纯图片或图文发送，发送前可预览/移除，发送后气泡内展示并支持灯箱查看大图）；[ComposerDock](components/chat/ComposerDock.tsx) 输入区随多行内容自动增高（统一外框聚焦高光，移除内部矩形轮廓）并切换多行圆角轮廓；[MarkdownView](MarkdownView.tsx) 配合 [deliverables.css](styles/deliverables.css) / [chat-stream.css](styles/chat-stream.css) 支持单元格与行内代码自然换行与两列表格首列保底宽度，避免窄列单字竖排挤压。
 
 ## 组织身份、团队记忆与成果阅读
 

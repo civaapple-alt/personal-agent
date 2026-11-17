@@ -4,6 +4,7 @@ import {
 	type KeyboardEvent,
 	type ReactNode,
 	type RefObject,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -92,8 +93,21 @@ export function ComposerDock({
 	onOpenLightbox,
 }: ComposerDockProps) {
 	const [dragOverComposer, setDragOverComposer] = useState(false);
+	const [isMultiline, setIsMultiline] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
+
+	// Auto-size textarea cleanly as the user writes multi-line tasks without inner scrollbars until ceiling height.
+	useLayoutEffect(() => {
+		const el = composerRef.current;
+		if (!el) return;
+		el.style.height = "auto";
+		const maxHeight = selectedMatterId ? 180 : 220;
+		const nextHeight = Math.min(el.scrollHeight, maxHeight);
+		el.style.height = `${nextHeight}px`;
+		el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+		setIsMultiline(composerText.includes("\n") || el.scrollHeight > 44);
+	}, [composerRef, composerText, selectedMatterId]);
 
 	const hasDraggedFiles = (dataTransfer: DataTransfer | null): boolean => {
 		if (!dataTransfer) return false;
@@ -350,7 +364,7 @@ export function ComposerDock({
 					</ul>
 				)}
 
-				<div className="pill-composer">
+				<div className={`pill-composer${isMultiline ? " is-multiline" : ""}`}>
 					<input
 						ref={fileInputRef}
 						type="file"
@@ -414,16 +428,16 @@ export function ComposerDock({
 						onPaste={handleComposerPaste}
 						placeholder={
 							isArchitectMode
-								? "描述你们的工作流程或角色缺口，由架构师拆出专职角色与边界（Enter 发送）..."
+								? "描述你们的工作流程或角色缺口，由架构师拆出专职角色与边界（Enter 发送，Shift+Enter 换行）..."
 								: composerMode === "discussion"
-									? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送）..."
+									? "和团队成员同步想法、附带截图讨论（不触发 AI 执行，Enter 发送，Shift+Enter 换行）..."
 									: !isOwner
-										? "写下希望 AI 协助处理的内容，提交后由团队所有者一键确认并派发..."
+										? "写下希望 AI 协助处理的内容，提交后由团队所有者一键确认并派发（Shift+Enter 换行）..."
 										: isTurnRunning
 											? "当前 AI 回合仍在推进，可切到「团队聊天讨论」或等待完成后继续..."
 											: selectedMatterId
-												? "继续给 AI 团队安排工作、拖拽或粘贴图片，或提出修改（Enter 发送）..."
-												: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送）..."
+												? "继续给 AI 团队安排工作、拖拽或粘贴图片，或提出修改（Enter 发送，Shift+Enter 换行）..."
+												: "向你的 AI 团队布置任务，支持上传/拖拽/粘贴图片（Enter 发送，Shift+Enter 换行）..."
 						}
 					/>
 					{activeMatterProgress && selectedMatterId && isOwner && (
