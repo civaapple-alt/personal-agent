@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Bot and plugin research
+
+- Compare local pstack 0.15.42 and Cole Skills 1.10.1 with their public manifests and Grok Bot/plugin pages. Document reusable methods, platform dependencies, project-specific verification templates, and the distinction between persistent members and packaged subagent definitions. Record proposed adoption steps without installing packages or claiming runtime or quality improvements.
+
 ### Decision contracts and evidence follow-up
 
 - Follow `5001069..fca5970` without replacing the completed initiation UI. Preserve explicit role IDs, verification plans, constraints, Anti-Jobs and Skill dependencies in model-generated designs; missing explicit Skills remain visible in capability reports. Model-suggested Skills are still limited to the installed catalog. Constraints now coexist with verification plans in both design modes.

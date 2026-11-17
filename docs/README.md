@@ -16,6 +16,7 @@
 | 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md)、[原型演进](prototypes/README.md) |
 | 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前确认稿和运行实现为准 |
 | 外部产品提供了哪些参考 | [Grok Bot 研究](references/grok-bot.md)、[人才市场研究](references/grok-bot-marketplace.md) |
+| Bot、Plugin、Skill 的关系与两套工程方法包 | [pstack、Cole Skills 与 Bot/Plugin 对照](references/bot-plugin-and-skill-packs.md) |
 | 角色架构师与 dr eggbot 的差距及验证建议 | [dr eggbot 对照](references/dr-eggbot-v2.md) |
 | 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
 | 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
