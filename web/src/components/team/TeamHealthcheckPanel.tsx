@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { applyMemberAdjustments, chatWithRoleArchitect, type MetaArchitectChatResultDto } from "../../api.ts";
 import { formatRoleToolTierLabel } from "../../utils.ts";
+import { RoleFindingEvidence } from "./RoleDesignDetails.tsx";
 
 interface TeamHealthcheckModalProps {
 	open: boolean;
@@ -195,6 +196,7 @@ export function TeamHealthcheckPanel({
 										<div className="meta-health-copy">
 											<strong>{finding.title}</strong>
 											<span>{finding.detail}</span>
+											<RoleFindingEvidence finding={finding} />
 										</div>
 									</div>
 								))}

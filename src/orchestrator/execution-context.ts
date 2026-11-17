@@ -2,22 +2,16 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, relative, resolve } from "node:path";
+import { resolveRoleSkillPath } from "../roles/capabilities.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamToolCall } from "../rpc/team-tool-bridge.ts";
 import type { WorkerSessionRecord } from "../storage/types.ts";
 
-const skillsDir = fileURLToPath(new URL("../../skills/", import.meta.url));
-
 export async function resolveRoleSkills(template: RoleTemplate | undefined): Promise<string[]> {
 	return await Promise.all(
 		(template?.skills ?? []).map(async (name) => {
-			const path = isAbsolute(name)
-				? name
-				: name.includes("/")
-					? resolve(template?.sourcePath ? dirname(template.sourcePath) : skillsDir, name)
-					: resolve(skillsDir, name, "SKILL.md");
+			const path = resolveRoleSkillPath(name, template);
 			const info = await stat(path).catch(() => {
 				throw new Error(`Skill ${name} is not installed: ${path}`);
 			});

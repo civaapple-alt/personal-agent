@@ -25,6 +25,7 @@
     （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
   - `POST /api/members/architect/chat`（所有者专属，无工具隔离、支持中断与团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 提供离线规则草案；`POST /api/members`、`POST /api/members/batch` 支持显式传入 `tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 支持移除无历史交付或主责引用的非主联系成员；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
+  - 角色设计、创建和提案应用保留 `skills`、`mcpDependencies` 及正文中的沟通/验证约定；设计返回 `capabilityReport`，bootstrap 模板附带 MCP 声明。其状态不代替运行时能力核查，见[角色设计](../../docs/role-design.md)。
   - 角色写入在当前服务内依次处理；批量提案先校验全部新增与调整，只有待应用提案可生效。新建 ID 冲突返回 409，非法文件名或思考档位返回 400；导入可更新业务模板，内置架构师不可覆盖。文件采用临时文件替换，删除标记保存在数据库，防止启动复活。具体边界见[角色管理一致性](../../docs/runtime-collaboration.md#角色管理一致性)。
 - 多人类受限协作与显式讨论隔离（方案 B）：
   - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式

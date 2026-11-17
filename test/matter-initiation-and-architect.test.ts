@@ -49,8 +49,11 @@ test("RoleArchitect enforces One Job, Explicit Anti-Jobs, and least-privilege to
 
 	const builtIn = await loadRoleTemplatesFromDir(resolve("roles"));
 	const pm = builtIn.find((item) => item.id === "product-manager")!;
-	assert.equal(pm.antiJobs, undefined);
-	assert.ok(!serializeRoleTemplateMarkdown(pm).includes("antiJobs:"));
+	assert.ok(pm.antiJobs?.length);
+	assert.deepEqual(parseRoleTemplateMarkdown(serializeRoleTemplateMarkdown(pm)).antiJobs, pm.antiJobs);
+	// Older shared definitions without explicit Anti-Jobs still round-trip without invented boundaries.
+	const legacy = { ...pm, antiJobs: undefined };
+	assert.ok(!serializeRoleTemplateMarkdown(legacy).includes("antiJobs:"));
 });
 
 test("Solo and selective observer runtime scopes enforce delegate restrictions, antiJobs prompt injection, and selective observers", async () => {

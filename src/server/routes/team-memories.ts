@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
+import { assessRoleCapabilities } from "../../roles/capabilities.ts";
 import {
 	applyRoleTemplatePatch,
 	buildRoleDesignDraft,
@@ -87,6 +88,9 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 					.filter(Boolean)
 			: [];
 	const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
+	const mcpDependencies = Array.isArray(body.mcpDependencies) ? body.mcpDependencies.map(String).filter(Boolean) : [];
+	if (mcpDependencies.some((name) => !/^[a-zA-Z0-9_-]+$/.test(name)))
+		throw new HttpRequestError(400, "Invalid MCP dependency name");
 	const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
 	const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
 	const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
@@ -152,7 +156,7 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 		keywords,
 		tools,
 		skills,
-		mcpDependencies: [],
+		mcpDependencies,
 		...(antiJobs.length > 0 ? { antiJobs } : {}),
 		sections: {
 			responsibilitiesAndBoundaries: responsibilities,
@@ -482,10 +486,18 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			keywords,
 			workflowRules: typeof body.workflowRules === "string" ? body.workflowRules : undefined,
 			constraints: typeof body.constraints === "string" ? body.constraints : undefined,
+			skills: Array.isArray(body.skills)
+				? body.skills.filter((value): value is string => typeof value === "string")
+				: [],
+			mcpDependencies: Array.isArray(body.mcpDependencies)
+				? body.mcpDependencies.filter((value): value is string => typeof value === "string")
+				: [],
+			communicationStyle: typeof body.communicationStyle === "string" ? body.communicationStyle : undefined,
+			verificationPlan: typeof body.verificationPlan === "string" ? body.verificationPlan : undefined,
 			isPrimaryContact: body.isPrimaryContact === true,
 			existingMemberIds: store.listMembers().map((m) => m.id),
 		});
-		sendJson(res, 200, draft);
+		sendJson(res, 200, { ...draft, capabilityReport: await assessRoleCapabilities(draft.template) });
 		return true;
 	}
 

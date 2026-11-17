@@ -11,6 +11,7 @@ import {
 import { filterBusinessMembers } from "../../architectApi.ts";
 import { formatRoleToolTierLabel, getMemberThemeById, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
+import { RoleCapabilityDetails } from "./RoleDesignDetails.tsx";
 
 interface RoleArchitectModalProps {
 	open: boolean;
@@ -150,6 +151,7 @@ export function RoleArchitectModal({
 					.map((s) => s.trim())
 					.filter(Boolean),
 				skills: draft.template.skills,
+				mcpDependencies: draft.template.mcpDependencies,
 				tools: draft.template.tools,
 				antiJobs: draft.antiJobs,
 				sections: draft.template.sections,
@@ -397,6 +399,7 @@ export function RoleArchitectModal({
 								</div>
 							</div>
 
+							<RoleCapabilityDetails draft={draft} />
 							<div className="form-grid">
 								<label className="identity-field">
 									<span className="identity-field-label">角色名称</span>

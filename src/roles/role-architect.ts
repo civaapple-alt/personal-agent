@@ -1,5 +1,5 @@
 import { serializeRoleTemplateMarkdown } from "./template-loader.ts";
-import type { RoleTemplate } from "./types.ts";
+import type { RoleCapabilityReport, RoleTemplate } from "./types.ts";
 
 export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
 export type RoleWorkspaceScope = "read_write_code" | "read_only_repo" | "no_repo_docs";
@@ -16,6 +16,10 @@ export interface RoleDesignBriefInput {
 	keywords?: string[];
 	workflowRules?: string;
 	constraints?: string;
+	skills?: string[];
+	mcpDependencies?: string[];
+	communicationStyle?: string;
+	verificationPlan?: string;
 	isPrimaryContact?: boolean;
 	existingMemberIds?: string[];
 }
@@ -27,6 +31,7 @@ export interface RoleArchitectDraft {
 	toolSummary: string;
 	recommendedParticipation: RoleInteractionStyle;
 	designNotes: string[];
+	capabilityReport?: RoleCapabilityReport;
 }
 
 const VALID_ROLE_TOOLS = new Set(["read", "edit", "write", "bash", "mcp"]);
@@ -219,7 +224,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 			: workspaceScope === "read_only_repo"
 				? "- 仅使用只读文档与代码核查能力（`read`），确保事实可溯源。"
 				: "- 具备工作区读写与命令验证能力（`read` / `edit` / `write` / `bash`），改动须附实际运行验证。";
-	const collabSection =
+	const baseCollabSection =
 		interactionStyle === "risk_observer"
 			? "- 默认作为关键风险旁听审视者列席；仅当发现明显冲突或遗漏时简洁插话，其余时刻保持安静。"
 			: interactionStyle === "consult_specialist"
@@ -227,8 +232,15 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 				: interactionStyle === "lead_direct"
 					? "- 可作为事项主负责人承接需求，在明确边界内推进并在关键业务取舍处向人确认。"
 					: "- 既可独立担任事项主责推进并在关键节点向人确认，也可作为内部协同或旁听成员按事项需要参与。";
-	const deliverySection = input.constraints?.trim()
-		? `- 交付与验收要求：${input.constraints.trim()}`
+	const collabSection = [
+		baseCollabSection,
+		input.communicationStyle?.trim() ? `- 沟通方式：${input.communicationStyle.trim()}` : "",
+	]
+		.filter(Boolean)
+		.join("\n");
+	const verificationPlan = input.verificationPlan?.trim() || input.constraints?.trim();
+	const deliverySection = verificationPlan
+		? `- 交付与验收要求：${verificationPlan}`
 		: interactionStyle === "lead_direct"
 			? "- 形成明确阶段结果时通过正式成果归档，附简练 `changeNote` 与核查依据；普通讨论不归档。"
 			: interactionStyle === "mixed"
@@ -263,8 +275,8 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		isPrimaryContact: Boolean(input.isPrimaryContact),
 		keywords,
 		tools,
-		skills: [],
-		mcpDependencies: [],
+		skills: [...new Set((input.skills ?? []).map((name) => name.trim()).filter(Boolean))],
+		mcpDependencies: [...new Set((input.mcpDependencies ?? []).map((name) => name.trim()).filter(Boolean))],
 		antiJobs,
 		sections,
 		rawBody,
@@ -357,7 +369,7 @@ const ARCHITECT_SECTIONS = {
 	].join("\n"),
 	skillsAndMethods: [
 		"- 坚持 One Job + Explicit Anti-Jobs + Least Privilege Tools（最小必要工具权限）+ Keep Silent When Useful。",
-		"- 信息不足时先用 2~3 个关键问题厘清真实协作流程与人工确认节点，再产出最小可行角色或现有角色微调草案。",
+		"- 信息不足时只追问影响职责、能力或结果的缺口；目标明确即可给方案，优先复用成员与已安装方法。",
 	].join("\n"),
 	toolsAndEnvironment:
 		"- 纯规划与只读诊断角色：不挂载代码写工具与 bash，依托宿主注入的团队配置与近期协作体检摘要进行评估。",
@@ -365,7 +377,8 @@ const ARCHITECT_SECTIONS = {
 		"- 作为元角色可在专属对话事项中长期讨论建队与体检，也可在业务事项推进到任意阶段时被中途请入补人或收窄边界。",
 		"- 所有建议均输出为可确认提案卡片，不擅自改写他人职责或接管日常业务派发。",
 	].join("\n"),
-	deliveryAndVerification: "- 输出精炼结论、必要追问短选项，以及可直接勾选创建/调整的结构化角色草案与建议阵型。",
+	deliveryAndVerification:
+		"- 输出精炼结论和可选择的角色草案，包含工作方法、沟通约定、Skills/依赖与具体任务验证计划。文件存在不等于能力已验证；体检结论引用实际案例，缺少证据时明确说明。",
 };
 
 /** Built-in Meta-Bot Role Architect template registered in workbench runtime (never auto-routed for business work). */
@@ -374,7 +387,7 @@ export const BUILTIN_ROLE_ARCHITECT_TEMPLATE: RoleTemplate = {
 	name: "角色架构师",
 	title: "Role Architect",
 	roleKind: "architect",
-	version: "1.0.0",
+	version: "1.1.0",
 	shareable: true,
 	defaultProvider: "kimi-coding",
 	defaultModel: "kimi-for-coding",
@@ -382,7 +395,7 @@ export const BUILTIN_ROLE_ARCHITECT_TEMPLATE: RoleTemplate = {
 	isPrimaryContact: false,
 	keywords: ["角色", "建队", "分工", "工作流", "体检", "权限", "精简", "补人", "边界", "architect"],
 	tools: [],
-	skills: [],
+	skills: ["role-design"],
 	mcpDependencies: [],
 	antiJobs: [
 		"不直接修改工作区代码或角色文件，所有新增或调整须由团队所有者勾选确认后生效",

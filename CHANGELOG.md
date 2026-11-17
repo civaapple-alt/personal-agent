@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Role methods and capability composition
+
+- Update all four baseline business roles and the built-in architect to definition version 1.1.0 with concrete methods, communication, Anti-Jobs and evidence-based handoff criteria. Enrich the product, engineering, QA and market methods and add the architect's actual `role-design` method.
+- Preserve selected Skills, MCP declarations, communication and verification plans across design, proposal application, creation and export. Expose installed method inventory and distinguish missing/present files from runtime-unverified integrations; no dependency installation or quality guarantee is implied.
+- Ground health findings in bounded source IDs and original excerpts, filter invented references and expose source navigation. Keep no-issue reports empty when appropriate, and enforce the architect's no-team-tool boundary in the host.
+
 ### Documentation
 
 - Revisit dr eggbot's public listing against the implemented Role Architect. Document gaps in skill/dependency composition, evidence-linked healthchecks and real-task verification, with a proposed isolated smoke scenario; no runtime capability or scheduled task is added.

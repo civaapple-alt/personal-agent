@@ -116,7 +116,7 @@ export async function executeWithWorkerPass(
 	try {
 		const template = deps.getTemplateForMember(input.member);
 		const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
-		const skillPaths = isArchitect ? [] : await resolveRoleSkills(template);
+		const skillPaths = await resolveRoleSkills(template);
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
@@ -145,6 +145,7 @@ export async function executeWithWorkerPass(
 		}> = [];
 		bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 			toolSignal.throwIfAborted();
+			if (isArchitect) throw new Error("Role architect cannot execute team tools");
 			const releaseIdle = worker?.suspendIdleTimeout?.();
 			try {
 				if (call.tool === "delegate_to_member") {
@@ -317,7 +318,7 @@ export async function executeWithWorkerPass(
 					teamMembers: deps.resolveMatterAiMembers(matter),
 					...(isArchitect && deps.getTemplatesById
 						? {
-								extraGuidance: buildArchitectMatterContext(
+								extraGuidance: await buildArchitectMatterContext(
 									{ store: deps.store, templatesById: deps.getTemplatesById() },
 									{
 										isMidMatterConsult: Boolean(

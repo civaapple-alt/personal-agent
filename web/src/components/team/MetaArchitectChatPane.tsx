@@ -12,6 +12,7 @@ import {
 	type TeamMemberDto,
 } from "../../api.ts";
 import { formatRoleToolTierLabel } from "../../utils.ts";
+import { RoleCapabilityDetails, RoleFindingEvidence } from "./RoleDesignDetails.tsx";
 
 interface MetaArchitectChatPaneProps {
 	open: boolean;
@@ -200,6 +201,7 @@ export function MetaArchitectChatPane({
 				responsibilities: item.draft.template.sections.responsibilitiesAndBoundaries,
 				keywords: item.draft.template.keywords,
 				skills: item.draft.template.skills,
+				mcpDependencies: item.draft.template.mcpDependencies,
 				tools: item.draft.template.tools,
 				antiJobs: item.draft.antiJobs,
 				sections: item.draft.template.sections,
@@ -304,6 +306,7 @@ export function MetaArchitectChatPane({
 											<div className="meta-health-copy">
 												<strong>{finding.title}</strong>
 												<span>{finding.detail}</span>
+												<RoleFindingEvidence finding={finding} />
 											</div>
 										</div>
 									))}
@@ -486,6 +489,7 @@ export function MetaArchitectChatPane({
 											</div>
 											{item.rationale && <div className="meta-blueprint-rationale">{item.rationale}</div>}
 											<pre className="meta-blueprint-body">{tpl.sections.responsibilitiesAndBoundaries}</pre>
+											<RoleCapabilityDetails draft={item.draft} />
 										</div>
 									);
 								})}

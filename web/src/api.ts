@@ -215,6 +215,7 @@ export interface RoleTemplateDto {
 	roleKind?: "business" | "architect";
 	version: string;
 	skills: string[];
+	mcpDependencies?: string[];
 	tools: string[];
 	keywords: string[];
 	shareable: boolean;
@@ -265,6 +266,10 @@ export interface RoleArchitectDraftDto {
 	toolSummary: string;
 	recommendedParticipation: RoleInteractionStyle;
 	designNotes: string[];
+	capabilityReport?: {
+		skills: Array<{ name: string; state: "file_present" | "missing" }>;
+		mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
+	};
 }
 
 export interface MetaArchitectMessageDto {
@@ -288,6 +293,14 @@ export interface MetaArchitectHealthFindingDto {
 	status: "ok" | "warn";
 	title: string;
 	detail: string;
+	evidence?: Array<{
+		id: string;
+		kind: "role" | "message" | "feedback" | "memory";
+		sourceId: string;
+		matterId?: string;
+		label: string;
+		excerpt: string;
+	}>;
 }
 
 export interface MetaArchitectRoleAdjustmentDto {
@@ -609,6 +622,10 @@ export function designRoleDraft(input: {
 	keywords?: string[];
 	workflowRules?: string;
 	constraints?: string;
+	skills?: string[];
+	mcpDependencies?: string[];
+	communicationStyle?: string;
+	verificationPlan?: string;
 	isPrimaryContact?: boolean;
 }): Promise<RoleArchitectDraftDto> {
 	return requestJson("/api/members/design", {
@@ -640,6 +657,7 @@ export interface CreateMemberPayload {
 	responsibilities?: string;
 	keywords?: string[];
 	skills?: string[];
+	mcpDependencies?: string[];
 	tools?: string[];
 	antiJobs?: string[];
 	sections?: Record<string, string>;

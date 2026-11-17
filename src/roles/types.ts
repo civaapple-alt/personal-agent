@@ -10,6 +10,11 @@ export interface RoleTemplateSections {
 
 export type RoleKind = "business" | "architect";
 
+export interface RoleCapabilityReport {
+	skills: Array<{ name: string; state: "file_present" | "missing" }>;
+	mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
+}
+
 /**
  * Shareable role capability definition loaded from `roles/*.md` or built-in meta roles.
  * Intentionally excludes company-private or project-private memories.

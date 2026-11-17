@@ -1,5 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { assessRoleCapabilities, listRoleSkillCatalog } from "../roles/capabilities.ts";
 import {
+	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
 	normalizeRoleTools,
@@ -11,7 +14,9 @@ import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { TeamMember } from "../storage/types.ts";
+import { resolveRoleSkills } from "./execution-context.ts";
 import type { CollaborationPresetMode } from "./matter-initiation.ts";
+import { collectTeamHealthEvidence, formatTeamHealthEvidence, type TeamHealthEvidence } from "./team-health.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
 
 export interface MetaArchitectMessage {
@@ -28,6 +33,7 @@ export interface MetaArchitectHealthFinding {
 	status: "ok" | "warn";
 	title: string;
 	detail: string;
+	evidence?: TeamHealthEvidence[];
 }
 
 export interface MetaArchitectRoleAdjustment {
@@ -79,6 +85,19 @@ export interface RoleProposalPayload {
 	appliedAdjustmentIds?: string[];
 }
 
+async function enrichBlueprintCapabilities(result: Pick<MetaArchitectChatResult, "blueprints">): Promise<void> {
+	await Promise.all(
+		result.blueprints.map(async ({ draft }) => {
+			draft.capabilityReport = await assessRoleCapabilities(draft.template);
+		}),
+	);
+}
+
+async function architectMethodText(): Promise<string> {
+	const paths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE);
+	return (await Promise.all(paths.map((path) => readFile(path, "utf8")))).join("\n\n");
+}
+
 function listBusinessMembers(store: PersonalAgentStore, templatesById: Map<string, RoleTemplate>): TeamMember[] {
 	return store
 		.listMembers()
@@ -124,8 +143,9 @@ export function collectTeamFrictionDigest(store: PersonalAgentStore, templatesBy
 				return `${m.id}(${m.displayName}, 工具:${tools}${antiCount > 0 ? `, 边界:${antiCount}` : ""})`;
 			})
 			.join("、")}`,
-		`- 近 ${matters.length} 个事项观测：异常 ${failedCount} 次、中止 ${abortedCount} 次、旁听有效插话 ${observerNotes} 次、成果负反馈 ${negativeFeedback} 项`,
+		`- 近 ${matters.length} 个事项观测：异常 ${failedCount} 次、中止 ${abortedCount} 次、旁听发言 ${observerNotes} 次；全部成果中的负反馈 ${negativeFeedback} 项。次数仅为线索，不代表原因或效果。`,
 		candidateMemories.length > 0 ? `- 近期纠偏/协同候选信号：\n${candidateMemories.join("\n")}` : "",
+		`- 可引用案例与配置（只代表已记录内容，不能据此认定因果）：\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById))}`,
 	]
 		.filter(Boolean)
 		.join("\n");
@@ -151,7 +171,11 @@ function normalizePresetMode(raw: unknown): CollaborationPresetMode {
 export function parseMetaArchitectResponse(
 	rawText: string,
 	existingMembers: TeamMember[],
-	options?: { templatesById?: Map<string, RoleTemplate>; isHealthcheck?: boolean },
+	options?: {
+		templatesById?: Map<string, RoleTemplate>;
+		isHealthcheck?: boolean;
+		healthEvidence?: TeamHealthEvidence[];
+	},
 ): Omit<MetaArchitectChatResult, "usedHealthcheck"> {
 	const cleaned = rawText.trim();
 	const jsonBlock = cleaned
@@ -237,6 +261,9 @@ export function parseMetaArchitectResponse(
 						status: entry.status === "ok" ? "ok" : "warn",
 						title: title || "检查项",
 						detail: detail || title,
+						evidence: (options?.healthEvidence ?? []).filter(
+							(source) => Array.isArray(entry.evidenceIds) && entry.evidenceIds.includes(source.id),
+						),
 					};
 				})
 				.filter((item): item is MetaArchitectHealthFinding => item !== null)
@@ -315,6 +342,14 @@ export function parseMetaArchitectResponse(
 			keywords,
 			workflowRules: typeof bp.workflowRules === "string" ? bp.workflowRules : undefined,
 			constraints: typeof bp.constraints === "string" ? bp.constraints : undefined,
+			skills: Array.isArray(bp.skills)
+				? bp.skills.filter((value): value is string => typeof value === "string")
+				: [],
+			mcpDependencies: Array.isArray(bp.mcpDependencies)
+				? bp.mcpDependencies.filter((value): value is string => typeof value === "string")
+				: [],
+			communicationStyle: typeof bp.communicationStyle === "string" ? bp.communicationStyle : undefined,
+			verificationPlan: typeof bp.verificationPlan === "string" ? bp.verificationPlan : undefined,
 			existingMemberIds: reservedIds,
 		});
 		reservedIds.push(draft.template.id);
@@ -351,12 +386,14 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"2. **Explicit Anti-Jobs（明确不做清单）+ 静默原则**：每个非代码/审核/旁听角色必须明确写出绝不越权做的事，以及无实质增量时何时保持静默（[SILENT]）。",
 	"3. **Least-Privilege Tools（最小权限工具，不留多余工具）**：`workspaceScope` 只能选 `no_repo_docs`（纯思考文稿，零工具）、`read_only_repo`（仅只读核查）或 `read_write_code`（确需改代码跑命令才给）。",
 	"4. **控制人数与避免重复造人**：优先复用现有合适成员；若确实缺 1 个或多个互补角色，可以一次在 `blueprints` 中规划 1~4 个职责互不重叠的新角色（例如起草者 + 独立风控旁听者），并说明他们和人类员工如何配合。",
-	"5. **多轮追问 vs 立即给草案**：如果用户目标还缺少关键流程边界（例如：谁最终拍板、要不要改代码、需不需要有人静默把关），先提出 2~3 个短追问（`blueprints` 留空数组 `[]`）；一旦工作流清晰，或用户明确要求出草案/体检建议，直接给出结构化方案等待用户勾选确认（绝不擅自创建或修改）。",
+	"5. 仅追问会改变工作目标、能力或验收的缺口，最多三个；已明确的内容不重复问，信息足够时直接给最小方案。蓝图可携带 skills、mcpDependencies、communicationStyle 和 verificationPlan。选择适用的已安装 Skill；缺少依赖明确说明，不编造集成已可用。",
+	"- 创建后的验证计划要有真实小任务、结果标准和职责边界；没有实际运行不得声称角色已验证。具体设计方法见显式加载的 role-design Skill。",
 	"6. **团队协作体检专项规则**：当用户在做团队协作体检（查看现有分工重叠、工具过宽、运行摩擦）时：",
 	"   - `reply` 只保留 1 句简明总结，**严禁把 ①②③④ 塞成一整段密文字**；",
 	'   - 把各维度检查结果拆成清晰的 `healthFindings` 数组（每项标注 `status: "ok" | "warn"`、简短 `title` 与 1 句 `detail`）；',
 	"   - 如需收窄已有成员的 `tools` 或追加 `antiJobs` / `workflowNote`，必须放入 `roleAdjustments`（供用户勾选确认后自动修改对应角色），**不要只在话术里写“确认收窄”而不给结构化提案**；",
 	"   - 纯团队体检时 `recommendedFormation` 必须置为 `null`（不要输出假造的“几人参与体检复盘”事项阵型）。",
+	"   - 每条发现用 evidenceIds 引用宿主给出的配置或案例 ID，不编造来源。次数和候选经验只提供线索，不自动表示能力不足；没有具体问题时允许 healthFindings/roleAdjustments 均为空。",
 	"",
 	"## 严格输出格式（仅返回合法 JSON，不要附带其它 markdown 围栏外文本）",
 	JSON.stringify(
@@ -368,6 +405,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 					status: "ok | warn",
 					title: "检查维度简短标题（例如：职责重叠度 / 工具权限过宽）",
 					detail: "一句具体依据与结论",
+					evidenceIds: ["role:product-manager 或宿主提供的实际案例 ID"],
 				},
 			],
 			roleAdjustments: [
@@ -389,10 +427,10 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 ].join("\n");
 
 /** Builds read-only live roster, health digest, and JSON proposal contract for an in-matter Role Architect turn. */
-export function buildArchitectMatterContext(
+export async function buildArchitectMatterContext(
 	deps: { store: PersonalAgentStore; templatesById: Map<string, RoleTemplate> },
 	options?: { isMidMatterConsult?: boolean },
-): string {
+): Promise<string> {
 	const businessMembers = listBusinessMembers(deps.store, deps.templatesById);
 	const rosterLines = businessMembers
 		.map((m) => {
@@ -400,7 +438,7 @@ export function buildArchitectMatterContext(
 			const resp = truncateInline(tpl?.sections.responsibilitiesAndBoundaries ?? "", 160);
 			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "无工具(纯文稿)";
 			const anti = tpl?.antiJobs?.length ? ` | Anti-Jobs: ${tpl.antiJobs.join("; ")}` : "";
-			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
+			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}] | Skills: [${tpl?.skills.join(",") ?? ""}] | MCP声明（未核验）: [${tpl?.mcpDependencies.join(",") ?? ""}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
 		})
 		.join("\n");
 	const healthDigest = collectTeamFrictionDigest(deps.store, deps.templatesById);
@@ -410,21 +448,28 @@ export function buildArchitectMatterContext(
 
 	return [
 		ARCHITECT_SYSTEM_INSTRUCTIONS + midMatterHint,
+		`## 岗位设计方法\n${await architectMethodText()}`,
+		`## 已安装方法目录（文件存在不代表任务效果已验证）\n${JSON.stringify(await listRoleSkillCatalog())}`,
 		`## 当前已有业务 AI 成员（共 ${businessMembers.length} 位）\n${rosterLines || "（暂无业务成员）"}`,
 		`## 团队近期运行摩擦与健康摘要\n${healthDigest}`,
 	].join("\n\n");
 }
 
 /** Parses an in-matter Role Architect turn output into clean prose + interactive inline proposal metadata. */
-export function buildArchitectMessageProposals(
+export async function buildArchitectMessageProposals(
 	rawText: string,
 	store: PersonalAgentStore,
 	templatesById: Map<string, RoleTemplate>,
 	options?: { promptText?: string; isMidMatterConsult?: boolean },
-): { replyText: string; roleProposals?: RoleProposalPayload } {
+): Promise<{ replyText: string; roleProposals?: RoleProposalPayload }> {
 	const existingMembers = store.listMembers();
 	const isHealthcheck = /(?:体检|诊断|重叠|收窄|冗余|权限过宽|摩擦)/i.test(options?.promptText ?? "");
-	const parsed = parseMetaArchitectResponse(rawText, existingMembers, { templatesById, isHealthcheck });
+	const parsed = parseMetaArchitectResponse(rawText, existingMembers, {
+		templatesById,
+		isHealthcheck,
+		healthEvidence: collectTeamHealthEvidence(store, templatesById),
+	});
+	await enrichBlueprintCapabilities(parsed);
 	const hasStructured =
 		parsed.followUpQuestions.length > 0 ||
 		(parsed.healthFindings && parsed.healthFindings.length > 0) ||
@@ -473,7 +518,7 @@ export async function runMetaArchitectChat(
 			const resp = truncateInline(tpl?.sections.responsibilitiesAndBoundaries ?? "", 160);
 			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "无工具(纯文稿)";
 			const anti = tpl?.antiJobs?.length ? ` | Anti-Jobs: ${tpl.antiJobs.join("; ")}` : "";
-			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
+			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}] | Skills: [${tpl?.skills.join(",") ?? ""}] | MCP声明（未核验）: [${tpl?.mcpDependencies.join(",") ?? ""}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
 		})
 		.join("\n");
 
@@ -484,9 +529,10 @@ export async function runMetaArchitectChat(
 
 	const healthDigest = input.includeHealthcheck ? collectTeamFrictionDigest(deps.store, deps.templatesById) : "";
 
-	const systemPrompt = ARCHITECT_SYSTEM_INSTRUCTIONS;
+	const systemPrompt = `${ARCHITECT_SYSTEM_INSTRUCTIONS}\n\n## 岗位设计方法\n${await architectMethodText()}`;
 
 	const prompt = [
+		`## 已安装方法目录（文件存在，不代表履职效果）\n${JSON.stringify(await listRoleSkillCatalog())}`,
 		`## 当前已有团队成员（共 ${members.length} 位）\n${rosterLines || "（暂无）"}`,
 		workspace
 			? `## 当前关联工作区\n- ${workspace.name} (${workspace.repoPath})`
@@ -498,12 +544,20 @@ export async function runMetaArchitectChat(
 		.filter(Boolean)
 		.join("\n\n");
 
+	const methodPaths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE);
 	const worker = deps.workerFactory({
 		cwd,
 		provider: primary?.provider ?? "kimi-coding",
 		model: primary?.model ?? "kimi-for-coding",
 		noSession: true,
-		args: ["--no-extensions", "--no-skills", "--no-mcp", "--tools", ""],
+		args: [
+			"--no-extensions",
+			"--no-skills",
+			"--no-mcp",
+			...methodPaths.flatMap((path) => ["--skill", path]),
+			"--tools",
+			"",
+		],
 		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt },
 	});
 	const onAbortWorker = () => {
@@ -530,7 +584,9 @@ export async function runMetaArchitectChat(
 	const parsed = parseMetaArchitectResponse(result.assistantText, allMembers, {
 		templatesById: deps.templatesById,
 		isHealthcheck: Boolean(input.includeHealthcheck),
+		healthEvidence: collectTeamHealthEvidence(deps.store, deps.templatesById),
 	});
+	await enrichBlueprintCapabilities(parsed);
 	return {
 		...parsed,
 		usedHealthcheck: Boolean(input.includeHealthcheck),

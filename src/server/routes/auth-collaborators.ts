@@ -90,6 +90,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				roleKind: t.roleKind ?? (t.id === "role-architect" ? "architect" : "business"),
 				version: t.version,
 				skills: t.skills,
+				mcpDependencies: t.mcpDependencies,
 				tools: t.tools,
 				keywords: t.keywords,
 				shareable: t.shareable,

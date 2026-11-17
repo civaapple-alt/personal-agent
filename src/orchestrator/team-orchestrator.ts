@@ -450,7 +450,7 @@ export class TeamOrchestrator {
 			const rawReply = result.assistantText.trim();
 			const architectParsed =
 				!aborted && assignedIsArchitect
-					? buildArchitectMessageProposals(rawReply, this.store, this.templatesById, {
+					? await buildArchitectMessageProposals(rawReply, this.store, this.templatesById, {
 							promptText: input.prompt,
 							isMidMatterConsult: isMidMatterArchitectConsult,
 						})

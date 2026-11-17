@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ApplyMatterRoleProposalsPayload, TeamMemberDto } from "../../api.ts";
 import type { MatterRoleJoinMode, RoleProposalPayloadDto } from "../../architectApi.ts";
 import { formatRoleToolTierLabel } from "../../utils.ts";
+import { RoleCapabilityDetails, RoleFindingEvidence } from "../team/RoleDesignDetails.tsx";
 
 interface RoleProposalCardProps {
 	matterId: string;
@@ -95,6 +96,7 @@ export function RoleProposalCard({
 					responsibilities: draft.template.sections.responsibilitiesAndBoundaries,
 					keywords: draft.template.keywords,
 					skills: draft.template.skills,
+					mcpDependencies: draft.template.mcpDependencies,
 					tools: draft.template.tools,
 					antiJobs: draft.antiJobs,
 					sections: draft.template.sections,
@@ -142,6 +144,7 @@ export function RoleProposalCard({
 								<strong>{finding.title}</strong>
 							</div>
 							<p>{finding.detail}</p>
+							<RoleFindingEvidence finding={finding} />
 						</div>
 					))}
 				</div>
@@ -224,6 +227,7 @@ export function RoleProposalCard({
 										<span className="pill">{bp.draft.toolSummary}</span>
 									</div>
 									<p>{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}</p>
+									<RoleCapabilityDetails draft={bp.draft} />
 									{bp.draft.antiJobs.length > 0 && (
 										<div className="architect-blueprint-anti">
 											<strong>不做边界：</strong>
