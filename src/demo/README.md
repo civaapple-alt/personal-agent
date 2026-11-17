@@ -16,6 +16,8 @@
 
 [inner-matter-definition.ts](inner-matter-definition.ts) 是网页内置演示的纯定义，不是会自动运行的 CLI。四步体验及按需初始化规则见[内置演示事项](../../docs/inner-matter-demo.md)。
 
+`demo:decision` 的查仓场景明确要求读取合成工作区的 `README.md` 与 `package.json`，两份文件均有成功完成的真实工具读取记录才通过；仅开放 `read` 工具不算读取成功。`decision-report.json` 保留实际路径及阵型输出，但脚本通过不代表阵型语义质量或长期角色能力已通过独立评估。
+
 `publication-review` 的场景与标准在 [case](publication-review-case.ts)，工具时序与场景行为在 [evidence](publication-review-evidence.ts)，参数及重复顺序在 [options](publication-review-options.ts)，独立审阅校验在 [quality](publication-review-quality.ts)，离线三层汇总在 [report](publication-review-report.ts)。重复轮次使用独立目录、数据库和会话；不因咨询次数更多而自动判定质量改善。
 
 `team-smoke` 保留临时证据目录，输出 `first.json`、`restart.json` 与数据库/会话的位置；样例是假设，不是业务需求确认，不访问书架。模型和超时以脚本为准，不展示或索取密钥。

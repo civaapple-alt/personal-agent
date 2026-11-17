@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Decision contracts and evidence follow-up
+
+- Follow `5001069..fca5970` without replacing the completed initiation UI. Preserve explicit role IDs, verification plans, constraints, Anti-Jobs and Skill dependencies in model-generated designs; missing explicit Skills remain visible in capability reports. Model-suggested Skills are still limited to the installed catalog. Constraints now coexist with verification plans in both design modes.
+- Separate read permission (`repoReadEnabled`) from completed workspace reads (`usedRepoRead`, `repoReadPaths`). Ignore failed, unfinished and out-of-workspace reads, including symlink escapes. The UI shows actual read paths or the lack of successful evidence; `demo:decision` now requires successful reads of both sample entry files.
+- Wrap throwing schema validators in `PiDecisionError` with `validation_error`, preserving the cause and raw output after worker cleanup. Add regressions for these three failure cases and HTTP preservation of explicit design requirements; no additional user approval step is introduced.
+
 ### Typed Pi LLM Decision Model for Initiation Assessment (`typesafe-ai` style)
 
 - Add a reusable typed structured decision runner over Pi RPC ([src/orchestrator/pi-decision.ts](src/orchestrator/pi-decision.ts): `runTypedPiDecision`, `extractJsonObject`, `PiDecisionError`), executing isolated stateless turns (`noSession: true`, `thinkingLevel: "low"`, `--no-extensions`, `--no-skills`, `--no-mcp`, `--tools ""` or optional read-only `["read"]`), enforcing schema + live business member ID validation, and propagating `AbortSignal` cleanup.

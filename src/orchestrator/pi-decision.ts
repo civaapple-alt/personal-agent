@@ -1,4 +1,4 @@
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
+import type { PromptRunResult, ToolExecutionRecord } from "../rpc/pi-rpc-worker.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
 import type { WorkerFactory } from "./types.ts";
 
@@ -47,6 +47,7 @@ export interface RunTypedPiDecisionOptions {
 export interface PiDecisionResult<T> {
 	decision: T;
 	rawText: string;
+	toolExecutions: ToolExecutionRecord[];
 }
 
 /** Extracts the first top-level JSON object from model prose or fenced ```json blocks. */
@@ -133,7 +134,15 @@ export async function runTypedPiDecision<T>(
 		});
 	}
 
-	const validated = spec.validate(rawObject);
+	let validated: T | null;
+	try {
+		validated = spec.validate(rawObject);
+	} catch (cause) {
+		throw new PiDecisionError("validation_error", `Decision "${spec.name}" JSON failed schema validation`, {
+			rawText: promptResult.assistantText,
+			cause,
+		});
+	}
 	if (validated === null) {
 		throw new PiDecisionError("validation_error", `Decision "${spec.name}" JSON failed schema validation`, {
 			rawText: promptResult.assistantText,
@@ -143,5 +152,6 @@ export async function runTypedPiDecision<T>(
 	return {
 		decision: validated,
 		rawText: promptResult.assistantText,
+		toolExecutions: promptResult.toolExecutions,
 	};
 }

@@ -11,6 +11,7 @@ import {
 	PersonalAgentStore,
 	PiDecisionError,
 	PreviewManager,
+	type RoleArchitectDraft,
 	type RpcWorkerLike,
 	runTypedPiDecision,
 	TeamOrchestrator,
@@ -208,7 +209,7 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 		assert.equal(okRun.args[toolsFlagIdx + 1], "");
 		assert.equal(okRun.thinkingLevel, "low");
 
-		// 3) readRepo: true passes read tool allowlist cleanly
+		// 3) readRepo: true opens read tools, but no completed reads are fabricated.
 		const readRes = await fetch(`${url}/api/matters/assess`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -220,8 +221,14 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 			}),
 		});
 		assert.equal(readRes.status, 200);
-		const readBody = (await readRes.json()) as { usedRepoRead: boolean };
-		assert.equal(readBody.usedRepoRead, true);
+		const readBody = (await readRes.json()) as {
+			usedRepoRead: boolean;
+			repoReadEnabled: boolean;
+			repoReadPaths: string[];
+		};
+		assert.equal(readBody.repoReadEnabled, true);
+		assert.equal(readBody.usedRepoRead, false);
+		assert.deepEqual(readBody.repoReadPaths, []);
 		const readRun = observedRuns[2]!;
 		const readToolsIdx = readRun.args.indexOf("--tools");
 		assert.equal(readRun.args[readToolsIdx + 1], "read");
@@ -375,6 +382,31 @@ test("AI Role Designer validates installed skills, structured verificationPlan, 
 		assert.equal(body.template.name, "发布运维专员");
 		assert.deepEqual(body.template.skills, ["repo-analysis"]);
 		assert.deepEqual(body.template.tools, ["read"]);
+
+		const explicitRes = await fetch(`${url}/api/members/design`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				oneJob: "检查发版",
+				roleId: "explicit-release-check",
+				mode: "model",
+				verificationPlan: "以旧版清单检查全部变更",
+				constraints: "不得访问客户数据",
+				skills: ["explicit-missing-skill"],
+			}),
+		});
+		assert.equal(explicitRes.status, 200);
+		const explicitBody = (await explicitRes.json()) as RoleArchitectDraft;
+		assert.equal(explicitBody.template.id, "explicit-release-check");
+		assert.ok(explicitBody.markdown.includes("以旧版清单检查全部变更"));
+		assert.ok(explicitBody.markdown.includes("不得访问客户数据"));
+		assert.deepEqual(
+			explicitBody.capabilityReport?.skills.find((s) => s.name === "explicit-missing-skill"),
+			{
+				name: "explicit-missing-skill",
+				state: "missing",
+			},
+		);
 
 		malformed = true;
 		const badRes = await fetch(`${url}/api/members/design`, {

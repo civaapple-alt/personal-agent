@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
 	isArchitectRoleTemplate,
 	type RoleInteractionStyle,
@@ -43,6 +45,8 @@ export interface MatterInitiationAssessment {
 	gapSuggestion?: RoleGapSuggestion;
 	assessmentSource?: InitiationAssessmentSource;
 	confidence?: DecisionConfidence;
+	repoReadEnabled?: boolean;
+	repoReadPaths?: string[];
 	usedRepoRead?: boolean;
 }
 
@@ -629,7 +633,7 @@ export async function assessMatterInitiationWithModel(
 		`## 用户需求草稿\n${truncateInline(prompt, 2000)}${input.hasImages ? "\n（注：附带了图片，当前决策阶段不直接解析图片像素细节）" : ""}`,
 	].join("\n\n");
 
-	const { decision } = await runTypedPiDecision(
+	const { decision, toolExecutions } = await runTypedPiDecision(
 		{
 			cwd: input.workspacePath ?? deps.defaultCwd,
 			provider: primary?.provider ?? "kimi-coding",
@@ -655,6 +659,24 @@ export async function assessMatterInitiationWithModel(
 			signal: input.signal,
 		},
 	);
+	input.signal.throwIfAborted();
+	// Tool availability is not read evidence. Only retain completed successful reads whose
+	// resolved files are inside the selected workspace (including symlink resolution).
+	const repoReadPaths = new Set<string>();
+	if (useRepoRead && input.workspacePath) {
+		const root = await realpath(input.workspacePath);
+		for (const execution of toolExecutions) {
+			if (execution.toolName !== "read" || execution.isError || execution.result === undefined) continue;
+			const args = execution.args;
+			if (!args || typeof args !== "object" || !("path" in args) || typeof args.path !== "string") continue;
+			const target = await realpath(resolve(root, args.path)).catch(() => null);
+			if (!target) continue;
+			const path = relative(root, target);
+			if (!path || isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`)) continue;
+			repoReadPaths.add(path.split(sep).join("/"));
+		}
+	}
+	input.signal.throwIfAborted();
 
 	const selectedAiSet = new Set<string>([
 		...(decision.recommendedLeadId ? [decision.recommendedLeadId] : []),
@@ -701,6 +723,8 @@ export async function assessMatterInitiationWithModel(
 		...(decision.gapSuggestion ? { gapSuggestion: decision.gapSuggestion } : {}),
 		assessmentSource: "model",
 		confidence: decision.confidence,
-		usedRepoRead: useRepoRead,
+		repoReadEnabled: useRepoRead,
+		repoReadPaths: [...repoReadPaths],
+		usedRepoRead: repoReadPaths.size > 0,
 	};
 }

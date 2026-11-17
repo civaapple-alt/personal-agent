@@ -11,6 +11,7 @@
 | 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
 | 立项适配诊断、单兵/定向旁听边界与引导式角色设计（Role Architect） | [matter-initiation-and-architect.test.ts](matter-initiation-and-architect.test.ts) |
 | 类型化 Pi 决策引擎、模型态立项接口、Schema/Roster 强校验与取消 | [pi-decision.test.ts](pi-decision.test.ts) |
+| 模型草案保留用户要求、缺失依赖可见、真实读取证据及抛异常校验器 | [decision-contracts.test.ts](decision-contracts.test.ts) |
 | 角色路径与 ID 冲突、批量提案校验、并发应用、符号链接和删除后重新打开数据库 | [member-management.test.ts](member-management.test.ts) |
 | 五个角色方法装载、能力组合、体检来源、设计到导出一致性与缺失依赖提前失败 | [role-capabilities.test.ts](role-capabilities.test.ts) |
 | 角色真实演示的待审阅/失败区分、输入哈希、原文引用、离线帮助和目录保护 | [role-design-demo.test.ts](role-design-demo.test.ts) |

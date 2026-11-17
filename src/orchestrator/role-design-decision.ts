@@ -2,6 +2,7 @@ import { assessRoleCapabilities, listRoleSkillCatalog } from "../roles/capabilit
 import {
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
+	normalizeRoleVerificationPlan,
 	type RoleArchitectDraft,
 	type RoleDesignBriefInput,
 	type RoleInteractionStyle,
@@ -30,7 +31,7 @@ export interface RoleDesignDecisionPayload {
 	workspaceScope: RoleWorkspaceScope;
 	communicationStyle: string;
 	workflowRules?: string;
-	verificationPlan: RoleVerificationPlan;
+	verificationPlan: string | RoleVerificationPlan;
 	designRationale: string;
 }
 
@@ -51,13 +52,13 @@ export function validateRoleDesignDecision(
 
 	// Reject oversized sentence-like names when the caller did not force one.
 	const cleanName = nameRaw.slice(0, 16);
-	const rawId = typeof raw.id === "string" ? raw.id.trim() : "";
+	const rawId = context.explicit.roleId?.trim() || (typeof raw.id === "string" ? raw.id.trim() : "");
 	const id = slugifyRoleId(rawId || titleRaw, [...context.existingMemberIds, "role-architect"]);
 
 	const rawAntiJobs = Array.isArray(raw.antiJobs)
 		? raw.antiJobs.map((s) => (typeof s === "string" ? s.trim() : "")).filter(Boolean)
 		: [];
-	const mergedAntiJobs = Array.from(new Set([...(context.explicit.antiJobs ?? []), ...rawAntiJobs])).slice(0, 6);
+	const mergedAntiJobs = Array.from(new Set([...(context.explicit.antiJobs ?? []), ...rawAntiJobs.slice(0, 6)]));
 	if (mergedAntiJobs.length === 0) return null;
 
 	const quietWhen =
@@ -74,9 +75,7 @@ export function validateRoleDesignDecision(
 	const rawSkills = Array.isArray(raw.skills)
 		? raw.skills.map((s) => (typeof s === "string" ? s.trim() : "")).filter((s) => context.installedSkills.has(s))
 		: [];
-	const skills = Array.from(
-		new Set([...(context.explicit.skills ?? []).filter((s) => context.installedSkills.has(s)), ...rawSkills]),
-	).slice(0, 4);
+	const skills = Array.from(new Set([...(context.explicit.skills ?? []), ...rawSkills.slice(0, 4)]));
 
 	const styleRaw = typeof raw.interactionStyle === "string" ? raw.interactionStyle.trim() : "";
 	const interactionStyle =
@@ -96,13 +95,12 @@ export function validateRoleDesignDecision(
 		context.explicit.workflowRules?.trim() ||
 		(typeof raw.workflowRules === "string" && raw.workflowRules.trim() ? raw.workflowRules.trim() : undefined);
 
-	const vp = raw.verificationPlan;
-	if (!vp || typeof vp !== "object") return null;
-	const vpObj = vp as Record<string, unknown>;
-	const task = typeof vpObj.task === "string" ? vpObj.task.trim() : "";
-	const successCriteria = typeof vpObj.successCriteria === "string" ? vpObj.successCriteria.trim() : "";
-	const boundaryCheck = typeof vpObj.boundaryCheck === "string" ? vpObj.boundaryCheck.trim() : "";
-	if (!task || !successCriteria || !boundaryCheck) return null;
+	const verificationPlan =
+		normalizeRoleVerificationPlan(context.explicit.verificationPlan) ||
+		(raw.verificationPlan && typeof raw.verificationPlan === "object"
+			? normalizeRoleVerificationPlan(raw.verificationPlan)
+			: undefined);
+	if (!verificationPlan) return null;
 
 	const designRationale =
 		typeof raw.designRationale === "string" && raw.designRationale.trim()
@@ -122,7 +120,7 @@ export function validateRoleDesignDecision(
 		workspaceScope,
 		communicationStyle,
 		...(workflowRules ? { workflowRules } : {}),
-		verificationPlan: { task, successCriteria, boundaryCheck },
+		verificationPlan,
 		designRationale,
 	};
 }
@@ -202,6 +200,15 @@ export async function designRoleDraftWithModel(
 	const userPrompt = [
 		`## 已有团队成员（避免 ID 与职责冲突）\n${rosterSummary || "（暂无）"}`,
 		`## 已安装 Skills 目录\n${JSON.stringify(skillCatalog)}`,
+		`## 用户指定配置（优先保留；未安装的显式依赖仅标记缺失，不擅自删除或安装）\n${JSON.stringify({
+			roleId: input.roleId,
+			skills: input.skills,
+			mcpDependencies: input.mcpDependencies,
+			quietWhen: input.quietWhen,
+			communicationStyle: input.communicationStyle,
+			constraints: input.constraints,
+			verificationPlan: input.verificationPlan,
+		})}`,
 		[
 			"## 用户创建请求",
 			`- 核心职责输入: ${oneJob}`,
@@ -258,6 +265,7 @@ export async function designRoleDraftWithModel(
 		mcpDependencies: input.mcpDependencies,
 		communicationStyle: decision.communicationStyle,
 		verificationPlan: decision.verificationPlan,
+		constraints: input.constraints,
 		isPrimaryContact: input.isPrimaryContact,
 		existingMemberIds: deps.members.map((m) => m.id),
 	});

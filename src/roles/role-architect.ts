@@ -215,7 +215,7 @@ function buildDefaultAntiJobs(input: {
 	} else {
 		pushItem("无实质依据或超出职责范围时直接说明边界，不凭记忆猜测");
 	}
-	return list.slice(0, 8);
+	return list;
 }
 
 /**
@@ -270,9 +270,10 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	]
 		.filter(Boolean)
 		.join("\n");
-	const verificationPlan = normalizeRoleVerificationPlan(input.verificationPlan) || input.constraints?.trim();
+	const explicitPlan = normalizeRoleVerificationPlan(input.verificationPlan);
+	const verificationPlan = explicitPlan || input.constraints?.trim();
 	const deliverySection = verificationPlan
-		? `- 交付与验收要求：${verificationPlan}`
+		? `- 交付与验收要求：${verificationPlan}${explicitPlan && input.constraints?.trim() ? `\n- 额外约束：${input.constraints.trim()}` : ""}`
 		: interactionStyle === "lead_direct"
 			? "- 形成明确阶段结果时通过正式成果归档，附简练 `changeNote` 与核查依据；普通讨论不归档。"
 			: interactionStyle === "mixed"

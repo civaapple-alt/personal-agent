@@ -270,7 +270,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 									<p>{assessment.explanation}</p>
 									<p>
 										{isModelResult
-											? `由 Pi 决策模型基于职责与不做边界判断${assessment.usedRepoRead ? "（已开启只读仓库参考）" : "（未读取仓库文件）"}。建议不会自动替换当前设置。`
+											? `由 Pi 决策模型基于职责与不做边界判断${assessment.usedRepoRead ? `（已读取：${assessment.repoReadPaths?.join("、") ?? "仓库文件"}）` : assessment.repoReadEnabled ? "（已允许读取，但无成功读取仓库文件的记录）" : "（未读取仓库文件）"}。建议不会自动替换当前设置。`
 											: "以上为本地文字规则预判，不调用模型、不读取仓库；建议不会自动替换当前设置，未命中关键词不代表成员无法胜任。"}
 									</p>
 								</details>

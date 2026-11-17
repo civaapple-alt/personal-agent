@@ -480,6 +480,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
 		const designInput = {
 			oneJob,
+			roleId: typeof body.roleId === "string" ? body.roleId : undefined,
 			antiJobs,
 			quietWhen: typeof body.quietWhen === "string" ? body.quietWhen : undefined,
 			interactionStyle,

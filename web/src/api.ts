@@ -256,6 +256,8 @@ export interface MatterInitiationAssessmentDto {
 	gapSuggestion?: RoleGapSuggestionDto;
 	assessmentSource?: InitiationAssessmentSource;
 	confidence?: DecisionConfidence;
+	repoReadEnabled?: boolean;
+	repoReadPaths?: string[];
 	usedRepoRead?: boolean;
 }
 

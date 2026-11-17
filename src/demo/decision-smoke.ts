@@ -155,7 +155,8 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 					templatesByRoleId: templatesMap,
 				},
 				{
-					prompt: "在 order-service 中新增退款幂等接口实现，并补充关键边界回归测试验证。",
+					prompt:
+						"请先读取仓库 README.md 与 package.json，再判断由谁负责以下工作：在 order-service 中新增退款幂等接口实现，并补充关键边界回归测试验证。",
 					workspacePath: sampleRepo,
 					workspaceName: "order-service",
 					readRepo: true,
@@ -165,6 +166,8 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 			const passed =
 				res.assessmentSource === "model" &&
 				res.usedRepoRead === true &&
+				res.repoReadPaths?.includes("README.md") === true &&
+				res.repoReadPaths?.includes("package.json") === true &&
 				res.recommendedLeadId === "engineering-manager" &&
 				(res.recommendedMode === "lead_review" || res.recommendedMode === "lead_consult");
 			records.push({
