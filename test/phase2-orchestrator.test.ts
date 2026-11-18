@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -754,6 +754,63 @@ test("TeamOrchestrator preserves multi-human discussion speaker attribution and 
 		);
 		const updatedMatter = store.getMatter(matter.id);
 		assert.ok(updatedMatter?.collaboratorIds.includes("collab-bob"));
+	} finally {
+		db.close();
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
+});
+
+test("TeamOrchestrator injects target workspace top-level entries, scope rules, and PA_TARGET_WORKSPACE_ROOT isolation", async () => {
+	const tempRoot = mkdtempSync(join(tmpdir(), "pa-ws-scope-"));
+	const targetRepo = join(tempRoot, ".data", "team-workspaces", "civa-team", "hello-rust");
+	mkdirSync(join(targetRepo, ".git"), { recursive: true });
+	mkdirSync(join(targetRepo, "src"), { recursive: true });
+	writeFileSync(join(targetRepo, "Cargo.toml"), '[package]\nname = "hello-rust"\n', "utf8");
+	writeFileSync(join(targetRepo, "README.md"), "# hello-rust\n", "utf8");
+	const db = openPersonalAgentDatabase(join(tempRoot, "team.sqlite"));
+	try {
+		const store = new PersonalAgentStore(db);
+		const org = store.upsertOrganization({ name: "civa-team" });
+		const ws = store.upsertWorkspace({
+			orgId: org.id,
+			name: "hello-rust",
+			repoPath: targetRepo,
+			sourceType: "cloned",
+		});
+		const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+		const workers: FakeRpcWorker[] = [];
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			sessionDir: tempRoot,
+			noSession: true,
+			defaultCwd: tempRoot,
+			workerFactory: (opts) => {
+				const w = new FakeRpcWorker(opts, async () => "ok");
+				workers.push(w);
+				return w;
+			},
+		});
+
+		await orchestrator.dispatchMatter({
+			prompt: "简单介绍当前项目",
+			workspaceId: ws.id,
+			preferredMemberId: "product-manager",
+			observersEnabled: false,
+		});
+		const wsEnv = workers[0]?.options.env;
+		assert.equal(wsEnv?.PA_TARGET_WORKSPACE_ROOT, resolve(targetRepo));
+		assert.match(wsEnv?.PA_MEMBER_CONTEXT ?? "", /Treat "hello-rust"/);
+		assert.match(wsEnv?.PA_MEMBER_CONTEXT ?? "", /Top-level entries: Cargo\.toml, README\.md, src\//);
+		assert.doesNotMatch(wsEnv?.PA_MEMBER_CONTEXT ?? "", /\.git/);
+
+		await orchestrator.dispatchMatter({
+			prompt: "一般讨论任务",
+			orgId: org.id,
+			preferredMemberId: "product-manager",
+			observersEnabled: false,
+		});
+		assert.equal(workers[1]?.options.env?.PA_TARGET_WORKSPACE_ROOT, "__none__");
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });

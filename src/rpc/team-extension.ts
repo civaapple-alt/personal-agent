@@ -1,4 +1,6 @@
+import { realpathSync } from "node:fs";
 import { request as httpRequest } from "node:http";
+import { isAbsolute, relative, resolve } from "node:path";
 
 /** Minimal structural subset of Pi's extension API. No dependency on Pi's installation path. */
 export interface PiExtensionApi {
@@ -14,10 +16,48 @@ export interface PiExtensionApi {
 		): Promise<{ content: { type: "text"; text: string }[]; details: unknown }>;
 	}): void;
 	on(event: "session_start", handler: () => Promise<void>): void;
-	on(event: "before_agent_start", handler: (event: { systemPrompt: string }) => { systemPrompt: string }): void;
+	on(
+		event: "before_agent_start",
+		handler: (event: {
+			systemPrompt: string;
+			systemPromptOptions?: {
+				cwd?: string;
+				contextFiles?: Array<{ path: string; content: string }>;
+			};
+		}) => { systemPrompt: string },
+	): void;
 	getActiveTools(): string[];
 	getAllTools(): { name: string }[];
 	setActiveTools(names: string[]): void;
+}
+
+function resolveCanonicalPath(target: string): string {
+	const normalized = resolve(target);
+	try {
+		return realpathSync(normalized);
+	} catch {
+		return normalized;
+	}
+}
+
+/**
+ * Drop ancestor/host AGENTS.md/CLAUDE.md files outside the assigned target workspace root.
+ * When `PA_TARGET_WORKSPACE_ROOT` is `"__none__"`, clears all auto-discovered context files so
+ * unbound matters do not absorb the workbench checkout's own repository instructions.
+ */
+export function filterContextFilesForTargetWorkspace<T extends { path: string }>(
+	contextFiles: T[],
+	targetWorkspaceRoot: string | undefined,
+): T[] {
+	if (targetWorkspaceRoot === undefined) return contextFiles;
+	const trimmed = targetWorkspaceRoot.trim();
+	if (!trimmed || trimmed === "__none__") return [];
+	const canonicalRoot = resolveCanonicalPath(trimmed);
+	return contextFiles.filter((file) => {
+		if (!file || typeof file.path !== "string") return false;
+		const rel = relative(canonicalRoot, resolveCanonicalPath(file.path));
+		return rel === "" || (rel !== ".." && !rel.startsWith("../") && !rel.startsWith("..\\") && !isAbsolute(rel));
+	});
 }
 
 export default function teamExtension(pi: PiExtensionApi): void {
@@ -199,7 +239,15 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			process.stderr.write("Personal Agent capability handshake failed\n");
 		});
 	});
-	pi.on("before_agent_start", (event) => ({
-		systemPrompt: `${event.systemPrompt}\n\n${env.PA_MEMBER_CONTEXT ?? ""}\n\nActive tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
-	}));
+	pi.on("before_agent_start", (event) => {
+		if (env.PA_TARGET_WORKSPACE_ROOT !== undefined && Array.isArray(event.systemPromptOptions?.contextFiles)) {
+			event.systemPromptOptions.contextFiles = filterContextFilesForTargetWorkspace(
+				event.systemPromptOptions.contextFiles,
+				env.PA_TARGET_WORKSPACE_ROOT,
+			);
+		}
+		return {
+			systemPrompt: `${event.systemPrompt}\n\n${env.PA_MEMBER_CONTEXT ?? ""}\n\nActive tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
+		};
+	});
 }

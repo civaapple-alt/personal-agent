@@ -9,6 +9,7 @@ import type { ImageContent } from "../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
 import type { Matter, MemoryCategory, MemoryScope, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import {
+	listWorkspaceTopLevelEntries,
 	prepareDelivery,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
@@ -274,6 +275,7 @@ export async function executeWithWorkerPass(
 
 		const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
 		const repoGitUser = resolveRepoGitUserIdentity(cwd);
+		const workspaceTopLevelEntries = input.workspace ? listWorkspaceTopLevelEntries(cwd) : undefined;
 		const committerName = repoGitUser?.name || gitIdentity.gitName;
 		const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
 		const relevantMemories = deps.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null, {
@@ -290,6 +292,7 @@ export async function executeWithWorkerPass(
 			env: {
 				...bridge.env,
 				...(pstack ? { PA_PSTACK_DIR: pstack.root } : {}),
+				PA_TARGET_WORKSPACE_ROOT: input.workspace ? cwd : "__none__",
 				GIT_AUTHOR_NAME: gitIdentity.gitName,
 				GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
 				GIT_COMMITTER_NAME: committerName,
@@ -313,6 +316,7 @@ export async function executeWithWorkerPass(
 						template,
 						memories: relevantMemories,
 						workspace: input.workspace,
+						workspaceTopLevelEntries,
 						organization,
 						repoGitUser,
 						sessionMode,

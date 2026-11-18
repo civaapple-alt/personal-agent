@@ -636,6 +636,7 @@ export async function runMetaArchitectChat(
 			"--no-extensions",
 			"--no-skills",
 			"--no-mcp",
+			"--no-context-files",
 			...methodPaths.flatMap((path) => ["--skill", path]),
 			"--tools",
 			"",

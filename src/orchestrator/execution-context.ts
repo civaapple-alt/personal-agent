@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { resolveAllowedSkillRoots, resolveRoleSkillPath, type SkillResolutionOptions } from "../roles/capabilities.ts";
@@ -169,5 +169,23 @@ export function resolveRepoGitUserIdentity(cwd?: string | null): { name: string;
 		return null;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * List immediate non-VCS files and subdirectories of a workspace so read-only roles without
+ * `bash`/`ls` can directly locate manifests and documentation inside the target repository.
+ */
+export function listWorkspaceTopLevelEntries(workspacePath?: string | null, limit = 40): string[] {
+	if (!workspacePath || !existsSync(workspacePath)) return [];
+	try {
+		const entries = readdirSync(workspacePath, { withFileTypes: true })
+			.filter((entry) => entry.name !== ".git" && entry.name !== ".DS_Store")
+			.map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+			.sort((a, b) => a.localeCompare(b));
+		if (entries.length <= limit) return entries;
+		return [...entries.slice(0, limit), `... (+${entries.length - limit} more)`];
+	} catch {
+		return [];
 	}
 }

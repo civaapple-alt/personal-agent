@@ -86,7 +86,7 @@ export async function runTypedPiDecision<T>(
 		provider: deps.provider,
 		model: deps.model,
 		noSession: true,
-		args: ["--no-extensions", "--no-skills", "--no-mcp", "--tools", toolsArg],
+		args: ["--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", toolsArg],
 		env: { PA_DECISION_NAME: spec.name },
 	});
 

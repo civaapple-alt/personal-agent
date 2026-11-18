@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import teamExtension, { type PiExtensionApi } from "../src/rpc/team-extension.ts";
+import teamExtension, { filterContextFilesForTargetWorkspace, type PiExtensionApi } from "../src/rpc/team-extension.ts";
 import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {
@@ -133,5 +136,83 @@ test("teamExtension bridge transport disables request timeouts, returns errors, 
 	} finally {
 		controller.abort();
 		await bridge.close();
+	}
+});
+
+test("teamExtension isolates before_agent_start contextFiles to the target workspace root", () => {
+	const root = mkdtempSync(join(tmpdir(), "pa-ext-ctx-"));
+	const workspaceRoot = join(root, ".data", "team-workspaces", "civa-team", "hello-rust");
+	mkdirSync(workspaceRoot, { recursive: true });
+	const hostAgents = join(root, "AGENTS.md");
+	const targetAgents = join(workspaceRoot, "AGENTS.md");
+	writeFileSync(hostAgents, "# Host Personal Agent instructions\n", "utf8");
+	writeFileSync(targetAgents, "# hello-rust workspace instructions\n", "utf8");
+	try {
+		const filtered = filterContextFilesForTargetWorkspace(
+			[
+				{ path: "/Users/other/.pi/agent/AGENTS.md", content: "global" },
+				{ path: hostAgents, content: "host" },
+				{ path: targetAgents, content: "target" },
+			],
+			workspaceRoot,
+		);
+		assert.deepEqual(
+			filtered.map((f) => f.path),
+			[targetAgents],
+		);
+		assert.deepEqual(filterContextFilesForTargetWorkspace([{ path: hostAgents, content: "host" }], "__none__"), []);
+
+		const envBefore = { ...process.env };
+		let beforeStartHandler:
+			| ((event: {
+					systemPrompt: string;
+					systemPromptOptions?: {
+						cwd?: string;
+						contextFiles?: Array<{ path: string; content: string }>;
+					};
+			  }) => { systemPrompt: string })
+			| undefined;
+		Object.assign(process.env, {
+			PA_TARGET_WORKSPACE_ROOT: workspaceRoot,
+			PA_MEMBER_CONTEXT: "## Target workspace\n- Project: hello-rust",
+		});
+		try {
+			teamExtension({
+				registerTool() {},
+				on: (event, handler) => {
+					if (event === "before_agent_start") beforeStartHandler = handler as typeof beforeStartHandler;
+				},
+				getActiveTools: () => ["read", "write"],
+				getAllTools: () => [],
+				setActiveTools: () => {},
+			});
+		} finally {
+			for (const key of ["PA_TARGET_WORKSPACE_ROOT", "PA_MEMBER_CONTEXT"]) {
+				if (envBefore[key] === undefined) delete process.env[key];
+				else process.env[key] = envBefore[key];
+			}
+		}
+		assert.ok(beforeStartHandler);
+		const options = {
+			cwd: workspaceRoot,
+			contextFiles: [
+				{ path: hostAgents, content: "# Host" },
+				{ path: targetAgents, content: "# Target" },
+			],
+		};
+		const event = {
+			get systemPrompt() {
+				return (options.contextFiles ?? []).map((f) => f.content).join("\n");
+			},
+			systemPromptOptions: options,
+		};
+		const res = beforeStartHandler(event);
+		assert.equal(options.contextFiles.length, 1);
+		assert.equal(options.contextFiles[0]?.path, targetAgents);
+		assert.doesNotMatch(res.systemPrompt, /# Host/);
+		assert.match(res.systemPrompt, /# Target/);
+		assert.match(res.systemPrompt, /Project: hello-rust/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
 	}
 });

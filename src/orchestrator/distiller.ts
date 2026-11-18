@@ -265,7 +265,7 @@ export async function performDistillationPass(
 		provider: member.provider,
 		model: member.model,
 		noSession: true,
-		args: ["--no-extensions", "--no-skills", "--no-mcp", "--tools", ""],
+		args: ["--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", ""],
 	});
 	const onAbortWorker = () => {
 		void worker.abort?.().catch(() => {});

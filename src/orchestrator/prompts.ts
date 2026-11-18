@@ -249,6 +249,7 @@ export function buildMemberSystemPrompt(input: {
 	template?: RoleTemplate;
 	memories: MemberMemory[];
 	workspace: WorkspaceLink | null;
+	workspaceTopLevelEntries?: string[];
 	organization?: Organization | null;
 	repoGitUser?: { name: string; email: string } | null;
 	taskPrompt?: string;
@@ -338,9 +339,18 @@ export function buildMemberSystemPrompt(input: {
 	}
 
 	if (input.workspace) {
-		sections.push(
-			`## Target workspace\n- Project: ${input.workspace.name}\n- Local path: ${input.workspace.repoPath}\n- Default branch: ${input.workspace.defaultBranch}\n- Use the actual files and Git state in this workspace as the source of truth for the repository.`,
-		);
+		const workspaceLines = [
+			"## Target workspace",
+			`- Project: ${input.workspace.name}`,
+			`- Local path: ${input.workspace.repoPath}`,
+			`- Default branch: ${input.workspace.defaultBranch}`,
+			`- Workspace scope: Treat "${input.workspace.name}" (${input.workspace.repoPath}) as the current project and repository root. Any request mentioning "current project", "this repository", or "当前项目" refers exclusively to this workspace—never inspect or substitute an unrelated parent host directory (such as the Personal Agent workbench checkout) unless the target workspace itself is that repository.`,
+			`- Use relative paths or paths under ${input.workspace.repoPath}, and use the actual files and Git state in this workspace as the source of truth.`,
+		];
+		if (input.workspaceTopLevelEntries && input.workspaceTopLevelEntries.length > 0) {
+			workspaceLines.push(`- Top-level entries: ${input.workspaceTopLevelEntries.join(", ")}`);
+		}
+		sections.push(workspaceLines.join("\n"));
 	}
 
 	if (mode === "internal") {

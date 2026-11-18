@@ -69,7 +69,7 @@
 编排核启动每个成员 worker 时采用隔离策略（见 [团队编排核](../src/orchestrator/team-orchestrator.ts) 与 [运行说明](runtime-collaboration.md)）：
 
 - 固定参数：`--mode rpc --no-extensions --no-skills`，再按顺序显式传入：
-  - 团队扩展（源码或构建后的 `team-extension`）与 `PA_PI_EXTENSIONS`
+  - 团队扩展（源码或构建后的 `team-extension`）与 `PA_PI_EXTENSIONS`（并通过 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先/宿主 `AGENTS.md`/`CLAUDE.md`，避免 `.data/team-workspaces/` 等子目录工作区继承工作台自身仓库导航；辅助无工具/JSON pass 另附 `--no-context-files`）
   - 角色声明的 `--skill` 路径，以及限定可用工具清单的 `--tools`
   - 配置 `PA_PSTACK_DIR` 时增加模式入口、`pstack-extension` 与 `load_pstack_skill`；不隐式增加其他业务或 MCP 工具
 - MCP 开关：当角色 `mcpDependencies` 为空时附加 `--no-mcp`；非空时附加 `--extension builtin:mcp`，并在工具列表中声明对应 `mcp__<server>__*` 前缀。

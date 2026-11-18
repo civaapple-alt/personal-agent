@@ -7,7 +7,7 @@
 | [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾；支持 `suspendIdleTimeout()` 在宿主桥接耗时期间暂停空闲看门狗。`sessionFile` 必须是编排核选定的文件 |
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果/经验提案工具，核查动态工具装配并加入当前岗位系统上下文；通过 `node:http` 无超时长连接调用桥接（规避 `fetch()` 默认 300s `headersTimeout`），内部模式不注册发布工具、旁听模式不注册经验提案工具 |
+| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托/成果/经验提案工具，核查动态工具装配并在 `before_agent_start` 按 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先/宿主 `contextFiles`（阻止 `.data/team-workspaces/` 继承工作台自身 `AGENTS.md`，保留目标仓库自带说明），随后注入当前岗位系统上下文；通过 `node:http` 无超时长连接调用桥接（规避 `fetch()` 默认 300s `headersTimeout`），内部模式不注册发布工具、旁听模式不注册经验提案工具 |
 | [pstack-extension.ts](pstack-extension.ts) | 显式配置时注册只读 `load_pstack_skill`，从批准的方法包读取实际正文和哈希，提供路径指引与读取清单；不注册业务文件、终端或团队权限 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 

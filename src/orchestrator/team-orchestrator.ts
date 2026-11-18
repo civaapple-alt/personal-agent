@@ -12,7 +12,7 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
-import { validateDelivery } from "./execution-context.ts";
+import { listWorkspaceTopLevelEntries, validateDelivery } from "./execution-context.ts";
 import {
 	assessMatterInitiation,
 	assessMatterInitiationWithModel,
@@ -379,8 +379,12 @@ export class TeamOrchestrator {
 					? this.store.getOrganization(input.workspace.orgId)
 					: null;
 		const matterForPrompt = input.matterId ? this.store.getMatter(input.matterId) : null;
+		const workspaceTopLevelEntries = input.workspace
+			? listWorkspaceTopLevelEntries(input.workspace.repoPath)
+			: undefined;
 		return buildMemberSystemPrompt({
 			...input,
+			workspaceTopLevelEntries,
 			organization,
 			teamMembers: this.resolveMatterAiMembers(matterForPrompt),
 		});
