@@ -20,7 +20,33 @@ npm run check:startup
 
 开发真实 AI 执行与运行 `demo:*` 任务必须另装本地 Pi CLI；它是当前唯一执行底座，不由 `npm ci` 安装。多平台安装与产品说明以 [pi.dev](https://pi.dev/) 为入口，模型匹配及本项目验证基线见[首次运行](getting-started.md)。离线测试的受控 Worker 不构成替代执行底座。
 
-需要实际操作工作台时运行 `npm run start:web`。它会使用默认 `.data/`，已有用户数据的检出目录不要直接拿来做破坏性开发实验。若要快速验证团队版多组织权限、审核后台与多版本成果库交互而不影响 `.data/`，运行 `npm run start:team:sandbox` 在临时目录拉起预置完整样本数据的隔离沙盒（`PA_REQUIRE_AUTH=1`，退出自动清理）。`check:startup` 自动使用临时库、模板目录和端口，适合验证启动；它不会证明模型协作可用。
+需要实际操作工作台时运行 `npm run start:web`。它会使用默认 `.data/`，已有用户数据的检出目录适合做不写改数据的只读排查，不要直接拿来做破坏性实验。若要快速验证团队版多组织权限、审核后台与多版本成果库交互而不影响 `.data/`，运行 `npm run start:team:sandbox`（详见下方[团队版一键验证沙盒](#团队版一键验证沙盒)）。`check:startup` 自动使用临时库、模板目录和端口，适合验证启动；它不会证明模型协作可用。
+
+### 团队版一键验证沙盒
+
+运行以下命令可在系统临时目录启动完整的团队版隔离沙盒（自动构建网页并启用 `PA_REQUIRE_AUTH=1`，退出后自动清理临时目录，不调用真实模型、不触碰 `.data/`）：
+
+```bash
+npm run start:team:sandbox
+```
+
+- **默认入口**：`http://127.0.0.1:4399/#/deliverables`（超管后台 `http://127.0.0.1:4399/#/admin`，启动日志另打印一条可用的 `Alpha Studio` `?invite=orginv_...` 邀请链接）。
+- **常用参数**：`--port=<端口>`、`--host=<地址>`、`--dir=<目录>`（保留目录并在二次启动时幂等跳过重复灌库）、`--keep`、`--password=<密码>`（默认 `Sandbox123!`，可通过 `PA_SANDBOX_PASSWORD` 覆盖，至少 8 位）、`--seed-only`、`--help`。
+- **预置成果样本（共 6 条交付版本）**：
+  - `Alpha Studio / Alpha Platform`（`org`）：《Q4 发布计划与架构方案》`V1 → V2` 版本演进、V1 正向验收评价、已注入并关联的 `company_private` 组织经验与 1 条待核验 `candidate` 经验。
+  - `Alpha Studio / Alpha Platform`（`private`）：《高风险灰度应急预案》（仅发起人、`Alpha 成员` 与 `Alpha Studio` 管理员可见）。
+  - `Alpha Studio / Alpha Secret`（`restricted`）：《核心密钥轮换与审计清单》及仓库级 `project_private` 经验。
+  - `Beta Labs / Beta App`（`org`）：《Beta 开放平台接口规范》`V1 → V2` 版本演进。
+
+| 预设账号 | 统一密码（默认） | 角色与成员关系 | 典型验证范围 |
+| --- | --- | --- | --- |
+| `admin@sandbox.local` | `Sandbox123!` | `super_admin` | `#/admin` 平台配置、全局可见范围及待审核账号 `pending@sandbox.local`（`pending_review`）审批 |
+| `owner@alpha.local` | `Sandbox123!` | `Alpha Studio` `org_owner` + `Beta Labs` `org_member` | 全量 6 条跨组织成果、组织/范围筛选、切换 `成果访问范围`、V1→V2 与候选经验核验 |
+| `admin@alpha.local` | `Sandbox123!` | `Alpha Studio` `org_admin` | Alpha 内共享/私密/受限成果管理与组织经验复盘 |
+| `member@alpha.local` | `Sandbox123!` | `Alpha Studio` `org_member`（受邀私密/受限） | 可见 Alpha 全部 3 组交付物（含受邀私密与受限仓库） |
+| `peer@alpha.local` | `Sandbox123!` | `Alpha Studio` `org_member` | 仅见 Alpha 公开共享成果，屏蔽私密、受限与 Beta |
+| `viewer@alpha.local` | `Sandbox123!` | `Alpha Studio` `org_viewer` | 只读视图：无「继续修改」「记录验收」及范围修改入口 |
+| `owner@beta.local` | `Sandbox123!` | `Beta Labs` `org_owner` | 仅见 `Beta Labs` 成果，不可访问 `Alpha Studio` |
 
 ## 找到行为所属模块
 

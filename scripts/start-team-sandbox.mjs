@@ -338,7 +338,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 		store.addMemory({
 			memberId: "qa-manager",
 			scope: "company_private",
-			category: "workflow_efficiency",
+			category: "efficiency",
 			orgId: alphaOrg.id,
 			content: "发布检查清单应先执行离线启动检查再进入灰度验证。",
 			rationale: "来自 Q4 发布方案 V2 复盘候选",

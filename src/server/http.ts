@@ -112,6 +112,7 @@ function sendAssetBuffer(res: ServerResponse, content: Buffer, mime: string, doc
 	}
 	res.writeHead(200, {
 		...BASE_SECURITY_HEADERS,
+		"Cache-Control": "no-store",
 		"Content-Type": mime,
 		"Content-Length": payload.byteLength,
 	});

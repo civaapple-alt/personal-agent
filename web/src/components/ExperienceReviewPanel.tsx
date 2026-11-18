@@ -31,6 +31,7 @@ interface ExperienceItemCardProps {
 	workspaceName: (id: string | null) => string | null;
 	organizationName?: (id: string | null) => string | null;
 	showMemberBadge?: boolean;
+	canManage?: boolean;
 	onOpenMatter?: (matterId: string) => void;
 	onOpenDeliverable?: (deliverableId: string) => void;
 	onRefresh: () => Promise<void>;
@@ -48,6 +49,7 @@ export function ExperienceItemCard({
 	workspaceName,
 	organizationName,
 	showMemberBadge = false,
+	canManage = true,
 	onOpenMatter,
 	onOpenDeliverable,
 	onRefresh,
@@ -171,7 +173,7 @@ export function ExperienceItemCard({
 				)}
 			</div>
 
-			{editing ? (
+			{canManage && editing ? (
 				<div className="memory-edit-form">
 					<div className="memory-draft-controls">
 						{members.length > 0 && (
@@ -316,69 +318,71 @@ export function ExperienceItemCard({
 							)}
 						</div>
 					)}
-					<div className="memory-item-actions">
-						{(status === "candidate" || status === "rejected") && (
-							<button
-								type="button"
-								className="btn-pill-dark btn-xs"
-								disabled={busy}
-								onClick={() =>
-									void runAction(async () => {
-										await updateMemberMemory(memory.id, { status: "verified" });
-									}, "已核验通过，后续同岗位或同仓库任务会自动注入")
-								}
-							>
-								核验通过
-							</button>
-						)}
-						{status === "verified" && (
-							<>
+					{canManage && (
+						<div className="memory-item-actions">
+							{(status === "candidate" || status === "rejected") && (
 								<button
 									type="button"
-									className="btn-pill-outline btn-xs"
+									className="btn-pill-dark btn-xs"
 									disabled={busy}
 									onClick={() =>
 										void runAction(async () => {
-											await evaluateMemberMemory(memory.id, { outcome: "positive" });
-										}, "已记录正向验证（+1）")
+											await updateMemberMemory(memory.id, { status: "verified" });
+										}, "已核验通过，后续同岗位或同仓库任务会自动注入")
 									}
 								>
-									+1 有效
+									核验通过
 								</button>
+							)}
+							{status === "verified" && (
+								<>
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										disabled={busy}
+										onClick={() =>
+											void runAction(async () => {
+												await evaluateMemberMemory(memory.id, { outcome: "positive" });
+											}, "已记录正向验证（+1）")
+										}
+									>
+										+1 有效
+									</button>
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										disabled={busy}
+										onClick={() =>
+											void runAction(async () => {
+												await evaluateMemberMemory(memory.id, { outcome: "negative" });
+											}, "已记录存疑反馈（-1）")
+										}
+									>
+										-1 存疑
+									</button>
+								</>
+							)}
+							{status !== "superseded" && (
+								<button type="button" className="btn-inline btn-xs" disabled={busy} onClick={openEditor}>
+									编辑
+								</button>
+							)}
+							{(status === "candidate" || status === "verified") && (
 								<button
 									type="button"
-									className="btn-pill-outline btn-xs"
+									className="btn-inline btn-xs"
 									disabled={busy}
 									onClick={() =>
 										void runAction(async () => {
-											await evaluateMemberMemory(memory.id, { outcome: "negative" });
-										}, "已记录存疑反馈（-1）")
+											await updateMemberMemory(memory.id, { status: "rejected" });
+										}, "已忽略该经验（不会注入新任务）")
 									}
 								>
-									-1 存疑
+									忽略
 								</button>
-							</>
-						)}
-						{status !== "superseded" && (
-							<button type="button" className="btn-inline btn-xs" disabled={busy} onClick={openEditor}>
-								编辑
-							</button>
-						)}
-						{(status === "candidate" || status === "verified") && (
-							<button
-								type="button"
-								className="btn-inline btn-xs"
-								disabled={busy}
-								onClick={() =>
-									void runAction(async () => {
-										await updateMemberMemory(memory.id, { status: "rejected" });
-									}, "已忽略该经验（不会注入新任务）")
-								}
-							>
-								忽略
-							</button>
-						)}
-					</div>
+							)}
+						</div>
+					)}
 				</>
 			)}
 		</div>
@@ -635,6 +639,7 @@ interface InlineExperienceReviewSectionProps {
 	manualOpen?: boolean;
 	onToggleManual?: () => void;
 	showManualToggle?: boolean;
+	canManage?: boolean;
 	defaultManualContent?: string;
 	hideEmptyPlaceholder?: boolean;
 	onRefresh: () => Promise<void>;
@@ -664,6 +669,7 @@ export function InlineExperienceReviewSection({
 	manualOpen,
 	onToggleManual,
 	showManualToggle = true,
+	canManage = true,
 	defaultManualContent = "",
 	hideEmptyPlaceholder = false,
 	onRefresh,
@@ -710,7 +716,8 @@ export function InlineExperienceReviewSection({
 					)}
 				</div>
 				<div className="memory-draft-controls">
-					{onDistill &&
+					{canManage &&
+						onDistill &&
 						(distilling ? (
 							<>
 								<button type="button" className="btn-pill-outline btn-xs" disabled>
@@ -743,12 +750,12 @@ export function InlineExperienceReviewSection({
 								AI 复盘提炼团队经验
 							</button>
 						))}
-					{showManualToggle && (
+					{canManage && showManualToggle && (
 						<button type="button" className="btn-pill-outline btn-xs" onClick={toggleManual}>
 							{isManualOpen ? "收起手动录入" : "+ 手动录入"}
 						</button>
 					)}
-					{pendingMemories.length > 0 && (
+					{canManage && pendingMemories.length > 0 && (
 						<button
 							type="button"
 							className="btn-pill-dark btn-xs"
@@ -768,7 +775,7 @@ export function InlineExperienceReviewSection({
 
 			{lastDistillNote && <div className="distill-result-note">{lastDistillNote}</div>}
 
-			{isManualOpen && (
+			{canManage && isManualOpen && (
 				<ManualExperienceForm
 					members={members}
 					workspaces={workspaces}
@@ -811,6 +818,7 @@ export function InlineExperienceReviewSection({
 							workspaceName={workspaceName}
 							organizationName={organizationName}
 							showMemberBadge={true}
+							canManage={canManage}
 							onRefresh={onRefresh}
 							onNotice={onNotice}
 							onError={onError}

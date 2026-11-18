@@ -368,6 +368,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					manualOpen={memoryOpen}
 					onToggleManual={() => setMemoryOpen((prev) => !prev)}
 					showManualToggle={false}
+					canManage={props.isOwner !== false}
 					defaultManualContent={`关于「${props.deliverable.title}」的可复用经验：${parsedSummary.lead || props.deliverable.summary}`}
 					hideEmptyPlaceholder={true}
 					onRefresh={props.onRefresh}
