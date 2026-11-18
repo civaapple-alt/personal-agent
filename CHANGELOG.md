@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Post-a1706c5 reliability follow-up
+
+- Preserve the local `.notes` archive decision and the lighter team/new-matter layouts. Add keyboard focus, arrow/Home/End navigation, Escape return and Tab dismissal to member menus; show role details first when no experience exists. Hide organization mutations from collaborators to match existing server authorization.
+- Move operation notices from the chat-only feed to the shared app layout, and catch primary-contact/export failures so management errors are visible on the page where they occur.
+- Force isolated startup checks to bind loopback regardless of inherited `PA_HOST`. Exercise IPC shutdown on Unix memory cases as well as SIGTERM on file cases; Windows keeps IPC shutdown. Invoke npm via its Node CLI during packaging to avoid executing `npm.cmd` directly on Windows.
+- Add Node 22.19/26 Unix CI coverage, least-privilege workflow permissions, job timeouts and Windows preview packaging. Local macOS tests cover Node 22.19.0/26.10.0 and Chrome owner/collaborator interactions; Linux/Windows runner results are not claimed.
+
 ### UI cognitive load reduction
 
 - Simplify `MemberCard` on `#/team` by removing nested Git/memory count boxes and multi-row tag walls in favor of role identity, primary duty summary, a single-line tool/boundary/model caption, `向 TA 派活`, `详情与经验`, and a `···` action menu (putting full responsibilities, Skills, Anti-Jobs, Git Author identity, and memories inside `MemberInspectorModal`).

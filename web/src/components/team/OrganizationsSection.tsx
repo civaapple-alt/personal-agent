@@ -118,7 +118,7 @@ export function OrganizationsSection({
 						aria-expanded={expanded}
 						onClick={() => setExpanded((v) => !v)}
 					>
-						{expanded ? "收起 ▴" : "展开管理 ▾"}
+						{expanded ? "收起 ▴" : isOwner ? "展开管理 ▾" : "展开组织 ▾"}
 					</button>
 				</div>
 			</div>
@@ -144,24 +144,26 @@ export function OrganizationsSection({
 												<strong className="ui-chip-title">{org.name}</strong>
 												{org.isDefault && <span className="pill live">默认组织</span>}
 											</div>
-											<div className="ui-row-actions">
-												{!org.isDefault && (
+											{isOwner && (
+												<div className="ui-row-actions">
+													{!org.isDefault && (
+														<button
+															type="button"
+															className="btn-inline btn-xs"
+															onClick={() => void handleSetDefaultOrg(org)}
+														>
+															设为默认
+														</button>
+													)}
 													<button
 														type="button"
 														className="btn-inline btn-xs"
-														onClick={() => void handleSetDefaultOrg(org)}
+														onClick={() => openEditOrgForm(org)}
 													>
-														设为默认
+														编辑
 													</button>
-												)}
-												<button
-													type="button"
-													className="btn-inline btn-xs"
-													onClick={() => openEditOrgForm(org)}
-												>
-													编辑
-												</button>
-											</div>
+												</div>
+											)}
 										</div>
 										<div className="org-chip-meta">
 											{org.gitEmailDomain ? `Git 域名：@${org.gitEmailDomain} · ` : ""}
@@ -179,7 +181,7 @@ export function OrganizationsSection({
 			)}
 
 			<ModalDialog
-				open={showOrgForm}
+				open={showOrgForm && isOwner}
 				title={editingOrgId ? "编辑组织身份" : "新建组织身份"}
 				subtitle="归属同一组织的工作区会共享「组织记忆」与默认 Git 邮箱域名。"
 				size="sm"

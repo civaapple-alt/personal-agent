@@ -64,8 +64,6 @@ interface ChatStageProps {
 	submitting: boolean;
 	composerText: string;
 	pendingImages: ComposerImageAttachment[];
-	errorBanner: string | null;
-	noticeBanner: string | null;
 	starterTasks: StarterTask[];
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
@@ -123,8 +121,6 @@ interface ChatStageProps {
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
-	onDismissError: () => void;
-	onDismissNotice: () => void;
 }
 
 const chatScrollMemory = new Map<string, { scrollTop: number; atBottom: boolean }>();
@@ -161,8 +157,6 @@ export function ChatStage({
 	submitting,
 	composerText,
 	pendingImages,
-	errorBanner,
-	noticeBanner,
 	starterTasks,
 	templateByRoleId,
 	memoriesByMember,
@@ -216,8 +210,6 @@ export function ChatStage({
 	onRefresh,
 	onNotice,
 	onError,
-	onDismissError,
-	onDismissNotice,
 }: ChatStageProps) {
 	const [collabOpen, setCollabOpen] = useState(false);
 	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
@@ -616,10 +608,6 @@ export function ChatStage({
 				chatStreamInnerRef={chatStreamInnerRef}
 				messagesEndRef={messagesEndRef}
 				onScroll={handleStreamScroll}
-				errorBanner={errorBanner}
-				noticeBanner={noticeBanner}
-				onDismissError={onDismissError}
-				onDismissNotice={onDismissNotice}
 				selectedMatterId={selectedMatterId}
 				selectedMemberId={selectedMemberId}
 				headerContact={headerContact}

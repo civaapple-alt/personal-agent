@@ -37,10 +37,6 @@ interface MessageFeedProps {
 	chatStreamInnerRef: RefObject<HTMLDivElement | null>;
 	messagesEndRef: RefObject<HTMLDivElement | null>;
 	onScroll: (e: UIEvent<HTMLDivElement>) => void;
-	errorBanner: string | null;
-	noticeBanner: string | null;
-	onDismissError: () => void;
-	onDismissNotice: () => void;
 	selectedMatterId: string | null;
 	selectedMemberId: string;
 	headerContact: TeamMemberDto | null;
@@ -93,10 +89,6 @@ export function MessageFeed({
 	chatStreamInnerRef,
 	messagesEndRef,
 	onScroll,
-	errorBanner,
-	noticeBanner,
-	onDismissError,
-	onDismissNotice,
 	selectedMatterId,
 	selectedMemberId,
 	headerContact,
@@ -162,29 +154,6 @@ export function MessageFeed({
 	return (
 		<div ref={chatScrollRef} className="chat-stream-scroll" onScroll={onScroll}>
 			<div ref={chatStreamInnerRef} className="chat-stream-inner">
-				{errorBanner && (
-					<div className="approval-card banner-gap">
-						<div className="banner-row">
-							<span>
-								<strong>操作提示：</strong> {errorBanner}
-							</span>
-							<button type="button" className="btn-inline" onClick={onDismissError}>
-								关闭
-							</button>
-						</div>
-					</div>
-				)}
-				{noticeBanner && (
-					<div className="notice-card banner-gap">
-						<div className="banner-row">
-							<span>{noticeBanner}</span>
-							<button type="button" className="btn-inline" onClick={onDismissNotice}>
-								知道了
-							</button>
-						</div>
-					</div>
-				)}
-
 				{!selectedMatterId || (!matterDetail && !activeMatterProgress) ? (
 					<div className="welcome-hero">
 						<BotFaceIcon bg={headerTheme.bg} size={!selectedMatterId && !selectedIsArchitect ? "md" : "lg"} />

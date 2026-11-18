@@ -51,6 +51,8 @@ async function main(preview) {
 		"Runtime data, credentials or generated files must not be tracked in the source snapshot",
 	);
 	const version = pkg.version;
+	const npmCli = process.env.npm_execpath;
+	assert.ok(process.platform !== "win32" || npmCli, "On Windows, use npm run package:release to locate npm-cli.js");
 	const directory = preview
 		? join(root, ".releases", "previews", `v${version}-${commit.slice(0, 12)}`)
 		: join(root, ".releases", `v${version}`);
@@ -117,7 +119,12 @@ async function main(preview) {
 			join(snapshot, "node_modules"),
 			process.platform === "win32" ? "junction" : "dir",
 		);
-		console.log(await run("npm", ["run", "build"], snapshot, { ...process.env, NODE_ENV: "production" }));
+		console.log(
+			await run(npmCli ? process.execPath : "npm", npmCli ? [npmCli, "run", "build"] : ["run", "build"], snapshot, {
+				...process.env,
+				NODE_ENV: "production",
+			}),
+		);
 		await unlink(join(snapshot, "node_modules"));
 		await run("tar", ["-czf", join(pending, prebuiltName), "-C", temporary, prefix], root, {
 			...process.env,

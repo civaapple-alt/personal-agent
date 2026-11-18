@@ -16,6 +16,8 @@ npm run check:startup
 
 使用 Node.js ≥ 22.19；当前验证环境见[首次运行](getting-started.md)。离线检查不要求 Pi 认证，不发起真实模型请求。网页测试需要构建资源，以上顺序已包含构建。
 
+[CI 配置](../.github/workflows/ci.yml) 在 Linux/macOS 声明 Node 22.19 与 26 的检查、构建、离线测试、启动、文档、开源审查和预览包验证；Windows 声明构建、启动及预览验证。工作流文件存在不等于远端检查已执行，Windows 不运行完整测试套件。当前本机已验证 macOS 的 Node 22.19.0 与 26.10.0，不能据此宣称其他系统验证通过。
+
 开发真实 AI 执行与运行 `demo:*` 任务必须另装本地 Pi CLI；它是当前唯一执行底座，不由 `npm ci` 安装。多平台安装与产品说明以 [pi.dev](https://pi.dev/) 为入口，模型匹配及本项目验证基线见[首次运行](getting-started.md)。离线测试的受控 Worker 不构成替代执行底座。
 
 需要实际操作工作台时运行 `npm run start:web`。它会使用默认 `.data/`，已有用户数据的检出目录不要直接拿来做破坏性开发实验。`check:startup` 自动使用临时库、模板目录和端口，适合验证启动；它不会证明模型协作可用。

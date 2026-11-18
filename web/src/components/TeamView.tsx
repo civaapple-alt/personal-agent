@@ -98,14 +98,22 @@ export function TeamView({
 	);
 
 	const handleSetPrimary = async (memberId: string) => {
-		await setPrimaryMember(memberId);
-		onNotice(`已将「${memberName(memberId)}」设为默认主联系人`);
-		await onRefresh();
+		try {
+			await setPrimaryMember(memberId);
+			onNotice(`已将「${memberName(memberId)}」设为默认主联系人`);
+			await onRefresh();
+		} catch (error: unknown) {
+			onError(error instanceof Error ? error.message : String(error));
+		}
 	};
 
 	const handleExportMember = async (memberId: string) => {
-		const pkg = await exportMemberPackage(memberId);
-		setExportedPackage(pkg);
+		try {
+			const pkg = await exportMemberPackage(memberId);
+			setExportedPackage(pkg);
+		} catch (error: unknown) {
+			onError(error instanceof Error ? error.message : String(error));
+		}
 	};
 
 	return (

@@ -689,6 +689,37 @@ export function App() {
 			/>
 
 			<main className="main-stage">
+				{(errorBanner || noticeBanner) && (
+					<div className="app-banners">
+						{errorBanner && (
+							<div className="approval-card banner-gap" role="alert">
+								<div className="banner-row">
+									<span>
+										<strong>操作提示：</strong> {errorBanner}
+									</span>
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => setErrorBanner(null)}
+										aria-label="关闭操作提示"
+									>
+										关闭
+									</button>
+								</div>
+							</div>
+						)}
+						{noticeBanner && (
+							<div className="notice-card banner-gap" aria-live="polite">
+								<div className="banner-row">
+									<span>{noticeBanner}</span>
+									<button type="button" className="btn-inline" onClick={() => setNoticeBanner(null)}>
+										知道了
+									</button>
+								</div>
+							</div>
+						)}
+					</div>
+				)}
 				<div className="mobile-topbar">
 					<button
 						type="button"
@@ -750,8 +781,6 @@ export function App() {
 						submitting={submitting}
 						composerText={composerText}
 						pendingImages={composerImages}
-						errorBanner={errorBanner}
-						noticeBanner={noticeBanner}
 						starterTasks={starterTasks}
 						templateByRoleId={templateByRoleId}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
@@ -809,8 +838,6 @@ export function App() {
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
-						onDismissError={() => setErrorBanner(null)}
-						onDismissNotice={() => setNoticeBanner(null)}
 					/>
 				)}
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
 	deleteMember,
 	type MemberMemoryDto,
@@ -45,6 +45,12 @@ export function MemberCard({
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [deletingMember, setDeletingMember] = useState(false);
 	const menuRef = useRef<HTMLDivElement>(null);
+	const menuButtonRef = useRef<HTMLButtonElement>(null);
+	const menuId = useId();
+	const closeMenu = () => {
+		setMenuOpen(false);
+		menuButtonRef.current?.focus();
+	};
 
 	useEffect(() => {
 		if (!menuOpen) {
@@ -52,20 +58,53 @@ export function MemberCard({
 			return;
 		}
 		const handlePointerDown = (e: PointerEvent) => {
-			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+			if (e.target instanceof Node && menuRef.current && !menuRef.current.contains(e.target)) {
 				setMenuOpen(false);
 			}
 		};
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setMenuOpen(false);
+			if (e.key === "Escape") {
+				e.preventDefault();
+				setMenuOpen(false);
+				menuButtonRef.current?.focus();
+				return;
+			}
+			if (!(e.target instanceof Node) || !menuRef.current?.contains(e.target)) return;
+			const items = Array.from(
+				menuRef.current.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
+			);
+			if (!items.length) return;
+			const current =
+				document.activeElement instanceof HTMLButtonElement ? items.indexOf(document.activeElement) : -1;
+			let target: HTMLButtonElement | undefined;
+			switch (e.key) {
+				case "Home":
+					target = items[0];
+					break;
+				case "End":
+					target = items.at(-1);
+					break;
+				case "ArrowDown":
+					target = items[(current + 1) % items.length];
+					break;
+				case "ArrowUp":
+					target = items.at(current <= 0 ? -1 : current - 1);
+					break;
+				default:
+					return;
+			}
+			e.preventDefault();
+			target?.focus();
 		};
+		const target = confirmDelete ? ".member-more-confirm button" : '[role="menuitem"]';
+		menuRef.current?.querySelector<HTMLButtonElement>(target)?.focus();
 		document.addEventListener("pointerdown", handlePointerDown);
 		document.addEventListener("keydown", handleKeyDown);
 		return () => {
 			document.removeEventListener("pointerdown", handlePointerDown);
 			document.removeEventListener("keydown", handleKeyDown);
 		};
-	}, [menuOpen]);
+	}, [menuOpen, confirmDelete]);
 
 	const theme = getBotTheme(index);
 	const gitIdentity = formatMemberGitIdentity(member, activeOrg);
@@ -132,29 +171,48 @@ export function MemberCard({
 					<button
 						type="button"
 						className="btn-pill-outline btn-xs"
-						onClick={() => onInspectMember(member.id, "memories")}
+						onClick={() => onInspectMember(member.id, memories.length > 0 ? "memories" : "identity")}
 					>
 						详情与经验{memories.length > 0 ? ` (${memories.length})` : ""}
 					</button>
 				</div>
 				<div className="member-more-wrap" ref={menuRef}>
 					<button
+						ref={menuButtonRef}
 						type="button"
 						className={`icon-btn member-more-btn${menuOpen ? " active" : ""}`}
 						aria-label={`${member.displayName} 更多操作`}
 						aria-expanded={menuOpen}
+						aria-haspopup="menu"
+						aria-controls={menuOpen ? menuId : undefined}
 						onClick={() => setMenuOpen((v) => !v)}
+						onKeyDown={(event) => {
+							if (event.key === "ArrowDown" && !menuOpen) {
+								event.preventDefault();
+								setMenuOpen(true);
+							}
+						}}
 					>
 						···
 					</button>
 					{menuOpen && (
-						<div className="member-more-popover" role="menu">
+						<div
+							className="member-more-popover"
+							id={menuId}
+							role="menu"
+							aria-label={`${member.displayName} 操作`}
+							onBlur={(event) => {
+								if (event.relatedTarget instanceof Node && !menuRef.current?.contains(event.relatedTarget)) {
+									setMenuOpen(false);
+								}
+							}}
+						>
 							<button
 								type="button"
 								className="member-more-item"
 								role="menuitem"
 								onClick={() => {
-									setMenuOpen(false);
+									closeMenu();
 									onInspectMember(member.id, "identity");
 								}}
 							>
@@ -166,7 +224,7 @@ export function MemberCard({
 									className="member-more-item"
 									role="menuitem"
 									onClick={() => {
-										setMenuOpen(false);
+										closeMenu();
 										void onSetPrimary(member.id);
 									}}
 								>
@@ -178,7 +236,7 @@ export function MemberCard({
 								className="member-more-item"
 								role="menuitem"
 								onClick={() => {
-									setMenuOpen(false);
+									closeMenu();
 									void onExportMember(member.id);
 								}}
 							>
@@ -190,6 +248,7 @@ export function MemberCard({
 										<button
 											type="button"
 											className="member-more-item danger"
+											role="menuitem"
 											disabled={deletingMember}
 											onClick={() => {
 												setDeletingMember(true);

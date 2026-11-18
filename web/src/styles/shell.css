@@ -16,6 +16,10 @@
 	min-height: 0;
 	overflow: hidden;
 }
+.app-banners {
+	flex: 0 0 auto;
+	padding: 12px var(--page-pad-x) 0;
+}
 .sidebar-top {
 	height: 56px;
 	padding: 0 14px;

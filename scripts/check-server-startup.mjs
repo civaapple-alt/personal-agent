@@ -24,7 +24,12 @@ try {
 		await symlink(resolve("web/dist"), join(cwd, "web/dist"), process.platform === "win32" ? "junction" : "dir");
 		const child = spawn(process.execPath, [resolve(entry)], {
 			cwd,
-			env: { ...process.env, PORT: String(port), PA_DB_PATH: memory ? ":memory:" : join(directory, `${port}.db`) },
+			env: {
+				...process.env,
+				PA_HOST: "127.0.0.1",
+				PORT: String(port),
+				PA_DB_PATH: memory ? ":memory:" : join(directory, `${port}.db`),
+			},
 			stdio: ["ignore", "pipe", "pipe", "ipc"],
 		});
 		let output = "";
@@ -68,7 +73,9 @@ try {
 				assert.equal(detail.deliverables.length, 0);
 			}
 			assert.equal((await fetch(base)).status, 200);
-			if (process.platform === "win32" && child.connected) {
+			const shutdownViaIpc = process.platform === "win32" || memory;
+			if (shutdownViaIpc) {
+				assert.ok(child.connected, "IPC shutdown channel is unavailable");
 				child.send("shutdown");
 			} else {
 				child.kill("SIGTERM");
@@ -82,7 +89,7 @@ try {
 			]);
 			assert.deepEqual(result, { code: 0, signal: null });
 			console.log(
-				`PASS ${entry} (${memory ? "memory DB, isolated role creation" : "file DB, built-in demo"}): bootstrap, built UI and graceful shutdown`,
+				`PASS ${entry} (${memory ? "memory DB, isolated role creation" : "file DB, built-in demo"}): bootstrap, built UI and graceful ${shutdownViaIpc ? "IPC" : "SIGTERM"} shutdown`,
 			);
 		} finally {
 			if (child.exitCode === null) child.kill("SIGKILL");
