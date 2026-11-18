@@ -79,6 +79,35 @@ export async function handleAdminAndAuthRoutes(
 		return true;
 	}
 
+	if (method === "GET" && pathname === "/api/auth/invite-preview") {
+		const url = new URL(req.url ?? "/", "http://127.0.0.1");
+		const token = url.searchParams.get("token")?.trim() ?? "";
+		if (!token) {
+			sendJson(res, 200, { valid: false, reason: "缺少邀请码" });
+			return true;
+		}
+		const invite = store.peekOrgInviteByToken(token);
+		if (!invite) {
+			sendJson(res, 200, { valid: false, reason: "组织邀请链接无效、已过期或已达使用上限" });
+			return true;
+		}
+		const org = store.getOrganization(invite.orgId);
+		if (!org) {
+			sendJson(res, 200, { valid: false, reason: "邀请对应的组织已不存在" });
+			return true;
+		}
+		const existingMembership = actor?.user ? store.getOrgMembership(org.id, actor.user.id) : null;
+		sendJson(res, 200, {
+			valid: true,
+			orgId: org.id,
+			orgName: org.name,
+			orgRole: invite.orgRole,
+			alreadyMember: Boolean(existingMembership),
+			existingRole: existingMembership?.orgRole ?? null,
+		});
+		return true;
+	}
+
 	if (method === "POST" && pathname === "/api/auth/setup-admin") {
 		const rateKey = `setup:${ip}`;
 		if (!authRateLimiter.check(rateKey)) {

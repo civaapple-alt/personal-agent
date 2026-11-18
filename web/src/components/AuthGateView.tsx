@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AccountUserDto, RegistrationMode } from "../api.ts";
+import type { AccountUserDto, OrgInvitePreviewDto, OrgMemberRole, RegistrationMode } from "../api.ts";
 
 export interface AuthGateViewProps {
 	status: "checking" | "unauthenticated";
@@ -11,6 +11,8 @@ export interface AuthGateViewProps {
 	authError: string | null;
 	authTokenInput: string;
 	orgInviteToken: string;
+	invitePreview?: OrgInvitePreviewDto | null;
+	preferredTab?: "login" | "register" | "legacy_token" | null;
 	onTokenInputChange: (value: string) => void;
 	onSubmitInvite: (token: string) => void | Promise<void>;
 	onSetupAdmin: (input: { email: string; password: string; displayName: string }) => Promise<void>;
@@ -28,6 +30,13 @@ export interface AuthGateViewProps {
 
 type AuthTab = "login" | "register" | "legacy_token";
 
+const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
+	org_owner: "组织所有者",
+	org_admin: "组织管理员",
+	org_member: "普通成员",
+	org_viewer: "只读访客",
+};
+
 /** Fullscreen gate shown for account setup, login/registration, admin review wait, or LAN invite token auth. */
 export function AuthGateView({
 	status,
@@ -39,6 +48,8 @@ export function AuthGateView({
 	authError,
 	authTokenInput,
 	orgInviteToken,
+	invitePreview = null,
+	preferredTab = null,
 	onTokenInputChange,
 	onSubmitInvite,
 	onSetupAdmin,
@@ -49,6 +60,7 @@ export function AuthGateView({
 	onRestoreOwner,
 }: AuthGateViewProps) {
 	const [activeTab, setActiveTab] = useState<AuthTab>(() => {
+		if (preferredTab) return preferredTab;
 		if (authTokenInput.startsWith("inv_")) return "legacy_token";
 		if (orgInviteToken) return "register";
 		return "login";
@@ -62,8 +74,17 @@ export function AuthGateView({
 	useEffect(() => {
 		if (orgInviteToken) {
 			setInviteInput(orgInviteToken);
+			if (!preferredTab) {
+				setActiveTab("register");
+			}
 		}
-	}, [orgInviteToken]);
+	}, [orgInviteToken, preferredTab]);
+
+	useEffect(() => {
+		if (preferredTab) {
+			setActiveTab(preferredTab);
+		}
+	}, [preferredTab]);
 
 	if (status === "checking") {
 		return (
@@ -155,8 +176,11 @@ export function AuthGateView({
 						<div>
 							<h1>账号待超级管理员审核</h1>
 							<p className="muted-hint">
-								账号 {accountUser?.email ?? ""}{" "}
-								已注册成功，但当前平台处于「开放注册、管理员审核开通」模式。请等待管理员启用并配置配额后再进入。
+								账号 {accountUser?.email ?? ""} 已注册成功
+								{invitePreview?.valid && invitePreview.orgName
+									? `并已绑定受邀组织「${invitePreview.orgName}」`
+									: ""}
+								，当前平台处于「开放注册、管理员审核开通」模式。请等待管理员启用并配置配额后再进入。
 							</p>
 						</div>
 					</div>
@@ -227,7 +251,11 @@ export function AuthGateView({
 
 				{inviteInput && activeTab !== "legacy_token" && (
 					<output className="notice-banner" aria-live="polite">
-						检测到组织邀请码，{activeTab === "register" ? "注册并开通" : "登录"}后将自动加入对应组织。
+						{invitePreview
+							? invitePreview.valid
+								? `受邀以「${ORG_ROLE_LABEL[invitePreview.orgRole ?? "org_member"]}」身份加入组织「${invitePreview.orgName}」，${activeTab === "register" ? "完成注册" : "登录"}后自动生效。`
+								: `邀请提示：${invitePreview.reason ?? "该组织邀请链接无效或已过期"}`
+							: `检测到组织邀请码，${activeTab === "register" ? "完成注册" : "登录"}后将自动加入对应组织。`}
 					</output>
 				)}
 				{authError && <div className="approval-card">{authError}</div>}
@@ -370,7 +398,7 @@ export function AuthGateView({
 
 				{!permissionRequired && (
 					<button type="button" className="btn-inline" onClick={onRestoreOwner}>
-						退出当前会话，返回本机所有者视图
+						返回本机免密所有者视图
 					</button>
 				)}
 			</div>

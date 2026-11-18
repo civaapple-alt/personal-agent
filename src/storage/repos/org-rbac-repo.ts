@@ -273,11 +273,13 @@ export class OrgRbacRepo {
 			if (invite.revokedAt) throw new Error("组织邀请码已被撤销");
 			if (invite.expiresAt && Date.parse(invite.expiresAt) <= Date.now()) throw new Error("组织邀请码已过期");
 			if (invite.usedCount >= invite.maxUses) throw new Error("组织邀请码已达到最大使用次数");
-			this.db.prepare("UPDATE organization_invites SET used_count = used_count + 1 WHERE id = ?").run(invite.id);
 			const existingMember = this.getOrgMembership(invite.orgId, userId);
-			const membership = existingMember
-				? existingMember
-				: this.upsertOrgMember({ orgId: invite.orgId, userId, orgRole: invite.orgRole });
+			if (existingMember) {
+				this.db.exec("COMMIT");
+				return { invite, membership: existingMember };
+			}
+			this.db.prepare("UPDATE organization_invites SET used_count = used_count + 1 WHERE id = ?").run(invite.id);
+			const membership = this.upsertOrgMember({ orgId: invite.orgId, userId, orgRole: invite.orgRole });
 			this.db.exec("COMMIT");
 			return { invite: { ...invite, usedCount: invite.usedCount + 1 }, membership };
 		} catch (err) {

@@ -9,6 +9,7 @@ interface SidebarProps {
 	activeTab: NavTab;
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
+	authKind?: "session" | "legacy_token" | "loopback" | null;
 	isSuperAdmin?: boolean;
 	orgEffectiveMemberIds?: string[] | null;
 	runtimeBadge?: string | null;
@@ -32,6 +33,7 @@ export function Sidebar({
 	activeTab,
 	bootstrap,
 	currentUser,
+	authKind = null,
 	isSuperAdmin = false,
 	orgEffectiveMemberIds = null,
 	runtimeBadge,
@@ -269,20 +271,24 @@ export function Sidebar({
 				)}
 				<div className="sidebar-status-row">
 					<span className="muted-tiny">
-						{bootstrap?.accountUser
+						{authKind === "session" && bootstrap?.accountUser
 							? `${bootstrap.accountUser.displayName} · ${bootstrap.accountUser.platformRole === "super_admin" ? "超管" : "成员"}`
-							: currentUser
-								? `${currentUser.name} · ${currentUser.permissionRole === "owner" ? "所有者" : "协同"}`
-								: "Pi RPC"}
+							: authKind === "legacy_token" && currentUser
+								? `${currentUser.name} · 协同访客`
+								: currentUser
+									? `${currentUser.name} · 本机所有者`
+									: "Pi RPC"}
 					</span>
 					<div className="sidebar-status-actions">
-						{(bootstrap?.accountUser || currentUser?.permissionRole === "collaborator") && onSwitchOrLogout && (
+						{onSwitchOrLogout && (
 							<button type="button" className="btn-inline btn-xs" onClick={onSwitchOrLogout}>
-								{bootstrap?.accountUser
-									? "退出登录"
-									: window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-										? "恢复所有者"
-										: "退出"}
+								{authKind === "loopback"
+									? "切换账号"
+									: authKind === "legacy_token"
+										? window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+											? "恢复所有者"
+											: "退出"
+										: "退出登录"}
 							</button>
 						)}
 						<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>

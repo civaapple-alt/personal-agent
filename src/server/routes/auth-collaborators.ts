@@ -92,6 +92,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 
 		sendJson(res, 200, {
 			innerDemoAvailable: Boolean(ctx.innerMatterDemo),
+			authKind: actor.authKind,
 			currentUser: toPublicCollaborator(actor.collaborator),
 			accountUser: actor.user ? toPublicUser(actor.user) : null,
 			platformPolicy: {

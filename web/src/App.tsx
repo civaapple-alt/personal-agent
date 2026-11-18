@@ -13,6 +13,7 @@ import {
 	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
+	fetchOrgInvitePreview,
 	fetchRuntimeOverview,
 	type InnerMatterStep,
 	joinOrganizationByInvite,
@@ -22,6 +23,7 @@ import {
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type MatterVisibility,
+	type OrgInvitePreviewDto,
 	openInnerMatterDemo,
 	type PreviewServiceDto,
 	type RegistrationMode,
@@ -42,6 +44,7 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
+import { ModalDialog } from "./components/ModalDialog.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
@@ -89,6 +92,12 @@ export function App() {
 	const [pendingApproval, setPendingApproval] = useState(false);
 	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_auto");
 	const [sessionAccountUser, setSessionAccountUser] = useState<AccountUserDto | null>(null);
+	const [authKind, setAuthKind] = useState<"session" | "legacy_token" | "loopback" | null>(null);
+	const [activeOrgInviteToken, setActiveOrgInviteToken] = useState(initialOrgInvite);
+	const [invitePreview, setInvitePreview] = useState<OrgInvitePreviewDto | null>(null);
+	const [showInviteSwitchModal, setShowInviteSwitchModal] = useState(false);
+	const [inviteActionBusy, setInviteActionBusy] = useState(false);
+	const [authPreferredTab, setAuthPreferredTab] = useState<"login" | "register" | "legacy_token" | null>(null);
 	const [authTokenInput, setAuthTokenInput] = useState(initialLegacyInvite);
 	const [authError, setAuthError] = useState<string | null>(null);
 	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
@@ -255,6 +264,7 @@ export function App() {
 		setPendingApproval(Boolean(session.pendingApproval));
 		setRegistrationMode(session.registrationMode ?? "open_auto");
 		setSessionAccountUser(session.accountUser ?? null);
+		setAuthKind(session.authKind ?? null);
 		if (!session.authenticated) {
 			if (session.revokedSession) {
 				setAuthError("当前登录凭证已失效或已被重置，请重新登录");
@@ -311,21 +321,17 @@ export function App() {
 				}
 			}
 			try {
+				if (initialOrgInvite) {
+					void fetchOrgInvitePreview(initialOrgInvite)
+						.then((preview) => {
+							if (!cancelled) setInvitePreview(preview);
+						})
+						.catch(() => {});
+				}
 				const ok = await syncSessionAndBootstrap();
 				if (cancelled) return;
 				if (ok && initialOrgInvite) {
-					try {
-						const joined = await joinOrganizationByInvite(initialOrgInvite);
-						if (!cancelled) {
-							setNoticeBanner(`已通过邀请链接加入组织「${joined.organization.name}」`);
-							await refreshBootstrap();
-						}
-					} catch (joinErr: unknown) {
-						if (!cancelled) {
-							setErrorBanner(joinErr instanceof Error ? joinErr.message : "加入组织失败");
-						}
-					}
-					window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
+					setShowInviteSwitchModal(true);
 				}
 			} catch (err: unknown) {
 				if (cancelled) return;
@@ -776,7 +782,9 @@ export function App() {
 				return;
 			}
 			await syncSessionAndBootstrap();
-			if (initialOrgInvite) {
+			if (activeOrgInviteToken) {
+				setActiveOrgInviteToken("");
+				setShowInviteSwitchModal(false);
 				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
 			}
 		} catch (err: unknown) {
@@ -795,7 +803,9 @@ export function App() {
 				return;
 			}
 			await syncSessionAndBootstrap();
-			if (initialOrgInvite) {
+			if (activeOrgInviteToken) {
+				setActiveOrgInviteToken("");
+				setShowInviteSwitchModal(false);
 				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
 			}
 			if (res.joinedOrgId) {
@@ -803,6 +813,57 @@ export function App() {
 			}
 		} catch (err: unknown) {
 			setAuthError(err instanceof Error ? err.message : "邮箱或密码错误");
+		}
+	};
+
+	const clearPendingInviteFromUrl = () => {
+		setShowInviteSwitchModal(false);
+		setActiveOrgInviteToken("");
+		window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
+	};
+
+	const handleSwitchToInviteAuth = async (targetTab: "register" | "login") => {
+		if (inviteActionBusy) return;
+		setInviteActionBusy(true);
+		try {
+			const currentKind = bootstrap?.authKind ?? authKind;
+			if (currentKind && currentKind !== "loopback") {
+				await logoutAuthSession();
+			}
+			setAdminOverview(null);
+			adminAutoFetchedRef.current = false;
+			setPendingApproval(false);
+			setSessionAccountUser(null);
+			setCurrentUserOverride(null);
+			setBootstrap(null);
+			setAuthKind(null);
+			setAuthError(null);
+			setAuthPreferredTab(targetTab);
+			setShowInviteSwitchModal(false);
+			if (activeOrgInviteToken) {
+				const preview = await fetchOrgInvitePreview(activeOrgInviteToken).catch(() => null);
+				if (preview) setInvitePreview(preview);
+			}
+			setAuthStatus("unauthenticated");
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		} finally {
+			setInviteActionBusy(false);
+		}
+	};
+
+	const handleAcceptInviteWithCurrentUser = async () => {
+		if (!activeOrgInviteToken || inviteActionBusy) return;
+		setInviteActionBusy(true);
+		try {
+			const joined = await joinOrganizationByInvite(activeOrgInviteToken);
+			clearPendingInviteFromUrl();
+			setNoticeBanner(`已使用当前账号加入组织「${joined.organization.name}」`);
+			await refreshBootstrap();
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : "加入组织失败");
+		} finally {
+			setInviteActionBusy(false);
 		}
 	};
 
@@ -832,12 +893,20 @@ export function App() {
 	};
 
 	const handleLogoutOrRestore = async () => {
+		const effectiveKind = bootstrap?.authKind ?? authKind;
 		try {
+			// On localhost免登录模式, clicking "切换账号" opens the login/registration gate without loop-bouncing.
+			if (effectiveKind === "loopback" && !permissionRequired) {
+				setAuthError(null);
+				setAuthStatus("unauthenticated");
+				return;
+			}
 			await logoutAuthSession();
 			setAdminOverview(null);
 			adminAutoFetchedRef.current = false;
 			setPendingApproval(false);
 			setSessionAccountUser(null);
+			setAuthKind(null);
 			if (activeTab === "admin") {
 				navigateRoute({ tab: "chats" }, { replace: true });
 			}
@@ -845,15 +914,30 @@ export function App() {
 			setPermissionRequired(session.permissionRequired);
 			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 			setRegistrationMode(session.registrationMode ?? "open_auto");
-			if (session.authenticated && session.currentUser) {
+			// If exiting a legacy LAN guest preview on localhost, seamlessly restore the host owner view.
+			if (effectiveKind === "legacy_token" && session.authenticated && session.currentUser) {
+				setAuthKind(session.authKind ?? "loopback");
 				setCurrentUserOverride(session.currentUser);
 				setComposerMode(session.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
 				await refreshBootstrap();
-				setNoticeBanner(`已切换回「${session.currentUser.name}」身份`);
+				setNoticeBanner(`已结束协同体验，恢复本机所有者「${session.currentUser.name}」`);
 			} else {
 				setCurrentUserOverride(null);
 				setBootstrap(null);
 				setAuthStatus("unauthenticated");
+			}
+		} catch (err: unknown) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	};
+
+	const handleRestoreLoopbackOwner = async () => {
+		setAuthError(null);
+		try {
+			await logoutAuthSession();
+			const ok = await syncSessionAndBootstrap();
+			if (ok) {
+				setNoticeBanner("已返回本机免密所有者视图");
 			}
 		} catch (err: unknown) {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
@@ -940,7 +1024,9 @@ export function App() {
 				accountUser={sessionAccountUser}
 				authError={authError}
 				authTokenInput={authTokenInput}
-				orgInviteToken={initialOrgInvite}
+				orgInviteToken={activeOrgInviteToken}
+				invitePreview={invitePreview}
+				preferredTab={authPreferredTab}
 				onTokenInputChange={setAuthTokenInput}
 				onSubmitInvite={(token) => void handleInviteLogin(token)}
 				onSetupAdmin={handleSetupAdmin}
@@ -948,7 +1034,7 @@ export function App() {
 				onRegisterEmail={handleRegisterEmail}
 				onRefreshSession={handleRefreshAuthSession}
 				onLogoutPending={handleLogoutOrRestore}
-				onRestoreOwner={() => void handleLogoutOrRestore()}
+				onRestoreOwner={() => void handleRestoreLoopbackOwner()}
 			/>
 		);
 	}
@@ -992,6 +1078,7 @@ export function App() {
 				activeTab={activeTab}
 				bootstrap={bootstrap}
 				currentUser={currentUser}
+				authKind={bootstrap?.authKind ?? authKind}
 				isSuperAdmin={isSuperAdmin}
 				orgEffectiveMemberIds={orgEffectiveMemberIds}
 				runtimeBadge={runtimeBadge}
@@ -1370,6 +1457,115 @@ export function App() {
 				onNotice={(msg) => setNoticeBanner(msg)}
 				onError={(msg) => setErrorBanner(msg)}
 			/>
+
+			<ModalDialog
+				open={showInviteSwitchModal && Boolean(activeOrgInviteToken)}
+				title={
+					invitePreview?.valid === false
+						? "组织邀请链接提示"
+						: invitePreview?.alreadyMember
+							? `当前浏览器已登录「${accountUser?.displayName ?? currentUser?.name ?? "当前账号"}」`
+							: `受邀加入组织「${invitePreview?.orgName ?? "目标组织"}」`
+				}
+				subtitle={
+					invitePreview?.valid === false
+						? (invitePreview.reason ?? "邀请链接无效或已过期")
+						: (bootstrap?.authKind ?? authKind) === "loopback"
+							? "当前为本机免密视图，请切换或注册个人账号后再加入组织。"
+							: invitePreview?.alreadyMember
+								? `当前浏览器中的账号（${accountUser?.email ?? ""}）已是该组织成员；如需测试或为新同事注册账号加入，请先退出当前账号。`
+								: `受邀加入组织「${invitePreview?.orgName ?? ""}」，你可以用当前已登录账号加入，或退出并注册新账号。`
+				}
+				size="sm"
+				closeDisabled={inviteActionBusy}
+				onClose={clearPendingInviteFromUrl}
+				footer={
+					invitePreview?.valid === false ? (
+						<button type="button" className="btn-pill-dark" onClick={clearPendingInviteFromUrl}>
+							知道了
+						</button>
+					) : (bootstrap?.authKind ?? authKind) === "loopback" ? (
+						<>
+							<button
+								type="button"
+								className="btn-pill-outline"
+								disabled={inviteActionBusy}
+								onClick={clearPendingInviteFromUrl}
+							>
+								暂不处理
+							</button>
+							<button
+								type="button"
+								className="btn-inline"
+								disabled={inviteActionBusy}
+								onClick={() => void handleSwitchToInviteAuth("login")}
+							>
+								登录已有账号
+							</button>
+							<button
+								type="button"
+								className="btn-pill-dark"
+								disabled={inviteActionBusy}
+								onClick={() => void handleSwitchToInviteAuth("register")}
+							>
+								注册新账号并加入
+							</button>
+						</>
+					) : invitePreview?.alreadyMember ? (
+						<>
+							<button
+								type="button"
+								className="btn-pill-outline"
+								disabled={inviteActionBusy}
+								onClick={clearPendingInviteFromUrl}
+							>
+								留在当前账号
+							</button>
+							<button
+								type="button"
+								className="btn-pill-dark"
+								disabled={inviteActionBusy}
+								onClick={() => void handleSwitchToInviteAuth("register")}
+							>
+								退出并注册新成员
+							</button>
+						</>
+					) : (
+						<>
+							<button
+								type="button"
+								className="btn-pill-outline"
+								disabled={inviteActionBusy}
+								onClick={clearPendingInviteFromUrl}
+							>
+								暂不加入
+							</button>
+							<button
+								type="button"
+								className="btn-inline"
+								disabled={inviteActionBusy}
+								onClick={() => void handleSwitchToInviteAuth("register")}
+							>
+								退出并注册新账号
+							</button>
+							<button
+								type="button"
+								className="btn-pill-dark"
+								disabled={inviteActionBusy}
+								onClick={() => void handleAcceptInviteWithCurrentUser()}
+							>
+								用当前账号加入
+							</button>
+						</>
+					)
+				}
+			>
+				{invitePreview?.valid && !invitePreview.alreadyMember && accountUser && (
+					<div className="muted-hint">
+						当前账号：{accountUser.displayName}（{accountUser.email}）
+					</div>
+				)}
+			</ModalDialog>
 		</div>
 	);
 }

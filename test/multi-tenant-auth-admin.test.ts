@@ -442,6 +442,38 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		const { rawToken: orgInviteToken } = (await inviteCreate.json()) as { rawToken: string };
 		assert.match(orgInviteToken, /^orginv_/);
 
+		// Invite preview works unauthenticated (returns org name/role safely) and flags alreadyMember for Alice
+		const anonPreview = (await (
+			await fetch(`${baseUrl}/api/auth/invite-preview?token=${encodeURIComponent(orgInviteToken)}`)
+		).json()) as { valid: boolean; orgName?: string; orgRole?: string; alreadyMember?: boolean };
+		assert.equal(anonPreview.valid, true);
+		assert.equal(anonPreview.orgName, "Team Alpha");
+		assert.equal(anonPreview.orgRole, "org_member");
+		assert.equal(anonPreview.alreadyMember, false);
+
+		const alicePreview = (await (
+			await fetch(`${baseUrl}/api/auth/invite-preview?token=${encodeURIComponent(orgInviteToken)}`, {
+				headers: { Cookie: aliceFreshCookie },
+			})
+		).json()) as { valid: boolean; alreadyMember?: boolean; existingRole?: string };
+		assert.equal(alicePreview.valid, true);
+		assert.equal(alicePreview.alreadyMember, true);
+		assert.equal(alicePreview.existingRole, "org_owner");
+
+		// Consuming own invite does not burn invite usage count
+		const aliceSelfJoin = (await (
+			await fetch(`${baseUrl}/api/organizations/join`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: aliceFreshCookie },
+				body: JSON.stringify({ inviteToken: orgInviteToken }),
+			})
+		).json()) as { membership: { orgRole: string } };
+		assert.equal(aliceSelfJoin.membership.orgRole, "org_owner");
+		const invitesBeforeBob = (await (
+			await fetch(`${baseUrl}/api/organizations/${orgA.id}/invites`, { headers: { Cookie: aliceFreshCookie } })
+		).json()) as { invites: Array<{ usedCount: number }> };
+		assert.equal(invitesBeforeBob.invites[0]?.usedCount, 0);
+
 		const bobJoin = await fetch(`${baseUrl}/api/organizations/join`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: bobCookie },

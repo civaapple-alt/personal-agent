@@ -500,6 +500,7 @@ export interface ActiveRunSnapshotDto extends MatterProgressDto {
 
 export interface BootstrapPayload {
 	innerDemoAvailable?: boolean;
+	authKind?: "session" | "legacy_token" | "loopback" | null;
 	currentUser?: CollaboratorDto;
 	accountUser?: AccountUserDto | null;
 	platformPolicy?: {
@@ -577,8 +578,22 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 	return data;
 }
 
+export interface OrgInvitePreviewDto {
+	valid: boolean;
+	reason?: string;
+	orgId?: string;
+	orgName?: string;
+	orgRole?: OrgMemberRole;
+	alreadyMember?: boolean;
+	existingRole?: OrgMemberRole | null;
+}
+
 export function fetchAuthSession(): Promise<AuthSessionPayload> {
 	return requestJson<AuthSessionPayload>("/api/auth/session");
+}
+
+export function fetchOrgInvitePreview(token: string): Promise<OrgInvitePreviewDto> {
+	return requestJson<OrgInvitePreviewDto>(`/api/auth/invite-preview?token=${encodeURIComponent(token)}`);
 }
 
 export function setupInitialAdmin(input: {

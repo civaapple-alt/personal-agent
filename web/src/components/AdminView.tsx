@@ -159,21 +159,24 @@ export function AdminView({
 	};
 
 	return (
-		<div className="detail-scroll ui-page">
-			<div className="detail-card ui-page-inner wide">
-				<header className="ui-page-header">
-					<div>
-						<h1 className="ui-page-title">超级管理员控制台</h1>
-						<p className="ui-page-lead">
-							统一管理用户审核与配额、代码库克隆主目录、注册策略、运行中 AI 任务与安全审计日志。
-						</p>
+		<div className="subpage-scroll">
+			<div className="subpage-inner wide">
+				<div className="pane-header-row">
+					<div className="pane-header">
+						<h1>超级管理员控制台</h1>
+						<p>统一管理用户审核与配额、代码库克隆主目录、注册策略、运行中 AI 任务与安全审计日志</p>
 					</div>
-					<div className="ui-header-actions">
-						<button type="button" className="btn-inline" onClick={() => void onRefresh()} disabled={loading}>
+					<div className="actions-row compact">
+						<button
+							type="button"
+							className="btn-pill-outline"
+							onClick={() => void onRefresh()}
+							disabled={loading}
+						>
 							{loading ? "刷新中..." : "刷新总览"}
 						</button>
 					</div>
-				</header>
+				</div>
 
 				<div className="settings-category-tabs" role="tablist" aria-label="管理员控制台模块">
 					<button
@@ -236,7 +239,7 @@ export function AdminView({
 							<section className="ui-section" aria-label="用户审核与配额">
 								<div className="ui-section-head">
 									<h2 className="ui-section-title">平台账号与配额</h2>
-									<div className="ui-header-actions">
+									<div className="actions-row compact">
 										{(["all", "pending_review", "active", "disabled"] as UserStatusFilter[]).map((f) => (
 											<button
 												key={f}
@@ -287,7 +290,7 @@ export function AdminView({
 																	: ""}
 															</div>
 														</div>
-														<div className="ui-header-actions">
+														<div className="actions-row compact">
 															{user.status === "pending_review" && (
 																<button
 																	type="button"
@@ -533,7 +536,7 @@ export function AdminView({
 										</label>
 									</div>
 
-									<div className="ui-header-actions">
+									<div className="actions-row compact">
 										<button type="submit" className="btn-pill-dark" disabled={savingSettings}>
 											{savingSettings ? "保存中..." : "保存平台安全配置"}
 										</button>
