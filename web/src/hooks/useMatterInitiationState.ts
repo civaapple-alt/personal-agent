@@ -12,6 +12,8 @@ interface UseMatterInitiationParams {
 	selectedMatterId: string | null;
 	composerText: string;
 	composerImageCount: number;
+	composerFileCount: number;
+	composerAttachmentText?: string;
 	selectedWorkspaceId: string;
 	selectedMemberId: string;
 	members: TeamMemberDto[];
@@ -26,6 +28,8 @@ export function useMatterInitiationState({
 	selectedMatterId,
 	composerText,
 	composerImageCount,
+	composerFileCount,
+	composerAttachmentText = "",
 	selectedWorkspaceId,
 	selectedMemberId,
 	members,
@@ -71,7 +75,7 @@ export function useMatterInitiationState({
 			setAssessing(false);
 			return;
 		}
-		const trimmed = composerText.trim();
+		const trimmed = (composerText.trim() || composerAttachmentText.trim()).slice(0, 4000);
 		if (trimmed.length < 6) {
 			setAssessment(null);
 			setAssessing(false);
@@ -83,6 +87,7 @@ export function useMatterInitiationState({
 				{
 					prompt: trimmed,
 					hasImages: composerImageCount > 0,
+					hasFiles: composerFileCount > 0,
 					workspaceId: selectedWorkspaceId || undefined,
 					preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
 				},
@@ -110,7 +115,15 @@ export function useMatterInitiationState({
 			controller.abort();
 			window.clearTimeout(timer);
 		};
-	}, [selectedMatterId, composerText, composerImageCount, selectedWorkspaceId, selectedMemberId]);
+	}, [
+		selectedMatterId,
+		composerText,
+		composerImageCount,
+		composerFileCount,
+		composerAttachmentText,
+		selectedWorkspaceId,
+		selectedMemberId,
+	]);
 
 	const applyPresetMode = useCallback(
 		(
@@ -188,7 +201,7 @@ export function useMatterInitiationState({
 
 	const requestModelAssessment = useCallback(
 		async (options?: { readRepo?: boolean }) => {
-			const trimmed = composerText.trim();
+			const trimmed = (composerText.trim() || composerAttachmentText.trim()).slice(0, 4000);
 			if (selectedMatterId || !trimmed) return;
 			const seq = ++modelSeqRef.current;
 			modelControllerRef.current?.abort();
@@ -201,6 +214,7 @@ export function useMatterInitiationState({
 					{
 						prompt: trimmed,
 						hasImages: composerImageCount > 0,
+						hasFiles: composerFileCount > 0,
 						workspaceId: selectedWorkspaceId || undefined,
 						preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
 						mode: "model",
@@ -229,7 +243,15 @@ export function useMatterInitiationState({
 				}
 			}
 		},
-		[composerImageCount, composerText, selectedMatterId, selectedMemberId, selectedWorkspaceId],
+		[
+			composerAttachmentText,
+			composerFileCount,
+			composerImageCount,
+			composerText,
+			selectedMatterId,
+			selectedMemberId,
+			selectedWorkspaceId,
+		],
 	);
 
 	const openArchitectForGap = useCallback((gap?: RoleGapSuggestionDto) => {

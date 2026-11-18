@@ -141,11 +141,25 @@ export interface PromptImageAttachment extends ImageContent {
 	url?: string;
 }
 
+export interface PromptFileAttachment {
+	type: "file";
+	kind: "file" | "pasted_text";
+	name: string;
+	mimeType: string;
+	content: string;
+	sizeBytes: number;
+	lineCount: number;
+	charCount: number;
+	previewText?: string;
+	url?: string;
+}
+
 export interface DispatchMatterInput {
 	matterId?: string;
 	title?: string;
 	prompt: string;
 	images?: PromptImageAttachment[];
+	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	aiMemberIds?: string[] | null;

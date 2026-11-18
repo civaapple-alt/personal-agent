@@ -1,27 +1,43 @@
-import type { ComposerImageAttachment } from "./api.ts";
+import type { ComposerFileAttachment, ComposerImageAttachment } from "./api.ts";
+import {
+	COMPOSER_FILE_ACCEPT,
+	createPastedTextAttachment,
+	isSupportedImageDescriptor,
+	LARGE_PASTE_CHAR_THRESHOLD,
+	LARGE_PASTE_LINE_THRESHOLD,
+	MAX_COMPOSER_FILE_BYTES,
+	MAX_COMPOSER_FILES,
+	prepareComposerTextFiles,
+	resolveSupportedImageMimeType,
+	shouldFoldPastedText,
+} from "./textAttachments.ts";
+
+export {
+	COMPOSER_FILE_ACCEPT,
+	createPastedTextAttachment,
+	LARGE_PASTE_CHAR_THRESHOLD,
+	LARGE_PASTE_LINE_THRESHOLD,
+	MAX_COMPOSER_FILE_BYTES,
+	MAX_COMPOSER_FILES,
+	shouldFoldPastedText,
+};
 
 export const MAX_COMPOSER_IMAGES = 6;
+
 const MAX_RAW_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_ENCODED_IMAGE_BYTES = 4.5 * 1024 * 1024;
 const PASS_THROUGH_BYTES = 1.2 * 1024 * 1024;
 const MAX_EDGE_PX = 2048;
 
-const SUPPORTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+export function isSupportedImageFile(file: File): boolean {
+	return isSupportedImageDescriptor(file);
+}
 
-const EXT_TO_MIME: Record<string, string> = {
-	png: "image/png",
-	jpg: "image/jpeg",
-	jpeg: "image/jpeg",
-	webp: "image/webp",
-	gif: "image/gif",
-};
-
-function resolveImageMimeType(file: File): string | null {
-	const raw = file.type.trim().toLowerCase();
-	const normalized = raw === "image/jpg" ? "image/jpeg" : raw;
-	if (SUPPORTED_MIME_TYPES.has(normalized)) return normalized;
-	const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-	return EXT_TO_MIME[ext] ?? null;
+export async function prepareComposerFiles(
+	files: FileList | File[],
+	existingCount: number,
+): Promise<{ attachments: ComposerFileAttachment[]; warnings: string[] }> {
+	return prepareComposerTextFiles(Array.from(files), existingCount);
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -123,7 +139,7 @@ export async function prepareComposerImages(
 			warnings.push(`最多附带 ${MAX_COMPOSER_IMAGES} 张图片，已忽略多余文件`);
 			break;
 		}
-		const mimeType = resolveImageMimeType(file);
+		const mimeType = resolveSupportedImageMimeType(file);
 		if (!mimeType) {
 			warnings.push(`不支持「${file.name || "未命名文件"}」（仅支持 PNG / JPG / WebP / GIF）`);
 			continue;

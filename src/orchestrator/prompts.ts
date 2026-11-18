@@ -149,10 +149,26 @@ export function formatMessageHistorySpeaker(message: MatterMessage): string {
 
 export function formatMessageHistoryContent(message: MatterMessage): string {
 	const rawImages = Array.isArray(message.metadata?.images) ? message.metadata.images : [];
+	const rawFiles = Array.isArray(message.metadata?.files) ? message.metadata.files : [];
 	const trimmed = message.content.trim();
-	if (rawImages.length === 0) return message.content;
-	const badge = `[Image attachments: ${rawImages.length}]`;
-	return trimmed ? `${trimmed}\n${badge}` : badge;
+	const parts: string[] = [];
+	if (trimmed) parts.push(trimmed);
+	if (rawImages.length > 0) parts.push(`[Image attachments: ${rawImages.length}]`);
+	if (rawFiles.length > 0) {
+		const labels = rawFiles
+			.map((entry) => {
+				if (!entry || typeof entry !== "object") return null;
+				const rec = entry as Record<string, unknown>;
+				const name = typeof rec.name === "string" ? rec.name : "attachment";
+				const lineCount = typeof rec.lineCount === "number" ? `${rec.lineCount} lines` : "";
+				const preview =
+					typeof rec.previewText === "string" && rec.previewText ? ` — ${rec.previewText.slice(0, 120)}` : "";
+				return `${name}${lineCount ? ` (${lineCount})` : ""}${preview}`;
+			})
+			.filter((item): item is string => Boolean(item));
+		if (labels.length > 0) parts.push(`[Attached files: ${labels.join("; ")}]`);
+	}
+	return parts.length > 0 ? parts.join("\n") : message.content;
 }
 
 export function buildObserverTaskPrompt(input: {
@@ -160,11 +176,19 @@ export function buildObserverTaskPrompt(input: {
 	userPrompt: string;
 	leadReply: string;
 	imageCount?: number;
+	fileSummaries?: string[];
 }): string {
 	const trimmedUser = input.userPrompt.trim();
+	const fileCount = input.fileSummaries?.length ?? 0;
+	const attachmentLines = [
+		input.imageCount ? `[Image attachments: ${input.imageCount}]` : "",
+		fileCount > 0 ? `[Attached files: ${input.fileSummaries!.join("; ")}]` : "",
+	]
+		.filter(Boolean)
+		.join("\n");
 	const userPart = trimmedUser
-		? `${truncateInline(trimmedUser, 2000)}${input.imageCount ? `\n[Image attachments: ${input.imageCount}]` : ""}`
-		: `[Image attachments: ${input.imageCount ?? 1}. The user provided no text.]`;
+		? `${truncateInline(trimmedUser, 2000)}${attachmentLines ? `\n${attachmentLines}` : ""}`
+		: attachmentLines || "[The user provided attachments without text.]";
 	const leadPart = input.leadReply.trim().slice(0, 6000);
 	return [
 		"Review this turn from your area of expertise and decide whether to speak.",

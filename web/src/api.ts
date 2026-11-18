@@ -99,6 +99,32 @@ export interface ComposerImageAttachment extends UploadImagePayload {
 	sizeBytes: number;
 }
 
+export interface MessageFileDto {
+	url?: string;
+	kind?: "file" | "pasted_text";
+	name: string;
+	mimeType: string;
+	sizeBytes?: number;
+	lineCount?: number;
+	charCount?: number;
+	previewText?: string;
+}
+
+export interface UploadFilePayload {
+	kind: "file" | "pasted_text";
+	name: string;
+	mimeType: string;
+	content: string;
+}
+
+export interface ComposerFileAttachment extends UploadFilePayload {
+	id: string;
+	sizeBytes: number;
+	lineCount: number;
+	charCount: number;
+	previewText: string;
+}
+
 export interface MatterMessageDto {
 	id: string;
 	matterId: string;
@@ -455,6 +481,7 @@ export function assessMatterInitiation(
 	input: {
 		prompt: string;
 		hasImages?: boolean;
+		hasFiles?: boolean;
 		workspaceId?: string;
 		preferredMemberId?: string;
 		mode?: "rules" | "model";
@@ -473,6 +500,7 @@ export function createMatter(input: {
 	mode?: MatterSendMode;
 	prompt: string;
 	images?: UploadImagePayload[];
+	files?: UploadFilePayload[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	orgId?: string | null;
@@ -494,6 +522,7 @@ export function postMatterMessage(
 		mode?: MatterSendMode;
 		prompt: string;
 		images?: UploadImagePayload[];
+		files?: UploadFilePayload[];
 		preferredMemberId?: string;
 		observerMemberIds?: string[];
 	},

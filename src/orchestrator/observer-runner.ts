@@ -46,6 +46,7 @@ export async function runObserversPass(
 		workspace: WorkspaceLink | null;
 		userPrompt: string;
 		userImages?: ImageContent[];
+		userFileSummaries?: string[];
 		leadReply: string;
 		leadMessageId: string;
 		observers: TeamMember[];
@@ -60,6 +61,7 @@ export async function runObserversPass(
 		userPrompt: input.userPrompt,
 		leadReply: input.leadReply,
 		imageCount: input.userImages?.length ?? 0,
+		fileSummaries: input.userFileSummaries,
 	});
 	const observerNames = input.observers.map((member) => member.displayName).join("、");
 	pushRunLog(input.run, "旁听席", `${observerNames}正在审视本轮讨论`);

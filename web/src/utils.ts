@@ -7,6 +7,7 @@ import type {
 	MatterProgressDto,
 	MemberMemoryDto,
 	MemoryCategory,
+	MessageFileDto,
 	MessageImageDto,
 	OrganizationDto,
 	ProgressActivityDto,
@@ -775,6 +776,39 @@ export function parseMessageImages(metadata: Record<string, unknown> | null | un
 		});
 	}
 	return images;
+}
+
+/** Extracts lightweight uploaded file and pasted-text attachment references stored on message metadata. */
+export function parseMessageFiles(metadata: Record<string, unknown> | null | undefined): MessageFileDto[] {
+	const raw = metadata?.files;
+	if (!Array.isArray(raw)) return [];
+	const files: MessageFileDto[] = [];
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
+		const record = entry as Record<string, unknown>;
+		const name = typeof record.name === "string" ? record.name.trim() : "";
+		const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "text/plain";
+		const url = typeof record.url === "string" ? record.url.trim() : undefined;
+		const kind = record.kind === "pasted_text" ? "pasted_text" : "file";
+		if (!name && !url) continue;
+		files.push({
+			...(url ? { url } : {}),
+			kind,
+			name: name || "attachment.txt",
+			mimeType: mimeType || "text/plain",
+			...(typeof record.sizeBytes === "number" ? { sizeBytes: record.sizeBytes } : {}),
+			...(typeof record.lineCount === "number" ? { lineCount: record.lineCount } : {}),
+			...(typeof record.charCount === "number" ? { charCount: record.charCount } : {}),
+			...(typeof record.previewText === "string" ? { previewText: record.previewText } : {}),
+		});
+	}
+	return files;
+}
+
+export function formatByteSize(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Formats declared RoleTemplate tool lists into concise 4-tier permission badges. */

@@ -123,6 +123,63 @@
 	font-size: var(--text-xs);
 	opacity: 0.85;
 }
+.stream-msg-files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	max-width: 100%;
+	min-width: 0;
+}
+.stream-msg-file-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	max-width: min(320px, 100%);
+	padding: 6px 11px;
+	border-radius: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	background: rgba(255, 255, 255, 0.1);
+	color: inherit;
+	font: inherit;
+	font-size: var(--text-xs);
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease;
+	min-width: 0;
+}
+.stream-msg-file-chip:hover {
+	background: rgba(255, 255, 255, 0.18);
+	border-color: rgba(255, 255, 255, 0.36);
+}
+.stream-msg-file-chip.is-pasted {
+	border-style: dashed;
+}
+.stream-msg-file-chip > span:first-child {
+	flex-shrink: 0;
+	font-size: 14px;
+	line-height: 1;
+}
+.stream-msg-file-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	overflow: hidden;
+}
+.stream-msg-file-meta strong,
+.stream-msg-file-meta small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.stream-msg-file-meta strong {
+	font-weight: 600;
+}
+.stream-msg-file-meta small {
+	opacity: 0.78;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
 .stream-bubble.member {
 	background: var(--bg-sidebar);
 	color: var(--text-primary);

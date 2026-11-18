@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	type BootstrapPayload,
 	type CollaboratorDto,
+	type ComposerFileAttachment,
 	type ComposerImageAttachment,
 	type DeliverableDto,
 	type FeedbackRating,
@@ -38,8 +39,16 @@ import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
 import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useRsiDistill } from "./hooks/useRsiDistill.ts";
-import { MAX_COMPOSER_IMAGES, prepareComposerImages } from "./imageAttachments.ts";
-import { buildStarterTasks, getBotTheme } from "./utils.ts";
+import {
+	createPastedTextAttachment,
+	isSupportedImageFile,
+	MAX_COMPOSER_FILE_BYTES,
+	MAX_COMPOSER_FILES,
+	MAX_COMPOSER_IMAGES,
+	prepareComposerFiles,
+	prepareComposerImages,
+} from "./imageAttachments.ts";
+import { getBotTheme } from "./utils.ts";
 
 function extractInitialInviteToken(): string {
 	try {
@@ -86,6 +95,9 @@ export function App() {
 	const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
 	const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
 	composerImagesRef.current = composerImages;
+	const [composerFiles, setComposerFiles] = useState<ComposerFileAttachment[]>([]);
+	const composerFilesRef = useRef<ComposerFileAttachment[]>([]);
+	composerFilesRef.current = composerFiles;
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -398,15 +410,21 @@ export function App() {
 		[bootstrap],
 	);
 
-	const starterTasks = useMemo(
-		() => buildStarterTasks(bootstrap?.members, selectedWorkspace),
-		[bootstrap, selectedWorkspace],
+	const composerAttachmentText = useMemo(
+		() =>
+			composerFiles
+				.map((item) => item.content)
+				.join("\n")
+				.slice(0, 1200),
+		[composerFiles],
 	);
 
 	const initiation = useMatterInitiationState({
 		selectedMatterId,
 		composerText,
 		composerImageCount: composerImages.length,
+		composerFileCount: composerFiles.length,
+		composerAttachmentText,
 		selectedWorkspaceId,
 		selectedMemberId,
 		members: bootstrap?.members ?? [],
@@ -477,18 +495,66 @@ export function App() {
 		return draftObserversEnabled;
 	}, [draftObserversEnabled, matterDetail, selectedMatterId]);
 
-	const handleAddComposerImages = useCallback(async (files: FileList | File[]) => {
-		const { attachments, warnings } = await prepareComposerImages(files, composerImagesRef.current.length);
-		if (attachments.length > 0) {
-			setComposerImages((prev) => [...prev, ...attachments].slice(0, MAX_COMPOSER_IMAGES));
+	const handleAddComposerAttachments = useCallback(async (files: FileList | File[]) => {
+		const incoming = Array.from(files ?? []);
+		if (incoming.length === 0) return;
+		const imageFiles: File[] = [];
+		const docFiles: File[] = [];
+		for (const file of incoming) {
+			if (isSupportedImageFile(file)) {
+				imageFiles.push(file);
+			} else {
+				docFiles.push(file);
+			}
+		}
+		const warnings: string[] = [];
+		if (imageFiles.length > 0) {
+			const res = await prepareComposerImages(imageFiles, composerImagesRef.current.length);
+			if (res.attachments.length > 0) {
+				setComposerImages((prev) => [...prev, ...res.attachments].slice(0, MAX_COMPOSER_IMAGES));
+			}
+			warnings.push(...res.warnings);
+		}
+		if (docFiles.length > 0) {
+			const res = await prepareComposerFiles(docFiles, composerFilesRef.current.length);
+			if (res.attachments.length > 0) {
+				setComposerFiles((prev) => [...prev, ...res.attachments].slice(0, MAX_COMPOSER_FILES));
+			}
+			warnings.push(...res.warnings);
 		}
 		if (warnings.length > 0) {
 			setErrorBanner(warnings[0]!);
 		}
 	}, []);
 
+	const handleAddPastedText = useCallback((text: string) => {
+		if (composerFilesRef.current.length >= MAX_COMPOSER_FILES) {
+			setErrorBanner(`每次最多附带 ${MAX_COMPOSER_FILES} 个文本文件或长文本片段`);
+			return;
+		}
+		const pastedIndex = composerFilesRef.current.filter((item) => item.kind === "pasted_text").length + 1;
+		const attachment = createPastedTextAttachment(text, pastedIndex);
+		if (attachment.sizeBytes > MAX_COMPOSER_FILE_BYTES) {
+			setErrorBanner(`粘贴文本超过 512KB 上限，请分段后再发送`);
+			return;
+		}
+		setComposerFiles((prev) => [...prev, attachment].slice(0, MAX_COMPOSER_FILES));
+	}, []);
+
 	const handleRemoveComposerImage = useCallback((imageId: string) => {
 		setComposerImages((prev) => prev.filter((item) => item.id !== imageId));
+	}, []);
+
+	const handleRemoveComposerFile = useCallback((fileId: string) => {
+		setComposerFiles((prev) => prev.filter((item) => item.id !== fileId));
+	}, []);
+
+	const handleExpandPastedFile = useCallback((fileId: string) => {
+		const target = composerFilesRef.current.find((item) => item.id === fileId);
+		if (!target) return;
+		setComposerFiles((prev) => prev.filter((item) => item.id !== fileId));
+		setComposerText((prev) => (prev.trim() ? `${prev}\n${target.content}` : target.content));
+		composerRef.current?.focus();
 	}, []);
 
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
@@ -502,6 +568,7 @@ export function App() {
 			navigateRoute({ tab: "chats", matterId: matter.id });
 			setComposerText("");
 			setComposerImages([]);
+			setComposerFiles([]);
 			setComposerMode("dispatch");
 			await refreshBootstrap();
 			await refreshDetail(matter.id);
@@ -530,6 +597,7 @@ export function App() {
 			}
 			if (selectedMatterIdRef.current !== targetMatterId) return;
 			setComposerImages([]);
+			setComposerFiles([]);
 			setComposerMode("dispatch");
 			setComposerText(prompt);
 			setNoticeBanner(
@@ -584,6 +652,7 @@ export function App() {
 		composerMode,
 		composerText,
 		composerImages,
+		composerFiles,
 		submitting,
 		selectedMatterId,
 		selectedMemberId,
@@ -602,6 +671,7 @@ export function App() {
 		setSubmitting,
 		setComposerText,
 		setComposerImages,
+		setComposerFiles,
 		setSelectedMemberId,
 		setSelectedWorkspaceId,
 		setSelectedOrgId,
@@ -833,7 +903,7 @@ export function App() {
 						submitting={submitting}
 						composerText={composerText}
 						pendingImages={composerImages}
-						starterTasks={starterTasks}
+						pendingFiles={composerFiles}
 						templateByRoleId={templateByRoleId}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						memberName={memberName}
@@ -841,8 +911,11 @@ export function App() {
 						organizationName={organizationName}
 						previewUrlFor={previewUrlFor}
 						onComposerTextChange={setComposerText}
-						onAddImages={(files) => void handleAddComposerImages(files)}
+						onAddAttachments={(files) => void handleAddComposerAttachments(files)}
+						onAddPastedText={handleAddPastedText}
 						onRemoveImage={handleRemoveComposerImage}
+						onRemoveFile={handleRemoveComposerFile}
+						onExpandPastedFile={handleExpandPastedFile}
 						onSelectOrganization={actions.handleSelectOrganization}
 						onSelectWorkspace={actions.handleSelectWorkspace}
 						matterAiMemberIds={matterAiMemberIds}

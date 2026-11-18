@@ -3,6 +3,7 @@ import {
 	buildProgressSnapshot,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
+	type PromptFileAttachment,
 	type PromptImageAttachment,
 	type TeamOrchestrator,
 } from "../orchestrator/team-orchestrator.ts";
@@ -21,6 +22,7 @@ export interface BackgroundDispatchInput {
 	title?: string;
 	prompt: string;
 	images?: PromptImageAttachment[];
+	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
 	observerMemberIds?: string[];
@@ -61,6 +63,7 @@ export function createDispatchRunner(deps: {
 				title: input.title,
 				prompt: input.prompt,
 				images: input.images,
+				files: input.files,
 				preferredMemberId: input.preferredMemberId,
 				workspaceId: input.workspaceId,
 				observerMemberIds: input.observerMemberIds,

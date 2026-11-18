@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	createPastedTextAttachment,
+	isSupportedImageDescriptor as isSupportedImageFile,
+	prepareComposerTextFiles as prepareComposerFiles,
+	shouldFoldPastedText,
+} from "../web/src/textAttachments.ts";
+import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
+	formatByteSize,
 	formatElapsedDuration,
 	formatNoticeEventLine,
 	getMemberThemeById,
@@ -11,6 +18,7 @@ import {
 	MEMORY_CATEGORY_LABELS,
 	mapDelegationsToMessages,
 	parseDeliverableSummary,
+	parseMessageFiles,
 	parseMessageImages,
 	parseProgressSnapshot,
 	pickDefaultWorkspaceId,
@@ -317,4 +325,82 @@ test("parseMessageImages extracts valid lightweight image refs from message meta
 		}),
 		[{ url: "/api/uploads/a.png", mimeType: "image/png", name: "a.png" }, { mimeType: "image/webp" }],
 	);
+});
+
+test("parseMessageFiles extracts valid file and pasted_text refs from message metadata", () => {
+	assert.deepEqual(parseMessageFiles(null), []);
+	assert.deepEqual(
+		parseMessageFiles({
+			files: [
+				{
+					id: "f1",
+					kind: "file",
+					name: "spec.md",
+					mimeType: "text/markdown",
+					url: "/api/uploads/123.txt",
+					sizeBytes: 120,
+					lineCount: 4,
+					charCount: 118,
+				},
+				{
+					id: "f2",
+					kind: "pasted_text",
+					name: "pasted-text-1.txt",
+					lineCount: 15,
+					charCount: 820,
+				},
+				{ id: "bad", name: "" },
+			],
+		}),
+		[
+			{
+				url: "/api/uploads/123.txt",
+				kind: "file",
+				name: "spec.md",
+				mimeType: "text/markdown",
+				sizeBytes: 120,
+				lineCount: 4,
+				charCount: 118,
+			},
+			{
+				kind: "pasted_text",
+				name: "pasted-text-1.txt",
+				mimeType: "text/plain",
+				lineCount: 15,
+				charCount: 820,
+			},
+		],
+	);
+});
+
+test("formatByteSize, shouldFoldPastedText, and createPastedTextAttachment handle attachments", async () => {
+	assert.equal(formatByteSize(512), "512 B");
+	assert.equal(formatByteSize(2048), "2.0 KB");
+	assert.equal(formatByteSize(1_572_864), "1.5 MB");
+
+	assert.equal(shouldFoldPastedText("short single line"), false);
+	assert.equal(shouldFoldPastedText("a".repeat(600)), true);
+	assert.equal(shouldFoldPastedText(Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n")), true);
+
+	const pasted = createPastedTextAttachment("line1\r\nline2\r\nline3", 2);
+	assert.equal(pasted.kind, "pasted_text");
+	assert.equal(pasted.name, "pasted-text-2.txt");
+	assert.equal(pasted.lineCount, 3);
+	assert.equal(pasted.charCount, 17);
+
+	const textFile = new File(["const x = 1;\n"], "sample.ts", { type: "text/plain" });
+	assert.equal(isSupportedImageFile(textFile), false);
+	const pngFile = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "pic.png", { type: "image/png" });
+	assert.equal(isSupportedImageFile(pngFile), true);
+
+	const prepared = await prepareComposerFiles([textFile], 0);
+	assert.equal(prepared.warnings.length, 0);
+	assert.equal(prepared.attachments.length, 1);
+	assert.equal(prepared.attachments[0]?.name, "sample.ts");
+	assert.equal(prepared.attachments[0]?.lineCount, 2);
+
+	const binFile = new File([new Uint8Array([0x00, 0x01, 0x02])], "blob.bin", { type: "application/octet-stream" });
+	const binPrepared = await prepareComposerFiles([binFile], 0);
+	assert.equal(binPrepared.attachments.length, 0);
+	assert.equal(binPrepared.warnings.length, 1);
 });

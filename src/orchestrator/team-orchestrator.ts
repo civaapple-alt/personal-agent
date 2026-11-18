@@ -66,6 +66,7 @@ export {
 	type OrchestratorDialogHandler,
 	type ProgressActivityItem,
 	type ProgressSnapshot,
+	type PromptFileAttachment,
 	type PromptImageAttachment,
 	type RpcWorkerLike,
 	type TeamOrchestratorOptions,
@@ -339,14 +340,34 @@ export class TeamOrchestrator {
 			mimeType: item.mimeType,
 			name: item.name || `image-${idx + 1}`,
 		}));
+		const files = (input.files ?? []).filter(
+			(item) => item && item.type === "file" && typeof item.content === "string" && item.content.length > 0,
+		);
+		const fileMetadataRefs = files.map((item) => ({
+			...(item.url ? { url: item.url } : {}),
+			kind: item.kind,
+			name: item.name,
+			mimeType: item.mimeType,
+			sizeBytes: item.sizeBytes,
+			lineCount: item.lineCount,
+			charCount: item.charCount,
+			...(item.previewText ? { previewText: item.previewText } : {}),
+		}));
+		const fileSummaries = files.map((item) => `${item.name} (${item.lineCount} lines)`);
 		const trimmedPrompt = input.prompt.trim();
 		const fallbackTitle = trimmedPrompt
 			? trimmedPrompt.slice(0, 60)
-			: images.length === 1
-				? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
-				: images.length > 1
-					? `上传了 ${images.length} 张图片`
-					: "新事项";
+			: files.length > 0
+				? files.length === 1
+					? files[0]?.kind === "pasted_text"
+						? `粘贴文本（${files[0].lineCount} 行）`
+						: `文件：${files[0]?.name ?? "附件"}`.slice(0, 60)
+					: `上传了 ${files.length} 个文件`
+				: images.length === 1
+					? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
+					: images.length > 1
+						? `上传了 ${images.length} 张图片`
+						: "新事项";
 		let matter =
 			existing ??
 			this.store.createMatter({
@@ -441,13 +462,27 @@ export class TeamOrchestrator {
 							}
 						: {}),
 					...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+					...(fileMetadataRefs.length > 0 ? { files: fileMetadataRefs } : {}),
 				},
 			});
 			run.userMessageId = message.id;
-			const effectiveTaskPrompt =
+			const formattedFilesBlock =
+				files.length > 0
+					? [
+							"[Attached files / pasted text]",
+							...files.map(
+								(file, idx) =>
+									`--- Attachment ${idx + 1}: ${file.name} (${file.kind}, ${file.lineCount} lines, ${file.charCount} chars) ---\n${file.content}\n--- End Attachment ${idx + 1} ---`,
+							),
+						].join("\n\n")
+					: "";
+			const basePromptText =
 				trimmedPrompt.length > 0
 					? input.prompt
-					: `Review the user's image attachments (${rpcImages.length}) and reply directly. If the conversation has no requested language, reply in Chinese.`;
+					: `Review the user's attachments (${files.length} files, ${rpcImages.length} images) and reply directly. If the conversation has no requested language, reply in Chinese.`;
+			const effectiveTaskPrompt = formattedFilesBlock
+				? `${basePromptText}\n\n${formattedFilesBlock}`
+				: basePromptText;
 			let result: PromptRunResult;
 			try {
 				result = await this.executeWithWorker({
@@ -600,6 +635,7 @@ export class TeamOrchestrator {
 								workspace,
 								userPrompt: input.prompt,
 								userImages: rpcImages.length > 0 ? rpcImages : undefined,
+								userFileSummaries: fileSummaries.length > 0 ? fileSummaries : undefined,
 								leadReply: replyText,
 								leadMessageId: leadMessage.id,
 								observers: observerCandidates,

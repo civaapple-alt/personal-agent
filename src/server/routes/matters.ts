@@ -1,12 +1,19 @@
 import { resolve } from "node:path";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
-import type { PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
+import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
 import type { Collaborator, DeliverableType, Matter } from "../../storage/types.ts";
 import { requireOwner, toDispatchAuthor } from "../auth.ts";
 import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
-import { loadStoredImagesFromRefs, parseIncomingImages, persistUploadedImages } from "../uploads.ts";
+import {
+	loadStoredFilesFromRefs,
+	loadStoredImagesFromRefs,
+	parseIncomingFiles,
+	parseIncomingImages,
+	persistUploadedFiles,
+	persistUploadedImages,
+} from "../uploads.ts";
 import { parseCollaboratorIds, parseObserverMemberIds, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
 function appendDiscussionOrAiRequestMessage(
@@ -19,6 +26,7 @@ function appendDiscussionOrAiRequestMessage(
 		workspaceId: string | undefined;
 		preferredMemberId: string | undefined;
 		images: PromptImageAttachment[];
+		files: PromptFileAttachment[];
 	},
 ) {
 	const { store, orchestrator, broadcast } = ctx;
@@ -27,6 +35,16 @@ function appendDiscussionOrAiRequestMessage(
 		...(item.url ? { url: item.url } : {}),
 		mimeType: item.mimeType,
 		name: item.name || `image-${idx + 1}`,
+	}));
+	const fileMetadataRefs = input.files.map((item) => ({
+		...(item.url ? { url: item.url } : {}),
+		kind: item.kind,
+		name: item.name,
+		mimeType: item.mimeType,
+		sizeBytes: item.sizeBytes,
+		lineCount: item.lineCount,
+		charCount: item.charCount,
+		...(item.previewText ? { previewText: item.previewText } : {}),
 	}));
 	const message = store.appendMessage({
 		matterId: input.matter.id,
@@ -45,6 +63,7 @@ function appendDiscussionOrAiRequestMessage(
 			...(input.mode === "ai_request" ? { aiRequestStatus: "pending" } : {}),
 			...(input.preferredMemberId ? { preferredMemberId: input.preferredMemberId } : {}),
 			...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+			...(fileMetadataRefs.length > 0 ? { files: fileMetadataRefs } : {}),
 		},
 	});
 	const refreshedMatter = store.getMatter(input.matter.id) ?? input.matter;
@@ -266,7 +285,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			try {
 				const assessment = await orchestrator.assessInitiationWithModel({
 					prompt,
-					hasImages: body.hasImages === true,
+					hasImages: body.hasImages === true || body.hasFiles === true,
 					workspaceId,
 					preferredMemberId,
 					readRepo: body.readRepo === true,
@@ -289,7 +308,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		const assessment = orchestrator.assessInitiation({
 			prompt,
-			hasImages: body.hasImages === true,
+			hasImages: body.hasImages === true || body.hasFiles === true,
 			hasWorkspace: Boolean(workspaceId),
 			preferredMemberId,
 		});
@@ -303,8 +322,9 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		if (mode === "dispatch" && !requireOwner(res, actor)) return true;
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const parsedImages = parseIncomingImages(body.images);
-		if (!prompt && parsedImages.length === 0) {
-			sendError(res, 400, "prompt or images is required");
+		const parsedFiles = parseIncomingFiles(body.files);
+		if (!prompt && parsedImages.length === 0 && parsedFiles.length === 0) {
+			sendError(res, 400, "prompt, images, or files is required");
 			return true;
 		}
 		const preferredMemberId =
@@ -353,13 +373,20 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				? [...requestedCollaboratorIds, actor!.collaborator.id]
 				: requestedCollaboratorIds;
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
+		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
 		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds);
 		const fallbackTitle = prompt
 			? prompt.slice(0, 60)
-			: images.length === 1
-				? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
-				: `上传了 ${images.length} 张图片`;
+			: files.length > 0
+				? files.length === 1
+					? files[0]?.kind === "pasted_text"
+						? `粘贴文本（${files[0].lineCount} 行）`
+						: `文件：${files[0]?.name ?? "附件"}`.slice(0, 60)
+					: `上传了 ${files.length} 个文件`
+				: images.length === 1
+					? `图片：${images[0]?.name ?? "上传图片"}`.slice(0, 60)
+					: `上传了 ${images.length} 张图片`;
 		const matter = store.createMatter({
 			title: title ?? fallbackTitle,
 			leadMemberId: leadMember.id,
@@ -380,6 +407,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				workspaceId,
 				preferredMemberId,
 				images,
+				files,
 			});
 			sendJson(res, 201, { matter: refreshedMatter, message, assignedMember: leadMember });
 			return true;
@@ -390,6 +418,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			title,
 			prompt,
 			images: images.length > 0 ? images : undefined,
+			files: files.length > 0 ? files : undefined,
 			preferredMemberId: leadMember.id,
 			workspaceId,
 			observerMemberIds: matter.observerMemberIds,
@@ -426,9 +455,12 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			typeof targetMsg.metadata?.authorName === "string" && targetMsg.metadata.authorName.trim()
 				? targetMsg.metadata.authorName.trim()
 				: "同事";
+		const hasFileRefs = Array.isArray(targetMsg.metadata?.files) && targetMsg.metadata.files.length > 0;
 		const dispatchPrompt = targetMsg.content.trim()
 			? `[Owner 已确认同事 ${requesterName} 的 AI 提请并安排执行]\n${targetMsg.content.trim()}`
-			: `请处理同事 ${requesterName} 在上一条 AI 提请中附带的图片。`;
+			: hasFileRefs
+				? `请处理同事 ${requesterName} 在上一条 AI 提请中附带的附件。`
+				: `请处理同事 ${requesterName} 在上一条 AI 提请中附带的图片。`;
 		const preferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
 				? body.preferredMemberId
@@ -442,6 +474,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				: (matter.workspaceId ?? undefined);
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		const images = await loadStoredImagesFromRefs(targetMsg.metadata?.images, uploadsDir, memoryUploads);
+		const files = await loadStoredFilesFromRefs(targetMsg.metadata?.files, uploadsDir, memoryUploads);
 
 		// Validate all asynchronous inputs before claiming the request. No awaits between claim and dispatch.
 		const currentMatter = store.getMatter(matterId)!;
@@ -475,7 +508,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "Requested AI member is no longer in this matter");
 			return true;
 		}
-		if (Array.isArray(targetMsg.metadata?.images) && images.length !== targetMsg.metadata.images.length) {
+		if (
+			(Array.isArray(targetMsg.metadata?.images) && images.length !== targetMsg.metadata.images.length) ||
+			(Array.isArray(targetMsg.metadata?.files) && files.length !== targetMsg.metadata.files.length)
+		) {
 			sendError(res, 410, "Request attachments are no longer available; submit the request again");
 			return true;
 		}
@@ -498,6 +534,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			matterId: matter.id,
 			prompt: dispatchPrompt,
 			images: images.length > 0 ? images : undefined,
+			files: files.length > 0 ? files : undefined,
 			preferredMemberId,
 			workspaceId,
 			observerMemberIds,
@@ -554,8 +591,9 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const parsedImages = parseIncomingImages(body.images);
-		if (!prompt && parsedImages.length === 0) {
-			sendError(res, 400, "prompt or images is required");
+		const parsedFiles = parseIncomingFiles(body.files);
+		if (!prompt && parsedImages.length === 0 && parsedFiles.length === 0) {
+			sendError(res, 400, "prompt, images, or files is required");
 			return true;
 		}
 		const preferredMemberId =
@@ -572,6 +610,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				: undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
+		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
 		if (mode === "discussion" || mode === "ai_request") {
 			if (actor!.collaborator.permissionRole !== "owner") {
@@ -585,6 +624,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				workspaceId,
 				preferredMemberId,
 				images,
+				files,
 			});
 			sendJson(res, 201, { accepted: false, mode, message, matter: refreshedMatter });
 			return true;
@@ -594,6 +634,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			matterId: matter.id,
 			prompt,
 			images: images.length > 0 ? images : undefined,
+			files: files.length > 0 ? files : undefined,
 			preferredMemberId,
 			workspaceId,
 			observerMemberIds,

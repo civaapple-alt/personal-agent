@@ -66,6 +66,7 @@ export {
 	type DistillExperiencesResult,
 	type OrchestratorDialogHandler,
 	type ProgressSnapshot,
+	type PromptFileAttachment,
 	type PromptImageAttachment,
 	type RpcWorkerLike,
 	TeamOrchestrator,

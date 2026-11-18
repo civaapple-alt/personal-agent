@@ -16,14 +16,17 @@ import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEM
 import { MarkdownView } from "../../MarkdownView.tsx";
 import {
 	type DelegationSummaryItem,
+	formatByteSize,
 	formatClockTime,
 	getMemberThemeById,
+	parseMessageFiles,
 	parseMessageImages,
 	parseProgressSnapshot,
 	stripMarkdownFormatting,
 } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
+import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
@@ -63,6 +66,7 @@ interface MessageFeedProps {
 		unattached: DelegationSummaryItem[];
 	};
 	onOpenLightbox: (img: { src: string; alt: string }) => void;
+	onPreviewFile: (file: PreviewableTextAttachment) => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
@@ -109,6 +113,7 @@ export function MessageFeed({
 	deliverablesPlacement,
 	delegationsPlacement,
 	onOpenLightbox,
+	onPreviewFile,
 	onOpenDeliverables,
 	onApproveAiRequest,
 	onDismissAiRequest,
@@ -262,6 +267,7 @@ export function MessageFeed({
 										? memberName(matterDetail.matter.leadMemberId)
 										: undefined;
 							const userImages = isUser ? parseMessageImages(msg.metadata) : [];
+							const userFiles = isUser ? parseMessageFiles(msg.metadata) : [];
 							const bubbleModeClass = isUser
 								? isDiscussion
 									? " discussion"
@@ -342,6 +348,50 @@ export function MessageFeed({
 																</span>
 															),
 														)}
+													</div>
+												)}
+												{userFiles.length > 0 && (
+													<div className="stream-msg-files">
+														{userFiles.map((file, idx) => {
+															const isPasted = file.kind === "pasted_text";
+															return (
+																<button
+																	key={`${msg.id}-file-${file.url ?? file.name}-${idx}`}
+																	type="button"
+																	className={`stream-msg-file-chip${isPasted ? " is-pasted" : ""}`}
+																	title="点击查看附件内容"
+																	onClick={() =>
+																		onPreviewFile({
+																			kind: isPasted ? "pasted_text" : "file",
+																			name: file.name,
+																			url: file.url,
+																			content: file.url ? undefined : file.previewText,
+																			lineCount: file.lineCount,
+																			charCount: file.charCount,
+																			sizeBytes: file.sizeBytes,
+																		})
+																	}
+																>
+																	<span aria-hidden="true">{isPasted ? "¶" : "📄"}</span>
+																	<span className="stream-msg-file-meta">
+																		<strong>
+																			{isPasted
+																				? `粘贴文本${file.lineCount ? ` · ${file.lineCount} 行` : ""}`
+																				: file.name}
+																		</strong>
+																		<small>
+																			{file.sizeBytes !== undefined
+																				? formatByteSize(file.sizeBytes)
+																				: ""}
+																			{file.charCount !== undefined
+																				? `${file.sizeBytes !== undefined ? " · " : ""}${file.charCount} 字`
+																				: ""}
+																			{file.previewText ? ` · ${file.previewText}` : ""}
+																		</small>
+																	</span>
+																</button>
+															);
+														})}
 													</div>
 												)}
 												{msg.content && <div className="stream-bubble-text">{msg.content}</div>}

@@ -5,6 +5,7 @@ import {
 	applyMatterRoleProposals,
 	approveAiRequest,
 	type BootstrapPayload,
+	type ComposerFileAttachment,
 	type ComposerImageAttachment,
 	createMatter,
 	dismissAiRequest,
@@ -13,6 +14,7 @@ import {
 	postMatterMessage,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
+	type UploadFilePayload,
 	updateMatterAiMembers,
 	updateMatterCollaborators,
 	updateMatterLead,
@@ -49,6 +51,7 @@ interface UseMatterActionsParams {
 	composerMode: "discussion" | "dispatch";
 	composerText: string;
 	composerImages: ComposerImageAttachment[];
+	composerFiles: ComposerFileAttachment[];
 	submitting: boolean;
 	selectedMatterId: string | null;
 	selectedMemberId: string;
@@ -67,6 +70,7 @@ interface UseMatterActionsParams {
 	setSubmitting: (v: boolean) => void;
 	setComposerText: (v: string) => void;
 	setComposerImages: (v: ComposerImageAttachment[]) => void;
+	setComposerFiles: (v: ComposerFileAttachment[]) => void;
 	setSelectedMemberId: (v: string) => void;
 	setSelectedWorkspaceId: (v: string) => void;
 	setSelectedOrgId: (v: string) => void;
@@ -89,6 +93,7 @@ export function useMatterActions({
 	composerMode,
 	composerText,
 	composerImages,
+	composerFiles,
 	submitting,
 	selectedMatterId,
 	selectedMemberId,
@@ -107,6 +112,7 @@ export function useMatterActions({
 	setSubmitting,
 	setComposerText,
 	setComposerImages,
+	setComposerFiles,
 	setSelectedMemberId,
 	setSelectedWorkspaceId,
 	setSelectedOrgId,
@@ -124,10 +130,11 @@ export function useMatterActions({
 	const sendPromptInternal = async (
 		rawText: string,
 		imagesPayload: Array<{ data: string; mimeType: string; name?: string }>,
+		filesPayload: UploadFilePayload[],
 		options?: { preferredMemberId?: string; clearComposer?: boolean; forceDispatch?: boolean },
 	) => {
 		const text = rawText.trim();
-		if ((!text && imagesPayload.length === 0) || submitting) return;
+		if ((!text && imagesPayload.length === 0 && filesPayload.length === 0) || submitting) return;
 		const effectiveMode: MatterSendMode =
 			!options?.forceDispatch && composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
 		setSubmitting(true);
@@ -141,6 +148,7 @@ export function useMatterActions({
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
+					files: filesPayload.length > 0 ? filesPayload : undefined,
 					preferredMemberId: options?.preferredMemberId,
 				});
 				if (effectiveMode === "ai_request") {
@@ -156,6 +164,7 @@ export function useMatterActions({
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
+					files: filesPayload.length > 0 ? filesPayload : undefined,
 					preferredMemberId: preferredForCreate,
 					workspaceId: isArchitectCreate ? undefined : selectedWorkspaceId || undefined,
 					orgId: isArchitectCreate ? null : selectedOrgId || null,
@@ -188,6 +197,7 @@ export function useMatterActions({
 			if (options?.clearComposer) {
 				setComposerText("");
 				setComposerImages([]);
+				setComposerFiles([]);
 			}
 			await refreshBootstrap();
 			if (targetMatterId) {
@@ -202,11 +212,17 @@ export function useMatterActions({
 
 	const handleSendPrompt = async () => {
 		const imagesPayload = composerImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }));
-		await sendPromptInternal(composerText, imagesPayload, { clearComposer: true });
+		const filesPayload = composerFiles.map(({ kind, name, mimeType, content }) => ({
+			kind,
+			name,
+			mimeType,
+			content,
+		}));
+		await sendPromptInternal(composerText, imagesPayload, filesPayload, { clearComposer: true });
 	};
 
 	const handleSendQuickPrompt = async (prompt: string, options?: { preferredMemberId?: string }) => {
-		await sendPromptInternal(prompt, [], {
+		await sendPromptInternal(prompt, [], [], {
 			preferredMemberId: options?.preferredMemberId,
 			clearComposer: false,
 			forceDispatch: true,
@@ -217,7 +233,7 @@ export function useMatterActions({
 		const text =
 			customPrompt?.trim() ||
 			"请结合本事项当前推进上下文与团队现有角色配置，诊断是否缺少专职角色、存在职责重叠或工具权限过宽，并给出可勾选应用的角色提案。";
-		await sendPromptInternal(text, [], {
+		await sendPromptInternal(text, [], [], {
 			preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
 			clearComposer: false,
 			forceDispatch: true,

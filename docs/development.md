@@ -29,7 +29,7 @@ npm run check:startup
 | 事项主责、委托、上下文、取消与成果收尾 | [编排核](../src/orchestrator/README.md) |
 | Pi RPC、事件、扩展桥接与工具能力 | [RPC](../src/rpc/README.md) |
 | 数据模式、历史记录、版本和经验范围 | [存储](../src/storage/README.md) |
-| HTTP、SSE、邀请、图片与预览 | [服务](../src/server/README.md) |
+| HTTP、SSE、邀请、文件/图片与预览 | [服务](../src/server/README.md) |
 | 页面与 API 消费 | [网页](../web/README.md) → [源码](../web/src/README.md) |
 | 岗位及方法资产 | [roles](../roles/README.md)、[skills](../skills/README.md) |
 | 定义解析、序列化与能力目录 | [角色解析](../src/roles/README.md) |

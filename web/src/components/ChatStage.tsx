@@ -3,6 +3,7 @@ import type {
 	ApplyMatterRoleProposalsPayload,
 	CollaborationPresetMode,
 	CollaboratorDto,
+	ComposerFileAttachment,
 	ComposerImageAttachment,
 	DeliverableDto,
 	DistillRsiResult,
@@ -19,19 +20,21 @@ import type {
 	WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
+import { copyTextToClipboard } from "../clipboard.ts";
 import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
+	formatByteSize,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
-	type StarterTask,
 } from "../utils.ts";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
-import { ComposerDock } from "./chat/ComposerDock.tsx";
+import { ComposerDock, type PreviewableTextAttachment } from "./chat/ComposerDock.tsx";
 import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
+import { ModalDialog } from "./ModalDialog.tsx";
 
 interface ChatStageProps {
 	onOpenDemo?: () => void;
@@ -64,7 +67,7 @@ interface ChatStageProps {
 	submitting: boolean;
 	composerText: string;
 	pendingImages: ComposerImageAttachment[];
-	starterTasks: StarterTask[];
+	pendingFiles: ComposerFileAttachment[];
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	memberName: (id: string) => string;
@@ -72,8 +75,11 @@ interface ChatStageProps {
 	organizationName: (id: string | null) => string | null;
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	onComposerTextChange: (value: string) => void;
-	onAddImages: (files: FileList | File[]) => void;
+	onAddAttachments: (files: FileList | File[]) => void;
+	onAddPastedText: (text: string) => void;
 	onRemoveImage: (imageId: string) => void;
+	onRemoveFile: (fileId: string) => void;
+	onExpandPastedFile: (fileId: string) => void;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
@@ -157,7 +163,7 @@ export function ChatStage({
 	submitting,
 	composerText,
 	pendingImages,
-	starterTasks,
+	pendingFiles,
 	templateByRoleId,
 	memoriesByMember,
 	memberName,
@@ -165,8 +171,11 @@ export function ChatStage({
 	organizationName,
 	previewUrlFor,
 	onComposerTextChange,
-	onAddImages,
+	onAddAttachments,
+	onAddPastedText,
 	onRemoveImage,
+	onRemoveFile,
+	onExpandPastedFile,
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
@@ -215,12 +224,16 @@ export function ChatStage({
 	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
 	const [distillingMatter, setDistillingMatter] = useState(false);
 	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
-	const [starterMenuOpen, setStarterMenuOpen] = useState(false);
 	const [rosterOpen, setRosterOpen] = useState(false);
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 	const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+	const [previewFile, setPreviewFile] = useState<{
+		file: PreviewableTextAttachment;
+		loading: boolean;
+		error: string | null;
+	} | null>(null);
 
 	const chatScrollRef = useRef<HTMLDivElement | null>(null);
 	const chatStreamInnerRef = useRef<HTMLDivElement | null>(null);
@@ -242,16 +255,48 @@ export function ChatStage({
 		setRosterSearch("");
 	};
 
+	const openFilePreview = (file: PreviewableTextAttachment) => {
+		if (typeof file.content === "string") {
+			setPreviewFile({ file, loading: false, error: null });
+			return;
+		}
+		if (!file.url) {
+			setPreviewFile({ file, loading: false, error: "文件内容不可用。" });
+			return;
+		}
+		setPreviewFile({ file, loading: true, error: null });
+		void fetch(file.url)
+			.then(async (res) => {
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				return await res.text();
+			})
+			.then((text) => {
+				setPreviewFile((prev) =>
+					prev && prev.file.url === file.url
+						? { ...prev, file: { ...prev.file, content: text }, loading: false }
+						: prev,
+				);
+			})
+			.catch((err) => {
+				setPreviewFile((prev) =>
+					prev && prev.file.url === file.url
+						? {
+								...prev,
+								loading: false,
+								error: err instanceof Error ? err.message : "读取文件内容失败。",
+							}
+						: prev,
+				);
+			});
+	};
+
 	useEffect(() => {
-		if (!collabOpen && !starterMenuOpen && !rosterOpen && !moreMenuOpen) return;
+		if (!collabOpen && !rosterOpen && !moreMenuOpen && !lightboxImage) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
 			if (collabOpen && !collabPanelRef.current?.contains(target) && !moreMenuWrapRef.current?.contains(target)) {
 				setCollabOpen(false);
-			}
-			if (starterMenuOpen && !composerDockRef.current?.contains(target)) {
-				setStarterMenuOpen(false);
 			}
 			if (rosterOpen && !rosterPanelRef.current?.contains(target) && !headerHumansBtnRef.current?.contains(target)) {
 				setRosterOpen(false);
@@ -265,7 +310,6 @@ export function ChatStage({
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setCollabOpen(false);
-				setStarterMenuOpen(false);
 				setRosterOpen(false);
 				setMoreMenuOpen(false);
 				setRosterMode("view");
@@ -279,7 +323,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, starterMenuOpen, rosterOpen, moreMenuOpen]);
+	}, [collabOpen, rosterOpen, moreMenuOpen, lightboxImage]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -628,6 +672,7 @@ export function ChatStage({
 				deliverablesPlacement={deliverablesPlacement}
 				delegationsPlacement={delegationsPlacement}
 				onOpenLightbox={setLightboxImage}
+				onPreviewFile={openFilePreview}
 				onOpenDeliverables={onOpenDeliverables}
 				onApproveAiRequest={onApproveAiRequest}
 				onDismissAiRequest={onDismissAiRequest}
@@ -650,7 +695,7 @@ export function ChatStage({
 							isOwner={isOwner}
 							composerMode={composerMode}
 							hasWorkspace={Boolean(selectedWorkspaceId)}
-							hasPromptText={Boolean(composerText.trim())}
+							hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
 							members={members}
 							nonOwnerCollaborators={nonOwnerCollaborators}
 							templateByRoleId={templateByRoleId}
@@ -687,29 +732,28 @@ export function ChatStage({
 				submitting={submitting}
 				composerText={composerText}
 				pendingImages={pendingImages}
+				pendingFiles={pendingFiles}
 				effectiveOrgId={effectiveOrgId}
 				selectedWorkspaceId={selectedWorkspaceId}
 				selectedMatterId={selectedMatterId}
 				activeMatterProgress={activeMatterProgress}
+				elapsedSeconds={elapsedSeconds}
 				organizations={organizations}
 				orgFilteredWorkspaces={orgFilteredWorkspaces}
-				starterTasks={starterTasks}
-				starterMenuOpen={starterMenuOpen}
-				onToggleStarterMenu={() => setStarterMenuOpen((v) => !v)}
-				onCloseStarterMenu={() => setStarterMenuOpen(false)}
 				onCloseRoster={closeRoster}
 				onComposerModeChange={onComposerModeChange}
 				onSelectOrganization={onSelectOrganization}
 				onSelectWorkspace={onSelectWorkspace}
 				onNewMatter={onNewMatter}
-				onChangeLeadMember={onChangeLeadMember}
-				onApplyPresetMode={onApplyPresetMode}
 				onComposerTextChange={onComposerTextChange}
-				onAddImages={onAddImages}
+				onAddAttachments={onAddAttachments}
+				onAddPastedText={onAddPastedText}
 				onRemoveImage={onRemoveImage}
+				onRemoveFile={onRemoveFile}
 				onSendPrompt={onSendPrompt}
 				onAbortMatter={onAbortMatter}
 				onOpenLightbox={setLightboxImage}
+				onPreviewFile={openFilePreview}
 			/>
 
 			{lightboxImage && (
@@ -731,6 +775,68 @@ export function ChatStage({
 					</div>
 				</div>
 			)}
+
+			<ModalDialog
+				open={previewFile !== null}
+				title={previewFile?.file.name ?? ""}
+				subtitle={
+					previewFile
+						? [
+								previewFile.file.kind === "pasted_text" ? "折叠粘贴文本" : "文本文件",
+								previewFile.file.lineCount !== undefined ? `${previewFile.file.lineCount} 行` : null,
+								previewFile.file.charCount !== undefined
+									? `${previewFile.file.charCount.toLocaleString()} 字`
+									: null,
+								previewFile.file.sizeBytes !== undefined ? formatByteSize(previewFile.file.sizeBytes) : null,
+							]
+								.filter(Boolean)
+								.join(" · ")
+						: undefined
+				}
+				size="lg"
+				onClose={() => setPreviewFile(null)}
+				footer={
+					previewFile ? (
+						<>
+							{previewFile.file.pendingPastedId && (
+								<button
+									type="button"
+									className="btn-inline"
+									onClick={() => {
+										const id = previewFile.file.pendingPastedId;
+										setPreviewFile(null);
+										if (id) onExpandPastedFile(id);
+									}}
+								>
+									放回输入框
+								</button>
+							)}
+							{typeof previewFile.file.content === "string" && (
+								<button
+									type="button"
+									className="btn-inline"
+									onClick={() => {
+										void copyTextToClipboard(previewFile.file.content ?? "", "附件文本", onNotice);
+									}}
+								>
+									复制内容
+								</button>
+							)}
+							<button type="button" className="btn-inline" onClick={() => setPreviewFile(null)}>
+								关闭
+							</button>
+						</>
+					) : undefined
+				}
+			>
+				{previewFile?.loading ? (
+					<div className="muted small">正在读取文件内容...</div>
+				) : previewFile?.error ? (
+					<div className="error-text small">{previewFile.error}</div>
+				) : (
+					<pre className="composer-file-preview-pre">{previewFile?.file.content ?? ""}</pre>
+				)}
+			</ModalDialog>
 		</div>
 	);
 }

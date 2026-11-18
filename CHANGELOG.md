@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Unified composer window, file/image uploads & large-paste folding
+
+- Unify [ComposerDock](web/src/components/chat/ComposerDock.tsx), [ChatStage](web/src/components/ChatStage.tsx), and [chat-composer.css](web/src/styles/chat-composer.css) into one consistent `.composer-card` container across new matter, existing matter idle, Role Architect, and running states (showing an integrated `.composer-run-banner` with live elapsed time, quick switch-to-discussion action, and abort control while running; removing the old `+` starter-prompt popover and merging files + images onto the single `+` button).
+- Add UTF-8 text/code file uploads and automatic folding for large pasted text (`>= 600` chars or `>= 10` lines) via [imageAttachments.ts](web/src/imageAttachments.ts), [App.tsx](web/src/App.tsx), [MessageFeed.tsx](web/src/components/chat/MessageFeed.tsx), and [ModalDialog](web/src/components/ModalDialog.tsx) (supporting click-to-preview, copy, and restoring folded paste drafts back into the textarea).
+- Persist text/pasted-text `files` alongside `images` across [uploads.ts](src/server/uploads.ts) (serving `.txt` uploads with `text/plain; charset=utf-8` and `X-Content-Type-Options: nosniff`), [matters.ts](src/server/routes/matters.ts) (including `approve-ai` attachment reload & `hasFiles` assessment support), [dispatch-runner.ts](src/server/dispatch-runner.ts), [team-orchestrator.ts](src/orchestrator/team-orchestrator.ts), and [prompts.ts](src/orchestrator/prompts.ts), with tests in [test/server-rsi-and-uploads.test.ts](test/server-rsi-and-uploads.test.ts) and [test/web-utils.test.ts](test/web-utils.test.ts).
+
 ### Settings subpage (Agent base, extensions & live configuration)
 
 - Add `resolveBuiltinExtensionPath`, `probePiCli`, and `buildRuntimeOverview` in [src/orchestrator/runtime-info.ts](src/orchestrator/runtime-info.ts), expose `TeamOrchestrator.getRuntimeConfig()` and server `runtimeMeta`, and serve `GET /api/runtime` (with injectable `probePiCli`, sectioned live configuration mirroring `docs/configuration.md`, and host path redaction for non-owner collaborators).

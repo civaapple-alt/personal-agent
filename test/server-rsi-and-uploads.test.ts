@@ -15,7 +15,8 @@ import {
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../src/index.ts";
-import { parseMessageImages } from "../web/src/utils.ts";
+import { formatMessageHistoryContent } from "../src/orchestrator/prompts.ts";
+import { parseMessageFiles, parseMessageImages } from "../web/src/utils.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 test("HTTP API persists observerMemberIds and broadcasts proactive observer messages", async () => {
@@ -594,6 +595,219 @@ test("HTTP server persists uploaded chat images to uploadsDir, forwards them to 
 		const missingUpload = await fetch(`${baseUrl}/api/uploads/does-not-exist.png`);
 		assert.equal(missingUpload.status, 404);
 	} finally {
+		await orchestrator.shutdown();
+		server.closeAllConnections();
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test("HTTP server persists uploaded text files and folded pasted text, serves with nosniff, and reloads them on approve-ai", async () => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-file-uploads-"));
+	const dbPath = join(tempDir, "test.sqlite");
+	const uploadsDir = join(tempDir, "uploads");
+	const receivedPrompts: string[] = [];
+
+	class TextCaptureWorker implements RpcWorkerLike {
+		readonly options: PiRpcWorkerOptions;
+		constructor(options: PiRpcWorkerOptions) {
+			this.options = options;
+		}
+		async start() {
+			await reportReady(this.options);
+		}
+		async getState() {
+			return { sessionId: "sess-files", sessionFile: undefined };
+		}
+		async stop() {}
+		async abort() {}
+		onEvent() {
+			return () => {};
+		}
+		onNotice() {
+			return () => {};
+		}
+		setDialogHandler() {}
+		async runPromptAndWait(prompt: string): Promise<PromptRunResult> {
+			receivedPrompts.push(prompt);
+			return {
+				disposition: "started",
+				aborted: false,
+				assistantText: "已阅读附带文件与粘贴文本",
+				assistantMessages: [],
+				toolExecutions: [],
+				notices: [],
+				dialogs: [],
+				events: [],
+			};
+		}
+	}
+
+	const db = openPersonalAgentDatabase(dbPath);
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const previewManager = new PreviewManager();
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tempDir,
+		workerFactory: (opts) => new TextCaptureWorker(opts),
+	});
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker: new DialogBroker(),
+		uploadsDir,
+	});
+
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+
+	try {
+		// Reject files containing NUL bytes
+		const badFileRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "inspect binary",
+				files: [{ kind: "file", name: "bin.dat", content: "hello\0world" }],
+			}),
+		});
+		assert.equal(badFileRes.status, 400);
+
+		// Initiation assessment accepts attachment-only requests when hasFiles is true
+		const assessRes = await fetch(`${baseUrl}/api/matters/assess`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ prompt: "", hasFiles: true }),
+		});
+		assert.equal(assessRes.status, 200);
+
+		// File + folded pasted text matter creation without prompt text
+		const createRes = await fetch(`${baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				prompt: "",
+				files: [
+					{
+						kind: "file",
+						name: "notes.md",
+						mimeType: "text/markdown",
+						content: "# Notes\nline 2\nline 3",
+					},
+					{
+						kind: "pasted_text",
+						name: "pasted-text-1.txt",
+						content: "alpha\nbeta\ngamma",
+					},
+				],
+			}),
+		});
+		assert.equal(createRes.status, 202);
+		const created = (await createRes.json()) as { matter: { id: string; title: string } };
+		assert.equal(created.matter.title, "上传了 2 个文件");
+
+		type DetailResult = {
+			userMessages: Array<{
+				id: string;
+				senderType: string;
+				content: string;
+				metadata?: Record<string, unknown> | null;
+			}>;
+			activeRun?: unknown;
+		};
+		let detail: DetailResult | null = null;
+		for (let i = 0; i < 40; i += 1) {
+			const res = await fetch(`${baseUrl}/api/matters/${created.matter.id}`);
+			const data = (await res.json()) as DetailResult;
+			if (data.userMessages.length >= 2 && !data.activeRun) {
+				detail = data;
+				break;
+			}
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		assert.ok(detail);
+		assert.equal(receivedPrompts.length, 1);
+		assert.match(receivedPrompts[0]!, /notes\.md/);
+		assert.match(receivedPrompts[0]!, /# Notes\nline 2\nline 3/);
+		assert.match(receivedPrompts[0]!, /pasted-text-1\.txt/);
+		assert.match(receivedPrompts[0]!, /alpha\nbeta\ngamma/);
+
+		const userMsg = detail.userMessages.find((m) => m.senderType === "user");
+		assert.ok(userMsg);
+		const storedFiles = parseMessageFiles(userMsg.metadata);
+		assert.equal(storedFiles.length, 2);
+		assert.equal(storedFiles[0]?.kind, "file");
+		assert.equal(storedFiles[0]?.name, "notes.md");
+		assert.equal(storedFiles[0]?.lineCount, 3);
+		assert.match(storedFiles[0]?.url ?? "", /^\/api\/uploads\/.+\.txt$/);
+		assert.equal(storedFiles[1]?.kind, "pasted_text");
+		assert.equal(storedFiles[1]?.name, "pasted-text-1.txt");
+		assert.equal(readdirSync(uploadsDir).length, 2);
+
+		// Served uploaded text uses text/plain + nosniff
+		const fileGetRes = await fetch(`${baseUrl}${storedFiles[0]!.url!}`);
+		assert.equal(fileGetRes.status, 200);
+		assert.equal(fileGetRes.headers.get("content-type"), "text/plain; charset=utf-8");
+		assert.equal(fileGetRes.headers.get("x-content-type-options"), "nosniff");
+		assert.equal(await fileGetRes.text(), "# Notes\nline 2\nline 3");
+
+		// formatMessageHistoryContent includes stored files summary
+		const formattedHistory = formatMessageHistoryContent({
+			id: userMsg.id,
+			matterId: created.matter.id,
+			channel: "user",
+			senderType: "user",
+			senderId: "user",
+			content: userMsg.content,
+			metadata: userMsg.metadata ?? null,
+			createdAt: new Date().toISOString(),
+		});
+		assert.match(formattedHistory, /notes\.md/);
+		assert.match(formattedHistory, /pasted-text-1\.txt/);
+
+		// Queue an ai_request with a file, then approve-ai reloads persisted content from disk
+		const aiReqRes = await fetch(`${baseUrl}/api/matters/${created.matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				mode: "ai_request",
+				prompt: "",
+				files: [
+					{
+						kind: "pasted_text",
+						name: "pasted-text-2.txt",
+						content: "approved payload line 1\napproved payload line 2",
+					},
+				],
+			}),
+		});
+		assert.equal(aiReqRes.status, 201);
+		const aiReqBody = (await aiReqRes.json()) as {
+			message: { id: string; metadata?: Record<string, unknown> | null };
+		};
+		assert.equal(parseMessageFiles(aiReqBody.message.metadata).length, 1);
+
+		const approveRes = await fetch(
+			`${baseUrl}/api/matters/${created.matter.id}/messages/${aiReqBody.message.id}/approve-ai`,
+			{ method: "POST" },
+		);
+		assert.equal(approveRes.status, 202);
+		for (let i = 0; i < 40; i += 1) {
+			if (receivedPrompts.length >= 2 && !orchestrator.isMatterRunning(created.matter.id)) break;
+			await new Promise((r) => setTimeout(r, 25));
+		}
+		assert.equal(receivedPrompts.length, 2);
+		assert.match(receivedPrompts[1]!, /pasted-text-2\.txt/);
+		assert.match(receivedPrompts[1]!, /approved payload line 1\napproved payload line 2/);
+	} finally {
+		await previewManager.stopAll();
 		await orchestrator.shutdown();
 		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
