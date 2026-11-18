@@ -1,10 +1,15 @@
-import { type ChangeEvent, useState } from "react";
-import { importMemberPackage } from "../../api.ts";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type AccountUserDto, type CollaboratorDto, importMemberPackage, type OrganizationDto } from "../../api.ts";
+import { buildRoleScopeChoices } from "../../architectApi.ts";
 import { ModalDialog } from "../ModalDialog.tsx";
 
 interface MemberPackageFormsProps {
 	showImportMember: boolean;
 	exportedPackage: { id: string; filename: string; markdown: string } | null;
+	isSuperAdmin?: boolean;
+	accountUser?: AccountUserDto | null;
+	currentUser?: CollaboratorDto | null;
+	organizations?: OrganizationDto[];
 	onCloseImportMember: () => void;
 	onCloseExportedPackage: () => void;
 	onRefresh: () => Promise<void>;
@@ -16,6 +21,10 @@ interface MemberPackageFormsProps {
 export function MemberPackageForms({
 	showImportMember,
 	exportedPackage,
+	isSuperAdmin = false,
+	accountUser = null,
+	currentUser = null,
+	organizations = [],
 	onCloseImportMember,
 	onCloseExportedPackage,
 	onRefresh,
@@ -24,6 +33,18 @@ export function MemberPackageForms({
 }: MemberPackageFormsProps) {
 	const [importMarkdown, setImportMarkdown] = useState("");
 	const [importing, setImporting] = useState(false);
+	const scopeChoices = useMemo(
+		() => buildRoleScopeChoices({ isSuperAdmin, accountUser, currentUser, organizations }),
+		[isSuperAdmin, accountUser, currentUser, organizations],
+	);
+	const [selectedScopeKey, setSelectedScopeKey] = useState<string>(() => scopeChoices[0]?.key ?? "personal");
+
+	useEffect(() => {
+		if (!showImportMember) return;
+		if (!scopeChoices.some((c) => c.key === selectedScopeKey)) {
+			setSelectedScopeKey(scopeChoices[0]?.key ?? "personal");
+		}
+	}, [showImportMember, scopeChoices, selectedScopeKey]);
 
 	const closeImportModal = () => {
 		if (importing) return;
@@ -33,9 +54,13 @@ export function MemberPackageForms({
 
 	const handleImportMember = async () => {
 		if (!importMarkdown.trim() || importing) return;
+		const chosen = scopeChoices.find((c) => c.key === selectedScopeKey) ?? scopeChoices[0];
 		setImporting(true);
 		try {
-			const res = await importMemberPackage(importMarkdown);
+			const res = await importMemberPackage(
+				importMarkdown,
+				chosen ? { roleScope: chosen.roleScope, ownerOrgId: chosen.ownerOrgId } : undefined,
+			);
 			setImportMarkdown("");
 			onCloseImportMember();
 			onNotice(`已导入角色「${res.member.displayName}」`);
@@ -95,6 +120,20 @@ export function MemberPackageForms({
 					</>
 				}
 			>
+				<label className="identity-field">
+					<span className="identity-field-label">导入后的角色使用范围</span>
+					<select
+						className="input-field"
+						value={selectedScopeKey}
+						onChange={(e) => setSelectedScopeKey(e.target.value)}
+					>
+						{scopeChoices.map((choice) => (
+							<option key={choice.key} value={choice.key}>
+								{choice.label}
+							</option>
+						))}
+					</select>
+				</label>
 				<label className="file-upload-label">
 					<span>选择本地 .md 文件：</span>
 					<input type="file" accept=".md,text/markdown" onChange={handleImportFileChange} />

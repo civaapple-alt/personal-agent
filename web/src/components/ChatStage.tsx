@@ -1,5 +1,6 @@
 import { type RefObject, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
+	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
 	CollaborationPresetMode,
 	CollaboratorDto,
@@ -54,6 +55,8 @@ interface ChatStageProps {
 	demoStepBusy?: boolean;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	currentUser?: CollaboratorDto | null;
+	accountUser?: AccountUserDto | null;
+	isSuperAdmin?: boolean;
 	canDispatchAi?: boolean;
 	collaborators?: CollaboratorDto[];
 	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
@@ -155,6 +158,8 @@ export function ChatStage({
 	demoStepBusy,
 	composerRef,
 	currentUser,
+	accountUser = null,
+	isSuperAdmin = false,
 	canDispatchAi,
 	collaborators = [],
 	orgMembersByOrgId = {},
@@ -486,6 +491,7 @@ export function ChatStage({
 		return members.filter(
 			(m) =>
 				orgEffectiveMemberIds.includes(m.id) ||
+				m.roleScope === "personal" ||
 				isArchitectMemberId(m.id, members, templateByRoleId) ||
 				m.id === matterDetail?.matter.leadMemberId,
 		);
@@ -744,6 +750,10 @@ export function ChatStage({
 				elapsedSeconds={elapsedSeconds}
 				streamingDelta={streamingDelta}
 				isOwner={isOwner}
+				isSuperAdmin={isSuperAdmin}
+				accountUser={accountUser}
+				currentUser={currentUser}
+				organizations={organizations}
 				isTurnRunning={isTurnRunning}
 				members={members}
 				memberName={memberName}

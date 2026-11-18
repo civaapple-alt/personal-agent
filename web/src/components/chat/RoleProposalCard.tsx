@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
-import type { ApplyMatterRoleProposalsPayload, TeamMemberDto } from "../../api.ts";
-import type { MatterRoleJoinMode, RoleProposalPayloadDto } from "../../architectApi.ts";
+import { useEffect, useMemo, useState } from "react";
+import type {
+	AccountUserDto,
+	ApplyMatterRoleProposalsPayload,
+	CollaboratorDto,
+	NewSkillDraftDto,
+	OrganizationDto,
+	TeamMemberDto,
+} from "../../api.ts";
+import { buildRoleScopeChoices, type MatterRoleJoinMode, type RoleProposalPayloadDto } from "../../architectApi.ts";
 import { formatRoleToolTierLabel } from "../../utils.ts";
+import { NewSkillsDraftSection } from "../team/NewSkillsDraftSection.tsx";
 import { RoleCapabilityDetails, RoleFindingEvidence } from "../team/RoleDesignDetails.tsx";
 
 interface RoleProposalCardProps {
@@ -10,6 +18,11 @@ interface RoleProposalCardProps {
 	proposals: RoleProposalPayloadDto;
 	isArchitectMatter: boolean;
 	isOwner: boolean;
+	isSuperAdmin?: boolean;
+	accountUser?: AccountUserDto | null;
+	currentUser?: CollaboratorDto | null;
+	organizations?: OrganizationDto[];
+	matterOrgId?: string | null;
 	isTurnRunning: boolean;
 	members: TeamMemberDto[];
 	memberName: (id: string) => string;
@@ -42,6 +55,11 @@ export function RoleProposalCard({
 	proposals,
 	isArchitectMatter,
 	isOwner,
+	isSuperAdmin = false,
+	accountUser = null,
+	currentUser = null,
+	organizations = [],
+	matterOrgId = null,
 	isTurnRunning,
 	members,
 	memberName,
@@ -59,12 +77,45 @@ export function RoleProposalCard({
 	const [joinMode, setJoinMode] = useState<MatterRoleJoinMode>(() =>
 		proposals.isMidMatterConsult || !isArchitectMatter ? "consult" : "none",
 	);
+	const [newSkillsByBlueprint, setNewSkillsByBlueprint] = useState<Record<number, NewSkillDraftDto[]>>(() =>
+		Object.fromEntries(proposals.blueprints.map((bp, idx) => [idx, bp.draft.newSkills ?? []])),
+	);
+	const [selectedNewSkillsByBlueprint, setSelectedNewSkillsByBlueprint] = useState<Record<number, number[]>>(() =>
+		Object.fromEntries(
+			proposals.blueprints.map((bp, idx) => [idx, (bp.draft.newSkills ?? []).map((_, skillIdx) => skillIdx)]),
+		),
+	);
+	const scopeChoices = useMemo(
+		() => buildRoleScopeChoices({ isSuperAdmin, accountUser, currentUser, organizations }),
+		[isSuperAdmin, accountUser, currentUser, organizations],
+	);
+	const preferredScopeKey =
+		(matterOrgId && scopeChoices.find((c) => c.ownerOrgId === matterOrgId)?.key) ||
+		scopeChoices[0]?.key ||
+		"personal";
+	const [selectedScopeKey, setSelectedScopeKey] = useState<string>(preferredScopeKey);
+	const activeScopeChoice = scopeChoices.find((c) => c.key === selectedScopeKey) ??
+		scopeChoices[0] ?? { key: "personal", roleScope: "personal" as const, ownerOrgId: null, label: "个人私有" };
 	const [busy, setBusy] = useState(false);
 
 	useEffect(() => {
 		setSelectedBlueprintIndices(proposals.blueprints.map((_, idx) => idx));
 		setSelectedAdjustIds((proposals.roleAdjustments ?? []).map((adj) => adj.memberId));
+		setNewSkillsByBlueprint(
+			Object.fromEntries(proposals.blueprints.map((bp, idx) => [idx, bp.draft.newSkills ?? []])),
+		);
+		setSelectedNewSkillsByBlueprint(
+			Object.fromEntries(
+				proposals.blueprints.map((bp, idx) => [idx, (bp.draft.newSkills ?? []).map((_, skillIdx) => skillIdx)]),
+			),
+		);
 	}, [proposals.blueprints, proposals.roleAdjustments]);
+
+	useEffect(() => {
+		if (!scopeChoices.some((c) => c.key === selectedScopeKey)) {
+			setSelectedScopeKey(preferredScopeKey);
+		}
+	}, [scopeChoices, selectedScopeKey, preferredScopeKey]);
 
 	const toggleBlueprint = (idx: number) => {
 		setSelectedBlueprintIndices((prev) =>
@@ -78,7 +129,13 @@ export function RoleProposalCard({
 		);
 	};
 
-	const totalSelected = selectedBlueprintIndices.length + selectedAdjustIds.length;
+	const canManageScopeOrgs =
+		isSuperAdmin ||
+		organizations.some((o) => o.orgRole === "org_owner" || o.orgRole === "org_admin") ||
+		(!accountUser && currentUser?.permissionRole !== "collaborator");
+	const canApplyBlueprints = isOwner && scopeChoices.length > 0;
+	const canApplyAdjustments = isOwner && canManageScopeOrgs;
+	const totalSelected = selectedBlueprintIndices.length + (canApplyAdjustments ? selectedAdjustIds.length : 0);
 	const existingMemberIds = new Set(members.map((m) => m.id));
 	const appliedValidIds = (proposals.appliedMemberIds ?? []).filter((id) => existingMemberIds.has(id));
 
@@ -87,23 +144,37 @@ export function RoleProposalCard({
 		setBusy(true);
 		try {
 			const selectedMembers = selectedBlueprintIndices
-				.map((idx) => proposals.blueprints[idx])
-				.filter((bp): bp is NonNullable<typeof bp> => Boolean(bp))
-				.map(({ draft }) => ({
-					id: draft.template.id,
-					name: draft.template.name,
-					title: draft.template.title,
-					responsibilities: draft.template.sections.responsibilitiesAndBoundaries,
-					keywords: draft.template.keywords,
-					skills: draft.template.skills,
-					mcpDependencies: draft.template.mcpDependencies,
-					tools: draft.template.tools,
-					antiJobs: draft.antiJobs,
-					sections: draft.template.sections,
-					isPrimaryContact: false,
-				}));
+				.map((idx) => {
+					const bp = proposals.blueprints[idx];
+					if (!bp) return null;
+					const { draft } = bp;
+					const editedSkills = newSkillsByBlueprint[idx] ?? draft.newSkills ?? [];
+					const chosenIndices = selectedNewSkillsByBlueprint[idx] ?? [];
+					const confirmedNewSkills = chosenIndices
+						.map((sIdx) => editedSkills[sIdx])
+						.filter((s): s is NewSkillDraftDto =>
+							Boolean(s?.name.trim() && s.description.trim() && s.body.trim()),
+						);
+					return {
+						id: draft.template.id,
+						name: draft.template.name,
+						title: draft.template.title,
+						roleScope: activeScopeChoice.roleScope,
+						ownerOrgId: activeScopeChoice.ownerOrgId,
+						responsibilities: draft.template.sections.responsibilitiesAndBoundaries,
+						keywords: draft.template.keywords,
+						skills: draft.template.skills,
+						...(confirmedNewSkills.length > 0 ? { newSkills: confirmedNewSkills } : {}),
+						mcpDependencies: draft.template.mcpDependencies,
+						tools: draft.template.tools,
+						antiJobs: draft.antiJobs,
+						sections: draft.template.sections,
+						isPrimaryContact: false,
+					};
+				})
+				.filter((item): item is NonNullable<typeof item> => Boolean(item));
 			const selectedAdjustments = (proposals.roleAdjustments ?? [])
-				.filter((adj) => selectedAdjustIds.includes(adj.memberId))
+				.filter((adj) => canApplyAdjustments && selectedAdjustIds.includes(adj.memberId))
 				.map((adj) => ({
 					memberId: adj.memberId,
 					...(adj.suggestedTools ? { tools: adj.suggestedTools } : {}),
@@ -156,8 +227,8 @@ export function RoleProposalCard({
 						<strong>建议调整现有角色（勾选确认后生效）</strong>
 					</div>
 					{proposals.roleAdjustments.map((adj) => {
-						const checked = selectedAdjustIds.includes(adj.memberId);
-						const disabled = proposals.status !== "pending" || !isOwner;
+						const checked = canApplyAdjustments && selectedAdjustIds.includes(adj.memberId);
+						const disabled = proposals.status !== "pending" || !canApplyAdjustments;
 						return (
 							<label
 								key={adj.memberId}
@@ -206,9 +277,11 @@ export function RoleProposalCard({
 					</div>
 					{proposals.blueprints.map((bp, idx) => {
 						const checked = selectedBlueprintIndices.includes(idx);
-						const disabled = proposals.status !== "pending" || !isOwner;
+						const disabled = proposals.status !== "pending" || !canApplyBlueprints;
+						const bpNewSkills = newSkillsByBlueprint[idx] ?? bp.draft.newSkills ?? [];
+						const bpSelectedSkillIndices = selectedNewSkillsByBlueprint[idx] ?? [];
 						return (
-							<label
+							<div
 								key={`${bp.draft.template.id}-${idx}`}
 								className={`architect-blueprint-card ${checked ? "selected" : ""}`}
 							>
@@ -216,6 +289,7 @@ export function RoleProposalCard({
 									type="checkbox"
 									checked={checked}
 									disabled={disabled}
+									aria-label={`选择角色 ${bp.draft.template.name}`}
 									onChange={() => toggleBlueprint(idx)}
 								/>
 								<div className="architect-blueprint-body">
@@ -237,8 +311,31 @@ export function RoleProposalCard({
 									{bp.rationale && (
 										<div className="architect-blueprint-rationale">定位理由：{bp.rationale}</div>
 									)}
+									{checked && (
+										<NewSkillsDraftSection
+											skills={bpNewSkills}
+											selectedIndices={bpSelectedSkillIndices}
+											roleScope={activeScopeChoice.roleScope}
+											isSuperAdmin={isSuperAdmin}
+											disabled={disabled}
+											onToggle={(skillIdx) =>
+												setSelectedNewSkillsByBlueprint((prev) => {
+													const current = prev[idx] ?? [];
+													return {
+														...prev,
+														[idx]: current.includes(skillIdx)
+															? current.filter((item) => item !== skillIdx)
+															: [...current, skillIdx],
+													};
+												})
+											}
+											onChangeSkills={(next) =>
+												setNewSkillsByBlueprint((prev) => ({ ...prev, [idx]: next }))
+											}
+										/>
+									)}
 								</div>
-							</label>
+							</div>
 						);
 					})}
 				</div>
@@ -273,8 +370,24 @@ export function RoleProposalCard({
 				</div>
 			)}
 
-			{proposals.status === "pending" && totalSelected > 0 && isOwner && (
+			{proposals.status === "pending" && totalSelected > 0 && (canApplyBlueprints || canApplyAdjustments) && (
 				<div className="role-proposal-footer">
+					{selectedBlueprintIndices.length > 0 && scopeChoices.length > 0 && (
+						<label className="role-proposal-join-select">
+							<span>使用范围：</span>
+							<select
+								className="wechat-row-select"
+								value={activeScopeChoice.key}
+								onChange={(e) => setSelectedScopeKey(e.target.value)}
+							>
+								{scopeChoices.map((choice) => (
+									<option key={choice.key} value={choice.key}>
+										{choice.label}
+									</option>
+								))}
+							</select>
+						</label>
+					)}
 					{!isArchitectMatter && selectedBlueprintIndices.length > 0 && (
 						<label className="role-proposal-join-select">
 							<span>新建角色加入本事项：</span>

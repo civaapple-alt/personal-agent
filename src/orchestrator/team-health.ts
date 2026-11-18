@@ -11,15 +11,49 @@ export interface TeamHealthEvidence {
 	excerpt: string;
 }
 
+export interface TeamHealthScopeFilter {
+	allowedMemberIds?: Set<string>;
+	orgId?: string | null;
+	allowedOrgIds?: Set<string>;
+	actorUserId?: string | null;
+}
+
+export function filterTeamMembersForScope<
+	T extends { id: string; roleScope?: string; ownerOrgId?: string | null; ownerUserId?: string | null },
+>(members: T[], scope?: TeamHealthScopeFilter): T[] {
+	if (!scope) return members;
+	return members.filter((member) => {
+		if (scope.allowedMemberIds && !scope.allowedMemberIds.has(member.id)) return false;
+		const roleScope = member.roleScope ?? (member.ownerUserId ? "personal" : member.ownerOrgId ? "org" : "global");
+		if (roleScope === "personal") {
+			return Boolean(scope.actorUserId && member.ownerUserId === scope.actorUserId);
+		}
+		if (roleScope === "org") {
+			if (scope.orgId) return member.ownerOrgId === scope.orgId;
+			if (scope.allowedOrgIds) return Boolean(member.ownerOrgId && scope.allowedOrgIds.has(member.ownerOrgId));
+		}
+		return true;
+	});
+}
+
 /** Bounded source records, separate from the model's interpretation of their cause or importance. */
 export function collectTeamHealthEvidence(
 	store: PersonalAgentStore,
 	templates: Map<string, RoleTemplate>,
+	scope?: TeamHealthScopeFilter,
 ): TeamHealthEvidence[] {
 	const sources: TeamHealthEvidence[] = [];
-	const members = store
-		.listMembers()
-		.filter((member) => !isArchitectRoleTemplate(templates.get(member.templateId) ?? { id: member.id }));
+	const members = filterTeamMembersForScope(store.listMembers(), scope).filter(
+		(member) => !isArchitectRoleTemplate(templates.get(member.templateId) ?? { id: member.id }),
+	);
+	const memberIds = new Set(members.map((m) => m.id));
+	const scopedMatters = store.listMatters().filter((matter) => {
+		if (!scope) return true;
+		if (scope.orgId) return matter.orgId === scope.orgId;
+		if (scope.allowedOrgIds) return !matter.orgId || scope.allowedOrgIds.has(matter.orgId);
+		return true;
+	});
+	const scopedMatterIds = new Set(scopedMatters.map((m) => m.id));
 	for (const member of members.slice(0, 16)) {
 		const role = templates.get(member.templateId);
 		sources.push({
@@ -30,7 +64,7 @@ export function collectTeamHealthEvidence(
 			excerpt: `工具 ${role?.tools.join(",") || "无"}；Skills ${role?.skills.join(",") || "无"}；${role?.sections.responsibilitiesAndBoundaries.slice(0, 260) ?? "定义缺失"}`,
 		});
 	}
-	for (const matter of store.listMatters().slice(0, 8)) {
+	for (const matter of scopedMatters.slice(0, 8)) {
 		const messages = store
 			.listMessages(matter.id, "user")
 			.filter(
@@ -53,7 +87,10 @@ export function collectTeamHealthEvidence(
 	}
 	for (const delivery of store
 		.listDeliverables()
-		.filter((item) => item.feedbackRating === "negative")
+		.filter(
+			(item) =>
+				item.feedbackRating === "negative" && scopedMatterIds.has(item.matterId) && memberIds.has(item.memberId),
+		)
 		.slice(0, 4)) {
 		sources.push({
 			id: `feedback:${delivery.id}`,
@@ -67,10 +104,18 @@ export function collectTeamHealthEvidence(
 	for (const member of members) {
 		const corrections = store
 			.listMemberMemories(member.id)
-			.filter(
-				(memory) =>
-					memory.category === "user_correction" && memory.status !== "rejected" && memory.status !== "superseded",
-			)
+			.filter((memory) => {
+				if (
+					memory.category !== "user_correction" ||
+					memory.status === "rejected" ||
+					memory.status === "superseded"
+				) {
+					return false;
+				}
+				if (scope?.orgId && memory.orgId && memory.orgId !== scope.orgId) return false;
+				if (scope?.allowedOrgIds && memory.orgId && !scope.allowedOrgIds.has(memory.orgId)) return false;
+				return true;
+			})
 			.slice(0, 1);
 		for (const memory of corrections)
 			sources.push({

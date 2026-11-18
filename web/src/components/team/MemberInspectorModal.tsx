@@ -11,6 +11,7 @@ import {
 	updateMemberMemory,
 	type WorkspaceDto,
 } from "../../api.ts";
+import { getMemberScopeBadge } from "../../architectApi.ts";
 import {
 	defaultMemberGitName,
 	formatMemberGitIdentity,
@@ -29,6 +30,8 @@ interface MemberInspectorModalProps {
 	template?: RoleTemplateDto;
 	memories: MemberMemoryDto[];
 	initialTab: "identity" | "memories";
+	canEditIdentity?: boolean;
+	canCurateMemories?: boolean;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
@@ -54,6 +57,8 @@ export function MemberInspectorModal({
 	template,
 	memories,
 	initialTab,
+	canEditIdentity = true,
+	canCurateMemories = true,
 	members,
 	workspaces,
 	organizations,
@@ -167,6 +172,11 @@ export function MemberInspectorModal({
 							<div className="member-name-row">
 								<strong>{member.displayName}</strong>
 								{member.isPrimaryContact && <span className="pill live">默认主联系</span>}
+								<span
+									className={`pill role-scope-pill is-${getMemberScopeBadge(member, organizationName).scope}`}
+								>
+									{getMemberScopeBadge(member, organizationName).label}
+								</span>
 							</div>
 							<div className="member-sub">
 								{member.roleTitle} · {member.model} · ID：{member.id}
@@ -215,6 +225,7 @@ export function MemberInspectorModal({
 								<span className="identity-field-label">团队显示名</span>
 								<input
 									className="input-field"
+									disabled={!canEditIdentity}
 									value={editDisplayName}
 									onChange={(e) => setEditDisplayName(e.target.value)}
 								/>
@@ -223,6 +234,7 @@ export function MemberInspectorModal({
 								<span className="identity-field-label">职位头衔</span>
 								<input
 									className="input-field"
+									disabled={!canEditIdentity}
 									value={editRoleTitle}
 									onChange={(e) => setEditRoleTitle(e.target.value)}
 								/>
@@ -231,6 +243,7 @@ export function MemberInspectorModal({
 								<span className="identity-field-label">Git Author 名称</span>
 								<input
 									className="input-field"
+									disabled={!canEditIdentity}
 									placeholder="如：R&D Lead"
 									value={editGitName}
 									onChange={(e) => setEditGitName(e.target.value)}
@@ -240,6 +253,7 @@ export function MemberInspectorModal({
 								<span className="identity-field-label">Git Author 邮箱</span>
 								<input
 									className="input-field"
+									disabled={!canEditIdentity}
 									placeholder="如：rd@acme.dev"
 									value={editGitEmail}
 									onChange={(e) => setEditGitEmail(e.target.value)}
@@ -252,6 +266,7 @@ export function MemberInspectorModal({
 							<textarea
 								rows={3}
 								className="input-field identity-textarea"
+								disabled={!canEditIdentity}
 								placeholder="补充该角色在当前团队/项目中的分工偏好、关注重点或边界说明"
 								value={editIdentitySummary}
 								onChange={(e) => setEditIdentitySummary(e.target.value)}
@@ -299,16 +314,18 @@ export function MemberInspectorModal({
 							</span>
 							<div className="ui-row-actions">
 								<button type="button" className="btn-pill-outline" onClick={onClose}>
-									取消
+									{canEditIdentity ? "取消" : "关闭"}
 								</button>
-								<button
-									type="button"
-									className="btn-pill-dark"
-									disabled={savingIdentity}
-									onClick={() => void handleSaveIdentity()}
-								>
-									{savingIdentity ? "保存中…" : "保存身份"}
-								</button>
+								{canEditIdentity && (
+									<button
+										type="button"
+										className="btn-pill-dark"
+										disabled={savingIdentity}
+										onClick={() => void handleSaveIdentity()}
+									>
+										{savingIdentity ? "保存中…" : "保存身份"}
+									</button>
+								)}
 							</div>
 						</div>
 					</div>
@@ -359,7 +376,7 @@ export function MemberInspectorModal({
 										</option>
 									))}
 								</select>
-								{candidateCount > 0 && (
+								{candidateCount > 0 && canCurateMemories && (
 									<button
 										type="button"
 										className="btn-pill-dark btn-xs"
@@ -369,13 +386,15 @@ export function MemberInspectorModal({
 										{batchApproving ? "核验中..." : `全部通过 (${candidateCount})`}
 									</button>
 								)}
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
-									onClick={() => setShowAddMemory((prev) => !prev)}
-								>
-									{showAddMemory ? "取消录入" : "+ 录入经验"}
-								</button>
+								{canCurateMemories && (
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										onClick={() => setShowAddMemory((prev) => !prev)}
+									>
+										{showAddMemory ? "取消录入" : "+ 录入经验"}
+									</button>
+								)}
 							</div>
 						</div>
 

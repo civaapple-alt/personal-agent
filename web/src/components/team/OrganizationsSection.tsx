@@ -221,12 +221,18 @@ export function OrganizationsSection({
 		}
 	};
 
+	const getEligibleOrgMembers = (orgId: string | null) =>
+		businessMembers.filter(
+			(m) => m.roleScope !== "personal" && (m.roleScope !== "org" || (Boolean(orgId) && m.ownerOrgId === orgId)),
+		);
+
 	const openAiModal = (orgId: string) => {
+		const eligible = getEligibleOrgMembers(orgId);
 		const entry = orgAiRolesByOrgId[orgId];
-		const enabledIds = entry ? entry.effectiveMemberIds : businessMembers.map((m) => m.id);
+		const enabledIds = entry ? entry.effectiveMemberIds : eligible.map((m) => m.id);
 		const primaryConfig = entry?.configs.find((c) => c.enabled && c.isPrimaryContact);
 		const fallbackPrimary =
-			businessMembers.find((m) => enabledIds.includes(m.id) && m.isPrimaryContact)?.id ?? enabledIds[0] ?? "";
+			eligible.find((m) => enabledIds.includes(m.id) && m.isPrimaryContact)?.id ?? enabledIds[0] ?? "";
 		setDraftEnabledAiIds(enabledIds);
 		setDraftPrimaryAiId(primaryConfig?.memberId ?? fallbackPrimary);
 		setAiModalOrgId(orgId);
@@ -234,9 +240,10 @@ export function OrganizationsSection({
 
 	const handleSaveAiRoles = async () => {
 		if (!aiModalOrgId || savingAiRoles) return;
+		const eligible = getEligibleOrgMembers(aiModalOrgId);
 		setSavingAiRoles(true);
 		try {
-			const payload = businessMembers.map((m) => ({
+			const payload = eligible.map((m) => ({
 				memberId: m.id,
 				enabled: draftEnabledAiIds.includes(m.id),
 				isPrimaryContact: draftEnabledAiIds.includes(m.id) && draftPrimaryAiId === m.id,
@@ -302,7 +309,8 @@ export function OrganizationsSection({
 								const boundWs = workspaces.filter((ws) => ws.orgId === org.id);
 								const membersList = orgMembersByOrgId[org.id] ?? [];
 								const aiEntry = orgAiRolesByOrgId[org.id];
-								const activeAiCount = aiEntry ? aiEntry.effectiveMemberIds.length : businessMembers.length;
+								const orgEligibleCount = getEligibleOrgMembers(org.id).length;
+								const activeAiCount = aiEntry ? aiEntry.effectiveMemberIds.length : orgEligibleCount;
 								const canManageThisOrg =
 									isSuperAdmin ||
 									org.orgRole === "org_owner" ||
@@ -680,7 +688,7 @@ export function OrganizationsSection({
 				}
 			>
 				<div className="org-ai-checklist">
-					{businessMembers.map((m) => {
+					{getEligibleOrgMembers(aiModalOrgId).map((m) => {
 						const enabled = draftEnabledAiIds.includes(m.id);
 						return (
 							<div key={m.id} className="org-ai-config-row">

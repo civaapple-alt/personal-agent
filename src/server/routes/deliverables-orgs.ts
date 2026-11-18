@@ -175,7 +175,9 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 		}
 		if (Array.isArray(body.aiMemberIds)) {
 			const enabledSet = new Set(parseUserIdList(body.aiMemberIds));
-			const allMembers = store.listMembers().filter((m) => !m.ownerOrgId || m.ownerOrgId === orgWithDir.id);
+			const allMembers = store
+				.listMembers()
+				.filter((m) => m.roleScope === "global" || (m.roleScope === "org" && m.ownerOrgId === orgWithDir.id));
 			const primaryId =
 				typeof body.primaryAiMemberId === "string" && enabledSet.has(body.primaryAiMemberId)
 					? body.primaryAiMemberId

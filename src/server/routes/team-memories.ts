@@ -1,9 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
-import { assessRoleCapabilities } from "../../roles/capabilities.ts";
+import { assessRoleCapabilities, validateSkillReference } from "../../roles/capabilities.ts";
 import {
 	applyRoleTemplatePatch,
 	buildRoleDesignDraft,
@@ -15,20 +12,39 @@ import {
 	type RoleWorkspaceScope,
 } from "../../roles/role-architect.ts";
 import {
+	allowedSkillScopesForRole,
+	buildScopedRoleId,
+	deleteRolePackage,
+	saveRolePackage,
+	validateNewSkillDrafts,
+} from "../../roles/role-package-store.ts";
+import {
 	formatRoleTemplateBody,
+	parseRoleScope,
 	parseRoleTemplateMarkdown,
 	parseRoleThinkingLevel,
 	serializeRoleTemplateMarkdown,
 	validateRoleTemplateId,
 } from "../../roles/template-loader.ts";
-import type { RoleTemplate } from "../../roles/types.ts";
+import type { NewSkillDraft, RoleScope, RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
 import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMember } from "../../storage/types.ts";
-import { canAccessMatter, canAccessOrganization, canManageOrganization } from "../acl.ts";
-import { isSuperAdminActor, requireActiveActor, requireOwner } from "../auth.ts";
+import {
+	canAccessMatter,
+	canAccessOrganization,
+	canAccessWorkspace,
+	canActorCreateRoleInScope,
+	canActorManageMember,
+	canActorUseMember,
+	canManageOrganization,
+	isViewerInAllOrgsOrTarget,
+	resolveActorAccessibleOrgIds,
+} from "../acl.ts";
+import { isSuperAdminActor, type RequestActor, requireActiveActor, requireOwner } from "../auth.ts";
 import { HttpRequestError, readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
+	auditActorAction,
 	broadcastDistilledMemories,
 	MEMORY_CATEGORIES,
 	type RouteRequest,
@@ -38,49 +54,165 @@ import {
 interface PlannedMember {
 	template: RoleTemplate;
 	identity: Parameters<ServerRouteContext["store"]["updateMemberIdentity"]>[1];
+	newSkills: NewSkillDraft[];
 }
 
-async function saveRoleTemplate(rolesDir: string | undefined, template: RoleTemplate): Promise<void> {
-	if (!rolesDir) return;
-	await mkdir(rolesDir, { recursive: true });
-	const temporary = join(rolesDir, `.${template.id}-${randomUUID()}.tmp`);
-	try {
-		await writeFile(temporary, serializeRoleTemplateMarkdown(template), { encoding: "utf8", flag: "wx" });
-		await rename(temporary, join(rolesDir, `${template.id}.md`));
-	} finally {
-		await rm(temporary, { force: true });
+interface ResolvedRoleScopeTarget {
+	roleScope: RoleScope;
+	ownerOrgId: string | null;
+	ownerUserId: string | null;
+}
+
+function broadcastTeamUpdateForMember(
+	broadcast: ServerRouteContext["broadcast"],
+	payload: unknown,
+	member: Pick<TeamMember, "roleScope" | "ownerOrgId" | "ownerUserId">,
+): void {
+	if (member.roleScope === "personal") {
+		broadcast("team_updated", payload, { userId: member.ownerUserId ?? null });
+		return;
+	}
+	if (member.roleScope === "org") {
+		broadcast("team_updated", payload, { orgId: member.ownerOrgId ?? null });
+		return;
+	}
+	broadcast("team_updated", payload);
+}
+
+function resolveMemberTargetScope(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	rec: Record<string, unknown>,
+	fallbackOrgId?: string | null,
+): ResolvedRoleScopeTarget {
+	const { store } = ctx;
+	const hasExplicitScope = Object.hasOwn(rec, "roleScope") && rec.roleScope !== undefined && rec.roleScope !== null;
+	const parsedExplicitScope = hasExplicitScope ? parseRoleScope(rec.roleScope) : undefined;
+	if (hasExplicitScope && !parsedExplicitScope) {
+		throw new HttpRequestError(400, "roleScope 必须是 global、org 或 personal");
+	}
+	const explicitOrgId = typeof rec.ownerOrgId === "string" && rec.ownerOrgId.trim() ? rec.ownerOrgId.trim() : null;
+
+	let roleScope: RoleScope;
+	if (parsedExplicitScope) {
+		roleScope = parsedExplicitScope;
+	} else if (explicitOrgId) {
+		roleScope = "org";
+	} else if (isSuperAdminActor(actor)) {
+		roleScope = "global";
+	} else if (fallbackOrgId && canManageOrganization(store, actor, fallbackOrgId)) {
+		roleScope = "org";
+	} else if (actor.authKind === "session" && actor.user) {
+		const manageableOrg = store
+			.listUserOrganizations(actor.user.id)
+			.find((org) => org.orgRole === "org_owner" || org.orgRole === "org_admin");
+		roleScope = manageableOrg ? "org" : "personal";
+	} else {
+		roleScope = "personal";
+	}
+
+	let ownerOrgId: string | null = null;
+	if (roleScope === "org") {
+		ownerOrgId = explicitOrgId ?? fallbackOrgId ?? null;
+		if (!ownerOrgId && actor.user) {
+			const manageableOrg = store
+				.listUserOrganizations(actor.user.id)
+				.find((org) => org.orgRole === "org_owner" || org.orgRole === "org_admin");
+			ownerOrgId = manageableOrg?.id ?? null;
+		}
+		if (ownerOrgId && !store.getOrganization(ownerOrgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${ownerOrgId}`);
+		}
+	}
+
+	const check = canActorCreateRoleInScope(store, actor, roleScope, ownerOrgId);
+	if (!check.allowed) {
+		throw new HttpRequestError(403, check.reason ?? "无权在此范围创建 AI 角色");
+	}
+	return {
+		roleScope,
+		ownerOrgId: roleScope === "org" ? ownerOrgId : null,
+		ownerUserId: roleScope === "personal" ? (actor.user?.id ?? null) : null,
+	};
+}
+
+function enforcePersonalQuotaForBatch(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	plannedList: Array<Pick<RoleTemplate, "roleScope">>,
+): void {
+	if (isSuperAdminActor(actor) || !actor.user) return;
+	const newPersonalCount = plannedList.filter((item) => item.roleScope === "personal").length;
+	if (newPersonalCount === 0) return;
+	const current = ctx.store.countPersonalRoles(actor.user.id);
+	if (current + newPersonalCount > actor.user.maxPersonalRoles) {
+		throw new HttpRequestError(
+			403,
+			`个人私有 AI 角色已达配额上限（${current}/${actor.user.maxPersonalRoles}），如需扩容请联系超级管理员`,
+		);
 	}
 }
 
-function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<string>): PlannedMember {
+function planMemberFromBody(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	body: Record<string, unknown>,
+	existingIds: Set<string>,
+	options?: { fallbackOrgId?: string | null },
+): PlannedMember {
 	const name = typeof body.name === "string" ? body.name.trim() : "";
 	const title = typeof body.title === "string" ? body.title.trim() : "";
 	if (!name || !title) {
 		throw new HttpRequestError(400, "name and title are required");
 	}
+	const scopeTarget = resolveMemberTargetScope(ctx, actor, body, options?.fallbackOrgId);
 	const responsibilities =
 		typeof body.responsibilities === "string" && body.responsibilities.trim().length > 0
 			? body.responsibilities.trim()
 			: `- 承担 ${name} 的核心岗位职责与交付产出。`;
-	let rawId =
-		typeof body.id === "string" && body.id.trim().length > 0
-			? body.id.trim()
-			: title
-					.toLowerCase()
-					.replace(/[^a-z0-9]+/g, "-")
-					.replace(/^-|-$/g, "") || `role-${Date.now()}`;
-	if (!body.id && existingIds.has(rawId)) {
-		let idx = 2;
-		while (existingIds.has(`${rawId}-${idx}`)) idx += 1;
-		rawId = `${rawId}-${idx}`;
-	}
-	try {
-		validateRoleTemplateId(rawId);
-	} catch (error) {
-		throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
-	}
-	if (rawId === ROLE_ARCHITECT_MEMBER_ID || existingIds.has(rawId)) {
-		throw new HttpRequestError(409, `Role id already exists or is reserved: ${rawId}`);
+	const hasExplicitId = typeof body.id === "string" && body.id.trim().length > 0;
+	const rawBaseId = hasExplicitId
+		? String(body.id).trim()
+		: title
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-")
+				.replace(/^-|-$/g, "") || `role-${Date.now()}`;
+	let rawId: string;
+	if (scopeTarget.roleScope === "global") {
+		rawId = rawBaseId;
+		if (!hasExplicitId && existingIds.has(rawId)) {
+			let idx = 2;
+			while (existingIds.has(`${rawId}-${idx}`)) idx += 1;
+			rawId = `${rawId}-${idx}`;
+		}
+		try {
+			validateRoleTemplateId(rawId);
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+		if (rawId === ROLE_ARCHITECT_MEMBER_ID || existingIds.has(rawId)) {
+			throw new HttpRequestError(409, `Role id already exists or is reserved: ${rawId}`);
+		}
+	} else {
+		if (rawBaseId === ROLE_ARCHITECT_MEMBER_ID) {
+			throw new HttpRequestError(409, `Role id already exists or is reserved: ${rawBaseId}`);
+		}
+		try {
+			validateRoleTemplateId(rawBaseId);
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+		rawId = buildScopedRoleId({
+			baseId: rawBaseId,
+			roleScope: scopeTarget.roleScope,
+			ownerOrgId: scopeTarget.ownerOrgId,
+			ownerUserId: scopeTarget.ownerUserId,
+			existingIds,
+			allowCollisionSuffix: !hasExplicitId,
+		});
+		if (existingIds.has(rawId)) {
+			throw new HttpRequestError(409, `Role id already exists: ${rawId}`);
+		}
 	}
 	existingIds.add(rawId);
 	const keywords = Array.isArray(body.keywords)
@@ -92,8 +224,15 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 					.filter(Boolean)
 			: [];
 	const skills = Array.isArray(body.skills) ? body.skills.map(String).filter(Boolean) : [];
+	for (const skillName of skills) {
+		try {
+			validateSkillReference(skillName);
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+	}
 	const mcpDependencies = Array.isArray(body.mcpDependencies) ? body.mcpDependencies.map(String).filter(Boolean) : [];
-	if (mcpDependencies.some((name) => !/^[a-zA-Z0-9_-]+$/.test(name)))
+	if (mcpDependencies.some((dep) => !/^[a-zA-Z0-9_-]+$/.test(dep)))
 		throw new HttpRequestError(400, "Invalid MCP dependency name");
 	const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
 	const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
@@ -108,7 +247,21 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 	if ([name, title, model, provider, ...keywords, ...skills, ...antiJobs].some((value) => /[\r\n]/.test(value))) {
 		throw new HttpRequestError(400, "Role metadata fields and array entries must each fit on one line");
 	}
-	const isPrimaryContact = body.isPrimaryContact === true;
+	let newSkills: NewSkillDraft[] = [];
+	if (body.newSkills !== undefined) {
+		try {
+			newSkills = validateNewSkillDrafts(body.newSkills, {
+				roleScope: scopeTarget.roleScope,
+				allowedScopes: allowedSkillScopesForRole(scopeTarget.roleScope, isSuperAdminActor(actor)),
+			});
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+	}
+	if (body.isPrimaryContact === true && scopeTarget.roleScope !== "global") {
+		throw new HttpRequestError(400, "仅平台通用（global）AI 角色可设为全局默认主联系人");
+	}
+	const isPrimaryContact = scopeTarget.roleScope === "global" && body.isPrimaryContact === true;
 	const customSections =
 		body.sections && typeof body.sections === "object" ? (body.sections as Record<string, unknown>) : {};
 	const skillsAndMethods =
@@ -142,8 +295,11 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 		id: rawId,
 		name,
 		title,
+		roleScope: scopeTarget.roleScope,
+		...(scopeTarget.ownerOrgId ? { ownerOrgId: scopeTarget.ownerOrgId } : {}),
+		...(scopeTarget.ownerUserId ? { ownerUserId: scopeTarget.ownerUserId } : {}),
 		version: "1.0.0",
-		shareable: true,
+		shareable: scopeTarget.roleScope === "global",
 		defaultProvider: provider,
 		defaultModel: model,
 		thinkingLevel,
@@ -159,6 +315,7 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 
 	return {
 		template,
+		newSkills,
 		identity: {
 			gitName: typeof body.gitName === "string" ? body.gitName : undefined,
 			gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
@@ -167,7 +324,12 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 	};
 }
 
-function planMembersBatch(ctx: ServerRouteContext, rawList: unknown[]): PlannedMember[] {
+function planMembersBatch(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	rawList: unknown[],
+	options?: { fallbackOrgId?: string | null },
+): PlannedMember[] {
 	const existingIds = new Set(ctx.store.listMembers().map((member) => member.id));
 	const planned: PlannedMember[] = [];
 	for (const item of rawList) {
@@ -175,22 +337,47 @@ function planMembersBatch(ctx: ServerRouteContext, rawList: unknown[]): PlannedM
 			throw new HttpRequestError(400, "Each item in members must be an object");
 		}
 		const rec = item as Record<string, unknown>;
-		planned.push(planMemberFromBody(rec, existingIds));
+		planned.push(planMemberFromBody(ctx, actor, rec, existingIds, options));
 	}
+	enforcePersonalQuotaForBatch(
+		ctx,
+		actor,
+		planned.map((p) => p.template),
+	);
 	return planned;
 }
 
-async function materializeMembersBatch(ctx: ServerRouteContext, planned: PlannedMember[]): Promise<TeamMember[]> {
+async function materializeMembersBatch(
+	ctx: ServerRouteContext,
+	r: RouteRequest,
+	planned: PlannedMember[],
+): Promise<TeamMember[]> {
 	const created: TeamMember[] = [];
-	for (const { template, identity } of planned) {
-		await saveRoleTemplate(ctx.rolesDir, template);
-		const member = ctx.orchestrator.registerRoleTemplate(template);
-		created.push(ctx.store.updateMemberIdentity(member.id, identity));
+	for (const { template, identity, newSkills } of planned) {
+		const saved = await saveRolePackage({
+			rolesDir: ctx.rolesDir,
+			skillsDir: ctx.skillsDir,
+			template,
+			newSkills,
+		});
+		const member = ctx.orchestrator.registerRoleTemplate(saved.template);
+		const updated = ctx.store.updateMemberIdentity(member.id, identity);
+		created.push(updated);
+		auditActorAction(ctx, r.req, r.actor, {
+			action: "role.create",
+			targetType: "role",
+			targetId: updated.id,
+			orgId: updated.ownerOrgId ?? null,
+			detail: {
+				roleScope: updated.roleScope,
+				createdSkills: newSkills.map((s) => ({ name: s.name, storageScope: s.storageScope })),
+			},
+		});
 	}
 	return created;
 }
 
-function planRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): RoleTemplate[] {
+function planRoleAdjustmentsBatch(ctx: ServerRouteContext, actor: RequestActor, rawList: unknown[]): RoleTemplate[] {
 	const { store, orchestrator } = ctx;
 	const planned: RoleTemplate[] = [];
 	const seen = new Set<string>();
@@ -206,6 +393,9 @@ function planRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): 
 				memberId ? 404 : 400,
 				memberId ? `Member not found: ${memberId}` : "memberId is required",
 			);
+		}
+		if (!canActorManageMember(store, actor, member)) {
+			throw new HttpRequestError(403, `无权调整角色 ${member.displayName} 的配置`);
 		}
 		const prev = orchestrator.getTemplateForMember(member);
 		if (!prev) {
@@ -225,17 +415,33 @@ function planRoleAdjustmentsBatch(ctx: ServerRouteContext, rawList: unknown[]): 
 		if (patch.tools === undefined && (!patch.addAntiJobs || patch.addAntiJobs.length === 0) && !patch.workflowNote) {
 			throw new HttpRequestError(400, `Adjustment for ${memberId} has no changes to apply`);
 		}
-		planned.push(applyRoleTemplatePatch(prev, patch));
+		const patched = applyRoleTemplatePatch(prev, patch);
+		patched.roleScope = member.roleScope;
+		patched.ownerOrgId = member.ownerOrgId ?? null;
+		patched.ownerUserId = member.ownerUserId ?? null;
+		planned.push(patched);
 	}
 	return planned;
 }
 
-async function applyRoleAdjustmentsBatch(ctx: ServerRouteContext, planned: RoleTemplate[]): Promise<TeamMember[]> {
-	const { orchestrator, rolesDir } = ctx;
+async function applyRoleAdjustmentsBatch(
+	ctx: ServerRouteContext,
+	r: RouteRequest,
+	planned: RoleTemplate[],
+): Promise<TeamMember[]> {
+	const { orchestrator, rolesDir, skillsDir } = ctx;
 	const updatedMembers: TeamMember[] = [];
 	for (const next of planned) {
-		await saveRoleTemplate(rolesDir, next);
-		updatedMembers.push(orchestrator.registerRoleTemplate(next));
+		const saved = await saveRolePackage({ rolesDir, skillsDir, template: next });
+		const member = orchestrator.registerRoleTemplate(saved.template);
+		updatedMembers.push(member);
+		auditActorAction(ctx, r.req, r.actor, {
+			action: "role.adjust",
+			targetType: "role",
+			targetId: member.id,
+			orgId: member.ownerOrgId ?? null,
+			detail: { roleScope: member.roleScope },
+		});
 	}
 	return updatedMembers;
 }
@@ -267,8 +473,8 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Matter not found: ${matterId}`);
 			return true;
 		}
-		if (!isSuperAdminActor(actor) && !canManageOrganization(store, actor, matter.orgId)) {
-			sendError(res, 403, "仅所有者或组织管理员可应用角色提案");
+		if (!canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
 			return true;
 		}
 		const targetMsg = store.getMessage(messageId);
@@ -289,7 +495,14 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 		const body = await readJsonBody(req);
 		const action = body.action === "dismiss" ? "dismiss" : "apply";
+		const canManageScope = isSuperAdminActor(actor) || canManageOrganization(store, actor, matter.orgId);
+		const isActiveSessionMember =
+			actor.authKind === "session" && actor.user && !isViewerInAllOrgsOrTarget(store, actor, matter.orgId);
 		if (action === "dismiss") {
+			if (!canManageScope && !(isActiveSessionMember && matter.createdByUserId === actor.user?.id)) {
+				sendError(res, 403, "仅所有者、组织管理员或私人事项发起人可处理角色提案");
+				return true;
+			}
 			if (existingProposals.status === "applied") {
 				sendError(res, 409, "Applied role proposals cannot be dismissed");
 				return true;
@@ -299,7 +512,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 				roleProposals: { ...existingProposals, status: "dismissed" },
 			});
 			if (updatedMsg) {
-				broadcast("matter_message", { matterId, message: updatedMsg, matter });
+				broadcast("matter_message", { matterId, message: updatedMsg, matter }, { matterId });
 			}
 			sendJson(res, 200, { ok: true, createdMembers: [], updatedMembers: [], message: updatedMsg, matter });
 			return true;
@@ -327,11 +540,28 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 400, "At most 8 members or adjustments may be applied in one batch");
 			return true;
 		}
+		if (!canManageScope) {
+			if (!isActiveSessionMember) {
+				sendError(res, 403, "仅所有者或组织管理员可应用角色提案");
+				return true;
+			}
+			if (
+				rawAdjustments.length > 0 &&
+				rawAdjustments.some((adj) => {
+					const rec = adj && typeof adj === "object" ? (adj as Record<string, unknown>) : null;
+					const target = typeof rec?.memberId === "string" ? store.getMember(rec.memberId) : null;
+					return !target || !canActorManageMember(store, actor, target);
+				})
+			) {
+				sendError(res, 403, "仅所有者或组织管理员可调整共享角色配置");
+				return true;
+			}
+		}
 
-		const memberPlans = planMembersBatch(ctx, rawMembers);
-		const adjustmentPlans = planRoleAdjustmentsBatch(ctx, rawAdjustments);
-		const createdMembers = await materializeMembersBatch(ctx, memberPlans);
-		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, adjustmentPlans);
+		const memberPlans = planMembersBatch(ctx, actor, rawMembers, { fallbackOrgId: matter.orgId });
+		const adjustmentPlans = planRoleAdjustmentsBatch(ctx, actor, rawAdjustments);
+		const createdMembers = await materializeMembersBatch(ctx, r, memberPlans);
+		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, r, adjustmentPlans);
 		const newIds = createdMembers.map((m) => m.id);
 		let matterMutated = false;
 		if (matterJoinMode !== "none" && newIds.length > 0) {
@@ -358,20 +588,24 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 				appliedMatterJoinMode: matterJoinMode,
 			},
 		});
-		const changedMemberIds = [...newIds, ...updatedMembers.map((m) => m.id)];
-		broadcast("team_updated", { memberIds: changedMemberIds });
+		for (const cm of createdMembers) {
+			broadcastTeamUpdateForMember(broadcast, { memberIds: [cm.id] }, cm);
+		}
+		for (const um of updatedMembers) {
+			broadcastTeamUpdateForMember(broadcast, { memberIds: [um.id] }, um);
+		}
 		if (matterMutated) {
-			broadcast("matter_updated", { matterId: matter.id, reason: "role_proposals_joined" });
+			broadcast("matter_updated", { matterId: matter.id, reason: "role_proposals_joined" }, { matterId: matter.id });
 		}
 		if (updatedMsg) {
-			broadcast("matter_message", { matterId: matter.id, message: updatedMsg, matter });
+			broadcast("matter_message", { matterId: matter.id, message: updatedMsg, matter }, { matterId: matter.id });
 		}
 		sendJson(res, 200, { ok: true, createdMembers, updatedMembers, message: updatedMsg, matter });
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/members/architect/chat") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const rawMessages = Array.isArray(body.messages) ? body.messages : [];
 		const messages: MetaArchitectMessage[] = rawMessages
@@ -389,17 +623,55 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		}
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
-		if (workspaceId && !store.getWorkspace(workspaceId)) {
+		const workspace = workspaceId ? store.getWorkspace(workspaceId) : null;
+		if (workspaceId && !workspace) {
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
+		if (workspace && !canAccessWorkspace(store, actor, workspace)) {
+			sendError(res, 403, "无权访问所选项目仓库");
+			return true;
+		}
+		const explicitOrgId = typeof body.orgId === "string" && body.orgId.trim().length > 0 ? body.orgId.trim() : null;
+		if (explicitOrgId && !store.getOrganization(explicitOrgId)) {
+			sendError(res, 404, `Organization not found: ${explicitOrgId}`);
+			return true;
+		}
+		const effectiveOrgId = explicitOrgId ?? workspace?.orgId ?? null;
+		if (effectiveOrgId && !canAccessOrganization(store, actor, effectiveOrgId)) {
+			sendError(res, 403, "无权访问所选组织");
+			return true;
+		}
+		if (
+			(actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") ||
+			isViewerInAllOrgsOrTarget(store, actor, effectiveOrgId)
+		) {
+			sendError(res, 403, "只读成员或访客口令不支持调用角色架构师");
+			return true;
+		}
+		const targetScope = resolveMemberTargetScope(ctx, actor, body, effectiveOrgId);
+		const canRunOrgHealthcheck =
+			isSuperAdminActor(actor) ||
+			(effectiveOrgId
+				? canManageOrganization(store, actor, effectiveOrgId)
+				: Boolean(
+						actor.user &&
+							store
+								.listUserOrganizations(actor.user.id)
+								.some((org) => org.orgRole === "org_owner" || org.orgRole === "org_admin"),
+					));
 		const cancellation = responseCancellation(res);
 		try {
 			const result = await orchestrator.chatWithRoleArchitect({
 				messages,
 				matterPrompt: typeof body.matterPrompt === "string" ? body.matterPrompt.trim() || undefined : undefined,
 				workspaceId,
-				includeHealthcheck: body.includeHealthcheck === true,
+				orgId: targetScope.ownerOrgId ?? effectiveOrgId,
+				targetRoleScope: targetScope.roleScope,
+				actorUserId: actor.user?.id ?? null,
+				allowedOrgIds: resolveActorAccessibleOrgIds(store, actor),
+				isSuperAdmin: isSuperAdminActor(actor),
+				includeHealthcheck: body.includeHealthcheck === true && canRunOrgHealthcheck,
 				signal: cancellation.signal,
 			});
 			if (res.destroyed || cancellation.signal.aborted) return true;
@@ -411,36 +683,41 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 	}
 
 	if (method === "POST" && pathname === "/api/members/batch") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const rawList = Array.isArray(body.members) ? body.members : [];
 		if (rawList.length === 0 || rawList.length > 8) {
 			sendError(res, 400, "members must be an array of 1 to 8 role payloads");
 			return true;
 		}
-		const created = await materializeMembersBatch(ctx, planMembersBatch(ctx, rawList));
-		broadcast("team_updated", { memberIds: created.map((m) => m.id) });
+		const created = await materializeMembersBatch(ctx, r, planMembersBatch(ctx, actor, rawList));
+		for (const member of created) {
+			broadcastTeamUpdateForMember(broadcast, { memberIds: [member.id] }, member);
+		}
 		sendJson(res, 201, { members: created });
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/members/adjustments/apply") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const rawList = Array.isArray(body.adjustments) ? body.adjustments : [];
 		if (rawList.length === 0 || rawList.length > 8) {
 			sendError(res, 400, "adjustments must be an array of 1 to 8 role updates");
 			return true;
 		}
-		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, planRoleAdjustmentsBatch(ctx, rawList));
-		broadcast("team_updated", { memberIds: updatedMembers.map((m) => m.id) });
+		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, r, planRoleAdjustmentsBatch(ctx, actor, rawList));
+		for (const member of updatedMembers) {
+			broadcastTeamUpdateForMember(broadcast, { memberIds: [member.id] }, member);
+		}
 		sendJson(res, 200, { members: updatedMembers });
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/members/design") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
+		const targetScope = resolveMemberTargetScope(ctx, actor, body);
 		const oneJob = typeof body.oneJob === "string" ? body.oneJob.trim() : "";
 		if (!oneJob) {
 			sendError(res, 400, "oneJob is required");
@@ -468,10 +745,27 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			body.workspaceScope === "no_repo_docs"
 				? (body.workspaceScope as RoleWorkspaceScope)
 				: undefined;
+		const skills = Array.isArray(body.skills)
+			? body.skills.filter((value): value is string => typeof value === "string")
+			: [];
+		for (const s of skills) {
+			try {
+				validateSkillReference(s);
+			} catch (error) {
+				throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+			}
+		}
+		const visibleExistingIds = store
+			.listMembers()
+			.filter((m) => canActorUseMember(store, actor, m))
+			.map((m) => m.id);
 		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
 		const designInput = {
 			oneJob,
 			roleId: typeof body.roleId === "string" ? body.roleId : undefined,
+			roleScope: targetScope.roleScope,
+			ownerOrgId: targetScope.ownerOrgId,
+			ownerUserId: targetScope.ownerUserId,
 			antiJobs,
 			quietWhen: typeof body.quietWhen === "string" ? body.quietWhen : undefined,
 			interactionStyle,
@@ -481,22 +775,21 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			keywords,
 			workflowRules: typeof body.workflowRules === "string" ? body.workflowRules : undefined,
 			constraints: typeof body.constraints === "string" ? body.constraints : undefined,
-			skills: Array.isArray(body.skills)
-				? body.skills.filter((value): value is string => typeof value === "string")
-				: [],
+			skills,
 			mcpDependencies: Array.isArray(body.mcpDependencies)
 				? body.mcpDependencies.filter((value): value is string => typeof value === "string")
 				: [],
 			communicationStyle: typeof body.communicationStyle === "string" ? body.communicationStyle : undefined,
 			verificationPlan: normalizeRoleVerificationPlan(body.verificationPlan),
-			isPrimaryContact: body.isPrimaryContact === true,
-			existingMemberIds: store.listMembers().map((m) => m.id),
+			isPrimaryContact: targetScope.roleScope === "global" && body.isPrimaryContact === true,
+			existingMemberIds: visibleExistingIds,
 		};
 		if (mode === "model") {
 			const cancellation = responseCancellation(res);
 			try {
 				const draft = await orchestrator.designRoleWithModel({
 					...designInput,
+					allowedOrgIds: resolveActorAccessibleOrgIds(store, actor),
 					signal: cancellation.signal,
 				});
 				if (res.destroyed || cancellation.signal.aborted) return true;
@@ -517,27 +810,32 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		sendJson(res, 200, {
 			...draft,
 			designSource: "rules",
-			capabilityReport: await assessRoleCapabilities(draft.template),
+			capabilityReport: await assessRoleCapabilities(draft.template, { skillsDir: ctx.skillsDir }),
 		});
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/members") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
-		const [member] = await materializeMembersBatch(ctx, planMembersBatch(ctx, [body]));
+		const [member] = await materializeMembersBatch(ctx, r, planMembersBatch(ctx, actor, [body]));
 		if (!member) throw new Error("Member creation returned no result");
-		broadcast("team_updated", { memberId: member.id });
+		broadcastTeamUpdateForMember(broadcast, { memberId: member.id }, member);
 		sendJson(res, 201, { member });
 		return true;
 	}
 
 	const memberPatchMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
 	if (method === "PATCH" && memberPatchMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const memberId = decodeURIComponent(memberPatchMatch[1]!);
-		if (!store.getMember(memberId)) {
+		const existing = store.getMember(memberId);
+		if (!existing) {
 			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		if (!canActorManageMember(store, actor, existing)) {
+			sendError(res, 403, "无权编辑该 AI 角色的署名与资料");
 			return true;
 		}
 		const body = await readJsonBody(req);
@@ -548,25 +846,34 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			gitEmail: typeof body.gitEmail === "string" ? body.gitEmail : undefined,
 			identitySummary: typeof body.identitySummary === "string" ? body.identitySummary : undefined,
 		});
-		broadcast("team_updated", { memberId: member.id });
+		broadcastTeamUpdateForMember(broadcast, { memberId: member.id }, member);
 		sendJson(res, 200, { member });
 		return true;
 	}
 
 	if (method === "DELETE" && memberPatchMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const memberId = decodeURIComponent(memberPatchMatch[1]!);
 		const existing = store.getMember(memberId);
 		if (!existing) {
 			sendError(res, 404, `Member not found: ${memberId}`);
 			return true;
 		}
+		if (!canActorManageMember(store, actor, existing)) {
+			sendError(res, 403, "无权删除该 AI 角色");
+			return true;
+		}
 		try {
 			const deleted = orchestrator.unregisterRoleTemplate(memberId);
-			if (rolesDir) {
-				await unlink(join(rolesDir, `${deleted.id}.md`)).catch(() => {});
-			}
-			broadcast("team_updated", { removedMemberId: deleted.id });
+			await deleteRolePackage({ rolesDir, member: deleted }).catch(() => {});
+			auditActorAction(ctx, req, actor, {
+				action: "role.delete",
+				targetType: "role",
+				targetId: deleted.id,
+				orgId: deleted.ownerOrgId ?? null,
+				detail: { roleScope: deleted.roleScope },
+			});
+			broadcastTeamUpdateForMember(broadcast, { removedMemberId: deleted.id }, deleted);
 			broadcast("matter_updated", { reason: "member_deleted", memberId: deleted.id });
 			sendJson(res, 200, { ok: true, deletedMemberId: deleted.id });
 		} catch (error) {
@@ -579,6 +886,15 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 	if (method === "POST" && memberPrimaryMatch) {
 		if (!requireOwner(res, actor)) return true;
 		const memberId = decodeURIComponent(memberPrimaryMatch[1]!);
+		const existing = store.getMember(memberId);
+		if (!existing) {
+			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		if (existing.roleScope !== "global") {
+			sendError(res, 400, "仅平台通用（global）AI 角色可设为全局默认主联系人");
+			return true;
+		}
 		const member = store.setPrimaryContact(memberId);
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 200, { member });
@@ -594,8 +910,8 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Member not found: ${memberId}`);
 			return true;
 		}
-		if (member.ownerOrgId && !canAccessOrganization(store, actor, member.ownerOrgId)) {
-			sendError(res, 403, "无权导出其他组织的私有角色");
+		if (!canActorUseMember(store, actor, member)) {
+			sendError(res, 403, "无权导出其他组织或他人的私有角色");
 			return true;
 		}
 		const template = orchestrator.getTemplateForMember(member);
@@ -609,31 +925,80 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 	}
 
 	if (method === "POST" && pathname === "/api/members/import") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const markdown = typeof body.markdown === "string" ? body.markdown : "";
 		if (!markdown.trim()) {
 			sendError(res, 400, "markdown is required");
 			return true;
 		}
+		const targetScope = resolveMemberTargetScope(ctx, actor, body);
 		let parsed: RoleTemplate;
 		try {
 			parsed = parseRoleTemplateMarkdown(markdown);
+			for (const skillName of parsed.skills) {
+				validateSkillReference(skillName);
+			}
 		} catch (error) {
 			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
 		}
 		if (parsed.id === ROLE_ARCHITECT_MEMBER_ID) {
 			throw new HttpRequestError(409, "Built-in role architect cannot be replaced by an imported role");
 		}
-		await saveRoleTemplate(rolesDir, parsed);
-		const member = orchestrator.registerRoleTemplate(parsed);
-		broadcast("team_updated", { memberId: member.id });
+		const existingIds = new Set(store.listMembers().map((m) => m.id));
+		const targetId =
+			targetScope.roleScope === "global"
+				? parsed.id
+				: buildScopedRoleId({
+						baseId: parsed.id,
+						roleScope: targetScope.roleScope,
+						ownerOrgId: targetScope.ownerOrgId,
+						ownerUserId: targetScope.ownerUserId,
+						existingIds,
+						allowCollisionSuffix: false,
+					});
+		const existingMember = store.getMember(targetId);
+		if (existingMember) {
+			const sameScope =
+				existingMember.roleScope === targetScope.roleScope &&
+				(existingMember.ownerOrgId ?? null) === targetScope.ownerOrgId &&
+				(existingMember.ownerUserId ?? null) === targetScope.ownerUserId;
+			if (!sameScope || !canActorManageMember(store, actor, existingMember)) {
+				throw new HttpRequestError(409, `Role id "${targetId}" conflicts with an existing role`);
+			}
+		} else {
+			enforcePersonalQuotaForBatch(ctx, actor, [{ roleScope: targetScope.roleScope }]);
+		}
+		const scopedTemplate: RoleTemplate = {
+			...parsed,
+			id: targetId,
+			roleScope: targetScope.roleScope,
+			ownerOrgId: targetScope.ownerOrgId,
+			ownerUserId: targetScope.ownerUserId,
+			shareable: targetScope.roleScope === "global" ? parsed.shareable : false,
+			isPrimaryContact:
+				targetScope.roleScope === "global" && isSuperAdminActor(actor) ? parsed.isPrimaryContact : false,
+		};
+		const saved = await saveRolePackage({
+			rolesDir,
+			skillsDir: ctx.skillsDir,
+			template: scopedTemplate,
+		});
+		const member = orchestrator.registerRoleTemplate(saved.template);
+		auditActorAction(ctx, req, actor, {
+			action: "role.import",
+			targetType: "role",
+			targetId: member.id,
+			orgId: member.ownerOrgId ?? null,
+			detail: { roleScope: member.roleScope },
+		});
+		broadcastTeamUpdateForMember(broadcast, { memberId: member.id }, member);
 		sendJson(res, 201, { member });
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/memories") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const memberId = typeof body.memberId === "string" ? body.memberId.trim() : "";
 		const content = typeof body.content === "string" ? body.content.trim() : "";
@@ -642,8 +1007,16 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 400, "memberId and content are required");
 			return true;
 		}
-		if (!store.getMember(memberId)) {
+		const targetMember = store.getMember(memberId);
+		if (!targetMember) {
 			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		if (
+			!isSuperAdminActor(actor) &&
+			!(targetMember.roleScope === "personal" && canActorManageMember(store, actor, targetMember))
+		) {
+			sendError(res, 403, "只有团队所有者可添加共享角色的经验");
 			return true;
 		}
 		if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {

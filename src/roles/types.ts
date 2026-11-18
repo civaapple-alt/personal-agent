@@ -10,6 +10,17 @@ export interface RoleTemplateSections {
 
 export type RoleKind = "business" | "architect";
 
+export type RoleScope = "global" | "org" | "personal";
+
+export type SkillStorageScope = "role_local" | "global" | "org" | "personal";
+
+export interface NewSkillDraft {
+	name: string;
+	description: string;
+	body: string;
+	storageScope: SkillStorageScope;
+}
+
 export interface RoleCapabilityReport {
 	skills: Array<{ name: string; state: "file_present" | "missing" }>;
 	mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
@@ -24,6 +35,9 @@ export interface RoleTemplate {
 	name: string;
 	title: string;
 	roleKind?: RoleKind;
+	roleScope?: RoleScope;
+	ownerOrgId?: string | null;
+	ownerUserId?: string | null;
 	version: string;
 	shareable: boolean;
 	defaultProvider: string;

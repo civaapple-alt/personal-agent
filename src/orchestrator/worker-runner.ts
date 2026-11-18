@@ -44,6 +44,7 @@ export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;
 	defaultCwd: string;
 	sessionDir: string | undefined;
+	skillsDir?: string;
 	noSession: boolean;
 	extensions: string[];
 	pstackDir?: string;
@@ -118,7 +119,7 @@ export async function executeWithWorkerPass(
 	try {
 		const template = deps.getTemplateForMember(input.member);
 		const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
-		const skillPaths = await resolveRoleSkills(template);
+		const skillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
 		const pstack = deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
 		const methodTools = pstack ? ["load_pstack_skill"] : [];
 		const previous = deps.noSession
@@ -319,11 +320,17 @@ export async function executeWithWorkerPass(
 						...(isArchitect && deps.getTemplatesById
 							? {
 									extraGuidance: await buildArchitectMatterContext(
-										{ store: deps.store, templatesById: deps.getTemplatesById() },
+										{
+											store: deps.store,
+											templatesById: deps.getTemplatesById(),
+											skillsDir: deps.skillsDir,
+										},
 										{
 											isMidMatterConsult: Boolean(
 												matter?.leadMemberId && matter.leadMemberId !== input.member.id,
 											),
+											orgId: matter?.orgId ?? null,
+											actorUserId: matter?.createdByUserId ?? null,
 										},
 									),
 								}

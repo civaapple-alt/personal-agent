@@ -8,6 +8,15 @@ export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
 export type WorkspaceSourceType = "local" | "cloned";
 export type WorkspaceVisibility = "org" | "restricted";
 export type MatterVisibility = "org" | "private";
+export type RoleScope = "global" | "org" | "personal";
+export type SkillStorageScope = "role_local" | "global" | "org" | "personal";
+
+export interface NewSkillDraftDto {
+	name: string;
+	description: string;
+	body: string;
+	storageScope: SkillStorageScope;
+}
 
 export interface AccountUserDto {
 	id: string;
@@ -17,6 +26,7 @@ export interface AccountUserDto {
 	status: UserStatus;
 	maxOrgs: number;
 	maxActiveDispatches: number;
+	maxPersonalRoles: number;
 	canDispatchAi: boolean;
 	createdAt: string;
 	updatedAt: string;
@@ -31,6 +41,7 @@ export interface PlatformSettingsDto {
 	allowCommandPreviews: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
+	defaultMaxPersonalRoles: number;
 	pstackDir?: string | null;
 	updatedAt: string;
 }
@@ -102,7 +113,9 @@ export interface TeamMemberDto {
 	displayName: string;
 	roleTitle: string;
 	isPrimaryContact: boolean;
+	roleScope?: RoleScope;
 	ownerOrgId?: string | null;
+	ownerUserId?: string | null;
 	provider: string;
 	model: string;
 	thinkingLevel: string;
@@ -337,6 +350,9 @@ export interface RoleTemplateDto {
 	name: string;
 	title: string;
 	roleKind?: "business" | "architect";
+	roleScope?: RoleScope;
+	ownerOrgId?: string | null;
+	ownerUserId?: string | null;
 	version: string;
 	skills: string[];
 	mcpDependencies?: string[];
@@ -398,6 +414,7 @@ export interface RoleArchitectDraftDto {
 	toolSummary: string;
 	recommendedParticipation: RoleInteractionStyle;
 	designNotes: string[];
+	newSkills?: NewSkillDraftDto[];
 	capabilityReport?: {
 		skills: Array<{ name: string; state: "file_present" | "missing" }>;
 		mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
@@ -867,6 +884,8 @@ export function stopPreview(previewId: string): Promise<{ preview: PreviewServic
 export function designRoleDraft(
 	input: {
 		oneJob: string;
+		roleScope?: RoleScope;
+		ownerOrgId?: string | null;
 		antiJobs?: string[];
 		quietWhen?: string;
 		interactionStyle?: RoleInteractionStyle;
@@ -897,6 +916,8 @@ export function chatWithRoleArchitect(
 		messages: MetaArchitectMessageDto[];
 		matterPrompt?: string;
 		workspaceId?: string | null;
+		orgId?: string | null;
+		roleScope?: RoleScope;
 		includeHealthcheck?: boolean;
 	},
 	signal?: AbortSignal,
@@ -912,9 +933,12 @@ export interface CreateMemberPayload {
 	id?: string;
 	name: string;
 	title: string;
+	roleScope?: RoleScope;
+	ownerOrgId?: string | null;
 	responsibilities?: string;
 	keywords?: string[];
 	skills?: string[];
+	newSkills?: NewSkillDraftDto[];
 	mcpDependencies?: string[];
 	tools?: string[];
 	antiJobs?: string[];
@@ -1022,10 +1046,17 @@ export function exportMemberPackage(memberId: string): Promise<{
 	return requestJson(`/api/members/${encodeURIComponent(memberId)}/export`);
 }
 
-export function importMemberPackage(markdown: string): Promise<{ member: TeamMemberDto }> {
+export function importMemberPackage(
+	markdown: string,
+	options?: { roleScope?: RoleScope; ownerOrgId?: string | null },
+): Promise<{ member: TeamMemberDto }> {
 	return requestJson("/api/members/import", {
 		method: "POST",
-		body: JSON.stringify({ markdown }),
+		body: JSON.stringify({
+			markdown,
+			...(options?.roleScope ? { roleScope: options.roleScope } : {}),
+			...(options?.ownerOrgId ? { ownerOrgId: options.ownerOrgId } : {}),
+		}),
 	});
 }
 
@@ -1286,6 +1317,7 @@ export function updateAdminSettings(
 		allowCommandPreviews: boolean;
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
+		defaultMaxPersonalRoles: number;
 	}>,
 ): Promise<{ settings: PlatformSettingsDto }> {
 	return requestJson("/api/admin/settings", {
@@ -1302,6 +1334,7 @@ export function updateAdminUser(
 		status: UserStatus;
 		maxOrgs: number;
 		maxActiveDispatches: number;
+		maxPersonalRoles: number;
 		canDispatchAi: boolean;
 	}>,
 ): Promise<{ user: AccountUserDto }> {

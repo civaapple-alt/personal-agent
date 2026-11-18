@@ -148,12 +148,21 @@ export function mapMemberRow(row: Record<string, unknown>): TeamMember {
 	const rawGitEmail = typeof row.git_email === "string" ? row.git_email.trim() : "";
 	const ownerOrgId =
 		typeof row.owner_org_id === "string" && row.owner_org_id.trim() ? row.owner_org_id.trim() : undefined;
+	const ownerUserId =
+		typeof row.owner_user_id === "string" && row.owner_user_id.trim() ? row.owner_user_id.trim() : undefined;
+	const rawScope = row.role_scope;
+	const roleScope =
+		rawScope === "personal" || ownerUserId
+			? ("personal" as const)
+			: rawScope === "org" || ownerOrgId
+				? ("org" as const)
+				: ("global" as const);
 	return {
 		id,
 		templateId: String(row.template_id),
 		displayName,
 		roleTitle,
-		isPrimaryContact: Boolean(row.is_primary_contact),
+		isPrimaryContact: roleScope === "global" ? Boolean(row.is_primary_contact) : false,
 		provider: String(row.provider),
 		model: String(row.model),
 		thinkingLevel: row.thinking_level as ThinkingLevel,
@@ -161,7 +170,9 @@ export function mapMemberRow(row: Record<string, unknown>): TeamMember {
 		gitName: rawGitName || defaultMemberGitName({ id, displayName, roleTitle }),
 		gitEmail: rawGitEmail || `${id}@team.local`,
 		identitySummary: typeof row.identity_summary === "string" ? row.identity_summary : "",
+		roleScope,
 		...(ownerOrgId ? { ownerOrgId } : {}),
+		...(ownerUserId ? { ownerUserId } : {}),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};

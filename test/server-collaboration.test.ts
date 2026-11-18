@@ -663,8 +663,12 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 		for (let i = 0; i < 40; i++) {
 			const detailRes = await fetch(`${baseUrl}/api/matters/${matterId}`);
 			assert.equal(detailRes.status, 200);
-			const detail = (await detailRes.json()) as { running?: boolean; matter: { status: string } };
-			if (!detail.running && detail.matter.status !== "running") break;
+			const detail = (await detailRes.json()) as {
+				activeRun?: unknown;
+				running?: boolean;
+				matter: { status: string };
+			};
+			if (!detail.activeRun && !detail.running && detail.matter.status !== "running") break;
 			await new Promise((r) => setTimeout(r, 25));
 		}
 

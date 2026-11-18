@@ -2,10 +2,10 @@
 
 本目录是解析器，不存放团队角色内容。可分享的角色资产在顶层 [roles/](../../roles/README.md)，运行经验在 [storage](../storage/README.md)。
 
-[types.ts](types.ts) 定义 `RoleTemplate`（含可选 `roleKind` 区分业务与架构师元角色、可选 `antiJobs` 不做清单）与五个正文段落；[template-loader.ts](template-loader.ts) 提供解析、目录加载、`loadRoleTemplatesWithCustomDir`（将仓库内建 `roles/` 与运行期自定义目录 `.data/roles/` 合并）和 Markdown 序列化；[role-architect.ts](role-architect.ts) 基于单一核心职责（One Job）、显式 Anti-Jobs 与最小工具权责按需生成角色草案，并导出内置元角色模板 `BUILTIN_ROLE_ARCHITECT_TEMPLATE` 与辅助判定。
+[types.ts](types.ts) 定义 `RoleTemplate`（含 `roleKind`、`antiJobs` 及多租户作用域字段 `roleScope` / `ownerOrgId` / `ownerUserId`、`SkillStorageScope`、`NewSkillDraft`）与五个正文段落；[template-loader.ts](template-loader.ts) 提供解析、目录加载（同时支持 `<id>.md` 单文件与 `<id>/<id>.md` 角色包目录，且由目录归属覆盖 frontmatter 的 `roleScope`/`ownerOrgId`/`ownerUserId` 以防止越权伪造，并阻止非 `global` 角色覆盖全局模板或成为主联系人）、`loadRoleTemplatesWithCustomDir`（将仓库内建 `roles/` 与运行期自定义目录 `.data/roles/` 根及 `global/`、`orgs/<orgId>/`、`users/<userId>/` 合并）和 Markdown 序列化；[role-package-store.ts](role-package-store.ts) 维护作用域目录映射（`global` 写回 `<rolesDir>` 根以兼容既有 `.data/roles/*.md`，`org`/`personal` 分别写入 `orgs/<orgId>/` 与 `users/<userId>/` 且生成 `org-<8hex>-` / `usr-<8hex>-` 命名空间 ID）、`newSkills` 草案校验（大小/作用域限制）与随角色包落盘的 `<roleDir>/skills/<skillName>/SKILL.md` 及 `.data/skills/{global,orgs,users}/` 原子读写与清理；[role-architect.ts](role-architect.ts) 基于单一核心职责（One Job）、显式 Anti-Jobs 与最小工具权责按需生成角色草案及可选 `newSkills` 建议（仅作草案预览，确认前不落盘），并导出内置元角色模板 `BUILTIN_ROLE_ARCHITECT_TEMPLATE` 与辅助判定。
 
 frontmatter 是本项目支持的简单字段/数组格式，不是完整 YAML 解析器。
-方法路径与目录清单由 [capabilities.ts](capabilities.ts) 维护，草案检查只标记 Skill 文件存在/缺失与 MCP 待运行核查，不安装依赖，也不证明效果；实际能力仍由执行器核查。
+方法路径与作用域 Skill 目录清单位于 [capabilities.ts](capabilities.ts)，提供 `validateSkillReference`（拒绝 `..`、`\` 与绝对路径越界）、`resolveAllowedSkillRoots` 与 `listScopedSkillCatalog`；草案检查只标记 Skill 文件存在/缺失与 MCP 待运行核查，不安装依赖，也不证明效果；实际能力仍由执行器核查。
 [pstack.ts](pstack.ts) 独立读取显式配置的外部完整方法包，保留模式哈希和目录，并限制方法资源的路径、类型与大小；不把用户机器上的绝对路径写进共享角色定义。装配与范围见[pstack 内循环](../../docs/pstack-runtime.md)。
 `id` 同时作为文件名，只接受最长 128 字符的小写字母、数字和连接短横线，不接受 `readme`。解析与 HTTP 新建使用相同校验，思考档位也共用解析器；既有非法 ID 不自动改名或重写历史关联。
 

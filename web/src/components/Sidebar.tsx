@@ -60,7 +60,7 @@ export function Sidebar({
 	const allBusinessMembers = filterBusinessMembers(allMembers);
 	const businessMembers =
 		orgEffectiveMemberIds && orgEffectiveMemberIds.length > 0
-			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id))
+			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id) || m.roleScope === "personal")
 			: allBusinessMembers;
 	const architectMember = allMembers.find((m) => isArchitectMember(m)) ?? null;
 	const getWorkingMood = (memberId: string): RoleMood => {

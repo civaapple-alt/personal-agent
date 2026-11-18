@@ -454,6 +454,9 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 				...(typeof body.defaultMaxActiveDispatches === "number"
 					? { defaultMaxActiveDispatches: body.defaultMaxActiveDispatches }
 					: {}),
+				...(typeof body.defaultMaxPersonalRoles === "number"
+					? { defaultMaxPersonalRoles: body.defaultMaxPersonalRoles }
+					: {}),
 			},
 			ctx.defaultWorkspacesRoot,
 		);
@@ -500,6 +503,7 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 				...(status ? { status } : {}),
 				...(typeof body.maxOrgs === "number" ? { maxOrgs: body.maxOrgs } : {}),
 				...(typeof body.maxActiveDispatches === "number" ? { maxActiveDispatches: body.maxActiveDispatches } : {}),
+				...(typeof body.maxPersonalRoles === "number" ? { maxPersonalRoles: body.maxPersonalRoles } : {}),
 				...(typeof body.canDispatchAi === "boolean" ? { canDispatchAi: body.canDispatchAi } : {}),
 			});
 		} catch (err) {
@@ -519,6 +523,7 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 				platformRole: updated.platformRole,
 				maxOrgs: updated.maxOrgs,
 				maxActiveDispatches: updated.maxActiveDispatches,
+				maxPersonalRoles: updated.maxPersonalRoles,
 				canDispatchAi: updated.canDispatchAi,
 			},
 		});

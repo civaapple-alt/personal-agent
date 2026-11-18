@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { RoleScope } from "../api.ts";
 import {
 	type AccountUserDto,
 	type CollaboratorDto,
@@ -13,7 +14,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../api.ts";
-import { filterBusinessMembers } from "../architectApi.ts";
+import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
 import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
@@ -83,6 +84,20 @@ export function TeamView({
 	onOpenDeliverable,
 }: TeamViewProps) {
 	const isOwner = isSuperAdmin || (!accountUser && currentUser?.permissionRole !== "collaborator");
+	const roleScopeChoices = useMemo(
+		() => buildRoleScopeChoices({ isSuperAdmin, accountUser, currentUser, organizations }),
+		[isSuperAdmin, accountUser, currentUser, organizations],
+	);
+	const canCreateAnyRole = roleScopeChoices.length > 0;
+	const canManageAnyOrg =
+		isSuperAdmin || organizations.some((org) => org.orgRole === "org_owner" || org.orgRole === "org_admin");
+	const canRunHealthcheck = isOwner || canManageAnyOrg;
+	const canDispatchAny = accountUser
+		? accountUser.status === "active" &&
+			accountUser.canDispatchAi &&
+			(organizations.length === 0 || organizations.some((o) => o.orgRole !== "org_viewer"))
+		: currentUser?.permissionRole !== "collaborator";
+	const [scopeFilter, setScopeFilter] = useState<"all" | RoleScope>("all");
 	const [showImportMember, setShowImportMember] = useState(false);
 	const [exportedPackage, setExportedPackage] = useState<{
 		id: string;
@@ -92,11 +107,31 @@ export function TeamView({
 	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
 	const [inspectState, setInspectState] = useState<{ memberId: string; tab: "identity" | "memories" } | null>(null);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
+	const visibleBusinessMembers = useMemo(() => {
+		if (scopeFilter === "all") return businessMembers;
+		return businessMembers.filter((m) => (m.roleScope ?? (m.ownerOrgId ? "org" : "global")) === scopeFilter);
+	}, [businessMembers, scopeFilter]);
+	const scopeCounts = useMemo(() => {
+		let global = 0;
+		let org = 0;
+		let personal = 0;
+		for (const m of businessMembers) {
+			const s = m.roleScope ?? (m.ownerOrgId ? "org" : "global");
+			if (s === "personal") personal += 1;
+			else if (s === "org") org += 1;
+			else global += 1;
+		}
+		return { global, org, personal };
+	}, [businessMembers]);
 	const inspectedMember = useMemo(
 		() => (inspectState ? (members.find((m) => m.id === inspectState.memberId) ?? null) : null),
 		[inspectState, members],
 	);
 	const inspectedIndex = inspectedMember ? businessMembers.findIndex((m) => m.id === inspectedMember.id) : -1;
+	const inspectedCanManage = useMemo(
+		() => canMemberManageRole(inspectedMember, { isSuperAdmin, accountUser, currentUser, organizations }),
+		[inspectedMember, isSuperAdmin, accountUser, currentUser, organizations],
+	);
 
 	const matterWorkspaceById = useMemo(
 		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
@@ -138,9 +173,9 @@ export function TeamView({
 						<h1>我的团队</h1>
 						<p>查看岗位分工与经验沉淀，支持按需创建角色或导入导出能力包</p>
 					</div>
-					{isOwner && (
+					{canCreateAnyRole && (
 						<div className="actions-row compact">
-							{onOpenArchitectMatter && (
+							{onOpenArchitectMatter && canDispatchAny && (
 								<button type="button" className="btn-pill-dark" onClick={onOpenArchitectMatter}>
 									对话规划角色
 								</button>
@@ -148,7 +183,7 @@ export function TeamView({
 							{onOpenArchitect && (
 								<button
 									type="button"
-									className={onOpenArchitectMatter ? "btn-pill-outline" : "btn-pill-dark"}
+									className={onOpenArchitectMatter && canDispatchAny ? "btn-pill-outline" : "btn-pill-dark"}
 									onClick={() => {
 										setShowImportMember(false);
 										onOpenArchitect();
@@ -168,6 +203,10 @@ export function TeamView({
 					<MemberPackageForms
 						showImportMember={showImportMember}
 						exportedPackage={exportedPackage}
+						isSuperAdmin={isSuperAdmin}
+						accountUser={accountUser}
+						currentUser={currentUser}
+						organizations={organizations}
 						onCloseImportMember={() => setShowImportMember(false)}
 						onCloseExportedPackage={() => setExportedPackage(null)}
 						onRefresh={onRefresh}
@@ -178,21 +217,58 @@ export function TeamView({
 					<section className="ui-section">
 						<div className="ui-section-head">
 							<div className="team-members-heading">
-								<h2 className="ui-section-title">AI 业务团队成员（{businessMembers.length}）</h2>
+								<h2 className="ui-section-title">
+									AI 业务团队成员（{businessMembers.length}）
+									{accountUser && scopeCounts.personal > 0 && (
+										<span className="muted-tiny">
+											{" "}
+											· 个人私有 {scopeCounts.personal}/{accountUser.maxPersonalRoles ?? 5}
+										</span>
+									)}
+								</h2>
 								<p className="ui-section-desc">点开「详情与经验」可查看 Git 署名、禁用边界与三层记忆</p>
 							</div>
-							{isOwner && (
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
-									onClick={() => setHealthcheckOpen(true)}
-								>
-									团队协作体检
-								</button>
-							)}
+							<div className="actions-row compact">
+								{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (
+									<div className="architect-quick-chips" role="tablist" aria-label="按角色使用范围筛选">
+										{(
+											[
+												["all", `全部 (${businessMembers.length})`],
+												["global", `平台通用 (${scopeCounts.global})`],
+												...(scopeCounts.org > 0
+													? ([["org", `组织共享 (${scopeCounts.org})`]] as const)
+													: []),
+												...(scopeCounts.personal > 0
+													? ([["personal", `仅我可用 (${scopeCounts.personal})`]] as const)
+													: []),
+											] as const
+										).map(([key, label]) => (
+											<button
+												key={key}
+												type="button"
+												role="tab"
+												aria-selected={scopeFilter === key}
+												className={`choice-chip ${scopeFilter === key ? "active" : ""}`}
+												onClick={() => setScopeFilter(key)}
+											>
+												{label}
+											</button>
+										))}
+									</div>
+								)}
+								{canRunHealthcheck && (
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										onClick={() => setHealthcheckOpen(true)}
+									>
+										团队协作体检
+									</button>
+								)}
+							</div>
 						</div>
 						<div className="team-grid">
-							{businessMembers.map((member, idx) => (
+							{visibleBusinessMembers.map((member, idx) => (
 								<MemberCard
 									key={member.id}
 									member={member}
@@ -201,6 +277,17 @@ export function TeamView({
 									memories={memoriesByMember[member.id] ?? []}
 									activeWorkspace={activeWorkspace}
 									activeOrg={activeOrg}
+									organizationName={organizationName}
+									canManage={canMemberManageRole(member, {
+										isSuperAdmin,
+										accountUser,
+										currentUser,
+										organizations,
+									})}
+									canSetPrimary={
+										isOwner && (member.roleScope ?? (member.ownerOrgId ? "org" : "global")) === "global"
+									}
+									canDispatch={canDispatchAny}
 									onAssignTask={onAssignTask}
 									onSetPrimary={handleSetPrimary}
 									onExportMember={handleExportMember}
@@ -260,6 +347,10 @@ export function TeamView({
 				template={inspectedMember ? templateByRoleId.get(inspectedMember.templateId) : undefined}
 				memories={inspectedMember ? (memoriesByMember[inspectedMember.id] ?? []) : []}
 				initialTab={inspectState?.tab ?? "identity"}
+				canEditIdentity={inspectedCanManage}
+				canCurateMemories={
+					isOwner || Boolean(inspectedMember && inspectedMember.roleScope === "personal" && inspectedCanManage)
+				}
 				members={members}
 				workspaces={workspaces}
 				organizations={organizations}

@@ -45,7 +45,10 @@ async function main(): Promise<void> {
 	const effectivePstackDir = process.env.PA_PSTACK_DIR?.trim() || savedSettings.pstackDir || undefined;
 	const builtinRolesDir = resolve(rootDir, "roles");
 	const temporaryRolesDir = dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-roles-")) : undefined;
+	const temporarySkillsDir =
+		dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-skills-")) : undefined;
 	const customRolesDir = temporaryRolesDir ?? resolve(dirname(resolve(dbPath)), "roles");
+	const customSkillsDir = temporarySkillsDir ?? resolve(dirname(resolve(dbPath)), "skills");
 	const templates = [
 		...(await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir)),
 		BUILTIN_ROLE_ARCHITECT_TEMPLATE,
@@ -61,6 +64,7 @@ async function main(): Promise<void> {
 		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
 		pstackDir: effectivePstackDir,
 		sessionDir: resolve(rootDir, ".data/pi-sessions"),
+		skillsDir: customSkillsDir,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
 
@@ -107,6 +111,7 @@ async function main(): Promise<void> {
 		dialogBroker,
 		webDistDir: resolve(rootDir, "web/dist"),
 		rolesDir: customRolesDir,
+		skillsDir: customSkillsDir,
 		uploadsDir: resolve(dataDir, "uploads"),
 		requireAuth,
 		defaultWorkspacesRoot,
@@ -148,6 +153,7 @@ async function main(): Promise<void> {
 		await closed;
 		db.close();
 		if (temporaryRolesDir) await rm(temporaryRolesDir, { recursive: true, force: true });
+		if (temporarySkillsDir) await rm(temporarySkillsDir, { recursive: true, force: true });
 		process.exit(0);
 	};
 

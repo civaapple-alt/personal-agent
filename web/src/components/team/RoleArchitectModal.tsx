@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	type AccountUserDto,
+	type CollaboratorDto,
 	createMember,
 	designRoleDraft,
+	type NewSkillDraftDto,
+	type OrganizationDto,
 	type RoleArchitectDraftDto,
 	type RoleGapSuggestionDto,
 	type RoleTemplateDto,
 	type RoleWorkspaceScope,
 	type TeamMemberDto,
 } from "../../api.ts";
-import { filterBusinessMembers } from "../../architectApi.ts";
+import { buildRoleScopeChoices, filterBusinessMembers } from "../../architectApi.ts";
 import { formatRoleToolTierLabel, getMemberThemeById, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
+import { NewSkillsDraftSection } from "./NewSkillsDraftSection.tsx";
 import { RoleCapabilityDetails } from "./RoleDesignDetails.tsx";
 
 interface RoleArchitectModalProps {
@@ -18,6 +23,11 @@ interface RoleArchitectModalProps {
 	seedGap?: RoleGapSuggestionDto | null;
 	members: TeamMemberDto[];
 	templateByRoleId: Map<string, RoleTemplateDto>;
+	isSuperAdmin?: boolean;
+	accountUser?: AccountUserDto | null;
+	currentUser?: CollaboratorDto | null;
+	organizations?: OrganizationDto[];
+	defaultOrgId?: string | null;
 	onClose: () => void;
 	onOpenArchitectMatter?: () => void;
 	onCreated: (member: TeamMemberDto) => Promise<void> | void;
@@ -51,6 +61,11 @@ export function RoleArchitectModal({
 	seedGap,
 	members,
 	templateByRoleId,
+	isSuperAdmin = false,
+	accountUser = null,
+	currentUser = null,
+	organizations = [],
+	defaultOrgId = null,
 	onClose,
 	onOpenArchitectMatter,
 	onCreated,
@@ -67,11 +82,24 @@ export function RoleArchitectModal({
 	const [keywordsText, setKeywordsText] = useState("");
 	const [isPrimaryContact, setIsPrimaryContact] = useState(false);
 	const [draft, setDraft] = useState<RoleArchitectDraftDto | null>(null);
+	const [draftNewSkills, setDraftNewSkills] = useState<NewSkillDraftDto[]>([]);
+	const [selectedNewSkillIndices, setSelectedNewSkillIndices] = useState<number[]>([]);
 	const [generating, setGenerating] = useState(false);
 	const [generatingMode, setGeneratingMode] = useState<"rules" | "model" | null>(null);
 	const [confirmAiDesign, setConfirmAiDesign] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const designAbortRef = useRef<AbortController | null>(null);
+	const scopeChoices = useMemo(
+		() => buildRoleScopeChoices({ isSuperAdmin, accountUser, currentUser, organizations }),
+		[isSuperAdmin, accountUser, currentUser, organizations],
+	);
+	const defaultScopeKey =
+		(defaultOrgId && scopeChoices.find((c) => c.ownerOrgId === defaultOrgId)?.key) ||
+		scopeChoices[0]?.key ||
+		"personal";
+	const [selectedScopeKey, setSelectedScopeKey] = useState<string>(defaultScopeKey);
+	const activeScopeChoice = scopeChoices.find((c) => c.key === selectedScopeKey) ??
+		scopeChoices[0] ?? { key: "personal", roleScope: "personal" as const, ownerOrgId: null, label: "个人私有" };
 
 	useEffect(() => {
 		if (!open) {
@@ -83,7 +111,10 @@ export function RoleArchitectModal({
 			return;
 		}
 		setDraft(null);
+		setDraftNewSkills([]);
+		setSelectedNewSkillIndices([]);
 		setConfirmAiDesign(false);
+		setSelectedScopeKey(defaultScopeKey);
 		if (seedGap) {
 			setOneJob(seedGap.suggestedJob);
 			setSelectedBoundaries(seedGap.suggestedAntiJobs.slice(0, 3));
@@ -105,7 +136,7 @@ export function RoleArchitectModal({
 			setKeywordsText("");
 			setIsPrimaryContact(false);
 		}
-	}, [open, seedGap]);
+	}, [open, seedGap, defaultScopeKey]);
 
 	if (!open) return null;
 	const businessMembers = filterBusinessMembers(members, templateByRoleId);
@@ -131,6 +162,8 @@ export function RoleArchitectModal({
 			const res = await designRoleDraft(
 				{
 					oneJob: oneJob.trim(),
+					roleScope: activeScopeChoice.roleScope,
+					ownerOrgId: activeScopeChoice.ownerOrgId,
 					antiJobs: Array.from(new Set([...selectedBoundaries, ...extraLines])),
 					interactionStyle: seedGap?.suggestedInteractionStyle ?? "mixed",
 					workspaceScope,
@@ -141,13 +174,16 @@ export function RoleArchitectModal({
 						.map((s) => s.trim())
 						.filter(Boolean),
 					workflowRules: workflowRules.trim() || undefined,
-					isPrimaryContact,
+					isPrimaryContact: activeScopeChoice.roleScope === "global" && isPrimaryContact,
 					mode,
 				},
 				controller.signal,
 			);
 			if (controller.signal.aborted) return;
 			setDraft(res);
+			const proposedSkills = res.newSkills ?? [];
+			setDraftNewSkills(proposedSkills);
+			setSelectedNewSkillIndices(proposedSkills.map((_, idx) => idx));
 			setRoleName(res.template.name);
 			setRoleTitle(res.template.title);
 			setKeywordsText(res.template.keywords.join(", "));
@@ -174,23 +210,31 @@ export function RoleArchitectModal({
 		if (!draft || !roleName.trim() || !roleTitle.trim() || saving) return;
 		setSaving(true);
 		try {
+			const confirmedNewSkills = selectedNewSkillIndices
+				.map((idx) => draftNewSkills[idx])
+				.filter((s): s is NewSkillDraftDto => Boolean(s?.name.trim() && s.description.trim() && s.body.trim()));
 			const res = await createMember({
 				id: draft.template.title === roleTitle.trim() ? draft.template.id : undefined,
 				name: roleName.trim(),
 				title: roleTitle.trim(),
+				roleScope: activeScopeChoice.roleScope,
+				ownerOrgId: activeScopeChoice.ownerOrgId,
 				responsibilities: draft.template.sections.responsibilitiesAndBoundaries,
 				keywords: keywordsText
 					.split(/[,，\s]+/)
 					.map((s) => s.trim())
 					.filter(Boolean),
 				skills: draft.template.skills,
+				...(confirmedNewSkills.length > 0 ? { newSkills: confirmedNewSkills } : {}),
 				mcpDependencies: draft.template.mcpDependencies,
 				tools: draft.template.tools,
 				antiJobs: draft.antiJobs,
 				sections: draft.template.sections,
-				isPrimaryContact,
+				isPrimaryContact: activeScopeChoice.roleScope === "global" && isPrimaryContact,
 			});
-			onNotice(`已创建「${res.member.displayName}」`);
+			onNotice(
+				`已创建「${res.member.displayName}」${confirmedNewSkills.length > 0 ? `并生成 ${confirmedNewSkills.length} 项 Skill` : ""}`,
+			);
 			await onCreated(res.member);
 			onClose();
 		} catch (err: unknown) {
@@ -258,6 +302,26 @@ export function RoleArchitectModal({
 				)}
 
 				<div className="architect-form-body">
+					<label className="identity-field">
+						<span className="identity-field-label">角色使用范围（Role Scope）</span>
+						<select
+							className="input-field"
+							value={activeScopeChoice.key}
+							onChange={(e) => {
+								setSelectedScopeKey(e.target.value);
+								setDraft(null);
+								setDraftNewSkills([]);
+								setSelectedNewSkillIndices([]);
+								setIsPrimaryContact(false);
+							}}
+						>
+							{scopeChoices.map((choice) => (
+								<option key={choice.key} value={choice.key}>
+									{choice.label}
+								</option>
+							))}
+						</select>
+					</label>
 					<div className="form-grid">
 						<label className="identity-field">
 							<span className="identity-field-label">角色名称（可选，不填按职责提炼）</span>
@@ -530,15 +594,47 @@ export function RoleArchitectModal({
 								</div>
 							</div>
 
+							<NewSkillsDraftSection
+								skills={draftNewSkills}
+								selectedIndices={selectedNewSkillIndices}
+								roleScope={activeScopeChoice.roleScope}
+								isSuperAdmin={isSuperAdmin}
+								disabled={saving}
+								onToggle={(idx) =>
+									setSelectedNewSkillIndices((prev) =>
+										prev.includes(idx) ? prev.filter((item) => item !== idx) : [...prev, idx],
+									)
+								}
+								onChangeSkills={setDraftNewSkills}
+								onAddCustomSkill={() => {
+									const nextIndex = draftNewSkills.length;
+									const suffix = nextIndex > 0 ? `-${nextIndex + 1}` : "";
+									setDraftNewSkills((prev) => [
+										...prev,
+										{
+											name: `custom-skill${suffix}`,
+											description: `${roleTitle.trim() || "Role"} SOP checklist`,
+											body: `# Custom Method\n\n1. Verify inputs\n2. Produce structured verdict`,
+											storageScope: "role_local",
+										},
+									]);
+									setSelectedNewSkillIndices((prev) => [...prev, nextIndex]);
+								}}
+							/>
+
 							<div className="form-footer">
-								<label className="checkbox-label">
-									<input
-										type="checkbox"
-										checked={isPrimaryContact}
-										onChange={(e) => setIsPrimaryContact(e.target.checked)}
-									/>
-									<span>设为默认主联系人</span>
-								</label>
+								{activeScopeChoice.roleScope === "global" ? (
+									<label className="checkbox-label">
+										<input
+											type="checkbox"
+											checked={isPrimaryContact}
+											onChange={(e) => setIsPrimaryContact(e.target.checked)}
+										/>
+										<span>设为默认主联系人</span>
+									</label>
+								) : (
+									<span className="muted-tiny">当前使用范围：{activeScopeChoice.label}</span>
+								)}
 								<div className="ui-row-actions">
 									<button type="button" className="btn-pill-outline" onClick={onClose}>
 										取消

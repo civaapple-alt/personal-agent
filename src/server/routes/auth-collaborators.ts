@@ -6,6 +6,7 @@ import {
 	canAccessMatter,
 	canAccessOrganization,
 	canAccessWorkspace,
+	canActorUseMember,
 	canManageOrganization,
 	getActorOrgRole,
 	requireOrgAccess,
@@ -88,7 +89,8 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 
 		const isAdmin = isSuperAdminActor(actor);
 		const accessibleOrgIds = new Set(scopedOrgs.map((o) => o.id));
-		const visibleMembers = store.listMembers().filter((m) => !m.ownerOrgId || accessibleOrgIds.has(m.ownerOrgId));
+		const visibleMembers = store.listMembers().filter((m) => canActorUseMember(store, actor, m));
+		const visibleTemplateIds = new Set(visibleMembers.map((m) => m.templateId));
 
 		sendJson(res, 200, {
 			innerDemoAvailable: Boolean(ctx.innerMatterDemo),
@@ -109,20 +111,25 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 							.map(toPublicCollaborator)
 					: allCollaborators.filter((c) => !c.orgId || accessibleOrgIds.has(c.orgId)).map(toPublicCollaborator),
 			members: visibleMembers,
-			templates: liveTemplates.map((t) => ({
-				id: t.id,
-				name: t.name,
-				title: t.title,
-				roleKind: t.roleKind ?? (t.id === "role-architect" ? "architect" : "business"),
-				version: t.version,
-				skills: t.skills,
-				mcpDependencies: t.mcpDependencies,
-				tools: t.tools,
-				keywords: t.keywords,
-				shareable: t.shareable,
-				antiJobs: t.antiJobs ?? [],
-				responsibilities: t.sections.responsibilitiesAndBoundaries,
-			})),
+			templates: liveTemplates
+				.filter((t) => t.roleKind === "architect" || visibleTemplateIds.has(t.id))
+				.map((t) => ({
+					id: t.id,
+					name: t.name,
+					title: t.title,
+					roleKind: t.roleKind ?? (t.id === "role-architect" ? "architect" : "business"),
+					roleScope: t.roleScope ?? "global",
+					ownerOrgId: t.ownerOrgId ?? null,
+					ownerUserId: t.ownerUserId ?? null,
+					version: t.version,
+					skills: t.skills,
+					mcpDependencies: t.mcpDependencies,
+					tools: t.tools,
+					keywords: t.keywords,
+					shareable: t.shareable,
+					antiJobs: t.antiJobs ?? [],
+					responsibilities: t.sections.responsibilitiesAndBoundaries,
+				})),
 			workspaces: scopedWorkspaces,
 			organizations: scopedOrgs,
 			orgMembersByOrgId,
@@ -139,10 +146,11 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 
 	if (method === "GET" && pathname === "/api/runtime") {
 		if (!requireActiveActor(res, actor)) return true;
+		const visibleMembers = store.listMembers().filter((m) => canActorUseMember(store, actor, m));
 		const overview = await buildRuntimeOverview({
 			config: orchestrator.getRuntimeConfig(),
 			serverConfig: ctx.getServerRuntimeConfig?.(),
-			activeMembers: store.listMembers(),
+			activeMembers: visibleMembers,
 			isOwner: isSuperAdminActor(actor),
 			probePiCli: ctx.probePiCli,
 		});
@@ -419,6 +427,17 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			if (!parsedRoles.some((role) => role.enabled)) {
 				sendError(res, 400, "每个组织至少需要启用 1 位 AI 角色");
 				return true;
+			}
+			for (const role of parsedRoles) {
+				const target = store.getMember(role.memberId);
+				if (target && target.roleScope === "personal") {
+					sendError(res, 400, "个人私有 AI 角色不能加入组织共享角色配置");
+					return true;
+				}
+				if (target && target.roleScope === "org" && target.ownerOrgId !== orgId) {
+					sendError(res, 403, `角色 ${target.displayName} 属于其他组织，无法在本组织启用`);
+					return true;
+				}
 			}
 			const configs = store.setOrgAiRolesBatch(orgId, parsedRoles);
 			const effectiveMembers = store.resolveEffectiveOrgMembers(orgId);

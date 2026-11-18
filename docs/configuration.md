@@ -3,7 +3,7 @@
 本文集中说明 Personal Agent 当前实际生效的环境变量、服务路径、Pi RPC 参数、岗位模板字段以及编排核内置限制。
 
 - 所有默认数值均以当前源码为准；工作台 **设置 → 运行配置**（`#/settings/config`）可按节直接查看当前运行实例生效的配置值与覆写状态。
-- 未列出的能力（如持久化定时后台调度、分布式多机数据库集群或自定义工作流配置文件）尚未实现；平台注册策略（`registrationMode` 默认为 `open_review`，即开放注册需审核；`allowLocalWorkspacePath` 与 `allowCommandPreviews` 默认 `true`）、用户审核配额（默认 `maxOrgs: 5`、`maxActiveDispatches: 3`）与多团队代码库主目录通过超级管理员控制台 `#/admin` 维护（持久化在 `platform_settings` 表中）。从本机免密试用切换到团队模式的迁移细节见[安装与首次运行](getting-started.md#从个人本机试用切换到团队共享部署)。
+- 未列出的能力（如持久化定时后台调度、分布式多机数据库集群或自定义工作流配置文件）尚未实现；平台注册策略（`registrationMode` 默认为 `open_review`，即开放注册需审核；`allowLocalWorkspacePath` 与 `allowCommandPreviews` 默认 `true`）、用户审核配额（默认 `maxOrgs: 5`、`maxActiveDispatches: 3`、`defaultMaxPersonalRoles: 5`）与多团队代码库主目录通过超级管理员控制台 `#/admin` 维护（持久化在 `platform_settings` 表中）。从本机免密试用切换到团队模式的迁移细节见[安装与首次运行](getting-started.md#从个人本机试用切换到团队共享部署)。
 
 ## 1. 环境变量
 
@@ -47,11 +47,12 @@
 | `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话持久目录（`--session-dir`） | 按事项、成员、工作区路径与会话模式精确记录 `sessionFile` 与 `piSessionId` |
 | `roles/` | 内置可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`），保存仓库自带的基础模板 |
-| `.data/roles/` | 运行时自建/调整角色目录 | 工作台新建、导入、架构师应用或修改后的角色模板 `.md` 写盘至此。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建系统临时目录，正常退出后清理。启动按 ID 与 `roles/` 合并，并跳过数据库中已标记删除的模板 |
-| `skills/<name>/SKILL.md` | 角色引用的技能说明文件 | 供启动参数 `--skill` 显式挂载 |
+| `.data/roles/` | 运行时自建/调整角色目录 | 根目录 `*.md`（如既有自定义全局角色）与 `global/` 属全局作用域（`global`），`orgs/<orgId>/` 属组织共享（`org`），`users/<userId>/` 属个人私有（`personal`）；各作用域同时支持 `<id>.md` 单文件与带包内 Skill 的 `<id>/<id>.md` 目录。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建临时目录并于退出后清理 |
+| `.data/skills/` | 运行时自定义 Skill 库目录 | 按 `global/`、`orgs/<orgId>/` 与 `users/<userId>/` 隔离存放确认后落盘的 `<skillName>/SKILL.md`（若随角色包隔离则位于 `<roleDir>/skills/<skillName>/SKILL.md`）；自定义 `PA_DB_PATH` 时位于数据库同级 `skills/` |
+| `skills/<name>/SKILL.md` | 内置岗位引用的技能说明文件 | 供启动参数 `--skill` 显式挂载，执行器会校验所有解析后路径落在允许作用域根目录内 |
 | `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
 
-`PA_DB_PATH` 不迁移全部运行目录：自建角色与内置演示跟随数据库位置，会话与上传仍分别固定在启动目录的 `.data/pi-sessions` 与 `.data/uploads`。备份与升级步骤见[使用指南](user-guide.md#保存与备份运行资料)。
+`PA_DB_PATH` 不迁移全部运行目录：自建角色、自建 Skill 与内置演示跟随数据库位置，会话与上传仍分别固定在启动目录的 `.data/pi-sessions` 与 `.data/uploads`。备份与升级步骤见[使用指南](user-guide.md#保存与备份运行资料)。
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。

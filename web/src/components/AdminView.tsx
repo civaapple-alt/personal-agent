@@ -15,6 +15,7 @@ interface AdminViewProps {
 		allowCommandPreviews: boolean;
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
+		defaultMaxPersonalRoles: number;
 	}) => Promise<void>;
 	onUpdateUser: (
 		userId: string,
@@ -23,6 +24,7 @@ interface AdminViewProps {
 			platformRole?: PlatformRole;
 			maxOrgs?: number;
 			maxActiveDispatches?: number;
+			maxPersonalRoles?: number;
 			canDispatchAi?: boolean;
 		},
 	) => Promise<void>;
@@ -82,10 +84,11 @@ export function AdminView({
 	const [allowCommandPreviews, setAllowCommandPreviews] = useState(false);
 	const [defaultMaxOrgs, setDefaultMaxOrgs] = useState(3);
 	const [defaultMaxActiveDispatches, setDefaultMaxActiveDispatches] = useState(3);
+	const [defaultMaxPersonalRoles, setDefaultMaxPersonalRoles] = useState(5);
 
 	// Per-user quota drafts
 	const [userDrafts, setUserDrafts] = useState<
-		Record<string, { maxOrgs: number; maxActiveDispatches: number; canDispatchAi: boolean }>
+		Record<string, { maxOrgs: number; maxActiveDispatches: number; maxPersonalRoles: number; canDispatchAi: boolean }>
 	>({});
 
 	useEffect(() => {
@@ -98,12 +101,17 @@ export function AdminView({
 		setAllowCommandPreviews(s.allowCommandPreviews);
 		setDefaultMaxOrgs(s.defaultMaxOrgs);
 		setDefaultMaxActiveDispatches(s.defaultMaxActiveDispatches);
+		setDefaultMaxPersonalRoles(s.defaultMaxPersonalRoles ?? 5);
 
-		const nextDrafts: Record<string, { maxOrgs: number; maxActiveDispatches: number; canDispatchAi: boolean }> = {};
+		const nextDrafts: Record<
+			string,
+			{ maxOrgs: number; maxActiveDispatches: number; maxPersonalRoles: number; canDispatchAi: boolean }
+		> = {};
 		for (const u of overview.users) {
 			nextDrafts[u.id] = {
 				maxOrgs: u.maxOrgs,
 				maxActiveDispatches: u.maxActiveDispatches,
+				maxPersonalRoles: u.maxPersonalRoles ?? 5,
 				canDispatchAi: u.canDispatchAi,
 			};
 		}
@@ -130,6 +138,7 @@ export function AdminView({
 				allowCommandPreviews,
 				defaultMaxOrgs: Number(defaultMaxOrgs) || 1,
 				defaultMaxActiveDispatches: Number(defaultMaxActiveDispatches) || 1,
+				defaultMaxPersonalRoles: Math.max(0, Number(defaultMaxPersonalRoles) || 0),
 			});
 			setActionFeedback("平台安全配置已保存");
 		} finally {
@@ -144,6 +153,7 @@ export function AdminView({
 			platformRole?: PlatformRole;
 			maxOrgs?: number;
 			maxActiveDispatches?: number;
+			maxPersonalRoles?: number;
 			canDispatchAi?: boolean;
 		},
 		message: string,
@@ -263,6 +273,7 @@ export function AdminView({
 											const draft = userDrafts[user.id] ?? {
 												maxOrgs: user.maxOrgs,
 												maxActiveDispatches: user.maxActiveDispatches,
+												maxPersonalRoles: user.maxPersonalRoles ?? 5,
 												canDispatchAi: user.canDispatchAi,
 											};
 											const isSelf = user.id === currentUserId;
@@ -303,6 +314,7 @@ export function AdminView({
 																				status: "active",
 																				maxOrgs: draft.maxOrgs,
 																				maxActiveDispatches: draft.maxActiveDispatches,
+																				maxPersonalRoles: draft.maxPersonalRoles,
 																				canDispatchAi: draft.canDispatchAi,
 																			},
 																			`已审核通过 ${user.displayName}`,
@@ -406,6 +418,25 @@ export function AdminView({
 																}
 															/>
 														</label>
+														<label className="admin-quota-field">
+															<span>私有角色上限</span>
+															<input
+																type="number"
+																min={0}
+																max={100}
+																className="input-field compact-number"
+																value={draft.maxPersonalRoles}
+																onChange={(e) =>
+																	setUserDrafts((prev) => ({
+																		...prev,
+																		[user.id]: {
+																			...draft,
+																			maxPersonalRoles: Number(e.target.value) || 0,
+																		},
+																	}))
+																}
+															/>
+														</label>
 														<label className="admin-check-field">
 															<input
 																type="checkbox"
@@ -429,6 +460,7 @@ export function AdminView({
 																	{
 																		maxOrgs: draft.maxOrgs,
 																		maxActiveDispatches: draft.maxActiveDispatches,
+																		maxPersonalRoles: draft.maxPersonalRoles,
 																		canDispatchAi: draft.canDispatchAi,
 																	},
 																	`已保存 ${user.displayName} 的配额设置`,
@@ -532,6 +564,17 @@ export function AdminView({
 												className="input-field compact-number"
 												value={defaultMaxActiveDispatches}
 												onChange={(e) => setDefaultMaxActiveDispatches(Number(e.target.value) || 0)}
+											/>
+										</label>
+										<label className="admin-quota-field">
+											<span>新用户默认私有角色上限</span>
+											<input
+												type="number"
+												min={0}
+												max={100}
+												className="input-field compact-number"
+												value={defaultMaxPersonalRoles}
+												onChange={(e) => setDefaultMaxPersonalRoles(Number(e.target.value) || 0)}
 											/>
 										</label>
 									</div>

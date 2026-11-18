@@ -5,7 +5,7 @@ import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/r
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../../storage/repositories.ts";
 import type { MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
-import { canAccessOrganization, canAccessWorkspace, canManageOrganization } from "../acl.ts";
+import { canAccessOrganization, canAccessWorkspace, canActorUseMember, canManageOrganization } from "../acl.ts";
 import { extractClientIp, isSuperAdminActor, type RequestActor } from "../auth.ts";
 import type { DialogBroker } from "../dialog-broker.ts";
 import type { ActiveRunState, BackgroundDispatchInput } from "../dispatch-runner.ts";
@@ -31,6 +31,7 @@ export interface ServerRouteContext {
 	probePiCli?: () => Promise<PiCliProbeResult>;
 	getServerRuntimeConfig?: () => ServerRuntimeConfig;
 	rolesDir?: string;
+	skillsDir?: string;
 	withRoleMutation: <T>(action: () => Promise<T>) => Promise<T>;
 	uploadsDir?: string;
 	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>;
@@ -86,7 +87,7 @@ export function formatScopedMemoryMap(store: PersonalAgentStore, actor: RequestA
 		return wsCache.get(wsId) ?? null;
 	};
 	for (const member of store.listMembers()) {
-		if (member.ownerOrgId && !canAccessOrganization(store, actor, member.ownerOrgId)) {
+		if (!canActorUseMember(store, actor, member)) {
 			continue;
 		}
 		result[member.id] = store.listMemberMemories(member.id).filter((mem) => {

@@ -1,6 +1,8 @@
 import { type RefObject, type UIEvent, useState } from "react";
 import {
+	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
+	type CollaboratorDto,
 	type DeliverableDto,
 	type InnerMatterStep,
 	type MatterDetailPayload,
@@ -53,6 +55,10 @@ interface MessageFeedProps {
 	elapsedSeconds: number;
 	streamingDelta: string;
 	isOwner: boolean;
+	isSuperAdmin?: boolean;
+	accountUser?: AccountUserDto | null;
+	currentUser?: CollaboratorDto | null;
+	organizations?: OrganizationDto[];
 	isTurnRunning: boolean;
 	members: TeamMemberDto[];
 	memberName: (id: string) => string;
@@ -106,6 +112,10 @@ export function MessageFeed({
 	elapsedSeconds,
 	streamingDelta,
 	isOwner,
+	isSuperAdmin = false,
+	accountUser = null,
+	currentUser = null,
+	organizations = [],
 	isTurnRunning,
 	members,
 	memberName,
@@ -450,6 +460,11 @@ export function MessageFeed({
 											proposals={roleProposals}
 											isArchitectMatter={isArchitectMatter}
 											isOwner={isOwner}
+											isSuperAdmin={isSuperAdmin}
+											accountUser={accountUser}
+											currentUser={currentUser}
+											organizations={organizations}
+											matterOrgId={matterDetail.matter.orgId ?? null}
 											isTurnRunning={isTurnRunning}
 											members={members}
 											memberName={memberName}

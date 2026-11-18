@@ -1,3 +1,4 @@
+import type { RoleScope } from "../roles/types.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
 
 export type MemoryScope = "role_general" | "company_private" | "project_private";
@@ -38,6 +39,7 @@ export interface PlatformUser {
 	status: UserStatus;
 	maxOrgs: number;
 	maxActiveDispatches: number;
+	maxPersonalRoles: number;
 	canDispatchAi: boolean;
 	createdAt: string;
 	updatedAt: string;
@@ -63,6 +65,7 @@ export interface PlatformSettings {
 	allowCommandPreviews: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
+	defaultMaxPersonalRoles: number;
 	pstackDir: string | null;
 	updatedAt: string;
 }
@@ -167,7 +170,9 @@ export interface TeamMember {
 	gitName: string;
 	gitEmail: string;
 	identitySummary: string;
+	roleScope: RoleScope;
 	ownerOrgId?: string | null;
+	ownerUserId?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }

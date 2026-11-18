@@ -127,6 +127,7 @@ export interface TeamOrchestratorOptions {
 	templates: RoleTemplate[];
 	defaultCwd?: string;
 	sessionDir?: string;
+	skillsDir?: string;
 	noSession?: boolean;
 	workerFactory?: WorkerFactory;
 	onDialog?: OrchestratorDialogHandler;
@@ -163,6 +164,7 @@ export interface DispatchMatterInput {
 	preferredMemberId?: string;
 	workspaceId?: string;
 	orgId?: string | null;
+	actorUserId?: string | null;
 	aiMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
@@ -259,6 +261,7 @@ export interface MatterRun {
 	delegationCount: number;
 	effects: ExecutionEffects;
 	userMessageId: string;
+	startedByUserId?: string | null;
 	startedAt: number;
 	lastProgress?: DispatchProgressEvent;
 	timeoutMs: number;

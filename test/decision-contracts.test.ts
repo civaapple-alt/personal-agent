@@ -119,6 +119,7 @@ test("repository evidence requires a completed successful read inside the select
 			displayName: template.name,
 			roleTitle: template.title,
 			isPrimaryContact: true,
+			roleScope: "global" as const,
 			provider: template.defaultProvider,
 			model: template.defaultModel,
 			thinkingLevel: template.thinkingLevel,

@@ -329,7 +329,8 @@ export class OrgRbacRepo {
 			for (const role of roles) {
 				const member = this.memberRepo.getMember(role.memberId);
 				if (!member) continue;
-				if (member.ownerOrgId && member.ownerOrgId !== orgId) continue;
+				if (member.roleScope === "personal") continue;
+				if (member.roleScope === "org" && member.ownerOrgId !== orgId) continue;
 				stmt.run(
 					orgId,
 					role.memberId,
@@ -353,7 +354,11 @@ export class OrgRbacRepo {
 
 	resolveEffectiveOrgMembers(orgId: string): TeamMember[] {
 		const allRows = this.db
-			.prepare("SELECT * FROM team_members WHERE owner_org_id IS NULL OR owner_org_id = ? ORDER BY created_at ASC")
+			.prepare(
+				`SELECT * FROM team_members
+				 WHERE role_scope = 'global' OR (role_scope = 'org' AND owner_org_id = ?)
+				 ORDER BY created_at ASC`,
+			)
 			.all(orgId) as Record<string, unknown>[];
 		const baseMembers = allRows.map(mapMemberRow);
 		const configs = this.listOrgAiRoleConfigs(orgId);
@@ -365,7 +370,7 @@ export class OrgRbacRepo {
 		return baseMembers
 			.filter((member) => {
 				const cfg = configMap.get(member.id);
-				return cfg ? cfg.enabled : member.ownerOrgId === orgId;
+				return cfg ? cfg.enabled : member.roleScope === "org" && member.ownerOrgId === orgId;
 			})
 			.map((member) => {
 				const cfg = configMap.get(member.id);
@@ -379,6 +384,21 @@ export class OrgRbacRepo {
 					isPrimaryContact: hasPrimaryOverride ? cfg.isPrimaryContact : member.isPrimaryContact,
 				};
 			});
+	}
+
+	resolveEffectiveOrgMembersForUser(orgId: string, userId?: string | null): TeamMember[] {
+		const shared = this.resolveEffectiveOrgMembers(orgId);
+		if (!userId) return shared;
+		const personalRows = this.db
+			.prepare(
+				`SELECT * FROM team_members
+				 WHERE role_scope = 'personal' AND owner_user_id = ?
+				 ORDER BY created_at ASC`,
+			)
+			.all(userId) as Record<string, unknown>[];
+		if (personalRows.length === 0) return shared;
+		const seen = new Set(shared.map((m) => m.id));
+		return [...shared, ...personalRows.map(mapMemberRow).filter((m) => !seen.has(m.id))];
 	}
 
 	// ---- Project / Workspace Access Members ----

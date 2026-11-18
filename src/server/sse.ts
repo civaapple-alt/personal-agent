@@ -7,6 +7,7 @@ export interface SseBroadcastScope {
 	orgId?: string | null;
 	matterId?: string | null;
 	workspaceId?: string | null;
+	userId?: string | null;
 	adminOnly?: boolean;
 }
 
@@ -28,6 +29,9 @@ export function createSseHub(store?: PersonalAgentStore) {
 				actor.user?.platformRole === "super_admin" ||
 				(actor.authKind === "legacy_token" && actor.collaborator.permissionRole === "owner")
 			);
+		}
+		if (scope.userId) {
+			return Boolean(actor.user && actor.user.id === scope.userId);
 		}
 		if (scope.matterId) {
 			const matter = store.getMatter(scope.matterId);

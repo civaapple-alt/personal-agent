@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { dirname, resolve } from "node:path";
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -27,6 +28,7 @@ export interface PersonalAgentServerOptions {
 	dialogBroker: DialogBroker;
 	webDistDir?: string;
 	rolesDir?: string;
+	skillsDir?: string;
 	uploadsDir?: string;
 	requireAuth?: boolean;
 	innerMatterDir?: string;
@@ -44,6 +46,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	broadcast: (eventName: string, payload: unknown) => void;
 } {
 	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
+	const skillsDir =
+		options.skillsDir ??
+		(options.dataDir
+			? resolve(options.dataDir, "skills")
+			: rolesDir
+				? resolve(dirname(rolesDir), "skills")
+				: undefined);
 	const sse = createSseHub(store);
 	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
@@ -81,6 +90,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			};
 		},
 		rolesDir,
+		skillsDir,
 		withRoleMutation: (action) => {
 			const result = roleMutationTail.then(action);
 			roleMutationTail = result.then(

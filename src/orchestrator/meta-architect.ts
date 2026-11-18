@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { assessRoleCapabilities, listRoleSkillCatalog } from "../roles/capabilities.ts";
+import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
 import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
@@ -11,14 +11,21 @@ import {
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
 } from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
+import { allowedSkillScopesForRole, validateNewSkillDrafts } from "../roles/role-package-store.ts";
+import type { RoleScope, RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { resolveRoleSkills } from "./execution-context.ts";
 import type { CollaborationPresetMode } from "./matter-initiation.ts";
 import { extractJsonObject } from "./pi-decision.ts";
-import { collectTeamHealthEvidence, formatTeamHealthEvidence, type TeamHealthEvidence } from "./team-health.ts";
+import {
+	collectTeamHealthEvidence,
+	filterTeamMembersForScope,
+	formatTeamHealthEvidence,
+	type TeamHealthEvidence,
+	type TeamHealthScopeFilter,
+} from "./team-health.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
 
 export interface MetaArchitectMessage {
@@ -59,6 +66,11 @@ export interface MetaArchitectChatInput {
 	messages: MetaArchitectMessage[];
 	matterPrompt?: string;
 	workspaceId?: string | null;
+	orgId?: string | null;
+	targetRoleScope?: RoleScope;
+	actorUserId?: string | null;
+	allowedOrgIds?: Set<string>;
+	isSuperAdmin?: boolean;
 	includeHealthcheck?: boolean;
 	timeoutMs?: number;
 	signal?: AbortSignal;
@@ -87,32 +99,51 @@ export interface RoleProposalPayload {
 	appliedAdjustmentIds?: string[];
 }
 
-async function enrichBlueprintCapabilities(result: Pick<MetaArchitectChatResult, "blueprints">): Promise<void> {
+async function enrichBlueprintCapabilities(
+	result: Pick<MetaArchitectChatResult, "blueprints">,
+	skillsDir?: string,
+): Promise<void> {
 	await Promise.all(
 		result.blueprints.map(async ({ draft }) => {
-			draft.capabilityReport = await assessRoleCapabilities(draft.template);
+			draft.capabilityReport = await assessRoleCapabilities(draft.template, { skillsDir });
 		}),
 	);
 }
 
-async function architectMethodText(): Promise<string> {
-	const paths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE);
+async function architectMethodText(skillsDir?: string): Promise<string> {
+	const paths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE, { skillsDir });
 	return (await Promise.all(paths.map((path) => readFile(path, "utf8")))).join("\n\n");
 }
 
-function listBusinessMembers(store: PersonalAgentStore, templatesById: Map<string, RoleTemplate>): TeamMember[] {
-	return store
-		.listMembers()
-		.filter(
-			(m) => !isArchitectRoleTemplate(templatesById.get(m.templateId) ?? templatesById.get(m.id) ?? { id: m.id }),
-		);
+function listBusinessMembers(
+	store: PersonalAgentStore,
+	templatesById: Map<string, RoleTemplate>,
+	scope?: TeamHealthScopeFilter,
+): TeamMember[] {
+	return filterTeamMembersForScope(store.listMembers(), scope).filter(
+		(m) => !isArchitectRoleTemplate(templatesById.get(m.templateId) ?? templatesById.get(m.id) ?? { id: m.id }),
+	);
 }
 
 /** Collects a compact, read-only digest of recent team friction and roster coverage for Meta-Bot audits. */
-export function collectTeamFrictionDigest(store: PersonalAgentStore, templatesById: Map<string, RoleTemplate>): string {
-	const members = listBusinessMembers(store, templatesById);
-	const matters = store.listMatters().slice(0, 12);
-	const deliverables = store.listDeliverables();
+export function collectTeamFrictionDigest(
+	store: PersonalAgentStore,
+	templatesById: Map<string, RoleTemplate>,
+	scope?: TeamHealthScopeFilter,
+): string {
+	const members = listBusinessMembers(store, templatesById, scope);
+	const memberIds = new Set(members.map((m) => m.id));
+	const matters = store
+		.listMatters()
+		.filter((matter) => {
+			if (!scope) return true;
+			if (scope.orgId) return matter.orgId === scope.orgId;
+			if (scope.allowedOrgIds) return !matter.orgId || scope.allowedOrgIds.has(matter.orgId);
+			return true;
+		})
+		.slice(0, 12);
+	const matterIds = new Set(matters.map((m) => m.id));
+	const deliverables = store.listDeliverables().filter((deliv) => !scope || matterIds.has(deliv.matterId));
 	let abortedCount = 0;
 	let failedCount = 0;
 	let observerNotes = 0;
@@ -130,9 +161,12 @@ export function collectTeamFrictionDigest(store: PersonalAgentStore, templatesBy
 	}
 	const candidateMemories = members
 		.flatMap((m) => store.listMemberMemories(m.id))
-		.filter(
-			(mem) => mem.status === "candidate" || mem.category === "user_correction" || mem.category === "collaboration",
-		)
+		.filter((mem) => {
+			if (!memberIds.has(mem.memberId)) return false;
+			if (scope?.orgId && mem.orgId && mem.orgId !== scope.orgId) return false;
+			if (scope?.allowedOrgIds && mem.orgId && !scope.allowedOrgIds.has(mem.orgId)) return false;
+			return mem.status === "candidate" || mem.category === "user_correction" || mem.category === "collaboration";
+		})
 		.slice(-8)
 		.map((mem) => `- [${mem.memberId} · ${mem.category}] ${truncateInline(mem.content, 120)}`);
 
@@ -149,7 +183,7 @@ export function collectTeamFrictionDigest(store: PersonalAgentStore, templatesBy
 		candidateMemories.length > 0
 			? `- Recent correction and collaboration signals:\n${candidateMemories.join("\n")}`
 			: "",
-		`- Citable cases and configuration. The records establish what was observed:\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById))}`,
+		`- Citable cases and configuration. The records establish what was observed:\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById, scope))}`,
 	]
 		.filter(Boolean)
 		.join("\n");
@@ -179,6 +213,9 @@ export function parseMetaArchitectResponse(
 		templatesById?: Map<string, RoleTemplate>;
 		isHealthcheck?: boolean;
 		healthEvidence?: TeamHealthEvidence[];
+		roleScope?: RoleScope;
+		ownerOrgId?: string | null;
+		ownerUserId?: string | null;
 	},
 ): Omit<MetaArchitectChatResult, "usedHealthcheck"> {
 	const cleaned = rawText.trim();
@@ -296,6 +333,8 @@ export function parseMetaArchitectResponse(
 	const reservedIds = existingMembers.map((m) => m.id);
 	const blueprints: MetaArchitectBlueprintProposal[] = [];
 
+	const roleScope = options?.roleScope ?? "global";
+	const allowedNewSkillScopes = allowedSkillScopesForRole(roleScope, roleScope === "global");
 	for (const item of rawBlueprints) {
 		if (!item || typeof item !== "object") continue;
 		const bp = item as Record<string, unknown>;
@@ -307,12 +346,27 @@ export function parseMetaArchitectResponse(
 		const keywords = Array.isArray(bp.keywords)
 			? bp.keywords.map((s) => String(s).trim()).filter(Boolean)
 			: undefined;
+		let suggestedNewSkills: ReturnType<typeof validateNewSkillDrafts> | undefined;
+		if (Array.isArray(bp.newSkills) && bp.newSkills.length > 0) {
+			try {
+				const valid = validateNewSkillDrafts(bp.newSkills, {
+					roleScope,
+					allowedScopes: allowedNewSkillScopes,
+				});
+				if (valid.length > 0) suggestedNewSkills = valid;
+			} catch {
+				// Ignore malformed model newSkills; rule fallback proposes a clean optional role_local draft.
+			}
+		}
 		const draft = buildRoleDesignDraft({
 			oneJob,
 			antiJobs,
 			quietWhen: typeof bp.quietWhen === "string" ? bp.quietWhen : undefined,
 			interactionStyle: normalizeStyle(bp.interactionStyle),
 			workspaceScope: normalizeScope(bp.workspaceScope),
+			roleScope,
+			ownerOrgId: options?.ownerOrgId,
+			ownerUserId: options?.ownerUserId,
 			roleId: typeof bp.id === "string" ? bp.id : undefined,
 			roleName:
 				typeof bp.name === "string"
@@ -333,6 +387,7 @@ export function parseMetaArchitectResponse(
 			mcpDependencies: Array.isArray(bp.mcpDependencies)
 				? bp.mcpDependencies.filter((value): value is string => typeof value === "string")
 				: [],
+			...(suggestedNewSkills ? { suggestedNewSkills } : {}),
 			communicationStyle: typeof bp.communicationStyle === "string" ? bp.communicationStyle : undefined,
 			verificationPlan: normalizeRoleVerificationPlan(bp.verificationPlan),
 			existingMemberIds: reservedIds,
@@ -357,6 +412,7 @@ export function parseMetaArchitectResponse(
 export interface MetaArchitectDeps {
 	store: PersonalAgentStore;
 	defaultCwd: string;
+	skillsDir?: string;
 	workerFactory: WorkerFactory;
 	templatesById: Map<string, RoleTemplate>;
 }
@@ -372,7 +428,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"3. Choose the minimum workspace access in `workspaceScope`: `no_repo_docs` for planning and writing without tools, `read_only_repo` for inspection, or `read_write_code` when implementation requires code changes or commands.",
 	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
 	"5. Ask up to three questions, limited to gaps that could change the goal, capability, or acceptance criteria. Use answers already given. When you have enough information, return the smallest workable plan.",
-	"6. Use relevant installed Skills. Identify missing dependencies without assuming that an integration works. Blueprints can include skills, mcpDependencies, communicationStyle, and verificationPlan.",
+	'6. Use relevant installed Skills in `skills`. If the workflow lacks a tailored SOP, also propose an optional draft in `newSkills: [{ name, description, body, storageScope }]` (default `storageScope: "role_local"`) for user confirmation instead of placing unconfirmed names in `skills`. Identify missing dependencies without assuming that an integration works.',
 	"7. Follow the role-design Skill. Give each proposed role a small runnable task, success criteria, and a boundary check. Report capability as verified only after execution. Use a short string or { task, successCriteria, boundaryCheck } with three nonempty strings for verificationPlan. State when the plan is missing.",
 	"",
 	"## Assess team health",
@@ -409,15 +465,23 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 		null,
 		2,
 	),
-	'For a new workflow proposal, you may omit `healthFindings` and `roleAdjustments`. Use `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }` and `blueprints: [{ id: "ux-designer", name: "UX Designer", title: "UX Designer", oneJob: "One sentence describing the core responsibility", antiJobs: ["One explicit boundary"], interactionStyle: "consult_specialist | risk_observer | lead_direct", workspaceScope: "read_only_repo | no_repo_docs | read_write_code", rationale: "Why this role is needed" }]`. Give each blueprint a short display name, a kebab-case English ID, and an English title. Default the display name to English and preserve names specified by the user. Put the responsibility in `oneJob`.',
+	'For a new workflow proposal, you may omit `healthFindings` and `roleAdjustments`. Use `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }` and `blueprints: [{ id: "ux-designer", name: "UX Designer", title: "UX Designer", oneJob: "One sentence describing the core responsibility", antiJobs: ["One explicit boundary"], skills: ["installed-skill-name"], newSkills: [{ name: "role-sop", description: "One-line trigger description", body: "# Role SOP\\n1. Step", storageScope: "role_local" }], interactionStyle: "consult_specialist | risk_observer | lead_direct", workspaceScope: "read_only_repo | no_repo_docs | read_write_code", rationale: "Why this role is needed" }]`. Give each blueprint a short display name, a kebab-case English ID, and an English title. Default the display name to English and preserve names specified by the user. Put the responsibility in `oneJob`.',
 ].join("\n");
 
 /** Builds read-only live roster, health digest, and JSON proposal contract for an in-matter Role Architect turn. */
 export async function buildArchitectMatterContext(
-	deps: { store: PersonalAgentStore; templatesById: Map<string, RoleTemplate> },
-	options?: { isMidMatterConsult?: boolean },
+	deps: { store: PersonalAgentStore; templatesById: Map<string, RoleTemplate>; skillsDir?: string },
+	options?: {
+		isMidMatterConsult?: boolean;
+		orgId?: string | null;
+		actorUserId?: string | null;
+	},
 ): Promise<string> {
-	const businessMembers = listBusinessMembers(deps.store, deps.templatesById);
+	const scopeFilter: TeamHealthScopeFilter | undefined =
+		options?.orgId !== undefined || options?.actorUserId !== undefined
+			? { orgId: options?.orgId, actorUserId: options?.actorUserId }
+			: undefined;
+	const businessMembers = listBusinessMembers(deps.store, deps.templatesById, scopeFilter);
 	const rosterLines = businessMembers
 		.map((m) => {
 			const tpl = deps.templatesById.get(m.templateId) ?? deps.templatesById.get(m.id);
@@ -427,15 +491,21 @@ export async function buildArchitectMatterContext(
 			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | Tools: [${tools}] | Skills: [${tpl?.skills.join(", ") ?? ""}] | MCP (unverified): [${tpl?.mcpDependencies.join(", ") ?? ""}]${anti}${resp ? ` | Responsibilities: ${resp}` : ""}`;
 		})
 		.join("\n");
-	const healthDigest = collectTeamFrictionDigest(deps.store, deps.templatesById);
+	const healthDigest = collectTeamFrictionDigest(deps.store, deps.templatesById, scopeFilter);
 	const midMatterHint = options?.isMidMatterConsult
 		? "\nYou were invited into an active matter. Diagnose the blocker from the conversation. Provide only the necessary `blueprints` to add a role or `roleAdjustments` to refine boundaries. The current lead still owns the matter."
 		: "";
+	const skillCatalog = await listScopedSkillCatalog({
+		skillsDir: deps.skillsDir,
+		roleScope: options?.orgId ? "org" : "global",
+		ownerOrgId: options?.orgId ?? null,
+		ownerUserId: options?.actorUserId ?? null,
+	});
 
 	return [
 		ARCHITECT_SYSTEM_INSTRUCTIONS + midMatterHint,
-		`## Role design method\n${await architectMethodText()}`,
-		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(await listRoleSkillCatalog())}`,
+		`## Role design method\n${await architectMethodText(deps.skillsDir)}`,
+		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(skillCatalog)}`,
 		`## Current business roles (${businessMembers.length})\n${rosterLines || "No business roles yet."}`,
 		`## Recent team health evidence\n${healthDigest}`,
 	].join("\n\n");
@@ -446,16 +516,24 @@ export async function buildArchitectMessageProposals(
 	rawText: string,
 	store: PersonalAgentStore,
 	templatesById: Map<string, RoleTemplate>,
-	options?: { promptText?: string; isMidMatterConsult?: boolean },
+	options?: {
+		promptText?: string;
+		isMidMatterConsult?: boolean;
+		skillsDir?: string;
+		scopeFilter?: TeamHealthScopeFilter;
+	},
 ): Promise<{ replyText: string; roleProposals?: RoleProposalPayload }> {
-	const existingMembers = store.listMembers();
+	const existingMembers = filterTeamMembersForScope(store.listMembers(), options?.scopeFilter);
 	const isHealthcheck = /(?:体检|诊断|重叠|收窄|冗余|权限过宽|摩擦)/i.test(options?.promptText ?? "");
 	const parsed = parseMetaArchitectResponse(rawText, existingMembers, {
 		templatesById,
 		isHealthcheck,
-		healthEvidence: collectTeamHealthEvidence(store, templatesById),
+		healthEvidence: collectTeamHealthEvidence(store, templatesById, options?.scopeFilter),
+		roleScope: options?.scopeFilter?.orgId ? "org" : "global",
+		ownerOrgId: options?.scopeFilter?.orgId ?? null,
+		ownerUserId: options?.scopeFilter?.actorUserId ?? null,
 	});
-	await enrichBlueprintCapabilities(parsed);
+	await enrichBlueprintCapabilities(parsed, options?.skillsDir);
 	const hasStructured =
 		parsed.followUpQuestions.length > 0 ||
 		(parsed.healthFindings && parsed.healthFindings.length > 0) ||
@@ -491,11 +569,20 @@ export async function runMetaArchitectChat(
 	if (input.messages.length === 0) {
 		throw new Error("At least one user message is required");
 	}
-	const allMembers = deps.store.listMembers();
-	const members = listBusinessMembers(deps.store, deps.templatesById);
-	const primary =
-		members.find((m) => m.isPrimaryContact) ?? members[0] ?? deps.store.getPrimaryContact() ?? allMembers[0];
 	const workspace = input.workspaceId ? deps.store.getWorkspace(input.workspaceId) : null;
+	const targetOrgId = input.orgId !== undefined ? input.orgId : (workspace?.orgId ?? null);
+	const scopeFilter: TeamHealthScopeFilter | undefined =
+		input.actorUserId !== undefined || input.allowedOrgIds !== undefined || targetOrgId !== null
+			? {
+					orgId: targetOrgId ?? undefined,
+					allowedOrgIds: input.allowedOrgIds,
+					actorUserId: input.actorUserId,
+				}
+			: undefined;
+	const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter);
+	const members = listBusinessMembers(deps.store, deps.templatesById, scopeFilter);
+	const primary =
+		members.find((m) => m.isPrimaryContact) ?? members[0] ?? deps.store.getPrimaryContact() ?? visibleMembers[0];
 	const cwd = resolve(workspace?.repoPath ?? deps.defaultCwd);
 
 	const rosterLines = members
@@ -513,12 +600,21 @@ export async function runMetaArchitectChat(
 		.map((msg) => `${msg.role === "user" ? "User" : "Role Architect"}: ${truncateInline(msg.content, 1600)}`)
 		.join("\n\n");
 
-	const healthDigest = input.includeHealthcheck ? collectTeamFrictionDigest(deps.store, deps.templatesById) : "";
+	const healthDigest = input.includeHealthcheck
+		? collectTeamFrictionDigest(deps.store, deps.templatesById, scopeFilter)
+		: "";
 
-	const systemPrompt = `${ARCHITECT_SYSTEM_INSTRUCTIONS}\n\n## Role design method\n${await architectMethodText()}`;
+	const systemPrompt = `${ARCHITECT_SYSTEM_INSTRUCTIONS}\n\n## Role design method\n${await architectMethodText(deps.skillsDir)}`;
+	const targetRoleScope: RoleScope = input.targetRoleScope ?? (targetOrgId ? "org" : "global");
+	const skillCatalog = await listScopedSkillCatalog({
+		skillsDir: deps.skillsDir,
+		roleScope: targetRoleScope,
+		ownerOrgId: targetOrgId,
+		ownerUserId: input.actorUserId,
+	});
 
 	const prompt = [
-		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(await listRoleSkillCatalog())}`,
+		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(skillCatalog)}`,
 		`## Current team members (${members.length})\n${rosterLines || "No business roles yet."}`,
 		workspace
 			? `## Linked workspace\n- ${workspace.name} (${workspace.repoPath})`
@@ -530,7 +626,7 @@ export async function runMetaArchitectChat(
 		.filter(Boolean)
 		.join("\n\n");
 
-	const methodPaths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE);
+	const methodPaths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE, { skillsDir: deps.skillsDir });
 	const worker = deps.workerFactory({
 		cwd,
 		provider: primary?.provider ?? "kimi-coding",
@@ -567,12 +663,15 @@ export async function runMetaArchitectChat(
 	if (result.aborted || input.signal.aborted) {
 		throw new Error("Role architect session was aborted");
 	}
-	const parsed = parseMetaArchitectResponse(result.assistantText, allMembers, {
+	const parsed = parseMetaArchitectResponse(result.assistantText, visibleMembers, {
 		templatesById: deps.templatesById,
 		isHealthcheck: Boolean(input.includeHealthcheck),
-		healthEvidence: collectTeamHealthEvidence(deps.store, deps.templatesById),
+		healthEvidence: collectTeamHealthEvidence(deps.store, deps.templatesById, scopeFilter),
+		roleScope: targetRoleScope,
+		ownerOrgId: targetRoleScope === "org" ? targetOrgId : null,
+		ownerUserId: targetRoleScope === "personal" ? (input.actorUserId ?? null) : null,
 	});
-	await enrichBlueprintCapabilities(parsed);
+	await enrichBlueprintCapabilities(parsed, deps.skillsDir);
 	return {
 		...parsed,
 		usedHealthcheck: Boolean(input.includeHealthcheck),

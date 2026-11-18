@@ -513,7 +513,10 @@ export function App() {
 			? bootstrap?.orgAiRolesByOrgId?.[draftEffectiveOrgId]?.effectiveMemberIds
 			: undefined;
 		if (!enabledIds || enabledIds.length === 0) return all;
-		return all.filter((m) => enabledIds.includes(m.id) || isArchitectMemberId(m.id, all, templateByRoleId));
+		return all.filter(
+			(m) =>
+				enabledIds.includes(m.id) || m.roleScope === "personal" || isArchitectMemberId(m.id, all, templateByRoleId),
+		);
 	}, [bootstrap, draftEffectiveOrgId, templateByRoleId]);
 
 	const filteredMatters = useMemo(() => {
@@ -1230,6 +1233,8 @@ export function App() {
 						demoStepBusy={submitting}
 						composerRef={composerRef}
 						currentUser={currentUser}
+						accountUser={accountUser}
+						isSuperAdmin={isSuperAdmin}
 						canDispatchAi={canDispatchAi}
 						collaborators={bootstrap?.collaborators ?? []}
 						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
@@ -1460,6 +1465,11 @@ export function App() {
 				seedGap={initiation.architectSeed}
 				members={bootstrap?.members ?? []}
 				templateByRoleId={templateByRoleId}
+				isSuperAdmin={isSuperAdmin}
+				accountUser={accountUser}
+				currentUser={currentUser}
+				organizations={bootstrap?.organizations ?? []}
+				defaultOrgId={effectiveOrgIdForScope}
 				onClose={() => initiation.setArchitectOpen(false)}
 				onOpenArchitectMatter={() => startArchitectMatter()}
 				onCreated={async (member) => {

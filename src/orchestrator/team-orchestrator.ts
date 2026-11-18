@@ -28,6 +28,7 @@ import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
+import { filterTeamMembersForScope } from "./team-health.ts";
 import {
 	buildProgressSnapshot,
 	type DelegateInput,
@@ -82,6 +83,7 @@ export class TeamOrchestrator {
 	private readonly templatesById = new Map<string, RoleTemplate>();
 	private readonly defaultCwd: string;
 	private readonly sessionDir: string | undefined;
+	private readonly skillsDir: string | undefined;
 	private readonly noSession: boolean;
 	private readonly workerFactory: WorkerFactory;
 	private dialogHandler: OrchestratorDialogHandler | undefined;
@@ -100,6 +102,7 @@ export class TeamOrchestrator {
 		this.pstackDir = options.pstackDir;
 		this.defaultCwd = options.defaultCwd ?? process.cwd();
 		this.sessionDir = options.sessionDir;
+		this.skillsDir = options.skillsDir;
 		this.noSession = options.noSession ?? false;
 		this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
 		this.dialogHandler = options.onDialog;
@@ -136,21 +139,28 @@ export class TeamOrchestrator {
 	 */
 	syncRoleTemplates(templates: RoleTemplate[]): TeamMember[] {
 		const synced: TeamMember[] = [];
+		const existingPrimary = this.store.getPrimaryContact();
+		const validExistingPrimaryId = existingPrimary?.roleScope === "global" ? existingPrimary.id : undefined;
 		const primaryId =
-			this.store.getPrimaryContact()?.id ?? templates.find((template) => template.isPrimaryContact)?.id;
+			validExistingPrimaryId ??
+			templates.find((template) => (template.roleScope ?? "global") === "global" && template.isPrimaryContact)?.id;
 		for (const tpl of templates) {
 			if (this.store.isRoleTemplateRemoved(tpl.id)) continue;
 			this.templatesById.set(tpl.id, tpl);
+			const roleScope = tpl.roleScope ?? "global";
 			const member = this.store.upsertMember({
 				id: tpl.id,
 				templateId: tpl.id,
 				displayName: tpl.name,
 				roleTitle: tpl.title,
-				isPrimaryContact: primaryId === tpl.id,
+				isPrimaryContact: roleScope === "global" && primaryId === tpl.id,
 				provider: tpl.defaultProvider,
 				model: tpl.defaultModel,
 				thinkingLevel: tpl.thinkingLevel,
 				keywords: tpl.keywords,
+				roleScope,
+				ownerOrgId: tpl.ownerOrgId ?? null,
+				ownerUserId: tpl.ownerUserId ?? null,
 			});
 			synced.push(member);
 		}
@@ -166,24 +176,36 @@ export class TeamOrchestrator {
 	}
 
 	registerRoleTemplate(template: RoleTemplate): TeamMember {
-		if (template.isPrimaryContact) {
+		const roleScope = template.roleScope ?? "global";
+		const isGlobalPrimary = roleScope === "global" && template.isPrimaryContact;
+		if (isGlobalPrimary) {
 			for (const existing of this.templatesById.values()) {
 				existing.isPrimaryContact = existing.id === template.id;
 			}
 		}
-		this.templatesById.set(template.id, template);
+		const normalizedTemplate: RoleTemplate = {
+			...template,
+			roleScope,
+			ownerOrgId: roleScope === "org" ? (template.ownerOrgId ?? null) : null,
+			ownerUserId: roleScope === "personal" ? (template.ownerUserId ?? null) : null,
+			isPrimaryContact: isGlobalPrimary,
+		};
+		this.templatesById.set(normalizedTemplate.id, normalizedTemplate);
 		const member = this.store.upsertMember({
-			id: template.id,
-			templateId: template.id,
-			displayName: template.name,
-			roleTitle: template.title,
-			isPrimaryContact: template.isPrimaryContact,
-			provider: template.defaultProvider,
-			model: template.defaultModel,
-			thinkingLevel: template.thinkingLevel,
-			keywords: template.keywords,
+			id: normalizedTemplate.id,
+			templateId: normalizedTemplate.id,
+			displayName: normalizedTemplate.name,
+			roleTitle: normalizedTemplate.title,
+			isPrimaryContact: isGlobalPrimary,
+			provider: normalizedTemplate.defaultProvider,
+			model: normalizedTemplate.defaultModel,
+			thinkingLevel: normalizedTemplate.thinkingLevel,
+			keywords: normalizedTemplate.keywords,
+			roleScope,
+			ownerOrgId: normalizedTemplate.ownerOrgId,
+			ownerUserId: normalizedTemplate.ownerUserId,
 		});
-		if (template.isPrimaryContact) {
+		if (isGlobalPrimary) {
 			return this.store.setPrimaryContact(member.id);
 		}
 		return member;
@@ -206,17 +228,41 @@ export class TeamOrchestrator {
 		);
 	}
 
-	private resolveMatterAiMembers(matter: Matter | null): TeamMember[] {
+	private resolveMatterAiMembers(matter: Matter | null, actorUserId?: string | null): TeamMember[] {
 		const orgId = matter?.orgId ?? null;
-		const all = orgId ? this.store.resolveEffectiveOrgMembers(orgId) : this.store.listMembers();
+		const effectiveUserId = actorUserId ?? matter?.createdByUserId ?? null;
+		const sharedOrgMembers = orgId
+			? this.store.resolveEffectiveOrgMembers(orgId)
+			: filterTeamMembersForScope(this.store.listMembers(), { actorUserId: effectiveUserId });
+		const personalMembers = effectiveUserId
+			? this.store.listMembers().filter((m) => m.roleScope === "personal" && m.ownerUserId === effectiveUserId)
+			: [];
+		const all = orgId
+			? [...sharedOrgMembers, ...personalMembers.filter((p) => !sharedOrgMembers.some((s) => s.id === p.id))]
+			: sharedOrgMembers;
 		if (!matter || matter.aiMemberIds === null) {
-			const business = all.filter((member) => !this.isArchitectMember(member) || member.id === matter?.leadMemberId);
+			const business = all.filter((member) => {
+				if (this.isArchitectMember(member) && member.id !== matter?.leadMemberId) return false;
+				if (member.roleScope === "personal" && !actorUserId && matter?.createdByUserId !== member.ownerUserId) {
+					return false;
+				}
+				return true;
+			});
 			return business.length > 0 ? business : all;
 		}
 		const allowed = new Set(matter.aiMemberIds);
 		if (matter.leadMemberId) allowed.add(matter.leadMemberId);
-		const filtered = all.filter((member) => allowed.has(member.id));
-		return filtered.length > 0 ? filtered : all;
+		const filtered = all.filter((member) => {
+			if (!allowed.has(member.id)) return false;
+			if (member.roleScope === "personal") {
+				return Boolean(
+					(actorUserId && member.ownerUserId === actorUserId) ||
+						(matter.createdByUserId && member.ownerUserId === matter.createdByUserId),
+				);
+			}
+			return true;
+		});
+		return filtered.length > 0 ? filtered : sharedOrgMembers;
 	}
 
 	/**
@@ -228,8 +274,11 @@ export class TeamOrchestrator {
 		hasWorkspace?: boolean;
 		preferredMemberId?: string;
 		orgId?: string | null;
+		actorUserId?: string | null;
 	}): MatterInitiationAssessment {
-		const members = input.orgId ? this.store.resolveEffectiveOrgMembers(input.orgId) : this.store.listMembers();
+		const members = input.orgId
+			? this.store.resolveEffectiveOrgMembersForUser(input.orgId, input.actorUserId)
+			: filterTeamMembersForScope(this.store.listMembers(), { actorUserId: input.actorUserId });
 		return assessMatterInitiation({
 			...input,
 			members,
@@ -245,17 +294,20 @@ export class TeamOrchestrator {
 		preferredMemberId?: string,
 		allowedMemberIds?: string[] | null,
 		orgId?: string | null,
+		options?: { actorUserId?: string | null },
 	): TeamMember {
-		const allMembers = orgId ? this.store.resolveEffectiveOrgMembers(orgId) : this.store.listMembers();
+		const allMembers = orgId
+			? this.store.resolveEffectiveOrgMembersForUser(orgId, options?.actorUserId)
+			: filterTeamMembersForScope(this.store.listMembers(), { actorUserId: options?.actorUserId });
 		if (allMembers.length === 0) {
 			throw new Error("No team members registered in store");
 		}
 		if (preferredMemberId) {
-			const inOrg = allMembers.find((m) => m.id === preferredMemberId);
-			if (inOrg) return inOrg;
+			const inScope = allMembers.find((m) => m.id === preferredMemberId);
+			if (inScope) return inScope;
 			if (!orgId) {
 				const explicit = this.store.getMember(preferredMemberId);
-				if (explicit) return explicit;
+				if (explicit && explicit.roleScope !== "personal") return explicit;
 			}
 			const explicitGlobal = this.store.getMember(preferredMemberId);
 			if (explicitGlobal && this.isArchitectMember(explicitGlobal)) return explicitGlobal;
@@ -346,11 +398,13 @@ export class TeamOrchestrator {
 		const workspace = workspaceId ? this.store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !workspace) throw new Error(`Unknown workspace: ${workspaceId}`);
 		const effectiveOrgId = existing?.orgId ?? workspace?.orgId ?? input.orgId ?? null;
+		const effectiveUserId = input.actorUserId ?? existing?.createdByUserId ?? null;
 		const assignedMember = this.routeMemberForRequest(
 			input.prompt,
 			input.preferredMemberId ?? existing?.leadMemberId ?? undefined,
 			existing ? existing.aiMemberIds : input.aiMemberIds,
 			effectiveOrgId,
+			{ actorUserId: effectiveUserId },
 		);
 		const images = (input.images ?? []).filter(
 			(item) =>
@@ -402,6 +456,7 @@ export class TeamOrchestrator {
 				leadMemberId: assignedMember.id,
 				workspaceId: workspace?.id,
 				orgId: effectiveOrgId,
+				createdByUserId: input.actorUserId ?? null,
 				aiMemberIds: input.aiMemberIds,
 				observersEnabled: input.observersEnabled,
 				observerMemberIds: input.observerMemberIds,
@@ -424,6 +479,7 @@ export class TeamOrchestrator {
 			delegationCount: 0,
 			effects: emptyEffects(),
 			userMessageId: "",
+			startedByUserId: effectiveUserId,
 			startedAt,
 			timeoutMs: turnDeadlineMs,
 			deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,
@@ -539,6 +595,11 @@ export class TeamOrchestrator {
 					? await buildArchitectMessageProposals(rawReply, this.store, this.templatesById, {
 							promptText: input.prompt,
 							isMidMatterConsult: isMidMatterArchitectConsult,
+							skillsDir: this.skillsDir,
+							scopeFilter: {
+								orgId: matter.orgId ?? null,
+								actorUserId: effectiveUserId,
+							},
 						})
 					: null;
 			const replyText = aborted
@@ -848,6 +909,7 @@ export class TeamOrchestrator {
 				store: this.store,
 				defaultCwd: this.defaultCwd,
 				sessionDir: this.sessionDir,
+				skillsDir: this.skillsDir,
 				noSession: this.noSession,
 				extensions: this.extensions,
 				pstackDir: this.pstackDir,
@@ -855,7 +917,8 @@ export class TeamOrchestrator {
 				getDialogHandler: () => this.dialogHandler,
 				getTemplateForMember: (member) => this.getTemplateForMember(member),
 				getTemplatesById: () => this.templatesById,
-				resolveMatterAiMembers: (matter) => this.resolveMatterAiMembers(matter),
+				resolveMatterAiMembers: (matter) =>
+					this.resolveMatterAiMembers(matter, this.runs.get(matter?.id ?? "")?.startedByUserId),
 				requireMatter: (matterId) => this.requireMatter(matterId),
 				delegate: (dInput, run, workspace, chain, signal, effectsTarget, onProgress) =>
 					this.delegate(dInput, run, workspace, chain, signal, effectsTarget, onProgress),
@@ -892,8 +955,12 @@ export class TeamOrchestrator {
 					defaultCwd: this.defaultCwd,
 					workerFactory: this.workerFactory,
 					requireMatter: (matterId) => this.requireMatter(matterId),
-					routeMemberForRequest: (prompt, preferredMemberId) =>
-						this.routeMemberForRequest(prompt, preferredMemberId),
+					routeMemberForRequest: (prompt, preferredMemberId) => {
+						const m = this.store.getMatter(input.matterId);
+						return this.routeMemberForRequest(prompt, preferredMemberId, m?.aiMemberIds, m?.orgId, {
+							actorUserId: m?.createdByUserId ?? null,
+						});
+					},
 				},
 				{ ...input, signal: controller.signal },
 			);
@@ -940,18 +1007,24 @@ export class TeamOrchestrator {
 		prompt: string;
 		hasImages?: boolean;
 		workspaceId?: string | null;
+		orgId?: string | null;
+		actorUserId?: string | null;
 		preferredMemberId?: string;
 		readRepo?: boolean;
 		timeoutMs?: number;
 		signal?: AbortSignal;
 	}): Promise<MatterInitiationAssessment> {
 		const workspace = input.workspaceId ? this.store.getWorkspace(input.workspaceId) : null;
+		const orgId = workspace?.orgId ?? input.orgId ?? null;
+		const scopedMembers = orgId
+			? this.store.resolveEffectiveOrgMembersForUser(orgId, input.actorUserId)
+			: filterTeamMembersForScope(this.store.listMembers(), { actorUserId: input.actorUserId });
 		return this.runTrackedAuxTask("Initiation decision was aborted", input.signal, (signal) =>
 			assessMatterInitiationWithModel(
 				{
 					defaultCwd: this.defaultCwd,
 					workerFactory: this.workerFactory,
-					members: this.store.listMembers(),
+					members: scopedMembers,
 					templatesByRoleId: this.templatesById,
 				},
 				{
@@ -970,14 +1043,20 @@ export class TeamOrchestrator {
 
 	/** Generate a structured, capability-aware role design draft using an isolated typed Pi LLM call. */
 	async designRoleWithModel(
-		input: RoleDesignBriefInput & { timeoutMs?: number; signal?: AbortSignal },
+		input: RoleDesignBriefInput & { allowedOrgIds?: Set<string>; timeoutMs?: number; signal?: AbortSignal },
 	): Promise<RoleArchitectDraft> {
+		const scopedMembers = filterTeamMembersForScope(this.store.listMembers(), {
+			orgId: input.ownerOrgId ?? undefined,
+			allowedOrgIds: input.allowedOrgIds,
+			actorUserId: input.ownerUserId,
+		});
 		return this.runTrackedAuxTask("Role design decision was aborted", input.signal, (signal) =>
 			designRoleDraftWithModel(
 				{
 					defaultCwd: this.defaultCwd,
+					skillsDir: this.skillsDir,
 					workerFactory: this.workerFactory,
-					members: this.store.listMembers(),
+					members: scopedMembers,
 					templatesByRoleId: this.templatesById,
 				},
 				{ ...input, signal },
@@ -992,6 +1071,7 @@ export class TeamOrchestrator {
 				{
 					store: this.store,
 					defaultCwd: this.defaultCwd,
+					skillsDir: this.skillsDir,
 					workerFactory: this.workerFactory,
 					templatesById: this.templatesById,
 				},

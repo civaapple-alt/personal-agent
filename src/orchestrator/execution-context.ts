@@ -3,20 +3,35 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { resolveRoleSkillPath } from "../roles/capabilities.ts";
+import { resolveAllowedSkillRoots, resolveRoleSkillPath, type SkillResolutionOptions } from "../roles/capabilities.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamToolCall } from "../rpc/team-tool-bridge.ts";
 import type { WorkerSessionRecord } from "../storage/types.ts";
 
-export async function resolveRoleSkills(template: RoleTemplate | undefined): Promise<string[]> {
+function isInsideRootDir(rootDir: string, realTarget: string): boolean {
+	const rel = relative(rootDir, realTarget);
+	return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
+}
+
+export async function resolveRoleSkills(
+	template: RoleTemplate | undefined,
+	options?: SkillResolutionOptions,
+): Promise<string[]> {
+	const allowedRoots = await Promise.all(
+		resolveAllowedSkillRoots(template, options).map((root) => realpath(root).catch(() => resolve(root))),
+	);
 	return await Promise.all(
 		(template?.skills ?? []).map(async (name) => {
-			const path = resolveRoleSkillPath(name, template);
+			const path = resolveRoleSkillPath(name, template, options);
 			const info = await stat(path).catch(() => {
 				throw new Error(`Skill ${name} is not installed: ${path}`);
 			});
 			if (!info.isFile()) throw new Error(`Skill must point to a SKILL.md file: ${path}`);
-			return path;
+			const realTarget = await realpath(path);
+			if (!allowedRoots.some((root) => isInsideRootDir(root, realTarget))) {
+				throw new Error(`Skill ${name} resolves outside allowed skill scope boundaries`);
+			}
+			return realTarget;
 		}),
 	);
 }

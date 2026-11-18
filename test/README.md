@@ -13,6 +13,7 @@
 | 类型化 Pi 决策引擎、模型态立项接口、Schema/Roster 强校验与取消 | [pi-decision.test.ts](pi-decision.test.ts) |
 | 模型草案保留用户要求、缺失依赖可见、真实读取证据及抛异常校验器 | [decision-contracts.test.ts](decision-contracts.test.ts) |
 | 角色路径与 ID 冲突、批量提案校验、并发应用、符号链接和删除后重新打开数据库 | [member-management.test.ts](member-management.test.ts) |
+| 多租户作用域角色/Skill 目录、角色包落盘、确认后生成新 Skill 草案、个人配额与严格用户隔离 | [scoped-roles-and-skills.test.ts](scoped-roles-and-skills.test.ts) |
 | 五个角色方法装载、能力组合、体检来源、设计到导出一致性与缺失依赖提前失败 | [role-capabilities.test.ts](role-capabilities.test.ts) |
 | pstack 模式/原则按需读取、方法目录、路径/大小/取消与岗位能力握手 | [pstack-runtime.test.ts](pstack-runtime.test.ts) |
 | 自然任务不泄露方法名称、临时读取范围、完整正文证据、质量分层及无模型汇总 | [pstack-selection.test.ts](pstack-selection.test.ts) |

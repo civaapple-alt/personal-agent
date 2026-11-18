@@ -7,6 +7,7 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../../api.ts";
+import { getMemberScopeBadge } from "../../architectApi.ts";
 import { formatMemberGitIdentity, formatRoleToolTierLabel, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
@@ -17,6 +18,10 @@ interface MemberCardProps {
 	memories: MemberMemoryDto[];
 	activeWorkspace: WorkspaceDto | null;
 	activeOrg: OrganizationDto | null;
+	organizationName?: (id: string | null) => string | null;
+	canManage?: boolean;
+	canSetPrimary?: boolean;
+	canDispatch?: boolean;
 	onAssignTask: (memberId: string) => void;
 	onSetPrimary: (memberId: string) => Promise<void>;
 	onExportMember: (memberId: string) => Promise<void>;
@@ -33,6 +38,10 @@ export function MemberCard({
 	template,
 	memories,
 	activeOrg,
+	organizationName,
+	canManage = true,
+	canSetPrimary = false,
+	canDispatch = true,
 	onAssignTask,
 	onSetPrimary,
 	onExportMember,
@@ -115,6 +124,7 @@ export function MemberCard({
 		? stripMarkdownFormatting(template.responsibilities.split("\n")[0] ?? "")
 		: "";
 	const antiJobsCount = template?.antiJobs?.length ?? 0;
+	const scopeBadge = getMemberScopeBadge(member, organizationName);
 
 	return (
 		<div className="member-card">
@@ -125,6 +135,7 @@ export function MemberCard({
 						<div className="member-name-row">
 							<strong>{member.displayName}</strong>
 							{member.isPrimaryContact && <span className="pill live">主联系</span>}
+							<span className={`pill role-scope-pill is-${scopeBadge.scope}`}>{scopeBadge.label}</span>
 						</div>
 						{member.roleTitle &&
 							member.roleTitle.trim().toLowerCase() !== member.displayName.trim().toLowerCase() && (
@@ -168,9 +179,11 @@ export function MemberCard({
 
 			<div className="member-card-footer">
 				<div className="member-footer-primary">
-					<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
-						向 TA 派活
-					</button>
+					{canDispatch && (
+						<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
+							向 TA 派活
+						</button>
+					)}
 					<button
 						type="button"
 						className="btn-pill-outline btn-xs"
@@ -221,7 +234,7 @@ export function MemberCard({
 							>
 								身份与 Git 署名
 							</button>
-							{!member.isPrimaryContact && (
+							{!member.isPrimaryContact && canSetPrimary && (
 								<button
 									type="button"
 									className="member-more-item"
@@ -246,6 +259,7 @@ export function MemberCard({
 								导出能力包
 							</button>
 							{!member.isPrimaryContact &&
+								canManage &&
 								(confirmDelete ? (
 									<div className="member-more-confirm">
 										<button

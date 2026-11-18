@@ -1,4 +1,4 @@
-import { assessRoleCapabilities, listRoleSkillCatalog } from "../roles/capabilities.ts";
+import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
 import {
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
@@ -10,7 +10,8 @@ import {
 	type RoleWorkspaceScope,
 	slugifyRoleId,
 } from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
+import { allowedSkillScopesForRole, buildScopedRoleId, validateNewSkillDrafts } from "../roles/role-package-store.ts";
+import type { NewSkillDraft, RoleScope, RoleTemplate } from "../roles/types.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
@@ -27,6 +28,7 @@ export interface RoleDesignDecisionPayload {
 	quietWhen: string;
 	keywords: string[];
 	skills: string[];
+	newSkills?: NewSkillDraft[];
 	interactionStyle: RoleInteractionStyle;
 	workspaceScope: RoleWorkspaceScope;
 	communicationStyle: string;
@@ -52,8 +54,19 @@ export function validateRoleDesignDecision(
 
 	// Reject oversized sentence-like names when the caller did not force one.
 	const cleanName = nameRaw.slice(0, 16);
+	const roleScope: RoleScope = context.explicit.roleScope ?? "global";
 	const rawId = context.explicit.roleId?.trim() || (typeof raw.id === "string" ? raw.id.trim() : "");
-	const id = slugifyRoleId(rawId || titleRaw, [...context.existingMemberIds, "role-architect"]);
+	const id =
+		roleScope === "global"
+			? slugifyRoleId(rawId || titleRaw, [...context.existingMemberIds, "role-architect"])
+			: buildScopedRoleId({
+					baseId: rawId || titleRaw,
+					roleScope,
+					ownerOrgId: context.explicit.ownerOrgId,
+					ownerUserId: context.explicit.ownerUserId,
+					existingIds: new Set([...context.existingMemberIds, "role-architect"]),
+					allowCollisionSuffix: true,
+				});
 
 	const rawAntiJobs = Array.isArray(raw.antiJobs)
 		? raw.antiJobs.map((s) => (typeof s === "string" ? s.trim() : "")).filter(Boolean)
@@ -107,6 +120,19 @@ export function validateRoleDesignDecision(
 			? raw.designRationale.trim()
 			: "由 Pi 角色设计模型结合团队分工与最小权限原则生成。";
 
+	let newSkills: NewSkillDraft[] | undefined;
+	if (Array.isArray(raw.newSkills) && raw.newSkills.length > 0) {
+		try {
+			const validated = validateNewSkillDrafts(raw.newSkills, {
+				roleScope,
+				allowedScopes: allowedSkillScopesForRole(roleScope, roleScope === "global"),
+			});
+			if (validated.length > 0) newSkills = validated;
+		} catch {
+			// Ignore malformed model-generated newSkills and allow rule fallback draft to propose a clean SOP.
+		}
+	}
+
 	return {
 		id,
 		name: cleanName,
@@ -116,6 +142,7 @@ export function validateRoleDesignDecision(
 		quietWhen,
 		keywords,
 		skills,
+		...(newSkills ? { newSkills } : {}),
 		interactionStyle,
 		workspaceScope,
 		communicationStyle,
@@ -132,6 +159,7 @@ export function validateRoleDesignDecision(
 export async function designRoleDraftWithModel(
 	deps: {
 		defaultCwd: string;
+		skillsDir?: string;
 		workerFactory: WorkerFactory;
 		members: TeamMember[];
 		templatesByRoleId: Map<string, RoleTemplate>;
@@ -150,7 +178,12 @@ export async function designRoleDraftWithModel(
 	);
 	const primary = businessMembers.find((m) => m.isPrimaryContact) ?? businessMembers[0] ?? deps.members[0] ?? null;
 
-	const skillCatalog = await listRoleSkillCatalog();
+	const skillCatalog = await listScopedSkillCatalog({
+		skillsDir: deps.skillsDir,
+		roleScope: input.roleScope,
+		ownerOrgId: input.ownerOrgId,
+		ownerUserId: input.ownerUserId,
+	});
 	const installedSkills = new Set(skillCatalog.map((s) => s.name));
 	const rosterSummary = businessMembers
 		.map((m) => {
@@ -160,6 +193,9 @@ export async function designRoleDraftWithModel(
 		})
 		.join("\n");
 
+	const roleScope = input.roleScope ?? "global";
+	const allowedNewSkillScopes = allowedSkillScopesForRole(roleScope, roleScope === "global").join(" | ");
+
 	const systemPrompt = [
 		"你是 Personal Agent 的 **AI 角色设计决策引擎（Typed Role Designer）**。",
 		"根据用户提供的岗位需求，输出严格符合最小权限与单核心职责原则的角色结构化设计方案。",
@@ -168,7 +204,8 @@ export async function designRoleDraftWithModel(
 		"1. **One Job & Explicit Anti-Jobs**：`oneJob` 提炼为清晰单一句；`antiJobs` 写 2~4 条明确不做边界（防止与现有成员重叠或越权改代码/拍板）。",
 		"2. Use a short English display name unless the user supplies a name. Use a short English title and a unique lowercase kebab-case ID.",
 		"3. **技能仅选已安装目录**：`skills` 只能从以下已安装技能 ID 中挑选确有帮助的项，不得编造名称。",
-		"4. **完整验证计划**：`verificationPlan` 必须包含具体小任务 `task`、可观察通过条件 `successCriteria` 与越界校验 `boundaryCheck`。",
+		"4. **可选新建 Skill 草案 (`newSkills`)**：若现有目录缺少该岗位的专属方法或清单，可在 `newSkills` 中附带 1 条待用户确认后才落盘的新 Skill 草案（勿直接填入 `skills`）；默认 `storageScope` 为 `role_local`。",
+		"5. **完整验证计划**：`verificationPlan` 必须包含具体小任务 `task`、可观察通过条件 `successCriteria` 与越界校验 `boundaryCheck`。",
 		"",
 		"## 严格输出格式（仅返回合法 JSON 对象，勿附带多余正文）",
 		JSON.stringify(
@@ -181,6 +218,14 @@ export async function designRoleDraftWithModel(
 				quietWhen: "无相关风险或不在职责范围内时保持安静",
 				keywords: ["关键词1", "关键词2", "关键词3"],
 				skills: ["仅填下方已安装技能 ID 或 []"],
+				newSkills: [
+					{
+						name: "release-checklist",
+						description: "One-line trigger description for the proposed skill",
+						body: "# Release Checklist\\n\\n1. Concrete step\\n2. Boundary check",
+						storageScope: allowedNewSkillScopes,
+					},
+				],
 				interactionStyle: "lead_direct | consult_specialist | risk_observer | mixed",
 				workspaceScope: "no_repo_docs | read_only_repo | read_write_code",
 				communicationStyle: "简短明确的团队沟通风格约定",
@@ -259,9 +304,13 @@ export async function designRoleDraftWithModel(
 		quietWhen: decision.quietWhen,
 		interactionStyle: decision.interactionStyle,
 		workspaceScope: decision.workspaceScope,
+		roleScope: input.roleScope,
+		ownerOrgId: input.ownerOrgId,
+		ownerUserId: input.ownerUserId,
 		keywords: decision.keywords,
 		workflowRules: decision.workflowRules,
 		skills: decision.skills,
+		...(decision.newSkills ? { suggestedNewSkills: decision.newSkills } : {}),
 		mcpDependencies: input.mcpDependencies,
 		communicationStyle: decision.communicationStyle,
 		verificationPlan: decision.verificationPlan,
@@ -272,7 +321,7 @@ export async function designRoleDraftWithModel(
 
 	return {
 		...draft,
-		capabilityReport: await assessRoleCapabilities(draft.template),
+		capabilityReport: await assessRoleCapabilities(draft.template, { skillsDir: deps.skillsDir }),
 		designNotes: [decision.designRationale, ...draft.designNotes.slice(1)],
 		designSource: "model",
 	};

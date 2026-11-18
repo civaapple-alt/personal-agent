@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 	status TEXT NOT NULL DEFAULT 'active',
 	max_orgs INTEGER NOT NULL DEFAULT 5,
 	max_active_dispatches INTEGER NOT NULL DEFAULT 3,
+	max_personal_roles INTEGER NOT NULL DEFAULT 5,
 	can_dispatch_ai INTEGER NOT NULL DEFAULT 1,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
@@ -138,6 +139,9 @@ CREATE TABLE IF NOT EXISTS team_members (
 	git_name TEXT NOT NULL DEFAULT '',
 	git_email TEXT NOT NULL DEFAULT '',
 	identity_summary TEXT NOT NULL DEFAULT '',
+	role_scope TEXT NOT NULL DEFAULT 'global',
+	owner_org_id TEXT,
+	owner_user_id TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
 );
@@ -331,7 +335,23 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	ensureMemberCol("git_name", "git_name TEXT NOT NULL DEFAULT ''");
 	ensureMemberCol("git_email", "git_email TEXT NOT NULL DEFAULT ''");
 	ensureMemberCol("identity_summary", "identity_summary TEXT NOT NULL DEFAULT ''");
+	ensureMemberCol("role_scope", "role_scope TEXT NOT NULL DEFAULT 'global'");
 	ensureMemberCol("owner_org_id", "owner_org_id TEXT");
+	ensureMemberCol("owner_user_id", "owner_user_id TEXT");
+	const userColumns = db.prepare("PRAGMA table_info(users)").all();
+	if (!userColumns.some((column) => column.name === "max_personal_roles")) {
+		db.exec("ALTER TABLE users ADD COLUMN max_personal_roles INTEGER NOT NULL DEFAULT 5");
+		db.exec("UPDATE users SET max_personal_roles = 100 WHERE platform_role = 'super_admin'");
+	}
+	db.exec(`
+		UPDATE team_members
+		SET role_scope = CASE
+			WHEN owner_user_id IS NOT NULL AND TRIM(owner_user_id) != '' THEN 'personal'
+			WHEN owner_org_id IS NOT NULL AND TRIM(owner_org_id) != '' THEN 'org'
+			ELSE 'global'
+		END
+		WHERE role_scope IS NULL OR TRIM(role_scope) = '' OR (role_scope = 'global' AND (owner_org_id IS NOT NULL OR owner_user_id IS NOT NULL));
+	`);
 	db.exec(`
 		UPDATE team_members
 		SET git_name = CASE

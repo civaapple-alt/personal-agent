@@ -62,7 +62,7 @@
 - Pi 原生会话树负责模型历史与压缩；这里没有无限拼接完整对话。
 - **参与阵型与角色架构师隔离**：
   - 当事项处于单兵模式（`solo`，仅 1 位 AI 成员参与且无授权内部协同池）时，在 `--tools` 与系统提示中同步禁用 `delegate_to_member` 并注入单兵边界提醒；立项与运行期支持经 `observerMemberIds` 按人切换定向旁听。
-  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检；对话规划与协作体检均以无工具只读模式隔离执行（`--tools "" --no-skills --no-mcp`），仅生成结构化提案确认卡或体检调整建议，经所有者勾选确认后才写回角色档案（`.data/roles/`）与成员记录。
+  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检；对话规划与协作体检均以无工具只读模式隔离执行（`--tools "" --no-skills --no-mcp`），仅生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议，经授权用户勾选确认后才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录；运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色禁止被非本人查看、执行或经 `delegate_to_member` 委托。
 
 增量交接背景策略如下：
 

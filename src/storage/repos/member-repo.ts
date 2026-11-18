@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import type { RoleScope } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type { TeamMember } from "../types.ts";
 import { defaultMemberGitName, mapMemberRow, nowIso } from "./helpers.ts";
@@ -25,7 +26,9 @@ export class MemberRepo {
 		gitName?: string;
 		gitEmail?: string;
 		identitySummary?: string;
+		roleScope?: RoleScope;
 		ownerOrgId?: string | null;
+		ownerUserId?: string | null;
 	}): TeamMember {
 		const timestamp = nowIso();
 		const existing = this.getMember(input.id);
@@ -40,21 +43,34 @@ export class MemberRepo {
 				: existing?.gitEmail.trim() || `${input.id}@team.local`;
 		const identitySummary =
 			input.identitySummary !== undefined ? input.identitySummary.trim() : (existing?.identitySummary ?? "");
-		const ownerOrgId = input.ownerOrgId !== undefined ? input.ownerOrgId : (existing?.ownerOrgId ?? null);
+		const rawOwnerOrgId = input.ownerOrgId !== undefined ? input.ownerOrgId : (existing?.ownerOrgId ?? null);
+		const rawOwnerUserId = input.ownerUserId !== undefined ? input.ownerUserId : (existing?.ownerUserId ?? null);
+		const roleScope: RoleScope =
+			input.roleScope ?? existing?.roleScope ?? (rawOwnerUserId ? "personal" : rawOwnerOrgId ? "org" : "global");
+		const ownerOrgId = roleScope === "org" ? rawOwnerOrgId?.trim() || null : null;
+		const ownerUserId = roleScope === "personal" ? rawOwnerUserId?.trim() || null : null;
+		if (roleScope === "org" && !ownerOrgId) {
+			throw new Error("Organization-scoped member requires ownerOrgId");
+		}
+		if (roleScope === "personal" && !ownerUserId) {
+			throw new Error("Personal-scoped member requires ownerUserId");
+		}
+		const isPrimaryContact = roleScope === "global" && input.isPrimaryContact ? 1 : 0;
 		if (existing) {
 			this.db
 				.prepare(
 					`UPDATE team_members
 					 SET template_id = ?, display_name = ?, role_title = ?, is_primary_contact = ?,
 					     provider = ?, model = ?, thinking_level = ?, keywords_json = ?,
-					     git_name = ?, git_email = ?, identity_summary = ?, owner_org_id = ?, updated_at = ?
+					     git_name = ?, git_email = ?, identity_summary = ?,
+					     role_scope = ?, owner_org_id = ?, owner_user_id = ?, updated_at = ?
 					 WHERE id = ?`,
 				)
 				.run(
 					input.templateId,
 					input.displayName,
 					input.roleTitle,
-					input.isPrimaryContact ? 1 : 0,
+					isPrimaryContact,
 					input.provider,
 					input.model,
 					input.thinkingLevel,
@@ -62,7 +78,9 @@ export class MemberRepo {
 					gitName,
 					gitEmail,
 					identitySummary,
+					roleScope,
 					ownerOrgId,
+					ownerUserId,
 					timestamp,
 					input.id,
 				);
@@ -75,15 +93,15 @@ export class MemberRepo {
 				`INSERT INTO team_members (
 					id, template_id, display_name, role_title, is_primary_contact,
 					provider, model, thinking_level, keywords_json,
-					git_name, git_email, identity_summary, owner_org_id, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					git_name, git_email, identity_summary, role_scope, owner_org_id, owner_user_id, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				input.id,
 				input.templateId,
 				input.displayName,
 				input.roleTitle,
-				input.isPrimaryContact ? 1 : 0,
+				isPrimaryContact,
 				input.provider,
 				input.model,
 				input.thinkingLevel,
@@ -91,12 +109,21 @@ export class MemberRepo {
 				gitName,
 				gitEmail,
 				identitySummary,
+				roleScope,
 				ownerOrgId,
+				ownerUserId,
 				timestamp,
 				timestamp,
 			);
 		this.db.prepare("DELETE FROM removed_role_templates WHERE template_id = ?").run(input.templateId);
 		return this.getMember(input.id)!;
+	}
+
+	countPersonalRoles(userId: string): number {
+		const row = this.db
+			.prepare("SELECT COUNT(*) AS cnt FROM team_members WHERE role_scope = 'personal' AND owner_user_id = ?")
+			.get(userId) as { cnt?: number } | undefined;
+		return Number(row?.cnt ?? 0);
 	}
 
 	isRoleTemplateRemoved(templateId: string): boolean {
@@ -165,6 +192,9 @@ export class MemberRepo {
 		const existing = this.getMember(memberId);
 		if (!existing) {
 			throw new Error(`Member not found: ${memberId}`);
+		}
+		if (existing.roleScope !== "global") {
+			throw new Error("仅平台通用（global）AI 角色可设为全局默认主联系人");
 		}
 		const timestamp = nowIso();
 		this.db.prepare("UPDATE team_members SET is_primary_contact = 0, updated_at = ?").run(timestamp);

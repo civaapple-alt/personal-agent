@@ -73,6 +73,7 @@ export function createDispatchRunner(deps: {
 				preferredMemberId: input.preferredMemberId,
 				workspaceId: input.workspaceId,
 				orgId: input.orgId,
+				actorUserId: input.startedByUserId ?? null,
 				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,

@@ -10,6 +10,7 @@ import {
 	canAccessMatter,
 	canAccessOrganization,
 	canAccessWorkspace,
+	canActorUseMember,
 	canDispatchAiInOrg,
 	canManageOrganization,
 	canParticipateInMatter,
@@ -43,15 +44,45 @@ function countActiveDispatchesForUser(ctx: ServerRouteContext, userId: string): 
 	return count;
 }
 
+function ensureActorAllowedMembers(
+	res: ServerResponse,
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	memberIds: Array<string | null | undefined>,
+): boolean {
+	for (const memberId of memberIds) {
+		if (!memberId) continue;
+		const member = ctx.store.getMember(memberId);
+		if (!member) {
+			sendError(res, 404, `Member not found: ${memberId}`);
+			return false;
+		}
+		if (!canActorUseMember(ctx.store, actor, member)) {
+			sendError(res, 403, `无权使用或指定该 AI 角色: ${memberId}`);
+			return false;
+		}
+	}
+	return true;
+}
+
 function ensureOrgEnabledAiRequest(
 	res: ServerResponse,
 	ctx: ServerRouteContext,
+	actor: RequestActor,
 	orgId: string | null,
 	preferredMemberId: string | null | undefined,
 	aiMemberIds: string[] | null | undefined,
 ): boolean {
+	if (
+		!ensureActorAllowedMembers(res, ctx, actor, [
+			preferredMemberId,
+			...(Array.isArray(aiMemberIds) ? aiMemberIds : []),
+		])
+	) {
+		return false;
+	}
 	if (!orgId || !ctx.store.hasOrgAiRolesConfigured(orgId)) return true;
-	const allowed = new Set(ctx.store.resolveEffectiveOrgMembers(orgId).map((m) => m.id));
+	const allowed = new Set(ctx.store.resolveEffectiveOrgMembersForUser(orgId, actor.user?.id).map((m) => m.id));
 	if (preferredMemberId && preferredMemberId !== ROLE_ARCHITECT_MEMBER_ID && !allowed.has(preferredMemberId)) {
 		sendError(res, 403, `角色 ${preferredMemberId} 未在该组织中启用`);
 		return false;
@@ -322,7 +353,16 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, or lead member");
 			return true;
 		}
-		if (!ensureOrgEnabledAiRequest(res, ctx, nextOrgId, nextLeadId, parsedAiMemberIds)) {
+		if (
+			!ensureActorAllowedMembers(res, ctx, actor, [
+				nextLeadId,
+				...(Array.isArray(parsedAiMemberIds) ? parsedAiMemberIds : []),
+				...(observerMemberIds ?? []),
+			])
+		) {
+			return true;
+		}
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, nextOrgId, nextLeadId, parsedAiMemberIds)) {
 			return true;
 		}
 		let updated = existing;
@@ -426,8 +466,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 403, "无权访问所选组织");
 			return true;
 		}
-		if (preferredMemberId && !store.getMember(preferredMemberId)) {
-			sendError(res, 404, `Member not found: ${preferredMemberId}`);
+		if (!ensureActorAllowedMembers(res, ctx, actor, [preferredMemberId])) {
 			return true;
 		}
 		if (mode === "model") {
@@ -445,6 +484,8 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 					prompt,
 					hasImages: body.hasImages === true || body.hasFiles === true,
 					workspaceId,
+					orgId: effectiveOrgId,
+					actorUserId: actor.user?.id ?? null,
 					preferredMemberId,
 					readRepo: body.readRepo === true,
 					signal: cancellation.signal,
@@ -470,6 +511,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			hasWorkspace: Boolean(workspaceId),
 			preferredMemberId,
 			orgId: effectiveOrgId,
+			actorUserId: actor.user?.id ?? null,
 		});
 		sendJson(res, 200, assessment);
 		return true;
@@ -562,13 +604,18 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			}
 		}
 		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
-		if (!ensureOrgEnabledAiRequest(res, ctx, orgId, preferredMemberId, aiMemberIds)) {
+		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
+			return true;
+		}
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, aiMemberIds)) {
 			return true;
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
-		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds, orgId);
+		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds, orgId, {
+			actorUserId: actor.user?.id ?? null,
+		});
 		const fallbackTitle = prompt
 			? prompt.slice(0, 60)
 			: files.length > 0
@@ -677,13 +724,19 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			: hasFileRefs
 				? `请处理同事 ${requesterName} 在上一条 AI 提请中附带的附件。`
 				: `请处理同事 ${requesterName} 在上一条 AI 提请中附带的图片。`;
-		const preferredMemberId =
+		const explicitApproveMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
 				? body.preferredMemberId
 				: typeof targetMsg.metadata?.preferredMemberId === "string" &&
 						targetMsg.metadata.preferredMemberId.length > 0
 					? targetMsg.metadata.preferredMemberId
-					: (matter.leadMemberId ?? undefined);
+					: null;
+		const fallbackLeadMember = matter.leadMemberId ? store.getMember(matter.leadMemberId) : null;
+		const preferredMemberId =
+			explicitApproveMemberId ??
+			(fallbackLeadMember && canActorUseMember(store, actor, fallbackLeadMember)
+				? fallbackLeadMember.id
+				: undefined);
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.length > 0
 				? body.workspaceId
@@ -711,8 +764,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "AI request scope changed; submit a new request in the current organization/workspace");
 			return true;
 		}
-		if (preferredMemberId && !store.getMember(preferredMemberId)) {
-			sendError(res, 404, `Member not found: ${preferredMemberId}`);
+		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
+			return true;
+		}
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, effectiveOrgId, preferredMemberId, undefined)) {
 			return true;
 		}
 		if (
@@ -846,10 +901,14 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 400, "prompt, images, or files is required");
 			return true;
 		}
-		const preferredMemberId =
+		const explicitPreferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
 				? body.preferredMemberId
-				: (matter.leadMemberId ?? undefined);
+				: null;
+		const leadMember = matter.leadMemberId ? store.getMember(matter.leadMemberId) : null;
+		const preferredMemberId =
+			explicitPreferredMemberId ??
+			(leadMember && canActorUseMember(store, actor, leadMember) ? leadMember.id : undefined);
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.length > 0
 				? body.workspaceId
@@ -859,7 +918,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				? body.deliverableTitle.trim()
 				: undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
-		if (!ensureOrgEnabledAiRequest(res, ctx, matter.orgId, preferredMemberId, undefined)) {
+		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
+			return true;
+		}
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, undefined)) {
 			return true;
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);

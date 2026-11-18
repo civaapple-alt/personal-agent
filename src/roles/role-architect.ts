@@ -1,5 +1,6 @@
+import { buildScopedRoleId, slugifySkillName, validateNewSkillDrafts } from "./role-package-store.ts";
 import { formatRoleTemplateBody, serializeRoleTemplateMarkdown } from "./template-loader.ts";
-import type { RoleCapabilityReport, RoleTemplate } from "./types.ts";
+import type { NewSkillDraft, RoleCapabilityReport, RoleScope, RoleTemplate } from "./types.ts";
 
 export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
 export type RoleWorkspaceScope = "read_write_code" | "read_only_repo" | "no_repo_docs";
@@ -39,6 +40,9 @@ export interface RoleDesignBriefInput {
 	quietWhen?: string;
 	interactionStyle?: RoleInteractionStyle;
 	workspaceScope?: RoleWorkspaceScope;
+	roleScope?: RoleScope;
+	ownerOrgId?: string | null;
+	ownerUserId?: string | null;
 	roleId?: string;
 	roleName?: string;
 	roleTitle?: string;
@@ -47,6 +51,7 @@ export interface RoleDesignBriefInput {
 	constraints?: string;
 	skills?: string[];
 	mcpDependencies?: string[];
+	suggestedNewSkills?: NewSkillDraft[];
 	communicationStyle?: string;
 	verificationPlan?: string | RoleVerificationPlan;
 	isPrimaryContact?: boolean;
@@ -60,6 +65,7 @@ export interface RoleArchitectDraft {
 	toolSummary: string;
 	recommendedParticipation: RoleInteractionStyle;
 	designNotes: string[];
+	newSkills?: NewSkillDraft[];
 	capabilityReport?: RoleCapabilityReport;
 	verificationPlanState: "specified" | "missing";
 	designSource?: "rules" | "model";
@@ -218,6 +224,47 @@ function buildDefaultAntiJobs(input: {
 	return list;
 }
 
+export function buildDefaultSuggestedSkillDraft(input: {
+	roleId: string;
+	name: string;
+	title: string;
+	oneJob: string;
+	antiJobs: string[];
+	workflowRules?: string;
+	verificationPlan?: string;
+}): NewSkillDraft {
+	const rawSlug = input.roleId.replace(/^(?:org|usr)-[a-f0-9]{8}-/, "");
+	const skillName = slugifySkillName(`${rawSlug || "role"}-playbook`);
+	const cleanJob = input.oneJob.replace(/[\r\n]+/g, " ").trim();
+	const description = `${input.title} specialized SOP & checklist: ${cleanJob.slice(0, 180)}`;
+	const bodyLines = [
+		`# ${input.name} (${input.title}) Playbook`,
+		"",
+		"## When to Use",
+		`- Apply whenever acting as ${input.name} on: ${cleanJob}`,
+		"",
+		"## Core Procedure",
+		"1. Confirm task scope and check workspace/context facts before proposing conclusions.",
+		input.workflowRules?.trim()
+			? `2. Follow workflow gate: ${input.workflowRules.trim()}`
+			: "2. Structure output with verdict, evidence, and explicit caveats.",
+		...(input.verificationPlan
+			? ["3. Verify deliverables against:", `   ${input.verificationPlan.replace(/\n/g, " | ")}`]
+			: ["3. Cite concrete observations or command results before finishing."]),
+		"",
+		"## Boundaries (Anti-Jobs)",
+		...(input.antiJobs.length > 0
+			? input.antiJobs.map((rule) => `- ${rule}`)
+			: ["- Stay strictly within assigned domain scope."]),
+	];
+	return {
+		name: skillName,
+		description: description.slice(0, 300),
+		body: bodyLines.join("\n"),
+		storageScope: "role_local",
+	};
+}
+
 /**
  * Generates a tightly-scoped, minimal-tool role definition inspired by `dr-eggbot-v2`:
  * one clear job, explicit anti-jobs, quiet rules, and zero leftover tools.
@@ -227,10 +274,25 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	if (!oneJob) {
 		throw new Error("oneJob is required to design a role");
 	}
+	const roleScope: RoleScope = input.roleScope ?? "global";
+	const ownerOrgId = roleScope === "org" ? input.ownerOrgId?.trim() || null : null;
+	const ownerUserId = roleScope === "personal" ? input.ownerUserId?.trim() || null : null;
 	const interactionStyle: RoleInteractionStyle = input.interactionStyle ?? "mixed";
 	const workspaceScope: RoleWorkspaceScope = input.workspaceScope ?? "read_only_repo";
 	const { name, title } = deriveRoleNameAndTitle(input);
-	const id = slugifyRoleId(input.roleId?.trim() || title, input.existingMemberIds ?? []);
+	const rawSlug = input.roleId?.trim() || title;
+	const existingSet = new Set(input.existingMemberIds ?? []);
+	const id =
+		roleScope === "global"
+			? slugifyRoleId(rawSlug, input.existingMemberIds ?? [])
+			: buildScopedRoleId({
+					baseId: rawSlug,
+					roleScope,
+					ownerOrgId,
+					ownerUserId,
+					existingIds: existingSet,
+					allowCollisionSuffix: true,
+				});
 	const { tools, summary: toolSummary } = resolveToolsForScope(workspaceScope);
 	const antiJobs = buildDefaultAntiJobs({
 		interactionStyle,
@@ -292,12 +354,15 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		id,
 		name,
 		title,
+		roleScope,
+		...(ownerOrgId ? { ownerOrgId } : {}),
+		...(ownerUserId ? { ownerUserId } : {}),
 		version: "1.0.0",
-		shareable: true,
+		shareable: roleScope === "global",
 		defaultProvider: "kimi-coding",
 		defaultModel: "kimi-for-coding",
 		thinkingLevel: "high",
-		isPrimaryContact: Boolean(input.isPrimaryContact),
+		isPrimaryContact: roleScope === "global" && Boolean(input.isPrimaryContact),
 		keywords,
 		tools,
 		skills: [...new Set((input.skills ?? []).map((name) => name.trim()).filter(Boolean))],
@@ -306,6 +371,21 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		sections,
 		rawBody: formatRoleTemplateBody(sections),
 	};
+
+	const validatedNewSkills =
+		input.suggestedNewSkills !== undefined
+			? validateNewSkillDrafts(input.suggestedNewSkills)
+			: [
+					buildDefaultSuggestedSkillDraft({
+						roleId: id,
+						name,
+						title,
+						oneJob,
+						antiJobs,
+						workflowRules: input.workflowRules,
+						verificationPlan,
+					}),
+				];
 
 	const designNotes = [
 		`已收敛为单核心职责：${oneJob}`,
@@ -321,6 +401,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		toolSummary,
 		recommendedParticipation: interactionStyle,
 		designNotes,
+		newSkills: validatedNewSkills,
 	};
 }
 

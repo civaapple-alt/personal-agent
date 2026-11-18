@@ -74,6 +74,9 @@ export class PersonalAgentStore {
 	deleteMember(memberId: string) {
 		return this.members.deleteMember(memberId);
 	}
+	countPersonalRoles(userId: string) {
+		return this.members.countPersonalRoles(userId);
+	}
 	isRoleTemplateRemoved(templateId: string) {
 		return this.members.isRoleTemplateRemoved(templateId);
 	}
@@ -398,6 +401,9 @@ export class PersonalAgentStore {
 	}
 	resolveEffectiveOrgMembers(orgId: string) {
 		return this.orgRbac.resolveEffectiveOrgMembers(orgId);
+	}
+	resolveEffectiveOrgMembersForUser(orgId: string, userId?: string | null) {
+		return this.orgRbac.resolveEffectiveOrgMembersForUser(orgId, userId);
 	}
 	setWorkspaceAccess(
 		workspaceId: string,

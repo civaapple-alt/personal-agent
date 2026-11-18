@@ -38,7 +38,17 @@ export async function delegateBetweenMembers(
 	if (!fromMember || !rawToMember) throw new Error("Delegation requires existing team members");
 	const matterRecord = deps.store.getMatter(input.matterId);
 	let toMember = rawToMember;
-	if (matterRecord?.orgId) {
+	if (rawToMember.roleScope === "personal") {
+		const permittedByMatterCreator =
+			matterRecord?.createdByUserId &&
+			rawToMember.ownerUserId === matterRecord.createdByUserId &&
+			(matterRecord.leadMemberId === rawToMember.id ||
+				(Array.isArray(matterRecord.aiMemberIds) && matterRecord.aiMemberIds.includes(rawToMember.id)) ||
+				run.startedByUserId === rawToMember.ownerUserId);
+		if (!permittedByMatterCreator) {
+			throw new Error(`Personal team member ${rawToMember.displayName} is not accessible in this matter`);
+		}
+	} else if (matterRecord?.orgId) {
 		const orgMembers = deps.store.resolveEffectiveOrgMembers(matterRecord.orgId);
 		const matchedOrgMember = orgMembers.find((m) => m.id === rawToMember.id);
 		if (!matchedOrgMember) {

@@ -1,8 +1,9 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
+import type { RoleScope } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, OrgMemberRole, PlatformSettings, WorkspaceLink } from "../storage/types.ts";
+import type { Matter, OrgMemberRole, PlatformSettings, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import { isSuperAdminActor, type RequestActor, requireActiveActor } from "./auth.ts";
 import { sendError } from "./http.ts";
 
@@ -62,6 +63,100 @@ export function canManageOrganization(
 	if (!orgId) return false;
 	const role = getActorOrgRole(store, actor, orgId);
 	return role === "org_owner" || role === "org_admin";
+}
+
+export function resolveActorAccessibleOrgIds(store: PersonalAgentStore, actor: RequestActor | null): Set<string> {
+	const ids = new Set<string>();
+	if (!actor) return ids;
+	for (const org of store.listOrganizations()) {
+		if (canAccessOrganization(store, actor, org.id)) ids.add(org.id);
+	}
+	return ids;
+}
+
+export function isViewerInAllOrgsOrTarget(
+	store: PersonalAgentStore,
+	actor: RequestActor,
+	orgId?: string | null,
+): boolean {
+	if (actor.authKind === "loopback" || isSuperAdminActor(actor)) return false;
+	if (!actor.user) return isLegacyCollaboratorActor(actor);
+	if (orgId) {
+		return getActorOrgRole(store, actor, orgId) === "org_viewer";
+	}
+	const orgs = store.listUserOrganizations(actor.user.id);
+	if (orgs.length === 0) return false;
+	return orgs.every((org) => org.orgRole === "org_viewer");
+}
+
+export function canActorCreateRoleInScope(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	roleScope: RoleScope,
+	ownerOrgId?: string | null,
+): { allowed: boolean; reason?: string } {
+	if (!actor) return { allowed: false, reason: "未认证" };
+	if (actor.user && actor.user.status !== "active") return { allowed: false, reason: "账号未激活" };
+	if (roleScope === "global") {
+		if (isSuperAdminActor(actor)) return { allowed: true };
+		return { allowed: false, reason: "仅超级管理员可创建或修改平台通用（global）AI 角色与 Skill" };
+	}
+	if (roleScope === "org") {
+		if (!ownerOrgId) return { allowed: false, reason: "创建组织共享 AI 角色必须指定所属组织" };
+		if (!store.getOrganization(ownerOrgId))
+			return { allowed: false, reason: `Organization not found: ${ownerOrgId}` };
+		if (isSuperAdminActor(actor) || canManageOrganization(store, actor, ownerOrgId)) {
+			return { allowed: true };
+		}
+		return { allowed: false, reason: "仅组织所有者或管理员可创建该组织的共享 AI 角色与 Skill" };
+	}
+	if (isLegacyCollaboratorActor(actor)) {
+		return { allowed: false, reason: "访客邀请口令不支持创建个人私有角色，请登录个人账号后操作" };
+	}
+	if (!actor.user) {
+		return { allowed: false, reason: "当前会话未绑定个人账号，无法创建个人私有角色" };
+	}
+	if (isViewerInAllOrgsOrTarget(store, actor, ownerOrgId)) {
+		return { allowed: false, reason: "只读成员（org_viewer）无权创建个人私有 AI 角色与 Skill" };
+	}
+	return { allowed: true };
+}
+
+export function canActorUseMember(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	member: Pick<TeamMember, "roleScope" | "ownerOrgId" | "ownerUserId"> | null | undefined,
+): boolean {
+	if (!actor || !member) return false;
+	if (actor.user && actor.user.status !== "active") return false;
+	if (member.roleScope === "personal") {
+		return Boolean(actor.user && member.ownerUserId && member.ownerUserId === actor.user.id);
+	}
+	if (member.roleScope === "org") {
+		return (
+			isSuperAdminActor(actor) ||
+			Boolean(member.ownerOrgId && canAccessOrganization(store, actor, member.ownerOrgId))
+		);
+	}
+	return true;
+}
+
+export function canActorManageMember(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	member: Pick<TeamMember, "roleScope" | "ownerOrgId" | "ownerUserId"> | null | undefined,
+): boolean {
+	if (!actor || !member) return false;
+	if (actor.user && actor.user.status !== "active") return false;
+	if (member.roleScope === "personal") {
+		return Boolean(actor.user && member.ownerUserId && member.ownerUserId === actor.user.id);
+	}
+	if (member.roleScope === "org") {
+		return Boolean(
+			member.ownerOrgId && (isSuperAdminActor(actor) || canManageOrganization(store, actor, member.ownerOrgId)),
+		);
+	}
+	return isSuperAdminActor(actor);
 }
 
 export function canAccessWorkspace(

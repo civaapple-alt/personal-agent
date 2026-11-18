@@ -59,6 +59,7 @@ function mapUserRow(row: Record<string, unknown>): PlatformUser {
 		status,
 		maxOrgs: Math.max(0, Number(row.max_orgs ?? 5)),
 		maxActiveDispatches: Math.max(0, Number(row.max_active_dispatches ?? 3)),
+		maxPersonalRoles: Math.max(0, Number(row.max_personal_roles ?? 5)),
 		canDispatchAi: row.can_dispatch_ai === undefined ? true : Boolean(row.can_dispatch_ai),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
@@ -118,8 +119,8 @@ export class UserAuthRepo {
 			.prepare(
 				`INSERT INTO users (
 					id, email, display_name, password_hash, platform_role, status,
-					max_orgs, max_active_dispatches, can_dispatch_ai, created_at, updated_at
-				) VALUES (?, ?, ?, '', 'super_admin', 'active', 100, 20, 1, ?, ?)`,
+					max_orgs, max_active_dispatches, max_personal_roles, can_dispatch_ai, created_at, updated_at
+				) VALUES (?, ?, ?, '', 'super_admin', 'active', 100, 20, 100, 1, ?, ?)`,
 			)
 			.run(DEFAULT_LOCAL_ADMIN_USER_ID, "owner@localhost", displayName, timestamp, timestamp);
 		return this.getUserById(DEFAULT_LOCAL_ADMIN_USER_ID)!;
@@ -150,7 +151,7 @@ export class UserAuthRepo {
 				.prepare(
 					`UPDATE users
 					 SET display_name = ?, password_hash = ?, platform_role = 'super_admin', status = 'active',
-					     max_orgs = 100, max_active_dispatches = 20, can_dispatch_ai = 1, updated_at = ?
+					     max_orgs = 100, max_active_dispatches = 20, max_personal_roles = 100, can_dispatch_ai = 1, updated_at = ?
 					 WHERE id = ?`,
 				)
 				.run(displayName, passwordHash, timestamp, existingEmail.id);
@@ -162,7 +163,7 @@ export class UserAuthRepo {
 				.prepare(
 					`UPDATE users
 					 SET email = ?, display_name = ?, password_hash = ?, platform_role = 'super_admin', status = 'active',
-					     max_orgs = 100, max_active_dispatches = 20, can_dispatch_ai = 1, updated_at = ?
+					     max_orgs = 100, max_active_dispatches = 20, max_personal_roles = 100, can_dispatch_ai = 1, updated_at = ?
 					 WHERE id = ?`,
 				)
 				.run(email, displayName, passwordHash, timestamp, DEFAULT_LOCAL_ADMIN_USER_ID);
@@ -176,6 +177,7 @@ export class UserAuthRepo {
 			status: "active",
 			maxOrgs: 100,
 			maxActiveDispatches: 20,
+			maxPersonalRoles: 100,
 			canDispatchAi: true,
 		});
 	}
@@ -189,6 +191,7 @@ export class UserAuthRepo {
 		status?: UserStatus;
 		maxOrgs?: number;
 		maxActiveDispatches?: number;
+		maxPersonalRoles?: number;
 		canDispatchAi?: boolean;
 	}): PlatformUser {
 		const email = input.email.trim().toLowerCase();
@@ -206,8 +209,8 @@ export class UserAuthRepo {
 			.prepare(
 				`INSERT INTO users (
 					id, email, display_name, password_hash, platform_role, status,
-					max_orgs, max_active_dispatches, can_dispatch_ai, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					max_orgs, max_active_dispatches, max_personal_roles, can_dispatch_ai, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -218,6 +221,7 @@ export class UserAuthRepo {
 				input.status ?? "active",
 				input.maxOrgs ?? settings.defaultMaxOrgs,
 				input.maxActiveDispatches ?? settings.defaultMaxActiveDispatches,
+				input.maxPersonalRoles ?? settings.defaultMaxPersonalRoles,
 				input.canDispatchAi === false ? 0 : 1,
 				timestamp,
 				timestamp,
@@ -264,6 +268,7 @@ export class UserAuthRepo {
 			status?: UserStatus;
 			maxOrgs?: number;
 			maxActiveDispatches?: number;
+			maxPersonalRoles?: number;
 			canDispatchAi?: boolean;
 			password?: string;
 		},
@@ -292,13 +297,17 @@ export class UserAuthRepo {
 			patch.maxActiveDispatches !== undefined
 				? Math.max(0, Math.floor(patch.maxActiveDispatches))
 				: existing.maxActiveDispatches;
+		const maxPersonalRoles =
+			patch.maxPersonalRoles !== undefined
+				? Math.max(0, Math.floor(patch.maxPersonalRoles))
+				: existing.maxPersonalRoles;
 		const canDispatchAi = patch.canDispatchAi !== undefined ? patch.canDispatchAi : existing.canDispatchAi;
 		const passwordHash = patch.password ? hashPassword(patch.password) : existing.passwordHash;
 		this.db
 			.prepare(
 				`UPDATE users
 				 SET display_name = ?, password_hash = ?, platform_role = ?, status = ?,
-				     max_orgs = ?, max_active_dispatches = ?, can_dispatch_ai = ?, updated_at = ?
+				     max_orgs = ?, max_active_dispatches = ?, max_personal_roles = ?, can_dispatch_ai = ?, updated_at = ?
 				 WHERE id = ?`,
 			)
 			.run(
@@ -308,6 +317,7 @@ export class UserAuthRepo {
 				nextStatus,
 				maxOrgs,
 				maxActiveDispatches,
+				maxPersonalRoles,
 				canDispatchAi ? 1 : 0,
 				timestamp,
 				userId,
@@ -379,6 +389,7 @@ export class UserAuthRepo {
 			allowCommandPreviews: true,
 			defaultMaxOrgs: 5,
 			defaultMaxActiveDispatches: 3,
+			defaultMaxPersonalRoles: 5,
 			pstackDir: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
 		};
@@ -419,6 +430,10 @@ export class UserAuthRepo {
 					Number.isFinite(parsed.defaultMaxActiveDispatches)
 						? Math.max(0, Math.floor(parsed.defaultMaxActiveDispatches))
 						: defaults.defaultMaxActiveDispatches,
+				defaultMaxPersonalRoles:
+					typeof parsed.defaultMaxPersonalRoles === "number" && Number.isFinite(parsed.defaultMaxPersonalRoles)
+						? Math.max(0, Math.floor(parsed.defaultMaxPersonalRoles))
+						: defaults.defaultMaxPersonalRoles,
 				pstackDir:
 					typeof parsed.pstackDir === "string" && parsed.pstackDir.trim()
 						? parsed.pstackDir.trim()
@@ -455,6 +470,10 @@ export class UserAuthRepo {
 				patch.defaultMaxActiveDispatches !== undefined
 					? Math.max(0, Math.floor(patch.defaultMaxActiveDispatches))
 					: current.defaultMaxActiveDispatches,
+			defaultMaxPersonalRoles:
+				patch.defaultMaxPersonalRoles !== undefined
+					? Math.max(0, Math.floor(patch.defaultMaxPersonalRoles))
+					: current.defaultMaxPersonalRoles,
 			pstackDir:
 				patch.pstackDir === null || patch.pstackDir === ""
 					? null
