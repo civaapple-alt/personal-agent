@@ -1333,6 +1333,8 @@ export function App() {
 					<DeliverablesView
 						bootstrap={bootstrap}
 						currentUser={currentUser}
+						accountUser={accountUser}
+						isSuperAdmin={isSuperAdmin}
 						activeDeliverable={activeDeliverable}
 						filteredDeliverables={filteredDeliverables}
 						siblingVersions={siblingVersionsFor(activeDeliverable)}

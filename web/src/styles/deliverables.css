@@ -471,16 +471,60 @@
 .deliverables-toolbar {
 	margin-top: 16px;
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
 	gap: 12px;
 	flex-wrap: wrap;
+}
+.deliverables-filter-bars {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex: 1 1 360px;
+	min-width: 0;
 }
 .project-filter-bar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	flex-wrap: wrap;
+}
+.deliverable-family-badges {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.scope-lock-pill,
+.scope-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 7px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+.scope-lock-pill.is-private,
+.scope-pill.is-private {
+	background: #fff2e8;
+	color: #9e4710;
+	border: 1px solid #f0cfb8;
+}
+.scope-lock-pill.is-restricted,
+.scope-pill.is-restricted {
+	background: #f2f4ff;
+	color: #36459a;
+	border: 1px solid #d4dbf7;
+}
+.scope-pill.is-org {
+	background: #edf9f5;
+	color: #0b574e;
+	border: 1px solid #cbe8de;
+}
+.deliverable-scope-select {
+	min-width: 0;
+	max-width: 100%;
+	height: 32px;
 }
 .choice-chip {
 	border: 1px solid var(--border);

@@ -24,6 +24,12 @@ interface DeliverableCardProps {
 	memberName: string;
 	workspaceId: string | null;
 	workspaceName: string | null;
+	organizationName?: string | null;
+	visibility?: "org" | "private";
+	workspaceVisibility?: "org" | "restricted";
+	canInteract?: boolean;
+	canChangeVisibility?: boolean;
+	onChangeVisibility?: (next: "org" | "private") => Promise<void>;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations?: OrganizationDto[];
@@ -65,6 +71,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 	const [autoDistill, setAutoDistill] = useState(false);
 	const [submittingFeedback, setSubmittingFeedback] = useState(false);
 	const [distilling, setDistilling] = useState(false);
+	const [changingVisibility, setChangingVisibility] = useState(false);
 	const [lastDistillNote, setLastDistillNote] = useState<string | null>(null);
 
 	const associatedMemories = useMemo(
@@ -150,7 +157,21 @@ export function DeliverableCard(props: DeliverableCardProps) {
 						) : (
 							<span className="deliverable-status-pill">✓ 已交付</span>
 						)}
+						{props.organizationName && <span className="pill org-pill">组织：{props.organizationName}</span>}
 						{props.workspaceName && <span className="pill">仓库：{props.workspaceName}</span>}
+						{props.visibility === "private" ? (
+							<span className="scope-pill is-private" title="仅事项发起人、受邀参与成员及本组织管理员可见">
+								私密范围
+							</span>
+						) : props.workspaceVisibility === "restricted" ? (
+							<span className="scope-pill is-restricted" title="仅授权仓库成员及本组织管理员可见">
+								受限仓库范围
+							</span>
+						) : props.organizationName ? (
+							<span className="scope-pill is-org" title="所属组织内有项目访问权限的成员可见">
+								组织内共享
+							</span>
+						) : null}
 						<span>{props.memberName}</span>
 						<span>·</span>
 						<span>{typeLabel}</span>
@@ -267,17 +288,21 @@ export function DeliverableCard(props: DeliverableCardProps) {
 						打开查看 →
 					</a>
 				)}
-				<button type="button" className="btn-pill-outline" onClick={props.onRequestRevision}>
-					继续修改
-				</button>
-				<button
-					type="button"
-					className={`btn-pill-outline ${feedbackOpen ? "active" : ""}`}
-					aria-expanded={feedbackOpen}
-					onClick={() => setFeedbackOpen((prev) => !prev)}
-				>
-					{feedbackOpen ? "收起验收" : ratingLabel ? "修改验收" : "记录验收"}
-				</button>
+				{props.canInteract !== false && (
+					<>
+						<button type="button" className="btn-pill-outline" onClick={props.onRequestRevision}>
+							继续修改
+						</button>
+						<button
+							type="button"
+							className={`btn-pill-outline ${feedbackOpen ? "active" : ""}`}
+							aria-expanded={feedbackOpen}
+							onClick={() => setFeedbackOpen((prev) => !prev)}
+						>
+							{feedbackOpen ? "收起验收" : ratingLabel ? "修改验收" : "记录验收"}
+						</button>
+					</>
+				)}
 				{props.isOwner !== false && (
 					<>
 						<button type="button" className="btn-pill-outline" onClick={() => setMemoryOpen((prev) => !prev)}>
@@ -287,6 +312,26 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
 						</button>
 					</>
+				)}
+				{props.canChangeVisibility && props.onChangeVisibility && (
+					<select
+						aria-label="成果访问范围"
+						className="select-sm deliverable-scope-select"
+						value={props.visibility ?? "org"}
+						disabled={changingVisibility}
+						onChange={(e) => {
+							const next = e.target.value === "private" ? "private" : "org";
+							if (next === (props.visibility ?? "org")) return;
+							setChangingVisibility(true);
+							void props.onChangeVisibility?.(next).finally(() => setChangingVisibility(false));
+						}}
+					>
+						<option value="org">访问范围：组织内可见</option>
+						<option value="private">访问范围：仅发起人/管理员/受邀人</option>
+					</select>
+				)}
+				{props.canInteract === false && (
+					<span className="muted-hint compact">只读成员（org_viewer）仅可查看交付成果</span>
 				)}
 				{distilling && props.onCancelDistill && (
 					<button type="button" className="btn-stop-pill" onClick={props.onCancelDistill}>
@@ -331,7 +376,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 				/>
 			)}
 
-			{feedbackOpen && (
+			{feedbackOpen && props.canInteract !== false && (
 				<div className="feedback-panel">
 					<div className="feedback-rating-row">
 						<span className="feedback-rating-label">验收结论：</span>

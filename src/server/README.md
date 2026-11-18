@@ -38,7 +38,7 @@
   - `GET /api/admin/overview`、`PATCH /api/admin/settings`、`PATCH /api/admin/users/:id`、`GET /api/admin/audit`、`POST /api/admin/matters/:id/abort` 及 `POST /api/admin/runtime/pstack/{enable,disable}`（超级管理员在页面一键只读克隆 `backnotprop/pstack` 至 `<dataDir>/extensions/repo/<repoName>`、校验后持久化 `platform_settings.pstackDir` 并动态注入 `orchestrator.setPstackDir`）仅供 `super_admin`（或未启用强制认证时的本机回环所有者）访问；变更写入 `audit_logs`，禁用账号立即吊销全量会话并断开 SSE。
   - 任何已启用账号成员均可在 `maxOrgs` 配额内自建组织（`POST /api/organizations`），经 `/api/organizations/:id/members*`、`invites*`、`POST /api/organizations/join` 与 `PUT /api/organizations/:id/ai-roles` 配置组织人类成员、邀请链接与启用 AI 角色（`ensureOrgEnabledAiRequest` 拦截未启用角色）。
   - `POST /api/workspaces` 支持 `sourceType: "clone"`（校验 `cloneUrl` 禁用 `file:`/`ext::`/参数注入后安全克隆至 `<workspacesRoot>/<orgSlug>/`）与 `sourceType: "local"`（非超管受 `allowLocalWorkspacePath`、`localWorkspaceAllowlist` 与内部运行目录隔离保护），并按 `visibility: "org" | "restricted"` 控制可见成员。
-  - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 与受限内网 `legacy_token` 仍禁止直接触发 AI；`/api/bootstrap`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL 严格隔离。
+  - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 与受限内网 `legacy_token` 仍禁止直接触发 AI；`/api/bootstrap`、`GET /api/deliverables`（支持 `?orgId=`、`?workspaceId=`、`?visibility=org|private` 筛选）、`GET /api/deliverables/:id`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL（`canAccessMatter`、`canAccessDeliverable`、`canAccessWorkspace`）严格隔离，同时阻止兼容态 `legacy_token` 访客读取/反馈他人 `private` 或受限事项，并允许所属组织的 `org_owner`/`org_admin` 在 `POST /api/previews/:id/stop` 中停止关联成果预览。
   - `POST /api/matters` 优先使用仓库所属组织，再使用请求中指定的组织。普通账号在未绑定仓库时省略 `orgId`，或传入 `null`、空字符串，均解析为其所属的默认组织或首个组织。无所属组织时返回 403。Role Architect 与普通事项共用此规则。
   - 多人类受限协作与显式讨论隔离（兼容模式）：
   - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式
@@ -52,10 +52,10 @@
   - 提请只允许从 `pending` 原子转为 `approved` 或 `dismissed`；重复处理/非提请返回 409。批准先校验来源组织与仓库、AI 成员和附件，失败保持待处理；附件缺失返回 410。
   - 图片上传完成后由 `dispatch-runner` 统一检查运行占用，冲突返回 409，不能覆盖原运行进度。运行中的仓库也不能经 PATCH 或同路径 upsert 改归属组织。
 - Phase 4 RSI 接口：
-  - `POST /api/deliverables/:id/feedback` 支持可选 `rating`、`autoDistill` 与 `scopeMode`，反馈与计数原子保存并仅评价该版本关联的经验（`neutral` 撤回当前票）。
+  - `POST /api/deliverables/:id/feedback` 支持可选 `rating`、`autoDistill` 与 `scopeMode`，先校验成果/事项访问权及反馈权限（`org_viewer` 与未授权 `legacy_token` 返回 403；`autoDistill` 须具备复盘管理权），反馈与计数原子保存并仅评价该版本关联的经验（`neutral` 撤回当前票）。
   - 可选自动复盘失败时仍返回已保存反馈与 `distillationError`。
-  - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止）、`POST /api/rsi/distill/abort` 支持只读多角色经验提炼与取消。
-  - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期。
+  - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止，校验 `canDistillMatter` 与可选 `deliverableId` 对所属 `matterId` 的一致性）、`POST /api/rsi/distill/abort` 支持只读多角色经验提炼与取消；组织 `org_owner`/`org_admin` 可为本组织可见成果与事项触发复盘。
+  - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期；`org_owner`/`org_admin` 可管理所属组织的 `company_private`、`project_private` 及组织内 `org` 角色经验，全局平台角色 `role_general` 仍限超级管理员管理，`org_member`/`org_viewer`/`legacy_token` 禁止写改记忆。
   - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
 - 运行态恢复与快照：
   - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端 F5 刷新恢复。

@@ -886,3 +886,426 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 		rmSync(tempDir, { recursive: true, force: true });
 	}
 });
+
+test("Deliverables API enforces org, restricted workspace, private visibility, org_viewer, and RSI access boundaries", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		noSession: true,
+		defaultCwd: process.cwd(),
+		workerFactory: (opts) => {
+			if (opts.args?.includes("--tools") && opts.args[opts.args.indexOf("--tools") + 1] === "") {
+				const baseWorker = new MultiTenantTestWorker(opts);
+				return {
+					start: async () => {},
+					stop: () => baseWorker.stop(),
+					getState: () => baseWorker.getState(),
+					onNotice: () => baseWorker.onNotice(),
+					setDialogHandler: () => baseWorker.setDialogHandler(),
+					onEvent: () => baseWorker.onEvent(),
+					options: baseWorker.options,
+					runPromptAndWait: async () => ({
+						disposition: "started",
+						aborted: false,
+						assistantText: JSON.stringify({
+							candidates: [
+								{
+									memberId: "product-manager",
+									scope: "company_private",
+									category: "domain_constraint",
+									content: "Alpha org deliverables must record acceptance criteria.",
+									rationale: "Verified from orgA review",
+								},
+							],
+						}),
+						assistantMessages: [],
+						toolExecutions: [],
+						notices: [],
+						dialogs: [],
+						events: [],
+					}),
+				};
+			}
+			return new MultiTenantTestWorker(opts);
+		},
+	});
+	const previewManager = new PreviewManager();
+	const dialogBroker = new DialogBroker();
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+		requireAuth: true,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const addr = server.address();
+	assert.ok(addr && typeof addr === "object");
+	const base = `http://127.0.0.1:${addr.port}`;
+
+	try {
+		const orgA = store.upsertOrganization({ name: "Alpha Org", isDefault: true });
+		const orgB = store.upsertOrganization({ name: "Beta Org" });
+		const ownerA = store.createUser({
+			email: "owner-a@test.local",
+			displayName: "OwnerA",
+			password: "Pass123456!",
+			status: "active",
+		});
+		const memberA = store.createUser({
+			email: "member-a@test.local",
+			displayName: "MemberA",
+			password: "Pass123456!",
+			status: "active",
+		});
+		const peerA = store.createUser({
+			email: "peer-a@test.local",
+			displayName: "PeerA",
+			password: "Pass123456!",
+			status: "active",
+		});
+		const viewerA = store.createUser({
+			email: "viewer-a@test.local",
+			displayName: "ViewerA",
+			password: "Pass123456!",
+			status: "active",
+		});
+		const ownerB = store.createUser({
+			email: "owner-b@test.local",
+			displayName: "OwnerB",
+			password: "Pass123456!",
+			status: "active",
+		});
+
+		store.upsertOrgMember({ orgId: orgA.id, userId: ownerA.id, orgRole: "org_owner" });
+		store.upsertOrgMember({ orgId: orgA.id, userId: memberA.id, orgRole: "org_member" });
+		store.upsertOrgMember({ orgId: orgA.id, userId: peerA.id, orgRole: "org_member" });
+		store.upsertOrgMember({ orgId: orgA.id, userId: viewerA.id, orgRole: "org_viewer" });
+		// Give ownerA membership in orgB too so we test multi-org filtering via ?orgId=
+		store.upsertOrgMember({ orgId: orgB.id, userId: ownerA.id, orgRole: "org_member" });
+		store.upsertOrgMember({ orgId: orgB.id, userId: ownerB.id, orgRole: "org_owner" });
+
+		const wsAOpen = store.upsertWorkspace({
+			name: "Alpha Open",
+			repoPath: "/tmp/alpha-open",
+			orgId: orgA.id,
+			visibility: "org",
+		});
+		const wsARestricted = store.upsertWorkspace({
+			name: "Alpha Restricted",
+			repoPath: "/tmp/alpha-secret",
+			orgId: orgA.id,
+			visibility: "restricted",
+		});
+		store.setWorkspaceAccess(wsARestricted.id, "restricted", [memberA.id]);
+		const wsBOpen = store.upsertWorkspace({
+			name: "Beta Open",
+			repoPath: "/tmp/beta-open",
+			orgId: orgB.id,
+			visibility: "org",
+		});
+
+		const mAOpen = store.createMatter({
+			title: "Alpha Shared",
+			leadMemberId: "product-manager",
+			orgId: orgA.id,
+			workspaceId: wsAOpen.id,
+			createdByUserId: memberA.id,
+			visibility: "org",
+		});
+		const mAPrivate = store.createMatter({
+			title: "Alpha Private",
+			leadMemberId: "product-manager",
+			orgId: orgA.id,
+			workspaceId: wsAOpen.id,
+			createdByUserId: memberA.id,
+			visibility: "private",
+		});
+		const mARestricted = store.createMatter({
+			title: "Alpha Restricted Matter",
+			leadMemberId: "product-manager",
+			orgId: orgA.id,
+			workspaceId: wsARestricted.id,
+			createdByUserId: memberA.id,
+			visibility: "org",
+		});
+		const mBOpen = store.createMatter({
+			title: "Beta Shared",
+			leadMemberId: "product-manager",
+			orgId: orgB.id,
+			workspaceId: wsBOpen.id,
+			createdByUserId: ownerB.id,
+			visibility: "org",
+		});
+
+		const [dAOpen] = store.recordDeliverables([
+			{
+				matterId: mAOpen.id,
+				memberId: "product-manager",
+				type: "document",
+				title: "Alpha Open Spec",
+				contentOrPath: "Open spec",
+			},
+		]);
+		const [dAPrivate] = store.recordDeliverables([
+			{
+				matterId: mAPrivate.id,
+				memberId: "product-manager",
+				type: "document",
+				title: "Alpha Secret Spec",
+				contentOrPath: "Private spec",
+			},
+		]);
+		const [dARestricted] = store.recordDeliverables([
+			{
+				matterId: mARestricted.id,
+				memberId: "product-manager",
+				type: "document",
+				title: "Alpha Restricted Spec",
+				contentOrPath: "Restricted spec",
+			},
+		]);
+		const [dBOpen] = store.recordDeliverables([
+			{
+				matterId: mBOpen.id,
+				memberId: "product-manager",
+				type: "document",
+				title: "Beta Open Spec",
+				contentOrPath: "Beta spec",
+			},
+		]);
+		assert.ok(dAOpen && dAPrivate && dARestricted && dBOpen);
+		store.appendMessage({
+			matterId: mAOpen.id,
+			channel: "user",
+			senderType: "member",
+			senderId: "product-manager",
+			content: "Published Alpha Open Spec",
+			metadata: {
+				orgId: orgA.id,
+				workspaceId: wsAOpen.id,
+				repoPath: resolve("/tmp/alpha-open"),
+				deliverableIds: [dAOpen.id],
+			},
+		});
+
+		const ownerACookie = `pa_session=${store.createSession(ownerA.id).rawToken}`;
+		const memberACookie = `pa_session=${store.createSession(memberA.id).rawToken}`;
+		const peerACookie = `pa_session=${store.createSession(peerA.id).rawToken}`;
+		const viewerACookie = `pa_session=${store.createSession(viewerA.id).rawToken}`;
+		const ownerBCookie = `pa_session=${store.createSession(ownerB.id).rawToken}`;
+
+		// 1. Multi-org filtering for OwnerA (belongs to both orgA & orgB)
+		const allOwnerA = (await (
+			await fetch(`${base}/api/deliverables`, { headers: { Cookie: ownerACookie } })
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.deepEqual(
+			allOwnerA.deliverables.map((d) => d.id).sort(),
+			[dAOpen.id, dAPrivate.id, dARestricted.id, dBOpen.id].sort(),
+		);
+		const onlyOrgA = (await (
+			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgA.id)}`, {
+				headers: { Cookie: ownerACookie },
+			})
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.deepEqual(
+			onlyOrgA.deliverables.map((d) => d.id).sort(),
+			[dAOpen.id, dAPrivate.id, dARestricted.id].sort(),
+		);
+		const onlyOrgB = (await (
+			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgB.id)}`, {
+				headers: { Cookie: ownerACookie },
+			})
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.deepEqual(
+			onlyOrgB.deliverables.map((d) => d.id),
+			[dBOpen.id],
+		);
+		const onlyPrivateA = (await (
+			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgA.id)}&visibility=private`, {
+				headers: { Cookie: ownerACookie },
+			})
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.deepEqual(
+			onlyPrivateA.deliverables.map((d) => d.id),
+			[dAPrivate.id],
+		);
+
+		// 2. PeerA (org_member not on private matter or restricted workspace) cannot see or fetch them, nor query orgB
+		const peerList = (await (
+			await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerACookie } })
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.deepEqual(
+			peerList.deliverables.map((d) => d.id),
+			[dAOpen.id],
+		);
+		assert.equal(
+			(await fetch(`${base}/api/deliverables/${dAPrivate.id}`, { headers: { Cookie: peerACookie } })).status,
+			403,
+		);
+		assert.equal(
+			(await fetch(`${base}/api/deliverables/${dARestricted.id}`, { headers: { Cookie: peerACookie } })).status,
+			403,
+		);
+		assert.equal(
+			(await fetch(`${base}/api/deliverables/${dBOpen.id}`, { headers: { Cookie: peerACookie } })).status,
+			403,
+		);
+		assert.equal(
+			(
+				await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgB.id)}`, {
+					headers: { Cookie: peerACookie },
+				})
+			).status,
+			403,
+		);
+
+		// 3. Creator MemberA tightens dAOpen from org -> private; PeerA immediately loses visibility
+		const tightenRes = await fetch(`${base}/api/matters/${mAOpen.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Cookie: memberACookie },
+			body: JSON.stringify({ visibility: "private" }),
+		});
+		assert.equal(tightenRes.status, 200);
+		assert.equal(
+			(await fetch(`${base}/api/deliverables/${dAOpen.id}`, { headers: { Cookie: peerACookie } })).status,
+			403,
+		);
+		const peerListAfterTighten = (await (
+			await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerACookie } })
+		).json()) as { deliverables: Array<{ id: string }> };
+		assert.equal(peerListAfterTighten.deliverables.length, 0);
+
+		// Re-open mAOpen to org for viewer/feedback/distill tests
+		assert.equal(
+			(
+				await fetch(`${base}/api/matters/${mAOpen.id}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json", Cookie: memberACookie },
+					body: JSON.stringify({ visibility: "org" }),
+				})
+			).status,
+			200,
+		);
+
+		// 4. org_viewer is read-only on deliverables (cannot submit feedback, tighten visibility, or distill)
+		assert.equal(
+			(
+				await fetch(`${base}/api/deliverables/${dAOpen.id}/feedback`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
+					body: JSON.stringify({ rating: "positive", feedback: "viewer hack" }),
+				})
+			).status,
+			403,
+		);
+		assert.equal(
+			(
+				await fetch(`${base}/api/matters/${mAOpen.id}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
+					body: JSON.stringify({ visibility: "private" }),
+				})
+			).status,
+			403,
+		);
+		assert.equal(
+			(
+				await fetch(`${base}/api/rsi/distill`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
+					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+				})
+			).status,
+			403,
+		);
+
+		// 5. org_member cannot trigger RSI distillation or autoDistill; org_owner CAN trigger RSI distill for own org & cross-matter deliverableId is rejected
+		assert.equal(
+			(
+				await fetch(`${base}/api/rsi/distill`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: memberACookie },
+					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+				})
+			).status,
+			403,
+		);
+		assert.equal(
+			(
+				await fetch(`${base}/api/deliverables/${dAOpen.id}/feedback`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: memberACookie },
+					body: JSON.stringify({ rating: "positive", autoDistill: true }),
+				})
+			).status,
+			403,
+		);
+		// Cross-matter deliverableId mismatch returns 400
+		assert.equal(
+			(
+				await fetch(`${base}/api/rsi/distill`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
+					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dBOpen.id }),
+				})
+			).status,
+			400,
+		);
+		// OrgA owner CAN distill on orgA deliverable & save company_private memory, but CANNOT mutate global role_general memory
+		const ownerADistill = await fetch(`${base}/api/rsi/distill`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: ownerACookie },
+			body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+		});
+		assert.equal(ownerADistill.status, 200);
+		assert.equal(
+			(
+				await fetch(`${base}/api/memories`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
+					body: JSON.stringify({
+						memberId: "product-manager",
+						scope: "role_general",
+						content: "Cross-org hijack",
+					}),
+				})
+			).status,
+			403,
+		);
+		assert.equal(
+			(
+				await fetch(`${base}/api/memories`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
+					body: JSON.stringify({
+						memberId: "product-manager",
+						scope: "company_private",
+						orgId: orgA.id,
+						content: "Alpha org deliverable checklist",
+					}),
+				})
+			).status,
+			201,
+		);
+		// OrgB owner cannot touch orgA deliverables
+		assert.equal(
+			(
+				await fetch(`${base}/api/rsi/distill`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: ownerBCookie },
+					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+				})
+			).status,
+			403,
+		);
+	} finally {
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		await orchestrator.shutdown();
+		db.close();
+	}
+});

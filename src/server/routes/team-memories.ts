@@ -31,6 +31,7 @@ import {
 } from "../../roles/template-loader.ts";
 import type { NewSkillDraft, RoleScope, RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
 import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMember } from "../../storage/types.ts";
 import {
@@ -41,7 +42,9 @@ import {
 	canActorCreateRoleInScope,
 	canActorManageMember,
 	canActorUseMember,
+	canDistillMatter,
 	canManageOrganization,
+	isGlobalUnscopedActor,
 	isViewerInAllOrgsOrTarget,
 	resolveActorAccessibleOrgIds,
 } from "../acl.ts";
@@ -59,6 +62,34 @@ interface PlannedMember {
 	template: RoleTemplate;
 	identity: Parameters<ServerRouteContext["store"]["updateMemberIdentity"]>[1];
 	newSkills: NewSkillDraft[];
+}
+
+function canActorManageMemoryEntry(
+	store: PersonalAgentStore,
+	actor: RequestActor,
+	input: {
+		member: Pick<TeamMember, "roleScope" | "ownerOrgId" | "ownerUserId"> | null | undefined;
+		scope: MemoryScope;
+		orgId?: string | null;
+		workspaceId?: string | null;
+	},
+): boolean {
+	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
+	if (!input.member) return false;
+	if (input.member.roleScope === "personal") {
+		return canActorManageMember(store, actor, input.member);
+	}
+	if (input.scope === "role_general") {
+		return (
+			input.member.roleScope === "org" &&
+			Boolean(input.member.ownerOrgId && canManageOrganization(store, actor, input.member.ownerOrgId))
+		);
+	}
+	if (input.scope === "company_private") {
+		return Boolean(input.orgId && canManageOrganization(store, actor, input.orgId));
+	}
+	const ws = input.workspaceId ? store.getWorkspace(input.workspaceId) : null;
+	return Boolean(ws?.orgId && canManageOrganization(store, actor, ws.orgId));
 }
 
 interface ResolvedRoleScopeTarget {
@@ -1030,13 +1061,6 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Member not found: ${memberId}`);
 			return true;
 		}
-		if (
-			!isSuperAdminActor(actor) &&
-			!(targetMember.roleScope === "personal" && canActorManageMember(store, actor, targetMember))
-		) {
-			sendError(res, 403, "只有团队所有者可添加共享角色的经验");
-			return true;
-		}
 		if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
 			sendError(res, 400, `Unsupported memory scope: ${scope}`);
 			return true;
@@ -1069,9 +1093,10 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		}
 		if (
 			(orgId && !canAccessOrganization(store, actor, orgId)) ||
-			(workspaceId && !canAccessWorkspace(store, actor, store.getWorkspace(workspaceId)))
+			(workspaceId && !canAccessWorkspace(store, actor, store.getWorkspace(workspaceId))) ||
+			!canActorManageMemoryEntry(store, actor, { member: targetMember, scope, orgId, workspaceId })
 		) {
-			sendError(res, 403, "无权在该组织或项目中添加经验");
+			sendError(res, 403, "仅所有者或对应组织管理员可为该范围沉淀经验");
 			return true;
 		}
 		const rawStatus = body.status;
@@ -1125,14 +1150,23 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 	const memoryEvalMatch = pathname.match(/^\/api\/memories\/([^/]+)\/evaluate$/);
 	if (method === "POST" && memoryEvalMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const memoryId = decodeURIComponent(memoryEvalMatch[1]!);
 		const existing = store.getMemory(memoryId);
 		if (!existing) {
 			sendError(res, 404, `Memory not found: ${memoryId}`);
 			return true;
 		}
-		if (!canActorAccessMemory(store, actor, existing)) {
+		const existingMember = store.getMember(existing.memberId);
+		if (
+			!canActorAccessMemory(store, actor, existing) ||
+			!canActorManageMemoryEntry(store, actor, {
+				member: existingMember,
+				scope: existing.scope,
+				orgId: existing.orgId,
+				workspaceId: existing.workspaceId,
+			})
+		) {
 			sendError(res, 403, "无权评价该经验");
 			return true;
 		}
@@ -1155,14 +1189,23 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 	const memoryPatchMatch = pathname.match(/^\/api\/memories\/([^/]+)$/);
 	if (method === "PATCH" && memoryPatchMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const memoryId = decodeURIComponent(memoryPatchMatch[1]!);
 		const existing = store.getMemory(memoryId);
 		if (!existing) {
 			sendError(res, 404, `Memory not found: ${memoryId}`);
 			return true;
 		}
-		if (!canActorAccessMemory(store, actor, existing)) {
+		const existingMember = store.getMember(existing.memberId);
+		if (
+			!canActorAccessMemory(store, actor, existing) ||
+			!canActorManageMemoryEntry(store, actor, {
+				member: existingMember,
+				scope: existing.scope,
+				orgId: existing.orgId,
+				workspaceId: existing.workspaceId,
+			})
+		) {
 			sendError(res, 403, "无权修改该经验");
 			return true;
 		}
@@ -1207,12 +1250,23 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
+		const nextMemberId = memberId ?? existing.memberId;
+		const nextScope = scope ?? existing.scope;
+		const nextOrgId = orgId === undefined ? existing.orgId : orgId;
+		const nextWorkspaceId = workspaceId === undefined ? existing.workspaceId : workspaceId;
+		const nextMember = store.getMember(nextMemberId);
 		if (
 			!canActorAccessMemory(store, actor, {
-				memberId: memberId ?? existing.memberId,
-				scope: scope ?? existing.scope,
-				orgId: orgId === undefined ? existing.orgId : orgId,
-				workspaceId: workspaceId === undefined ? existing.workspaceId : workspaceId,
+				memberId: nextMemberId,
+				scope: nextScope,
+				orgId: nextOrgId,
+				workspaceId: nextWorkspaceId,
+			}) ||
+			!canActorManageMemoryEntry(store, actor, {
+				member: nextMember,
+				scope: nextScope,
+				orgId: nextOrgId,
+				workspaceId: nextWorkspaceId,
 			})
 		) {
 			sendError(res, 403, "无权将经验移至该角色或作用域");
@@ -1259,7 +1313,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 	}
 
 	if (method === "POST" && pathname === "/api/rsi/distill/abort") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 		if (!matterId) {
@@ -1267,8 +1321,12 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			return true;
 		}
 		const matter = store.getMatter(matterId);
-		if (matter && !canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
+		if (!matter) {
+			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canDistillMatter(store, actor, matter)) {
+			sendError(res, 403, "仅所有者或对应组织管理员可中止该事项经验复盘");
 			return true;
 		}
 		const aborted = orchestrator.abortDistillation(matterId);
@@ -1277,7 +1335,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 	}
 
 	if (method === "POST" && pathname === "/api/rsi/distill") {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 		if (!matterId) {
@@ -1285,12 +1343,27 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			return true;
 		}
 		const matter = store.getMatter(matterId);
-		if (matter && !canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
+		if (!matter) {
+			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canDistillMatter(store, actor, matter)) {
+			sendError(res, 403, "仅所有者或对应组织管理员可在该事项触发团队经验复盘");
 			return true;
 		}
 		const deliverableId =
 			typeof body.deliverableId === "string" && body.deliverableId.trim() ? body.deliverableId.trim() : undefined;
+		if (deliverableId) {
+			const targetDeliverable = store.getDeliverable(deliverableId);
+			if (!targetDeliverable) {
+				sendError(res, 404, `Deliverable not found: ${deliverableId}`);
+				return true;
+			}
+			if (targetDeliverable.matterId !== matterId) {
+				sendError(res, 400, "deliverableId does not belong to the specified matterId");
+				return true;
+			}
+		}
 		const memberId = typeof body.memberId === "string" && body.memberId.trim() ? body.memberId.trim() : undefined;
 		const feedback = typeof body.feedback === "string" && body.feedback.trim() ? body.feedback.trim() : undefined;
 		const rating: FeedbackRating | undefined =

@@ -70,9 +70,10 @@
   - 支持在同一协作上下文按岗位和经验维度（提效/排障/协同/用户纠偏/项目规范）直接提炼，进行中支持「取消提炼」同步中止请求与后台 reflection worker。
   - 支持核验通过、批量通过、编辑改属与溯源跳转；为 `company_private` 提供组织（或退化单仓库）选择器，切换到仓库范围时通过 `pickDefaultWorkspaceId` 优先默认当前/来源事项所属仓库（仍可手动切换）。
   - 「待核验」卡片聚焦核验/编辑/忽略并隐藏零值计数；核验通过后再开放 `+1/-1` 效用评价。
-- [DeliverableCard](components/DeliverableCard.tsx) 在 [DeliverablesView](components/DeliverablesView.tsx) 中采用「简练 · 有重点 · 有过程」阅读视图：
-  - 顶部单行轻元信息 + [utils.ts](utils.ts) `parseDeliverableSummary` 提炼的「本版重点」与可展开「过程脉络」（依据清单、版本时间线与原对话直达）。
-  - 底部操作栏收口为「记录/修改验收」（默认折叠表单）、「手动沉淀经验」与「AI 提炼团队经验」，嵌入区设 `showManualToggle={false}` 避免重复按钮。
+- [DeliverablesView](components/DeliverablesView.tsx) 与 [DeliverableCard](components/DeliverableCard.tsx) 在 `#/deliverables` 提供多组织筛选与「简练 · 有重点 · 有过程」阅读视图：
+  - 顶部支持按**组织**（`全部组织` / 所属组织 / `未归属组织`）、级联**项目仓库**（随所选组织动态过滤）、**范围**（在存在私密或受限仓库成果时展示 `组织共享` / `仅限私密/受限`）与关键词组合筛选；切换筛选条件时同步收拢右侧详情栏与顶部本地预览条，避免展示越出当前筛选条件的成果。
+  - 卡片顶部展示单行轻元信息、组织/仓库徽标与范围胶囊（`私密范围` / `受限仓库范围` / `组织内共享`），配合 [utils.ts](utils.ts) `parseDeliverableSummary` 提炼的「本版重点」与可展开「过程脉络」（依据清单、版本时间线与原对话直达）。
+  - 操作栏收口「记录/修改验收」（默认折叠表单）、「手动沉淀经验」与「AI 提炼团队经验」（嵌入区设 `showManualToggle={false}` 避免重复按钮）：创建者、所属组织 `org_owner`/`org_admin` 与超管可通过 `成果访问范围` 选择器即时切换 `org`/`private`（`PATCH /api/matters/:id`）；组织管理员可管理本组织经验复盘；`org_viewer` 仅可只读查阅并隐藏修订/验收与反馈面板。
   - 验收返回 `distillationError` 时须显示“验收已保存、复盘未完成”，并刷新已保存反馈，避免误报保存失败。
 
 从仓库根运行 `npm run check`、`npm run build:web`。

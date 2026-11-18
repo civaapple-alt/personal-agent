@@ -25,7 +25,7 @@
 | 设置子页运行底座、Pi 探测与扩展清单接口 | [runtime-settings.test.ts](runtime-settings.test.ts) |
 | 旁听广播、Phase 4 RSI 与文件/图片上传接口 | [server-rsi-and-uploads.test.ts](server-rsi-and-uploads.test.ts) |
 | 组织/身份、受限协同门禁与花名册边界 | [server-collaboration.test.ts](server-collaboration.test.ts) |
-| 多用户注册/审核/超管配额、组织成员与 AI 角色隔离、Git 克隆主目录边界与成员直接派发 | [multi-tenant-auth-admin.test.ts](multi-tenant-auth-admin.test.ts) |
+| 多用户注册/审核/超管配额、组织成员与 AI 角色隔离、Git 克隆主目录边界、成员直接派发与交付成果库按组织筛选/私密/受限/只读及 RSI 权限边界 | [multi-tenant-auth-admin.test.ts](multi-tenant-auth-admin.test.ts) |
 | 组织会话切换、旁听背景、复盘失效与旧范围保留 | [organization-context.test.ts](organization-context.test.ts) |
 | 提请状态、并发批准、附件缺失与并发图片派发 | [ai-request-lifecycle.test.ts](ai-request-lifecycle.test.ts) |
 | 内置演示准备、文件保留、四步进度与正常归档 | [inner-matter.test.ts](inner-matter.test.ts) |

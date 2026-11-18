@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { RoleScope } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
+	Deliverable,
 	Matter,
 	MemberMemory,
 	OrgMemberRole,
@@ -211,9 +212,19 @@ export function canAccessMatter(
 			return false;
 		}
 	}
+	if (!matter.orgId && actor.authKind === "legacy_token" && !isGlobalUnscopedActor(actor)) {
+		if (actor.collaborator.orgId && !matter.collaboratorIds.includes(actor.collaborator.id)) {
+			return false;
+		}
+	}
 	if (matter.workspaceId) {
 		const ws = store.getWorkspace(matter.workspaceId);
 		if (ws && !canAccessWorkspace(store, actor, ws)) return false;
+	}
+	if (matter.visibility === "private" && actor.authKind === "legacy_token" && !isGlobalUnscopedActor(actor)) {
+		if (!matter.collaboratorIds.includes(actor.collaborator.id)) {
+			return false;
+		}
 	}
 	if (matter.visibility === "private" && actor.authKind === "session") {
 		const uid = actor.user?.id ?? "";
@@ -235,6 +246,29 @@ export function canParticipateInMatter(store: PersonalAgentStore, actor: Request
 	if (isLegacyCollaboratorActor(actor)) return true;
 	const orgRole = matter.orgId ? getActorOrgRole(store, actor, matter.orgId) : "org_member";
 	return orgRole !== "org_viewer" && orgRole !== null;
+}
+
+export function canAccessDeliverable(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	deliverable: Deliverable | null | undefined,
+): boolean {
+	if (!actor || !deliverable) return false;
+	if (actor.user && actor.user.status !== "active") return false;
+	if (isGlobalUnscopedActor(actor)) return true;
+	const matter = store.getMatter(deliverable.matterId);
+	if (!matter) return isSuperAdminActor(actor);
+	return canAccessMatter(store, actor, matter);
+}
+
+export function canDistillMatter(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	matter: Matter | null | undefined,
+): boolean {
+	if (!actor || !matter) return false;
+	if (!canAccessMatter(store, actor, matter)) return false;
+	return isGlobalUnscopedActor(actor) || isSuperAdminActor(actor) || canManageOrganization(store, actor, matter.orgId);
 }
 
 export function canDispatchAiInOrg(
