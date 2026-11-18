@@ -46,6 +46,7 @@
   - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
 - 运行态恢复与快照：
   - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端 F5 刷新恢复。
+  - `GET /api/runtime` 返回当前 Agent 底座探测结果（Pi CLI 可用性与 `--version`、会话持久化策略、`pstack` 状态与各执行路径隔离边界）、已加载的 Pi Extensions（内置 `team-extension`、`pstack-extension`、`builtin:mcp` 声明汇总及 `PA_PI_EXTENSIONS` 文件校验），以及按节分组的当前运行配置（环境变量与服务、目录与存储位置、Pi RPC 与桥接参数、编排与工作台边界）；非所有者协同成员请求时将本机路径收口为目录/文件名。
   - 执行失败时先提取 `ProgressSnapshot` 并连同错误与工作区锚点写入 `user` 系统消息 `metadata`（并广播 `matter_failed`），供前端回看与同作用域续跑。
 - [dialog-broker.ts](dialog-broker.ts) 在内存中等待 Extension UI 回答，HTTP 回复最终经 RPC 回写 Pi。它不是对所有命令的通用权限拦截器。
 - [preview-manager.ts](preview-manager.ts) 启停本地命令或登记外部服务链接；索引在内存中，不是部署系统，也不会因成果登记自动创建预览。

@@ -38,6 +38,23 @@ export {
 	validateRoleDesignDecision,
 } from "./orchestrator/role-design-decision.ts";
 export {
+	buildRuntimeOverview,
+	type OrchestratorRuntimeConfig,
+	type PiCliProbeResult,
+	probePiCli,
+	type RuntimeBaseInfo,
+	type RuntimeConfigItem,
+	type RuntimeConfigSection,
+	type RuntimeExtensionFileStatus,
+	type RuntimeExtensionItem,
+	type RuntimeExtensionSourceKind,
+	type RuntimeExtensionStatus,
+	type RuntimeIsolationMode,
+	type RuntimeOverviewPayload,
+	resolveBuiltinExtensionPath,
+	type ServerRuntimeConfig,
+} from "./orchestrator/runtime-info.ts";
+export {
 	buildProgressSnapshot,
 	type DelegateInput,
 	type DelegateResult,

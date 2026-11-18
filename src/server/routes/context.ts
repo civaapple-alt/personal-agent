@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolveRepoGitUserIdentity } from "../../orchestrator/execution-context.ts";
+import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../../storage/repositories.ts";
 import type { MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
@@ -24,6 +25,8 @@ export interface ServerRouteContext {
 	orchestrator: TeamOrchestrator;
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
+	probePiCli?: () => Promise<PiCliProbeResult>;
+	getServerRuntimeConfig?: () => ServerRuntimeConfig;
 	rolesDir?: string;
 	withRoleMutation: <T>(action: () => Promise<T>) => Promise<T>;
 	uploadsDir?: string;

@@ -9,6 +9,7 @@ interface SidebarProps {
 	activeTab: NavTab;
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
+	runtimeBadge?: string | null;
 	filteredMatters: MatterDto[];
 	selectedMatterId: string | null;
 	selectedMemberId: string;
@@ -29,6 +30,7 @@ export function Sidebar({
 	activeTab,
 	bootstrap,
 	currentUser,
+	runtimeBadge,
 	filteredMatters,
 	selectedMatterId,
 	selectedMemberId,
@@ -238,6 +240,14 @@ export function Sidebar({
 				>
 					<span>项目仓库与资料</span>
 					<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+				</button>
+				<button
+					type="button"
+					className={`footer-nav-btn ${activeTab === "settings" ? "active" : ""}`}
+					onClick={() => onNavigate({ tab: "settings" })}
+				>
+					<span>设置</span>
+					<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
 				</button>
 				<div className="sidebar-status-row">
 					<span className="muted-tiny">

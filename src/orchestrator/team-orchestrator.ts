@@ -27,6 +27,7 @@ import {
 import { runObserversPass } from "./observer-runner.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
+import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
 import {
 	buildProgressSnapshot,
 	type DelegateInput,
@@ -106,6 +107,17 @@ export class TeamOrchestrator {
 
 	getDefaultCwd(): string {
 		return this.defaultCwd;
+	}
+
+	getRuntimeConfig(): OrchestratorRuntimeConfig {
+		return {
+			defaultCwd: this.defaultCwd,
+			sessionDir: this.sessionDir ?? null,
+			noSession: this.noSession,
+			extensions: [...this.extensions],
+			pstackDir: this.pstackDir ?? null,
+			templates: this.listTemplates(),
+		};
 	}
 
 	setDialogHandler(handler: OrchestratorDialogHandler | undefined): void {

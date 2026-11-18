@@ -1,11 +1,15 @@
-export type NavTab = "deliverables" | "chats" | "team" | "materials";
+export type NavTab = "deliverables" | "chats" | "team" | "materials" | "settings";
+export type SettingsSection = "all" | "base" | "extensions" | "config";
 
 export interface HashRoute {
 	tab: NavTab;
 	deliverableId?: string;
 	matterId?: string;
 	isNewMatter?: boolean;
+	settingsSection?: SettingsSection;
 }
+
+const VALID_SETTINGS_SECTIONS = new Set<SettingsSection>(["base", "extensions", "config"]);
 
 export function parseHashRoute(rawHash: string): HashRoute {
 	const cleaned = rawHash.replace(/^#\/?/, "").trim();
@@ -31,6 +35,12 @@ export function parseHashRoute(rawHash: string): HashRoute {
 	if (segment0 === "materials") {
 		return { tab: "materials" };
 	}
+	if (segment0 === "settings") {
+		if (segment1 && VALID_SETTINGS_SECTIONS.has(segment1 as SettingsSection)) {
+			return { tab: "settings", settingsSection: segment1 as SettingsSection };
+		}
+		return { tab: "settings" };
+	}
 	return { tab: "chats" };
 }
 
@@ -46,6 +56,11 @@ export function formatHashRoute(route: HashRoute): string {
 	}
 	if (route.tab === "team") {
 		return "#/team";
+	}
+	if (route.tab === "settings") {
+		return route.settingsSection && route.settingsSection !== "all"
+			? `#/settings/${encodeURIComponent(route.settingsSection)}`
+			: "#/settings";
 	}
 	return "#/materials";
 }

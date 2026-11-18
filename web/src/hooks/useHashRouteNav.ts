@@ -1,5 +1,5 @@
 import { type MutableRefObject, useCallback, useEffect } from "react";
-import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute } from "../hashRouter.ts";
+import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "../hashRouter.ts";
 
 interface UseHashRouteNavParams {
 	initialRoute: HashRoute;
@@ -8,6 +8,7 @@ interface UseHashRouteNavParams {
 	setSelectedDeliverableId: React.Dispatch<React.SetStateAction<string | null>>;
 	setSelectedMatterId: React.Dispatch<React.SetStateAction<string | null>>;
 	setSelectedMemberId: React.Dispatch<React.SetStateAction<string>>;
+	setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
 }
 
 /** Synchronizes browser hash URLs with active tab, matter selection, and deliverable selection. */
@@ -18,6 +19,7 @@ export function useHashRouteNav({
 	setSelectedDeliverableId,
 	setSelectedMatterId,
 	setSelectedMemberId,
+	setSettingsSection,
 }: UseHashRouteNavParams) {
 	const navigateRoute = useCallback(
 		(next: HashRoute, options?: { replace?: boolean }) => {
@@ -34,6 +36,9 @@ export function useHashRouteNav({
 					setSelectedMatterId(next.matterId || null);
 				}
 			}
+			if (next.tab === "settings") {
+				setSettingsSection(next.settingsSection ?? "all");
+			}
 			const targetHash = formatHashRoute(next);
 			if (options?.replace) {
 				window.history.replaceState(null, "", targetHash);
@@ -41,7 +46,14 @@ export function useHashRouteNav({
 				window.location.hash = targetHash;
 			}
 		},
-		[explicitNewMatterRef, setActiveTab, setSelectedDeliverableId, setSelectedMatterId, setSelectedMemberId],
+		[
+			explicitNewMatterRef,
+			setActiveTab,
+			setSelectedDeliverableId,
+			setSelectedMatterId,
+			setSelectedMemberId,
+			setSettingsSection,
+		],
 	);
 
 	useEffect(() => {
@@ -65,11 +77,20 @@ export function useHashRouteNav({
 					setSelectedMemberId("auto");
 					setSelectedMatterId(route.matterId);
 				}
+			} else if (route.tab === "settings") {
+				setSettingsSection(route.settingsSection ?? "all");
 			}
 		};
 		window.addEventListener("hashchange", handleHashChange);
 		return () => window.removeEventListener("hashchange", handleHashChange);
-	}, [explicitNewMatterRef, setActiveTab, setSelectedDeliverableId, setSelectedMatterId, setSelectedMemberId]);
+	}, [
+		explicitNewMatterRef,
+		setActiveTab,
+		setSelectedDeliverableId,
+		setSelectedMatterId,
+		setSelectedMemberId,
+		setSettingsSection,
+	]);
 
 	return navigateRoute;
 }

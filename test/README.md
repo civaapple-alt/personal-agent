@@ -21,6 +21,7 @@
 | Phase 4 RSI 经验提案、提炼、替代与评估 | [rsi-lifecycle.test.ts](rsi-lifecycle.test.ts) |
 | RSI 工作区证据、失败分支、替代关系、版本评价与退出清理 | [rsi-boundaries.test.ts](rsi-boundaries.test.ts) |
 | HTTP/SSE、用户对话、工作区、预览与路由 | [phase3-server.test.ts](phase3-server.test.ts) |
+| 设置子页运行底座、Pi 探测与扩展清单接口 | [runtime-settings.test.ts](runtime-settings.test.ts) |
 | 旁听广播、Phase 4 RSI 与图片上传接口 | [server-rsi-and-uploads.test.ts](server-rsi-and-uploads.test.ts) |
 | 组织/身份、受限协同门禁与花名册边界 | [server-collaboration.test.ts](server-collaboration.test.ts) |
 | 组织会话切换、旁听背景、复盘失效与旧范围保留 | [organization-context.test.ts](organization-context.test.ts) |

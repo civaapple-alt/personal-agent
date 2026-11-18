@@ -15,6 +15,7 @@
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx)、[ExploringStatus](components/ExploringStatus.tsx) |
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
+| 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx)（对应 `#/settings` 与 `#/settings/{base,extensions,config}`，按类目展示 Pi 底座、扩展插件及按节分组的运行配置） |
 
 组件数量尚小，本页直接定位文件，`components/` 不再加一层重复目录说明。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。

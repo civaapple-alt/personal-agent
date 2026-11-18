@@ -81,6 +81,12 @@ async function main(): Promise<void> {
 		rolesDir: customRolesDir,
 		uploadsDir: resolve(rootDir, ".data/uploads"),
 		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
+		runtimeMeta: {
+			host,
+			port,
+			dbPath,
+			builtinRolesDir,
+		},
 	});
 
 	await new Promise<void>((resolveListen) => {

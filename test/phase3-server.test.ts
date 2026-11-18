@@ -439,7 +439,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 	}
 });
 
-test("hashRouter parses and formats deliverable, chat, team, and materials hash routes", () => {
+test("hashRouter parses and formats deliverable, chat, team, materials, and settings hash routes", () => {
 	assert.deepEqual(parseHashRoute(""), { tab: "chats" });
 	assert.deepEqual(parseHashRoute("#/unknown"), { tab: "chats" });
 	assert.deepEqual(parseHashRoute("#/deliverables/deliv-1"), {
@@ -456,6 +456,11 @@ test("hashRouter parses and formats deliverable, chat, team, and materials hash 
 	});
 	assert.deepEqual(parseHashRoute("#/team"), { tab: "team" });
 	assert.deepEqual(parseHashRoute("#/materials"), { tab: "materials" });
+	assert.deepEqual(parseHashRoute("#/settings"), { tab: "settings" });
+	assert.deepEqual(parseHashRoute("#/settings/base"), { tab: "settings", settingsSection: "base" });
+	assert.deepEqual(parseHashRoute("#/settings/extensions"), { tab: "settings", settingsSection: "extensions" });
+	assert.deepEqual(parseHashRoute("#/settings/config"), { tab: "settings", settingsSection: "config" });
+	assert.deepEqual(parseHashRoute("#/settings/unknown"), { tab: "settings" });
 
 	assert.equal(formatHashRoute({ tab: "deliverables" }), "#/deliverables");
 	assert.equal(formatHashRoute({ tab: "deliverables", deliverableId: "d1" }), "#/deliverables/d1");
@@ -463,6 +468,9 @@ test("hashRouter parses and formats deliverable, chat, team, and materials hash 
 	assert.equal(formatHashRoute({ tab: "chats", isNewMatter: true }), "#/chats/new");
 	assert.equal(formatHashRoute({ tab: "team" }), "#/team");
 	assert.equal(formatHashRoute({ tab: "materials" }), "#/materials");
+	assert.equal(formatHashRoute({ tab: "settings" }), "#/settings");
+	assert.equal(formatHashRoute({ tab: "settings", settingsSection: "all" }), "#/settings");
+	assert.equal(formatHashRoute({ tab: "settings", settingsSection: "config" }), "#/settings/config");
 });
 
 class AbortableTestWorker implements RpcWorkerLike {

@@ -81,6 +81,9 @@
 	.workspace-bind-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
+	.settings-kv-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 }
 @media (max-width: 720px) {
 	.stage-header {
@@ -156,8 +159,19 @@
 	.architect-preview-grid,
 	.meta-entry-grid,
 	.architect-option-grid,
-	.architect-advanced-grid {
+	.architect-advanced-grid,
+	.settings-kv-grid,
+	.settings-config-grid {
 		grid-template-columns: 1fr;
+	}
+	.settings-config-row {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.settings-config-valcol {
+		justify-content: flex-start;
+		text-align: left;
 	}
 	.initiation-mode-pills .choice-chip {
 		font-size: var(--text-micro);

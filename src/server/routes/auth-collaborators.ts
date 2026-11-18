@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, toPublicCollaborator } from "../../storage/repositories.ts";
 import type { CollaboratorRole } from "../../storage/types.ts";
 import {
@@ -111,6 +112,18 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				]),
 			),
 		});
+		return true;
+	}
+
+	if (method === "GET" && pathname === "/api/runtime") {
+		const overview = await buildRuntimeOverview({
+			config: orchestrator.getRuntimeConfig(),
+			serverConfig: ctx.getServerRuntimeConfig?.(),
+			activeMembers: store.listMembers(),
+			isOwner: actor!.collaborator.permissionRole === "owner",
+			probePiCli: ctx.probePiCli,
+		});
+		sendJson(res, 200, overview);
 		return true;
 	}
 

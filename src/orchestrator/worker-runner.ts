@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildPstackGuidance, preparePstackRuntime } from "../roles/pstack.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -24,6 +23,7 @@ import {
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
 } from "./prompts.ts";
+import { resolveBuiltinExtensionPath } from "./runtime-info.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -258,33 +258,12 @@ export async function executeWithWorkerPass(
 			}
 		}, signal);
 
-		const args = [
-			"--no-extensions",
-			"--no-skills",
-			"--extension",
-			fileURLToPath(
-				new URL(
-					import.meta.url.endsWith(".js") ? "../rpc/team-extension.js" : "../rpc/team-extension.ts",
-					import.meta.url,
-				),
-			),
-		];
+		const args = ["--no-extensions", "--no-skills", "--extension", resolveBuiltinExtensionPath("team-extension")];
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
-		if (pstack)
-			args.push(
-				"--skill",
-				pstack.modePath,
-				"--extension",
-				fileURLToPath(
-					new URL(
-						import.meta.url.endsWith(".js") ? "../rpc/pstack-extension.js" : "../rpc/pstack-extension.ts",
-						import.meta.url,
-					),
-				),
-			);
+		if (pstack) args.push("--skill", pstack.modePath, "--extension", resolveBuiltinExtensionPath("pstack-extension"));
 		args.push(
 			"--tools",
 			[...requestedTools, ...teamTools, ...methodTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(

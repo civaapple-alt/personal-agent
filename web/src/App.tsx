@@ -8,6 +8,7 @@ import {
 	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
+	fetchRuntimeOverview,
 	type InnerMatterStep,
 	loginWithInviteToken,
 	logoutAuthSession,
@@ -16,6 +17,7 @@ import {
 	openInnerMatterDemo,
 	type PreviewServiceDto,
 	type RoleTemplateDto,
+	type RuntimeOverviewDto,
 	setAuthRevokedHandler,
 	stopPreview,
 	submitDeliverableFeedback,
@@ -26,10 +28,11 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
+import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
-import { type NavTab, parseHashRoute } from "./hashRouter.ts";
+import { type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
 import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
 import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts";
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
@@ -62,6 +65,7 @@ export function App() {
 	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
 	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
+	const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settingsSection ?? "all");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
 	const [selectedMatterId, setSelectedMatterId] = useState<string | null>(
@@ -91,9 +95,13 @@ export function App() {
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
+	const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewDto | null>(null);
+	const [runtimeLoading, setRuntimeLoading] = useState(false);
+	const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
+	const runtimeAutoFetchedRef = useRef(false);
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
@@ -106,6 +114,7 @@ export function App() {
 		setSelectedDeliverableId,
 		setSelectedMatterId,
 		setSelectedMemberId,
+		setSettingsSection,
 	});
 
 	const refreshBootstrap = useCallback(async () => {
@@ -174,6 +183,9 @@ export function App() {
 		setCurrentUserOverride(null);
 		setBootstrap(null);
 		setMatterDetail(null);
+		setRuntimeOverview(null);
+		setRuntimeError(null);
+		runtimeAutoFetchedRef.current = false;
 		setProgressByMatter({});
 		setSseConnected(false);
 		setAuthError(message ?? "当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
@@ -243,6 +255,32 @@ export function App() {
 			cancelled = true;
 		};
 	}, [initialInviteToken, refreshBootstrap]);
+
+	const refreshRuntimeOverview = useCallback(async () => {
+		setRuntimeLoading(true);
+		setRuntimeError(null);
+		try {
+			const data = await fetchRuntimeOverview();
+			setRuntimeOverview(data);
+		} catch (err: unknown) {
+			setRuntimeError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setRuntimeLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		if (authStatus !== "authenticated") {
+			runtimeAutoFetchedRef.current = false;
+			setRuntimeOverview(null);
+			setRuntimeError(null);
+			return;
+		}
+		if (activeTab === "settings" && !runtimeAutoFetchedRef.current) {
+			runtimeAutoFetchedRef.current = true;
+			void refreshRuntimeOverview();
+		}
+	}, [authStatus, activeTab, refreshRuntimeOverview]);
 
 	useEffect(() => {
 		if (authStatus !== "authenticated") return;
@@ -627,7 +665,20 @@ export function App() {
 				? "我的团队"
 				: activeTab === "materials"
 					? "项目仓库与资料"
-					: matterDetail?.matter.title || "新事项对话";
+					: activeTab === "settings"
+						? settingsSection === "base"
+							? "设置 · Agent 底座"
+							: settingsSection === "extensions"
+								? "设置 · 扩展插件"
+								: settingsSection === "config"
+									? "设置 · 运行配置"
+									: "设置"
+						: matterDetail?.matter.title || "新事项对话";
+	const runtimeBadge = runtimeOverview
+		? runtimeOverview.base.available && runtimeOverview.base.version
+			? `Pi ${runtimeOverview.base.version}`
+			: "Pi 未就绪"
+		: "Pi RPC";
 	const hasRunningMatters = Object.keys(progressByMatter).length > 0;
 
 	return (
@@ -644,6 +695,7 @@ export function App() {
 				activeTab={activeTab}
 				bootstrap={bootstrap}
 				currentUser={currentUser}
+				runtimeBadge={runtimeBadge}
 				filteredMatters={filteredMatters}
 				selectedMatterId={selectedMatterId}
 				selectedMemberId={selectedMemberId}
@@ -922,6 +974,19 @@ export function App() {
 							setSelectedWorkspaceId(workspaceId);
 							startNewMatter();
 						}}
+					/>
+				)}
+
+				{activeTab === "settings" && (
+					<SettingsView
+						currentUser={currentUser}
+						activeSection={settingsSection}
+						overview={runtimeOverview}
+						loading={runtimeLoading}
+						error={runtimeError}
+						onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
+						onRefresh={refreshRuntimeOverview}
+						onOpenTeam={() => navigateRoute({ tab: "team" })}
 					/>
 				)}
 			</main>

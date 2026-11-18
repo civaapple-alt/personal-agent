@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Settings subpage (Agent base, extensions & live configuration)
+
+- Add `resolveBuiltinExtensionPath`, `probePiCli`, and `buildRuntimeOverview` in [src/orchestrator/runtime-info.ts](src/orchestrator/runtime-info.ts), expose `TeamOrchestrator.getRuntimeConfig()` and server `runtimeMeta`, and serve `GET /api/runtime` (with injectable `probePiCli`, sectioned live configuration mirroring `docs/configuration.md`, and host path redaction for non-owner collaborators).
+- Add the categorized `#/settings` subpage (`#/settings`, `#/settings/base`, `#/settings/extensions`, `#/settings/config` across [SettingsView.tsx](web/src/components/SettingsView.tsx), [Sidebar.tsx](web/src/components/Sidebar.tsx), [hashRouter.ts](web/src/hashRouter.ts), [useHashRouteNav.ts](web/src/hooks/useHashRouteNav.ts), and [App.tsx](web/src/App.tsx)) with concise cards for Pi CLI base status, mounted Pi Extensions (`team-extension`, `pstack-extension`, `builtin:mcp`, and `PA_PI_EXTENSIONS`), collapsible isolation policies, and sectioned configuration items (`环境变量与服务`, `目录与存储位置`, `Pi RPC 与桥接参数`, `编排、旁听与工作台边界`).
+- Add offline tests in [test/runtime-settings.test.ts](test/runtime-settings.test.ts), extend `#/settings/*` route coverage in [test/phase3-server.test.ts](test/phase3-server.test.ts), and link live configuration inspection in [docs/configuration.md](docs/configuration.md).
+
 ### Built-in role and Skill instruction language
 
 - Write the 15 built-in Skills and their task triggers in English. Bump the four business templates and the Role Architect to 1.1.1 with English display names, headings, instructions, and boundaries. Continue reading legacy Chinese section headings.

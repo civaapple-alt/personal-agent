@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import type { PiCliProbeResult, ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore } from "../storage/repositories.ts";
@@ -27,6 +28,8 @@ export interface PersonalAgentServerOptions {
 	uploadsDir?: string;
 	requireAuth?: boolean;
 	innerMatterDir?: string;
+	probePiCli?: () => Promise<PiCliProbeResult>;
+	runtimeMeta?: Pick<ServerRuntimeConfig, "host" | "port" | "dbPath" | "builtinRolesDir">;
 }
 
 /**
@@ -57,6 +60,22 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		orchestrator,
 		previewManager,
 		dialogBroker,
+		probePiCli: options.probePiCli,
+		getServerRuntimeConfig: () => {
+			const addr = server.address();
+			const listeningPort = addr && typeof addr !== "string" ? addr.port : undefined;
+			return {
+				host: options.runtimeMeta?.host,
+				port: listeningPort ?? options.runtimeMeta?.port,
+				dbPath: options.runtimeMeta?.dbPath,
+				builtinRolesDir: options.runtimeMeta?.builtinRolesDir,
+				rolesDir,
+				uploadsDir,
+				innerMatterDir: options.innerMatterDir,
+				webDistDir,
+				requireAuth: Boolean(options.requireAuth),
+			};
+		},
 		rolesDir,
 		withRoleMutation: (action) => {
 			const result = roleMutationTail.then(action);
