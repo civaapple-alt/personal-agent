@@ -3,7 +3,7 @@
 本文集中说明 Personal Agent 当前实际生效的环境变量、服务路径、Pi RPC 参数、岗位模板字段以及编排核内置限制。
 
 - 所有默认数值均以当前源码为准；工作台 **设置 → 运行配置**（`#/settings/config`）可按节直接查看当前运行实例生效的配置值与覆写状态。
-- 未列出的能力（如持久化定时后台调度、分布式多机数据库集群或自定义工作流配置文件）尚未实现；平台注册策略、用户审核配额与多团队代码库主目录通过超级管理员控制台 `#/admin` 维护（持久化在 `platform_settings` 表中）。
+- 未列出的能力（如持久化定时后台调度、分布式多机数据库集群或自定义工作流配置文件）尚未实现；平台注册策略（`registrationMode` 默认为 `open_review`，即开放注册需审核；`allowLocalWorkspacePath` 与 `allowCommandPreviews` 默认 `true`）、用户审核配额（默认 `maxOrgs: 5`、`maxActiveDispatches: 3`）与多团队代码库主目录通过超级管理员控制台 `#/admin` 维护（持久化在 `platform_settings` 表中）。从本机免密试用切换到团队模式的迁移细节见[安装与首次运行](getting-started.md#从个人本机试用切换到团队共享部署)。
 
 ## 1. 环境变量
 

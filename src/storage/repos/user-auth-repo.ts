@@ -372,7 +372,7 @@ export class UserAuthRepo {
 			.prepare("SELECT value_json, updated_at FROM platform_settings WHERE key = ?")
 			.get(SETTINGS_KEY) as Record<string, unknown> | undefined;
 		const defaults: PlatformSettings = {
-			registrationMode: "open_auto",
+			registrationMode: "open_review",
 			workspacesRoot: fallbackRoot,
 			allowLocalWorkspacePath: true,
 			localWorkspaceAllowlist: [],
@@ -385,9 +385,11 @@ export class UserAuthRepo {
 		try {
 			const parsed = JSON.parse(row.value_json) as Partial<PlatformSettings>;
 			const registrationMode: RegistrationMode =
-				parsed.registrationMode === "open_review" || parsed.registrationMode === "invite_only"
+				parsed.registrationMode === "open_auto" ||
+				parsed.registrationMode === "open_review" ||
+				parsed.registrationMode === "invite_only"
 					? parsed.registrationMode
-					: "open_auto";
+					: "open_review";
 			return {
 				registrationMode,
 				workspacesRoot:

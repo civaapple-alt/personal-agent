@@ -46,14 +46,14 @@ const USER_STATUS_BADGE: Record<UserStatus, string> = {
 
 const REGISTRATION_LABELS: Array<{ value: RegistrationMode; label: string; desc: string }> = [
 	{
+		value: "open_review",
+		label: "开放注册（管理员审核）",
+		desc: "默认策略：允许自主注册账号，但需超级管理员审核通过后才能访问工作台。",
+	},
+	{
 		value: "open_auto",
 		label: "开放注册（自动开通）",
 		desc: "任意成员邮箱密码注册后立即进入工作台，随后可由管理员调整配额或禁用。",
-	},
-	{
-		value: "open_review",
-		label: "开放注册（管理员审核）",
-		desc: "允许自主注册账号，但需超级管理员审核通过后才能访问工作台。",
 	},
 	{ value: "invite_only", label: "仅组织邀请注册", desc: "必须持有效组织邀请码才允许注册账号。" },
 ];
@@ -75,7 +75,7 @@ export function AdminView({
 	const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
 	// Platform settings draft state
-	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_auto");
+	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_review");
 	const [workspacesRoot, setWorkspacesRoot] = useState("");
 	const [allowLocalWorkspacePath, setAllowLocalWorkspacePath] = useState(true);
 	const [allowlistText, setAllowlistText] = useState("");

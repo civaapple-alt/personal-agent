@@ -90,7 +90,7 @@ export function App() {
 	const [permissionRequired, setPermissionRequired] = useState(true);
 	const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
 	const [pendingApproval, setPendingApproval] = useState(false);
-	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_auto");
+	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_review");
 	const [sessionAccountUser, setSessionAccountUser] = useState<AccountUserDto | null>(null);
 	const [authKind, setAuthKind] = useState<"session" | "legacy_token" | "loopback" | null>(null);
 	const [activeOrgInviteToken, setActiveOrgInviteToken] = useState(initialOrgInvite);
@@ -246,7 +246,7 @@ export function App() {
 				setPermissionRequired(s.permissionRequired);
 				setNeedsAdminSetup(Boolean(s.needsAdminSetup));
 				setPendingApproval(Boolean(s.pendingApproval));
-				setRegistrationMode(s.registrationMode ?? "open_auto");
+				setRegistrationMode(s.registrationMode ?? "open_review");
 				setSessionAccountUser(s.accountUser ?? null);
 			})
 			.catch(() => {});
@@ -262,7 +262,7 @@ export function App() {
 		setPermissionRequired(session.permissionRequired);
 		setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 		setPendingApproval(Boolean(session.pendingApproval));
-		setRegistrationMode(session.registrationMode ?? "open_auto");
+		setRegistrationMode(session.registrationMode ?? "open_review");
 		setSessionAccountUser(session.accountUser ?? null);
 		setAuthKind(session.authKind ?? null);
 		if (!session.authenticated) {
@@ -313,7 +313,7 @@ export function App() {
 								setPermissionRequired(s.permissionRequired);
 								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
 								setPendingApproval(Boolean(s.pendingApproval));
-								setRegistrationMode(s.registrationMode ?? "open_auto");
+								setRegistrationMode(s.registrationMode ?? "open_review");
 							}
 						})
 						.catch(() => {});
@@ -913,7 +913,7 @@ export function App() {
 			const session = await fetchAuthSession();
 			setPermissionRequired(session.permissionRequired);
 			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
-			setRegistrationMode(session.registrationMode ?? "open_auto");
+			setRegistrationMode(session.registrationMode ?? "open_review");
 			// If exiting a legacy LAN guest preview on localhost, seamlessly restore the host owner view.
 			if (effectiveKind === "legacy_token" && session.authenticated && session.currentUser) {
 				setAuthKind(session.authKind ?? "loopback");

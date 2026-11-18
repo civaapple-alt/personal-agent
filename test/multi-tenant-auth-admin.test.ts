@@ -149,10 +149,12 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 			authenticated: boolean;
 			permissionRequired: boolean;
 			needsAdminSetup: boolean;
+			registrationMode: string;
 		};
 		assert.equal(initSession.authenticated, false);
 		assert.equal(initSession.permissionRequired, true);
 		assert.equal(initSession.needsAdminSetup, true);
+		assert.equal(initSession.registrationMode, "open_review");
 
 		assert.equal((await fetch(`${baseUrl}/api/bootstrap`)).status, 401);
 
@@ -183,7 +185,30 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		assert.equal(setupRes.headers.get("x-frame-options"), "DENY");
 		assert.equal(setupRes.headers.get("referrer-policy"), "no-referrer");
 
-		// 3. Open registration ("open_auto"): Alice registers with email + password
+		// 3. Default registration mode ("open_review"): Bob sits pending_review until Super Admin approves
+		const bobReg = await fetch(`${baseUrl}/api/auth/register`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "bob@team-b.dev", password: "bob-password-1", displayName: "Bob" }),
+		});
+		assert.equal(bobReg.status, 201);
+		const bobRegBody = (await bobReg.json()) as {
+			pendingApproval: boolean;
+			accountUser: { id: string; status: string };
+		};
+		assert.equal(bobRegBody.pendingApproval, true);
+		assert.equal(bobRegBody.accountUser.status, "pending_review");
+		const bobCookie = extractSessionCookie(bobReg);
+		assert.equal((await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: bobCookie } })).status, 403);
+
+		// Switch temporarily to "open_auto" -> Alice registers with email + password and enters active immediately
+		const openAutoPatch = await fetch(`${baseUrl}/api/admin/settings`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Cookie: adminCookie },
+			body: JSON.stringify({ registrationMode: "open_auto" }),
+		});
+		assert.equal(openAutoPatch.status, 200);
+
 		const aliceReg = await fetch(`${baseUrl}/api/auth/register`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -322,23 +347,7 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		assert.ok(clonedWs.repoPath.startsWith(orgA.workspacesDir));
 		assert.ok(existsSync(join(clonedWs.repoPath, "README.md")));
 
-		// 5. Switch to open_review -> Bob registers & sits pending_review until Super Admin approves + sets quota
-		const bobReg = await fetch(`${baseUrl}/api/auth/register`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ email: "bob@team-b.dev", password: "bob-password-1", displayName: "Bob" }),
-		});
-		assert.equal(bobReg.status, 201);
-		const bobRegBody = (await bobReg.json()) as {
-			pendingApproval: boolean;
-			accountUser: { id: string; status: string };
-		};
-		assert.equal(bobRegBody.pendingApproval, true);
-		assert.equal(bobRegBody.accountUser.status, "pending_review");
-		const bobCookie = extractSessionCookie(bobReg);
-		assert.equal((await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: bobCookie } })).status, 403);
-
-		// Super admin approves Bob and grants maxOrgs=1, canDispatchAi=true
+		// 5. Super admin approves Bob (pending from default open_review) and grants maxOrgs=1, canDispatchAi=true
 		const approveBob = await fetch(`${baseUrl}/api/admin/users/${bobRegBody.accountUser.id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Cookie: adminCookie },
@@ -568,6 +577,133 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		await previewManager.stopAll();
 		await gitHttp.close();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test("Loopback trial upgrade to requireAuth preserves usr_local_owner org membership and trial data", async () => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-upgrade-"));
+	const trialRepoDir = join(tempDir, "trial-repo");
+	mkdirSync(trialRepoDir, { recursive: true });
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const defaultOrg = store.ensureDefaultOrganization();
+	const ownerCollab = store.ensureOwnerCollaborator("Local Owner");
+	const localAdmin = store.ensureLocalBootstrapAdmin(ownerCollab.name);
+	store.upsertOrgMember({
+		orgId: defaultOrg.id,
+		userId: localAdmin.id,
+		orgRole: "org_owner",
+		roleTitle: "超级管理员",
+	});
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+
+	const startServerWithAuth = async (requireAuth: boolean) => {
+		const dialogBroker = new DialogBroker();
+		const previewManager = new PreviewManager();
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			onDialog: (ctx) => dialogBroker.requestApproval(ctx),
+			workerFactory: (options) => new MultiTenantTestWorker(options),
+		});
+		const { server } = createPersonalAgentServer({
+			store,
+			orchestrator,
+			templates,
+			previewManager,
+			dialogBroker,
+			requireAuth,
+			dataDir: join(tempDir, "data"),
+			defaultWorkspacesRoot: join(tempDir, "workspaces-root"),
+			uploadsDir: join(tempDir, "uploads"),
+			webDistDir: resolve(process.cwd(), "web/dist"),
+		});
+		await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+		const addr = server.address();
+		assert.ok(addr && typeof addr === "object");
+		return {
+			baseUrl: `http://127.0.0.1:${addr.port}`,
+			close: async () => {
+				await previewManager.stopAll();
+				await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+			},
+		};
+	};
+
+	let loopbackSrv: Awaited<ReturnType<typeof startServerWithAuth>> | null = null;
+	let authSrv: Awaited<ReturnType<typeof startServerWithAuth>> | null = null;
+	try {
+		// Phase 1: Personal passwordless loopback trial creates workspace & matter in defaultOrg
+		loopbackSrv = await startServerWithAuth(false);
+		const wsRes = await fetch(`${loopbackSrv.baseUrl}/api/workspaces`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				orgId: defaultOrg.id,
+				name: "trial-local",
+				sourceType: "local",
+				repoPath: trialRepoDir,
+			}),
+		});
+		assert.equal(wsRes.status, 201);
+		const { workspace: trialWs } = (await wsRes.json()) as { workspace: { id: string } };
+
+		const matterRes = await fetch(`${loopbackSrv.baseUrl}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				mode: "discussion",
+				workspaceId: trialWs.id,
+				prompt: "免密试用期创建的本地事项",
+			}),
+		});
+		assert.equal(matterRes.status, 201);
+		const { matter: trialMatter } = (await matterRes.json()) as {
+			matter: { id: string; orgId: string | null; createdByUserId?: string | null };
+		};
+		assert.equal(trialMatter.orgId, defaultOrg.id);
+		assert.equal(trialMatter.createdByUserId, "usr_local_owner");
+
+		await loopbackSrv.close();
+		loopbackSrv = null;
+
+		// Phase 2: Switch same DB to PA_REQUIRE_AUTH=1 -> in-place upgrade of usr_local_owner
+		authSrv = await startServerWithAuth(true);
+		const sessionRes = (await (await fetch(`${authSrv.baseUrl}/api/auth/session`)).json()) as {
+			authenticated: boolean;
+			needsAdminSetup: boolean;
+			registrationMode: string;
+		};
+		assert.equal(sessionRes.authenticated, false);
+		assert.equal(sessionRes.needsAdminSetup, true);
+		assert.equal(sessionRes.registrationMode, "open_review");
+
+		const setupRes = await fetch(`${authSrv.baseUrl}/api/auth/setup-admin`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "owner@company.dev", password: "owner-password-1", displayName: "Owner" }),
+		});
+		assert.equal(setupRes.status, 201);
+		const setupJson = (await setupRes.json()) as { accountUser: { id: string; email: string } };
+		assert.equal(setupJson.accountUser.id, "usr_local_owner");
+		assert.equal(setupJson.accountUser.email, "owner@company.dev");
+		const adminCookie = extractSessionCookie(setupRes);
+
+		const bootRes = (await (
+			await fetch(`${authSrv.baseUrl}/api/bootstrap`, { headers: { Cookie: adminCookie } })
+		).json()) as {
+			organizations: Array<{ id: string; orgRole: string }>;
+			workspaces: Array<{ id: string }>;
+			matters: Array<{ id: string }>;
+		};
+		assert.ok(bootRes.organizations.some((o) => o.id === defaultOrg.id && o.orgRole === "org_owner"));
+		assert.ok(bootRes.workspaces.some((w) => w.id === trialWs.id));
+		assert.ok(bootRes.matters.some((m) => m.id === trialMatter.id));
+	} finally {
+		if (loopbackSrv) await loopbackSrv.close();
+		if (authSrv) await authSrv.close();
 		db.close();
 		rmSync(tempDir, { recursive: true, force: true });
 	}

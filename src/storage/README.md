@@ -43,9 +43,9 @@
 改 schema 时保留既有消息、版本、会话和用户数据，验证重开数据库后的行为；不要拿用户 `.data/` 试验迁移或清空修复。
 
 - 团队账号、多组织 RBAC、平台策略与审计日志：
-  - `users`（邮箱 + `scryptSync` 加盐密码哈希、`platform_role`: `super_admin` / `user`、`status`: `active` / `pending_review` / `disabled`、`max_orgs`、`max_active_dispatches`、`can_dispatch_ai`）、`user_sessions`（SHA-256 会话摘要）与 `platform_settings`（注册模式 `open_auto`/`open_review`/`invite_only`、`workspaces_root`、`allow_local_workspace_path`、`local_workspace_allowlist_json`、`allow_command_previews`、默认配额）以及持久化 `audit_logs` 由 [user-auth-repo.ts](repos/user-auth-repo.ts) 维护。
+  - `users`（邮箱 + `scryptSync` 加盐密码哈希、`platform_role`: `super_admin` / `user`、`status`: `active` / `pending_review` / `disabled`、`max_orgs`、`max_active_dispatches`、`can_dispatch_ai`）、`user_sessions`（SHA-256 会话摘要）与 `platform_settings`（注册模式 `open_auto`/`open_review`/`invite_only`，默认 `open_review`、`workspaces_root`、`allow_local_workspace_path`、`local_workspace_allowlist_json`、`allow_command_previews`、默认配额）以及持久化 `audit_logs` 由 [user-auth-repo.ts](repos/user-auth-repo.ts) 维护。
   - `organization_members`（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、`organization_invites`（SHA-256 哈希邀请码与原子核销）、`organization_ai_roles`（按组织启停 AI 角色与主联系人，经 `resolveEffectiveOrgMembers(orgId)` 统一解析）、`workspace_members`（支持 `workspace_links.visibility`: `org` / `restricted` 与 `source_type`: `local` / `cloned`）、`matters.visibility`（`org` / `private`）及 `uploads_index`（上传文件权限作用域归属）由 [org-rbac-repo.ts](repos/org-rbac-repo.ts) 维护。
-  - 保留既有表兼容性，本地默认所有者用户 `DEFAULT_LOCAL_ADMIN_USER_ID` 仅用于回环/旧库兼容平滑迁移。
+  - 保留既有表兼容性，本地默认所有者用户 `DEFAULT_LOCAL_ADMIN_USER_ID`（`usr_local_owner`）在从免密回环模式原地切换至 `PA_REQUIRE_AUTH=1` 时通过 `setupInitialAdmin` 原地升级并保留既有组织与事项关联。
 
 从仓库根运行 `node --test test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts test/multi-tenant-auth-admin.test.ts`。
 存储范围如何用于运行见 [orchestrator](../orchestrator/README.md)，历史兼容细节见[运行说明](../../docs/runtime-collaboration.md)。
