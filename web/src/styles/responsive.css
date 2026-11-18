@@ -7,6 +7,10 @@
 	}
 }
 @media (max-width: 1080px) {
+	.stage-header {
+		padding: 0 16px;
+		gap: 10px;
+	}
 	.deliverables-workspace {
 		grid-template-columns: 1fr;
 	}
@@ -94,7 +98,11 @@
 		display: none;
 	}
 	.stage-header-left {
-		flex: 0 1 auto;
+		flex: 1 1 auto;
+		flex-wrap: wrap;
+	}
+	.stage-header-left .pill {
+		max-width: 100%;
 	}
 	.stage-header-right {
 		flex: 0 0 auto;

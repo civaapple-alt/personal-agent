@@ -81,8 +81,10 @@ export function ChatStageHeader({
 	onOpenDeliverables,
 	onCloseMenus,
 }: ChatStageHeaderProps) {
+	const hasContext = Boolean(isArchitectMode || matterDetail);
+
 	return (
-		<header className="stage-header">
+		<header className={`stage-header${hasContext ? " has-context" : ""}`}>
 			<div className="stage-header-left">
 				{isArchitectMode ? (
 					<span className="pill" title="角色架构师以团队全局成员配置工作，不绑定具体代码仓库">

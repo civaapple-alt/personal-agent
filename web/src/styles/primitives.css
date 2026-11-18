@@ -195,6 +195,7 @@
 	font-size: var(--text-sm);
 }
 .notice-card {
+	display: block;
 	border: 1px solid #b6dfd3;
 	background: #edf9f5;
 	color: #0b574e;

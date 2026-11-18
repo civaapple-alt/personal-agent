@@ -104,6 +104,7 @@ export function App() {
 	const [demoOpening, setDemoOpening] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
+	const [noticePaused, setNoticePaused] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
@@ -293,6 +294,21 @@ export function App() {
 			void refreshRuntimeOverview();
 		}
 	}, [authStatus, activeTab, refreshRuntimeOverview]);
+
+	useEffect(() => {
+		if (!noticeBanner || noticePaused) return;
+		const timer = window.setTimeout(() => {
+			setNoticeBanner(null);
+			setNoticePaused(false);
+		}, 4500);
+		return () => window.clearTimeout(timer);
+	}, [noticeBanner, noticePaused]);
+
+	useEffect(() => {
+		if (!noticeBanner) {
+			setNoticePaused(false);
+		}
+	}, [noticeBanner]);
 
 	useEffect(() => {
 		if (authStatus !== "authenticated") return;
@@ -831,14 +847,28 @@ export function App() {
 							</div>
 						)}
 						{noticeBanner && (
-							<div className="notice-card banner-gap" aria-live="polite">
+							<output
+								className="notice-card banner-gap"
+								aria-live="polite"
+								onMouseEnter={() => setNoticePaused(true)}
+								onMouseLeave={() => setNoticePaused(false)}
+								onFocus={() => setNoticePaused(true)}
+								onBlur={() => setNoticePaused(false)}
+							>
 								<div className="banner-row">
 									<span>{noticeBanner}</span>
-									<button type="button" className="btn-inline" onClick={() => setNoticeBanner(null)}>
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => {
+											setNoticePaused(false);
+											setNoticeBanner(null);
+										}}
+									>
 										知道了
 									</button>
 								</div>
-							</div>
+							</output>
 						)}
 					</div>
 				)}
