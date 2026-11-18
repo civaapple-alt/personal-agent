@@ -644,6 +644,10 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 			requireAuth: boolean;
 		};
 		assert.equal(loopbackSession.requireAuth, false);
+		const loopbackBoot = (await (await fetch(`${loopbackSrv.baseUrl}/api/bootstrap`)).json()) as {
+			platformPolicy?: { requireAuth?: boolean };
+		};
+		assert.equal(loopbackBoot.platformPolicy?.requireAuth, false);
 
 		const wsRes = await fetch(`${loopbackSrv.baseUrl}/api/workspaces`, {
 			method: "POST",
@@ -707,10 +711,12 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 		const bootRes = (await (
 			await fetch(`${authSrv.baseUrl}/api/bootstrap`, { headers: { Cookie: adminCookie } })
 		).json()) as {
+			platformPolicy?: { requireAuth?: boolean };
 			organizations: Array<{ id: string; orgRole: string }>;
 			workspaces: Array<{ id: string }>;
 			matters: Array<{ id: string }>;
 		};
+		assert.equal(bootRes.platformPolicy?.requireAuth, true);
 		assert.ok(bootRes.organizations.some((o) => o.id === defaultOrg.id && o.orgRole === "org_owner"));
 		assert.ok(bootRes.workspaces.some((w) => w.id === trialWs.id));
 		assert.ok(bootRes.matters.some((m) => m.id === trialMatter.id));

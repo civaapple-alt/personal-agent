@@ -506,6 +506,7 @@ export interface BootstrapPayload {
 	currentUser?: CollaboratorDto;
 	accountUser?: AccountUserDto | null;
 	platformPolicy?: {
+		requireAuth?: boolean;
 		registrationMode: RegistrationMode;
 		allowLocalWorkspacePath: boolean;
 		allowCommandPreviews: boolean;

@@ -22,24 +22,37 @@
 }
 .sidebar-top {
 	height: 56px;
-	padding: 0 14px;
+	padding: 0 12px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	gap: 6px;
 	flex-shrink: 0;
+}
+.sidebar-brand {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	flex: 1 1 auto;
 }
 .brand-btn {
 	border: none;
 	background: transparent;
 	display: inline-flex;
 	align-items: center;
-	gap: 8px;
+	gap: 7px;
+	min-width: 0;
 	font-size: var(--text-base);
 	font-weight: 700;
 	color: var(--text-primary);
 	cursor: pointer;
-	padding: 4px;
+	padding: 4px 2px;
+}
+.brand-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .brand-mark {
 	width: 24px;
@@ -49,13 +62,36 @@
 	color: #fff;
 	display: grid;
 	place-items: center;
+	flex-shrink: 0;
 	font-size: var(--text-micro);
 	font-weight: 700;
+}
+.edition-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 6px;
+	border-radius: var(--radius-pill);
+	font-size: var(--text-micro);
+	line-height: 1.2;
+	font-weight: 600;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.edition-badge.team {
+	background: var(--surface-accent);
+	border: 1px solid var(--surface-accent-border);
+	color: var(--accent);
+}
+.edition-badge.personal {
+	background: var(--bg-subtle);
+	border: 1px solid var(--border);
+	color: var(--text-secondary);
 }
 .sidebar-tools {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex-shrink: 0;
 }
 .sidebar-search {
 	padding: 0 14px 10px;

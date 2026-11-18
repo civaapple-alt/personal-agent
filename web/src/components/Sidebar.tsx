@@ -10,6 +10,7 @@ interface SidebarProps {
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
 	authKind?: "session" | "legacy_token" | "loopback" | null;
+	requireAuth?: boolean | null;
 	isSuperAdmin?: boolean;
 	orgEffectiveMemberIds?: string[] | null;
 	runtimeBadge?: string | null;
@@ -34,6 +35,7 @@ export function Sidebar({
 	bootstrap,
 	currentUser,
 	authKind = null,
+	requireAuth = null,
 	isSuperAdmin = false,
 	orgEffectiveMemberIds = null,
 	runtimeBadge,
@@ -82,14 +84,24 @@ export function Sidebar({
 	return (
 		<aside className={`bot-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
 			<div className="sidebar-top">
-				<button
-					type="button"
-					className="brand-btn"
-					onClick={() => onNavigate({ tab: "chats", matterId: selectedMatterId ?? undefined })}
-				>
-					<span className="brand-mark">PA</span>
-					<span>Personal Agent</span>
-				</button>
+				<div className="sidebar-brand">
+					<button
+						type="button"
+						className="brand-btn"
+						onClick={() => onNavigate({ tab: "chats", matterId: selectedMatterId ?? undefined })}
+					>
+						<span className="brand-mark">PA</span>
+						<span className="brand-name">Personal Agent</span>
+					</button>
+					{typeof requireAuth === "boolean" && (
+						<span
+							className={`edition-badge ${requireAuth ? "team" : "personal"}`}
+							title={requireAuth ? "团队多成员版（PA_REQUIRE_AUTH=1）" : "个人本机版（未开启 PA_REQUIRE_AUTH）"}
+						>
+							{requireAuth ? "团队版" : "个人版"}
+						</span>
+					)}
+				</div>
 				<div className="sidebar-tools">
 					<button
 						type="button"

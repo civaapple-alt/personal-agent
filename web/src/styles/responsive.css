@@ -33,11 +33,18 @@
 		top: 0;
 		bottom: 0;
 		left: 0;
-		width: min(304px, 86vw);
+		width: min(338px, 90vw);
 		z-index: 60;
 		transform: translateX(-105%);
 		transition: transform 0.2s ease;
 		box-shadow: var(--shadow-lg);
+	}
+	.bot-sidebar .brand-btn {
+		font-size: var(--text-sm);
+		gap: 6px;
+	}
+	.bot-sidebar .sidebar-tools {
+		gap: 4px;
 	}
 	.bot-sidebar.mobile-open {
 		transform: translateX(0);

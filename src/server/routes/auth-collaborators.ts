@@ -96,6 +96,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			currentUser: toPublicCollaborator(actor.collaborator),
 			accountUser: actor.user ? toPublicUser(actor.user) : null,
 			platformPolicy: {
+				requireAuth: Boolean(ctx.requireAuth),
 				registrationMode: settings.registrationMode,
 				allowLocalWorkspacePath: settings.allowLocalWorkspacePath || isAdmin,
 				allowCommandPreviews: settings.allowCommandPreviews || isAdmin,

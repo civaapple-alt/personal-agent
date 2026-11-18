@@ -92,6 +92,7 @@ export function App() {
 		initialInviteToken && !initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+	const [serverRequireAuth, setServerRequireAuth] = useState<boolean | null>(null);
 	const [permissionRequired, setPermissionRequired] = useState(true);
 	const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
 	const [pendingApproval, setPendingApproval] = useState(false);
@@ -169,9 +170,16 @@ export function App() {
 		setSettingsSection,
 	});
 
+	const applyEditionState = useCallback((requireAuthValue: boolean | undefined) => {
+		if (typeof requireAuthValue !== "boolean") return;
+		syncEditionDocumentTitle(requireAuthValue);
+		setServerRequireAuth(requireAuthValue);
+	}, []);
+
 	const refreshBootstrap = useCallback(async () => {
 		const data = await fetchBootstrap();
 		setBootstrap(data);
+		applyEditionState(data.platformPolicy?.requireAuth);
 		if (data.activeRuns) {
 			const nextProgress: Record<string, MatterProgressDto> = {};
 			const nextStartedAt: Record<string, number> = {};
@@ -210,7 +218,7 @@ export function App() {
 			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
 		});
 		setSelectedDeliverableId((prev) => prev ?? data.deliverables[0]?.id ?? null);
-	}, []);
+	}, [applyEditionState]);
 
 	const refreshDetail = useCallback(async (matterId: string | null) => {
 		if (!matterId) {
@@ -231,32 +239,35 @@ export function App() {
 		}
 	}, []);
 
-	const applyRevokedSession = useCallback((message?: string) => {
-		setCurrentUserOverride(null);
-		setSessionAccountUser(null);
-		setBootstrap(null);
-		setMatterDetail(null);
-		setRuntimeOverview(null);
-		setRuntimeError(null);
-		setAdminOverview(null);
-		setAdminError(null);
-		runtimeAutoFetchedRef.current = false;
-		adminAutoFetchedRef.current = false;
-		setProgressByMatter({});
-		setSseConnected(false);
-		setAuthError(message ?? "当前登录凭证已失效或已被管理员吊销，请重新登录");
-		setAuthStatus("unauthenticated");
-		void fetchAuthSession()
-			.then((s) => {
-				syncEditionDocumentTitle(s.requireAuth);
-				setPermissionRequired(s.permissionRequired);
-				setNeedsAdminSetup(Boolean(s.needsAdminSetup));
-				setPendingApproval(Boolean(s.pendingApproval));
-				setRegistrationMode(s.registrationMode ?? "open_review");
-				setSessionAccountUser(s.accountUser ?? null);
-			})
-			.catch(() => {});
-	}, []);
+	const applyRevokedSession = useCallback(
+		(message?: string) => {
+			setCurrentUserOverride(null);
+			setSessionAccountUser(null);
+			setBootstrap(null);
+			setMatterDetail(null);
+			setRuntimeOverview(null);
+			setRuntimeError(null);
+			setAdminOverview(null);
+			setAdminError(null);
+			runtimeAutoFetchedRef.current = false;
+			adminAutoFetchedRef.current = false;
+			setProgressByMatter({});
+			setSseConnected(false);
+			setAuthError(message ?? "当前登录凭证已失效或已被管理员吊销，请重新登录");
+			setAuthStatus("unauthenticated");
+			void fetchAuthSession()
+				.then((s) => {
+					applyEditionState(s.requireAuth);
+					setPermissionRequired(s.permissionRequired);
+					setNeedsAdminSetup(Boolean(s.needsAdminSetup));
+					setPendingApproval(Boolean(s.pendingApproval));
+					setRegistrationMode(s.registrationMode ?? "open_review");
+					setSessionAccountUser(s.accountUser ?? null);
+				})
+				.catch(() => {});
+		},
+		[applyEditionState],
+	);
 
 	useEffect(() => {
 		setAuthRevokedHandler((message) => applyRevokedSession(message));
@@ -265,7 +276,7 @@ export function App() {
 
 	const syncSessionAndBootstrap = useCallback(async () => {
 		const session = await fetchAuthSession();
-		syncEditionDocumentTitle(session.requireAuth);
+		applyEditionState(session.requireAuth);
 		setPermissionRequired(session.permissionRequired);
 		setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 		setPendingApproval(Boolean(session.pendingApproval));
@@ -292,7 +303,7 @@ export function App() {
 		setAuthStatus("authenticated");
 		await refreshBootstrap();
 		return true;
-	}, [refreshBootstrap]);
+	}, [applyEditionState, refreshBootstrap]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -317,7 +328,7 @@ export function App() {
 					void fetchAuthSession()
 						.then((s) => {
 							if (!cancelled) {
-								syncEditionDocumentTitle(s.requireAuth);
+								applyEditionState(s.requireAuth);
 								setPermissionRequired(s.permissionRequired);
 								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
 								setPendingApproval(Boolean(s.pendingApproval));
@@ -350,7 +361,7 @@ export function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [initialLegacyInvite, initialOrgInvite, refreshBootstrap, syncSessionAndBootstrap]);
+	}, [applyEditionState, initialLegacyInvite, initialOrgInvite, refreshBootstrap, syncSessionAndBootstrap]);
 
 	const refreshRuntimeOverview = useCallback(async () => {
 		setRuntimeLoading(true);
@@ -919,7 +930,7 @@ export function App() {
 				navigateRoute({ tab: "chats" }, { replace: true });
 			}
 			const session = await fetchAuthSession();
-			syncEditionDocumentTitle(session.requireAuth);
+			applyEditionState(session.requireAuth);
 			setPermissionRequired(session.permissionRequired);
 			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 			setRegistrationMode(session.registrationMode ?? "open_review");
@@ -1088,6 +1099,7 @@ export function App() {
 				bootstrap={bootstrap}
 				currentUser={currentUser}
 				authKind={bootstrap?.authKind ?? authKind}
+				requireAuth={serverRequireAuth}
 				isSuperAdmin={isSuperAdmin}
 				orgEffectiveMemberIds={orgEffectiveMemberIds}
 				runtimeBadge={runtimeBadge}
