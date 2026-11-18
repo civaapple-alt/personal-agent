@@ -31,6 +31,7 @@ export interface PlatformSettingsDto {
 	allowCommandPreviews: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
+	pstackDir?: string | null;
 	updatedAt: string;
 }
 
@@ -146,6 +147,7 @@ export function setAuthRevokedHandler(handler: ((message?: string) => void) | nu
 
 export interface AuthSessionPayload {
 	authenticated: boolean;
+	requireAuth?: boolean;
 	permissionRequired: boolean;
 	revokedSession?: boolean;
 	pendingApproval?: boolean;
@@ -1401,6 +1403,8 @@ export interface RuntimeBaseInfoDto {
 		modeSha256: string | null;
 		skillCount: number;
 		error: string | null;
+		source?: "env" | "settings" | "none";
+		defaultCloneUrl?: string;
 	};
 	isolationModes: RuntimeIsolationModeDto[];
 	envFlags: {
@@ -1442,4 +1446,26 @@ export interface RuntimeOverviewDto {
 
 export function fetchRuntimeOverview(): Promise<RuntimeOverviewDto> {
 	return requestJson("/api/runtime");
+}
+
+export function enableRuntimePstack(input?: { cloneUrl?: string; update?: boolean }): Promise<{
+	source: "cloned" | "updated" | "existing";
+	repoPath: string;
+	settings: PlatformSettingsDto;
+	overview: RuntimeOverviewDto;
+}> {
+	return requestJson("/api/admin/runtime/pstack/enable", {
+		method: "POST",
+		body: JSON.stringify(input ?? {}),
+	});
+}
+
+export function disableRuntimePstack(): Promise<{
+	settings: PlatformSettingsDto;
+	overview: RuntimeOverviewDto;
+}> {
+	return requestJson("/api/admin/runtime/pstack/disable", {
+		method: "POST",
+		body: JSON.stringify({}),
+	});
 }

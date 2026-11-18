@@ -166,7 +166,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				if (await handle(routeCtx, routeReq)) return;
 			}
 
-			if (method === "GET" && (await serveStaticAsset(res, pathname, webDistDir))) {
+			const documentTitle = requireAuth ? "Personal Agent · 团队版" : "Personal Agent · 个人版";
+			if (method === "GET" && (await serveStaticAsset(res, pathname, webDistDir, { documentTitle }))) {
 				return;
 			}
 

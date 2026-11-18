@@ -92,7 +92,7 @@ export class TeamOrchestrator {
 	private readonly architectTasks = new Set<Promise<void>>();
 	private shuttingDown = false;
 	private readonly extensions: string[];
-	private readonly pstackDir: string | undefined;
+	private pstackDir: string | undefined;
 
 	constructor(options: TeamOrchestratorOptions) {
 		this.store = options.store;
@@ -119,6 +119,11 @@ export class TeamOrchestrator {
 			pstackDir: this.pstackDir ?? null,
 			templates: this.listTemplates(),
 		};
+	}
+
+	/** Dynamically enable or disable the configured pstack method pack directory. */
+	setPstackDir(pstackDir: string | undefined): void {
+		this.pstackDir = pstackDir?.trim() || undefined;
 	}
 
 	setDialogHandler(handler: OrchestratorDialogHandler | undefined): void {

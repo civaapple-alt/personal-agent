@@ -379,6 +379,7 @@ export class UserAuthRepo {
 			allowCommandPreviews: true,
 			defaultMaxOrgs: 5,
 			defaultMaxActiveDispatches: 3,
+			pstackDir: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
 		};
 		if (!row || typeof row.value_json !== "string") return defaults;
@@ -418,6 +419,10 @@ export class UserAuthRepo {
 					Number.isFinite(parsed.defaultMaxActiveDispatches)
 						? Math.max(0, Math.floor(parsed.defaultMaxActiveDispatches))
 						: defaults.defaultMaxActiveDispatches,
+				pstackDir:
+					typeof parsed.pstackDir === "string" && parsed.pstackDir.trim()
+						? parsed.pstackDir.trim()
+						: defaults.pstackDir,
 				updatedAt: String(row.updated_at ?? defaults.updatedAt),
 			};
 		} catch {
@@ -450,6 +455,12 @@ export class UserAuthRepo {
 				patch.defaultMaxActiveDispatches !== undefined
 					? Math.max(0, Math.floor(patch.defaultMaxActiveDispatches))
 					: current.defaultMaxActiveDispatches,
+			pstackDir:
+				patch.pstackDir === null || patch.pstackDir === ""
+					? null
+					: typeof patch.pstackDir === "string" && patch.pstackDir.trim()
+						? resolve(patch.pstackDir.trim())
+						: current.pstackDir,
 		};
 		this.db
 			.prepare(

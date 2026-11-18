@@ -66,6 +66,11 @@ import {
 } from "./imageAttachments.ts";
 import { getBotTheme } from "./utils.ts";
 
+function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
+	if (typeof requireAuth !== "boolean") return;
+	document.title = requireAuth ? "Personal Agent · 团队版" : "Personal Agent · 个人版";
+}
+
 function extractInitialInviteToken(): string {
 	try {
 		const searchToken = new URLSearchParams(window.location.search).get("invite")?.trim();
@@ -243,6 +248,7 @@ export function App() {
 		setAuthStatus("unauthenticated");
 		void fetchAuthSession()
 			.then((s) => {
+				syncEditionDocumentTitle(s.requireAuth);
 				setPermissionRequired(s.permissionRequired);
 				setNeedsAdminSetup(Boolean(s.needsAdminSetup));
 				setPendingApproval(Boolean(s.pendingApproval));
@@ -259,6 +265,7 @@ export function App() {
 
 	const syncSessionAndBootstrap = useCallback(async () => {
 		const session = await fetchAuthSession();
+		syncEditionDocumentTitle(session.requireAuth);
 		setPermissionRequired(session.permissionRequired);
 		setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 		setPendingApproval(Boolean(session.pendingApproval));
@@ -310,6 +317,7 @@ export function App() {
 					void fetchAuthSession()
 						.then((s) => {
 							if (!cancelled) {
+								syncEditionDocumentTitle(s.requireAuth);
 								setPermissionRequired(s.permissionRequired);
 								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
 								setPendingApproval(Boolean(s.pendingApproval));
@@ -911,6 +919,7 @@ export function App() {
 				navigateRoute({ tab: "chats" }, { replace: true });
 			}
 			const session = await fetchAuthSession();
+			syncEditionDocumentTitle(session.requireAuth);
 			setPermissionRequired(session.permissionRequired);
 			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 			setRegistrationMode(session.registrationMode ?? "open_review");
@@ -1395,12 +1404,16 @@ export function App() {
 				{activeTab === "settings" && (
 					<SettingsView
 						currentUser={currentUser}
+						isSuperAdmin={isSuperAdmin}
 						activeSection={settingsSection}
 						overview={runtimeOverview}
 						loading={runtimeLoading}
 						error={runtimeError}
 						onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
 						onRefresh={refreshRuntimeOverview}
+						onOverviewChange={setRuntimeOverview}
+						onNotice={(msg) => setNoticeBanner(msg)}
+						onError={(msg) => setErrorBanner(msg)}
 						onOpenTeam={() => navigateRoute({ tab: "team" })}
 					/>
 				)}

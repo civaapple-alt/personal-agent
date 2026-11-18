@@ -4,13 +4,23 @@ Personal Agent 的外层负责事项、稳定岗位、专业委托、会话接�
 
 本次复用 [backnotprop/pstack](https://github.com/backnotprop/pstack) 的跨宿主镜像。其 `poteto-mode` 已包含 Pi 等宿主的映射和能力缺失处理。没有重写或复制完整 pstack 方法，也不修改本机 Pi 安装。
 
-## 指定完整方法包后启动
+## 启用完整方法包
+
+### 方式一：启动参数显式指定
 
 ```bash
 PA_PSTACK_DIR=/path/to/pstack npm run start:web
 ```
 
-`PA_PSTACK_DIR` 指向同时包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md` 的完整包根目录。可以使用用户自行检出的镜像，目录原样只读使用；本项目不自动安装或更新第三方包。程序化调用可向 `TeamOrchestrator` 传入 `pstackDir`。
+### 方式二：在工作台设置页一键克隆并启用（无启动参数时推荐）
+
+如果启动命令没有设置 `PA_PSTACK_DIR`（例如 `PA_REQUIRE_AUTH=1 PA_HOST=0.0.0.0 PORT=4310 npm run start:web`）：
+
+1. 以**超级管理员**（或未启用强制认证时的本机所有者）进入工作台 **设置 → 扩展插件**（`#/settings/extensions`）。
+2. 在 **pstack-extension** 卡片内确认仓库地址（默认 `https://github.com/backnotprop/pstack.git`），点击 **「克隆并启用 pstack」**。
+3. 服务端会自动克隆（或复检复用已有目录）到 `<dataDir>/extensions/repo/<仓库名>`（默认仓库为 `.data/extensions/repo/pstack`），校验 `plugin.json` 与 `skills/poteto-mode/SKILL.md` 完整性后立即生效，并将该路径持久化保存在 `platform_settings.pstackDir` 中；后续不传 `PA_PSTACK_DIR` 重启服务仍会自动加载。可在同一卡片内按需「同步更新」或「停用」（如通过启动环境变量 `PA_PSTACK_DIR` 启动，则环境变量优先接管）。
+
+`PA_PSTACK_DIR` 指向同时包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md` 的完整包根目录。无论通过启动参数还是页面克隆目录，运行时均以只读方式读取其 Markdown 正文，不自动修改包内容；程序化调用仍可向 `TeamOrchestrator` 传入 `pstackDir`。
 
 当前 Codex 会话提供的 pstack 插件是 ChatGPT 精简适配版，含部分方法和原则，其 README 明确说明不包含全部自主编程流程。该安装目录没有 `poteto-mode`，不能直接当作本次完整方法包来源。外层助手拥有某个插件，也不意味着 Personal Agent 的 Pi 子进程自动继承它。
 

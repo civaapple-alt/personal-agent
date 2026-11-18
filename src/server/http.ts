@@ -97,10 +97,32 @@ export function responseCancellation(res: ServerResponse): { signal: AbortSignal
 	return { signal: controller.signal, dispose: () => res.off("close", onClose) };
 }
 
+function escapeHtmlText(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function sendAssetBuffer(res: ServerResponse, content: Buffer, mime: string, documentTitle?: string): void {
+	let payload = content;
+	if (documentTitle && mime.startsWith("text/html")) {
+		const html = content.toString("utf8");
+		const nextHtml = /<title>[\s\S]*?<\/title>/i.test(html)
+			? html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtmlText(documentTitle)}</title>`)
+			: html;
+		payload = Buffer.from(nextHtml, "utf8");
+	}
+	res.writeHead(200, {
+		...BASE_SECURITY_HEADERS,
+		"Content-Type": mime,
+		"Content-Length": payload.byteLength,
+	});
+	res.end(payload);
+}
+
 export async function serveStaticAsset(
 	res: ServerResponse,
 	pathname: string,
 	webDistDir: string | undefined,
+	options?: { documentTitle?: string },
 ): Promise<boolean> {
 	if (!webDistDir || !existsSync(webDistDir)) return false;
 	const safeRel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
@@ -108,23 +130,13 @@ export async function serveStaticAsset(
 	if (targetPath.startsWith(resolve(webDistDir)) && existsSync(targetPath)) {
 		const content = await readFile(targetPath);
 		const mime = MIME_TYPES[extname(targetPath)] ?? "application/octet-stream";
-		res.writeHead(200, {
-			...BASE_SECURITY_HEADERS,
-			"Content-Type": mime,
-			"Content-Length": content.byteLength,
-		});
-		res.end(content);
+		sendAssetBuffer(res, content, mime, options?.documentTitle);
 		return true;
 	}
 	const indexHtml = join(webDistDir, "index.html");
 	if (existsSync(indexHtml) && !pathname.startsWith("/api/")) {
 		const content = await readFile(indexHtml);
-		res.writeHead(200, {
-			...BASE_SECURITY_HEADERS,
-			"Content-Type": "text/html; charset=utf-8",
-			"Content-Length": content.byteLength,
-		});
-		res.end(content);
+		sendAssetBuffer(res, content, "text/html; charset=utf-8", options?.documentTitle);
 		return true;
 	}
 	return false;

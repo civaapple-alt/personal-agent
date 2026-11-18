@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -16,6 +18,7 @@ import {
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../src/index.ts";
+import { DEFAULT_PSTACK_CLONE_URL, resolveDefaultPstackRepoDir } from "../src/server/git-clone.ts";
 
 function createValidPstackFixture(dir: string): void {
 	mkdirSync(join(dir, "skills", "poteto-mode"), { recursive: true });
@@ -253,4 +256,209 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 
 	assert.ok(statSync(resolveBuiltinExtensionPath("team-extension")).isFile());
 	assert.ok(statSync(resolveBuiltinExtensionPath("pstack-extension")).isFile());
+});
+
+async function startBarePstackHttpRepo(
+	rootDir: string,
+	name: string,
+	populate: (workDir: string) => void,
+): Promise<{ cloneUrl: string; close: () => Promise<void> }> {
+	const workDir = join(rootDir, `${name}-src`);
+	const bareDir = join(rootDir, `${name}.git`);
+	mkdirSync(workDir, { recursive: true });
+	execFileSync("git", ["init", "-b", "main", workDir], { stdio: "ignore" });
+	execFileSync("git", ["config", "user.name", "Test User"], { cwd: workDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: workDir, stdio: "ignore" });
+	populate(workDir);
+	execFileSync("git", ["add", "."], { cwd: workDir, stdio: "ignore" });
+	execFileSync("git", ["commit", "-m", "init"], { cwd: workDir, stdio: "ignore" });
+	execFileSync("git", ["clone", "--bare", workDir, bareDir], { stdio: "ignore" });
+	execFileSync("git", ["update-server-info"], { cwd: bareDir, stdio: "ignore" });
+
+	const httpServer = http.createServer((req, res) => {
+		const urlPath = (req.url ?? "/").split("?")[0] ?? "/";
+		const prefix = `/${name}.git/`;
+		const cleanRel = urlPath.startsWith(prefix) ? urlPath.slice(prefix.length) : urlPath.replace(/^\/+/, "");
+		const target = resolve(bareDir, cleanRel);
+		if (!target.startsWith(bareDir) || !existsSync(target) || statSync(target).isDirectory()) {
+			res.writeHead(404);
+			res.end("Not found");
+			return;
+		}
+		res.writeHead(200);
+		res.end(readFileSync(target));
+	});
+	await new Promise<void>((resolveListen) => httpServer.listen(0, "127.0.0.1", () => resolveListen()));
+	const addr = httpServer.address();
+	assert.ok(addr && typeof addr === "object");
+	return {
+		cloneUrl: `http://127.0.0.1:${addr.port}/${name}.git`,
+		close: () => new Promise<void>((resolveClose) => httpServer.close(() => resolveClose())),
+	};
+}
+
+test("Super admin can clone/enable pstack into .data/extensions/repo/<name>, persist setting, and disable cleanly", async (t) => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-pstack-install-"));
+	t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+
+	const dataDir = join(tempDir, ".data");
+	const repoContainerDir = join(dataDir, "extensions", "repo");
+	mkdirSync(repoContainerDir, { recursive: true });
+	const expectedValidDir = join(repoContainerDir, "valid-pstack");
+
+	const prevEnvPstack = process.env.PA_PSTACK_DIR;
+	delete process.env.PA_PSTACK_DIR;
+	t.after(() => {
+		if (prevEnvPstack === undefined) delete process.env.PA_PSTACK_DIR;
+		else process.env.PA_PSTACK_DIR = prevEnvPstack;
+	});
+
+	const validRepo = await startBarePstackHttpRepo(tempDir, "valid-pstack", createValidPstackFixture);
+	t.after(() => validRepo.close());
+	const invalidRepo = await startBarePstackHttpRepo(tempDir, "invalid-pstack", (dir) => {
+		writeFileSync(join(dir, "README.md"), "# Not pstack\n", "utf8");
+	});
+	t.after(() => invalidRepo.close());
+
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const db = openPersonalAgentDatabase(join(dataDir, "personal-agent.db"));
+	t.after(() => db.close());
+	const store = new PersonalAgentStore(db);
+	const adminUser = store.setupInitialAdmin({
+		email: "admin@pstack.test",
+		password: "password-123",
+		displayName: "Admin",
+	});
+	const memberUser = store.createUser({
+		email: "member@pstack.test",
+		password: "password-123",
+		displayName: "Member",
+		status: "active",
+	});
+	const { rawToken: adminToken } = store.createSession(adminUser.id);
+	const { rawToken: memberToken } = store.createSession(memberUser.id);
+
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tempDir,
+		noSession: true,
+	});
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager: new PreviewManager(),
+		dialogBroker: new DialogBroker(),
+		requireAuth: true,
+		dataDir,
+		probePiCli: async () => ({ available: true, executable: "pi", version: "1.5.2", error: null }),
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+	t.after(() => new Promise<void>((resolveClose) => server.close(() => resolveClose())));
+	const addr = server.address();
+	assert.ok(addr && typeof addr !== "string");
+	const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+	// Default clone URL points to upstream backnotprop/pstack and resolves under .data/extensions/repo/pstack
+	assert.equal(DEFAULT_PSTACK_CLONE_URL, "https://github.com/backnotprop/pstack.git");
+	assert.equal(resolveDefaultPstackRepoDir(dataDir), join(repoContainerDir, "pstack"));
+
+	// Non-admin user is forbidden from enabling/disabling pstack
+	const memberEnableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${memberToken}` },
+		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
+	});
+	assert.equal(memberEnableRes.status, 403);
+
+	// Unsafe file:// URL blocked
+	const unsafeRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+		body: JSON.stringify({ cloneUrl: "file:///tmp/evil-pstack" }),
+	});
+	assert.equal(unsafeRes.status, 400);
+
+	// Cloning an incomplete repo fails cleanly without leaving invalid files under `.data/extensions/repo/<name>`
+	const invalidRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+		body: JSON.stringify({ cloneUrl: invalidRepo.cloneUrl }),
+	});
+	assert.equal(invalidRes.status, 400);
+	assert.equal(existsSync(join(repoContainerDir, "invalid-pstack")), false);
+	assert.equal(store.getPlatformSettings().pstackDir, null);
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, null);
+
+	// Valid repo clones into `.data/extensions/repo/valid-pstack`, verifies, persists settings, and activates immediately
+	const enableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
+	});
+	assert.equal(enableRes.status, 200);
+	const enableJson = (await enableRes.json()) as {
+		source: string;
+		repoPath: string;
+		settings: { pstackDir: string | null };
+		overview: RuntimeOverviewPayload;
+	};
+	assert.equal(enableJson.source, "cloned");
+	assert.ok(enableJson.repoPath.endsWith("/extensions/repo/valid-pstack"));
+	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
+	assert.ok(existsSync(join(expectedValidDir, "skills", "poteto-mode", "SKILL.md")));
+	assert.equal(enableJson.settings.pstackDir, enableJson.repoPath);
+	assert.equal(enableJson.overview.base.pstack.configured, true);
+	assert.equal(enableJson.overview.base.pstack.available, true);
+	assert.equal(enableJson.overview.base.pstack.version, "0.15.42");
+	assert.equal(enableJson.overview.base.pstack.skillCount, 2);
+	assert.equal(enableJson.overview.extensions.find((ext) => ext.id === "builtin-pstack-extension")?.status, "active");
+	assert.equal(
+		enableJson.overview.configSections.find((s) => s.id === "env")?.items.find((i) => i.key === "PA_PSTACK_DIR")
+			?.overridden,
+		true,
+	);
+
+	// Simulated server restart reads persisted pstackDir from DB without PA_PSTACK_DIR env
+	const reopenedSettings = store.getPlatformSettings();
+	assert.equal(reopenedSettings.pstackDir, enableJson.repoPath);
+	const restartedOrchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tempDir,
+		noSession: true,
+		pstackDir: reopenedSettings.pstackDir ?? undefined,
+	});
+	assert.equal(restartedOrchestrator.getRuntimeConfig().pstackDir, enableJson.repoPath);
+
+	// Disable clears persisted pstackDir while preserving local cloned directory for instant re-enable
+	const disableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/disable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+		body: "{}",
+	});
+	assert.equal(disableRes.status, 200);
+	const disableJson = (await disableRes.json()) as {
+		settings: { pstackDir: string | null };
+		overview: RuntimeOverviewPayload;
+	};
+	assert.equal(disableJson.settings.pstackDir, null);
+	assert.equal(disableJson.overview.base.pstack.configured, false);
+	assert.equal(
+		disableJson.overview.extensions.find((ext) => ext.id === "builtin-pstack-extension")?.status,
+		"inactive",
+	);
+	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
+
+	// Re-enable with same cloneUrl reuses existing `.data/extensions/repo/valid-pstack` without recloning
+	const reenableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
+	});
+	assert.equal(reenableRes.status, 200);
+	const reenableJson = (await reenableRes.json()) as { source: string; repoPath: string };
+	assert.equal(reenableJson.source, "existing");
+	assert.equal(reenableJson.repoPath, enableJson.repoPath);
 });

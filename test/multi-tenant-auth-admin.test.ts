@@ -637,6 +637,14 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 	try {
 		// Phase 1: Personal passwordless loopback trial creates workspace & matter in defaultOrg
 		loopbackSrv = await startServerWithAuth(false);
+		const personalHtml = await (await fetch(loopbackSrv.baseUrl)).text();
+		assert.match(personalHtml, /<title>Personal Agent · 个人版<\/title>/);
+		assert.doesNotMatch(personalHtml, /<title>.*V4.*<\/title>/);
+		const loopbackSession = (await (await fetch(`${loopbackSrv.baseUrl}/api/auth/session`)).json()) as {
+			requireAuth: boolean;
+		};
+		assert.equal(loopbackSession.requireAuth, false);
+
 		const wsRes = await fetch(`${loopbackSrv.baseUrl}/api/workspaces`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -671,12 +679,17 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 
 		// Phase 2: Switch same DB to PA_REQUIRE_AUTH=1 -> in-place upgrade of usr_local_owner
 		authSrv = await startServerWithAuth(true);
+		const teamHtml = await (await fetch(authSrv.baseUrl)).text();
+		assert.match(teamHtml, /<title>Personal Agent · 团队版<\/title>/);
+		assert.doesNotMatch(teamHtml, /<title>.*V4.*<\/title>/);
 		const sessionRes = (await (await fetch(`${authSrv.baseUrl}/api/auth/session`)).json()) as {
 			authenticated: boolean;
+			requireAuth: boolean;
 			needsAdminSetup: boolean;
 			registrationMode: string;
 		};
 		assert.equal(sessionRes.authenticated, false);
+		assert.equal(sessionRes.requireAuth, true);
 		assert.equal(sessionRes.needsAdminSetup, true);
 		assert.equal(sessionRes.registrationMode, "open_review");
 

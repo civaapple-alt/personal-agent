@@ -171,9 +171,13 @@
 		align-items: flex-start;
 		gap: 4px;
 	}
+	.settings-config-keycol {
+		max-width: 100%;
+	}
 	.settings-config-valcol {
 		justify-content: flex-start;
 		text-align: left;
+		width: 100%;
 	}
 	.initiation-mode-pills .choice-chip {
 		font-size: var(--text-micro);

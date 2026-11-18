@@ -41,6 +41,8 @@ async function main(): Promise<void> {
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
+	const savedSettings = store.getPlatformSettings(defaultWorkspacesRoot);
+	const effectivePstackDir = process.env.PA_PSTACK_DIR?.trim() || savedSettings.pstackDir || undefined;
 	const builtinRolesDir = resolve(rootDir, "roles");
 	const temporaryRolesDir = dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-roles-")) : undefined;
 	const customRolesDir = temporaryRolesDir ?? resolve(dirname(resolve(dbPath)), "roles");
@@ -57,7 +59,7 @@ async function main(): Promise<void> {
 		defaultCwd: rootDir,
 		noSession: false,
 		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
-		pstackDir: process.env.PA_PSTACK_DIR?.trim() || undefined,
+		pstackDir: effectivePstackDir,
 		sessionDir: resolve(rootDir, ".data/pi-sessions"),
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});

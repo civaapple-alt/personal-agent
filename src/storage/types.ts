@@ -63,6 +63,7 @@ export interface PlatformSettings {
 	allowCommandPreviews: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
+	pstackDir: string | null;
 	updatedAt: string;
 }
 

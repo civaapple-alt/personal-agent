@@ -1,22 +1,28 @@
-import { useMemo, useState } from "react";
-import type {
-	CollaboratorDto,
-	RuntimeConfigSectionDto,
-	RuntimeExtensionDto,
-	RuntimeExtensionSourceKind,
-	RuntimeExtensionStatus,
-	RuntimeOverviewDto,
+import { useEffect, useMemo, useState } from "react";
+import {
+	type CollaboratorDto,
+	disableRuntimePstack,
+	enableRuntimePstack,
+	type RuntimeConfigSectionDto,
+	type RuntimeExtensionDto,
+	type RuntimeExtensionSourceKind,
+	type RuntimeExtensionStatus,
+	type RuntimeOverviewDto,
 } from "../api.ts";
 import type { SettingsSection } from "../hashRouter.ts";
 
 interface SettingsViewProps {
 	currentUser?: CollaboratorDto | null;
+	isSuperAdmin?: boolean;
 	activeSection: SettingsSection;
 	overview: RuntimeOverviewDto | null;
 	loading: boolean;
 	error: string | null;
 	onSelectSection: (section: SettingsSection) => void;
 	onRefresh: () => Promise<void>;
+	onOverviewChange?: (overview: RuntimeOverviewDto) => void;
+	onNotice?: (message: string) => void;
+	onError?: (message: string) => void;
 	onOpenTeam: () => void;
 }
 
@@ -52,16 +58,71 @@ const STATUS_BADGE_CLASSES: Record<RuntimeExtensionStatus, string> = {
 };
 
 export function SettingsView({
+	isSuperAdmin = false,
 	activeSection,
 	overview,
 	loading,
 	error,
 	onSelectSection,
 	onRefresh,
+	onOverviewChange,
+	onNotice,
+	onError,
 	onOpenTeam,
 }: SettingsViewProps) {
 	const [extFilter, setExtFilter] = useState<ExtensionFilter>("all");
 	const [configFilter, setConfigFilter] = useState<ConfigSectionFilter>("all");
+	const [pstackUrlInput, setPstackUrlInput] = useState("https://github.com/backnotprop/pstack.git");
+	const [pstackBusy, setPstackBusy] = useState<"enable" | "update" | "disable" | null>(null);
+	const [pstackActionError, setPstackActionError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const defaultUrl = overview?.base.pstack.defaultCloneUrl;
+		if (defaultUrl) {
+			setPstackUrlInput((prev) => prev || defaultUrl);
+		}
+	}, [overview?.base.pstack.defaultCloneUrl]);
+
+	const handleEnablePstack = async (update = false) => {
+		if (pstackBusy) return;
+		setPstackBusy(update ? "update" : "enable");
+		setPstackActionError(null);
+		try {
+			const res = await enableRuntimePstack({
+				cloneUrl: pstackUrlInput.trim() || undefined,
+				update,
+			});
+			onOverviewChange?.(res.overview);
+			if (!onOverviewChange) await onRefresh();
+			const verb =
+				res.source === "cloned" ? "已克隆并启用" : res.source === "updated" ? "已同步更新并启用" : "已启用";
+			onNotice?.(`${verb} pstack 方法包（${res.repoPath}）`);
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setPstackActionError(msg);
+			onError?.(msg);
+		} finally {
+			setPstackBusy(null);
+		}
+	};
+
+	const handleDisablePstack = async () => {
+		if (pstackBusy) return;
+		setPstackBusy("disable");
+		setPstackActionError(null);
+		try {
+			const res = await disableRuntimePstack();
+			onOverviewChange?.(res.overview);
+			if (!onOverviewChange) await onRefresh();
+			onNotice?.("已停用 pstack 方法包（已保留本地仓库目录）");
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setPstackActionError(msg);
+			onError?.(msg);
+		} finally {
+			setPstackBusy(null);
+		}
+	};
 
 	const filteredExtensions: RuntimeExtensionDto[] = useMemo(() => {
 		const list = overview?.extensions ?? [];
@@ -332,14 +393,98 @@ export function SettingsView({
 														)}
 													</div>
 												)}
+												{ext.id === "builtin-pstack-extension" && (
+													<div className="settings-pstack-panel">
+														{base.pstack.configured && base.pstack.available ? (
+															<div className="settings-pstack-active-row">
+																<div className="settings-pstack-meta">
+																	<span>
+																		<strong>
+																			v{base.pstack.version}（{base.pstack.skillCount} 项方法）
+																		</strong>{" "}
+																		·{" "}
+																		{base.envFlags.pstackDirEnvConfigured
+																			? "由启动环境变量 PA_PSTACK_DIR 接管"
+																			: "已保存至数据库 platform_settings，下次无参数启动自动加载"}
+																	</span>
+																	<span className="settings-pstack-path-line">
+																		<span className="settings-pstack-path-label">路径：</span>
+																		<code className="mono-wrap">
+																			{base.pstack.root ?? ".data/extensions/repo/pstack"}
+																		</code>
+																	</span>
+																</div>
+																{isSuperAdmin && !base.envFlags.pstackDirEnvConfigured && (
+																	<div className="actions-row compact">
+																		<button
+																			type="button"
+																			className="btn-pill-outline"
+																			onClick={() => void handleEnablePstack(true)}
+																			disabled={pstackBusy !== null}
+																		>
+																			{pstackBusy === "update" ? "更新中..." : "同步更新"}
+																		</button>
+																		<button
+																			type="button"
+																			className="btn-pill-outline"
+																			onClick={() => void handleDisablePstack()}
+																			disabled={pstackBusy !== null}
+																		>
+																			{pstackBusy === "disable" ? "停用中..." : "停用"}
+																		</button>
+																	</div>
+																)}
+															</div>
+														) : isSuperAdmin ? (
+															<div className="settings-pstack-setup">
+																<div className="settings-pstack-form-row">
+																	<input
+																		type="url"
+																		className="text-input"
+																		aria-label="pstack Git 仓库地址"
+																		placeholder="https://github.com/backnotprop/pstack.git"
+																		value={pstackUrlInput}
+																		onChange={(e) => setPstackUrlInput(e.target.value)}
+																		disabled={pstackBusy !== null}
+																	/>
+																	<button
+																		type="button"
+																		className="btn-pill-dark"
+																		onClick={() => void handleEnablePstack(false)}
+																		disabled={pstackBusy !== null}
+																	>
+																		{pstackBusy === "enable"
+																			? "克隆并校验中..."
+																			: "克隆并启用 pstack"}
+																	</button>
+																</div>
+																<p className="muted-hint">
+																	将按仓库名自动克隆至{" "}
+																	<code>.data/extensions/repo/&lt;仓库名&gt;</code>（默认{" "}
+																	<code>.data/extensions/repo/pstack</code>），并将路径保存至本地数据库{" "}
+																	<code>platform_settings.pstackDir</code>（无参数启动自动生效）。
+																</p>
+															</div>
+														) : (
+															<p className="muted-hint">
+																仅超级管理员可在设置页一键克隆并启用 <code>pstack</code> 方法包。
+															</p>
+														)}
+														{pstackActionError && (
+															<div className="settings-ext-error">{pstackActionError}</div>
+														)}
+													</div>
+												)}
 											</article>
 										))
 									)}
 								</div>
 
 								<p className="muted-hint">
-									扩展以本机用户权限随常规岗位 <code>--extension</code> 挂载，网页不热安装插件（可通过{" "}
-									<code>PA_PI_EXTENSIONS</code> / <code>PA_PSTACK_DIR</code> 启动参数接入）。
+									扩展以本机用户权限随常规岗位 <code>--extension</code> 挂载；自定义{" "}
+									<code>PA_PI_EXTENSIONS</code> 仍需通过启动参数接入，<code>pstack</code>{" "}
+									方法包支持由超级管理员在上方按仓库名一键克隆至{" "}
+									<code>.data/extensions/repo/&lt;仓库名&gt;</code> 并持久化启用。
 								</p>
 							</section>
 						)}

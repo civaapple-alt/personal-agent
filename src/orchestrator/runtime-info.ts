@@ -110,6 +110,8 @@ export interface RuntimeBaseInfo {
 		modeSha256: string | null;
 		skillCount: number;
 		error: string | null;
+		source?: "env" | "settings" | "none";
+		defaultCloneUrl?: string;
 	};
 	isolationModes: RuntimeIsolationMode[];
 	envFlags: {
@@ -278,6 +280,7 @@ export async function buildRuntimeOverview(options: {
 		checkFileOrDir(pstackExtPath),
 	]);
 
+	const pstackEnvSet = Boolean(process.env.PA_PSTACK_DIR?.trim());
 	let pstackInfo: RuntimeBaseInfo["pstack"] = {
 		configured: Boolean(config.pstackDir),
 		available: false,
@@ -286,12 +289,15 @@ export async function buildRuntimeOverview(options: {
 		modeSha256: null,
 		skillCount: 0,
 		error: null,
+		source: pstackEnvSet ? "env" : config.pstackDir ? "settings" : "none",
+		defaultCloneUrl: "https://github.com/backnotprop/pstack.git",
 	};
 
 	if (config.pstackDir) {
 		try {
 			const runtime = await preparePstackRuntime(config.pstackDir);
 			pstackInfo = {
+				...pstackInfo,
 				configured: true,
 				available: true,
 				root: isOwner ? runtime.root : basename(runtime.root) || "pstack",
@@ -302,6 +308,7 @@ export async function buildRuntimeOverview(options: {
 			};
 		} catch (error: unknown) {
 			pstackInfo = {
+				...pstackInfo,
 				configured: true,
 				available: false,
 				root: isOwner ? config.pstackDir : basename(config.pstackDir) || "pstack",
@@ -495,7 +502,9 @@ export async function buildRuntimeOverview(options: {
 					value: !config.pstackDir
 						? "未设置"
 						: pstackInfo.available
-							? `v${pstackInfo.version} (${pstackInfo.skillCount} 项)`
+							? isOwner && pstackInfo.root
+								? `${pstackInfo.root} · v${pstackInfo.version} (${pstackInfo.skillCount} 项)`
+								: `v${pstackInfo.version} (${pstackInfo.skillCount} 项)`
 							: "配置异常",
 					defaultValue: "不启用",
 					overridden: Boolean(config.pstackDir),

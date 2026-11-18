@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
+import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
 import {
@@ -13,6 +14,7 @@ import {
 	SESSION_COOKIE_NAME,
 	SlidingWindowRateLimiter,
 } from "../auth.ts";
+import { installOrEnablePstackRepo } from "../git-clone.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
@@ -67,6 +69,7 @@ export async function handleAdminAndAuthRoutes(
 		const pendingApproval = actor?.user?.status === "pending_review";
 		sendJson(res, 200, {
 			authenticated: Boolean(actor),
+			requireAuth,
 			permissionRequired: requireAuth || !isLoopbackRemote(req),
 			revokedSession: Boolean(!actor && presentedToken),
 			pendingApproval: Boolean(pendingApproval),
@@ -545,6 +548,75 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			detail: { aborted },
 		});
 		sendJson(res, 200, { ok: true, aborted });
+		return true;
+	}
+
+	if (method === "POST" && pathname === "/api/admin/runtime/pstack/enable") {
+		const body = await readJsonBody(req);
+		const cloneUrl = typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : undefined;
+		const update = body.update === true;
+		const dataDir = ctx.dataDir ?? resolve(process.cwd(), ".data");
+		let installed: Awaited<ReturnType<typeof installOrEnablePstackRepo>>;
+		try {
+			installed = await installOrEnablePstackRepo({ dataDir, cloneUrl, update });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			const status = msg.startsWith("克隆 pstack 仓库失败") || msg.startsWith("同步更新 pstack") ? 502 : 400;
+			sendError(res, status, msg);
+			return true;
+		}
+		const updatedSettings = store.updatePlatformSettings(
+			{ pstackDir: installed.repoPath },
+			ctx.defaultWorkspacesRoot,
+		);
+		orchestrator.setPstackDir(installed.repoPath);
+		auditActorAction(ctx, req, actor, {
+			action: "admin.pstack_enable",
+			targetType: "runtime_extension",
+			targetId: "pstack",
+			detail: {
+				repoPath: installed.repoPath,
+				source: installed.source,
+				version: installed.runtime.version,
+				skillCount: installed.runtime.skills.length,
+			},
+		});
+		const overview = await buildRuntimeOverview({
+			config: orchestrator.getRuntimeConfig(),
+			serverConfig: ctx.getServerRuntimeConfig?.(),
+			activeMembers: store.listMembers(),
+			isOwner: true,
+			probePiCli: ctx.probePiCli,
+		});
+		sendJson(res, 200, {
+			source: installed.source,
+			repoPath: installed.repoPath,
+			settings: updatedSettings,
+			overview,
+		});
+		return true;
+	}
+
+	if (method === "POST" && pathname === "/api/admin/runtime/pstack/disable") {
+		if (process.env.PA_PSTACK_DIR?.trim()) {
+			sendError(res, 409, "当前由启动环境变量 PA_PSTACK_DIR 接管，请从启动参数移除后重启服务以停用");
+			return true;
+		}
+		const updatedSettings = store.updatePlatformSettings({ pstackDir: null }, ctx.defaultWorkspacesRoot);
+		orchestrator.setPstackDir(undefined);
+		auditActorAction(ctx, req, actor, {
+			action: "admin.pstack_disable",
+			targetType: "runtime_extension",
+			targetId: "pstack",
+		});
+		const overview = await buildRuntimeOverview({
+			config: orchestrator.getRuntimeConfig(),
+			serverConfig: ctx.getServerRuntimeConfig?.(),
+			activeMembers: store.listMembers(),
+			isOwner: true,
+			probePiCli: ctx.probePiCli,
+		});
+		sendJson(res, 200, { settings: updatedSettings, overview });
 		return true;
 	}
 
