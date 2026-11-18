@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-19
+
+See the [0.6.1 release guide](docs/releases/v0.6.1.md) for downloads, upgrade instructions, and validation.
+
 - Separate on-demand consultation from observer review. Both can be assigned to the same role, and switching collaboration scope preserves the observer selection.
 - Add opt-in AI participation in team discussions with role mentions and separate Pi sessions. Discussion keeps the role's configured tools for checking facts and leaves formal publication and experience proposals to dispatch turns.
 - Default AI Git commits to the repository directory's own `git config` identity instead of injecting per-role `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, and add organization-level opt-in `useRoleGitIdentity` toggle (`organizations.use_role_git_identity`, default `false`) plus per-org enabled AI role `gitNameOverride` / `gitEmailOverride` configuration (`organization_ai_roles.{git_name_override,git_email_override}`) across [database.ts](src/storage/database.ts), [organization-repo.ts](src/storage/repos/organization-repo.ts), [org-rbac-repo.ts](src/storage/repos/org-rbac-repo.ts), [worker-runner.ts](src/orchestrator/worker-runner.ts), [prompts.ts](src/orchestrator/prompts.ts), [team-orchestrator.ts](src/orchestrator/team-orchestrator.ts), [deliverables-orgs.ts](src/server/routes/deliverables-orgs.ts), [auth-collaborators.ts](src/server/routes/auth-collaborators.ts), [OrganizationsSection.tsx](web/src/components/team/OrganizationsSection.tsx), [TeamView.tsx](web/src/components/TeamView.tsx), [MemberInspectorModal.tsx](web/src/components/team/MemberInspectorModal.tsx), [utils.ts](web/src/utils.ts), and [views.css](web/src/styles/views.css), verified by [phase2-orchestrator.test.ts](test/phase2-orchestrator.test.ts), [server-collaboration.test.ts](test/server-collaboration.test.ts), and [web-utils.test.ts](test/web-utils.test.ts).

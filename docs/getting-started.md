@@ -14,10 +14,10 @@ git --version
 
 项目要求 Node.js ≥ 22.19。当前开发验证使用 macOS、Node 26.10.0 和 Pi 1.5.2；Node 最低版本声明不代表所有系统和版本组合均已验证。
 
-从 [0.6.0 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.0)下载源码包或预构建包。也可以克隆该版本的源码。
+从 [0.6.1 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.1)下载源码包或预构建包。也可以克隆该版本的源码。
 
 ```bash
-git clone --branch v0.6.0 https://github.com/civaapple-alt/personal-agent.git
+git clone --branch v0.6.1 https://github.com/civaapple-alt/personal-agent.git
 cd personal-agent
 ```
 
@@ -33,7 +33,7 @@ cd personal-agent
 | Windows | 官网的 PowerShell 安装方式 |
 | 使用 Node 包管理器 | 官网的 npm、pnpm 或 bun 安装方式 |
 
-Personal Agent 的离线验证涵盖 macOS 本机检查和仓库的 GitHub Actions 检查。具体平台和运行结果见[发布说明](releases/v0.6.0.md)。
+Personal Agent 的离线验证涵盖 macOS 本机检查和仓库的 GitHub Actions 检查。具体平台和运行结果见[发布说明](releases/v0.6.1.md)。
 
 安装后在将用于启动工作台的终端检查，确认 `pi` 已在 `PATH` 中。已有可用安装时不必重复安装：
 

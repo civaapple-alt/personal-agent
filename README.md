@@ -4,7 +4,7 @@
 
 产品经理关注需求与范围，研发经理核查技术方案，测试经理检查验收与风险，市场与营销负责人补充用户和市场依据。同一位成员可以参与不同项目，具体工作通过事项关联对应的组织、仓库和资料。
 
-**0.6.0 是首个公开发布版本。** 工作台在本机运行，通过 Pi RPC 执行 AI 任务。查看[版本说明](docs/releases/v0.6.0.md)或从 [GitHub Release](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.0)下载源码包和预构建包。
+工作台在本机运行，通过 Pi RPC 执行 AI 任务。查看 [0.6.1 发布说明](docs/releases/v0.6.1.md)或从 [GitHub Release](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.1)下载源码包和预构建包。
 
 ## 可以怎样使用
 
