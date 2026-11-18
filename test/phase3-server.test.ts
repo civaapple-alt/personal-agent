@@ -231,10 +231,12 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		});
 		assert.equal(prevRes.status, 201);
 
-		// 4. Built V4 web UI is served at /
+		// 4. Built V4 web UI is served at / and hash routing covers admin tab
 		const htmlRes = await fetch(`${baseUrl}/`);
 		assert.equal(htmlRes.status, 200);
 		assert.match(await htmlRes.text(), /Personal Agent/);
+		assert.deepEqual(parseHashRoute("#/admin"), { tab: "admin" });
+		assert.equal(formatHashRoute({ tab: "admin" }), "#/admin");
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

@@ -1,12 +1,23 @@
 import { useState } from "react";
-import { addWorkspace, type OrganizationDto, updateWorkspace, type WorkspaceDto } from "../api.ts";
+import {
+	addWorkspace,
+	type OrganizationDto,
+	type OrganizationMemberDto,
+	updateWorkspace,
+	type WorkspaceDto,
+	type WorkspaceSourceType,
+	type WorkspaceVisibility,
+} from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
+	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
 	selectedWorkspaceId: string;
+	allowLocalWorkspacePath?: boolean;
+	isAccountMode?: boolean;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -16,7 +27,10 @@ interface MaterialsViewProps {
 export function MaterialsView({
 	workspaces,
 	organizations,
+	orgMembersByOrgId = {},
 	selectedWorkspaceId,
+	allowLocalWorkspacePath = true,
+	isAccountMode = false,
 	onRefresh,
 	onNotice,
 	onError,
@@ -25,17 +39,36 @@ export function MaterialsView({
 	const defaultOrganization = organizations.find((o) => o.isDefault) ?? organizations[0] ?? null;
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [newWsName, setNewWsName] = useState("");
+	const [newWsSourceType, setNewWsSourceType] = useState<WorkspaceSourceType>(
+		!allowLocalWorkspacePath || isAccountMode ? "cloned" : "local",
+	);
+	const [newWsCloneUrl, setNewWsCloneUrl] = useState("");
+	const [newWsBranch, setNewWsBranch] = useState("");
 	const [newWsPath, setNewWsPath] = useState("");
 	const [newWsOrgChoice, setNewWsOrgChoice] = useState<string>("");
+	const [newWsVisibility, setNewWsVisibility] = useState<WorkspaceVisibility>("org");
+	const [newWsAllowedUserIds, setNewWsAllowedUserIds] = useState<string[]>([]);
 	const [submitting, setSubmitting] = useState(false);
+
+	// Visibility edit modal
+	const [editingAccessWs, setEditingAccessWs] = useState<WorkspaceDto | null>(null);
+	const [editVisibility, setEditVisibility] = useState<WorkspaceVisibility>("org");
+	const [editAllowedUserIds, setEditAllowedUserIds] = useState<string[]>([]);
+	const [savingAccess, setSavingAccess] = useState(false);
 
 	const resolvedNewOrgId =
 		newWsOrgChoice === "__standalone__" ? null : newWsOrgChoice || defaultOrganization?.id || null;
+	const targetOrgMembers = resolvedNewOrgId ? (orgMembersByOrgId[resolvedNewOrgId] ?? []) : [];
 
 	const openAddModal = () => {
 		setNewWsName("");
+		setNewWsSourceType(!allowLocalWorkspacePath || isAccountMode ? "cloned" : "local");
+		setNewWsCloneUrl("");
+		setNewWsBranch("");
 		setNewWsPath("");
 		setNewWsOrgChoice("");
+		setNewWsVisibility("org");
+		setNewWsAllowedUserIds([]);
 		setShowAddModal(true);
 	};
 
@@ -45,19 +78,26 @@ export function MaterialsView({
 	};
 
 	const handleAddWorkspace = async () => {
-		if (!newWsName.trim() || !newWsPath.trim() || submitting) return;
+		if (!newWsName.trim() || submitting) return;
+		if (newWsSourceType === "cloned" && !newWsCloneUrl.trim()) return;
+		if (newWsSourceType === "local" && !newWsPath.trim()) return;
 		setSubmitting(true);
 		try {
 			await addWorkspace({
 				name: newWsName.trim(),
-				repoPath: newWsPath.trim(),
+				sourceType: newWsSourceType,
+				...(newWsSourceType === "cloned"
+					? {
+							cloneUrl: newWsCloneUrl.trim(),
+							...(newWsBranch.trim() ? { defaultBranch: newWsBranch.trim() } : {}),
+						}
+					: { repoPath: newWsPath.trim() }),
 				orgId: newWsOrgChoice === "__standalone__" ? null : newWsOrgChoice || undefined,
+				visibility: newWsVisibility,
+				...(newWsVisibility === "restricted" ? { allowedUserIds: newWsAllowedUserIds } : {}),
 			});
-			setNewWsName("");
-			setNewWsPath("");
-			setNewWsOrgChoice("");
 			setShowAddModal(false);
-			onNotice("项目工作区已绑定");
+			onNotice(newWsSourceType === "cloned" ? "仓库已克隆到组织主目录并绑定工作区" : "项目工作区已绑定");
 			await onRefresh();
 		} catch (err: unknown) {
 			onError(err instanceof Error ? err.message : String(err));
@@ -76,13 +116,40 @@ export function MaterialsView({
 		}
 	};
 
+	const openEditAccessModal = (ws: WorkspaceDto) => {
+		setEditingAccessWs(ws);
+		setEditVisibility(ws.visibility ?? "org");
+		setEditAllowedUserIds(ws.allowedUserIds ?? []);
+	};
+
+	const handleSaveAccess = async () => {
+		if (!editingAccessWs || savingAccess) return;
+		setSavingAccess(true);
+		try {
+			await updateWorkspace(editingAccessWs.id, {
+				visibility: editVisibility,
+				allowedUserIds: editVisibility === "restricted" ? editAllowedUserIds : [],
+			});
+			setEditingAccessWs(null);
+			onNotice("项目仓库访问范围已更新");
+			await onRefresh();
+		} catch (err: unknown) {
+			onError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setSavingAccess(false);
+		}
+	};
+
+	const addDisabled =
+		!newWsName.trim() || submitting || (newWsSourceType === "cloned" ? !newWsCloneUrl.trim() : !newWsPath.trim());
+
 	return (
 		<div className="subpage-scroll">
 			<div className="subpage-inner wide">
 				<div className="pane-header-row">
 					<div className="pane-header">
 						<h1>已有资料与项目仓库</h1>
-						<p>仓库自身维护的信息以仓库为准；归属同一组织的仓库可共享组织记忆并继承组织 Git 邮箱域名</p>
+						<p>支持从 Git 地址克隆到组织主目录或绑定本地仓库；可按组织范围或指定成员控制项目访问权限。</p>
 					</div>
 					<div className="actions-row compact">
 						<button type="button" className="btn-pill-dark" onClick={openAddModal}>
@@ -96,12 +163,14 @@ export function MaterialsView({
 						<div className="ui-section-head">
 							<div>
 								<h2 className="ui-section-title">已登记工作区（{workspaces.length}）</h2>
-								<p className="ui-section-desc">切换仓库所属组织即可共享对应「组织记忆」与邮箱域名</p>
+								<p className="ui-section-desc">
+									同组织工作区共享组织记忆；受限仓库仅管理员与授权成员可见和调度
+								</p>
 							</div>
 						</div>
 						{workspaces.length === 0 ? (
 							<div className="ui-card">
-								<p className="ui-empty-note compact">暂无已登记仓库，可点击右上角按钮绑定本地 Git 仓库。</p>
+								<p className="ui-empty-note compact">暂无可访问的已登记仓库，可点击右上角按钮添加。</p>
 								<div className="actions-row compact">
 									<button type="button" className="btn-pill-outline btn-xs" onClick={openAddModal}>
 										+ 登记项目仓库
@@ -112,6 +181,11 @@ export function MaterialsView({
 							workspaces.map((ws) => {
 								const org = ws.orgId ? organizations.find((o) => o.id === ws.orgId) : null;
 								const isActive = selectedWorkspaceId === ws.id;
+								const canManageOrg =
+									!isAccountMode ||
+									!org?.orgRole ||
+									org.orgRole === "org_owner" ||
+									org.orgRole === "org_admin";
 								return (
 									<div key={ws.id} className={`compact-row static${isActive ? " is-active" : ""}`}>
 										<div className="ui-row-main">
@@ -120,10 +194,13 @@ export function MaterialsView({
 													{ws.name} ({ws.defaultBranch})
 												</span>
 												{org && <span className="pill org-pill">组织：{org.name}</span>}
+												{ws.sourceType === "cloned" && <span className="pill">Git 克隆</span>}
+												{ws.visibility === "restricted" && <span className="pill">仅授权成员</span>}
 												{isActive && <span className="pill is-active">当前已选</span>}
 											</div>
 											<div className="ui-row-sub">
 												{ws.repoPath}
+												{ws.cloneUrl ? ` · 源地址：${ws.cloneUrl}` : ""}
 												{ws.repoGitUser
 													? ` · Git Committer：${ws.repoGitUser.name} <${ws.repoGitUser.email}>`
 													: ""}
@@ -137,14 +214,23 @@ export function MaterialsView({
 											>
 												复制路径
 											</button>
-											{organizations.length > 0 && (
+											{canManageOrg && ws.orgId && (orgMembersByOrgId[ws.orgId]?.length ?? 0) > 0 && (
+												<button
+													type="button"
+													className="btn-inline"
+													onClick={() => openEditAccessModal(ws)}
+												>
+													权限范围
+												</button>
+											)}
+											{organizations.length > 0 && canManageOrg && (
 												<select
 													className="select-sm select-control"
 													aria-label={`设置 ${ws.name} 的所属组织`}
 													value={ws.orgId ?? ""}
 													onChange={(e) => void handleChangeWorkspaceOrg(ws.id, e.target.value)}
 												>
-													<option value="">独立仓库（无组织）</option>
+													{!isAccountMode && <option value="">独立仓库（无组织）</option>}
 													{organizations.map((item) => (
 														<option key={item.id} value={item.id}>
 															组织：{item.name}
@@ -171,7 +257,7 @@ export function MaterialsView({
 			<ModalDialog
 				open={showAddModal}
 				title="登记项目 Git 工作区"
-				subtitle="登记本地 Git 仓库后，可在该工作区内向 AI 团队指派研发、调研或交付任务。"
+				subtitle="建议通过 Git 地址克隆到组织安全主目录；超级管理员也可按策略开放指定服务器本地目录。"
 				size="sm"
 				closeDisabled={submitting}
 				onClose={closeAddModal}
@@ -183,14 +269,43 @@ export function MaterialsView({
 						<button
 							type="button"
 							className="btn-pill-dark"
-							disabled={!newWsName.trim() || !newWsPath.trim() || submitting}
+							disabled={addDisabled}
 							onClick={() => void handleAddWorkspace()}
 						>
-							{submitting ? "绑定中..." : "绑定工作区"}
+							{submitting
+								? newWsSourceType === "cloned"
+									? "正在克隆并绑定..."
+									: "绑定中..."
+								: newWsSourceType === "cloned"
+									? "克隆并绑定"
+									: "绑定工作区"}
 						</button>
 					</>
 				}
 			>
+				{allowLocalWorkspacePath && (
+					<div className="auth-tab-strip" role="tablist" aria-label="仓库接入方式">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={newWsSourceType === "cloned"}
+							className={newWsSourceType === "cloned" ? "auth-tab active" : "auth-tab"}
+							onClick={() => setNewWsSourceType("cloned")}
+						>
+							从 Git 地址克隆到组织主目录
+						</button>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={newWsSourceType === "local"}
+							className={newWsSourceType === "local" ? "auth-tab active" : "auth-tab"}
+							onClick={() => setNewWsSourceType("local")}
+						>
+							指定服务器本地目录
+						</button>
+					</div>
+				)}
+
 				<div className="form-grid">
 					<label className="identity-field">
 						<span className="identity-field-label">项目名称</span>
@@ -219,19 +334,137 @@ export function MaterialsView({
 									</option>
 								))
 							)}
-							<option value="__standalone__">不归属组织（独立仓库）</option>
+							{!isAccountMode && <option value="__standalone__">不归属组织（独立仓库）</option>}
 						</select>
 					</label>
 				</div>
-				<label className="identity-field">
-					<span className="identity-field-label">本地仓库绝对路径</span>
-					<input
-						className="input-field"
-						placeholder="/Users/you/code/order-service"
-						value={newWsPath}
-						onChange={(e) => setNewWsPath(e.target.value)}
-					/>
-				</label>
+
+				{newWsSourceType === "cloned" ? (
+					<div className="form-grid">
+						<label className="identity-field">
+							<span className="identity-field-label">Git 克隆地址（HTTPS / SSH）</span>
+							<input
+								className="input-field"
+								placeholder="https://github.com/org/repo.git 或 git@github.com:org/repo.git"
+								value={newWsCloneUrl}
+								onChange={(e) => setNewWsCloneUrl(e.target.value)}
+							/>
+						</label>
+						<label className="identity-field">
+							<span className="identity-field-label">分支（可选）</span>
+							<input
+								className="input-field"
+								placeholder="main"
+								value={newWsBranch}
+								onChange={(e) => setNewWsBranch(e.target.value)}
+							/>
+						</label>
+					</div>
+				) : (
+					<label className="identity-field">
+						<span className="identity-field-label">本地仓库绝对路径</span>
+						<input
+							className="input-field"
+							placeholder="/Users/you/code/order-service"
+							value={newWsPath}
+							onChange={(e) => setNewWsPath(e.target.value)}
+						/>
+					</label>
+				)}
+
+				{resolvedNewOrgId && (
+					<div className="identity-field">
+						<span className="identity-field-label">项目可见范围</span>
+						<select
+							className="select-sm select-control"
+							value={newWsVisibility}
+							onChange={(e) => setNewWsVisibility(e.target.value as WorkspaceVisibility)}
+						>
+							<option value="org">组织全员可见（org）</option>
+							<option value="restricted">仅勾选的组织成员可见（restricted）</option>
+						</select>
+						{newWsVisibility === "restricted" && targetOrgMembers.length > 0 && (
+							<div className="org-ai-checklist">
+								{targetOrgMembers.map((m) => (
+									<label key={m.userId} className="org-ai-check-item">
+										<input
+											type="checkbox"
+											checked={newWsAllowedUserIds.includes(m.userId)}
+											onChange={(e) =>
+												setNewWsAllowedUserIds((prev) =>
+													e.target.checked ? [...prev, m.userId] : prev.filter((id) => id !== m.userId),
+												)
+											}
+										/>
+										<span>{m.displayName ?? m.email ?? m.userId}</span>
+									</label>
+								))}
+							</div>
+						)}
+					</div>
+				)}
+			</ModalDialog>
+
+			<ModalDialog
+				open={Boolean(editingAccessWs)}
+				title={editingAccessWs ? `项目权限范围 · ${editingAccessWs.name}` : "项目权限范围"}
+				size="sm"
+				closeDisabled={savingAccess}
+				onClose={() => !savingAccess && setEditingAccessWs(null)}
+				footer={
+					<>
+						<button
+							type="button"
+							className="btn-pill-outline"
+							disabled={savingAccess}
+							onClick={() => setEditingAccessWs(null)}
+						>
+							取消
+						</button>
+						<button
+							type="button"
+							className="btn-pill-dark"
+							disabled={savingAccess}
+							onClick={() => void handleSaveAccess()}
+						>
+							{savingAccess ? "保存中..." : "保存权限"}
+						</button>
+					</>
+				}
+			>
+				{editingAccessWs && (
+					<div className="identity-field">
+						<label className="identity-field">
+							<span className="identity-field-label">项目可见范围</span>
+							<select
+								className="select-sm select-control"
+								value={editVisibility}
+								onChange={(e) => setEditVisibility(e.target.value as WorkspaceVisibility)}
+							>
+								<option value="org">组织内全部成员可见</option>
+								<option value="restricted">仅指定组织成员可见</option>
+							</select>
+						</label>
+						{editVisibility === "restricted" && editingAccessWs.orgId && (
+							<div className="org-ai-checklist">
+								{(orgMembersByOrgId[editingAccessWs.orgId] ?? []).map((m) => (
+									<label key={m.userId} className="org-ai-check-item">
+										<input
+											type="checkbox"
+											checked={editAllowedUserIds.includes(m.userId)}
+											onChange={(e) =>
+												setEditAllowedUserIds((prev) =>
+													e.target.checked ? [...prev, m.userId] : prev.filter((id) => id !== m.userId),
+												)
+											}
+										/>
+										<span>{m.displayName ?? m.email ?? m.userId}</span>
+									</label>
+								))}
+							</div>
+						)}
+					</div>
+				)}
 			</ModalDialog>
 		</div>
 	);

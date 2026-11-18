@@ -2,6 +2,8 @@
 
 状态：
 
+- 2026-11-18 新增多用户团队协作与安全边界：支持 `PA_REQUIRE_AUTH=1` 强制认证模式与超级管理员控制台（`#/admin`，含注册策略、用户审核/配额、`workspacesRoot` 与本地路径白名单、运行任务紧急中止及 `audit_logs`）、开放邮箱+密码注册、`organization_members` / `organization_invites` / 分组织 `organization_ai_roles`、按 `<workspacesRoot>/<orgSlug>/` 隔离的 Git 克隆与项目/事项可见性 ACL（组织 `org_member` 可在授权范围直接派发 AI），配套 [test/multi-tenant-auth-admin.test.ts](../test/multi-tenant-auth-admin.test.ts) 与隔离浏览器走查通过；底层 Pi 进程仍非容器沙箱，运行和部署约束见[安全说明](../SECURITY.md)。
+
 - 2026-11-18 跟进 `a1706c5..e4ceddf` 的 3 个提交，保留资料移至本地 `.notes/` 的整理与新版轻量界面。补齐成员菜单键盘/焦点、空经验时的职责入口、协同成员的组织只读入口及全页面操作提示；启动检查固定回环地址并在 macOS 同时实际验证 `SIGTERM` 和 IPC 退出。修正 Windows 打包的 npm 调用，新增最低版本/Node 26 CI 矩阵及 Windows 预览验证；本轮仅本机 macOS 执行结果，不宣称 Linux/Windows CI 已通过。
 
 - 开发版本目标更新为 `0.6.0`，准备以 MIT 开源；已补许可证、第三方归属、归档素材边界和只读开源检查，尚未创建 `v0.6.0` 标签或公开发布。最近已发布的本地版本仍为 `v0.5.0`。实际准备范围与待办见[0.6.0 说明](releases/v0.6.0.md)。

@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { Organization, WorkspaceLink } from "../types.ts";
+import type { Organization, WorkspaceLink, WorkspaceSourceType, WorkspaceVisibility } from "../types.ts";
 import {
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
 	mapOrganizationRow,
 	mapWorkspaceRow,
 	nowIso,
+	slugifyOrganizationName,
 } from "./helpers.ts";
 
 /** Manages organizations, default org seeding, and linked Git project workspaces. */
@@ -20,9 +21,12 @@ export class OrganizationRepo {
 	upsertOrganization(input: {
 		id?: string;
 		name: string;
+		slug?: string;
 		gitEmailDomain?: string;
 		description?: string;
 		isDefault?: boolean;
+		workspacesDir?: string | null;
+		createdByUserId?: string | null;
 	}): Organization {
 		const name = input.name.trim();
 		if (!name) throw new Error("Organization name is required");
@@ -39,13 +43,25 @@ export class OrganizationRepo {
 					}
 					const nextDefault =
 						input.isDefault !== undefined ? (input.isDefault ? 1 : 0) : existing.isDefault ? 1 : 0;
+					const nextSlug = input.slug?.trim() || existing.slug || slugifyOrganizationName(name, existing.id);
+					const nextWorkspacesDir =
+						input.workspacesDir !== undefined ? input.workspacesDir : (existing.workspacesDir ?? null);
 					this.db
 						.prepare(
 							`UPDATE organizations
-							 SET name = ?, git_email_domain = ?, description = ?, is_default = ?, updated_at = ?
+							 SET name = ?, slug = ?, git_email_domain = ?, description = ?, is_default = ?, workspaces_dir = ?, updated_at = ?
 							 WHERE id = ?`,
 						)
-						.run(name, gitEmailDomain, description, nextDefault, timestamp, existing.id);
+						.run(
+							name,
+							nextSlug,
+							gitEmailDomain,
+							description,
+							nextDefault,
+							nextWorkspacesDir,
+							timestamp,
+							existing.id,
+						);
 					this.db.exec("COMMIT");
 				} catch (err) {
 					this.db.exec("ROLLBACK");
@@ -55,6 +71,7 @@ export class OrganizationRepo {
 			}
 		}
 		const id = input.id?.trim() || `org_${randomUUID()}`;
+		const slug = input.slug?.trim() || slugifyOrganizationName(name, id);
 		const hasDefault = Boolean(this.db.prepare("SELECT 1 FROM organizations WHERE is_default = 1 LIMIT 1").get());
 		const shouldBeDefault = input.isDefault !== undefined ? input.isDefault : !hasDefault;
 		this.db.exec("BEGIN IMMEDIATE");
@@ -64,10 +81,21 @@ export class OrganizationRepo {
 			}
 			this.db
 				.prepare(
-					`INSERT INTO organizations (id, name, git_email_domain, description, is_default, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					`INSERT INTO organizations (id, name, slug, git_email_domain, description, is_default, workspaces_dir, created_by_user_id, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				)
-				.run(id, name, gitEmailDomain, description, shouldBeDefault ? 1 : 0, timestamp, timestamp);
+				.run(
+					id,
+					name,
+					slug,
+					gitEmailDomain,
+					description,
+					shouldBeDefault ? 1 : 0,
+					input.workspacesDir ?? null,
+					input.createdByUserId ?? null,
+					timestamp,
+					timestamp,
+				);
 			this.db.exec("COMMIT");
 		} catch (err) {
 			this.db.exec("ROLLBACK");
@@ -168,16 +196,23 @@ export class OrganizationRepo {
 		repoPath: string;
 		defaultBranch?: string;
 		description?: string;
+		sourceType?: WorkspaceSourceType;
+		cloneUrl?: string | null;
+		visibility?: WorkspaceVisibility;
 	}): WorkspaceLink {
 		const existing = this.db.prepare("SELECT * FROM workspace_links WHERE repo_path = ?").get(input.repoPath) as
 			| Record<string, unknown>
 			| undefined;
 		if (existing) {
 			const nextOrgId = input.orgId !== undefined ? input.orgId : existing.org_id ? String(existing.org_id) : null;
+			const nextSourceType = input.sourceType ?? (existing.source_type === "cloned" ? "cloned" : "local");
+			const nextCloneUrl =
+				input.cloneUrl !== undefined ? input.cloneUrl : existing.clone_url ? String(existing.clone_url) : null;
+			const nextVisibility = input.visibility ?? (existing.visibility === "restricted" ? "restricted" : "org");
 			this.db
 				.prepare(
 					`UPDATE workspace_links
-					 SET org_id = ?, name = ?, default_branch = ?, description = ?
+					 SET org_id = ?, name = ?, default_branch = ?, description = ?, source_type = ?, clone_url = ?, visibility = ?
 					 WHERE id = ?`,
 				)
 				.run(
@@ -185,6 +220,9 @@ export class OrganizationRepo {
 					input.name,
 					input.defaultBranch ?? String(existing.default_branch),
 					input.description ?? String(existing.description),
+					nextSourceType,
+					nextCloneUrl,
+					nextVisibility,
 					String(existing.id),
 				);
 			return this.getWorkspace(String(existing.id))!;
@@ -194,8 +232,8 @@ export class OrganizationRepo {
 		const timestamp = nowIso();
 		this.db
 			.prepare(
-				`INSERT INTO workspace_links (id, org_id, name, repo_path, default_branch, description, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO workspace_links (id, org_id, name, repo_path, default_branch, description, source_type, clone_url, visibility, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -204,6 +242,9 @@ export class OrganizationRepo {
 				input.repoPath,
 				input.defaultBranch ?? "main",
 				input.description ?? "",
+				input.sourceType ?? "local",
+				input.cloneUrl ?? null,
+				input.visibility ?? "org",
 				timestamp,
 			);
 		return this.getWorkspace(id)!;
@@ -211,7 +252,13 @@ export class OrganizationRepo {
 
 	updateWorkspace(
 		id: string,
-		patch: { orgId?: string | null; name?: string; defaultBranch?: string; description?: string },
+		patch: {
+			orgId?: string | null;
+			name?: string;
+			defaultBranch?: string;
+			description?: string;
+			visibility?: WorkspaceVisibility;
+		},
 	): WorkspaceLink {
 		const existing = this.getWorkspace(id);
 		if (!existing) throw new Error(`Workspace not found: ${id}`);
@@ -225,13 +272,14 @@ export class OrganizationRepo {
 				? patch.defaultBranch.trim() || existing.defaultBranch
 				: existing.defaultBranch;
 		const nextDesc = patch.description !== undefined ? patch.description.trim() : existing.description;
+		const nextVisibility = patch.visibility ?? existing.visibility ?? "org";
 		this.db
 			.prepare(
 				`UPDATE workspace_links
-				 SET org_id = ?, name = ?, default_branch = ?, description = ?
+				 SET org_id = ?, name = ?, default_branch = ?, description = ?, visibility = ?
 				 WHERE id = ?`,
 			)
-			.run(nextOrgId, nextName, nextBranch, nextDesc, id);
+			.run(nextOrgId, nextName, nextBranch, nextDesc, nextVisibility, id);
 		return this.getWorkspace(id)!;
 	}
 

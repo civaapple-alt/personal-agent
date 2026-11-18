@@ -11,14 +11,25 @@ import type {
 	MatterDetailPayload,
 	MatterInitiationAssessmentDto,
 	MatterProgressDto,
+	MatterVisibility,
 	MemberMemoryDto,
 	OrganizationDto,
+	OrganizationMemberDto,
+	OrgMemberRole,
 	PendingDialogDto,
 	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../api.ts";
+
+const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
+	org_owner: "组织所有者",
+	org_admin: "组织管理员",
+	org_member: "普通成员",
+	org_viewer: "只读访客",
+};
+
 import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
 import {
@@ -43,7 +54,10 @@ interface ChatStageProps {
 	demoStepBusy?: boolean;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	currentUser?: CollaboratorDto | null;
+	canDispatchAi?: boolean;
 	collaborators?: CollaboratorDto[];
+	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
+	orgEffectiveMemberIds?: string[] | null;
 	composerMode: "discussion" | "dispatch";
 	onComposerModeChange: (mode: "discussion" | "dispatch") => void;
 	selectedWorkspace: WorkspaceDto | null;
@@ -88,6 +102,7 @@ interface ChatStageProps {
 	draftPresetMode: CollaborationPresetMode;
 	draftAiMemberIds: string[] | null;
 	draftCollaboratorIds: string[];
+	draftVisibility?: MatterVisibility;
 	initiationAssessment: MatterInitiationAssessmentDto | null;
 	initiationAssessing: boolean;
 	initiationAssessmentError?: string | null;
@@ -97,6 +112,7 @@ interface ChatStageProps {
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
+	onUpdateDraftVisibility?: (visibility: MatterVisibility) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode, leadId?: string | null) => void;
 	onApplyInitiationRecommendation: () => void;
 	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
@@ -139,7 +155,10 @@ export function ChatStage({
 	demoStepBusy,
 	composerRef,
 	currentUser,
+	canDispatchAi,
 	collaborators = [],
+	orgMembersByOrgId = {},
+	orgEffectiveMemberIds = null,
 	composerMode,
 	onComposerModeChange,
 	selectedWorkspace,
@@ -184,6 +203,7 @@ export function ChatStage({
 	draftPresetMode,
 	draftAiMemberIds,
 	draftCollaboratorIds,
+	draftVisibility = "org",
 	initiationAssessment,
 	initiationAssessing,
 	initiationAssessmentError,
@@ -193,6 +213,7 @@ export function ChatStage({
 	onUpdateMatterAiMembers,
 	onUpdateDraftAiMemberIds,
 	onUpdateDraftCollaboratorIds,
+	onUpdateDraftVisibility,
 	onApplyPresetMode,
 	onApplyInitiationRecommendation,
 	onRequestModelAssessment,
@@ -247,7 +268,7 @@ export function ChatStage({
 	const rosterPanelRef = useRef<HTMLDivElement | null>(null);
 	const headerHumansBtnRef = useRef<HTMLButtonElement | null>(null);
 
-	const isOwner = currentUser?.permissionRole !== "collaborator";
+	const isOwner = canDispatchAi ?? currentUser?.permissionRole !== "collaborator";
 
 	const closeRoster = () => {
 		setRosterOpen(false);
@@ -459,8 +480,56 @@ export function ChatStage({
 		[effectiveOrgId, workspaces],
 	);
 
-	const ownerCollab = collaborators.find((c) => c.permissionRole === "owner") ?? null;
+	const orgMembers = effectiveOrgId ? (orgMembersByOrgId[effectiveOrgId] ?? []) : [];
+	const scopedMembers = useMemo(() => {
+		if (!orgEffectiveMemberIds || orgEffectiveMemberIds.length === 0) return members;
+		return members.filter(
+			(m) =>
+				orgEffectiveMemberIds.includes(m.id) ||
+				isArchitectMemberId(m.id, members, templateByRoleId) ||
+				m.id === matterDetail?.matter.leadMemberId,
+		);
+	}, [members, orgEffectiveMemberIds, templateByRoleId, matterDetail?.matter.leadMemberId]);
+
+	const ownerCollab =
+		orgMembers.length > 0
+			? (() => {
+					const orgOwner = orgMembers.find((om) => om.orgRole === "org_owner") ?? orgMembers[0];
+					return orgOwner
+						? {
+								id: orgOwner.userId,
+								name: orgOwner.displayName ?? orgOwner.email ?? orgOwner.userId,
+								roleTitle: orgOwner.roleTitle || ORG_ROLE_LABEL[orgOwner.orgRole],
+								permissionRole: "owner" as const,
+								orgId: orgOwner.orgId,
+								createdAt: orgOwner.createdAt,
+								updatedAt: orgOwner.updatedAt,
+							}
+						: null;
+				})()
+			: currentUser?.id.startsWith("usr_")
+				? currentUser
+				: (collaborators.find((c) => c.permissionRole === "owner") ?? null);
 	const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
+	const humanPeerCandidates = useMemo(() => {
+		const map = new Map<string, CollaboratorDto>();
+		for (const om of orgMembers) {
+			if (ownerCollab?.id === om.userId) continue;
+			map.set(om.userId, {
+				id: om.userId,
+				name: om.displayName ?? om.email ?? om.userId,
+				roleTitle: om.roleTitle || ORG_ROLE_LABEL[om.orgRole],
+				permissionRole: om.orgRole === "org_owner" || om.orgRole === "org_admin" ? "owner" : "collaborator",
+				orgId: om.orgId,
+				createdAt: om.createdAt,
+				updatedAt: om.updatedAt,
+			});
+		}
+		for (const col of nonOwnerCollaborators) {
+			if (!map.has(col.id)) map.set(col.id, col);
+		}
+		return [...map.values()];
+	}, [orgMembers, nonOwnerCollaborators, ownerCollab?.id]);
 	const assignedCollabIds = matterDetail ? (matterDetail.matter.collaboratorIds ?? []) : draftCollaboratorIds;
 	const messageHumanAuthorIds = useMemo(() => {
 		const ids = new Set<string>();
@@ -471,30 +540,40 @@ export function ChatStage({
 		}
 		return ids;
 	}, [matterDetail?.userMessages]);
-	const matterHumanParticipants = nonOwnerCollaborators.filter(
+	const matterHumanParticipants = humanPeerCandidates.filter(
 		(c) => assignedCollabIds.includes(c.id) || messageHumanAuthorIds.has(c.id) || currentUser?.id === c.id,
 	);
 	const allActiveHumans = useMemo(() => {
 		const list: CollaboratorDto[] = [];
-		if (ownerCollab) list.push(ownerCollab);
-		for (const col of matterHumanParticipants) list.push(col);
+		const seenIds = new Set<string>();
+		if (ownerCollab) {
+			list.push(ownerCollab);
+			seenIds.add(ownerCollab.id);
+		}
+		for (const col of matterHumanParticipants) {
+			if (!seenIds.has(col.id)) {
+				list.push(col);
+				seenIds.add(col.id);
+			}
+		}
 		return list;
 	}, [ownerCollab, matterHumanParticipants]);
 
 	const leadAi =
-		(matterDetail?.matter.leadMemberId ? members.find((m) => m.id === matterDetail.matter.leadMemberId) : null) ??
-		headerContact;
+		(matterDetail?.matter.leadMemberId
+			? scopedMembers.find((m) => m.id === matterDetail.matter.leadMemberId)
+			: null) ?? headerContact;
 	const inGroupAiMembers = useMemo(() => {
 		const idSet = new Set(matterAiMemberIds);
 		if (leadAi) idSet.add(leadAi.id);
-		const filtered = members.filter((m) => idSet.has(m.id));
+		const filtered = scopedMembers.filter((m) => idSet.has(m.id));
 		if (leadAi && filtered.some((m) => m.id === leadAi.id)) {
 			return [leadAi, ...filtered.filter((m) => m.id !== leadAi.id)];
 		}
-		return filtered.length > 0 ? filtered : members;
-	}, [leadAi, matterAiMemberIds, members]);
+		return filtered.length > 0 ? filtered : scopedMembers;
+	}, [leadAi, matterAiMemberIds, scopedMembers]);
 	const nonLeadGroupAiMembers = inGroupAiMembers.filter((m) => m.id !== leadAi?.id);
-	const removedAiMembers = members.filter((m) => !inGroupAiMembers.some((g) => g.id === m.id));
+	const removedAiMembers = scopedMembers.filter((m) => !inGroupAiMembers.some((g) => g.id === m.id));
 	const observerAis = observersEnabled
 		? observerMemberIds.length > 0
 			? nonLeadGroupAiMembers.filter((m) => observerMemberIds.includes(m.id))
@@ -589,10 +668,10 @@ export function ChatStage({
 					selectedMatterId={selectedMatterId}
 					currentUser={currentUser}
 					ownerCollab={ownerCollab}
-					nonOwnerCollaborators={nonOwnerCollaborators}
+					nonOwnerCollaborators={humanPeerCandidates}
 					matterHumanParticipants={matterHumanParticipants}
 					assignedCollabIds={assignedCollabIds}
-					members={members}
+					members={scopedMembers}
 					inGroupAiMembers={inGroupAiMembers}
 					nonLeadGroupAiMembers={nonLeadGroupAiMembers}
 					removedAiMembers={removedAiMembers}
@@ -696,8 +775,10 @@ export function ChatStage({
 							composerMode={composerMode}
 							hasWorkspace={Boolean(selectedWorkspaceId)}
 							hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
-							members={members}
+							members={scopedMembers}
 							nonOwnerCollaborators={nonOwnerCollaborators}
+							orgMembers={orgMembers}
+							draftVisibility={draftVisibility}
 							templateByRoleId={templateByRoleId}
 							selectedMemberId={selectedMemberId}
 							draftPresetMode={draftPresetMode}
@@ -714,6 +795,7 @@ export function ChatStage({
 							onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
 							onUpdateDraftObserverIds={onUpdateMatterObservers}
 							onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
+							onUpdateDraftVisibility={onUpdateDraftVisibility}
 							onApplyRecommendation={onApplyInitiationRecommendation}
 							onRequestModelAssessment={onRequestModelAssessment}
 							onCancelModelAssessment={onCancelModelAssessment}

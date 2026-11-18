@@ -20,8 +20,8 @@
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案；只有模型新增的 Skill 限于已安装目录，显式缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 
-- `dispatchMatter`：结合事项 `aiMemberIds`（`NULL` 默认全员 AI）、`observersEnabled` 与旁听成员选择或保留负责人与工作区，
-  取得事项占用，保存交流并决定收尾；`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前事项 AI 成员范围约束。
+- `dispatchMatter`：结合组织级启用的 AI 角色名册（`store.resolveEffectiveOrgMembers(orgId)`）、事项 `aiMemberIds`（`NULL` 默认使用当前组织有效 AI 角色）、`observersEnabled` 与旁听成员选择或保留负责人与工作区，
+  取得事项占用，保存交流并决定收尾；`assessInitiation`、`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前组织与事项双重 AI 成员范围约束。
   - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。
   - `formatMessageHistorySpeaker` 回放讨论和提请时附带 `[Team discussion]` 或 `[Teammate request]`，并保留发言人姓名、角色与原文。
   - 支持可选 `images`（`PromptImageAttachment[]`）与 `files`（`PromptFileAttachment[]`），将轻量引用存入消息 `metadata.images` 与 `metadata.files`（不在 SQLite 重复存储大文本正文），并在回放历史 `formatMessageHistoryContent` 时附带附件摘要。

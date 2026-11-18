@@ -6,11 +6,112 @@ const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS organizations (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
+	slug TEXT NOT NULL DEFAULT '',
 	git_email_domain TEXT NOT NULL DEFAULT '',
 	description TEXT NOT NULL DEFAULT '',
 	is_default INTEGER NOT NULL DEFAULT 0,
+	workspaces_dir TEXT,
+	created_by_user_id TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+	id TEXT PRIMARY KEY,
+	email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+	display_name TEXT NOT NULL,
+	password_hash TEXT NOT NULL DEFAULT '',
+	platform_role TEXT NOT NULL DEFAULT 'user',
+	status TEXT NOT NULL DEFAULT 'active',
+	max_orgs INTEGER NOT NULL DEFAULT 5,
+	max_active_dispatches INTEGER NOT NULL DEFAULT 3,
+	can_dispatch_ai INTEGER NOT NULL DEFAULT 1,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	expires_at TEXT NOT NULL,
+	revoked_at TEXT,
+	ip TEXT NOT NULL DEFAULT '',
+	user_agent TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS platform_settings (
+	key TEXT PRIMARY KEY,
+	value_json TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS organization_members (
+	org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	org_role TEXT NOT NULL DEFAULT 'org_member',
+	role_title TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	PRIMARY KEY (org_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS organization_invites (
+	id TEXT PRIMARY KEY,
+	org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+	token_hash TEXT NOT NULL UNIQUE,
+	org_role TEXT NOT NULL DEFAULT 'org_member',
+	created_by_user_id TEXT NOT NULL,
+	max_uses INTEGER NOT NULL DEFAULT 1,
+	used_count INTEGER NOT NULL DEFAULT 0,
+	expires_at TEXT,
+	revoked_at TEXT,
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS organization_ai_roles (
+	org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
+	enabled INTEGER NOT NULL DEFAULT 1,
+	is_primary_contact INTEGER NOT NULL DEFAULT 0,
+	display_name_override TEXT,
+	provider_override TEXT,
+	model_override TEXT,
+	thinking_level_override TEXT,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	PRIMARY KEY (org_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_members (
+	workspace_id TEXT NOT NULL REFERENCES workspace_links(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TEXT NOT NULL,
+	PRIMARY KEY (workspace_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS uploads_index (
+	filename TEXT PRIMARY KEY,
+	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+	matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
+	uploader_user_id TEXT,
+	kind TEXT NOT NULL DEFAULT 'image',
+	mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+	id TEXT PRIMARY KEY,
+	actor_user_id TEXT,
+	actor_email TEXT NOT NULL DEFAULT '',
+	actor_name TEXT NOT NULL DEFAULT '',
+	action TEXT NOT NULL,
+	target_type TEXT NOT NULL DEFAULT '',
+	target_id TEXT NOT NULL DEFAULT '',
+	org_id TEXT,
+	detail_json TEXT,
+	ip TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS collaborators (
@@ -207,6 +308,13 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 			WHERE org_id IS NULL AND workspace_id IS NOT NULL;
 		`);
 	}
+	const ensureMatterCol = (name: string, ddl: string) => {
+		if (!matterColumns.some((column) => column.name === name)) {
+			db.exec(`ALTER TABLE matters ADD COLUMN ${ddl}`);
+		}
+	};
+	ensureMatterCol("created_by_user_id", "created_by_user_id TEXT");
+	ensureMatterCol("visibility", "visibility TEXT NOT NULL DEFAULT 'org'");
 	const columns = db.prepare("PRAGMA table_info(worker_sessions)").all();
 	if (!columns.some((column) => column.name === "context_key")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN context_key TEXT");
@@ -223,6 +331,7 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	ensureMemberCol("git_name", "git_name TEXT NOT NULL DEFAULT ''");
 	ensureMemberCol("git_email", "git_email TEXT NOT NULL DEFAULT ''");
 	ensureMemberCol("identity_summary", "identity_summary TEXT NOT NULL DEFAULT ''");
+	ensureMemberCol("owner_org_id", "owner_org_id TEXT");
 	db.exec(`
 		UPDATE team_members
 		SET git_name = CASE
@@ -235,13 +344,25 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 		UPDATE team_members SET git_email = id || '@team.local' WHERE TRIM(git_email) = '';
 	`);
 	const orgColumns = db.prepare("PRAGMA table_info(organizations)").all();
-	if (!orgColumns.some((column) => column.name === "is_default")) {
-		db.exec("ALTER TABLE organizations ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0");
-	}
+	const ensureOrgCol = (name: string, ddl: string) => {
+		if (!orgColumns.some((column) => column.name === name)) {
+			db.exec(`ALTER TABLE organizations ADD COLUMN ${ddl}`);
+		}
+	};
+	ensureOrgCol("is_default", "is_default INTEGER NOT NULL DEFAULT 0");
+	ensureOrgCol("slug", "slug TEXT NOT NULL DEFAULT ''");
+	ensureOrgCol("workspaces_dir", "workspaces_dir TEXT");
+	ensureOrgCol("created_by_user_id", "created_by_user_id TEXT");
 	const workspaceColumns = db.prepare("PRAGMA table_info(workspace_links)").all();
-	if (!workspaceColumns.some((column) => column.name === "org_id")) {
-		db.exec("ALTER TABLE workspace_links ADD COLUMN org_id TEXT");
-	}
+	const ensureWsCol = (name: string, ddl: string) => {
+		if (!workspaceColumns.some((column) => column.name === name)) {
+			db.exec(`ALTER TABLE workspace_links ADD COLUMN ${ddl}`);
+		}
+	};
+	ensureWsCol("org_id", "org_id TEXT");
+	ensureWsCol("source_type", "source_type TEXT NOT NULL DEFAULT 'local'");
+	ensureWsCol("clone_url", "clone_url TEXT");
+	ensureWsCol("visibility", "visibility TEXT NOT NULL DEFAULT 'org'");
 	const memoryColumns = db.prepare("PRAGMA table_info(member_memories)").all();
 	const ensureMemoryCol = (name: string, ddl: string) => {
 		if (!memoryColumns.some((column) => column.name === name)) {
@@ -274,5 +395,9 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	db.exec("CREATE INDEX IF NOT EXISTS idx_worker_context ON worker_sessions(matter_id, member_id, context_key)");
 	db.exec("CREATE INDEX IF NOT EXISTS idx_workspace_links_org ON workspace_links(org_id)");
 	db.exec("CREATE INDEX IF NOT EXISTS idx_member_memories_org ON member_memories(member_id, org_id)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id, org_id)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC)");
+	db.exec("CREATE INDEX IF NOT EXISTS idx_uploads_matter ON uploads_index(matter_id)");
 	return db;
 }

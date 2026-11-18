@@ -25,7 +25,8 @@ import type { RoleTemplate } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
 import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMember } from "../../storage/types.ts";
-import { requireOwner } from "../auth.ts";
+import { canAccessMatter, canAccessOrganization, canManageOrganization } from "../acl.ts";
+import { isSuperAdminActor, requireActiveActor, requireOwner } from "../auth.ts";
 import { HttpRequestError, readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
 	broadcastDistilledMemories,
@@ -258,12 +259,16 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 	const proposalApplyMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/apply-role-proposals$/);
 	if (method === "POST" && proposalApplyMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(proposalApplyMatch[1]!);
 		const messageId = decodeURIComponent(proposalApplyMatch[2]!);
 		let matter = store.getMatter(matterId);
 		if (!matter) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!isSuperAdminActor(actor) && !canManageOrganization(store, actor, matter.orgId)) {
+			sendError(res, 403, "仅所有者或组织管理员可应用角色提案");
 			return true;
 		}
 		const targetMsg = store.getMessage(messageId);
@@ -582,10 +587,15 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 	const memberExportMatch = pathname.match(/^\/api\/members\/([^/]+)\/export$/);
 	if (method === "GET" && memberExportMatch) {
+		if (!requireActiveActor(res, actor)) return true;
 		const memberId = decodeURIComponent(memberExportMatch[1]!);
 		const member = store.getMember(memberId);
 		if (!member) {
 			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		if (member.ownerOrgId && !canAccessOrganization(store, actor, member.ownerOrgId)) {
+			sendError(res, 403, "无权导出其他组织的私有角色");
 			return true;
 		}
 		const template = orchestrator.getTemplateForMember(member);
@@ -696,13 +706,22 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 
 	const memoryAppsMatch = pathname.match(/^\/api\/memories\/([^/]+)\/applications$/);
 	if (method === "GET" && memoryAppsMatch) {
+		if (!requireActiveActor(res, actor)) return true;
 		const memoryId = decodeURIComponent(memoryAppsMatch[1]!);
 		const memory = store.getMemory(memoryId);
 		if (!memory) {
 			sendError(res, 404, `Memory not found: ${memoryId}`);
 			return true;
 		}
-		sendJson(res, 200, { memory, applications: store.listMemoryApplications(memoryId) });
+		if (memory.orgId && !canAccessOrganization(store, actor, memory.orgId)) {
+			sendError(res, 403, "无权查看其他组织的经验使用溯源");
+			return true;
+		}
+		const apps = store.listMemoryApplications(memoryId).filter((app) => {
+			const matter = store.getMatter(app.matterId);
+			return !matter || canAccessMatter(store, actor, matter);
+		});
+		sendJson(res, 200, { memory, applications: apps });
 		return true;
 	}
 

@@ -123,6 +123,7 @@ export {
 } from "./server/preview-manager.ts";
 export { openPersonalAgentDatabase } from "./storage/database.ts";
 export {
+	DEFAULT_LOCAL_ADMIN_USER_ID,
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
 	DEFAULT_OWNER_COLLABORATOR_ID,
@@ -130,6 +131,8 @@ export {
 	normalizeMemoryCategory,
 	PersonalAgentStore,
 	resolveEffectiveGitIdentity,
+	slugifyOrganizationName,
 	toPublicCollaborator,
+	toPublicUser,
 } from "./storage/repositories.ts";
 export type * from "./storage/types.ts";

@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import {
+	type AccountUserDto,
 	type CollaboratorDto,
 	exportMemberPackage,
 	type MatterDto,
 	type MemberMemoryDto,
+	type OrganizationAiRoleConfigDto,
 	type OrganizationDto,
+	type OrganizationMemberDto,
 	type RoleTemplateDto,
 	setPrimaryMember,
 	type TeamMemberDto,
@@ -20,10 +23,17 @@ import { TeamHealthcheckPanel } from "./team/TeamHealthcheckPanel.tsx";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
+	accountUser?: AccountUserDto | null;
+	isSuperAdmin?: boolean;
 	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations?: OrganizationDto[];
+	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
+	orgAiRolesByOrgId?: Record<
+		string,
+		{ configured: boolean; configs: OrganizationAiRoleConfigDto[]; effectiveMemberIds: string[] }
+	>;
 	matters?: MatterDto[];
 	defaultWorkspaceId?: string | null;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
@@ -43,13 +53,17 @@ interface TeamViewProps {
 	onOpenDeliverable?: (deliverableId: string) => void;
 }
 
-/** Coordinates the team page: human collaborators, organizations, member creation/import/export, and role cards. */
+/** Coordinates the team page: organizations, human org members/AI roles, global AI cards, and legacy collaborators. */
 export function TeamView({
 	currentUser,
+	accountUser = null,
+	isSuperAdmin = false,
 	collaborators = [],
 	members,
 	workspaces,
 	organizations = [],
+	orgMembersByOrgId = {},
+	orgAiRolesByOrgId = {},
 	matters = [],
 	defaultWorkspaceId = null,
 	memoriesByMember,
@@ -68,7 +82,7 @@ export function TeamView({
 	onOpenMatter,
 	onOpenDeliverable,
 }: TeamViewProps) {
-	const isOwner = currentUser?.permissionRole !== "collaborator";
+	const isOwner = isSuperAdmin || (!accountUser && currentUser?.permissionRole !== "collaborator");
 	const [showImportMember, setShowImportMember] = useState(false);
 	const [exportedPackage, setExportedPackage] = useState<{
 		id: string;
@@ -199,26 +213,33 @@ export function TeamView({
 						</div>
 					</section>
 
-					<CollaboratorsSection
-						isOwner={isOwner}
-						currentUser={currentUser}
-						collaborators={collaborators}
-						organizations={organizations}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-						onPreviewAsCollaborator={onPreviewAsCollaborator}
-						onRestoreOwner={onRestoreOwner}
-					/>
-
 					<OrganizationsSection
 						isOwner={isOwner}
+						isSuperAdmin={isSuperAdmin}
+						accountUser={accountUser}
 						organizations={organizations}
 						workspaces={workspaces}
+						businessMembers={businessMembers}
+						orgMembersByOrgId={orgMembersByOrgId}
+						orgAiRolesByOrgId={orgAiRolesByOrgId}
 						onRefresh={onRefresh}
 						onNotice={onNotice}
 						onError={onError}
 					/>
+
+					{(isSuperAdmin || !accountUser) && (
+						<CollaboratorsSection
+							isOwner={isOwner}
+							currentUser={currentUser}
+							collaborators={collaborators}
+							organizations={organizations}
+							onRefresh={onRefresh}
+							onNotice={onNotice}
+							onError={onError}
+							onPreviewAsCollaborator={onPreviewAsCollaborator}
+							onRestoreOwner={onRestoreOwner}
+						/>
+					)}
 				</div>
 			</div>
 

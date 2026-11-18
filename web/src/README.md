@@ -16,6 +16,7 @@
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx)（对应 `#/settings` 与 `#/settings/{base,extensions,config}`，按类目展示 Pi 底座、扩展插件及按节分组的运行配置） |
+| 账号门禁与超级管理员控制台 | [AuthGateView](components/AuthGateView.tsx)（超管首次初始化、邮箱密码登录/开放注册、待审核提示及 `?invite=` / `orginv_` 加入组织）、[AdminView](components/AdminView.tsx)（对应 `#/admin`，管理用户审核/配额、注册策略、克隆主目录、运行任务紧急中止与审计日志） |
 
 组件数量尚小，本页直接定位文件，`components/` 不再加一层重复目录说明。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。
@@ -54,9 +55,10 @@
 
 ## 组织身份、团队记忆与成果阅读
 
-- [TeamView](components/TeamView.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖协同同事管理、组织与成员身份视图：
-  - 支持所有者新增协同同事、复制局域网邀请链接（`?invite=<token>`）、重置口令、以同事视角本地体验并支持在侧栏「恢复所有者」，
-    同时在未认证局域网访问时经 [App.tsx](App.tsx) 显示邀请登录门禁，并在协同成员视图屏蔽管理员操作与 AI 经验提炼入口。
+- [TeamView](components/TeamView.tsx)、[OrganizationsSection](components/team/OrganizationsSection.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖多组织团队协同与项目接入边界：
+  - 任何已启用账号可在配额内自建组织，在组织卡片内管理人类成员角色（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、生成 `orginv_` 邀请链接、通过邀请码加入其他组织，以及勾选本组织启用的 AI 角色与主联系人（[Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx) 与 [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 同步按当前组织有效 AI 名册过滤）；同时保留局域网协同同事与 `inv_` 邀请预览入口。
+  - [MaterialsView](components/MaterialsView.tsx) 登记仓库支持切换「从 Git 地址克隆到组织主目录（`cloned`）」与受平台策略控制的「指定服务器本地目录（`local`）」，并可配置仓库可见范围（`org` / `restricted` 授权成员）。
+  - [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 支持设置新建事项范围（`org` 组织可见 / `private` 仅发起人与指定人类成员）与选择组织人类同事；已授权的 `org_member` 可直接向 AI 派发任务。
   - 支持默认组织徽标与「设为默认」切换、组织创建/编辑、新仓库默认选定默认组织（可选独立无组织）、
     仓库 `Git Committer` 真实用户展示、成员 `Git Author（角色）` vs `Git Committer（真实用户）` 与三层记忆筛选；
     经验表单与卡片亦优先预选默认组织。

@@ -11,6 +11,7 @@ import {
 	dismissAiRequest,
 	type FeedbackRating,
 	type MatterSendMode,
+	type MatterVisibility,
 	postMatterMessage,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
@@ -21,6 +22,7 @@ import {
 	updateMatterObservers,
 	updateMatterObserversEnabled,
 	updateMatterOrganization,
+	updateMatterVisibility,
 	updateMatterWorkspace,
 	type WorkspaceDto,
 } from "../api.ts";
@@ -61,6 +63,7 @@ interface UseMatterActionsParams {
 	draftAiMemberIds: string[] | null;
 	draftObserverMemberIds?: string[];
 	draftCollaboratorIds?: string[];
+	draftVisibility?: MatterVisibility;
 	draftObserversEnabled: boolean;
 	headerContact: TeamMemberDto | null;
 	explicitNewMatterRef: MutableRefObject<boolean>;
@@ -103,6 +106,7 @@ export function useMatterActions({
 	draftAiMemberIds,
 	draftObserverMemberIds = [],
 	draftCollaboratorIds = [],
+	draftVisibility = "org",
 	draftObserversEnabled,
 	headerContact,
 	explicitNewMatterRef,
@@ -180,6 +184,7 @@ export function useMatterActions({
 							? draftObserverMemberIds
 							: undefined,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
+					visibility: draftVisibility,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
@@ -480,6 +485,20 @@ export function useMatterActions({
 			});
 	};
 
+	const handleUpdateMatterVisibility = (matterId: string, visibility: MatterVisibility) => {
+		void updateMatterVisibility(matterId, visibility)
+			.then(async () => {
+				setNoticeBanner(
+					visibility === "private" ? "已设为私密事项（仅发起人与指定成员可见）" : "已设为组织全员可见",
+				);
+				await refreshBootstrap();
+				await refreshDetail(matterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+			});
+	};
+
 	const handleDeliverableFeedback = async (
 		deliverableId: string,
 		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
@@ -520,6 +539,7 @@ export function useMatterActions({
 		handleUpdateMatterAiMembers,
 		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
+		handleUpdateMatterVisibility,
 		handleDeliverableFeedback,
 	};
 }

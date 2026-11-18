@@ -9,6 +9,8 @@ interface SidebarProps {
 	activeTab: NavTab;
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
+	isSuperAdmin?: boolean;
+	orgEffectiveMemberIds?: string[] | null;
 	runtimeBadge?: string | null;
 	filteredMatters: MatterDto[];
 	selectedMatterId: string | null;
@@ -30,6 +32,8 @@ export function Sidebar({
 	activeTab,
 	bootstrap,
 	currentUser,
+	isSuperAdmin = false,
+	orgEffectiveMemberIds = null,
 	runtimeBadge,
 	filteredMatters,
 	selectedMatterId,
@@ -49,7 +53,11 @@ export function Sidebar({
 	const [searchOpen, setSearchOpen] = useState(false);
 
 	const allMembers = bootstrap?.members ?? [];
-	const businessMembers = filterBusinessMembers(allMembers);
+	const allBusinessMembers = filterBusinessMembers(allMembers);
+	const businessMembers =
+		orgEffectiveMemberIds && orgEffectiveMemberIds.length > 0
+			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id))
+			: allBusinessMembers;
 	const architectMember = allMembers.find((m) => isArchitectMember(m)) ?? null;
 	const getWorkingMood = (memberId: string): RoleMood => {
 		for (const [mId, prog] of Object.entries(progressByMatter)) {
@@ -249,18 +257,32 @@ export function Sidebar({
 					<span>设置</span>
 					<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
 				</button>
+				{isSuperAdmin && (
+					<button
+						type="button"
+						className={`footer-nav-btn ${activeTab === "admin" ? "active" : ""}`}
+						onClick={() => onNavigate({ tab: "admin" })}
+					>
+						<span>超管控制台</span>
+						<span className="pill">Admin</span>
+					</button>
+				)}
 				<div className="sidebar-status-row">
 					<span className="muted-tiny">
-						{currentUser
-							? `${currentUser.name} · ${currentUser.permissionRole === "owner" ? "所有者" : "协同"}`
-							: "Pi RPC · kimi-for-coding"}
+						{bootstrap?.accountUser
+							? `${bootstrap.accountUser.displayName} · ${bootstrap.accountUser.platformRole === "super_admin" ? "超管" : "成员"}`
+							: currentUser
+								? `${currentUser.name} · ${currentUser.permissionRole === "owner" ? "所有者" : "协同"}`
+								: "Pi RPC"}
 					</span>
 					<div className="sidebar-status-actions">
-						{currentUser?.permissionRole === "collaborator" && onSwitchOrLogout && (
+						{(bootstrap?.accountUser || currentUser?.permissionRole === "collaborator") && onSwitchOrLogout && (
 							<button type="button" className="btn-inline btn-xs" onClick={onSwitchOrLogout}>
-								{window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-									? "恢复所有者"
-									: "退出"}
+								{bootstrap?.accountUser
+									? "退出登录"
+									: window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+										? "恢复所有者"
+										: "退出"}
 							</button>
 						)}
 						<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>

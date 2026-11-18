@@ -34,9 +34,18 @@ export async function delegateBetweenMembers(
 ): Promise<DelegateResult> {
 	signal.throwIfAborted();
 	const fromMember = deps.store.getMember(input.fromMemberId);
-	const toMember = deps.store.getMember(input.toMemberId);
-	if (!fromMember || !toMember) throw new Error("Delegation requires existing team members");
+	const rawToMember = deps.store.getMember(input.toMemberId);
+	if (!fromMember || !rawToMember) throw new Error("Delegation requires existing team members");
 	const matterRecord = deps.store.getMatter(input.matterId);
+	let toMember = rawToMember;
+	if (matterRecord?.orgId) {
+		const orgMembers = deps.store.resolveEffectiveOrgMembers(matterRecord.orgId);
+		const matchedOrgMember = orgMembers.find((m) => m.id === rawToMember.id);
+		if (!matchedOrgMember) {
+			throw new Error(`Team member ${rawToMember.displayName} is not enabled in this organization`);
+		}
+		toMember = matchedOrgMember;
+	}
 	if (matterRecord && matterRecord.aiMemberIds !== null && !matterRecord.aiMemberIds.includes(toMember.id)) {
 		throw new Error(`Team member ${toMember.displayName} has been removed from this matter`);
 	}

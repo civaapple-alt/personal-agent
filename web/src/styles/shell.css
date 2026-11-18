@@ -574,10 +574,12 @@
 	min-width: 0;
 }
 .stage-header.has-context .stage-header-left {
-	flex: 0 0 auto;
+	flex: 0 1 auto;
+	min-width: 0;
 }
 .stage-header.has-context .stage-header-right {
-	flex: 0 0 auto;
+	flex: 0 1 auto;
+	min-width: 0;
 }
 .stage-header-left .pill,
 .stage-header-right .btn-pill-outline {
@@ -611,7 +613,7 @@
 .stage-header.has-context .stage-center-pill {
 	flex: 0 1 auto;
 	min-width: 80px;
-	max-width: none;
+	max-width: 38%;
 }
 .stage-center-name {
 	font-weight: 600;

@@ -3,13 +3,15 @@ import type { PiCliProbeResult, ServerRuntimeConfig } from "../orchestrator/runt
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore } from "../storage/repositories.ts";
-import { requireOwner, resolveRequestActor } from "./auth.ts";
+import { canActorAccessUpload } from "./acl.ts";
+import { requireActiveActor, requireOwner, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
-import { HttpRequestError, sendError, sendJson, serveStaticAsset } from "./http.ts";
+import { HttpRequestError, isAllowedMutatingOrigin, sendError, sendJson, serveStaticAsset } from "./http.ts";
 import { InnerMatterDemo } from "./inner-matter.ts";
 import type { PreviewManager } from "./preview-manager.ts";
-import { handleAuthRoutes, handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
+import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth.ts";
+import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
 import { handleDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
 import { handleMatterRoutes } from "./routes/matters.ts";
@@ -28,6 +30,8 @@ export interface PersonalAgentServerOptions {
 	uploadsDir?: string;
 	requireAuth?: boolean;
 	innerMatterDir?: string;
+	defaultWorkspacesRoot?: string;
+	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
 	runtimeMeta?: Pick<ServerRuntimeConfig, "host" | "port" | "dbPath" | "builtinRolesDir">;
 }
@@ -40,7 +44,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	broadcast: (eventName: string, payload: unknown) => void;
 } {
 	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
-	const sse = createSseHub();
+	const sse = createSseHub(store);
 	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 	let roleMutationTail = Promise.resolve();
@@ -92,9 +96,13 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		revokeTokenSessions: sse.revokeTokenSessions,
 		runDispatchInBackground,
 		innerMatterDemo,
+		requireAuth: Boolean(options.requireAuth),
+		defaultWorkspacesRoot: options.defaultWorkspacesRoot,
+		dataDir: options.dataDir,
 	};
 
 	const handlers = [
+		handleAdminRoutes,
 		handleBootstrapAndCollaboratorRoutes,
 		handleMatterRoutes,
 		handleDeliverableOrgPreviewRoutes,
@@ -107,15 +115,22 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		const pathname = url.pathname;
 
 		try {
+			if (pathname.startsWith("/api/") && !isAllowedMutatingOrigin(req)) {
+				sendError(res, 403, "跨站写请求已被拦截");
+				return;
+			}
 			const requireAuth = Boolean(options.requireAuth);
 			const actor = resolveRequestActor(req, store, requireAuth);
 
-			if (await handleAuthRoutes(routeCtx, req, res, method, pathname, actor, requireAuth)) {
+			if (await handleAdminAndAuthRoutes(routeCtx, req, res, method, pathname, actor, requireAuth)) {
 				return;
 			}
 
 			if (pathname.startsWith("/api/") && !actor) {
-				sendError(res, 401, "未认证，请使用邀请链接或口令登录");
+				sendError(res, 401, "未认证，请登录或通过有效邀请进入工作台");
+				return;
+			}
+			if (pathname.startsWith("/api/") && !requireActiveActor(res, actor)) {
 				return;
 			}
 			if (method === "POST" && pathname === "/api/demos/inner-matter") {
@@ -125,7 +140,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const matter = await innerMatterDemo.prepare();
-				sse.broadcast("matter_updated", { matterId: matter.id });
+				sse.broadcast("matter_updated", { matterId: matter.id }, { matterId: matter.id });
 				sendJson(res, 200, { matter });
 				return;
 			}
@@ -137,7 +152,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 
 			const uploadMatch = pathname.match(/^\/api\/uploads\/([a-zA-Z0-9._-]+)$/);
 			if (method === "GET" && uploadMatch) {
-				await handleUploadGet(res, uploadMatch[1]!, uploadsDir, memoryUploads);
+				const filename = uploadMatch[1]!;
+				if (!canActorAccessUpload(store, actor, filename)) {
+					sendError(res, 403, "无权访问该附件");
+					return;
+				}
+				await handleUploadGet(res, filename, uploadsDir, memoryUploads);
 				return;
 			}
 

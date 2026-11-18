@@ -3,7 +3,7 @@
 本文集中说明 Personal Agent 当前实际生效的环境变量、服务路径、Pi RPC 参数、岗位模板字段以及编排核内置限制。
 
 - 所有默认数值均以当前源码为准；工作台 **设置 → 运行配置**（`#/settings/config`）可按节直接查看当前运行实例生效的配置值与覆写状态。
-- 未列出的能力（如持久化定时后台调度、全局多租户配置或自定义工作流配置文件）尚未实现。
+- 未列出的能力（如持久化定时后台调度、分布式多机数据库集群或自定义工作流配置文件）尚未实现；平台注册策略、用户审核配额与多团队代码库主目录通过超级管理员控制台 `#/admin` 维护（持久化在 `platform_settings` 表中）。
 
 ## 1. 环境变量
 
@@ -14,6 +14,9 @@
 | `PORT` | `4310` | [服务入口](../src/server/main.ts) | Web 工作台 HTTP/SSE 监听端口 |
 | `PA_HOST` | `127.0.0.1` | [服务入口](../src/server/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
+| `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../src/server/main.ts) → [HTTP 鉴权](../src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
+| `PA_WORKSPACES_ROOT` | `<dataDir>/workspaces` | [服务入口](../src/server/main.ts) → [Git 克隆](../src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
+| `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../src/server/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../src/server/main.ts) → [编排核](../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
 | `PA_PSTACK_DIR` | 未设置（不启用） | [服务入口](../src/server/main.ts) → [执行装配](../src/orchestrator/worker-runner.ts) | 完整 pstack 包根目录，包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`；显式装配模式入口及只读方法工具，详见 [pstack 内循环](pstack-runtime.md) |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |

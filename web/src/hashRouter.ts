@@ -1,4 +1,4 @@
-export type NavTab = "deliverables" | "chats" | "team" | "materials" | "settings";
+export type NavTab = "deliverables" | "chats" | "team" | "materials" | "settings" | "admin";
 export type SettingsSection = "all" | "base" | "extensions" | "config";
 
 export interface HashRoute {
@@ -41,6 +41,9 @@ export function parseHashRoute(rawHash: string): HashRoute {
 		}
 		return { tab: "settings" };
 	}
+	if (segment0 === "admin") {
+		return { tab: "admin" };
+	}
 	return { tab: "chats" };
 }
 
@@ -61,6 +64,9 @@ export function formatHashRoute(route: HashRoute): string {
 		return route.settingsSection && route.settingsSection !== "all"
 			? `#/settings/${encodeURIComponent(route.settingsSection)}`
 			: "#/settings";
+	}
+	if (route.tab === "admin") {
+		return "#/admin";
 	}
 	return "#/materials";
 }

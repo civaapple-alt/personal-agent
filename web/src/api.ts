@@ -1,12 +1,96 @@
 import type { InnerMatterGuide, InnerMatterStep } from "../../src/demo/inner-matter-definition.ts";
 export type { InnerMatterGuide, InnerMatterStep };
 
+export type PlatformRole = "super_admin" | "user";
+export type UserStatus = "active" | "pending_review" | "disabled";
+export type OrgMemberRole = "org_owner" | "org_admin" | "org_member" | "org_viewer";
+export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
+export type WorkspaceSourceType = "local" | "cloned";
+export type WorkspaceVisibility = "org" | "restricted";
+export type MatterVisibility = "org" | "private";
+
+export interface AccountUserDto {
+	id: string;
+	email: string;
+	displayName: string;
+	platformRole: PlatformRole;
+	status: UserStatus;
+	maxOrgs: number;
+	maxActiveDispatches: number;
+	canDispatchAi: boolean;
+	createdAt: string;
+	updatedAt: string;
+	lastLoginAt: string | null;
+}
+
+export interface PlatformSettingsDto {
+	registrationMode: RegistrationMode;
+	workspacesRoot: string;
+	allowLocalWorkspacePath: boolean;
+	localWorkspaceAllowlist: string[];
+	allowCommandPreviews: boolean;
+	defaultMaxOrgs: number;
+	defaultMaxActiveDispatches: number;
+	updatedAt: string;
+}
+
+export interface OrganizationMemberDto {
+	orgId: string;
+	userId: string;
+	orgRole: OrgMemberRole;
+	roleTitle: string;
+	createdAt: string;
+	updatedAt: string;
+	email?: string;
+	displayName?: string;
+	userStatus?: UserStatus;
+}
+
+export interface OrganizationInviteDto {
+	id: string;
+	orgId: string;
+	orgRole: OrgMemberRole;
+	createdByUserId: string;
+	maxUses: number;
+	usedCount: number;
+	expiresAt: string | null;
+	revokedAt: string | null;
+	createdAt: string;
+}
+
+export interface OrganizationAiRoleConfigDto {
+	orgId: string;
+	memberId: string;
+	enabled: boolean;
+	isPrimaryContact: boolean;
+	displayNameOverride: string | null;
+	modelOverride: string | null;
+	updatedAt: string;
+}
+
+export interface AuditLogEntryDto {
+	id: string;
+	actorUserId: string | null;
+	actorEmail: string | null;
+	action: string;
+	targetType: string;
+	targetId: string | null;
+	orgId: string | null;
+	detail: Record<string, unknown> | null;
+	ipAddress: string | null;
+	createdAt: string;
+}
+
 export interface OrganizationDto {
 	id: string;
 	name: string;
+	slug?: string;
 	gitEmailDomain: string;
 	description: string;
 	isDefault?: boolean;
+	workspacesDir?: string | null;
+	createdByUserId?: string | null;
+	orgRole?: OrgMemberRole;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -17,6 +101,7 @@ export interface TeamMemberDto {
 	displayName: string;
 	roleTitle: string;
 	isPrimaryContact: boolean;
+	ownerOrgId?: string | null;
 	provider: string;
 	model: string;
 	thinkingLevel: string;
@@ -33,6 +118,10 @@ export interface WorkspaceDto {
 	repoPath: string;
 	defaultBranch: string;
 	description: string;
+	sourceType?: "local" | "clone" | WorkspaceSourceType;
+	cloneUrl?: string | null;
+	visibility?: WorkspaceVisibility;
+	allowedUserIds?: string[];
 	repoGitUser?: { name: string; email: string } | null;
 }
 
@@ -59,7 +148,12 @@ export interface AuthSessionPayload {
 	authenticated: boolean;
 	permissionRequired: boolean;
 	revokedSession?: boolean;
+	pendingApproval?: boolean;
+	needsAdminSetup?: boolean;
+	registrationMode?: RegistrationMode;
+	authKind?: "session" | "legacy_token" | "loopback" | null;
 	currentUser: CollaboratorDto | null;
+	accountUser?: AccountUserDto | null;
 }
 
 export type MatterSendMode = "discussion" | "dispatch" | "ai_request";
@@ -72,6 +166,8 @@ export interface MatterDto {
 	leadMemberId: string | null;
 	workspaceId: string | null;
 	orgId?: string | null;
+	createdByUserId?: string | null;
+	visibility?: MatterVisibility;
 	aiMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
@@ -405,17 +501,45 @@ export interface ActiveRunSnapshotDto extends MatterProgressDto {
 export interface BootstrapPayload {
 	innerDemoAvailable?: boolean;
 	currentUser?: CollaboratorDto;
+	accountUser?: AccountUserDto | null;
+	platformPolicy?: {
+		registrationMode: RegistrationMode;
+		allowLocalWorkspacePath: boolean;
+		allowCommandPreviews: boolean;
+	};
 	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	templates: RoleTemplateDto[];
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
+	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
+	orgAiRolesByOrgId?: Record<
+		string,
+		{
+			configured: boolean;
+			configs: OrganizationAiRoleConfigDto[];
+			effectiveMemberIds: string[];
+		}
+	>;
 	matters: MatterDto[];
 	deliverables: DeliverableDto[];
 	pendingDialogs: PendingDialogDto[];
 	previews: PreviewServiceDto[];
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	activeRuns?: Record<string, ActiveRunSnapshotDto>;
+}
+
+export interface AdminUserRowDto extends AccountUserDto {
+	ownedOrgCount: number;
+	orgMemberships: OrganizationMemberDto[];
+}
+
+export interface AdminOverviewPayload {
+	settings: PlatformSettingsDto;
+	users: AdminUserRowDto[];
+	organizations: OrganizationDto[];
+	activeRuns: Array<{ matterId: string; title: string; label: string; startedAt: number }>;
+	auditLogs: AuditLogEntryDto[];
 }
 
 export interface MatterDetailPayload {
@@ -439,8 +563,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 	});
 	const data = (await res.json()) as T & { error?: string };
 	if (!res.ok) {
-		if (res.status === 401 && url !== "/api/auth/login" && url !== "/api/auth/session") {
-			authRevokedHandler?.(data.error ?? "当前访问口令已失效或已被重置，请重新获取邀请链接");
+		if (
+			res.status === 401 &&
+			url !== "/api/auth/login" &&
+			url !== "/api/auth/register" &&
+			url !== "/api/auth/setup-admin" &&
+			url !== "/api/auth/session"
+		) {
+			authRevokedHandler?.(data.error ?? "当前登录态已失效或无访问权限，请重新登录");
 		}
 		throw new Error(data.error ?? `Request failed (${res.status})`);
 	}
@@ -451,10 +581,55 @@ export function fetchAuthSession(): Promise<AuthSessionPayload> {
 	return requestJson<AuthSessionPayload>("/api/auth/session");
 }
 
+export function setupInitialAdmin(input: {
+	email: string;
+	password: string;
+	displayName: string;
+}): Promise<{ ok: boolean; accountUser: AccountUserDto }> {
+	return requestJson("/api/auth/setup-admin", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function registerWithEmail(input: {
+	email: string;
+	password: string;
+	displayName: string;
+	inviteToken?: string;
+}): Promise<{ ok: boolean; pendingApproval?: boolean; accountUser: AccountUserDto }> {
+	return requestJson("/api/auth/register", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function loginWithEmail(input: { email: string; password: string; inviteToken?: string }): Promise<{
+	ok: boolean;
+	pendingApproval?: boolean;
+	joinedOrgId?: string | null;
+	accountUser?: AccountUserDto;
+}> {
+	return requestJson("/api/auth/login", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
 export function loginWithInviteToken(token: string): Promise<{ ok: boolean; currentUser: CollaboratorDto }> {
 	return requestJson("/api/auth/login", {
 		method: "POST",
 		body: JSON.stringify({ token }),
+	});
+}
+
+export function changeAccountPassword(input: {
+	currentPassword: string;
+	newPassword: string;
+}): Promise<{ ok: boolean }> {
+	return requestJson("/api/auth/change-password", {
+		method: "POST",
+		body: JSON.stringify(input),
 	});
 }
 
@@ -483,6 +658,7 @@ export function assessMatterInitiation(
 		hasImages?: boolean;
 		hasFiles?: boolean;
 		workspaceId?: string;
+		orgId?: string | null;
 		preferredMemberId?: string;
 		mode?: "rules" | "model";
 		readRepo?: boolean;
@@ -508,6 +684,7 @@ export function createMatter(input: {
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	collaboratorIds?: string[];
+	visibility?: MatterVisibility;
 	title?: string;
 }): Promise<{ matter: MatterDto; assignedMember: TeamMemberDto }> {
 	return requestJson("/api/matters", {
@@ -603,6 +780,8 @@ export function createOrganization(input: {
 	name: string;
 	gitEmailDomain?: string;
 	description?: string;
+	aiMemberIds?: string[];
+	primaryAiMemberId?: string;
 }): Promise<{ organization: OrganizationDto }> {
 	return requestJson("/api/organizations", {
 		method: "POST",
@@ -629,9 +808,13 @@ export function setDefaultOrganization(orgId: string): Promise<{ organization: O
 export function addWorkspace(input: {
 	orgId?: string | null;
 	name: string;
-	repoPath: string;
+	sourceType?: "local" | "clone" | WorkspaceSourceType;
+	cloneUrl?: string;
+	repoPath?: string;
 	defaultBranch?: string;
 	description?: string;
+	visibility?: WorkspaceVisibility;
+	allowedUserIds?: string[];
 }): Promise<{ workspace: WorkspaceDto }> {
 	return requestJson("/api/workspaces", {
 		method: "POST",
@@ -641,7 +824,14 @@ export function addWorkspace(input: {
 
 export function updateWorkspace(
 	workspaceId: string,
-	input: { orgId?: string | null; name?: string; defaultBranch?: string; description?: string },
+	input: {
+		orgId?: string | null;
+		name?: string;
+		defaultBranch?: string;
+		description?: string;
+		visibility?: WorkspaceVisibility;
+		allowedUserIds?: string[];
+	},
 ): Promise<{ workspace: WorkspaceDto }> {
 	return requestJson(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
 		method: "PATCH",
@@ -975,6 +1165,138 @@ export function updateMatterCollaborators(matterId: string, collaboratorIds: str
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ collaboratorIds }),
+	});
+}
+
+export function updateMatterVisibility(matterId: string, visibility: MatterVisibility): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ visibility }),
+	});
+}
+
+export function joinOrganizationByInvite(
+	inviteToken: string,
+): Promise<{ ok: boolean; organization: OrganizationDto; membership: OrganizationMemberDto }> {
+	return requestJson("/api/organizations/join", {
+		method: "POST",
+		body: JSON.stringify({ inviteToken }),
+	});
+}
+
+export function fetchOrgMembers(orgId: string): Promise<{ members: OrganizationMemberDto[] }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/members`);
+}
+
+export function addOrgMember(
+	orgId: string,
+	input: { email?: string; userId?: string; orgRole: OrgMemberRole; roleTitle?: string },
+): Promise<{ member: OrganizationMemberDto }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/members`, {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateOrgMember(
+	orgId: string,
+	userId: string,
+	input: { orgRole?: OrgMemberRole; roleTitle?: string },
+): Promise<{ member: OrganizationMemberDto }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function removeOrgMember(orgId: string, userId: string): Promise<{ ok: boolean }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`, {
+		method: "DELETE",
+	});
+}
+
+export function fetchOrgInvites(orgId: string): Promise<{ invites: OrganizationInviteDto[] }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/invites`);
+}
+
+export function createOrgInvite(
+	orgId: string,
+	input: { orgRole: OrgMemberRole; maxUses?: number; expiresInHours?: number },
+): Promise<{ invite: OrganizationInviteDto; rawToken: string }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/invites`, {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function revokeOrgInvite(orgId: string, inviteId: string): Promise<{ invite: OrganizationInviteDto }> {
+	return requestJson(
+		`/api/organizations/${encodeURIComponent(orgId)}/invites/${encodeURIComponent(inviteId)}/revoke`,
+		{ method: "POST", body: "{}" },
+	);
+}
+
+export function updateOrgAiRoles(
+	orgId: string,
+	roles: Array<{
+		memberId: string;
+		enabled: boolean;
+		isPrimaryContact?: boolean;
+		displayNameOverride?: string | null;
+		modelOverride?: string | null;
+	}>,
+): Promise<{
+	configs: OrganizationAiRoleConfigDto[];
+	effectiveMembers: TeamMemberDto[];
+}> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/ai-roles`, {
+		method: "PUT",
+		body: JSON.stringify({ roles }),
+	});
+}
+
+export function fetchAdminOverview(): Promise<AdminOverviewPayload> {
+	return requestJson("/api/admin/overview");
+}
+
+export function updateAdminSettings(
+	input: Partial<{
+		registrationMode: RegistrationMode;
+		workspacesRoot: string;
+		allowLocalWorkspacePath: boolean;
+		localWorkspaceAllowlist: string[];
+		allowCommandPreviews: boolean;
+		defaultMaxOrgs: number;
+		defaultMaxActiveDispatches: number;
+	}>,
+): Promise<{ settings: PlatformSettingsDto }> {
+	return requestJson("/api/admin/settings", {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function updateAdminUser(
+	userId: string,
+	input: Partial<{
+		displayName: string;
+		platformRole: PlatformRole;
+		status: UserStatus;
+		maxOrgs: number;
+		maxActiveDispatches: number;
+		canDispatchAi: boolean;
+	}>,
+): Promise<{ user: AccountUserDto }> {
+	return requestJson(`/api/admin/users/${encodeURIComponent(userId)}`, {
+		method: "PATCH",
+		body: JSON.stringify(input),
+	});
+}
+
+export function abortAdminMatter(matterId: string): Promise<{ ok: boolean; aborted: boolean }> {
+	return requestJson(`/api/admin/matters/${encodeURIComponent(matterId)}/abort`, {
+		method: "POST",
+		body: "{}",
 	});
 }
 

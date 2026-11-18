@@ -162,6 +162,7 @@ export interface DispatchMatterInput {
 	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
+	orgId?: string | null;
 	aiMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];

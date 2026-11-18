@@ -21,6 +21,111 @@ export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
 export type DeliverableType = "document" | "artifact" | "prototype_image" | "service_url";
 export type CollaboratorRole = "owner" | "collaborator";
+export type PlatformRole = "super_admin" | "user";
+export type UserStatus = "active" | "pending_review" | "disabled";
+export type OrgMemberRole = "org_owner" | "org_admin" | "org_member" | "org_viewer";
+export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
+export type WorkspaceSourceType = "local" | "cloned";
+export type WorkspaceVisibility = "org" | "restricted";
+export type MatterVisibility = "org" | "private";
+
+export interface PlatformUser {
+	id: string;
+	email: string;
+	displayName: string;
+	passwordHash: string;
+	platformRole: PlatformRole;
+	status: UserStatus;
+	maxOrgs: number;
+	maxActiveDispatches: number;
+	canDispatchAi: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export type PublicPlatformUser = Omit<PlatformUser, "passwordHash">;
+
+export interface UserSessionRecord {
+	id: string;
+	userId: string;
+	expiresAt: string;
+	revokedAt: string | null;
+	ip: string;
+	userAgent: string;
+	createdAt: string;
+}
+
+export interface PlatformSettings {
+	registrationMode: RegistrationMode;
+	workspacesRoot: string;
+	allowLocalWorkspacePath: boolean;
+	localWorkspaceAllowlist: string[];
+	allowCommandPreviews: boolean;
+	defaultMaxOrgs: number;
+	defaultMaxActiveDispatches: number;
+	updatedAt: string;
+}
+
+export interface OrganizationMember {
+	orgId: string;
+	userId: string;
+	email: string;
+	displayName: string;
+	userStatus: UserStatus;
+	orgRole: OrgMemberRole;
+	roleTitle: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface OrganizationInvite {
+	id: string;
+	orgId: string;
+	orgRole: OrgMemberRole;
+	createdByUserId: string;
+	maxUses: number;
+	usedCount: number;
+	expiresAt: string | null;
+	revokedAt: string | null;
+	createdAt: string;
+}
+
+export interface OrganizationAiRoleConfig {
+	orgId: string;
+	memberId: string;
+	enabled: boolean;
+	isPrimaryContact: boolean;
+	displayNameOverride: string | null;
+	providerOverride: string | null;
+	modelOverride: string | null;
+	thinkingLevelOverride: ThinkingLevel | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface AuditLogEntry {
+	id: string;
+	actorUserId: string | null;
+	actorEmail: string;
+	actorName: string;
+	action: string;
+	targetType: string;
+	targetId: string;
+	orgId: string | null;
+	detail: Record<string, unknown> | null;
+	ip: string;
+	createdAt: string;
+}
+
+export interface UploadRecord {
+	filename: string;
+	orgId: string | null;
+	matterId: string | null;
+	uploaderUserId: string | null;
+	kind: string;
+	mimeType: string;
+	createdAt: string;
+}
 
 export interface Collaborator {
 	id: string;
@@ -38,9 +143,12 @@ export type PublicCollaborator = Omit<Collaborator, "token">;
 export interface Organization {
 	id: string;
 	name: string;
+	slug?: string;
 	gitEmailDomain: string;
 	description: string;
 	isDefault: boolean;
+	workspacesDir?: string | null;
+	createdByUserId?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -58,6 +166,7 @@ export interface TeamMember {
 	gitName: string;
 	gitEmail: string;
 	identitySummary: string;
+	ownerOrgId?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -103,6 +212,10 @@ export interface WorkspaceLink {
 	repoPath: string;
 	defaultBranch: string;
 	description: string;
+	sourceType?: WorkspaceSourceType;
+	cloneUrl?: string | null;
+	visibility?: WorkspaceVisibility;
+	allowedUserIds?: string[];
 	repoGitUser?: { name: string; email: string } | null;
 	createdAt: string;
 }
@@ -115,6 +228,8 @@ export interface Matter {
 	leadMemberId: string | null;
 	workspaceId: string | null;
 	orgId: string | null;
+	createdByUserId?: string | null;
+	visibility?: MatterVisibility;
 	aiMemberIds: string[] | null;
 	observersEnabled: boolean;
 	observerMemberIds: string[];

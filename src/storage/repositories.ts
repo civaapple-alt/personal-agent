@@ -4,10 +4,13 @@ import { DeliverableRepo, type RecordDeliverableInput } from "./repos/deliverabl
 import { MatterRepo } from "./repos/matter-repo.ts";
 import { MemberRepo } from "./repos/member-repo.ts";
 import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
+import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
+import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 
 export {
+	DEFAULT_LOCAL_ADMIN_USER_ID,
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
 	DEFAULT_OWNER_COLLABORATOR_ID,
@@ -15,7 +18,9 @@ export {
 	MemoryValidationError,
 	normalizeMemoryCategory,
 	resolveEffectiveGitIdentity,
+	slugifyOrganizationName,
 	toPublicCollaborator,
+	toPublicUser,
 } from "./repos/helpers.ts";
 
 /** Unified SQLite store facade delegating to domain-focused repositories. */
@@ -27,6 +32,8 @@ export class PersonalAgentStore {
 	private readonly deliverables: DeliverableRepo;
 	private readonly matters: MatterRepo;
 	private readonly sessions: SessionRepo;
+	private readonly userAuth: UserAuthRepo;
+	private readonly orgRbac: OrgRbacRepo;
 
 	constructor(db: DatabaseSync) {
 		this.members = new MemberRepo(db);
@@ -41,6 +48,8 @@ export class PersonalAgentStore {
 		this.deliverables = new DeliverableRepo(db, this.memories);
 		this.matters = new MatterRepo(db, this.members, this.orgs);
 		this.sessions = new SessionRepo(db);
+		this.userAuth = new UserAuthRepo(db);
+		this.orgRbac = new OrgRbacRepo(db, this.members);
 	}
 
 	// ---- Members ----
@@ -286,5 +295,130 @@ export class PersonalAgentStore {
 	}
 	releaseMatterLease(matterId: string, ownerId: string) {
 		return this.sessions.releaseMatterLease(matterId, ownerId);
+	}
+
+	// ---- Platform Users, Sessions, Settings & Audit ----
+	ensureLocalBootstrapAdmin(defaultName?: string) {
+		return this.userAuth.ensureLocalBootstrapAdmin(defaultName);
+	}
+	hasPasswordedAdmin() {
+		return this.userAuth.hasPasswordedAdmin();
+	}
+	setupInitialAdmin(input: Parameters<UserAuthRepo["setupInitialAdmin"]>[0]) {
+		return this.userAuth.setupInitialAdmin(input);
+	}
+	createUser(input: Parameters<UserAuthRepo["createUser"]>[0]) {
+		return this.userAuth.createUser(input);
+	}
+	authenticateUser(email: string, password: string) {
+		return this.userAuth.authenticateUser(email, password);
+	}
+	getUserById(id: string) {
+		return this.userAuth.getUserById(id);
+	}
+	getUserByEmail(email: string) {
+		return this.userAuth.getUserByEmail(email);
+	}
+	listUsers() {
+		return this.userAuth.listUsers();
+	}
+	updateUser(userId: string, patch: Parameters<UserAuthRepo["updateUser"]>[1]) {
+		return this.userAuth.updateUser(userId, patch);
+	}
+	createSession(userId: string, meta?: Parameters<UserAuthRepo["createSession"]>[1]) {
+		return this.userAuth.createSession(userId, meta);
+	}
+	getSessionAndUserByToken(rawToken: string) {
+		return this.userAuth.getSessionAndUserByToken(rawToken);
+	}
+	revokeSessionByToken(rawToken: string) {
+		return this.userAuth.revokeSessionByToken(rawToken);
+	}
+	revokeAllUserSessions(userId: string) {
+		return this.userAuth.revokeAllUserSessions(userId);
+	}
+	getPlatformSettings(defaultWorkspacesRoot?: string) {
+		return this.userAuth.getPlatformSettings(defaultWorkspacesRoot);
+	}
+	updatePlatformSettings(
+		patch: Parameters<UserAuthRepo["updatePlatformSettings"]>[0],
+		defaultWorkspacesRoot?: string,
+	) {
+		return this.userAuth.updatePlatformSettings(patch, defaultWorkspacesRoot);
+	}
+	recordAuditLog(input: Parameters<UserAuthRepo["recordAuditLog"]>[0]) {
+		return this.userAuth.recordAuditLog(input);
+	}
+	listAuditLogs(options?: Parameters<UserAuthRepo["listAuditLogs"]>[0]) {
+		return this.userAuth.listAuditLogs(options);
+	}
+
+	// ---- Organization Members, Invites, Org AI Roles, Workspace & Upload ACL ----
+	upsertOrgMember(input: Parameters<OrgRbacRepo["upsertOrgMember"]>[0]) {
+		return this.orgRbac.upsertOrgMember(input);
+	}
+	removeOrgMember(orgId: string, userId: string) {
+		return this.orgRbac.removeOrgMember(orgId, userId);
+	}
+	getOrgMembership(orgId: string, userId: string) {
+		return this.orgRbac.getOrgMembership(orgId, userId);
+	}
+	listOrgMembers(orgId: string) {
+		return this.orgRbac.listOrgMembers(orgId);
+	}
+	listUserOrganizations(userId: string) {
+		return this.orgRbac.listUserOrganizations(userId);
+	}
+	countOwnedOrganizations(userId: string) {
+		return this.orgRbac.countOwnedOrganizations(userId);
+	}
+	createOrgInvite(input: Parameters<OrgRbacRepo["createOrgInvite"]>[0]) {
+		return this.orgRbac.createOrgInvite(input);
+	}
+	listOrgInvites(orgId: string) {
+		return this.orgRbac.listOrgInvites(orgId);
+	}
+	revokeOrgInvite(orgId: string, inviteId: string) {
+		return this.orgRbac.revokeOrgInvite(orgId, inviteId);
+	}
+	peekOrgInviteByToken(rawToken: string) {
+		return this.orgRbac.peekOrgInviteByToken(rawToken);
+	}
+	consumeOrgInviteByToken(rawToken: string, userId: string) {
+		return this.orgRbac.consumeOrgInviteByToken(rawToken, userId);
+	}
+	hasOrgAiRolesConfigured(orgId: string) {
+		return this.orgRbac.hasOrgAiRolesConfigured(orgId);
+	}
+	listOrgAiRoleConfigs(orgId: string) {
+		return this.orgRbac.listOrgAiRoleConfigs(orgId);
+	}
+	setOrgAiRolesBatch(orgId: string, roles: Parameters<OrgRbacRepo["setOrgAiRolesBatch"]>[1]) {
+		return this.orgRbac.setOrgAiRolesBatch(orgId, roles);
+	}
+	resolveEffectiveOrgMembers(orgId: string) {
+		return this.orgRbac.resolveEffectiveOrgMembers(orgId);
+	}
+	setWorkspaceAccess(
+		workspaceId: string,
+		visibility: Parameters<OrgRbacRepo["setWorkspaceAccess"]>[1],
+		allowedUserIds: string[],
+	) {
+		return this.orgRbac.setWorkspaceAccess(workspaceId, visibility, allowedUserIds);
+	}
+	listWorkspaceMemberIds(workspaceId: string) {
+		return this.orgRbac.listWorkspaceMemberIds(workspaceId);
+	}
+	isWorkspaceMember(workspaceId: string, userId: string) {
+		return this.orgRbac.isWorkspaceMember(workspaceId, userId);
+	}
+	recordUpload(input: Parameters<OrgRbacRepo["recordUpload"]>[0]) {
+		return this.orgRbac.recordUpload(input);
+	}
+	getUploadRecord(filename: string) {
+		return this.orgRbac.getUploadRecord(filename);
+	}
+	updateMatterVisibility(matterId: string, visibility: Parameters<MatterRepo["updateMatterVisibility"]>[1]) {
+		return this.matters.updateMatterVisibility(matterId, visibility);
 	}
 }

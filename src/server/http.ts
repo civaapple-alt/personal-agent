@@ -53,9 +53,31 @@ export async function readJsonBody(req: IncomingMessage): Promise<Record<string,
 	return parsed as Record<string, unknown>;
 }
 
+const BASE_SECURITY_HEADERS: Record<string, string> = {
+	"X-Content-Type-Options": "nosniff",
+	"X-Frame-Options": "DENY",
+	"Referrer-Policy": "no-referrer",
+};
+
+export function isAllowedMutatingOrigin(req: IncomingMessage): boolean {
+	const method = (req.method ?? "GET").toUpperCase();
+	if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
+	const origin = req.headers.origin;
+	if (!origin || typeof origin !== "string") return true;
+	const host = req.headers.host;
+	if (!host || typeof host !== "string") return false;
+	try {
+		const originUrl = new URL(origin);
+		return originUrl.host.toLowerCase() === host.trim().toLowerCase();
+	} catch {
+		return false;
+	}
+}
+
 export function sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
 	const body = JSON.stringify(data);
 	res.writeHead(statusCode, {
+		...BASE_SECURITY_HEADERS,
 		"Content-Type": "application/json; charset=utf-8",
 		"Content-Length": Buffer.byteLength(body),
 	});
@@ -86,14 +108,22 @@ export async function serveStaticAsset(
 	if (targetPath.startsWith(resolve(webDistDir)) && existsSync(targetPath)) {
 		const content = await readFile(targetPath);
 		const mime = MIME_TYPES[extname(targetPath)] ?? "application/octet-stream";
-		res.writeHead(200, { "Content-Type": mime, "Content-Length": content.byteLength });
+		res.writeHead(200, {
+			...BASE_SECURITY_HEADERS,
+			"Content-Type": mime,
+			"Content-Length": content.byteLength,
+		});
 		res.end(content);
 		return true;
 	}
 	const indexHtml = join(webDistDir, "index.html");
 	if (existsSync(indexHtml) && !pathname.startsWith("/api/")) {
 		const content = await readFile(indexHtml);
-		res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": content.byteLength });
+		res.writeHead(200, {
+			...BASE_SECURITY_HEADERS,
+			"Content-Type": "text/html; charset=utf-8",
+			"Content-Length": content.byteLength,
+		});
 		res.end(content);
 		return true;
 	}

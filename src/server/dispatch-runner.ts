@@ -15,6 +15,8 @@ export interface ActiveRunState {
 	progress: DispatchProgressEvent;
 	startedAt: number;
 	accumulatedDelta: string;
+	startedByUserId?: string | null;
+	orgId?: string | null;
 }
 
 export interface BackgroundDispatchInput {
@@ -25,9 +27,11 @@ export interface BackgroundDispatchInput {
 	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
 	workspaceId?: string;
+	orgId?: string | null;
 	observerMemberIds?: string[];
 	deliverableTitle?: string;
 	deliverableType?: DeliverableType;
+	startedByUserId?: string | null;
 	author?: {
 		collaboratorId: string;
 		name: string;
@@ -53,6 +57,8 @@ export function createDispatchRunner(deps: {
 			progress: { stage: "starting", label: "正在准备执行环境..." },
 			startedAt: Date.now(),
 			accumulatedDelta: "",
+			startedByUserId: input.startedByUserId ?? null,
+			orgId: input.orgId ?? null,
 		};
 		activeRuns.set(input.matterId, activeEntry);
 		broadcast("matter_started", { matterId: input.matterId });
@@ -66,6 +72,7 @@ export function createDispatchRunner(deps: {
 				files: input.files,
 				preferredMemberId: input.preferredMemberId,
 				workspaceId: input.workspaceId,
+				orgId: input.orgId,
 				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,

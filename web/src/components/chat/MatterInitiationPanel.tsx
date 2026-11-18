@@ -3,6 +3,8 @@ import type {
 	CollaborationPresetMode,
 	CollaboratorDto,
 	MatterInitiationAssessmentDto,
+	MatterVisibility,
+	OrganizationMemberDto,
 	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
@@ -13,6 +15,8 @@ interface MatterInitiationPanelProps {
 	isOwner: boolean;
 	members: TeamMemberDto[];
 	nonOwnerCollaborators: CollaboratorDto[];
+	orgMembers?: OrganizationMemberDto[];
+	draftVisibility?: MatterVisibility;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
 	composerMode: "discussion" | "dispatch";
@@ -32,6 +36,7 @@ interface MatterInitiationPanelProps {
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftObserverIds: (ids: string[]) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
+	onUpdateDraftVisibility?: (visibility: MatterVisibility) => void;
 	onApplyRecommendation: () => void;
 	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
 	onCancelModelAssessment?: () => void;
@@ -81,6 +86,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		onOpenArchitect,
 		onStartArchitectMatter,
 		nonOwnerCollaborators,
+		orgMembers = [],
+		draftVisibility = "org",
+		onUpdateDraftVisibility,
 	} = props;
 	if (!isOwner || isArchitectMemberId(selectedMemberId, members, templateByRoleId)) return null;
 	const business = filterBusinessMembers(members, templateByRoleId);
@@ -346,9 +354,47 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						</div>
 					)}
 					<div className="initiation-compact-footer">
-						{nonOwnerCollaborators.length > 0 && (
+						{onUpdateDraftVisibility && (
 							<div className="initiation-human-row">
-								<span className="initiation-mini-label">人类同事</span>
+								<span className="initiation-mini-label">事项范围</span>
+								<button
+									type="button"
+									className={`choice-chip ${draftVisibility === "org" ? "active" : ""}`}
+									aria-pressed={draftVisibility === "org"}
+									onClick={() => onUpdateDraftVisibility("org")}
+								>
+									组织内可见
+								</button>
+								<button
+									type="button"
+									className={`choice-chip ${draftVisibility === "private" ? "active" : ""}`}
+									aria-pressed={draftVisibility === "private"}
+									onClick={() => onUpdateDraftVisibility("private")}
+								>
+									仅指定成员私密
+								</button>
+							</div>
+						)}
+						{(orgMembers.length > 0 || nonOwnerCollaborators.length > 0) && (
+							<div className="initiation-human-row">
+								<span className="initiation-mini-label">人类成员</span>
+								{orgMembers.map((member) => (
+									<button
+										key={member.userId}
+										type="button"
+										className={`choice-chip ${draftCollaboratorIds.includes(member.userId) ? "active" : ""}`}
+										aria-pressed={draftCollaboratorIds.includes(member.userId)}
+										onClick={() =>
+											onUpdateDraftCollaboratorIds(
+												draftCollaboratorIds.includes(member.userId)
+													? draftCollaboratorIds.filter((id) => id !== member.userId)
+													: [...draftCollaboratorIds, member.userId],
+											)
+										}
+									>
+										{member.displayName ?? member.email ?? member.userId}
+									</button>
+								))}
 								{nonOwnerCollaborators.map((collaborator) => (
 									<button
 										key={collaborator.id}

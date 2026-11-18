@@ -1,30 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+	type AccountUserDto,
+	type AdminOverviewPayload,
+	abortAdminMatter,
 	type BootstrapPayload,
 	type CollaboratorDto,
 	type ComposerFileAttachment,
 	type ComposerImageAttachment,
 	type DeliverableDto,
 	type FeedbackRating,
+	fetchAdminOverview,
 	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
 	fetchRuntimeOverview,
 	type InnerMatterStep,
+	joinOrganizationByInvite,
+	loginWithEmail,
 	loginWithInviteToken,
 	logoutAuthSession,
 	type MatterDetailPayload,
 	type MatterProgressDto,
+	type MatterVisibility,
 	openInnerMatterDemo,
 	type PreviewServiceDto,
+	type RegistrationMode,
 	type RoleTemplateDto,
 	type RuntimeOverviewDto,
+	registerWithEmail,
 	setAuthRevokedHandler,
+	setupInitialAdmin,
 	stopPreview,
 	submitDeliverableFeedback,
 	type TeamMemberDto,
+	updateAdminSettings,
+	updateAdminUser,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
+import { AdminView } from "./components/AdminView.tsx";
 import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
@@ -66,13 +79,21 @@ function extractInitialInviteToken(): string {
 /** Root application shell coordinating authentication, SSE state sync, hash routing, and workspace tabs. */
 export function App() {
 	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
+	const initialOrgInvite = initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
+	const initialLegacyInvite =
+		initialInviteToken && !initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 	const [permissionRequired, setPermissionRequired] = useState(true);
-	const [authTokenInput, setAuthTokenInput] = useState("");
+	const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
+	const [pendingApproval, setPendingApproval] = useState(false);
+	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_auto");
+	const [sessionAccountUser, setSessionAccountUser] = useState<AccountUserDto | null>(null);
+	const [authTokenInput, setAuthTokenInput] = useState(initialLegacyInvite);
 	const [authError, setAuthError] = useState<string | null>(null);
 	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
 	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
+	const [draftMatterVisibility, setDraftMatterVisibility] = useState<MatterVisibility>("org");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settingsSection ?? "all");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -111,10 +132,14 @@ export function App() {
 	const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewDto | null>(null);
 	const [runtimeLoading, setRuntimeLoading] = useState(false);
 	const [runtimeError, setRuntimeError] = useState<string | null>(null);
+	const [adminOverview, setAdminOverview] = useState<AdminOverviewPayload | null>(null);
+	const [adminLoading, setAdminLoading] = useState(false);
+	const [adminError, setAdminError] = useState<string | null>(null);
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const runtimeAutoFetchedRef = useRef(false);
+	const adminAutoFetchedRef = useRef(false);
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
@@ -194,17 +219,27 @@ export function App() {
 
 	const applyRevokedSession = useCallback((message?: string) => {
 		setCurrentUserOverride(null);
+		setSessionAccountUser(null);
 		setBootstrap(null);
 		setMatterDetail(null);
 		setRuntimeOverview(null);
 		setRuntimeError(null);
+		setAdminOverview(null);
+		setAdminError(null);
 		runtimeAutoFetchedRef.current = false;
+		adminAutoFetchedRef.current = false;
 		setProgressByMatter({});
 		setSseConnected(false);
-		setAuthError(message ?? "当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
+		setAuthError(message ?? "当前登录凭证已失效或已被管理员吊销，请重新登录");
 		setAuthStatus("unauthenticated");
 		void fetchAuthSession()
-			.then((s) => setPermissionRequired(s.permissionRequired))
+			.then((s) => {
+				setPermissionRequired(s.permissionRequired);
+				setNeedsAdminSetup(Boolean(s.needsAdminSetup));
+				setPendingApproval(Boolean(s.pendingApproval));
+				setRegistrationMode(s.registrationMode ?? "open_auto");
+				setSessionAccountUser(s.accountUser ?? null);
+			})
 			.catch(() => {});
 	}, []);
 
@@ -213,12 +248,41 @@ export function App() {
 		return () => setAuthRevokedHandler(null);
 	}, [applyRevokedSession]);
 
+	const syncSessionAndBootstrap = useCallback(async () => {
+		const session = await fetchAuthSession();
+		setPermissionRequired(session.permissionRequired);
+		setNeedsAdminSetup(Boolean(session.needsAdminSetup));
+		setPendingApproval(Boolean(session.pendingApproval));
+		setRegistrationMode(session.registrationMode ?? "open_auto");
+		setSessionAccountUser(session.accountUser ?? null);
+		if (!session.authenticated) {
+			if (session.revokedSession) {
+				setAuthError("当前登录凭证已失效或已被重置，请重新登录");
+			}
+			setAuthStatus("unauthenticated");
+			return false;
+		}
+		setCurrentUserOverride(session.currentUser);
+		if (
+			session.accountUser
+				? !session.accountUser.canDispatchAi
+				: session.currentUser?.permissionRole === "collaborator"
+		) {
+			setComposerMode("discussion");
+		} else {
+			setComposerMode("dispatch");
+		}
+		setAuthStatus("authenticated");
+		await refreshBootstrap();
+		return true;
+	}, [refreshBootstrap]);
+
 	useEffect(() => {
 		let cancelled = false;
 		const initSession = async () => {
-			if (initialInviteToken) {
+			if (initialLegacyInvite) {
 				try {
-					const loginRes = await loginWithInviteToken(initialInviteToken);
+					const loginRes = await loginWithInviteToken(initialLegacyInvite);
 					if (cancelled) return;
 					setCurrentUserOverride(loginRes.currentUser);
 					if (loginRes.currentUser.permissionRole === "collaborator") {
@@ -235,29 +299,34 @@ export function App() {
 					setAuthStatus("unauthenticated");
 					void fetchAuthSession()
 						.then((s) => {
-							if (!cancelled) setPermissionRequired(s.permissionRequired);
+							if (!cancelled) {
+								setPermissionRequired(s.permissionRequired);
+								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
+								setPendingApproval(Boolean(s.pendingApproval));
+								setRegistrationMode(s.registrationMode ?? "open_auto");
+							}
 						})
 						.catch(() => {});
 					return;
 				}
 			}
 			try {
-				const session = await fetchAuthSession();
+				const ok = await syncSessionAndBootstrap();
 				if (cancelled) return;
-				setPermissionRequired(session.permissionRequired);
-				if (!session.authenticated) {
-					if (session.revokedSession) {
-						setAuthError("当前邀请口令已失效或已被重置，请向所有者获取新的邀请链接或口令");
+				if (ok && initialOrgInvite) {
+					try {
+						const joined = await joinOrganizationByInvite(initialOrgInvite);
+						if (!cancelled) {
+							setNoticeBanner(`已通过邀请链接加入组织「${joined.organization.name}」`);
+							await refreshBootstrap();
+						}
+					} catch (joinErr: unknown) {
+						if (!cancelled) {
+							setErrorBanner(joinErr instanceof Error ? joinErr.message : "加入组织失败");
+						}
 					}
-					setAuthStatus("unauthenticated");
-					return;
+					window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
 				}
-				setCurrentUserOverride(session.currentUser);
-				if (session.currentUser?.permissionRole === "collaborator") {
-					setComposerMode("discussion");
-				}
-				setAuthStatus("authenticated");
-				await refreshBootstrap();
 			} catch (err: unknown) {
 				if (cancelled) return;
 				setErrorBanner(err instanceof Error ? err.message : String(err));
@@ -267,7 +336,7 @@ export function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [initialInviteToken, refreshBootstrap]);
+	}, [initialLegacyInvite, initialOrgInvite, refreshBootstrap, syncSessionAndBootstrap]);
 
 	const refreshRuntimeOverview = useCallback(async () => {
 		setRuntimeLoading(true);
@@ -282,11 +351,27 @@ export function App() {
 		}
 	}, []);
 
+	const refreshAdminOverview = useCallback(async () => {
+		setAdminLoading(true);
+		setAdminError(null);
+		try {
+			const data = await fetchAdminOverview();
+			setAdminOverview(data);
+		} catch (err: unknown) {
+			setAdminError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setAdminLoading(false);
+		}
+	}, []);
+
 	useEffect(() => {
 		if (authStatus !== "authenticated") {
 			runtimeAutoFetchedRef.current = false;
+			adminAutoFetchedRef.current = false;
 			setRuntimeOverview(null);
 			setRuntimeError(null);
+			setAdminOverview(null);
+			setAdminError(null);
 			return;
 		}
 		if (activeTab === "settings" && !runtimeAutoFetchedRef.current) {
@@ -396,6 +481,15 @@ export function App() {
 		() => bootstrap?.workspaces.find((w) => w.id === selectedWorkspaceId) ?? null,
 		[bootstrap, selectedWorkspaceId],
 	);
+	const draftEffectiveOrgId = selectedWorkspace?.orgId ?? (selectedOrgId || null);
+	const initiationScopedMembers = useMemo(() => {
+		const all = bootstrap?.members ?? [];
+		const enabledIds = draftEffectiveOrgId
+			? bootstrap?.orgAiRolesByOrgId?.[draftEffectiveOrgId]?.effectiveMemberIds
+			: undefined;
+		if (!enabledIds || enabledIds.length === 0) return all;
+		return all.filter((m) => enabledIds.includes(m.id) || isArchitectMemberId(m.id, all, templateByRoleId));
+	}, [bootstrap, draftEffectiveOrgId, templateByRoleId]);
 
 	const filteredMatters = useMemo(() => {
 		const list = bootstrap?.matters ?? [];
@@ -442,8 +536,9 @@ export function App() {
 		composerFileCount: composerFiles.length,
 		composerAttachmentText,
 		selectedWorkspaceId,
+		selectedOrgId: draftEffectiveOrgId ?? "",
 		selectedMemberId,
-		members: bootstrap?.members ?? [],
+		members: initiationScopedMembers,
 		setSelectedMemberId,
 		setComposerMode,
 		setDraftAiMemberIds,
@@ -452,6 +547,7 @@ export function App() {
 
 	const startNewMatter = () => {
 		initiation.resetInitiationState();
+		setDraftMatterVisibility("org");
 		setSelectedMemberId("auto");
 		navigateRoute({ tab: "chats", isNewMatter: true });
 		composerRef.current?.focus();
@@ -574,7 +670,34 @@ export function App() {
 	}, []);
 
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
-	const isOwner = currentUser?.permissionRole !== "collaborator";
+	const accountUser = bootstrap?.accountUser ?? sessionAccountUser ?? null;
+	const effectiveOrgIdForScope =
+		(selectedMatterId ? matterDetail?.matter.orgId : null) ?? selectedWorkspace?.orgId ?? (selectedOrgId || null);
+	const effectiveOrg = effectiveOrgIdForScope
+		? (bootstrap?.organizations.find((o) => o.id === effectiveOrgIdForScope) ?? null)
+		: null;
+	const orgEffectiveMemberIds = effectiveOrgIdForScope
+		? (bootstrap?.orgAiRolesByOrgId?.[effectiveOrgIdForScope]?.effectiveMemberIds ?? null)
+		: null;
+	const isSuperAdmin = accountUser
+		? accountUser.platformRole === "super_admin"
+		: !permissionRequired && currentUser?.permissionRole !== "collaborator";
+
+	useEffect(() => {
+		if (authStatus !== "authenticated" || activeTab !== "admin") return;
+		if (!isSuperAdmin) {
+			navigateRoute({ tab: "chats" }, { replace: true });
+			return;
+		}
+		if (!adminAutoFetchedRef.current) {
+			adminAutoFetchedRef.current = true;
+			void refreshAdminOverview();
+		}
+	}, [authStatus, activeTab, isSuperAdmin, navigateRoute, refreshAdminOverview]);
+	const canDispatchAi = accountUser
+		? accountUser.status === "active" && accountUser.canDispatchAi && effectiveOrg?.orgRole !== "org_viewer"
+		: currentUser?.permissionRole !== "collaborator";
+	const isOwner = canDispatchAi;
 	const handleOpenDemo = async () => {
 		if (demoOpening) return;
 		setDemoOpening(true);
@@ -627,6 +750,71 @@ export function App() {
 		}
 	};
 
+	const handleSetupAdmin = async (input: { email: string; password: string; displayName: string }) => {
+		setAuthError(null);
+		try {
+			await setupInitialAdmin(input);
+			await syncSessionAndBootstrap();
+		} catch (err: unknown) {
+			setAuthError(err instanceof Error ? err.message : "初始化超级管理员失败");
+		}
+	};
+
+	const handleRegisterEmail = async (input: {
+		email: string;
+		password: string;
+		displayName: string;
+		inviteToken?: string;
+	}) => {
+		setAuthError(null);
+		try {
+			const res = await registerWithEmail(input);
+			setSessionAccountUser(res.accountUser);
+			if (res.pendingApproval) {
+				setPendingApproval(true);
+				setAuthStatus("unauthenticated");
+				return;
+			}
+			await syncSessionAndBootstrap();
+			if (initialOrgInvite) {
+				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
+			}
+		} catch (err: unknown) {
+			setAuthError(err instanceof Error ? err.message : "注册失败");
+		}
+	};
+
+	const handleLoginEmail = async (input: { email: string; password: string; inviteToken?: string }) => {
+		setAuthError(null);
+		try {
+			const res = await loginWithEmail(input);
+			if (res.pendingApproval) {
+				setSessionAccountUser(res.accountUser ?? null);
+				setPendingApproval(true);
+				setAuthStatus("unauthenticated");
+				return;
+			}
+			await syncSessionAndBootstrap();
+			if (initialOrgInvite) {
+				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
+			}
+			if (res.joinedOrgId) {
+				setNoticeBanner("登录成功并已自动加入邀请组织");
+			}
+		} catch (err: unknown) {
+			setAuthError(err instanceof Error ? err.message : "邮箱或密码错误");
+		}
+	};
+
+	const handleRefreshAuthSession = async () => {
+		setAuthError(null);
+		try {
+			await syncSessionAndBootstrap();
+		} catch (err: unknown) {
+			setAuthError(err instanceof Error ? err.message : "刷新登录状态失败");
+		}
+	};
+
 	const handleInviteLogin = async (tokenValue: string) => {
 		const token = tokenValue.trim();
 		if (!token) return;
@@ -646,7 +834,17 @@ export function App() {
 	const handleLogoutOrRestore = async () => {
 		try {
 			await logoutAuthSession();
+			setAdminOverview(null);
+			adminAutoFetchedRef.current = false;
+			setPendingApproval(false);
+			setSessionAccountUser(null);
+			if (activeTab === "admin") {
+				navigateRoute({ tab: "chats" }, { replace: true });
+			}
 			const session = await fetchAuthSession();
+			setPermissionRequired(session.permissionRequired);
+			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
+			setRegistrationMode(session.registrationMode ?? "open_auto");
 			if (session.authenticated && session.currentUser) {
 				setCurrentUserOverride(session.currentUser);
 				setComposerMode(session.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
@@ -678,6 +876,7 @@ export function App() {
 		draftAiMemberIds,
 		draftObserverMemberIds: initiation.draftObserverMemberIds,
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
+		draftVisibility: draftMatterVisibility,
 		draftObserversEnabled,
 		headerContact,
 		explicitNewMatterRef,
@@ -735,10 +934,20 @@ export function App() {
 			<AuthGateView
 				status={authStatus}
 				permissionRequired={permissionRequired}
+				needsAdminSetup={needsAdminSetup}
+				pendingApproval={pendingApproval}
+				registrationMode={registrationMode}
+				accountUser={sessionAccountUser}
 				authError={authError}
 				authTokenInput={authTokenInput}
+				orgInviteToken={initialOrgInvite}
 				onTokenInputChange={setAuthTokenInput}
 				onSubmitInvite={(token) => void handleInviteLogin(token)}
+				onSetupAdmin={handleSetupAdmin}
+				onLoginEmail={handleLoginEmail}
+				onRegisterEmail={handleRegisterEmail}
+				onRefreshSession={handleRefreshAuthSession}
+				onLogoutPending={handleLogoutOrRestore}
 				onRestoreOwner={() => void handleLogoutOrRestore()}
 			/>
 		);
@@ -751,15 +960,17 @@ export function App() {
 				? "我的团队"
 				: activeTab === "materials"
 					? "项目仓库与资料"
-					: activeTab === "settings"
-						? settingsSection === "base"
-							? "设置 · Agent 底座"
-							: settingsSection === "extensions"
-								? "设置 · 扩展插件"
-								: settingsSection === "config"
-									? "设置 · 运行配置"
-									: "设置"
-						: matterDetail?.matter.title || "新事项对话";
+					: activeTab === "admin"
+						? "超级管理员控制台"
+						: activeTab === "settings"
+							? settingsSection === "base"
+								? "设置 · Agent 底座"
+								: settingsSection === "extensions"
+									? "设置 · 扩展插件"
+									: settingsSection === "config"
+										? "设置 · 运行配置"
+										: "设置"
+							: matterDetail?.matter.title || "新事项对话";
 	const runtimeBadge = runtimeOverview
 		? runtimeOverview.base.available && runtimeOverview.base.version
 			? `Pi ${runtimeOverview.base.version}`
@@ -781,6 +992,8 @@ export function App() {
 				activeTab={activeTab}
 				bootstrap={bootstrap}
 				currentUser={currentUser}
+				isSuperAdmin={isSuperAdmin}
+				orgEffectiveMemberIds={orgEffectiveMemberIds}
 				runtimeBadge={runtimeBadge}
 				filteredMatters={filteredMatters}
 				selectedMatterId={selectedMatterId}
@@ -909,7 +1122,10 @@ export function App() {
 						demoStepBusy={submitting}
 						composerRef={composerRef}
 						currentUser={currentUser}
+						canDispatchAi={canDispatchAi}
 						collaborators={bootstrap?.collaborators ?? []}
+						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+						orgEffectiveMemberIds={orgEffectiveMemberIds}
 						composerMode={composerMode}
 						onComposerModeChange={setComposerMode}
 						selectedWorkspace={selectedWorkspace}
@@ -956,6 +1172,7 @@ export function App() {
 						draftPresetMode={initiation.draftPresetMode}
 						draftAiMemberIds={draftAiMemberIds}
 						draftCollaboratorIds={initiation.draftCollaboratorIds}
+						draftVisibility={draftMatterVisibility}
 						initiationAssessment={initiation.assessment}
 						initiationAssessing={initiation.assessing}
 						initiationAssessmentError={initiation.assessmentError}
@@ -965,6 +1182,7 @@ export function App() {
 						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
 						onUpdateDraftAiMemberIds={setDraftAiMemberIds}
 						onUpdateDraftCollaboratorIds={initiation.setDraftCollaboratorIds}
+						onUpdateDraftVisibility={setDraftMatterVisibility}
 						onApplyPresetMode={(mode, leadId) =>
 							initiation.applyPresetMode(mode, leadId ? { leadId } : undefined)
 						}
@@ -1034,10 +1252,14 @@ export function App() {
 				{activeTab === "team" && (
 					<TeamView
 						currentUser={currentUser}
+						accountUser={accountUser}
+						isSuperAdmin={isSuperAdmin}
 						collaborators={bootstrap?.collaborators ?? []}
 						members={bootstrap?.members ?? []}
 						workspaces={bootstrap?.workspaces ?? []}
 						organizations={bootstrap?.organizations ?? []}
+						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+						orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
 						matters={bootstrap?.matters ?? []}
 						defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
@@ -1069,7 +1291,10 @@ export function App() {
 					<MaterialsView
 						workspaces={bootstrap?.workspaces ?? []}
 						organizations={bootstrap?.organizations ?? []}
+						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 						selectedWorkspaceId={selectedWorkspaceId}
+						allowLocalWorkspacePath={bootstrap?.platformPolicy?.allowLocalWorkspacePath ?? true}
+						isAccountMode={Boolean(accountUser)}
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
@@ -1090,6 +1315,30 @@ export function App() {
 						onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
 						onRefresh={refreshRuntimeOverview}
 						onOpenTeam={() => navigateRoute({ tab: "team" })}
+					/>
+				)}
+
+				{activeTab === "admin" && isSuperAdmin && (
+					<AdminView
+						overview={adminOverview}
+						loading={adminLoading}
+						error={adminError}
+						currentUserId={accountUser?.id ?? null}
+						onRefresh={refreshAdminOverview}
+						onSaveSettings={async (input) => {
+							await updateAdminSettings(input);
+							await refreshAdminOverview();
+							await refreshBootstrap();
+						}}
+						onUpdateUser={async (userId, input) => {
+							await updateAdminUser(userId, input);
+							await refreshAdminOverview();
+						}}
+						onAbortMatter={async (matterId) => {
+							await abortAdminMatter(matterId);
+							await refreshAdminOverview();
+							await refreshBootstrap();
+						}}
 					/>
 				)}
 			</main>

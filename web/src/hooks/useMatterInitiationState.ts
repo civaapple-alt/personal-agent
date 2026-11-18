@@ -15,6 +15,7 @@ interface UseMatterInitiationParams {
 	composerFileCount: number;
 	composerAttachmentText?: string;
 	selectedWorkspaceId: string;
+	selectedOrgId?: string;
 	selectedMemberId: string;
 	members: TeamMemberDto[];
 	setSelectedMemberId: (memberId: string) => void;
@@ -31,6 +32,7 @@ export function useMatterInitiationState({
 	composerFileCount,
 	composerAttachmentText = "",
 	selectedWorkspaceId,
+	selectedOrgId = "",
 	selectedMemberId,
 	members,
 	setSelectedMemberId,
@@ -89,6 +91,7 @@ export function useMatterInitiationState({
 					hasImages: composerImageCount > 0,
 					hasFiles: composerFileCount > 0,
 					workspaceId: selectedWorkspaceId || undefined,
+					orgId: selectedOrgId || undefined,
 					preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
 				},
 				controller.signal,
@@ -122,6 +125,7 @@ export function useMatterInitiationState({
 		composerFileCount,
 		composerAttachmentText,
 		selectedWorkspaceId,
+		selectedOrgId,
 		selectedMemberId,
 	]);
 
@@ -216,6 +220,7 @@ export function useMatterInitiationState({
 						hasImages: composerImageCount > 0,
 						hasFiles: composerFileCount > 0,
 						workspaceId: selectedWorkspaceId || undefined,
+						orgId: selectedOrgId || undefined,
 						preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
 						mode: "model",
 						readRepo: options?.readRepo === true && Boolean(selectedWorkspaceId),
@@ -250,6 +255,7 @@ export function useMatterInitiationState({
 			composerText,
 			selectedMatterId,
 			selectedMemberId,
+			selectedOrgId,
 			selectedWorkspaceId,
 		],
 	);

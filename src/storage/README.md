@@ -3,7 +3,7 @@
 模块文件分工：
 
 - [database.ts](database.ts) 打开数据库并做兼容初始化，[types.ts](types.ts) 定义领域记录。
-- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的成员、组织、协作成员、经验、成果、事项与会话子仓储。
+- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色 / 受限工作区成员与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、经验、成果、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 
 需要核对的存储边界：
@@ -42,5 +42,10 @@
 
 改 schema 时保留既有消息、版本、会话和用户数据，验证重开数据库后的行为；不要拿用户 `.data/` 试验迁移或清空修复。
 
-从仓库根运行 `node --test test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts`。
+- 团队账号、多组织 RBAC、平台策略与审计日志：
+  - `users`（邮箱 + `scryptSync` 加盐密码哈希、`platform_role`: `super_admin` / `user`、`status`: `active` / `pending_review` / `disabled`、`max_orgs`、`max_active_dispatches`、`can_dispatch_ai`）、`user_sessions`（SHA-256 会话摘要）与 `platform_settings`（注册模式 `open_auto`/`open_review`/`invite_only`、`workspaces_root`、`allow_local_workspace_path`、`local_workspace_allowlist_json`、`allow_command_previews`、默认配额）以及持久化 `audit_logs` 由 [user-auth-repo.ts](repos/user-auth-repo.ts) 维护。
+  - `organization_members`（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、`organization_invites`（SHA-256 哈希邀请码与原子核销）、`organization_ai_roles`（按组织启停 AI 角色与主联系人，经 `resolveEffectiveOrgMembers(orgId)` 统一解析）、`workspace_members`（支持 `workspace_links.visibility`: `org` / `restricted` 与 `source_type`: `local` / `cloned`）、`matters.visibility`（`org` / `private`）及 `uploads_index`（上传文件权限作用域归属）由 [org-rbac-repo.ts](repos/org-rbac-repo.ts) 维护。
+  - 保留既有表兼容性，本地默认所有者用户 `DEFAULT_LOCAL_ADMIN_USER_ID` 仅用于回环/旧库兼容平滑迁移。
+
+从仓库根运行 `node --test test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts test/multi-tenant-auth-admin.test.ts`。
 存储范围如何用于运行见 [orchestrator](../orchestrator/README.md)，历史兼容细节见[运行说明](../../docs/runtime-collaboration.md)。

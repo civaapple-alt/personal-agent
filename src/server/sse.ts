@@ -1,25 +1,95 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { PersonalAgentStore } from "../storage/repositories.ts";
+import { canAccessMatter, canAccessOrganization, canAccessWorkspace } from "./acl.ts";
 import type { RequestActor } from "./auth.ts";
 
-/** Manages Server-Sent Event subscriptions, heartbeats, and revoked-session teardown. */
-export function createSseHub() {
-	const clients = new Map<ServerResponse, { collaboratorId: string; viaToken: boolean }>();
+export interface SseBroadcastScope {
+	orgId?: string | null;
+	matterId?: string | null;
+	workspaceId?: string | null;
+	adminOnly?: boolean;
+}
 
-	const broadcast = (eventName: string, payload: unknown): void => {
+interface SseClientMeta {
+	actor: RequestActor;
+}
+
+/** Manages Server-Sent Event subscriptions, heartbeats, scoped broadcasts, and revoked-session teardown. */
+export function createSseHub(store?: PersonalAgentStore) {
+	const clients = new Map<ServerResponse, SseClientMeta>();
+
+	const isRecipientAuthorized = (meta: SseClientMeta, scope?: SseBroadcastScope): boolean => {
+		if (!scope || !store) return true;
+		const { actor } = meta;
+		if (actor.user && actor.user.status !== "active") return false;
+		if (scope.adminOnly) {
+			return (
+				actor.authKind === "loopback" ||
+				actor.user?.platformRole === "super_admin" ||
+				(actor.authKind === "legacy_token" && actor.collaborator.permissionRole === "owner")
+			);
+		}
+		if (scope.matterId) {
+			const matter = store.getMatter(scope.matterId);
+			if (matter) return canAccessMatter(store, actor, matter);
+		}
+		if (scope.workspaceId) {
+			const ws = store.getWorkspace(scope.workspaceId);
+			if (ws) return canAccessWorkspace(store, actor, ws);
+		}
+		if (scope.orgId !== undefined) {
+			return canAccessOrganization(store, actor, scope.orgId);
+		}
+		return true;
+	};
+
+	const inferScope = (eventName: string, payload: unknown): SseBroadcastScope | undefined => {
+		if (!store || !payload || typeof payload !== "object") return undefined;
+		const obj = payload as Record<string, unknown>;
+		if (typeof obj.matterId === "string" && obj.matterId) {
+			return { matterId: obj.matterId };
+		}
+		if (eventName === "workspace_updated") {
+			const wsId = typeof obj.id === "string" ? obj.id : undefined;
+			const orgId = obj.orgId === null || typeof obj.orgId === "string" ? (obj.orgId as string | null) : undefined;
+			if (wsId || orgId !== undefined) return { workspaceId: wsId, orgId };
+		}
+		if (eventName === "organization_updated") {
+			const orgObj = obj.organization as Record<string, unknown> | undefined;
+			const orgId = typeof orgObj?.id === "string" ? orgObj.id : undefined;
+			if (orgId) return { orgId };
+		}
+		if (eventName === "deliverable_updated" && typeof obj.deliverableId === "string") {
+			const deliv = store.getDeliverable(obj.deliverableId);
+			if (deliv) return { matterId: deliv.matterId };
+		}
+		if (eventName === "memory_updated") {
+			const mem = obj.memory as Record<string, unknown> | undefined;
+			if (typeof mem?.orgId === "string") return { orgId: mem.orgId };
+		}
+		return undefined;
+	};
+
+	const broadcast = (eventName: string, payload: unknown, scope?: SseBroadcastScope): void => {
+		const effectiveScope = scope ?? inferScope(eventName, payload);
 		const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
-		for (const client of [...clients.keys()]) {
+		for (const [client, meta] of [...clients.entries()]) {
 			if (client.destroyed || client.writableEnded) {
 				clients.delete(client);
 				continue;
 			}
+			if (!isRecipientAuthorized(meta, effectiveScope)) continue;
 			client.write(frame);
 		}
 	};
 
-	const revokeTokenSessions = (collaboratorId: string, reason: string): void => {
-		const frame = `event: auth_revoked\ndata: ${JSON.stringify({ collaboratorId, reason })}\n\n`;
+	const revokeTokenSessions = (collaboratorOrUserId: string, reason: string): void => {
+		const frame = `event: auth_revoked\ndata: ${JSON.stringify({ collaboratorId: collaboratorOrUserId, reason })}\n\n`;
 		for (const [client, meta] of [...clients.entries()]) {
-			if (!meta.viaToken || meta.collaboratorId !== collaboratorId) continue;
+			if (!meta.actor.viaToken) continue;
+			const matchesUser = meta.actor.user?.id === collaboratorOrUserId;
+			const matchesCollab = meta.actor.collaborator.id === collaboratorOrUserId;
+			if (!matchesUser && !matchesCollab) continue;
 			clients.delete(client);
 			if (!client.destroyed && !client.writableEnded) {
 				client.write(frame);
@@ -36,7 +106,7 @@ export function createSseHub() {
 		});
 		res.write(`event: connected\ndata: ${JSON.stringify({ ok: true })}\n\n`);
 		if (actor) {
-			clients.set(res, { collaboratorId: actor.collaborator.id, viaToken: actor.viaToken });
+			clients.set(res, { actor });
 		}
 		const heartbeat = setInterval(() => {
 			if (!res.destroyed && !res.writableEnded) {

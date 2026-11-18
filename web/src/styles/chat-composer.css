@@ -770,7 +770,7 @@
 .initiation-role-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; }
 .initiation-role-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: var(--text-xs); min-width: 0; }
 .initiation-role-row > span { overflow-wrap: anywhere; }
-.initiation-role-row select { max-width: 130px; min-height: 34px; }
+.initiation-role-row select { max-width: 130px; height: auto; min-height: 30px; padding: 5px 10px; line-height: 1.3; }
 .initiation-compact-footer { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .initiation-mini-label { font-size: var(--text-xs); color: var(--text-muted); }
 .initiation-panel :is(button, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -784,7 +784,7 @@
 .chat-stage.is-new-matter .composer-dock-inner { max-width: 760px; }
 @media (max-width: 600px) {
  .initiation-role-rows { grid-template-columns: 1fr; }
- .initiation-role-row select { min-height: 44px; }
+ .initiation-role-row select { min-height: 30px; height: auto; padding: 5px 10px; }
  .initiation-current-row { align-items: flex-start; }
  .initiation-current-row > button, .initiation-recommendation-row > button { min-height: 36px; }
  .chat-stage.is-new-matter .welcome-hero { padding-top: 20px; }

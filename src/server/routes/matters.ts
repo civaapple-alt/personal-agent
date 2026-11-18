@@ -1,10 +1,22 @@
+import type { ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
-import type { Collaborator, DeliverableType, Matter } from "../../storage/types.ts";
-import { requireOwner, toDispatchAuthor } from "../auth.ts";
+import type { Collaborator, DeliverableType, Matter, MatterVisibility } from "../../storage/types.ts";
+import {
+	canAccessMatter,
+	canAccessOrganization,
+	canAccessWorkspace,
+	canDispatchAiInOrg,
+	canManageOrganization,
+	canParticipateInMatter,
+	isGlobalUnscopedActor,
+	requireMatterReadAccess,
+} from "../acl.ts";
+import { isSuperAdminActor, type RequestActor, requireActiveActor, toDispatchAuthor } from "../auth.ts";
 import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
 	loadStoredFilesFromRefs,
@@ -13,8 +25,65 @@ import {
 	parseIncomingImages,
 	persistUploadedFiles,
 	persistUploadedImages,
+	recordStoredUploadsAcl,
 } from "../uploads.ts";
-import { parseCollaboratorIds, parseObserverMemberIds, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import {
+	auditActorAction,
+	parseCollaboratorIds,
+	parseObserverMemberIds,
+	type RouteRequest,
+	type ServerRouteContext,
+} from "./context.ts";
+
+function countActiveDispatchesForUser(ctx: ServerRouteContext, userId: string): number {
+	let count = 0;
+	for (const run of ctx.activeRuns.values()) {
+		if (run.startedByUserId === userId) count += 1;
+	}
+	return count;
+}
+
+function ensureOrgEnabledAiRequest(
+	res: ServerResponse,
+	ctx: ServerRouteContext,
+	orgId: string | null,
+	preferredMemberId: string | null | undefined,
+	aiMemberIds: string[] | null | undefined,
+): boolean {
+	if (!orgId || !ctx.store.hasOrgAiRolesConfigured(orgId)) return true;
+	const allowed = new Set(ctx.store.resolveEffectiveOrgMembers(orgId).map((m) => m.id));
+	if (preferredMemberId && preferredMemberId !== ROLE_ARCHITECT_MEMBER_ID && !allowed.has(preferredMemberId)) {
+		sendError(res, 403, `角色 ${preferredMemberId} 未在该组织中启用`);
+		return false;
+	}
+	if (Array.isArray(aiMemberIds) && aiMemberIds.some((id) => id !== ROLE_ARCHITECT_MEMBER_ID && !allowed.has(id))) {
+		sendError(res, 403, "包含未在该组织中启用的 AI 角色");
+		return false;
+	}
+	return true;
+}
+
+function checkUserDispatchQuota(ctx: ServerRouteContext, actor: RequestActor, res: { end: unknown }): boolean {
+	if (!actor.user || isSuperAdminActor(actor)) return true;
+	const activeCount = countActiveDispatchesForUser(ctx, actor.user.id);
+	if (activeCount >= actor.user.maxActiveDispatches) {
+		sendError(
+			res as Parameters<typeof sendError>[0],
+			429,
+			`当前并发执行中的 AI 任务已达上限（${actor.user.maxActiveDispatches} 个），请等待完成或中止后再试`,
+		);
+		return false;
+	}
+	return true;
+}
+
+function resolveActorDefaultOrgId(ctx: ServerRouteContext, actor: RequestActor): string | null {
+	if (actor.authKind === "session" && actor.user) {
+		const orgs = ctx.store.listUserOrganizations(actor.user.id);
+		return orgs.find((o) => o.isDefault)?.id ?? orgs[0]?.id ?? null;
+	}
+	return ctx.store.getDefaultOrganization()?.id ?? null;
+}
 
 function appendDiscussionOrAiRequestMessage(
 	ctx: ServerRouteContext,
@@ -67,7 +136,11 @@ function appendDiscussionOrAiRequestMessage(
 		},
 	});
 	const refreshedMatter = store.getMatter(input.matter.id) ?? input.matter;
-	broadcast("matter_message", { matterId: refreshedMatter.id, message, matter: refreshedMatter });
+	broadcast(
+		"matter_message",
+		{ matterId: refreshedMatter.id, message, matter: refreshedMatter },
+		{ matterId: refreshedMatter.id },
+	);
 	return { message, refreshedMatter };
 }
 
@@ -93,6 +166,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 404, `Matter not found: ${matterId}`);
 			return true;
 		}
+		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
 		const active = activeRuns.get(matterId);
 		sendJson(res, 200, {
 			matter,
@@ -116,25 +190,54 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 
 	const matterAbortMatch = pathname.match(/^\/api\/matters\/([^/]+)\/abort$/);
 	if (method === "POST" && matterAbortMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(matterAbortMatch[1]!);
-		if (!store.getMatter(matterId)) {
+		const existing = store.getMatter(matterId);
+		if (!existing) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		const canAbort =
+			isSuperAdminActor(actor) ||
+			canManageOrganization(store, actor, existing.orgId) ||
+			(actor.authKind === "session" && actor.user && existing.createdByUserId === actor.user.id);
+		if (!canAbort) {
+			sendError(res, 403, "仅所有者、组织管理员或事项发起人可中止执行");
 			return true;
 		}
 		dialogBroker.cancelForMatter(matterId);
 		const aborted = await orchestrator.abortMatter(matterId);
-		broadcast("matter_aborted", { matterId, aborted });
+		auditActorAction(ctx, req, actor, {
+			action: "matter.abort",
+			targetType: "matter",
+			targetId: matterId,
+			orgId: existing.orgId,
+			detail: { aborted },
+		});
+		broadcast("matter_aborted", { matterId, aborted }, { matterId });
 		sendJson(res, 200, { ok: true, aborted });
 		return true;
 	}
 
 	if (method === "PATCH" && matterDetailMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(matterDetailMatch[1]!);
 		const existing = store.getMatter(matterId);
 		if (!existing) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canAccessMatter(store, actor, existing)) {
+			sendError(res, 403, "无权访问该事项");
+			return true;
+		}
+		const canModifyMatter =
+			isGlobalUnscopedActor(actor) ||
+			isSuperAdminActor(actor) ||
+			canManageOrganization(store, actor, existing.orgId) ||
+			(actor.authKind === "session" && actor.user && existing.createdByUserId === actor.user.id);
+		if (!canModifyMatter) {
+			sendError(res, 403, "仅所有者、组织管理员或事项发起人可修改事项配置");
 			return true;
 		}
 		const body = await readJsonBody(req);
@@ -145,11 +248,19 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const hasObserversEnabledUpdate = Object.hasOwn(body, "observersEnabled");
 		const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
 		const hasCollaboratorUpdate = Object.hasOwn(body, "collaboratorIds");
+		const hasVisibilityUpdate = Object.hasOwn(body, "visibility");
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
-		if (hasWorkspaceUpdate && workspaceId && !store.getWorkspace(workspaceId)) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+		if (hasWorkspaceUpdate && workspaceId) {
+			const targetWs = store.getWorkspace(workspaceId);
+			if (!targetWs) {
+				sendError(res, 404, `Workspace not found: ${workspaceId}`);
+				return true;
+			}
+			if (!canAccessWorkspace(store, actor, targetWs)) {
+				sendError(res, 403, "无权将事项切换到未授权的项目仓库");
+				return true;
+			}
 		}
 		const nextOrgId =
 			body.orgId === null
@@ -163,6 +274,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		if (hasOrgUpdate && nextOrgId && !store.getOrganization(nextOrgId)) {
 			sendError(res, 404, `Organization not found: ${nextOrgId}`);
+			return true;
+		}
+		if (hasOrgUpdate && nextOrgId && !canAccessOrganization(store, actor, nextOrgId)) {
+			sendError(res, 403, "无权将事项转移到未加入的组织");
 			return true;
 		}
 		const nextLeadId =
@@ -207,68 +322,108 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, or lead member");
 			return true;
 		}
+		if (!ensureOrgEnabledAiRequest(res, ctx, nextOrgId, nextLeadId, parsedAiMemberIds)) {
+			return true;
+		}
 		let updated = existing;
 		if (hasOrgUpdate) {
 			updated = store.updateMatterOrganization(matterId, nextOrgId);
-			broadcast("matter_updated", { matterId, orgId: updated.orgId, workspaceId: updated.workspaceId });
+			broadcast(
+				"matter_updated",
+				{ matterId, orgId: updated.orgId, workspaceId: updated.workspaceId },
+				{ matterId },
+			);
 		}
 		if (hasWorkspaceUpdate) {
 			updated = store.updateMatterWorkspace(matterId, workspaceId);
-			broadcast("workspace_updated", { matterId, workspaceId, orgId: updated.orgId });
+			broadcast("workspace_updated", { matterId, workspaceId, orgId: updated.orgId }, { matterId });
 		}
 		if (hasAiMembersUpdate && parsedAiMemberIds !== undefined) {
 			updated = store.updateMatterAiMembers(matterId, parsedAiMemberIds);
-			broadcast("matter_updated", {
-				matterId,
-				aiMemberIds: updated.aiMemberIds,
-				observerMemberIds: updated.observerMemberIds,
-			});
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					aiMemberIds: updated.aiMemberIds,
+					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
 		}
 		if (hasLeadUpdate && nextLeadId) {
 			updated = store.updateMatterLead(matterId, nextLeadId);
-			broadcast("matter_updated", {
-				matterId,
-				leadMemberId: updated.leadMemberId,
-				aiMemberIds: updated.aiMemberIds,
-				observerMemberIds: updated.observerMemberIds,
-			});
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					leadMemberId: updated.leadMemberId,
+					aiMemberIds: updated.aiMemberIds,
+					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
 		}
 		if (hasObserversEnabledUpdate) {
 			updated = store.updateMatterObserversEnabled(matterId, Boolean(body.observersEnabled));
-			broadcast("matter_updated", {
-				matterId,
-				observersEnabled: updated.observersEnabled,
-				observerMemberIds: updated.observerMemberIds,
-			});
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					observersEnabled: updated.observersEnabled,
+					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
 		}
 		if (observerMemberIds !== undefined) {
 			updated = store.updateMatterObservers(matterId, observerMemberIds);
-			broadcast("matter_updated", {
-				matterId,
-				observersEnabled: updated.observersEnabled,
-				observerMemberIds: updated.observerMemberIds,
-			});
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					observersEnabled: updated.observersEnabled,
+					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
 		}
 		if (collaboratorIds !== undefined) {
 			updated = store.updateMatterCollaborators(matterId, collaboratorIds);
-			broadcast("matter_updated", { matterId, collaboratorIds: updated.collaboratorIds });
+			broadcast("matter_updated", { matterId, collaboratorIds: updated.collaboratorIds }, { matterId });
+		}
+		if (hasVisibilityUpdate) {
+			const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
+			updated = store.updateMatterVisibility(matterId, visibility);
+			broadcast("matter_updated", { matterId, visibility }, { matterId });
 		}
 		sendJson(res, 200, { matter: updated });
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/matters/assess") {
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
+		const explicitOrgId = typeof body.orgId === "string" && body.orgId.trim().length > 0 ? body.orgId.trim() : null;
 		const preferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.trim().length > 0
 				? body.preferredMemberId.trim()
 				: undefined;
-		if (workspaceId && !store.getWorkspace(workspaceId)) {
+		const ws = workspaceId ? store.getWorkspace(workspaceId) : null;
+		if (workspaceId && !ws) {
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
+			return true;
+		}
+		if (ws && !canAccessWorkspace(store, actor, ws)) {
+			sendError(res, 403, "无权访问所选项目仓库");
+			return true;
+		}
+		const effectiveOrgId = ws?.orgId ?? explicitOrgId ?? resolveActorDefaultOrgId(ctx, actor);
+		if (effectiveOrgId && !canAccessOrganization(store, actor, effectiveOrgId)) {
+			sendError(res, 403, "无权访问所选组织");
 			return true;
 		}
 		if (preferredMemberId && !store.getMember(preferredMemberId)) {
@@ -276,7 +431,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			return true;
 		}
 		if (mode === "model") {
-			if (!requireOwner(res, actor)) return true;
+			if (!canDispatchAiInOrg(store, actor, effectiveOrgId)) {
+				sendError(res, 403, "无权在此组织调用 AI 模型预判");
+				return true;
+			}
 			if (!prompt) {
 				sendError(res, 400, "prompt is required when mode is model");
 				return true;
@@ -311,15 +469,16 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			hasImages: body.hasImages === true || body.hasFiles === true,
 			hasWorkspace: Boolean(workspaceId),
 			preferredMemberId,
+			orgId: effectiveOrgId,
 		});
 		sendJson(res, 200, assessment);
 		return true;
 	}
 
 	if (method === "POST" && pathname === "/api/matters") {
+		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const mode = body.mode === "discussion" ? "discussion" : body.mode === "ai_request" ? "ai_request" : "dispatch";
-		if (mode === "dispatch" && !requireOwner(res, actor)) return true;
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const parsedImages = parseIncomingImages(body.images);
 		const parsedFiles = parseIncomingFiles(body.files);
@@ -338,6 +497,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
+		if (boundWorkspace && !canAccessWorkspace(store, actor, boundWorkspace)) {
+			sendError(res, 403, "无权在此项目仓库内发起事项");
+			return true;
+		}
 		const hasExplicitOrg = Object.hasOwn(body, "orgId");
 		if (hasExplicitOrg && body.orgId !== null && typeof body.orgId !== "string") {
 			sendError(res, 400, "orgId must be a string or null");
@@ -352,7 +515,31 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			? boundWorkspace.orgId
 			: hasExplicitOrg
 				? requestedOrgId
-				: (store.getDefaultOrganization()?.id ?? null);
+				: resolveActorDefaultOrgId(ctx, actor);
+		if (orgId && !canAccessOrganization(store, actor, orgId)) {
+			sendError(res, 403, "无权在非所属组织内创建事项");
+			return true;
+		}
+		if (!orgId && actor.authKind === "session" && !isSuperAdminActor(actor)) {
+			sendError(res, 403, "请先创建或加入一个组织后再创建事项");
+			return true;
+		}
+		if (mode === "dispatch") {
+			if (!canDispatchAiInOrg(store, actor, orgId)) {
+				sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
+				return true;
+			}
+			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
+		} else {
+			if (orgId && actor.authKind === "session") {
+				const orgRole = ctx.store.getOrgMembership(orgId, actor.user!.id)?.orgRole;
+				if (orgRole === "org_viewer") {
+					sendError(res, 403, "只读成员（org_viewer）不能发起事项或讨论");
+					return true;
+				}
+			}
+		}
+
 		const title = typeof body.title === "string" && body.title.trim().length > 0 ? body.title.trim() : undefined;
 		const deliverableTitle =
 			typeof body.deliverableTitle === "string" && body.deliverableTitle.trim().length > 0
@@ -368,14 +555,20 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const observersEnabled = typeof body.observersEnabled === "boolean" ? body.observersEnabled : undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
-		const initialCollaboratorIds =
-			actor!.collaborator.permissionRole !== "owner" && !requestedCollaboratorIds.includes(actor!.collaborator.id)
-				? [...requestedCollaboratorIds, actor!.collaborator.id]
-				: requestedCollaboratorIds;
+		const initialCollaboratorIds = [...requestedCollaboratorIds];
+		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
+			if (!initialCollaboratorIds.includes(actor.collaborator.id)) {
+				initialCollaboratorIds.push(actor.collaborator.id);
+			}
+		}
+		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
+		if (!ensureOrgEnabledAiRequest(res, ctx, orgId, preferredMemberId, aiMemberIds)) {
+			return true;
+		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
-		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds);
+		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds, orgId);
 		const fallbackTitle = prompt
 			? prompt.slice(0, 60)
 			: files.length > 0
@@ -392,16 +585,25 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			leadMemberId: leadMember.id,
 			workspaceId: workspaceId ?? null,
 			orgId,
+			createdByUserId: actor.user?.id ?? null,
+			visibility,
 			aiMemberIds,
 			observersEnabled,
 			observerMemberIds,
 			collaboratorIds: initialCollaboratorIds,
 		});
+		recordStoredUploadsAcl(store, {
+			orgId: matter.orgId,
+			matterId: matter.id,
+			uploaderUserId: actor.user?.id ?? null,
+			images,
+			files,
+		});
 
 		if (mode === "discussion" || mode === "ai_request") {
 			const { message, refreshedMatter } = appendDiscussionOrAiRequestMessage(ctx, {
 				matter,
-				actorCollaborator: actor!.collaborator,
+				actorCollaborator: actor.collaborator,
 				mode,
 				prompt,
 				workspaceId,
@@ -421,10 +623,12 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			files: files.length > 0 ? files : undefined,
 			preferredMemberId: leadMember.id,
 			workspaceId,
+			orgId: matter.orgId,
 			observerMemberIds: matter.observerMemberIds,
 			deliverableTitle,
 			deliverableType,
-			author: toDispatchAuthor(actor!.collaborator),
+			startedByUserId: actor.user?.id ?? null,
+			author: toDispatchAuthor(actor.collaborator),
 		});
 
 		sendJson(res, 202, { matter, assignedMember: leadMember });
@@ -433,12 +637,23 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 
 	const matterApproveAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/approve-ai$/);
 	if (method === "POST" && matterApproveAiMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(matterApproveAiMatch[1]!);
 		const messageId = decodeURIComponent(matterApproveAiMatch[2]!);
 		const matter = store.getMatter(matterId);
 		if (!matter) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
+			return true;
+		}
+		if (
+			!isSuperAdminActor(actor) &&
+			!(actor.authKind === "session" && canManageOrganization(store, actor, matter.orgId))
+		) {
+			sendError(res, 403, "仅所有者或组织管理员可审批并派发 AI 提请");
 			return true;
 		}
 		if (orchestrator.isMatterRunning(matterId)) {
@@ -450,6 +665,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 404, `Message not found: ${messageId}`);
 			return true;
 		}
+		if (!checkUserDispatchQuota(ctx, actor, res)) return true;
 		const body = await readJsonBody(req);
 		const requesterName =
 			typeof targetMsg.metadata?.authorName === "string" && targetMsg.metadata.authorName.trim()
@@ -476,7 +692,6 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const images = await loadStoredImagesFromRefs(targetMsg.metadata?.images, uploadsDir, memoryUploads);
 		const files = await loadStoredFilesFromRefs(targetMsg.metadata?.files, uploadsDir, memoryUploads);
 
-		// Validate all asynchronous inputs before claiming the request. No awaits between claim and dispatch.
 		const currentMatter = store.getMatter(matterId)!;
 		const currentMessage = store.getMessage(messageId)!;
 		const currentWorkspace = currentMatter.workspaceId ? store.getWorkspace(currentMatter.workspaceId) : null;
@@ -520,15 +735,22 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			return true;
 		}
 		const updatedMsg = store.transitionAiRequest(messageId, "approved", {
-			approvedById: actor!.collaborator.id,
-			approvedByName: actor!.collaborator.name,
+			approvedById: actor.collaborator.id,
+			approvedByName: actor.collaborator.name,
 			approvedAt: new Date().toISOString(),
 		});
 		if (!updatedMsg) {
 			sendError(res, 409, "Only a pending AI request can be approved");
 			return true;
 		}
-		broadcast("matter_message", { matterId, message: updatedMsg, matter: currentMatter });
+		auditActorAction(ctx, req, actor, {
+			action: "matter.approve_ai_request",
+			targetType: "matter_message",
+			targetId: messageId,
+			orgId: currentMatter.orgId,
+			detail: { matterId },
+		});
+		broadcast("matter_message", { matterId, message: updatedMsg, matter: currentMatter }, { matterId });
 
 		runDispatchInBackground({
 			matterId: matter.id,
@@ -537,8 +759,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			files: files.length > 0 ? files : undefined,
 			preferredMemberId,
 			workspaceId,
+			orgId: currentMatter.orgId,
 			observerMemberIds,
-			author: toDispatchAuthor(actor!.collaborator),
+			startedByUserId: actor.user?.id ?? null,
+			author: toDispatchAuthor(actor.collaborator),
 		});
 
 		sendJson(res, 202, { accepted: true, matterId: matter.id, approvedMessageId: messageId });
@@ -547,12 +771,23 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 
 	const matterDismissAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/dismiss-ai$/);
 	if (method === "POST" && matterDismissAiMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(matterDismissAiMatch[1]!);
 		const messageId = decodeURIComponent(matterDismissAiMatch[2]!);
 		const matter = store.getMatter(matterId);
 		if (!matter) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
+			return true;
+		}
+		if (
+			!isSuperAdminActor(actor) &&
+			!(actor.authKind === "session" && canManageOrganization(store, actor, matter.orgId))
+		) {
+			sendError(res, 403, "仅所有者或组织管理员可忽略 AI 提请");
 			return true;
 		}
 		const targetMsg = store.getMessage(messageId);
@@ -561,33 +796,48 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			return true;
 		}
 		const updatedMsg = store.transitionAiRequest(messageId, "dismissed", {
-			dismissedById: actor!.collaborator.id,
-			dismissedByName: actor!.collaborator.name,
+			dismissedById: actor.collaborator.id,
+			dismissedByName: actor.collaborator.name,
 			dismissedAt: new Date().toISOString(),
 		});
 		if (!updatedMsg) {
 			sendError(res, 409, "Only a pending AI request can be dismissed");
 			return true;
 		}
-		broadcast("matter_message", { matterId, message: updatedMsg, matter });
+		broadcast("matter_message", { matterId, message: updatedMsg, matter }, { matterId });
 		sendJson(res, 200, { ok: true, message: updatedMsg });
 		return true;
 	}
 
 	const matterMsgMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages$/);
 	if (method === "POST" && matterMsgMatch) {
+		if (!requireActiveActor(res, actor)) return true;
 		const matterId = decodeURIComponent(matterMsgMatch[1]!);
 		const matter = store.getMatter(matterId);
 		if (!matter) {
 			sendError(res, 404, `Matter not found: ${matterId}`);
 			return true;
 		}
+		if (!canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
+			return true;
+		}
+		if (!canParticipateInMatter(store, actor, matter)) {
+			sendError(res, 403, "只读成员（org_viewer）不能在该事项内发言或触发操作");
+			return true;
+		}
 		const body = await readJsonBody(req);
 		const mode = body.mode === "discussion" ? "discussion" : body.mode === "ai_request" ? "ai_request" : "dispatch";
-		if (mode === "dispatch" && !requireOwner(res, actor)) return true;
-		if (mode === "dispatch" && orchestrator.isMatterRunning(matterId)) {
-			sendError(res, 409, "Matter already has an active turn");
-			return true;
+		if (mode === "dispatch") {
+			if (!canDispatchAiInOrg(store, actor, matter.orgId)) {
+				sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
+				return true;
+			}
+			if (orchestrator.isMatterRunning(matterId)) {
+				sendError(res, 409, "Matter already has an active turn");
+				return true;
+			}
+			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
 		}
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const parsedImages = parseIncomingImages(body.images);
@@ -609,16 +859,32 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				? body.deliverableTitle.trim()
 				: undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+		if (!ensureOrgEnabledAiRequest(res, ctx, matter.orgId, preferredMemberId, undefined)) {
+			return true;
+		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
+		recordStoredUploadsAcl(store, {
+			orgId: matter.orgId,
+			matterId: matter.id,
+			uploaderUserId: actor.user?.id ?? null,
+			images,
+			files,
+		});
 
 		if (mode === "discussion" || mode === "ai_request") {
-			if (actor!.collaborator.permissionRole !== "owner") {
-				store.addMatterCollaborator(matterId, actor!.collaborator.id);
+			// Legacy LAN guest discussion may record guest collaborator ID on non-private shared matters,
+			// but never auto-grants access to private matters.
+			if (
+				actor.authKind === "legacy_token" &&
+				actor.collaborator.permissionRole !== "owner" &&
+				matter.visibility !== "private"
+			) {
+				store.addMatterCollaborator(matterId, actor.collaborator.id);
 			}
 			const { message, refreshedMatter } = appendDiscussionOrAiRequestMessage(ctx, {
 				matter,
-				actorCollaborator: actor!.collaborator,
+				actorCollaborator: actor.collaborator,
 				mode,
 				prompt,
 				workspaceId,
@@ -637,9 +903,11 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			files: files.length > 0 ? files : undefined,
 			preferredMemberId,
 			workspaceId,
+			orgId: matter.orgId,
 			observerMemberIds,
 			deliverableTitle,
-			author: toDispatchAuthor(actor!.collaborator),
+			startedByUserId: actor.user?.id ?? null,
+			author: toDispatchAuthor(actor.collaborator),
 		});
 
 		sendJson(res, 202, { accepted: true, matterId: matter.id });
@@ -648,8 +916,20 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 
 	const dialogMatch = pathname.match(/^\/api\/dialogs\/([^/]+)\/respond$/);
 	if (method === "POST" && dialogMatch) {
-		if (!requireOwner(res, actor)) return true;
+		if (!requireActiveActor(res, actor)) return true;
 		const dialogId = decodeURIComponent(dialogMatch[1]!);
+		const pending = dialogBroker.listPending().find((d) => d.id === dialogId);
+		const matter = pending ? store.getMatter(pending.matterId) : null;
+		const canRespond =
+			isSuperAdminActor(actor) ||
+			(matter &&
+				canAccessMatter(store, actor, matter) &&
+				(canManageOrganization(store, actor, matter.orgId) ||
+					(actor.authKind === "session" && actor.user && matter.createdByUserId === actor.user.id)));
+		if (!canRespond) {
+			sendError(res, 403, "无权确认该交互弹窗");
+			return true;
+		}
 		const body = await readJsonBody(req);
 		let payload: RpcExtensionUIResponsePayload;
 		if (body.cancelled === true) {

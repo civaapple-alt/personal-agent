@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import { basename, extname, join, resolve } from "node:path";
 import type { PromptFileAttachment, PromptImageAttachment } from "../orchestrator/team-orchestrator.ts";
+import type { PersonalAgentStore } from "../storage/repositories.ts";
 import { HttpRequestError, MIME_TYPES, sendError } from "./http.ts";
 
 const MAX_UPLOAD_IMAGES = 6;
@@ -204,6 +205,42 @@ export async function persistUploadedFiles(
 		});
 	}
 	return stored;
+}
+
+export function recordStoredUploadsAcl(
+	store: PersonalAgentStore,
+	input: {
+		orgId: string | null;
+		matterId: string | null;
+		uploaderUserId: string | null;
+		images: PromptImageAttachment[];
+		files: PromptFileAttachment[];
+	},
+): void {
+	for (const img of input.images) {
+		if (!img.url) continue;
+		const filename = basename(img.url);
+		store.recordUpload({
+			filename,
+			orgId: input.orgId,
+			matterId: input.matterId,
+			uploaderUserId: input.uploaderUserId,
+			kind: "image",
+			mimeType: img.mimeType,
+		});
+	}
+	for (const file of input.files) {
+		if (!file.url) continue;
+		const filename = basename(file.url);
+		store.recordUpload({
+			filename,
+			orgId: input.orgId,
+			matterId: input.matterId,
+			uploaderUserId: input.uploaderUserId,
+			kind: file.kind,
+			mimeType: file.mimeType,
+		});
+	}
 }
 
 async function readStoredUploadBuffer(

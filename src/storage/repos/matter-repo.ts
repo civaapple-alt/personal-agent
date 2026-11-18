@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
-import type { Matter, MatterMessage, MatterMessageChannel, MatterMessageSenderType, MatterStatus } from "../types.ts";
+import type {
+	Matter,
+	MatterMessage,
+	MatterMessageChannel,
+	MatterMessageSenderType,
+	MatterStatus,
+	MatterVisibility,
+} from "../types.ts";
 import { mapMatterRow, mapMessageRow, normalizeUniqueIds, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
 import type { OrganizationRepo } from "./organization-repo.ts";
@@ -36,6 +43,8 @@ export class MatterRepo {
 		leadMemberId?: string | null;
 		workspaceId?: string | null;
 		orgId?: string | null;
+		createdByUserId?: string | null;
+		visibility?: MatterVisibility;
 		aiMemberIds?: string[] | null;
 		observersEnabled?: boolean;
 		observerMemberIds?: string[];
@@ -72,13 +81,14 @@ export class MatterRepo {
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspace = input.workspaceId ? this.orgRepo.getWorkspace(input.workspaceId) : null;
 		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
+		const visibility: MatterVisibility = input.visibility === "private" ? "private" : "org";
 		this.db
 			.prepare(
 				`INSERT INTO matters (
-					id, title, summary, status, lead_member_id, workspace_id, org_id,
+					id, title, summary, status, lead_member_id, workspace_id, org_id, created_by_user_id, visibility,
 					ai_member_ids_json, observers_enabled, observer_ids_json, collaborator_ids_json, created_at, updated_at
 				)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -87,6 +97,8 @@ export class MatterRepo {
 				input.leadMemberId ?? null,
 				input.workspaceId ?? null,
 				effectiveOrgId,
+				input.createdByUserId ?? null,
+				visibility,
 				storedAiIds === null ? null : JSON.stringify(storedAiIds),
 				observersEnabled ? 1 : 0,
 				JSON.stringify(observerIds),
@@ -95,6 +107,15 @@ export class MatterRepo {
 				timestamp,
 			);
 		return this.getMatter(id)!;
+	}
+
+	updateMatterVisibility(matterId: string, visibility: MatterVisibility): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		this.db
+			.prepare("UPDATE matters SET visibility = ?, updated_at = ? WHERE id = ?")
+			.run(visibility, nowIso(), matterId);
+		return this.getMatter(matterId)!;
 	}
 
 	getMatter(id: string): Matter | null {

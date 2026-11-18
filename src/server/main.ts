@@ -30,6 +30,14 @@ async function main(): Promise<void> {
 	const dbPath = process.env.PA_DB_PATH ?? resolve(rootDir, ".data/personal-agent.db");
 	const port = Number(process.env.PORT ?? 4310);
 	const host = process.env.PA_HOST?.trim() || "127.0.0.1";
+	const requireAuth =
+		process.env.PA_REQUIRE_AUTH === "1" || process.env.PA_REQUIRE_AUTH?.trim().toLowerCase() === "true";
+	const defaultWorkspacesRoot = process.env.PA_WORKSPACES_ROOT?.trim()
+		? resolve(process.env.PA_WORKSPACES_ROOT.trim())
+		: dbPath === ":memory:"
+			? resolve(rootDir, ".data/team-workspaces")
+			: resolve(dirname(resolve(dbPath)), "team-workspaces");
+	const dataDir = dbPath === ":memory:" ? resolve(rootDir, ".data") : dirname(resolve(dbPath));
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
@@ -59,7 +67,25 @@ async function main(): Promise<void> {
 	if (!hadOrganizations) {
 		store.assignOrphanWorkspacesToDefaultOrganization();
 	}
-	store.ensureOwnerCollaborator(resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者");
+	const ownerCollab = store.ensureOwnerCollaborator(resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者");
+	const localAdmin = store.ensureLocalBootstrapAdmin(ownerCollab.name);
+	const adminEmailEnv = process.env.PA_ADMIN_EMAIL?.trim();
+	const adminPasswordEnv = process.env.PA_ADMIN_PASSWORD ?? "";
+	if (adminEmailEnv && adminPasswordEnv.length >= 8 && !store.hasPasswordedAdmin()) {
+		store.setupInitialAdmin({
+			email: adminEmailEnv,
+			password: adminPasswordEnv,
+			displayName: process.env.PA_ADMIN_NAME?.trim() || ownerCollab.name,
+		});
+	}
+	if (store.listOrgMembers(defaultOrg.id).length === 0) {
+		store.upsertOrgMember({
+			orgId: defaultOrg.id,
+			userId: localAdmin.id,
+			orgRole: "org_owner",
+			roleTitle: "超级管理员",
+		});
+	}
 
 	if (store.listWorkspaces().length === 0) {
 		store.upsertWorkspace({
@@ -79,7 +105,10 @@ async function main(): Promise<void> {
 		dialogBroker,
 		webDistDir: resolve(rootDir, "web/dist"),
 		rolesDir: customRolesDir,
-		uploadsDir: resolve(rootDir, ".data/uploads"),
+		uploadsDir: resolve(dataDir, "uploads"),
+		requireAuth,
+		defaultWorkspacesRoot,
+		dataDir,
 		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
 		runtimeMeta: {
 			host,

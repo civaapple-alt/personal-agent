@@ -25,6 +25,7 @@ export class MemberRepo {
 		gitName?: string;
 		gitEmail?: string;
 		identitySummary?: string;
+		ownerOrgId?: string | null;
 	}): TeamMember {
 		const timestamp = nowIso();
 		const existing = this.getMember(input.id);
@@ -39,13 +40,14 @@ export class MemberRepo {
 				: existing?.gitEmail.trim() || `${input.id}@team.local`;
 		const identitySummary =
 			input.identitySummary !== undefined ? input.identitySummary.trim() : (existing?.identitySummary ?? "");
+		const ownerOrgId = input.ownerOrgId !== undefined ? input.ownerOrgId : (existing?.ownerOrgId ?? null);
 		if (existing) {
 			this.db
 				.prepare(
 					`UPDATE team_members
 					 SET template_id = ?, display_name = ?, role_title = ?, is_primary_contact = ?,
 					     provider = ?, model = ?, thinking_level = ?, keywords_json = ?,
-					     git_name = ?, git_email = ?, identity_summary = ?, updated_at = ?
+					     git_name = ?, git_email = ?, identity_summary = ?, owner_org_id = ?, updated_at = ?
 					 WHERE id = ?`,
 				)
 				.run(
@@ -60,6 +62,7 @@ export class MemberRepo {
 					gitName,
 					gitEmail,
 					identitySummary,
+					ownerOrgId,
 					timestamp,
 					input.id,
 				);
@@ -72,8 +75,8 @@ export class MemberRepo {
 				`INSERT INTO team_members (
 					id, template_id, display_name, role_title, is_primary_contact,
 					provider, model, thinking_level, keywords_json,
-					git_name, git_email, identity_summary, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					git_name, git_email, identity_summary, owner_org_id, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				input.id,
@@ -88,6 +91,7 @@ export class MemberRepo {
 				gitName,
 				gitEmail,
 				identitySummary,
+				ownerOrgId,
 				timestamp,
 				timestamp,
 			);

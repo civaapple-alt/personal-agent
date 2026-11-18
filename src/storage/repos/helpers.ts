@@ -10,19 +10,25 @@ import type {
 	MatterMessageChannel,
 	MatterMessageSenderType,
 	MatterStatus,
+	MatterVisibility,
 	MemberMemory,
 	MemoryCategory,
 	MemoryScope,
 	MemoryStatus,
 	Organization,
+	PlatformUser,
 	PublicCollaborator,
+	PublicPlatformUser,
 	TeamMember,
 	WorkspaceLink,
+	WorkspaceSourceType,
+	WorkspaceVisibility,
 } from "../types.ts";
 
 export const DEFAULT_ORGANIZATION_ID = "org-default";
 export const DEFAULT_ORGANIZATION_NAME = "默认组织";
 export const DEFAULT_OWNER_COLLABORATOR_ID = "owner";
+export const DEFAULT_LOCAL_ADMIN_USER_ID = "usr_local_owner";
 
 const ASCII_PRINTABLE_RE = /^[\x20-\x7E]+$/;
 
@@ -36,6 +42,21 @@ export function nowIso(): string {
 export function toPublicCollaborator(collaborator: Collaborator): PublicCollaborator {
 	const { token: _token, ...publicInfo } = collaborator;
 	return publicInfo;
+}
+
+export function toPublicUser(user: PlatformUser): PublicPlatformUser {
+	const { passwordHash: _passwordHash, ...publicUser } = user;
+	return publicUser;
+}
+
+export function slugifyOrganizationName(name: string, fallbackId: string): string {
+	const ascii = name
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.slice(0, 32);
+	if (ascii) return ascii;
+	return fallbackId.replace(/[^a-z0-9_-]/gi, "").slice(0, 32) || "org";
 }
 
 export function defaultMemberGitName(member: { id: string; displayName?: string; roleTitle?: string }): string {
@@ -98,12 +119,22 @@ export function parseUniqueIds(raw: unknown): string[] {
 }
 
 export function mapOrganizationRow(row: Record<string, unknown>): Organization {
+	const slug = typeof row.slug === "string" && row.slug.trim() ? row.slug.trim() : undefined;
+	const workspacesDir =
+		typeof row.workspaces_dir === "string" && row.workspaces_dir.trim() ? row.workspaces_dir.trim() : undefined;
+	const createdByUserId =
+		typeof row.created_by_user_id === "string" && row.created_by_user_id.trim()
+			? row.created_by_user_id.trim()
+			: undefined;
 	return {
 		id: String(row.id),
 		name: String(row.name),
+		...(slug ? { slug } : {}),
 		gitEmailDomain: typeof row.git_email_domain === "string" ? row.git_email_domain : "",
 		description: typeof row.description === "string" ? row.description : "",
 		isDefault: Boolean(row.is_default),
+		...(workspacesDir ? { workspacesDir } : {}),
+		...(createdByUserId ? { createdByUserId } : {}),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};
@@ -115,6 +146,8 @@ export function mapMemberRow(row: Record<string, unknown>): TeamMember {
 	const roleTitle = String(row.role_title);
 	const rawGitName = typeof row.git_name === "string" ? row.git_name.trim() : "";
 	const rawGitEmail = typeof row.git_email === "string" ? row.git_email.trim() : "";
+	const ownerOrgId =
+		typeof row.owner_org_id === "string" && row.owner_org_id.trim() ? row.owner_org_id.trim() : undefined;
 	return {
 		id,
 		templateId: String(row.template_id),
@@ -128,12 +161,16 @@ export function mapMemberRow(row: Record<string, unknown>): TeamMember {
 		gitName: rawGitName || defaultMemberGitName({ id, displayName, roleTitle }),
 		gitEmail: rawGitEmail || `${id}@team.local`,
 		identitySummary: typeof row.identity_summary === "string" ? row.identity_summary : "",
+		...(ownerOrgId ? { ownerOrgId } : {}),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};
 }
 
 export function mapWorkspaceRow(row: Record<string, unknown>): WorkspaceLink {
+	const sourceType: WorkspaceSourceType | undefined = row.source_type === "cloned" ? "cloned" : undefined;
+	const cloneUrl = typeof row.clone_url === "string" && row.clone_url.trim() ? row.clone_url.trim() : undefined;
+	const visibility: WorkspaceVisibility | undefined = row.visibility === "restricted" ? "restricted" : undefined;
 	return {
 		id: String(row.id),
 		orgId: row.org_id ? String(row.org_id) : null,
@@ -141,6 +178,9 @@ export function mapWorkspaceRow(row: Record<string, unknown>): WorkspaceLink {
 		repoPath: String(row.repo_path),
 		defaultBranch: String(row.default_branch),
 		description: String(row.description),
+		...(sourceType ? { sourceType } : {}),
+		...(cloneUrl ? { cloneUrl } : {}),
+		...(visibility ? { visibility } : {}),
 		createdAt: String(row.created_at),
 	};
 }
@@ -226,6 +266,11 @@ export function mapMessageRow(row: Record<string, unknown>): MatterMessage {
 
 export function mapMatterRow(row: Record<string, unknown>): Matter {
 	const observerMemberIds = parseUniqueIds(row.observer_ids_json);
+	const createdByUserId =
+		typeof row.created_by_user_id === "string" && row.created_by_user_id.trim()
+			? row.created_by_user_id.trim()
+			: undefined;
+	const visibility: MatterVisibility | undefined = row.visibility === "private" ? "private" : undefined;
 	return {
 		id: String(row.id),
 		title: String(row.title),
@@ -234,6 +279,8 @@ export function mapMatterRow(row: Record<string, unknown>): Matter {
 		leadMemberId: row.lead_member_id ? String(row.lead_member_id) : null,
 		workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 		orgId: row.org_id ? String(row.org_id) : null,
+		...(createdByUserId ? { createdByUserId } : {}),
+		...(visibility ? { visibility } : {}),
 		aiMemberIds:
 			row.ai_member_ids_json === null || row.ai_member_ids_json === undefined
 				? null
