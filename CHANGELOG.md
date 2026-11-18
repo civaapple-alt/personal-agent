@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Trigger [CI workflow](.github/workflows/ci.yml) only on `pull_request`, `v*` version tags, and manual `workflow_dispatch` instead of running on every push to `main`.
 - Isolate Pi worker workspace context from parent host repositories (filtering `before_agent_start` `contextFiles` via `PA_TARGET_WORKSPACE_ROOT` in [team-extension.ts](src/rpc/team-extension.ts), passing `--no-context-files` to isolated JSON/reflection workers in [distiller.ts](src/orchestrator/distiller.ts), [meta-architect.ts](src/orchestrator/meta-architect.ts), and [pi-decision.ts](src/orchestrator/pi-decision.ts), and adding explicit target workspace scope instructions + top-level entry listings via [execution-context.ts](src/orchestrator/execution-context.ts) and [prompts.ts](src/orchestrator/prompts.ts)) so cloned team repositories inside `.data/team-workspaces/` no longer inherit Personal Agent's own root `AGENTS.md`.
 - Keep LF line endings in Windows Git checkouts so Biome and the cross-platform checks use the same source files.
 
