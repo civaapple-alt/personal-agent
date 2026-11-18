@@ -23,6 +23,7 @@ export interface ObserverExecuteWorkerInput {
 	taskPrompt: string;
 	images?: ImageContent[];
 	sessionMode: "observer";
+	discussionMode?: boolean;
 	excludeMessageIds: string[];
 	run: MatterRun;
 	chain: string[];
@@ -50,6 +51,7 @@ export async function runObserversPass(
 		leadReply: string;
 		leadMessageId: string;
 		observers: TeamMember[];
+		discussionMode?: boolean;
 		run: MatterRun;
 		signal: AbortSignal;
 		onProgress?: (progress: DispatchProgressEvent) => void;
@@ -92,6 +94,7 @@ export async function runObserversPass(
 					taskPrompt,
 					images: input.userImages,
 					sessionMode: "observer",
+					discussionMode: input.discussionMode,
 					excludeMessageIds: [input.run.userMessageId, input.leadMessageId],
 					run: input.run,
 					chain: [input.assignedMember.id, observer.id],
@@ -137,6 +140,7 @@ export async function runObserversPass(
 					content: text,
 					metadata: {
 						observerIntervention: true,
+						...(input.discussionMode ? { discussionTurn: true } : {}),
 						inReplyToUserMessageId: input.run.userMessageId,
 						leadMemberId: input.assignedMember.id,
 						toolsUsed: result.toolExecutions.map((tool) => tool.toolName),

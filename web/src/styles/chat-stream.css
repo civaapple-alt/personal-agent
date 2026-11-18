@@ -71,6 +71,17 @@
 	color: var(--accent);
 	border: 1px solid var(--surface-accent-border);
 }
+.discussion-ai-badge {
+	display: inline-flex;
+	align-items: center;
+	border-radius: var(--radius-pill);
+	padding: 1px 7px;
+	font-size: var(--text-micro);
+	font-weight: 600;
+	background: #e0f2fe;
+	color: #0369a1;
+	border: 1px solid #bae6fd;
+}
 .stream-bubble {
 	padding: 11px 16px;
 	font-size: var(--text-base);

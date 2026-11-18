@@ -63,6 +63,7 @@ export interface WorkerRunnerDeps {
 		signal: AbortSignal,
 		effectsTarget: ExecutionEffects,
 		onProgress?: (progress: DispatchProgressEvent) => void,
+		options?: { discussionMode?: boolean },
 	) => Promise<DelegateResult>;
 }
 
@@ -74,6 +75,7 @@ export interface ExecuteWorkerInput {
 	images?: ImageContent[];
 	isInternalDelegation?: boolean;
 	sessionMode?: "lead" | "internal" | "observer";
+	discussionMode?: boolean;
 	excludeMessageIds?: string[];
 	run: MatterRun;
 	chain: string[];
@@ -90,10 +92,18 @@ export async function executeWithWorkerPass(
 ): Promise<PromptRunResult> {
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
-	const canPublish = sessionMode === "lead";
+	const isDiscussionMode = Boolean(input.discussionMode);
+	const canPublish = sessionMode === "lead" && !isDiscussionMode;
 	const matter = deps.store.getMatter(input.matterId);
 	const matterAiMembers = deps.resolveMatterAiMembers(matter);
-	const isSoloMatter = sessionMode === "lead" && matterAiMembers.length <= 1;
+	const matterConsultTargets = matterAiMembers.filter(
+		(member) =>
+			member.id !== input.member.id &&
+			(matter?.consultMemberIds == null ||
+				member.id === matter.leadMemberId ||
+				matter.consultMemberIds.includes(member.id)),
+	);
+	const isSoloMatter = sessionMode === "lead" && matterConsultTargets.length === 0;
 	const canDelegate = sessionMode !== "observer" && !isSoloMatter;
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
@@ -102,7 +112,7 @@ export async function executeWithWorkerPass(
 		"v2",
 		input.workspace?.id ?? null,
 		cwd,
-		sessionMode === "lead" ? "user" : sessionMode,
+		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
 		activeOrgId,
 	]);
 	const executionKey = JSON.stringify([input.member.id, contextKey]);
@@ -137,11 +147,15 @@ export async function executeWithWorkerPass(
 			? []
 			: sessionMode === "observer"
 				? []
-				: sessionMode === "internal"
-					? ["delegate_to_member", "propose_experience"]
-					: isSoloMatter
-						? ["publish_deliverable", "propose_experience"]
-						: ["delegate_to_member", "publish_deliverable", "propose_experience"];
+				: isDiscussionMode
+					? canDelegate
+						? ["delegate_to_member"]
+						: []
+					: sessionMode === "internal"
+						? ["delegate_to_member", "propose_experience"]
+						: isSoloMatter
+							? ["publish_deliverable", "propose_experience"]
+							: ["delegate_to_member", "publish_deliverable", "propose_experience"];
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
 			category: MemoryCategory;
@@ -171,12 +185,16 @@ export async function executeWithWorkerPass(
 						toolSignal,
 						effects,
 						input.onProgress,
+						{ discussionMode: isDiscussionMode },
 					);
 					return { memberId: result.toMember.id, answer: result.answerText };
 				}
 				if (call.tool === "propose_experience") {
 					if (sessionMode === "observer") {
 						throw new Error("Observing specialists cannot propose experiences during peer review");
+					}
+					if (isDiscussionMode) {
+						throw new Error("Discussion chat mode does not propose experiences directly");
 					}
 					if (call.scope === "project_private" && !input.workspace) {
 						throw new Error(
@@ -226,7 +244,9 @@ export async function executeWithWorkerPass(
 				}
 				if (!canPublish)
 					throw new Error(
-						"Internal specialists return results to the lead; only the lead publishes user deliverables",
+						isDiscussionMode
+							? "Chat discussion mode does not publish formal deliverables; switch to「给 AI 安排事项」to publish"
+							: "Internal specialists return results to the lead; only the lead publishes user deliverables",
 					);
 				const draft = await prepareDelivery(call, cwd);
 				toolSignal.throwIfAborted();
@@ -309,7 +329,7 @@ export async function executeWithWorkerPass(
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
 				PA_CAN_PUBLISH: String(canPublish && !isArchitect),
 				PA_CAN_DELEGATE: String(canDelegate && !isArchitect),
-				PA_CAN_EXPERIENCE: String(sessionMode !== "observer" && !isArchitect),
+				PA_CAN_EXPERIENCE: String(sessionMode !== "observer" && !isArchitect && !isDiscussionMode),
 				PA_REQUIRED_TOOLS: JSON.stringify([
 					...requestedTools,
 					...teamTools,
@@ -326,7 +346,11 @@ export async function executeWithWorkerPass(
 						organization,
 						repoGitUser,
 						sessionMode,
-						teamMembers: deps.resolveMatterAiMembers(matter),
+						discussionMode: isDiscussionMode,
+						leadMemberId: matter?.leadMemberId ?? null,
+						consultMemberIds: matter?.consultMemberIds ?? null,
+						observerMemberIds: matter?.observerMemberIds ?? [],
+						teamMembers: matterAiMembers,
 						...(isArchitect && deps.getTemplatesById
 							? {
 									extraGuidance: await buildArchitectMatterContext(

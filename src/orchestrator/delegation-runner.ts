@@ -31,6 +31,7 @@ export async function delegateBetweenMembers(
 	signal: AbortSignal,
 	effectsTarget: ExecutionEffects,
 	onProgress?: (progress: DispatchProgressEvent) => void,
+	options?: { discussionMode?: boolean },
 ): Promise<DelegateResult> {
 	signal.throwIfAborted();
 	const fromMember = deps.store.getMember(input.fromMemberId);
@@ -39,14 +40,8 @@ export async function delegateBetweenMembers(
 	const matterRecord = deps.store.getMatter(input.matterId);
 	let toMember = rawToMember;
 	if (rawToMember.roleScope === "personal") {
-		const permittedByMatterCreator =
-			matterRecord?.createdByUserId &&
-			rawToMember.ownerUserId === matterRecord.createdByUserId &&
-			(matterRecord.leadMemberId === rawToMember.id ||
-				(Array.isArray(matterRecord.aiMemberIds) && matterRecord.aiMemberIds.includes(rawToMember.id)) ||
-				run.startedByUserId === rawToMember.ownerUserId);
-		if (!permittedByMatterCreator) {
-			throw new Error(`Personal team member ${rawToMember.displayName} is not accessible in this matter`);
+		if (!run.startedByUserId || run.startedByUserId !== rawToMember.ownerUserId) {
+			throw new Error("The requested personal role is unavailable to the current user");
 		}
 	} else if (matterRecord?.orgId) {
 		const orgMembers = deps.store.resolveEffectiveOrgMembers(matterRecord.orgId);
@@ -58,6 +53,14 @@ export async function delegateBetweenMembers(
 	}
 	if (matterRecord && matterRecord.aiMemberIds !== null && !matterRecord.aiMemberIds.includes(toMember.id)) {
 		throw new Error(`Team member ${toMember.displayName} has been removed from this matter`);
+	}
+	if (
+		matterRecord &&
+		matterRecord.consultMemberIds != null &&
+		toMember.id !== matterRecord.leadMemberId &&
+		!matterRecord.consultMemberIds.includes(toMember.id)
+	) {
+		throw new Error(`Team member ${toMember.displayName} is unavailable for on-demand consultation in this matter`);
 	}
 	if (chain.includes(toMember.id)) throw new Error("Delegation cycle: cannot call yourself or an ancestor");
 	if (chain.length >= 3) throw new Error("Delegation depth limit reached (3 members)");
@@ -101,6 +104,7 @@ export async function delegateBetweenMembers(
 				workspace,
 				taskPrompt: `Internal delegation from ${fromMember.displayName}:\n${input.question}`,
 				isInternalDelegation: true,
+				discussionMode: options?.discussionMode,
 				run,
 				chain: [...chain, toMember.id],
 				signal,

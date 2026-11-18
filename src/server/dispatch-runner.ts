@@ -21,6 +21,8 @@ export interface ActiveRunState {
 
 export interface BackgroundDispatchInput {
 	matterId: string;
+	interactionMode?: "dispatch" | "discussion";
+	existingUserMessageId?: string;
 	title?: string;
 	prompt: string;
 	images?: PromptImageAttachment[];
@@ -53,8 +55,12 @@ export function createDispatchRunner(deps: {
 		// Uploads and body reads can yield after a route's first busy check. Reserve here before emitting events.
 		if (activeRuns.has(input.matterId) || orchestrator.isMatterRunning(input.matterId))
 			throw new HttpRequestError(409, "Matter already has an active turn");
+		const isDiscussion = input.interactionMode === "discussion";
 		const activeEntry: ActiveRunState = {
-			progress: { stage: "starting", label: "正在准备执行环境..." },
+			progress: {
+				stage: "starting",
+				label: isDiscussion ? "正在接入团队讨论..." : "正在准备执行环境...",
+			},
 			startedAt: Date.now(),
 			accumulatedDelta: "",
 			startedByUserId: input.startedByUserId ?? null,
@@ -66,6 +72,8 @@ export function createDispatchRunner(deps: {
 		void orchestrator
 			.dispatchMatter({
 				matterId: input.matterId,
+				interactionMode: input.interactionMode,
+				existingUserMessageId: input.existingUserMessageId,
 				title: input.title,
 				prompt: input.prompt,
 				images: input.images,

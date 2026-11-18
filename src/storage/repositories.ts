@@ -221,6 +221,12 @@ export class PersonalAgentStore {
 	updateMatterAiMembers(matterId: string, aiMemberIds: string[] | null) {
 		return this.matters.updateMatterAiMembers(matterId, aiMemberIds);
 	}
+	updateMatterConsultMembers(matterId: string, consultMemberIds: string[] | null) {
+		return this.matters.updateMatterConsultMembers(matterId, consultMemberIds);
+	}
+	updateMatterDiscussionAiEnabled(matterId: string, enabled: boolean) {
+		return this.matters.updateMatterDiscussionAiEnabled(matterId, enabled);
+	}
 	updateMatterCollaborators(matterId: string, collaboratorIds: string[]) {
 		return this.matters.updateMatterCollaborators(matterId, collaboratorIds);
 	}

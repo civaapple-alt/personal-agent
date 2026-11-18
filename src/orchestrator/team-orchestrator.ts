@@ -9,7 +9,15 @@ import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Deliverable, Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import type {
+	Deliverable,
+	Matter,
+	MatterMessage,
+	MemberMemory,
+	Organization,
+	TeamMember,
+	WorkspaceLink,
+} from "../storage/types.ts";
 import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { listWorkspaceTopLevelEntries, validateDelivery } from "./execution-context.ts";
@@ -25,7 +33,7 @@ import {
 	runMetaArchitectChat,
 } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
-import { buildMemberSystemPrompt } from "./prompts.ts";
+import { buildMemberSystemPrompt, resolveDiscussionMentionTargets } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
 import { filterTeamMembersForScope } from "./team-health.ts";
@@ -230,7 +238,7 @@ export class TeamOrchestrator {
 
 	private resolveMatterAiMembers(matter: Matter | null, actorUserId?: string | null): TeamMember[] {
 		const orgId = matter?.orgId ?? null;
-		const effectiveUserId = actorUserId ?? matter?.createdByUserId ?? null;
+		const effectiveUserId = actorUserId === undefined ? (matter?.createdByUserId ?? null) : actorUserId;
 		const sharedOrgMembers = orgId
 			? this.store.resolveEffectiveOrgMembers(orgId)
 			: filterTeamMembersForScope(this.store.listMembers(), { actorUserId: effectiveUserId });
@@ -398,20 +406,48 @@ export class TeamOrchestrator {
 
 	async dispatchMatter(input: DispatchMatterInput): Promise<DispatchMatterResult> {
 		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
+		const isDiscussionTurn = input.interactionMode === "discussion";
 		const existing = input.matterId ? this.requireMatter(input.matterId) : null;
 		if (existing && this.isMatterRunning(existing.id)) throw new Error("Matter already has an active turn");
 		const workspaceId = input.workspaceId ?? existing?.workspaceId;
 		const workspace = workspaceId ? this.store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !workspace) throw new Error(`Unknown workspace: ${workspaceId}`);
 		const effectiveOrgId = existing?.orgId ?? workspace?.orgId ?? input.orgId ?? null;
-		const effectiveUserId = input.actorUserId ?? existing?.createdByUserId ?? null;
+		const effectiveUserId = input.actorUserId === undefined ? (existing?.createdByUserId ?? null) : input.actorUserId;
+		const existingUserMsg = input.existingUserMessageId ? this.store.getMessage(input.existingUserMessageId) : null;
+		if (
+			input.existingUserMessageId &&
+			(!isDiscussionTurn ||
+				!existingUserMsg ||
+				existingUserMsg.matterId !== existing?.id ||
+				existingUserMsg.channel !== "user" ||
+				existingUserMsg.senderType !== "user" ||
+				existingUserMsg.metadata?.mode !== "discussion")
+		) {
+			throw new Error("Expected an existing discussion message in the current matter");
+		}
+		const existingDiscussionRoster =
+			isDiscussionTurn && existing ? this.resolveMatterAiMembers(existing, effectiveUserId) : null;
+		const existingLead = existing?.leadMemberId ?? undefined;
+		const preferredMemberId =
+			input.preferredMemberId ??
+			(!existingDiscussionRoster || existingDiscussionRoster.some(({ id }) => id === existingLead)
+				? existingLead
+				: undefined);
 		const assignedMember = this.routeMemberForRequest(
 			input.prompt,
-			input.preferredMemberId ?? existing?.leadMemberId ?? undefined,
+			preferredMemberId,
 			existing ? existing.aiMemberIds : input.aiMemberIds,
 			effectiveOrgId,
 			{ actorUserId: effectiveUserId },
 		);
+		if (
+			existingDiscussionRoster &&
+			(!existingDiscussionRoster.some(({ id }) => id === assignedMember.id) ||
+				(existing?.aiMemberIds && !existing.aiMemberIds.includes(assignedMember.id)))
+		) {
+			throw new Error("No eligible discussion speaker in the current matter");
+		}
 		const images = (input.images ?? []).filter(
 			(item) =>
 				item &&
@@ -464,8 +500,10 @@ export class TeamOrchestrator {
 				orgId: effectiveOrgId,
 				createdByUserId: input.actorUserId ?? null,
 				aiMemberIds: input.aiMemberIds,
+				consultMemberIds: input.consultMemberIds,
 				observersEnabled: input.observersEnabled,
 				observerMemberIds: input.observerMemberIds,
+				discussionAiEnabled: input.discussionAiEnabled,
 			});
 		const ownerId = randomUUID();
 		if (!this.store.acquireMatterLease(matter.id, ownerId)) throw new Error("Matter already has an active turn");
@@ -519,42 +557,57 @@ export class TeamOrchestrator {
 				existing.leadMemberId &&
 				!this.isArchitectMember(this.store.getMember(existing.leadMemberId)),
 		);
+		const discussionMentionPool =
+			isDiscussionTurn && !assignedIsArchitect
+				? (existingDiscussionRoster ?? this.resolveMatterAiMembers(matter, effectiveUserId)).filter(
+						(m) =>
+							!this.isArchitectMember(m) && (matter.aiMemberIds === null || matter.aiMemberIds.includes(m.id)),
+					)
+				: [];
+		const mentionedTargets =
+			isDiscussionTurn && !assignedIsArchitect
+				? resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
+				: [];
+		const activeSpeaker = mentionedTargets.length > 0 ? mentionedTargets[0]! : assignedMember;
 		try {
-			if (!isMidMatterArchitectConsult && matter.leadMemberId !== assignedMember.id) {
+			if (!isDiscussionTurn && !isMidMatterArchitectConsult && matter.leadMemberId !== assignedMember.id) {
 				matter = this.store.updateMatterLead(matter.id, assignedMember.id);
 			}
-			this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
-			if (existing && input.observerMemberIds !== undefined) {
+			if (!isDiscussionTurn) this.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
+			if (!isDiscussionTurn && existing && input.observerMemberIds !== undefined) {
 				matter = this.store.updateMatterObservers(matter.id, input.observerMemberIds);
 			}
-			this.store.updateMatterStatus(matter.id, "open");
+			if (!isDiscussionTurn) this.store.updateMatterStatus(matter.id, "open");
 			if (input.author && input.author.permissionRole !== "owner") {
 				this.store.addMatterCollaborator(matter.id, input.author.collaboratorId);
 			}
 
-			const message = this.store.appendMessage({
-				matterId: matter.id,
-				channel: "user",
-				senderType: "user",
-				senderId: input.author?.collaboratorId ?? "user",
-				content: input.prompt,
-				metadata: {
-					workspaceId: workspace?.id ?? null,
-					repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
-					...(assignedIsArchitect ? { targetMemberId: assignedMember.id } : {}),
-					...(isMidMatterArchitectConsult ? { isMidMatterConsult: true } : {}),
-					...(input.author
-						? {
-								authorId: input.author.collaboratorId,
-								authorName: input.author.name,
-								authorRole: input.author.roleTitle,
-								permissionRole: input.author.permissionRole,
-							}
-						: {}),
-					...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
-					...(fileMetadataRefs.length > 0 ? { files: fileMetadataRefs } : {}),
-				},
-			});
+			const message =
+				existingUserMsg ??
+				this.store.appendMessage({
+					matterId: matter.id,
+					channel: "user",
+					senderType: "user",
+					senderId: input.author?.collaboratorId ?? "user",
+					content: input.prompt,
+					metadata: {
+						...(isDiscussionTurn ? { mode: "discussion" } : {}),
+						workspaceId: workspace?.id ?? null,
+						repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+						...(assignedIsArchitect ? { targetMemberId: assignedMember.id } : {}),
+						...(isMidMatterArchitectConsult ? { isMidMatterConsult: true } : {}),
+						...(input.author
+							? {
+									authorId: input.author.collaboratorId,
+									authorName: input.author.name,
+									authorRole: input.author.roleTitle,
+									permissionRole: input.author.permissionRole,
+								}
+							: {}),
+						...(imageMetadataRefs.length > 0 ? { images: imageMetadataRefs } : {}),
+						...(fileMetadataRefs.length > 0 ? { files: fileMetadataRefs } : {}),
+					},
+				});
 			run.userMessageId = message.id;
 			const formattedFilesBlock =
 				files.length > 0
@@ -577,13 +630,15 @@ export class TeamOrchestrator {
 			try {
 				result = await this.executeWithWorker({
 					matterId: matter.id,
-					member: assignedMember,
+					member: activeSpeaker,
 					workspace,
 					taskPrompt: effectiveTaskPrompt,
 					images: rpcImages.length > 0 ? rpcImages : undefined,
 					isInternalDelegation: false,
+					discussionMode: isDiscussionTurn,
+					excludeMessageIds: existingUserMsg ? [existingUserMsg.id] : undefined,
 					run,
-					chain: [assignedMember.id],
+					chain: [activeSpeaker.id],
 					signal: run.controller.signal,
 					effectsTarget: run.effects,
 					onTextDelta: assignedIsArchitect ? undefined : input.onTextDelta,
@@ -614,6 +669,7 @@ export class TeamOrchestrator {
 			// Keep explicit document exports supported by API callers. Chat has no implicit export.
 			if (
 				!aborted &&
+				!isDiscussionTurn &&
 				rawReply &&
 				input.deliverableTitle &&
 				(!input.deliverableType || input.deliverableType === "document") &&
@@ -635,7 +691,7 @@ export class TeamOrchestrator {
 				});
 			}
 			const deliveries: Deliverable[] = [];
-			if (!aborted) {
+			if (!aborted && !isDiscussionTurn) {
 				// Recheck all paths before writing any index entry. Failed/cancelled turns publish nothing.
 				const validated = await Promise.all(
 					run.effects.deliveries.map(async (entry) => ({
@@ -681,11 +737,13 @@ export class TeamOrchestrator {
 				matterId: matter.id,
 				channel: "user",
 				senderType: "member",
-				senderId: assignedMember.id,
+				senderId: activeSpeaker.id,
 				content: replyText,
 				metadata: {
 					disposition: result.disposition,
 					aborted,
+					...(isDiscussionTurn ? { discussionTurn: true } : {}),
+					...(mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 					toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
 					deliverableIds: deliveries.map((delivery) => delivery.id),
 					sourceUserMessageId: run.userMessageId,
@@ -698,26 +756,73 @@ export class TeamOrchestrator {
 									outcome: "aborted",
 									progress: run.lastProgress,
 									startedAtMs: run.startedAt,
-									leadMember: assignedMember,
+									leadMember: activeSpeaker,
 								}),
 							}
 						: {}),
 				},
 			});
-			const updatedMatter = this.store.updateMatterStatus(
-				matter.id,
-				deliveries.length ? "delivered" : "open",
-				replyText.slice(0, 200),
-			);
+			const updatedMatter = isDiscussionTurn
+				? this.requireMatter(matter.id)
+				: this.store.updateMatterStatus(
+						matter.id,
+						deliveries.length ? "delivered" : "open",
+						replyText.slice(0, 200),
+					);
+			const extraMentionMessages: MatterMessage[] = [];
+			if (isDiscussionTurn && !aborted && !run.cancelled && mentionedTargets.length > 1) {
+				for (const extraSpeaker of mentionedTargets.slice(1)) {
+					if (run.cancelled || run.controller.signal.aborted) break;
+					let extraResult: PromptRunResult;
+					try {
+						extraResult = await this.executeWithWorker({
+							matterId: matter.id,
+							member: extraSpeaker,
+							workspace,
+							taskPrompt: effectiveTaskPrompt,
+							images: rpcImages.length > 0 ? rpcImages : undefined,
+							isInternalDelegation: false,
+							discussionMode: true,
+							excludeMessageIds: [run.userMessageId],
+							run,
+							chain: [extraSpeaker.id],
+							signal: run.controller.signal,
+							effectsTarget: emptyEffects(),
+							onProgress: emitDispatchProgress,
+						});
+					} catch (error) {
+						if (run.cancelled) break;
+						throw error;
+					}
+					if (extraResult.aborted || run.cancelled || run.controller.signal.aborted) break;
+					const extraText = extraResult.assistantText.trim() || "本轮暂无补充看法。";
+					extraMentionMessages.push(
+						this.store.appendMessage({
+							matterId: matter.id,
+							channel: "user",
+							senderType: "member",
+							senderId: extraSpeaker.id,
+							content: extraText,
+							metadata: {
+								disposition: extraResult.disposition,
+								aborted: false,
+								discussionTurn: true,
+								mentionedInDiscussion: true,
+								toolsUsed: extraResult.toolExecutions.map((tool) => tool.toolName),
+								deliverableIds: [],
+								sourceUserMessageId: run.userMessageId,
+								workspaceId: workspace?.id ?? null,
+								repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
+							},
+						}),
+					);
+				}
+			}
 			const observerCandidates =
-				!aborted && !run.cancelled && !assignedIsArchitect
-					? updatedMatter.observerMemberIds
-							.filter((id, idx, arr) => id !== assignedMember.id && arr.indexOf(id) === idx)
-							.map((id) => {
-								const raw = this.store.getMember(id);
-								return raw ? this.store.resolveMemberForOrg(updatedMatter.orgId, raw) : null;
-							})
-							.filter((member): member is TeamMember => member !== null)
+				!aborted && !run.cancelled && !assignedIsArchitect && !(isDiscussionTurn && mentionedTargets.length > 0)
+					? this.resolveMatterAiMembers(updatedMatter, effectiveUserId).filter(
+							(member) => member.id !== activeSpeaker.id && updatedMatter.observerMemberIds.includes(member.id),
+						)
 					: [];
 			const observerMessages =
 				observerCandidates.length > 0
@@ -729,7 +834,7 @@ export class TeamOrchestrator {
 							},
 							{
 								matter: updatedMatter,
-								assignedMember,
+								assignedMember: activeSpeaker,
 								workspace,
 								userPrompt: input.prompt,
 								userImages: rpcImages.length > 0 ? rpcImages : undefined,
@@ -737,6 +842,7 @@ export class TeamOrchestrator {
 								leadReply: replyText,
 								leadMessageId: leadMessage.id,
 								observers: observerCandidates,
+								discussionMode: isDiscussionTurn,
 								run,
 								signal: run.controller.signal,
 								onProgress: emitDispatchProgress,
@@ -745,25 +851,26 @@ export class TeamOrchestrator {
 					: [];
 			return {
 				matter: updatedMatter,
-				assignedMember,
+				assignedMember: activeSpeaker,
 				workspace,
 				replyText,
 				deliverable: deliveries.at(-1) ?? null,
-				observerMessages,
+				observerMessages: [...extraMentionMessages, ...observerMessages],
 				runResult: { ...result, aborted },
 			};
 		} catch (error) {
-			this.store.updateMatterStatus(matter.id, "open");
+			if (!isDiscussionTurn) this.store.updateMatterStatus(matter.id, "open");
 			if (run.cancelled) {
 				const replyText = formatAbortedReply("", run.cancelReason);
 				this.store.appendMessage({
 					matterId: matter.id,
 					channel: "user",
 					senderType: "member",
-					senderId: assignedMember.id,
+					senderId: activeSpeaker.id,
 					content: replyText,
 					metadata: {
 						aborted: true,
+						...(isDiscussionTurn ? { discussionTurn: true } : {}),
 						cancelReason: run.cancelReason ?? "user",
 						workspaceId: workspace?.id ?? null,
 						repoPath: resolve(workspace?.repoPath ?? this.defaultCwd),
@@ -771,13 +878,13 @@ export class TeamOrchestrator {
 							outcome: "aborted",
 							progress: run.lastProgress,
 							startedAtMs: run.startedAt,
-							leadMember: assignedMember,
+							leadMember: activeSpeaker,
 						}),
 					},
 				});
 				return {
 					matter: this.store.updateMatterStatus(matter.id, "open"),
-					assignedMember,
+					assignedMember: activeSpeaker,
 					workspace,
 					replyText,
 					deliverable: null,
@@ -896,6 +1003,7 @@ export class TeamOrchestrator {
 		signal: AbortSignal,
 		effectsTarget: ExecutionEffects,
 		onProgress?: (progress: DispatchProgressEvent) => void,
+		options?: { discussionMode?: boolean },
 	): Promise<DelegateResult> {
 		return delegateBetweenMembers(
 			{
@@ -909,6 +1017,7 @@ export class TeamOrchestrator {
 			signal,
 			effectsTarget,
 			onProgress,
+			options,
 		);
 	}
 
@@ -929,8 +1038,8 @@ export class TeamOrchestrator {
 				resolveMatterAiMembers: (matter) =>
 					this.resolveMatterAiMembers(matter, this.runs.get(matter?.id ?? "")?.startedByUserId),
 				requireMatter: (matterId) => this.requireMatter(matterId),
-				delegate: (dInput, run, workspace, chain, signal, effectsTarget, onProgress) =>
-					this.delegate(dInput, run, workspace, chain, signal, effectsTarget, onProgress),
+				delegate: (dInput, run, workspace, chain, signal, effectsTarget, onProgress, options) =>
+					this.delegate(dInput, run, workspace, chain, signal, effectsTarget, onProgress, options),
 			},
 			input,
 		);

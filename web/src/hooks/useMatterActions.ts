@@ -18,6 +18,8 @@ import {
 	type UploadFilePayload,
 	updateMatterAiMembers,
 	updateMatterCollaborators,
+	updateMatterConsultMembers,
+	updateMatterDiscussionAiEnabled,
 	updateMatterLead,
 	updateMatterObservers,
 	updateMatterObserversEnabled,
@@ -47,6 +49,23 @@ export function writeStoredSetting(key: string, value: string): void {
 	}
 }
 
+function discussionNotice(result: {
+	aiDiscussionTriggered?: boolean;
+	aiDiscussionSkippedReason?: string;
+}): string | null {
+	if (result.aiDiscussionTriggered) return "已发送讨论，AI 成员将参与回复";
+	switch (result.aiDiscussionSkippedReason) {
+		case "matter_busy":
+			return "已保存讨论。本事项已有 AI 轮次正在运行";
+		case "quota_limit":
+			return "已保存讨论。当前 AI 并发额度已用完";
+		case "unauthorized":
+			return "已保存讨论。当前账号无权启动 AI 回复";
+		default:
+			return null;
+	}
+}
+
 interface UseMatterActionsParams {
 	bootstrap: BootstrapPayload | null;
 	isOwner: boolean;
@@ -61,7 +80,9 @@ interface UseMatterActionsParams {
 	selectedWorkspace: WorkspaceDto | null;
 	selectedOrgId: string;
 	draftAiMemberIds: string[] | null;
+	draftConsultMemberIds?: string[] | null;
 	draftObserverMemberIds?: string[];
+	draftDiscussionAiEnabled?: boolean;
 	draftCollaboratorIds?: string[];
 	draftVisibility?: MatterVisibility;
 	draftObserversEnabled: boolean;
@@ -78,7 +99,9 @@ interface UseMatterActionsParams {
 	setSelectedWorkspaceId: (v: string) => void;
 	setSelectedOrgId: (v: string) => void;
 	setDraftAiMemberIds: (v: string[] | null) => void;
+	setDraftConsultMemberIds?: (v: string[] | null) => void;
 	setDraftObserverMemberIds?: (v: string[]) => void;
+	setDraftDiscussionAiEnabled?: (v: boolean) => void;
 	setDraftObserversEnabled: (v: boolean) => void;
 	onSyncDraftPresetForObservers?: (hasObservers: boolean) => void;
 	onResetInitiation?: () => void;
@@ -104,7 +127,9 @@ export function useMatterActions({
 	selectedWorkspace,
 	selectedOrgId,
 	draftAiMemberIds,
+	draftConsultMemberIds = null,
 	draftObserverMemberIds = [],
+	draftDiscussionAiEnabled = true,
 	draftCollaboratorIds = [],
 	draftVisibility = "org",
 	draftObserversEnabled,
@@ -121,7 +146,9 @@ export function useMatterActions({
 	setSelectedWorkspaceId,
 	setSelectedOrgId,
 	setDraftAiMemberIds,
+	setDraftConsultMemberIds,
 	setDraftObserverMemberIds,
+	setDraftDiscussionAiEnabled,
 	setDraftObserversEnabled,
 	onSyncDraftPresetForObservers,
 	onResetInitiation,
@@ -148,7 +175,7 @@ export function useMatterActions({
 			let targetMatterId = selectedMatterId;
 
 			if (targetMatterId) {
-				await postMatterMessage(targetMatterId, {
+				const posted = await postMatterMessage(targetMatterId, {
 					mode: effectiveMode,
 					prompt: text,
 					images: imagesPayload.length > 0 ? imagesPayload : undefined,
@@ -157,6 +184,8 @@ export function useMatterActions({
 				});
 				if (effectiveMode === "ai_request") {
 					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
+				} else if (effectiveMode === "discussion") {
+					setNoticeBanner(discussionNotice(posted));
 				} else if (options?.preferredMemberId === ROLE_ARCHITECT_MEMBER_ID) {
 					setNoticeBanner("已请「角色架构师」结合当前事项诊断分工与权限，生成提案后可勾选应用");
 				}
@@ -180,6 +209,7 @@ export function useMatterActions({
 					workspaceId: isArchitectCreate ? undefined : selectedWorkspaceId || undefined,
 					orgId: orgForCreate,
 					aiMemberIds: isArchitectCreate ? [ROLE_ARCHITECT_MEMBER_ID] : draftAiMemberIds,
+					consultMemberIds: isArchitectCreate ? [] : draftConsultMemberIds,
 					observersEnabled: isArchitectCreate
 						? false
 						: draftObserverMemberIds.length > 0
@@ -190,6 +220,7 @@ export function useMatterActions({
 						: draftObserverMemberIds.length > 0
 							? draftObserverMemberIds
 							: undefined,
+					discussionAiEnabled: isArchitectCreate ? false : draftDiscussionAiEnabled,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 					visibility: draftVisibility,
 				});
@@ -199,7 +230,7 @@ export function useMatterActions({
 				onResetInitiation?.();
 				navigateRoute({ tab: "chats", matterId: created.matter.id });
 				if (effectiveMode === "discussion") {
-					setNoticeBanner("已创建事项并发送首条团队讨论");
+					setNoticeBanner(discussionNotice(created) ?? "已创建事项并发送首条团队讨论");
 				} else if (effectiveMode === "ai_request") {
 					setNoticeBanner("已创建事项并提交 AI 提请，待团队所有者确认后派发");
 				} else {
@@ -480,8 +511,58 @@ export function useMatterActions({
 		const targetMatterId = selectedMatterId;
 		void updateMatterObservers(targetMatterId, deduped)
 			.then(async () => {
+				setNoticeBanner(deduped.length > 0 ? `已设定 ${deduped.length} 位定向旁听成员` : "已取消全部旁听");
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleUpdateMatterConsultMembers = (consultIds: string[] | null) => {
+		const deduped = consultIds === null ? null : [...new Set(consultIds)];
+		if (!selectedMatterId) {
+			setDraftConsultMemberIds?.(deduped);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterConsultMembers(targetMatterId, deduped)
+			.then(async () => {
 				setNoticeBanner(
-					deduped.length > 0 ? `已设定 ${deduped.length} 位定向旁听成员` : "已取消全部旁听，保留内部按需协同",
+					deduped && deduped.length > 0
+						? `已设定 ${deduped.length} 位可按需请教成员`
+						: deduped === null
+							? "已允许主责按需请教全部在组 AI 成员"
+							: "已设为不主动委托其他成员请教",
+				);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
+	const handleToggleDiscussionAiEnabled = (enabled: boolean) => {
+		if (!selectedMatterId) {
+			setDraftDiscussionAiEnabled?.(enabled);
+			setNoticeBanner(
+				enabled
+					? "讨论模式已开启 AI 参与：群聊时 AI 成员可查证和交流（可 @角色）"
+					: "讨论模式已切为纯人类交流：不调用 AI 模型",
+			);
+			return;
+		}
+		const targetMatterId = selectedMatterId;
+		void updateMatterDiscussionAiEnabled(targetMatterId, enabled)
+			.then(async () => {
+				setNoticeBanner(
+					enabled
+						? "已开启 AI 参与本事项团队讨论（切回「给 AI 安排事项」再正式授权执行）"
+						: "已关闭 AI 参与本事项团队讨论（当前为纯人类群聊）",
 				);
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
@@ -544,6 +625,8 @@ export function useMatterActions({
 		handleSelectWorkspace,
 		handleChangeLeadMember,
 		handleUpdateMatterAiMembers,
+		handleUpdateMatterConsultMembers,
+		handleToggleDiscussionAiEnabled,
 		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
 		handleUpdateMatterVisibility,

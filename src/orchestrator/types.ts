@@ -159,6 +159,8 @@ export interface DispatchMatterInput {
 	matterId?: string;
 	title?: string;
 	prompt: string;
+	interactionMode?: "dispatch" | "discussion";
+	existingUserMessageId?: string;
 	images?: PromptImageAttachment[];
 	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
@@ -166,8 +168,10 @@ export interface DispatchMatterInput {
 	orgId?: string | null;
 	actorUserId?: string | null;
 	aiMemberIds?: string[] | null;
+	consultMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
+	discussionAiEnabled?: boolean;
 	deliverableType?: DeliverableType;
 	deliverableTitle?: string;
 	author?: {

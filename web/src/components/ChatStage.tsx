@@ -58,6 +58,7 @@ interface ChatStageProps {
 	accountUser?: AccountUserDto | null;
 	isSuperAdmin?: boolean;
 	canDispatchAi?: boolean;
+	canManageMatter: boolean;
 	collaborators?: CollaboratorDto[];
 	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
 	orgEffectiveMemberIds?: string[] | null;
@@ -100,10 +101,12 @@ interface ChatStageProps {
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
+	matterConsultMemberIds?: string[] | null;
 	observerMemberIds: string[];
 	observersEnabled: boolean;
-	draftPresetMode: CollaborationPresetMode;
+	discussionAiEnabled?: boolean;
 	draftAiMemberIds: string[] | null;
+	draftConsultMemberIds?: string[] | null;
 	draftCollaboratorIds: string[];
 	draftVisibility?: MatterVisibility;
 	initiationAssessment: MatterInitiationAssessmentDto | null;
@@ -113,9 +116,15 @@ interface ChatStageProps {
 	initiationModelAssessmentError?: string | null;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
+	onUpdateMatterConsultMembers?: (consultMemberIds: string[] | null) => void;
+	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
 	onUpdateDraftVisibility?: (visibility: MatterVisibility) => void;
+	onSetScopeMode?: (scope: "solo" | "team") => void;
+	onToggleObserverPreset?: () => void;
+	onToggleDraftMemberConsult?: (memberId: string, enabled: boolean) => void;
+	onToggleDraftMemberObserver?: (memberId: string, enabled: boolean) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode, leadId?: string | null) => void;
 	onApplyInitiationRecommendation: () => void;
 	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
@@ -161,6 +170,7 @@ export function ChatStage({
 	accountUser = null,
 	isSuperAdmin = false,
 	canDispatchAi,
+	canManageMatter,
 	collaborators = [],
 	orgMembersByOrgId = {},
 	orgEffectiveMemberIds = null,
@@ -203,10 +213,12 @@ export function ChatStage({
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
+	matterConsultMemberIds = null,
 	observerMemberIds,
 	observersEnabled,
-	draftPresetMode,
+	discussionAiEnabled = false,
 	draftAiMemberIds,
+	draftConsultMemberIds = null,
 	draftCollaboratorIds,
 	draftVisibility = "org",
 	initiationAssessment,
@@ -216,9 +228,15 @@ export function ChatStage({
 	initiationModelAssessmentError,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
+	onUpdateMatterConsultMembers,
+	onToggleDiscussionAiEnabled,
 	onUpdateDraftAiMemberIds,
 	onUpdateDraftCollaboratorIds,
 	onUpdateDraftVisibility,
+	onSetScopeMode,
+	onToggleObserverPreset,
+	onToggleDraftMemberConsult,
+	onToggleDraftMemberObserver,
 	onApplyPresetMode,
 	onApplyInitiationRecommendation,
 	onRequestModelAssessment,
@@ -672,7 +690,7 @@ export function ChatStage({
 					panelRef={rosterPanelRef}
 					rosterMode={rosterMode}
 					rosterSearch={rosterSearch}
-					isOwner={isOwner}
+					isOwner={isOwner && canManageMatter}
 					isTurnRunning={isTurnRunning}
 					selectedMatterId={selectedMatterId}
 					currentUser={currentUser}
@@ -686,9 +704,11 @@ export function ChatStage({
 					removedAiMembers={removedAiMembers}
 					leadAi={leadAi}
 					observersEnabled={observersEnabled}
+					discussionAiEnabled={discussionAiEnabled}
 					observerAis={observerAis}
 					specialistIds={specialistIds}
 					matterAiMemberIds={matterAiMemberIds}
+					matterConsultMemberIds={matterConsultMemberIds}
 					onSearchChange={setRosterSearch}
 					onModeChange={setRosterMode}
 					onClose={closeRoster}
@@ -696,6 +716,8 @@ export function ChatStage({
 					onNotice={onNotice}
 					onChangeLeadMember={onChangeLeadMember}
 					onUpdateMatterAiMembers={onUpdateMatterAiMembers}
+					onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
+					onToggleDiscussionAiEnabled={onToggleDiscussionAiEnabled}
 					onToggleObserversEnabled={onToggleObserversEnabled}
 					onUpdateMatterObservers={onUpdateMatterObservers}
 					onUpdateMatterCollaborators={onUpdateMatterCollaborators}
@@ -794,9 +816,10 @@ export function ChatStage({
 							draftVisibility={draftVisibility}
 							templateByRoleId={templateByRoleId}
 							selectedMemberId={selectedMemberId}
-							draftPresetMode={draftPresetMode}
 							draftAiMemberIds={draftAiMemberIds}
+							draftConsultMemberIds={draftConsultMemberIds}
 							draftObserverMemberIds={observerMemberIds}
+							discussionAiEnabled={discussionAiEnabled}
 							draftCollaboratorIds={draftCollaboratorIds}
 							assessment={initiationAssessment}
 							assessing={initiationAssessing}
@@ -804,6 +827,10 @@ export function ChatStage({
 							modelAssessing={initiationModelAssessing}
 							modelAssessmentError={initiationModelAssessmentError}
 							onSelectLeadMember={onChangeLeadMember}
+							onSetScopeMode={onSetScopeMode}
+							onToggleObserverPreset={onToggleObserverPreset}
+							onToggleDraftMemberConsult={onToggleDraftMemberConsult}
+							onToggleDraftMemberObserver={onToggleDraftMemberObserver}
 							onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
 							onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
 							onUpdateDraftObserverIds={onUpdateMatterObservers}
@@ -821,6 +848,12 @@ export function ChatStage({
 				composerRef={composerRef}
 				composerMode={composerMode}
 				isOwner={isOwner}
+				discussionAiEnabled={discussionAiEnabled}
+				canToggleDiscussionAi={isOwner && canManageMatter}
+				onToggleDiscussionAiEnabled={onToggleDiscussionAiEnabled}
+				mentionMembers={filterBusinessMembers(inGroupAiMembers, templateByRoleId)}
+				leadMemberId={leadAi?.id ?? null}
+				observerMemberIds={observerMemberIds}
 				allowUnboundOrg={isSuperAdmin || organizations.length === 0}
 				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}

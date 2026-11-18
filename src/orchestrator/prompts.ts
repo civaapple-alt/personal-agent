@@ -144,7 +144,65 @@ export function formatMessageHistorySpeaker(message: MatterMessage): string {
 		}
 		if (modeTag) return `${modeTag} user/${message.senderId}`;
 	}
+	if (message.senderType === "member" && message.metadata?.discussionTurn === true) {
+		return `[Discussion reply] member/${message.senderId}`;
+	}
 	return `${message.senderType}/${message.senderId}`;
+}
+
+/** Resolve explicit `@role` mentions in a discussion prompt against eligible AI members, preserving mention order. */
+export function resolveDiscussionMentionTargets(prompt: string, pool: TeamMember[]): TeamMember[] {
+	if (!prompt.includes("@") || pool.length === 0) return [];
+	const candidates: Array<{ alias: string; aliasLower: string; member: TeamMember }> = [];
+	const seenAliases = new Set<string>();
+	for (const member of pool) {
+		for (const rawAlias of [member.displayName, member.roleTitle, member.id]) {
+			const alias = rawAlias.trim();
+			if (!alias) continue;
+			const key = `${member.id}\0${alias.toLowerCase()}`;
+			if (seenAliases.has(key)) continue;
+			seenAliases.add(key);
+			candidates.push({ alias, aliasLower: alias.toLowerCase(), member });
+		}
+	}
+	// Match longest aliases first so multi-word display names beat shorter substrings.
+	candidates.sort((a, b) => b.alias.length - a.alias.length);
+	const hits: Array<{ index: number; member: TeamMember }> = [];
+	const lowerPrompt = prompt.toLowerCase();
+	const isPrefixBoundary = (idx: number): boolean =>
+		idx === 0 || /[\s,.:;!?，。：；！？、([【（]/.test(prompt[idx - 1]!);
+	const isSuffixBoundary = (alias: string, endIdx: number): boolean => {
+		if (endIdx >= prompt.length) return true;
+		const next = prompt[endIdx]!;
+		if (/[\s,.:;!?，。：；！？、)\]}）】]/.test(next)) return true;
+		const lastChar = alias.at(-1) ?? "";
+		if (/[A-Za-z0-9_-]/.test(lastChar)) {
+			// Allow CJK text right after ASCII display name (e.g., "@Product Manager请看"), while preventing "@qa" matching "@qa2".
+			return /[^\x20-\x7E]/.test(next);
+		}
+		return true;
+	};
+	for (let i = 0; i < prompt.length; i += 1) {
+		if (prompt[i] !== "@" || !isPrefixBoundary(i)) continue;
+		const afterAt = lowerPrompt.slice(i + 1);
+		const matched = candidates.find(
+			(candidate) =>
+				afterAt.startsWith(candidate.aliasLower) &&
+				isSuffixBoundary(candidate.alias, i + 1 + candidate.alias.length),
+		);
+		if (matched) {
+			hits.push({ index: i, member: matched.member });
+			i += matched.alias.length;
+		}
+	}
+	const ordered: TeamMember[] = [];
+	const seenMembers = new Set<string>();
+	for (const hit of hits) {
+		if (seenMembers.has(hit.member.id)) continue;
+		seenMembers.add(hit.member.id);
+		ordered.push(hit.member);
+	}
+	return ordered;
 }
 
 export function formatMessageHistoryContent(message: MatterMessage): string {
@@ -255,6 +313,10 @@ export function buildMemberSystemPrompt(input: {
 	taskPrompt?: string;
 	isInternalDelegation?: boolean;
 	sessionMode?: "lead" | "internal" | "observer";
+	discussionMode?: boolean;
+	leadMemberId?: string | null;
+	consultMemberIds?: string[] | null;
+	observerMemberIds?: string[];
 	teamMembers: TeamMember[];
 	extraGuidance?: string;
 }): string {
@@ -373,30 +435,63 @@ export function buildMemberSystemPrompt(input: {
 	}
 
 	const isArchitect = isArchitectRoleTemplate(input.template ?? { id: input.member.id });
-	sections.push(
-		`## Current team\n${input.teamMembers.map((member) => `- ${member.id}: ${member.displayName} (${member.roleTitle})`).join("\n")}`,
-	);
+	const hasRoleStandingDiff = input.consultMemberIds != null || (input.observerMemberIds?.length ?? 0) > 0;
+	const formatTeamLine = (member: TeamMember): string => {
+		const base = `- ${member.id}: ${member.displayName} (${member.roleTitle})`;
+		if (!hasRoleStandingDiff) return base;
+		if (input.leadMemberId && member.id === input.leadMemberId) return `${base} [lead]`;
+		const canConsult =
+			input.consultMemberIds == null ? member.id !== input.leadMemberId : input.consultMemberIds.includes(member.id);
+		const isObserver = Boolean(input.observerMemberIds?.includes(member.id));
+		if (canConsult && isObserver) return `${base} [consultable + observer]`;
+		if (canConsult) return `${base} [consultable]`;
+		if (isObserver) return `${base} [observer only — do not delegate mid-turn]`;
+		return base;
+	};
+	sections.push(`## Current team\n${input.teamMembers.map(formatTeamLine).join("\n")}`);
 	if (input.extraGuidance) {
 		sections.push(input.extraGuidance);
 	}
 	if (mode !== "observer" && !isArchitect) {
-		const isSoloMatter = mode === "lead" && input.teamMembers.length <= 1;
-		const collabLine = isSoloMatter
-			? "This is a solo matter. Verify the facts and complete the work within your role without internal delegation. If the request exceeds your remit or needs an unavailable role, explain the gap and suggest what expertise is needed."
-			: "Advance the task within your role. When specialist work is needed, call delegate_to_member with the goal, relevant facts, and constraints. Integrate the specialist's evidence into the result. Keep routine coordination internal. Ask the user only when information or a business decision is missing.";
-		sections.push(
-			[
-				"## Collaboration and publication",
-				collabLine,
-				"Only the lead can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
-				"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
-				"Keep routine replies, clarifications, progress, and minor adjustments in the conversation. Base publication on the significance of the work. Publication alone requires no extra approval. Complete the necessary verification in the same turn.",
-				"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
-			].join("\n"),
-		);
+		const consultPool =
+			input.consultMemberIds == null
+				? input.teamMembers.filter((m) => m.id !== (input.leadMemberId ?? input.member.id))
+				: input.teamMembers.filter(
+						(m) => m.id !== (input.leadMemberId ?? input.member.id) && input.consultMemberIds!.includes(m.id),
+					);
+		const isSoloMatter = mode === "lead" && consultPool.length === 0;
+		if (input.discussionMode) {
+			const discussCollabLine = isSoloMatter
+				? "If specialized judgment from an unconfigured role is needed, point it out clearly to the user."
+				: "If another consultable colleague's quick factual input helps the discussion, you may call delegate_to_member for light read-only consultation; keep coordination light.";
+			sections.push(
+				[
+					"## Discussion chat mode (团队聊天讨论 · 未授权实施与交付)",
+					"- The latest message was sent in **团队聊天讨论** (team chat discussion) mode; the user has **not** switched to **给 AI 安排事项** (authorized work dispatch) yet.",
+					"- Participate constructively in the team discussion: share your role's perspective, feasibility assessment, risks, open questions, or answers to `@` mentions concisely and clearly.",
+					`- ${discussCollabLine}`,
+					"- You retain full access to workspace inspection and command tools (such as `read` and `bash`) when helpful to verify files, Git state, configs, logs, or test/build status before replying.",
+					"- **Authorization boundary:** Because this is a chat discussion and not an authorized work order yet, do NOT modify code, write/overwrite files, commit to Git, or publish formal deliverables. Present your findings/proposal and let the user switch to「给 AI 安排事项」when they are ready to authorize implementation.",
+				].join("\n"),
+			);
+		} else {
+			const collabLine = isSoloMatter
+				? "This is a solo matter. Verify the facts and complete the work within your role without internal delegation. If the request exceeds your remit or needs an unavailable role, explain the gap and suggest what expertise is needed."
+				: "Advance the task within your role. When specialist work is needed, call delegate_to_member with the goal, relevant facts, and constraints. Integrate the specialist's evidence into the result. Keep routine coordination internal. Ask the user only when information or a business decision is missing.";
+			sections.push(
+				[
+					"## Collaboration and publication",
+					collabLine,
+					"Only the lead can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
+					"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
+					"Keep routine replies, clarifications, progress, and minor adjustments in the conversation. Base publication on the significance of the work. Publication alone requires no extra approval. Complete the necessary verification in the same turn.",
+					"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
+				].join("\n"),
+			);
+		}
 	}
-	if (mode === "lead" && !isArchitect) sections.push(PUBLICATION_REVIEW_GUIDANCE);
-	if (mode === "lead" && !isArchitect)
+	if (mode === "lead" && !isArchitect && !input.discussionMode) sections.push(PUBLICATION_REVIEW_GUIDANCE);
+	if (mode === "lead" && !isArchitect && !input.discussionMode)
 		sections.push(
 			"## Document publication source\nFor a document saved in the workspace, call publish_deliverable with sourcePath alone so the host can read the final text. Use content only for documents without a source file. If the source changes after registration, register the final file under the same title before finishing.",
 		);

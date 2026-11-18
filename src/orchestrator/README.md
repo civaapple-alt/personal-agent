@@ -26,7 +26,9 @@
   - `formatMessageHistorySpeaker` 回放讨论和提请时附带 `[Team discussion]` 或 `[Teammate request]`，并保留发言人姓名、角色与原文。
   - 支持可选 `images`（`PromptImageAttachment[]`）与 `files`（`PromptFileAttachment[]`），将轻量引用存入消息 `metadata.images` 与 `metadata.files`（不在 SQLite 重复存储大文本正文），并在回放历史 `formatMessageHistoryContent` 时附带附件摘要。
   - 并将 `ImageContent[]` 与分隔后的文件/折叠粘贴正文一并传给主负责人与旁听 `runObservers` Worker（纯图片或纯附件消息自动生成标题与指令兜底）。
-  - 主成员正常回复后，旁听成员在 `runObservers` 中并行快速评估本轮讨论；无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。
+  - 主成员正常回复后，旁听成员在 `runObservers` 中并行评估。宿主按触发者和事项名册筛选旁听角色。发现关键问题时在 `user` 通道补充，标记 `observerIntervention: true`。
+  - `consultMemberIds` 与 `observerMemberIds` 独立。前者为空数组时不允许主责委托，为 `null` 时沿用旧事项全部可用在组成员的行为。
+  - 讨论轮次使用独立会话键。未点名时由当前可用的主责或在组角色回复，点名时按提及顺序回复。讨论保留岗位工具用于查证，宿主关闭成果发布和经验提案。回复保留在事项历史，正式执行会回放同范围内新增的讨论消息。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
   - `v2` 会话键额外包含有效组织 ID。旧 `v1` 或无范围会话继续保留，但首次升级不自动恢复；新范围建立后可切回续接。详见[迁移说明](../../docs/runtime-collaboration.md#兼容历史数据)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。

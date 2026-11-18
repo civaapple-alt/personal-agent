@@ -46,20 +46,35 @@ export class MatterRepo {
 		createdByUserId?: string | null;
 		visibility?: MatterVisibility;
 		aiMemberIds?: string[] | null;
+		consultMemberIds?: string[] | null;
 		observersEnabled?: boolean;
 		observerMemberIds?: string[];
+		discussionAiEnabled?: boolean;
 		collaboratorIds?: string[];
 	}): Matter {
 		const id = input.id ?? `mat_${randomUUID()}`;
 		const timestamp = nowIso();
 		let storedAiIds =
 			input.aiMemberIds === undefined || input.aiMemberIds === null ? null : normalizeUniqueIds(input.aiMemberIds);
+		if (storedAiIds === null && input.aiMemberIds === undefined && Array.isArray(input.consultMemberIds)) {
+			storedAiIds = normalizeUniqueIds([
+				...(input.leadMemberId ? [input.leadMemberId] : []),
+				...input.consultMemberIds,
+				...(input.observersEnabled === false ? [] : (input.observerMemberIds ?? [])),
+			]);
+		}
 		if (storedAiIds === null && input.leadMemberId === ROLE_ARCHITECT_MEMBER_ID) {
 			storedAiIds = [ROLE_ARCHITECT_MEMBER_ID];
 		} else if (storedAiIds !== null && input.leadMemberId && !storedAiIds.includes(input.leadMemberId)) {
 			storedAiIds = [input.leadMemberId, ...storedAiIds];
 		}
 		const effectiveAiIds = this.resolveEffectiveAiIds(storedAiIds);
+		const storedConsultIds =
+			input.consultMemberIds === undefined || input.consultMemberIds === null
+				? null
+				: normalizeUniqueIds(input.consultMemberIds).filter(
+						(memberId) => effectiveAiIds.includes(memberId) && memberId !== (input.leadMemberId ?? null),
+					);
 		const hasExplicitObserverList = input.observerMemberIds !== undefined;
 		const explicitObserverIds = normalizeUniqueIds(input.observerMemberIds).filter(
 			(memberId) => effectiveAiIds.includes(memberId) && memberId !== (input.leadMemberId ?? null),
@@ -78,6 +93,7 @@ export class MatterRepo {
 				: hasExplicitObserverList
 					? observerIds.length > 0
 					: input.observersEnabled === true;
+		const discussionAiEnabled = input.discussionAiEnabled ?? false;
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspace = input.workspaceId ? this.orgRepo.getWorkspace(input.workspaceId) : null;
 		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
@@ -86,9 +102,10 @@ export class MatterRepo {
 			.prepare(
 				`INSERT INTO matters (
 					id, title, summary, status, lead_member_id, workspace_id, org_id, created_by_user_id, visibility,
-					ai_member_ids_json, observers_enabled, observer_ids_json, collaborator_ids_json, created_at, updated_at
+					ai_member_ids_json, consult_member_ids_json, observers_enabled, observer_ids_json, discussion_ai_enabled,
+					collaborator_ids_json, created_at, updated_at
 				)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -100,8 +117,10 @@ export class MatterRepo {
 				input.createdByUserId ?? null,
 				visibility,
 				storedAiIds === null ? null : JSON.stringify(storedAiIds),
+				storedConsultIds === null ? null : JSON.stringify(storedConsultIds),
 				observersEnabled ? 1 : 0,
 				JSON.stringify(observerIds),
+				discussionAiEnabled ? 1 : 0,
 				JSON.stringify(collaboratorIds),
 				timestamp,
 				timestamp,
@@ -201,18 +220,69 @@ export class MatterRepo {
 		if (normalizedAiIds !== null && existing.leadMemberId && !normalizedAiIds.includes(existing.leadMemberId)) {
 			normalizedAiIds = [existing.leadMemberId, ...normalizedAiIds];
 		}
+		const prevEffectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
 		const effectiveAiIds = this.resolveEffectiveAiIds(normalizedAiIds);
-		const nextObserverIds = existing.observersEnabled
-			? this.computeAutoObservers(effectiveAiIds, existing.leadMemberId)
-			: existing.observerMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId);
+		const nextObserverIds = existing.observerMemberIds.filter(
+			(id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId,
+		);
+		const nextObserversEnabled = nextObserverIds.length > 0;
+		let nextConsultIds =
+			existing.consultMemberIds == null
+				? null
+				: existing.consultMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId);
+		if (nextConsultIds !== null) {
+			const addedNonObs = effectiveAiIds.filter(
+				(id) => id !== existing.leadMemberId && !prevEffectiveAiIds.includes(id) && !nextObserverIds.includes(id),
+			);
+			nextConsultIds = normalizeUniqueIds([...nextConsultIds, ...addedNonObs]);
+		}
 		this.db
-			.prepare("UPDATE matters SET ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?")
+			.prepare(
+				"UPDATE matters SET ai_member_ids_json = ?, consult_member_ids_json = ?, observers_enabled = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?",
+			)
 			.run(
 				normalizedAiIds === null ? null : JSON.stringify(normalizedAiIds),
+				nextConsultIds === null ? null : JSON.stringify(nextConsultIds),
+				nextObserversEnabled ? 1 : 0,
 				JSON.stringify(nextObserverIds),
 				timestamp,
 				matterId,
 			);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterConsultMembers(matterId: string, consultMemberIds: string[] | null): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const timestamp = nowIso();
+		if (consultMemberIds === null) {
+			this.db
+				.prepare("UPDATE matters SET consult_member_ids_json = NULL, updated_at = ? WHERE id = ?")
+				.run(timestamp, matterId);
+			return this.getMatter(matterId)!;
+		}
+		const normalizedConsult = normalizeUniqueIds(consultMemberIds).filter(
+			(id) => id !== existing.leadMemberId && id !== ROLE_ARCHITECT_MEMBER_ID,
+		);
+		const nextAiIds =
+			existing.aiMemberIds === null ? null : normalizeUniqueIds([...existing.aiMemberIds, ...normalizedConsult]);
+		this.db
+			.prepare("UPDATE matters SET ai_member_ids_json = ?, consult_member_ids_json = ?, updated_at = ? WHERE id = ?")
+			.run(
+				nextAiIds === null ? null : JSON.stringify(nextAiIds),
+				JSON.stringify(normalizedConsult),
+				timestamp,
+				matterId,
+			);
+		return this.getMatter(matterId)!;
+	}
+
+	updateMatterDiscussionAiEnabled(matterId: string, enabled: boolean): Matter {
+		const existing = this.getMatter(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		this.db
+			.prepare("UPDATE matters SET discussion_ai_enabled = ?, updated_at = ? WHERE id = ?")
+			.run(enabled ? 1 : 0, nowIso(), matterId);
 		return this.getMatter(matterId)!;
 	}
 
@@ -249,17 +319,37 @@ export class MatterRepo {
 			nextAiIds = [memberId, ...nextAiIds];
 		}
 		const effectiveAiIds = this.resolveEffectiveAiIds(nextAiIds);
-		const nextObserverIds = existing.observersEnabled
+		const prevEffectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
+		const prevAllNonLead = this.computeAutoObservers(prevEffectiveAiIds, existing.leadMemberId);
+		const wasAllAutoObserved =
+			existing.consultMemberIds === null &&
+			existing.observersEnabled &&
+			prevAllNonLead.length > 0 &&
+			prevAllNonLead.every((id) => existing.observerMemberIds.includes(id));
+		const nextObserverIds = wasAllAutoObserved
 			? this.computeAutoObservers(effectiveAiIds, memberId)
 			: existing.observerMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== memberId);
+		const nextConsultIds =
+			existing.consultMemberIds == null
+				? null
+				: normalizeUniqueIds([
+						...existing.consultMemberIds,
+						...(existing.leadMemberId &&
+						existing.leadMemberId !== memberId &&
+						existing.leadMemberId !== ROLE_ARCHITECT_MEMBER_ID
+							? [existing.leadMemberId]
+							: []),
+					]).filter((id) => effectiveAiIds.includes(id) && id !== memberId);
 		this.db
 			.prepare(
-				"UPDATE matters SET lead_member_id = ?, ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?",
+				"UPDATE matters SET lead_member_id = ?, ai_member_ids_json = ?, consult_member_ids_json = ?, observer_ids_json = ?, observers_enabled = ?, updated_at = ? WHERE id = ?",
 			)
 			.run(
 				memberId,
 				nextAiIds === null ? null : JSON.stringify(nextAiIds),
+				nextConsultIds === null ? null : JSON.stringify(nextConsultIds),
 				JSON.stringify(nextObserverIds),
+				nextObserverIds.length > 0 ? 1 : 0,
 				timestamp,
 				matterId,
 			);

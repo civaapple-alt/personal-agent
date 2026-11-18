@@ -14,7 +14,7 @@
 [inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/inner-matter-demo.md)。
 
 - 并发、工作区切换与图片上传：
-  - 同事项运行中发送消息、切换工作区及切换事项负责人（`leadMemberId`）返回 409；调整全局旁听开关（`observersEnabled`）、
+  - 同事项运行中再次派发、切换工作区或负责人返回 409。团队讨论消息仍保存，待本轮结束后可再次邀请 AI。调整全局旁听开关（`observersEnabled`）、
     AI 参与名单（`aiMemberIds`）或旁听列表（`observerMemberIds`）可在运行中即时更新。取消要交给编排核，不只广播停止事件。
   - `POST /api/matters/assess` 默认以 `mode: "rules"` 执行即时本地规则预判（支持传入 `hasFiles: true` 以允许纯附件输入发起评估）；传入 `mode: "model"`（仅所有者可调用，支持 `readRepo: true` 只读查看工作区与连接断开自动 `responseCancellation` 中止）通过 Pi 类型化决策模型返回强校验的推荐阵型与把握度。
   - `POST /api/matters` 支持传入 `aiMemberIds`、`observersEnabled`、定向 `observerMemberIds`、`collaboratorIds` 与可选 `images` / `files`（`POST /api/matters/:id/messages`
@@ -22,6 +22,7 @@
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
     - 文本/折叠粘贴文件约束：最多 6 个、单文件 UTF-8 文本 <= 512KB（拒绝含 NUL 的二进制负载），支持 `kind: "file" | "pasted_text"`，允许纯附件提交。
   - 上传图片与 `.txt` 规范化文本附件均落盘 `uploadsDir`（默认 `.data/uploads`，测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问（`.txt` 响应带 `Content-Type: text/plain; charset=utf-8` 与 `X-Content-Type-Options: nosniff`），消息仅存轻量引用 `metadata.images` / `metadata.files`。
+  - 新事项和升级前的已有事项默认关闭 `discussionAiEnabled`。创建请求或事项配置接口可开启，讨论消息在具备组织 AI 派发权限及并发额度时启动讨论 Worker。响应 `aiDiscussionTriggered` 表示已启动，否则 `aiDiscussionSkippedReason` 表示关闭、权限受限、事项繁忙或额度用尽。
 - 组织与成员身份接口：
   - [main.ts](main.ts) 启动时自动保证默认组织存在（`ensureDefaultOrganization`），并在首次无任何组织时将既有无归属工作区及自举仓库归入默认组织。
   - `GET /api/bootstrap` 下发 `organizations`；`GET /api/organizations`、`POST /api/organizations`、

@@ -240,8 +240,10 @@ export interface Matter {
 	createdByUserId?: string | null;
 	visibility?: MatterVisibility;
 	aiMemberIds: string[] | null;
+	consultMemberIds?: string[] | null;
 	observersEnabled: boolean;
 	observerMemberIds: string[];
+	discussionAiEnabled?: boolean;
 	collaboratorIds: string[];
 	createdAt: string;
 	updatedAt: string;

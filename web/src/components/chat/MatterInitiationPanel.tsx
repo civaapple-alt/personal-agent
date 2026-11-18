@@ -20,10 +20,11 @@ interface MatterInitiationPanelProps {
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
 	composerMode: "discussion" | "dispatch";
+	discussionAiEnabled?: boolean;
 	hasWorkspace?: boolean;
 	hasPromptText?: boolean;
-	draftPresetMode: CollaborationPresetMode;
 	draftAiMemberIds: string[] | null;
+	draftConsultMemberIds?: string[] | null;
 	draftObserverMemberIds: string[];
 	draftCollaboratorIds: string[];
 	assessment: MatterInitiationAssessmentDto | null;
@@ -32,6 +33,10 @@ interface MatterInitiationPanelProps {
 	modelAssessing?: boolean;
 	modelAssessmentError?: string | null;
 	onSelectLeadMember: (memberId: string) => void;
+	onSetScopeMode?: (scope: "solo" | "team") => void;
+	onToggleObserverPreset?: () => void;
+	onToggleDraftMemberConsult?: (memberId: string, enabled: boolean) => void;
+	onToggleDraftMemberObserver?: (memberId: string, enabled: boolean) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftObserverIds: (ids: string[]) => void;
@@ -44,12 +49,6 @@ interface MatterInitiationPanelProps {
 	onStartArchitectMatter?: (seedText?: string) => void;
 }
 
-const PRESET_OPTIONS: Array<{ id: CollaborationPresetMode; label: string; hint: string }> = [
-	{ id: "solo", label: "一人处理", hint: "一位主责处理，不委托其他成员，也不开启旁听" },
-	{ id: "lead_consult", label: "按需请教", hint: "主责自行判断是否请教可参与成员，不会全员同时执行" },
-	{ id: "lead_review", label: "加人旁听", hint: "主责完成回复后，指定成员按需检查风险并补充" },
-	{ id: "human_first", label: "先讨论", hint: "仅发送团队讨论，不启动 AI" },
-];
 const sameIds = (a: string[], b: string[]) => [...new Set(a)].sort().join("\0") === [...new Set(b)].sort().join("\0");
 
 /** Actual send configuration stays primary; optional local rule or explicit Pi LLM decision sits beside it. */
@@ -64,10 +63,11 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		templateByRoleId,
 		selectedMemberId,
 		composerMode,
+		discussionAiEnabled = true,
 		hasWorkspace = false,
 		hasPromptText = false,
-		draftPresetMode,
 		draftAiMemberIds,
+		draftConsultMemberIds = null,
 		draftObserverMemberIds,
 		draftCollaboratorIds,
 		assessment,
@@ -76,6 +76,10 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		modelAssessing = false,
 		modelAssessmentError,
 		onSelectLeadMember,
+		onSetScopeMode,
+		onToggleObserverPreset,
+		onToggleDraftMemberConsult,
+		onToggleDraftMemberObserver,
 		onApplyPresetMode,
 		onUpdateDraftAiMemberIds,
 		onUpdateDraftObserverIds,
@@ -93,45 +97,63 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	if (!isOwner || isArchitectMemberId(selectedMemberId, members, templateByRoleId)) return null;
 	const business = filterBusinessMembers(members, templateByRoleId);
 	const allowed = draftAiMemberIds ?? business.map((member) => member.id);
-	const suggestedLead = business.find(
-		(member) => member.id === assessment?.recommendedLeadId && allowed.includes(member.id),
-	);
 	const lead =
 		business.find((member) => member.id === selectedMemberId) ??
-		suggestedLead ??
 		business.find((member) => member.isPrimaryContact && allowed.includes(member.id)) ??
 		business.find((member) => allowed.includes(member.id));
 	const leadId = lead?.id;
-	const observers = draftObserverMemberIds.filter((id) => allowed.includes(id) && id !== leadId);
+	const nonLeadIds = business.map((member) => member.id).filter((id) => id !== leadId);
+	const observers = draftObserverMemberIds.filter((id) => nonLeadIds.includes(id) && allowed.includes(id));
+	const consultIds =
+		draftConsultMemberIds === null
+			? allowed.filter((id) => id !== leadId && nonLeadIds.includes(id))
+			: draftConsultMemberIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
 	const isDiscussion = composerMode === "discussion";
-	const activeMode = isDiscussion
-		? "human_first"
-		: draftPresetMode === "human_first"
-			? "lead_consult"
-			: draftPresetMode;
-	const consultCount = Math.max(0, allowed.filter((id) => id !== leadId && !observers.includes(id)).length);
+	const isSoloScope = consultIds.length === 0;
+	const hasObservers = observers.length > 0;
+	const consultCount = consultIds.length;
+	const teamSummary =
+		isSoloScope && !hasObservers
+			? "仅一位主责，不委托其他成员，也不开启旁听。"
+			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${observers.length ? `，${observers.length} 位成员旁听把关` : "，不自动旁听"}。`;
 	const description = isDiscussion
-		? "这次只发给团队讨论，不启动 AI。"
-		: activeMode === "solo"
-			? "由一位 AI 处理，不委托其他成员，也不开启旁听。"
-			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "由主责处理"}${observers.length ? `，${observers.length} 位成员旁听` : "，不自动旁听"}。`;
+		? discussionAiEnabled
+			? `团队讨论已开启 AI 探讨（不自动改码交付）· ${teamSummary}`
+			: "当前为纯人类聊天讨论，不调用 AI 模型（可随时切到上方开启 AI 参与）。"
+		: teamSummary;
 	const applied =
 		assessment &&
 		!assessing &&
 		(isDiscussion
 			? assessment.recommendedMode === "human_first"
-			: activeMode === assessment.recommendedMode &&
+			: (observers.length > 0 ? "lead_review" : consultIds.length > 0 ? "lead_consult" : "solo") ===
+					assessment.recommendedMode &&
 				selectedMemberId === assessment.recommendedLeadId &&
 				sameIds(allowed, assessment.recommendedAiMemberIds) &&
 				sameIds(observers, assessment.recommendedObserverIds));
-	const setStanding = (memberId: string, standing: string) => {
+	const setRoleFlag = (memberId: string, kind: "consult" | "observer", enabled: boolean) => {
 		if (memberId === leadId) return;
-		const nextAi =
-			standing === "excluded"
-				? allowed.filter((id) => id !== memberId)
-				: [...new Set([...(leadId ? [leadId] : []), ...allowed, memberId])];
+		if (kind === "consult" && onToggleDraftMemberConsult) {
+			onToggleDraftMemberConsult(memberId, enabled);
+			return;
+		}
+		if (kind === "observer" && onToggleDraftMemberObserver) {
+			onToggleDraftMemberObserver(memberId, enabled);
+			return;
+		}
+		const nextConsult =
+			kind === "consult"
+				? enabled
+					? [...new Set([...consultIds, memberId])]
+					: consultIds.filter((id) => id !== memberId)
+				: consultIds;
 		const nextObservers =
-			standing === "observer" ? [...new Set([...observers, memberId])] : observers.filter((id) => id !== memberId);
+			kind === "observer"
+				? enabled
+					? [...new Set([...observers, memberId])]
+					: observers.filter((id) => id !== memberId)
+				: observers;
+		const nextAi = [...new Set([...(leadId ? [leadId] : []), ...nextConsult, ...nextObservers])];
 		onUpdateDraftAiMemberIds(nextAi);
 		onUpdateDraftObserverIds(nextObservers);
 	};
@@ -152,7 +174,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 				<div className="initiation-current-copy">
 					<strong>
 						{isDiscussion
-							? "先和团队讨论"
+							? discussionAiEnabled
+								? `团队聊天讨论 · ${selectedMemberId === "auto" ? "主责自动匹配" : `${lead?.displayName ?? "主联系人"}主谈`}`
+								: "团队聊天讨论 · 纯人类交流"
 							: selectedMemberId === "auto"
 								? "主责自动匹配"
 								: `${lead?.displayName ?? "主联系人"}负责`}
@@ -289,20 +313,43 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			)}
 			{expanded && (
 				<div id={rosterId} className="initiation-roster-drawer compact">
-					<fieldset className="initiation-mode-pills" aria-label="参与方式">
-						{PRESET_OPTIONS.map((option) => (
+					<div className="initiation-scope-bar">
+						<fieldset className="initiation-mode-pills" aria-label="协作范围">
 							<button
-								key={option.id}
 								type="button"
-								className={`choice-chip ${activeMode === option.id ? "active" : ""}`}
-								aria-pressed={activeMode === option.id}
-								title={option.hint}
-								onClick={() => onApplyPresetMode(option.id)}
+								className={`choice-chip ${isSoloScope ? "active" : ""}`}
+								aria-pressed={isSoloScope}
+								title="仅一位主责处理，保留旁听安排"
+								onClick={() => (onSetScopeMode ? onSetScopeMode("solo") : onApplyPresetMode("solo"))}
 							>
-								{option.label}
+								一人处理
 							</button>
-						))}
-					</fieldset>
+							<button
+								type="button"
+								className={`choice-chip ${!isSoloScope ? "active" : ""}`}
+								aria-pressed={!isSoloScope}
+								title="团队分工协作，可自由勾选「按需请教」与「旁听把关」，两者可叠加"
+								onClick={() => (onSetScopeMode ? onSetScopeMode("team") : onApplyPresetMode("lead_consult"))}
+							>
+								团队协作
+							</button>
+						</fieldset>
+						<button
+							type="button"
+							className={`choice-chip initiation-observer-chip ${hasObservers ? "active" : ""}`}
+							aria-pressed={hasObservers}
+							title={
+								hasObservers
+									? "已启用旁听把关（不清空按需请教名单）；点击关闭全部旁听"
+									: "叠加开启旁听把关，主责回复后由旁听成员检查风险，保留现有按需请教配置"
+							}
+							onClick={() =>
+								onToggleObserverPreset ? onToggleObserverPreset() : onApplyPresetMode("lead_review")
+							}
+						>
+							{hasObservers ? `✓ 旁听把关 (${observers.length})` : "+ 旁听把关"}
+						</button>
+					</div>
 					<label className="initiation-lead-picker">
 						<span>主责</span>
 						<select
@@ -313,12 +360,15 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								const next = event.target.value;
 								onSelectLeadMember(next);
 								if (next !== "auto") {
-									onUpdateDraftAiMemberIds(activeMode === "solo" ? [next] : [...new Set([next, ...allowed])]);
-									onUpdateDraftObserverIds(observers.filter((id) => id !== next));
+									const remainingObservers = observers.filter((id) => id !== next);
+									onUpdateDraftAiMemberIds([
+										...new Set([next, ...(isSoloScope ? remainingObservers : allowed)]),
+									]);
+									onUpdateDraftObserverIds(remainingObservers);
 								}
 							}}
 						>
-							{activeMode !== "solo" && <option value="auto">按任务内容自动匹配</option>}
+							{!isSoloScope && <option value="auto">按任务内容自动匹配</option>}
 							{business.map((member) => (
 								<option key={member.id} value={member.id}>
 									{member.displayName}
@@ -326,32 +376,40 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 							))}
 						</select>
 					</label>
-					{activeMode !== "solo" && activeMode !== "human_first" && (
-						<div className="initiation-role-rows">
+					{business.length > 1 && (
+						<fieldset className="initiation-role-rows" aria-label="成员按需请教与旁听把关配置">
 							{business
 								.filter((member) => member.id !== leadId)
-								.map((member) => (
-									<label key={member.id} className="initiation-role-row">
-										<span>{member.displayName}</span>
-										<select
-											className="select-pill"
-											aria-label={`${member.displayName}参与方式`}
-											value={
-												!allowed.includes(member.id)
-													? "excluded"
-													: observers.includes(member.id)
-														? "observer"
-														: "consult"
-											}
-											onChange={(event) => setStanding(member.id, event.target.value)}
-										>
-											<option value="excluded">不参与</option>
-											<option value="consult">按需请教</option>
-											<option value="observer">旁听把关</option>
-										</select>
-									</label>
-								))}
-						</div>
+								.map((member) => {
+									const isConsult = consultIds.includes(member.id);
+									const isObserver = observers.includes(member.id);
+									return (
+										<div key={member.id} className="initiation-role-row">
+											<span className="initiation-role-name">{member.displayName}</span>
+											<div className="initiation-role-toggles">
+												<label className={`role-flag-pill ${isConsult ? "active" : ""}`}>
+													<input
+														type="checkbox"
+														checked={isConsult}
+														aria-label={`${member.displayName}按需请教`}
+														onChange={(e) => setRoleFlag(member.id, "consult", e.target.checked)}
+													/>
+													<span>按需请教</span>
+												</label>
+												<label className={`role-flag-pill observer ${isObserver ? "active" : ""}`}>
+													<input
+														type="checkbox"
+														checked={isObserver}
+														aria-label={`${member.displayName}旁听把关`}
+														onChange={(e) => setRoleFlag(member.id, "observer", e.target.checked)}
+													/>
+													<span>旁听把关</span>
+												</label>
+											</div>
+										</div>
+									);
+								})}
+						</fieldset>
 					)}
 					<div className="initiation-compact-footer">
 						{onUpdateDraftVisibility && (

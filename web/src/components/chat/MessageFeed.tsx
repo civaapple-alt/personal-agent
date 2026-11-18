@@ -250,6 +250,7 @@ export function MessageFeed({
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
+							const isDiscussionReply = !isUser && !isSystem && msg.metadata?.discussionTurn === true;
 							const msgMode = isUser && typeof msg.metadata?.mode === "string" ? msg.metadata.mode : "dispatch";
 							const isDiscussion = isUser && msgMode === "discussion";
 							const isAiRequest = isUser && msgMode === "ai_request";
@@ -319,6 +320,7 @@ export function MessageFeed({
 												{isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
 												{formatClockTime(msg.createdAt)}
 											</span>
+											{isDiscussionReply && <span className="discussion-ai-badge">讨论参与</span>}
 											{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 										</div>
 									)}

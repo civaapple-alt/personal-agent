@@ -5,7 +5,7 @@ import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
-import type { Collaborator, DeliverableType, Matter, MatterVisibility } from "../../storage/types.ts";
+import type { Collaborator, DeliverableType, Matter, MatterMessage, MatterVisibility } from "../../storage/types.ts";
 import {
 	canAccessMatter,
 	canAccessOrganization,
@@ -94,18 +94,19 @@ function ensureOrgEnabledAiRequest(
 	return true;
 }
 
-function checkUserDispatchQuota(ctx: ServerRouteContext, actor: RequestActor, res: { end: unknown }): boolean {
+function hasUserDispatchQuotaAvailable(ctx: ServerRouteContext, actor: RequestActor): boolean {
 	if (!actor.user || isSuperAdminActor(actor)) return true;
-	const activeCount = countActiveDispatchesForUser(ctx, actor.user.id);
-	if (activeCount >= actor.user.maxActiveDispatches) {
-		sendError(
-			res as Parameters<typeof sendError>[0],
-			429,
-			`当前并发执行中的 AI 任务已达上限（${actor.user.maxActiveDispatches} 个），请等待完成或中止后再试`,
-		);
-		return false;
-	}
-	return true;
+	return countActiveDispatchesForUser(ctx, actor.user.id) < actor.user.maxActiveDispatches;
+}
+
+function checkUserDispatchQuota(ctx: ServerRouteContext, actor: RequestActor, res: { end: unknown }): boolean {
+	if (hasUserDispatchQuotaAvailable(ctx, actor)) return true;
+	sendError(
+		res as Parameters<typeof sendError>[0],
+		429,
+		`当前并发执行中的 AI 任务已达上限（${actor.user!.maxActiveDispatches} 个），请等待完成或中止后再试`,
+	);
+	return false;
 }
 
 function resolveActorDefaultOrgId(ctx: ServerRouteContext, actor: RequestActor): string | null {
@@ -173,6 +174,42 @@ function appendDiscussionOrAiRequestMessage(
 		{ matterId: refreshedMatter.id },
 	);
 	return { message, refreshedMatter };
+}
+
+function startDiscussionAi(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	matter: Matter,
+	message: MatterMessage,
+	images: PromptImageAttachment[],
+	files: PromptFileAttachment[],
+	preferredMemberId?: string,
+) {
+	const skippedReason = !matter.discussionAiEnabled
+		? "disabled"
+		: !canDispatchAiInOrg(ctx.store, actor, matter.orgId)
+			? "unauthorized"
+			: ctx.orchestrator.isMatterRunning(matter.id) || ctx.activeRuns.has(matter.id)
+				? "matter_busy"
+				: !hasUserDispatchQuotaAvailable(ctx, actor)
+					? "quota_limit"
+					: null;
+	if (skippedReason) return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: skippedReason };
+
+	ctx.runDispatchInBackground({
+		matterId: matter.id,
+		interactionMode: "discussion",
+		existingUserMessageId: message.id,
+		prompt: message.content,
+		images,
+		files,
+		preferredMemberId,
+		workspaceId: matter.workspaceId ?? undefined,
+		orgId: matter.orgId,
+		startedByUserId: actor.user?.id ?? null,
+		author: toDispatchAuthor(actor.collaborator),
+	});
+	return { aiDiscussionTriggered: true };
 }
 
 /** Handle `/api/matters*` and `/api/dialogs/:id/respond` endpoints. */
@@ -276,8 +313,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const hasOrgUpdate = Object.hasOwn(body, "orgId");
 		const hasLeadUpdate = Object.hasOwn(body, "leadMemberId");
 		const hasAiMembersUpdate = Object.hasOwn(body, "aiMemberIds");
+		const hasConsultMembersUpdate = Object.hasOwn(body, "consultMemberIds");
 		const hasObserversEnabledUpdate = Object.hasOwn(body, "observersEnabled");
 		const hasObserverUpdate = Object.hasOwn(body, "observerMemberIds");
+		const hasDiscussionAiUpdate = Object.hasOwn(body, "discussionAiEnabled");
 		const hasCollaboratorUpdate = Object.hasOwn(body, "collaboratorIds");
 		const hasVisibilityUpdate = Object.hasOwn(body, "visibility");
 		const workspaceId =
@@ -335,8 +374,22 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 400, "At least one AI member must remain in the matter");
 			return true;
 		}
+		const parsedConsultMemberIds =
+			hasConsultMembersUpdate && body.consultMemberIds === null
+				? null
+				: hasConsultMembersUpdate
+					? parseObserverMemberIds(body.consultMemberIds, store)
+					: undefined;
+		if (hasConsultMembersUpdate && parsedConsultMemberIds === undefined) {
+			sendError(res, 400, "consultMemberIds must be null or an array of member IDs");
+			return true;
+		}
 		if (hasObserversEnabledUpdate && typeof body.observersEnabled !== "boolean") {
 			sendError(res, 400, "observersEnabled must be a boolean");
+			return true;
+		}
+		if (hasDiscussionAiUpdate && typeof body.discussionAiEnabled !== "boolean") {
+			sendError(res, 400, "discussionAiEnabled must be a boolean");
 			return true;
 		}
 		const observerMemberIds = hasObserverUpdate ? parseObserverMemberIds(body.observerMemberIds, store) : undefined;
@@ -357,6 +410,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, rosterOrgId, nextLeadId, [
 				...(parsedAiMemberIds ?? []),
+				...(parsedConsultMemberIds ?? []),
 				...(observerMemberIds ?? []),
 			])
 		) {
@@ -382,7 +436,32 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				{
 					matterId,
 					aiMemberIds: updated.aiMemberIds,
+					consultMemberIds: updated.consultMemberIds,
 					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
+		}
+		if (hasConsultMembersUpdate && parsedConsultMemberIds !== undefined) {
+			updated = store.updateMatterConsultMembers(matterId, parsedConsultMemberIds);
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					aiMemberIds: updated.aiMemberIds,
+					consultMemberIds: updated.consultMemberIds,
+					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
+		}
+		if (hasDiscussionAiUpdate) {
+			updated = store.updateMatterDiscussionAiEnabled(matterId, Boolean(body.discussionAiEnabled));
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					discussionAiEnabled: updated.discussionAiEnabled,
 				},
 				{ matterId },
 			);
@@ -593,8 +672,22 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				? null
 				: parseObserverMemberIds(body.aiMemberIds, store)
 			: undefined;
+		const consultMemberIds = Object.hasOwn(body, "consultMemberIds")
+			? body.consultMemberIds === null
+				? null
+				: parseObserverMemberIds(body.consultMemberIds, store)
+			: undefined;
+		if (Object.hasOwn(body, "consultMemberIds") && body.consultMemberIds !== null && consultMemberIds === undefined) {
+			sendError(res, 400, "consultMemberIds must be null or an array of member IDs");
+			return true;
+		}
 		const observersEnabled = typeof body.observersEnabled === "boolean" ? body.observersEnabled : undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
+		if (Object.hasOwn(body, "discussionAiEnabled") && typeof body.discussionAiEnabled !== "boolean") {
+			sendError(res, 400, "discussionAiEnabled must be a boolean");
+			return true;
+		}
+		const discussionAiEnabled = body.discussionAiEnabled === true;
 		const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
 		const initialCollaboratorIds = [...requestedCollaboratorIds];
 		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
@@ -606,6 +699,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, [
 				...(aiMemberIds ?? []),
+				...(consultMemberIds ?? []),
 				...(observerMemberIds ?? []),
 			])
 		) {
@@ -636,8 +730,10 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			createdByUserId: actor.user?.id ?? null,
 			visibility,
 			aiMemberIds,
+			consultMemberIds,
 			observersEnabled,
 			observerMemberIds,
+			discussionAiEnabled,
 			collaboratorIds: initialCollaboratorIds,
 		});
 		recordStoredUploadsAcl(store, {
@@ -659,7 +755,9 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				images,
 				files,
 			});
-			sendJson(res, 201, { matter: refreshedMatter, message, assignedMember: leadMember });
+			const discussion =
+				mode === "discussion" ? startDiscussionAi(ctx, actor, refreshedMatter, message, images, files) : {};
+			sendJson(res, 201, { matter: refreshedMatter, message, assignedMember: leadMember, ...discussion });
 			return true;
 		}
 
@@ -906,7 +1004,9 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const leadMember = matter.leadMemberId ? store.getMember(matter.leadMemberId) : null;
 		const preferredMemberId =
 			explicitPreferredMemberId ??
-			(leadMember && canActorUseMember(store, actor, leadMember) ? leadMember.id : undefined);
+			(mode !== "discussion" && leadMember && canActorUseMember(store, actor, leadMember)
+				? leadMember.id
+				: undefined);
 		const requestedWorkspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
 		if (requestedWorkspaceId && requestedWorkspaceId !== matter.workspaceId) {
 			sendError(res, 409, "请先通过事项设置切换工作区，再发送消息");
@@ -951,7 +1051,25 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 				images,
 				files,
 			});
-			sendJson(res, 201, { accepted: false, mode, message, matter: refreshedMatter });
+			const discussion =
+				mode === "discussion"
+					? startDiscussionAi(
+							ctx,
+							actor,
+							refreshedMatter,
+							message,
+							images,
+							files,
+							explicitPreferredMemberId ?? undefined,
+						)
+					: null;
+			sendJson(res, 201, {
+				accepted: discussion?.aiDiscussionTriggered ?? false,
+				mode,
+				message,
+				matter: refreshedMatter,
+				...discussion,
+			});
 			return true;
 		}
 

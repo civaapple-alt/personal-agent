@@ -41,7 +41,9 @@ export function useMatterInitiationState({
 	setDraftObserversEnabled,
 }: UseMatterInitiationParams) {
 	const [draftPresetMode, setDraftPresetMode] = useState<CollaborationPresetMode>("lead_consult");
+	const [draftConsultMemberIds, setDraftConsultMemberIds] = useState<string[] | null>(null);
 	const [draftObserverMemberIds, setDraftObserverMemberIds] = useState<string[]>([]);
+	const [draftDiscussionAiEnabled, setDraftDiscussionAiEnabled] = useState(false);
 	const [draftCollaboratorIds, setDraftCollaboratorIds] = useState<string[]>([]);
 	const [assessment, setAssessment] = useState<MatterInitiationAssessmentDto | null>(null);
 	const [assessing, setAssessing] = useState(false);
@@ -129,35 +131,142 @@ export function useMatterInitiationState({
 		selectedMemberId,
 	]);
 
+	const syncDraftRoster = useCallback(
+		(nextConsultIds: string[] | null, nextObserverIds: string[], explicitLeadId?: string | null) => {
+			const leadId = explicitLeadId ?? fallbackLeadId;
+			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+			const cleanConsult =
+				nextConsultIds === null
+					? nonLeadIds
+					: nextConsultIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
+			const cleanObs = nextObserverIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
+			const isAllConsult = nonLeadIds.every((id) => cleanConsult.includes(id));
+			const normalizedConsult = isAllConsult && nextConsultIds === null ? null : [...new Set(cleanConsult)];
+			setDraftConsultMemberIds(normalizedConsult);
+			setDraftObserverMemberIds([...new Set(cleanObs)]);
+			setDraftObserversEnabled(cleanObs.length > 0);
+			const union = [...new Set([...(leadId ? [leadId] : []), ...cleanConsult, ...cleanObs])];
+			if (isAllConsult) {
+				setDraftAiMemberIds(null);
+			} else {
+				setDraftAiMemberIds(union.length > 0 ? union : leadId ? [leadId] : null);
+			}
+			if (cleanConsult.length === 0 && cleanObs.length === 0) {
+				setDraftPresetMode("solo");
+			} else if (cleanObs.length > 0) {
+				setDraftPresetMode("lead_review");
+			} else {
+				setDraftPresetMode("lead_consult");
+			}
+		},
+		[businessMembers, fallbackLeadId, setDraftAiMemberIds, setDraftObserversEnabled],
+	);
+
+	const setScopeMode = useCallback(
+		(scope: "solo" | "team") => {
+			const leadId = fallbackLeadId;
+			if (scope === "solo") {
+				if (leadId) setSelectedMemberId(leadId);
+				syncDraftRoster([], draftObserverMemberIds, leadId);
+				return;
+			}
+			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+			const existingConsult =
+				draftConsultMemberIds === null
+					? nonLeadIds
+					: draftConsultMemberIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
+			const nextConsult = existingConsult.length > 0 ? draftConsultMemberIds : nonLeadIds;
+			// Expanding to team collaboration preserves any already-chosen observers.
+			syncDraftRoster(nextConsult, draftObserverMemberIds, leadId);
+		},
+		[
+			businessMembers,
+			draftConsultMemberIds,
+			draftObserverMemberIds,
+			fallbackLeadId,
+			setSelectedMemberId,
+			syncDraftRoster,
+		],
+	);
+
+	const toggleObserverPreset = useCallback(() => {
+		const leadId = fallbackLeadId;
+		if (draftObserverMemberIds.length > 0) {
+			syncDraftRoster(draftConsultMemberIds, [], leadId);
+			return;
+		}
+		const nonLead = businessMembers.filter((m) => m.id !== leadId);
+		const defaultObs = nonLead.find((m) => m.templateId === "qa-manager") ?? nonLead[0] ?? null;
+		const nextObs = defaultObs ? [defaultObs.id] : [];
+		syncDraftRoster(draftConsultMemberIds, nextObs, leadId);
+	}, [businessMembers, draftConsultMemberIds, draftObserverMemberIds.length, fallbackLeadId, syncDraftRoster]);
+
+	const toggleDraftMemberConsult = useCallback(
+		(memberId: string, enabled: boolean) => {
+			const leadId = fallbackLeadId;
+			if (memberId === leadId) return;
+			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+			const current = draftConsultMemberIds === null ? nonLeadIds : draftConsultMemberIds;
+			const nextConsult = enabled ? [...new Set([...current, memberId])] : current.filter((id) => id !== memberId);
+			syncDraftRoster(nextConsult, draftObserverMemberIds, leadId);
+		},
+		[businessMembers, draftConsultMemberIds, draftObserverMemberIds, fallbackLeadId, syncDraftRoster],
+	);
+
+	const toggleDraftMemberObserver = useCallback(
+		(memberId: string, enabled: boolean) => {
+			const leadId = fallbackLeadId;
+			if (memberId === leadId) return;
+			const nextObs = enabled
+				? [...new Set([...draftObserverMemberIds, memberId])]
+				: draftObserverMemberIds.filter((id) => id !== memberId);
+			syncDraftRoster(draftConsultMemberIds, nextObs, leadId);
+		},
+		[draftConsultMemberIds, draftObserverMemberIds, fallbackLeadId, syncDraftRoster],
+	);
+
 	const applyPresetMode = useCallback(
 		(
 			mode: CollaborationPresetMode,
-			options?: { leadId?: string | null; aiIds?: string[]; observerIds?: string[] },
+			options?: {
+				leadId?: string | null;
+				aiIds?: string[];
+				consultIds?: string[];
+				observerIds?: string[];
+			},
 		) => {
 			const leadId = options?.leadId ?? fallbackLeadId;
-			setDraftPresetMode(mode);
 			if (mode === "human_first") {
 				setComposerMode("discussion");
-				setDraftObserversEnabled(false);
-				setDraftObserverMemberIds([]);
+				setDraftDiscussionAiEnabled(false);
+				if (options?.consultIds || options?.aiIds || options?.observerIds) {
+					const obs = (options.observerIds ?? []).filter((id) => id !== leadId);
+					const consult =
+						options.consultIds ??
+						(options.aiIds ? options.aiIds.filter((id) => id !== leadId && !obs.includes(id)) : null);
+					syncDraftRoster(consult, obs, leadId);
+				}
 				return;
 			}
 			setComposerMode("dispatch");
 			if (mode === "solo") {
 				if (leadId) setSelectedMemberId(leadId);
+				setDraftConsultMemberIds([]);
+				setDraftObserverMemberIds([]);
+				setDraftObserversEnabled(false);
 				setDraftAiMemberIds(leadId ? [leadId] : null);
-				setDraftObserverMemberIds([]);
-				setDraftObserversEnabled(false);
+				setDraftPresetMode("solo");
 				return;
 			}
+			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
 			if (mode === "lead_consult") {
-				const allIds = businessMembers.map((m) => m.id);
-				setDraftAiMemberIds(options?.aiIds?.length ? options.aiIds : allIds.length > 0 ? allIds : null);
-				setDraftObserverMemberIds([]);
-				setDraftObserversEnabled(false);
+				const obs = (options?.observerIds ?? draftObserverMemberIds).filter((id) => id !== leadId);
+				const consult =
+					options?.consultIds ??
+					(options?.aiIds ? options.aiIds.filter((id) => id !== leadId && !obs.includes(id)) : nonLeadIds);
+				syncDraftRoster(consult, obs, leadId);
 				return;
 			}
-			// lead_review: targeted observers, without enrolling unrelated members.
 			const defaultObserver =
 				options?.observerIds && options.observerIds.length > 0
 					? options.observerIds.filter((id) => id !== leadId)
@@ -167,20 +276,23 @@ export function useMatterInitiationState({
 								businessMembers.find((m) => m.id !== leadId);
 							return qaOrOther ? [qaOrOther.id] : [];
 						})();
-			const nextAiIds = options?.aiIds?.length
-				? Array.from(new Set([...(leadId ? [leadId] : []), ...options.aiIds, ...defaultObserver]))
-				: [...(leadId ? [leadId] : []), ...defaultObserver];
-			setDraftAiMemberIds(nextAiIds.length > 0 ? nextAiIds : null);
-			setDraftObserverMemberIds(defaultObserver);
-			setDraftObserversEnabled(defaultObserver.length > 0);
+			const nextConsult =
+				options?.consultIds ??
+				(options?.aiIds
+					? options.aiIds.filter((id) => id !== leadId && !defaultObserver.includes(id))
+					: draftConsultMemberIds);
+			syncDraftRoster(nextConsult, defaultObserver, leadId);
 		},
 		[
 			businessMembers,
+			draftConsultMemberIds,
+			draftObserverMemberIds,
 			fallbackLeadId,
 			setComposerMode,
 			setDraftAiMemberIds,
 			setDraftObserversEnabled,
 			setSelectedMemberId,
+			syncDraftRoster,
 		],
 	);
 
@@ -192,6 +304,7 @@ export function useMatterInitiationState({
 		applyPresetMode(assessment.recommendedMode, {
 			leadId: assessment.recommendedLeadId,
 			aiIds: assessment.recommendedAiMemberIds,
+			consultIds: assessment.recommendedConsultIds,
 			observerIds: assessment.recommendedObserverIds,
 		});
 	}, [applyPresetMode, assessment, setSelectedMemberId]);
@@ -271,8 +384,10 @@ export function useMatterInitiationState({
 		modelControllerRef.current = null;
 		setDraftPresetMode("lead_consult");
 		setDraftAiMemberIds(null);
+		setDraftConsultMemberIds(null);
 		setDraftObserverMemberIds([]);
 		setDraftObserversEnabled(false);
+		setDraftDiscussionAiEnabled(false);
 		setDraftCollaboratorIds([]);
 		setAssessment(null);
 		setModelAssessing(false);
@@ -282,7 +397,9 @@ export function useMatterInitiationState({
 
 	return {
 		draftPresetMode,
+		draftConsultMemberIds,
 		draftObserverMemberIds,
+		draftDiscussionAiEnabled,
 		draftCollaboratorIds,
 		assessment,
 		assessing,
@@ -291,11 +408,18 @@ export function useMatterInitiationState({
 		modelAssessmentError,
 		architectOpen,
 		architectSeed,
+		setDraftConsultMemberIds,
 		setDraftObserverMemberIds,
+		setDraftDiscussionAiEnabled,
 		setDraftCollaboratorIds,
 		setDraftPresetMode,
 		setArchitectOpen,
 		setArchitectSeed,
+		syncDraftRoster,
+		setScopeMode,
+		toggleObserverPreset,
+		toggleDraftMemberConsult,
+		toggleDraftMemberObserver,
 		applyPresetMode,
 		applyAssessmentRecommendation,
 		requestModelAssessment,

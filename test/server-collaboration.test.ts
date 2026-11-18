@@ -501,6 +501,24 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		};
 		assert.ok(matter.collaboratorIds.includes(colleague.id));
 
+		const enableDiscussion = await fetch(`${baseUrl}/api/matters/${matter.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
+			body: JSON.stringify({ discussionAiEnabled: true }),
+		});
+		assert.equal(enableDiscussion.status, 200);
+		const guestDiscussion = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: collabCookie },
+			body: JSON.stringify({ mode: "discussion", prompt: "@product-manager 评论接口命名" }),
+		});
+		assert.equal(guestDiscussion.status, 201);
+		assert.equal(
+			((await guestDiscussion.json()) as { aiDiscussionSkippedReason: string }).aiDiscussionSkippedReason,
+			"unauthorized",
+		);
+		assert.equal(capturedPrompts.length, 0);
+
 		const postAiRequestRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: collabCookie },

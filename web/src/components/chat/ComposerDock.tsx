@@ -13,6 +13,7 @@ import type {
 	ComposerImageAttachment,
 	MatterProgressDto,
 	OrganizationDto,
+	TeamMemberDto,
 	WorkspaceDto,
 } from "../../api.ts";
 import {
@@ -41,6 +42,12 @@ interface ComposerDockProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	composerMode: "discussion" | "dispatch";
 	isOwner: boolean;
+	discussionAiEnabled?: boolean;
+	canToggleDiscussionAi: boolean;
+	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
+	mentionMembers?: TeamMemberDto[];
+	leadMemberId?: string | null;
+	observerMemberIds?: string[];
 	allowUnboundOrg?: boolean;
 	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
@@ -79,6 +86,12 @@ export function ComposerDock({
 	composerRef,
 	composerMode,
 	isOwner,
+	discussionAiEnabled = false,
+	canToggleDiscussionAi,
+	onToggleDiscussionAiEnabled,
+	mentionMembers = [],
+	leadMemberId = null,
+	observerMemberIds = [],
 	allowUnboundOrg = true,
 	isArchitectMode = false,
 	isTurnRunning,
@@ -111,8 +124,96 @@ export function ComposerDock({
 }: ComposerDockProps) {
 	const [dragOverComposer, setDragOverComposer] = useState(false);
 	const [isMultiline, setIsMultiline] = useState(false);
+	const [mentionState, setMentionState] = useState<{ start: number; end: number; query: string } | null>(null);
+	const [mentionIdx, setMentionIdx] = useState(0);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
+
+	const canUseAiInDiscussion = composerMode === "discussion" && !isArchitectMode && discussionAiEnabled && isOwner;
+	const showMentionPicker = Boolean(mentionState && canUseAiInDiscussion && mentionMembers.length > 0);
+	const filteredMentionMembers = showMentionPicker
+		? mentionMembers.filter((member) => {
+				const q = (mentionState?.query ?? "").trim().toLowerCase();
+				if (!q) return true;
+				return (
+					member.displayName.toLowerCase().includes(q) ||
+					member.roleTitle.toLowerCase().includes(q) ||
+					member.id.toLowerCase().includes(q)
+				);
+			})
+		: [];
+
+	const syncMentionFromCursor = (text: string, caret: number | null | undefined) => {
+		if (!canUseAiInDiscussion || caret == null) {
+			setMentionState(null);
+			return;
+		}
+		const beforeCaret = text.slice(0, caret);
+		const atIdx = beforeCaret.lastIndexOf("@");
+		if (atIdx < 0) {
+			setMentionState(null);
+			return;
+		}
+		const charBeforeAt = atIdx === 0 ? "" : beforeCaret[atIdx - 1]!;
+		if (charBeforeAt && !/[\s,.:;!?，。：；！？、([【（]/.test(charBeforeAt)) {
+			setMentionState(null);
+			return;
+		}
+		const query = beforeCaret.slice(atIdx + 1);
+		const normalizedQuery = query.toLowerCase();
+		const completedMention = mentionMembers.some((member) =>
+			[member.displayName, member.roleTitle, member.id].some((alias) => {
+				const prefix = alias.trim().toLowerCase();
+				return prefix.length > 0 && normalizedQuery.startsWith(prefix) && /\s/.test(query[prefix.length] ?? "");
+			}),
+		);
+		if (/^\s|\n/.test(query) || query.length > 128 || completedMention) {
+			setMentionState(null);
+			return;
+		}
+		setMentionState({ start: atIdx, end: caret, query });
+		setMentionIdx(0);
+	};
+
+	const insertMentionMember = (member: TeamMemberDto) => {
+		const el = composerRef.current;
+		const displayName = member.displayName.trim();
+		const duplicateName = mentionMembers.some(
+			(other) =>
+				other.id !== member.id &&
+				[other.displayName, other.roleTitle, other.id].some(
+					(alias) => alias.trim().toLowerCase() === displayName.toLowerCase(),
+				),
+		);
+		const mentionText = `@${duplicateName ? member.id : displayName} `;
+		if (mentionState) {
+			const next = composerText.slice(0, mentionState.start) + mentionText + composerText.slice(mentionState.end);
+			const nextCaret = mentionState.start + mentionText.length;
+			onComposerTextChange(next);
+			setMentionState(null);
+			requestAnimationFrame(() => {
+				if (el) {
+					el.focus();
+					el.setSelectionRange(nextCaret, nextCaret);
+				}
+			});
+			return;
+		}
+		const caret = el?.selectionStart ?? composerText.length;
+		const end = el?.selectionEnd ?? caret;
+		const prefixNeedsSpace = caret > 0 && !/[\s(（[【]/.test(composerText[caret - 1]!) ? " " : "";
+		const inserted = `${prefixNeedsSpace}${mentionText}`;
+		const next = composerText.slice(0, caret) + inserted + composerText.slice(end);
+		const nextCaret = caret + inserted.length;
+		onComposerTextChange(next);
+		setMentionState(null);
+		requestAnimationFrame(() => {
+			if (el) {
+				el.focus();
+				el.setSelectionRange(nextCaret, nextCaret);
+			}
+		});
+	};
 
 	const isNewMatter = !selectedMatterId;
 	const hasAttachments = pendingImages.length > 0 || pendingFiles.length > 0;
@@ -138,7 +239,31 @@ export function ComposerDock({
 	};
 
 	const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-		if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+		if (e.nativeEvent.isComposing) return;
+		if (showMentionPicker && e.key === "Escape") {
+			e.preventDefault();
+			setMentionState(null);
+			return;
+		}
+		if (showMentionPicker && filteredMentionMembers.length > 0) {
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				setMentionIdx((idx) => (idx + 1) % filteredMentionMembers.length);
+				return;
+			}
+			if (e.key === "ArrowUp") {
+				e.preventDefault();
+				setMentionIdx((idx) => (idx - 1 + filteredMentionMembers.length) % filteredMentionMembers.length);
+				return;
+			}
+			if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+				e.preventDefault();
+				const picked = filteredMentionMembers[mentionIdx] ?? filteredMentionMembers[0];
+				if (picked) insertMentionMember(picked);
+				return;
+			}
+		}
+		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			if (canSend) {
 				onSendPrompt();
@@ -215,7 +340,9 @@ export function ComposerDock({
 	const placeholder = isArchitectMode
 		? "描述你们的工作流程或角色缺口（Enter 发送，Shift+Enter 换行）..."
 		: composerMode === "discussion"
-			? "和团队成员同步想法，支持附带文件或截图（不触发 AI 执行）..."
+			? discussionAiEnabled && isOwner
+				? "在团队聊天讨论中交流想法（已开启 AI 探讨，可 @角色 点名；切到「给 AI 安排事项」再正式派工）..."
+				: "和团队成员同步想法，支持附带文件或截图（纯人类讨论，不触发 AI）..."
 			: !isOwner
 				? "写下希望 AI 协助处理的内容，提交后由团队所有者确认派发..."
 				: isTurnRunning
@@ -296,25 +423,48 @@ export function ComposerDock({
 							{isArchitectMode ? (
 								<span className="composer-architect-badge">角色架构师 · 只读建队规划</span>
 							) : (
-								<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
-									<button
-										type="button"
-										role="tab"
-										aria-selected={composerMode === "discussion"}
-										className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
-										onClick={() => onComposerModeChange("discussion")}
-									>
-										团队聊天讨论
-									</button>
-									<button
-										type="button"
-										role="tab"
-										aria-selected={composerMode === "dispatch"}
-										className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
-										onClick={() => onComposerModeChange("dispatch")}
-									>
-										{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
-									</button>
+								<div className="composer-mode-wrap">
+									<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
+										<button
+											type="button"
+											role="tab"
+											aria-selected={composerMode === "discussion"}
+											className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
+											onClick={() => onComposerModeChange("discussion")}
+										>
+											团队聊天讨论
+										</button>
+										<button
+											type="button"
+											role="tab"
+											aria-selected={composerMode === "dispatch"}
+											className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
+											onClick={() => onComposerModeChange("dispatch")}
+										>
+											{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
+										</button>
+									</div>
+									{composerMode === "discussion" && onToggleDiscussionAiEnabled && (
+										<button
+											type="button"
+											className={`composer-discussion-ai-pill ${discussionAiEnabled && isOwner ? "active" : ""}`}
+											aria-pressed={discussionAiEnabled && isOwner}
+											disabled={!canToggleDiscussionAi}
+											title={
+												!isOwner
+													? "当前账号仅支持纯人类讨论或提交 AI 提请，暂不直接触发 AI 讨论"
+													: !canToggleDiscussionAi
+														? "由事项发起人或管理员设置"
+														: discussionAiEnabled
+															? "点击关闭：切为纯人类讨论群，不调用 AI"
+															: "点击开启：发讨论时邀请 AI 成员查证和交流（可 @角色）"
+											}
+											onClick={() => onToggleDiscussionAiEnabled(!discussionAiEnabled)}
+										>
+											<span className="discussion-ai-dot" aria-hidden="true" />
+											{discussionAiEnabled && isOwner ? "AI 参与讨论：开" : "AI 参与讨论：关"}
+										</button>
+									)}
 								</div>
 							)}
 						</div>
@@ -464,6 +614,36 @@ export function ComposerDock({
 					)}
 
 					<div className="composer-input-shell">
+						{showMentionPicker && (
+							<div className="composer-mention-menu" role="listbox" aria-label="选择要 @ 的 AI 角色">
+								{filteredMentionMembers.length === 0 ? (
+									<div className="composer-mention-empty">没有匹配的在组 AI 角色</div>
+								) : (
+									filteredMentionMembers.map((member, idx) => {
+										const roleTag =
+											member.id === leadMemberId
+												? "主责"
+												: observerMemberIds.includes(member.id)
+													? "旁听"
+													: "协作";
+										return (
+											<button
+												key={member.id}
+												type="button"
+												role="option"
+												aria-selected={idx === mentionIdx}
+												className={`composer-mention-item ${idx === mentionIdx ? "active" : ""}`}
+												onMouseDown={(e) => e.preventDefault()}
+												onClick={() => insertMentionMember(member)}
+											>
+												<strong>@{member.displayName}</strong>
+												<span className="composer-mention-tag">{roleTag}</span>
+											</button>
+										);
+									})
+								)}
+							</div>
+						)}
 						<input
 							ref={fileInputRef}
 							type="file"
@@ -483,7 +663,16 @@ export function ComposerDock({
 							rows={isNewMatter ? 3 : 1}
 							className="composer-textarea"
 							value={composerText}
-							onChange={(e) => onComposerTextChange(e.target.value)}
+							onChange={(e) => {
+								onComposerTextChange(e.target.value);
+								syncMentionFromCursor(e.target.value, e.target.selectionStart);
+							}}
+							onClick={(e) => syncMentionFromCursor(e.currentTarget.value, e.currentTarget.selectionStart)}
+							onKeyUp={(e) => {
+								if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+									syncMentionFromCursor(e.currentTarget.value, e.currentTarget.selectionStart);
+								}
+							}}
 							onKeyDown={handleComposerKeyDown}
 							onPaste={handleComposerPaste}
 							placeholder={placeholder}
@@ -503,13 +692,41 @@ export function ComposerDock({
 								>
 									+
 								</button>
+								{canUseAiInDiscussion && mentionMembers.length > 0 && (
+									<button
+										type="button"
+										className="composer-at-btn"
+										aria-label="@指定 AI 角色讨论"
+										title="在讨论中 @指定 AI 角色回答"
+										onClick={() => {
+											const el = composerRef.current;
+											const caret = el?.selectionStart ?? composerText.length;
+											const end = el?.selectionEnd ?? caret;
+											const prefix = caret > 0 && !/[\s(（[【]/.test(composerText[caret - 1]!) ? " @" : "@";
+											const next = composerText.slice(0, caret) + prefix + composerText.slice(end);
+											const nextCaret = caret + prefix.length;
+											onComposerTextChange(next);
+											requestAnimationFrame(() => {
+												if (el) {
+													el.focus();
+													el.setSelectionRange(nextCaret, nextCaret);
+													syncMentionFromCursor(next, nextCaret);
+												}
+											});
+										}}
+									>
+										@角色
+									</button>
+								)}
 								<span className="composer-toolbar-hint">
 									{isTurnRunning && sendBlockedByTurn
 										? "当前正在执行，可停止或切到「团队聊天讨论」"
 										: isMultiline
 											? `${lineCount} 行 · ${composerText.length} 字 · Shift+Enter 换行`
 											: composerMode === "discussion"
-												? "自由讨论，不触发 AI · 支持文件与图片"
+												? discussionAiEnabled && isOwner
+													? "探讨中（不改码交付 · 可 @角色），切到「给 AI 安排事项」再正式派工"
+													: "纯人类讨论，不调用 AI · 支持文件与图片"
 												: "支持上传文件/图片，粘贴大段文本自动折叠"}
 								</span>
 							</div>

@@ -8,8 +8,12 @@ import { type RpcWorkerLike, TeamOrchestrator } from "../src/orchestrator/team-o
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
 import teamExtension, { type PiExtensionApi } from "../src/rpc/team-extension.ts";
+import { createPersonalAgentServer } from "../src/server/app.ts";
+import { DialogBroker } from "../src/server/dialog-broker.ts";
+import { PreviewManager } from "../src/server/preview-manager.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import type { Matter, MatterMessage } from "../src/storage/types.ts";
 import { invokeTool } from "./worker-helpers.ts";
 
 type Tool = Parameters<PiExtensionApi["registerTool"]>[0];
@@ -157,6 +161,135 @@ async function fixture(t: test.TestContext, respond: Responder) {
 	const workspace = store.upsertWorkspace({ name: "A", repoPath: root });
 	return { root, db, store, templates, workers, options, orchestrator, workspace };
 }
+
+test("team discussion is opt-in, preserves the roster and deliverables, and uses separate Pi sessions", async (t) => {
+	const f = await fixture(t, async (worker) => `Reply from ${worker.options.env?.PA_MEMBER_ID}`);
+	const { server } = createPersonalAgentServer({
+		store: f.store,
+		orchestrator: f.orchestrator,
+		templates: f.templates,
+		uploadsDir: join(f.root, "uploads"),
+		dialogBroker: new DialogBroker(),
+		previewManager: new PreviewManager(),
+	});
+	await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+	t.after(() => {
+		server.closeAllConnections();
+		server.close();
+	});
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const url = `http://127.0.0.1:${address.port}`;
+	const request = async (path: string, method: "POST" | "PATCH", input: object) => {
+		const response = await fetch(url + path, {
+			method,
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(input),
+		});
+		const body = await response.json();
+		assert.ok(response.ok, JSON.stringify(body));
+		return body as {
+			aiDiscussionTriggered?: boolean;
+			aiDiscussionSkippedReason?: string;
+			message: MatterMessage;
+			matter: Matter;
+		};
+	};
+	const waitForTurn = async (matterId: string) => {
+		const deadline = Date.now() + 5_000;
+		while (f.orchestrator.isMatterRunning(matterId) && Date.now() < deadline) {
+			await new Promise((wait) => setTimeout(wait, 10));
+		}
+		assert.equal(f.orchestrator.isMatterRunning(matterId), false);
+	};
+
+	const first = await f.orchestrator.dispatchMatter({
+		prompt: "Publish the initial design",
+		preferredMemberId: "engineering-manager",
+		workspaceId: f.workspace.id,
+		aiMemberIds: ["engineering-manager", "qa-manager", "product-manager"],
+		consultMemberIds: ["qa-manager"],
+		observerMemberIds: ["qa-manager"],
+		deliverableTitle: "Initial design",
+	});
+	const matterPath = `/api/matters/${first.matter.id}`;
+	const initialWorkerCount = f.workers.length;
+	const off = await request(`${matterPath}/messages`, "POST", {
+		mode: "discussion",
+		discussionAi: true,
+		prompt: "@qa-manager Review the initial design",
+	});
+	assert.equal(off.aiDiscussionSkippedReason, "disabled");
+	assert.equal(f.workers.length, initialWorkerCount);
+
+	await request(matterPath, "PATCH", { consultMemberIds: [] });
+	assert.deepEqual(f.store.getMatter(first.matter.id)?.observerMemberIds, ["qa-manager"]);
+	assert.deepEqual(f.store.getMatter(first.matter.id)?.aiMemberIds, [
+		"engineering-manager",
+		"qa-manager",
+		"product-manager",
+	]);
+	await request(matterPath, "PATCH", { discussionAiEnabled: true });
+	const on = await request(`${matterPath}/messages`, "POST", {
+		mode: "discussion",
+		prompt: "@qa-manager @engineering-manager What should we verify?",
+	});
+	assert.equal(on.aiDiscussionTriggered, true);
+	await waitForTurn(first.matter.id);
+	const discussionWorkers = f.workers.slice(initialWorkerCount);
+	assert.deepEqual(
+		discussionWorkers.map((worker) => worker.options.env?.PA_MEMBER_ID),
+		["qa-manager", "engineering-manager"],
+	);
+	assert.equal(
+		discussionWorkers.every((worker) => !worker.tools.has("publish_deliverable")),
+		true,
+	);
+	assert.equal(
+		discussionWorkers.every((worker) => !worker.tools.has("propose_experience")),
+		true,
+	);
+	assert.equal(discussionWorkers[1]?.options.sessionFile, undefined);
+	const engineeringArgs = discussionWorkers[1]?.options.args ?? [];
+	assert.ok(engineeringArgs[engineeringArgs.indexOf("--tools") + 1]?.split(",").includes("bash"));
+	assert.match(discussionWorkers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Discussion chat mode/);
+	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+	assert.equal(f.store.getMatter(first.matter.id)?.status, "delivered");
+	assert.equal(f.store.listDeliverables(first.matter.id).length, 1);
+	const messages = f.store.listMessages(first.matter.id, "user");
+	assert.equal(messages.filter(({ content }) => content === on.message.content).length, 1);
+	assert.deepEqual(
+		messages
+			.filter(({ metadata }) => metadata?.sourceUserMessageId === on.message.id)
+			.map(({ senderId }) => senderId),
+		["qa-manager", "engineering-manager"],
+	);
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Continue with the verified findings" });
+	const resumed = f.workers
+		.slice(initialWorkerCount + 2)
+		.find((worker) => worker.options.env?.PA_MEMBER_ID === "engineering-manager");
+	assert.equal(resumed?.options.sessionFile, f.workers[0]?.sessionFile);
+	assert.match(resumed?.prompt ?? "", /\[Discussion reply\].*Reply from qa-manager/);
+
+	const created = await request("/api/matters", "POST", {
+		mode: "discussion",
+		prompt: "@qa-manager Initial discussion",
+		discussionAiEnabled: true,
+		preferredMemberId: "engineering-manager",
+		aiMemberIds: ["engineering-manager", "qa-manager"],
+	});
+	assert.equal(created.aiDiscussionTriggered, true);
+	await waitForTurn(created.matter.id);
+	assert.deepEqual(
+		f.store
+			.listMessages(created.matter.id, "user")
+			.map(({ senderType, senderId }) => [senderType, senderType === "member" ? senderId : "human"]),
+		[
+			["user", "human"],
+			["member", "qa-manager"],
+		],
+	);
+});
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {
 	const f = await fixture(t, async () => "讨论回复");

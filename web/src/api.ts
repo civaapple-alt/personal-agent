@@ -187,8 +187,10 @@ export interface MatterDto {
 	createdByUserId?: string | null;
 	visibility?: MatterVisibility;
 	aiMemberIds?: string[] | null;
+	consultMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
+	discussionAiEnabled?: boolean;
 	collaboratorIds?: string[];
 	createdAt: string;
 	updatedAt: string;
@@ -394,6 +396,7 @@ export interface MatterInitiationAssessmentDto {
 	recommendedMode: CollaborationPresetMode;
 	recommendedLeadId: string | null;
 	recommendedAiMemberIds: string[];
+	recommendedConsultIds?: string[];
 	recommendedObserverIds: string[];
 	candidates: MatterInitiationCandidateDto[];
 	gapSuggestion?: RoleGapSuggestionDto;
@@ -719,12 +722,19 @@ export function createMatter(input: {
 	workspaceId?: string;
 	orgId?: string | null;
 	aiMemberIds?: string[] | null;
+	consultMemberIds?: string[] | null;
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
+	discussionAiEnabled?: boolean;
 	collaboratorIds?: string[];
 	visibility?: MatterVisibility;
 	title?: string;
-}): Promise<{ matter: MatterDto; assignedMember: TeamMemberDto }> {
+}): Promise<{
+	matter: MatterDto;
+	assignedMember: TeamMemberDto;
+	aiDiscussionTriggered?: boolean;
+	aiDiscussionSkippedReason?: string;
+}> {
 	return requestJson("/api/matters", {
 		method: "POST",
 		body: JSON.stringify(input),
@@ -741,7 +751,14 @@ export function postMatterMessage(
 		preferredMemberId?: string;
 		observerMemberIds?: string[];
 	},
-): Promise<{ accepted: boolean; mode?: MatterSendMode; message?: MatterMessageDto; matter?: MatterDto }> {
+): Promise<{
+	accepted: boolean;
+	mode?: MatterSendMode;
+	message?: MatterMessageDto;
+	matter?: MatterDto;
+	aiDiscussionTriggered?: boolean;
+	aiDiscussionSkippedReason?: string;
+}> {
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
 		method: "POST",
 		body: JSON.stringify(input),
@@ -1207,6 +1224,26 @@ export function updateMatterAiMembers(matterId: string, aiMemberIds: string[] | 
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ aiMemberIds }),
+	});
+}
+
+export function updateMatterConsultMembers(
+	matterId: string,
+	consultMemberIds: string[] | null,
+): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ consultMemberIds }),
+	});
+}
+
+export function updateMatterDiscussionAiEnabled(
+	matterId: string,
+	discussionAiEnabled: boolean,
+): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ discussionAiEnabled }),
 	});
 }
 

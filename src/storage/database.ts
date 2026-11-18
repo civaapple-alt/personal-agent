@@ -173,8 +173,10 @@ CREATE TABLE IF NOT EXISTS matters (
 	workspace_id TEXT REFERENCES workspace_links(id),
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	ai_member_ids_json TEXT,
+	consult_member_ids_json TEXT,
 	observers_enabled INTEGER NOT NULL DEFAULT 0,
 	observer_ids_json TEXT,
+	discussion_ai_enabled INTEGER NOT NULL DEFAULT 0,
 	collaborator_ids_json TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
@@ -322,6 +324,8 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	};
 	ensureMatterCol("created_by_user_id", "created_by_user_id TEXT");
 	ensureMatterCol("visibility", "visibility TEXT NOT NULL DEFAULT 'org'");
+	ensureMatterCol("consult_member_ids_json", "consult_member_ids_json TEXT");
+	ensureMatterCol("discussion_ai_enabled", "discussion_ai_enabled INTEGER NOT NULL DEFAULT 0");
 	const columns = db.prepare("PRAGMA table_info(worker_sessions)").all();
 	if (!columns.some((column) => column.name === "context_key")) {
 		db.exec("ALTER TABLE worker_sessions ADD COLUMN context_key TEXT");

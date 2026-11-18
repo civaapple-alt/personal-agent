@@ -650,6 +650,20 @@ export function App() {
 		return draftObserversEnabled;
 	}, [draftObserversEnabled, matterDetail, selectedMatterId]);
 
+	const matterConsultMemberIds: string[] | null = useMemo(() => {
+		if (selectedMatterId && matterDetail) {
+			return matterDetail.matter.consultMemberIds ?? null;
+		}
+		return initiation.draftConsultMemberIds;
+	}, [initiation.draftConsultMemberIds, matterDetail, selectedMatterId]);
+
+	const discussionAiEnabled: boolean = useMemo(() => {
+		if (selectedMatterId && matterDetail) {
+			return matterDetail.matter.discussionAiEnabled ?? false;
+		}
+		return initiation.draftDiscussionAiEnabled;
+	}, [initiation.draftDiscussionAiEnabled, matterDetail, selectedMatterId]);
+
 	const handleAddComposerAttachments = useCallback(async (files: FileList | File[]) => {
 		const incoming = Array.from(files ?? []);
 		if (incoming.length === 0) return;
@@ -739,6 +753,16 @@ export function App() {
 		? accountUser.status === "active" && accountUser.canDispatchAi && effectiveOrg?.orgRole !== "org_viewer"
 		: currentUser?.permissionRole !== "collaborator";
 	const isOwner = canDispatchAi;
+	const canManageMatter =
+		!selectedMatterId ||
+		isSuperAdmin ||
+		(!accountUser && currentUser?.permissionRole === "owner") ||
+		Boolean(
+			accountUser &&
+				(matterDetail?.matter.createdByUserId === accountUser.id ||
+					effectiveOrg?.orgRole === "org_owner" ||
+					effectiveOrg?.orgRole === "org_admin"),
+		);
 	const handleOpenDemo = async () => {
 		if (demoOpening) return;
 		setDemoOpening(true);
@@ -994,7 +1018,9 @@ export function App() {
 		selectedWorkspace,
 		selectedOrgId,
 		draftAiMemberIds,
+		draftConsultMemberIds: initiation.draftConsultMemberIds,
 		draftObserverMemberIds: initiation.draftObserverMemberIds,
+		draftDiscussionAiEnabled: initiation.draftDiscussionAiEnabled,
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		draftVisibility: draftMatterVisibility,
 		draftObserversEnabled,
@@ -1011,7 +1037,9 @@ export function App() {
 		setSelectedWorkspaceId,
 		setSelectedOrgId,
 		setDraftAiMemberIds,
+		setDraftConsultMemberIds: initiation.setDraftConsultMemberIds,
 		setDraftObserverMemberIds: initiation.setDraftObserverMemberIds,
+		setDraftDiscussionAiEnabled: initiation.setDraftDiscussionAiEnabled,
 		setDraftObserversEnabled,
 		onSyncDraftPresetForObservers: (hasObservers: boolean) => {
 			initiation.setDraftPresetMode((prev) =>
@@ -1249,6 +1277,7 @@ export function App() {
 						accountUser={accountUser}
 						isSuperAdmin={isSuperAdmin}
 						canDispatchAi={canDispatchAi}
+						canManageMatter={canManageMatter}
 						collaborators={bootstrap?.collaborators ?? []}
 						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 						orgEffectiveMemberIds={orgEffectiveMemberIds}
@@ -1291,12 +1320,14 @@ export function App() {
 						onSelectOrganization={actions.handleSelectOrganization}
 						onSelectWorkspace={actions.handleSelectWorkspace}
 						matterAiMemberIds={matterAiMemberIds}
+						matterConsultMemberIds={matterConsultMemberIds}
 						observerMemberIds={
 							matterDetail ? (matterDetail.matter.observerMemberIds ?? []) : initiation.draftObserverMemberIds
 						}
 						observersEnabled={observersEnabled}
-						draftPresetMode={initiation.draftPresetMode}
+						discussionAiEnabled={discussionAiEnabled}
 						draftAiMemberIds={draftAiMemberIds}
+						draftConsultMemberIds={initiation.draftConsultMemberIds}
 						draftCollaboratorIds={initiation.draftCollaboratorIds}
 						draftVisibility={draftMatterVisibility}
 						initiationAssessment={initiation.assessment}
@@ -1306,9 +1337,15 @@ export function App() {
 						initiationModelAssessmentError={initiation.modelAssessmentError}
 						onChangeLeadMember={actions.handleChangeLeadMember}
 						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
+						onUpdateMatterConsultMembers={actions.handleUpdateMatterConsultMembers}
+						onToggleDiscussionAiEnabled={actions.handleToggleDiscussionAiEnabled}
 						onUpdateDraftAiMemberIds={setDraftAiMemberIds}
 						onUpdateDraftCollaboratorIds={initiation.setDraftCollaboratorIds}
 						onUpdateDraftVisibility={setDraftMatterVisibility}
+						onSetScopeMode={initiation.setScopeMode}
+						onToggleObserverPreset={initiation.toggleObserverPreset}
+						onToggleDraftMemberConsult={initiation.toggleDraftMemberConsult}
+						onToggleDraftMemberObserver={initiation.toggleDraftMemberObserver}
 						onApplyPresetMode={(mode, leadId) =>
 							initiation.applyPresetMode(mode, leadId ? { leadId } : undefined)
 						}

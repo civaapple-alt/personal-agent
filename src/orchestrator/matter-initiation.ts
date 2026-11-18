@@ -40,6 +40,7 @@ export interface MatterInitiationAssessment {
 	recommendedMode: CollaborationPresetMode;
 	recommendedLeadId: string | null;
 	recommendedAiMemberIds: string[];
+	recommendedConsultIds?: string[];
 	recommendedObserverIds: string[];
 	candidates: MatterInitiationCandidate[];
 	gapSuggestion?: RoleGapSuggestion;
@@ -368,6 +369,7 @@ export function assessMatterInitiation(input: {
 		recommendedMode,
 		recommendedLeadId: leadId,
 		recommendedAiMemberIds: finalAiMemberIds,
+		recommendedConsultIds: recommendedMode === "solo" || recommendedMode === "human_first" ? [] : consultIds,
 		recommendedObserverIds:
 			recommendedMode === "solo" || recommendedMode === "human_first" ? [] : recommendedObserverIds,
 		candidates,
@@ -455,13 +457,12 @@ export function validateInitiationModelDecision(
 	if (recommendedMode === "solo" || recommendedMode === "human_first") {
 		consultIds = [];
 		observerIds = [];
-	} else if (recommendedMode === "lead_consult") {
-		observerIds = [];
-		if (consultIds.length === 0) {
-			recommendedMode = "solo";
-		}
-	} else if (recommendedMode === "lead_review" && observerIds.length === 0) {
-		recommendedMode = consultIds.length > 0 ? "lead_consult" : "solo";
+	} else if (observerIds.length > 0) {
+		recommendedMode = "lead_review";
+	} else if (consultIds.length > 0) {
+		recommendedMode = "lead_consult";
+	} else {
+		recommendedMode = "solo";
 	}
 
 	let gapSuggestion: RoleGapSuggestion | undefined;
@@ -721,6 +722,7 @@ export async function assessMatterInitiationWithModel(
 		recommendedMode: decision.recommendedMode,
 		recommendedLeadId: decision.recommendedLeadId,
 		recommendedAiMemberIds: Array.from(selectedAiSet),
+		recommendedConsultIds: decision.recommendedConsultIds,
 		recommendedObserverIds: decision.recommendedObserverIds,
 		candidates,
 		...(decision.gapSuggestion ? { gapSuggestion: decision.gapSuggestion } : {}),
