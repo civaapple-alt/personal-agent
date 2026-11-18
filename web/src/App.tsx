@@ -64,7 +64,7 @@ import {
 	prepareComposerFiles,
 	prepareComposerImages,
 } from "./imageAttachments.ts";
-import { getBotTheme } from "./utils.ts";
+import { applyPrimaryContactToMembers, getBotTheme, resolveEffectivePrimaryContactId } from "./utils.ts";
 
 function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
 	if (typeof requireAuth !== "boolean") return;
@@ -470,6 +470,13 @@ export function App() {
 		[bootstrap],
 	);
 
+	const selectedWorkspace = useMemo(
+		() => bootstrap?.workspaces.find((w) => w.id === selectedWorkspaceId) ?? null,
+		[bootstrap, selectedWorkspaceId],
+	);
+	const draftEffectiveOrgId = selectedWorkspace?.orgId ?? (selectedOrgId || null);
+	const effectiveOrgIdForScope =
+		(selectedMatterId ? matterDetail?.matter.orgId : null) ?? selectedWorkspace?.orgId ?? (selectedOrgId || null);
 	const headerContact: TeamMemberDto | null = useMemo(() => {
 		if (!bootstrap) return null;
 		if (selectedMatterId && matterDetail?.matter.leadMemberId) {
@@ -478,8 +485,13 @@ export function App() {
 		if (selectedMemberId !== "auto") {
 			return bootstrap.members.find((m) => m.id === selectedMemberId) ?? null;
 		}
-		return bootstrap.members.find((m) => m.isPrimaryContact) ?? bootstrap.members[0] ?? null;
-	}, [bootstrap, matterDetail, selectedMatterId, selectedMemberId]);
+		const primaryId = resolveEffectivePrimaryContactId(
+			bootstrap.members,
+			effectiveOrgIdForScope,
+			bootstrap.orgAiRolesByOrgId,
+		);
+		return bootstrap.members.find((m) => m.id === primaryId) ?? bootstrap.members[0] ?? null;
+	}, [bootstrap, matterDetail, selectedMatterId, selectedMemberId, effectiveOrgIdForScope]);
 
 	const memberThemeMap = useMemo(() => {
 		const map = new Map<string, { bg: string; tilt: string }>();
@@ -504,21 +516,22 @@ export function App() {
 		return map;
 	}, [bootstrap]);
 
-	const selectedWorkspace = useMemo(
-		() => bootstrap?.workspaces.find((w) => w.id === selectedWorkspaceId) ?? null,
-		[bootstrap, selectedWorkspaceId],
-	);
-	const draftEffectiveOrgId = selectedWorkspace?.orgId ?? (selectedOrgId || null);
 	const initiationScopedMembers = useMemo(() => {
 		const all = bootstrap?.members ?? [];
 		const enabledIds = draftEffectiveOrgId
 			? bootstrap?.orgAiRolesByOrgId?.[draftEffectiveOrgId]?.effectiveMemberIds
 			: undefined;
-		if (!enabledIds || enabledIds.length === 0) return all;
-		return all.filter(
-			(m) =>
-				enabledIds.includes(m.id) || m.roleScope === "personal" || isArchitectMemberId(m.id, all, templateByRoleId),
-		);
+		const filtered =
+			!enabledIds || enabledIds.length === 0
+				? all
+				: all.filter(
+						(m) =>
+							enabledIds.includes(m.id) ||
+							m.roleScope === "personal" ||
+							isArchitectMemberId(m.id, all, templateByRoleId),
+					);
+		const primaryId = resolveEffectivePrimaryContactId(all, draftEffectiveOrgId, bootstrap?.orgAiRolesByOrgId);
+		return applyPrimaryContactToMembers(filtered, primaryId);
 	}, [bootstrap, draftEffectiveOrgId, templateByRoleId]);
 
 	const filteredMatters = useMemo(() => {
@@ -701,8 +714,6 @@ export function App() {
 
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
 	const accountUser = bootstrap?.accountUser ?? sessionAccountUser ?? null;
-	const effectiveOrgIdForScope =
-		(selectedMatterId ? matterDetail?.matter.orgId : null) ?? selectedWorkspace?.orgId ?? (selectedOrgId || null);
 	const effectiveOrg = effectiveOrgIdForScope
 		? (bootstrap?.organizations.find((o) => o.id === effectiveOrgIdForScope) ?? null)
 		: null;
@@ -1378,6 +1389,7 @@ export function App() {
 						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 						orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
 						matters={bootstrap?.matters ?? []}
+						selectedOrgId={effectiveOrgIdForScope}
 						defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
 						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 						templateByRoleId={templateByRoleId}

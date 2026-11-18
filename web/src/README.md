@@ -56,7 +56,7 @@
 ## 组织身份、团队记忆与成果阅读
 
 - [TeamView](components/TeamView.tsx)、[OrganizationsSection](components/team/OrganizationsSection.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖多组织团队协同与项目接入边界：
-  - 任何已启用账号可在配额内自建组织，在组织卡片内管理人类成员角色（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、生成 `orginv_` 邀请链接、通过邀请码加入其他组织，以及勾选本组织启用的 AI 角色与主联系人（[Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx) 与 [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 同步按当前组织有效 AI 名册过滤）；同时保留局域网协同同事与 `inv_` 邀请预览入口。
+  - 任何已启用账号可在配额内自建组织，在组织卡片内管理人类成员角色（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、生成 `orginv_` 邀请链接、通过邀请码加入其他组织，以及勾选本组织启用的 AI 角色与主联系人（[Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx) 与 [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 同步按当前组织有效 AI 名册及组织主联系人过滤/预设，[TeamView](components/TeamView.tsx) 顶部另提供按组织或全局直达的主联系人切换栏，授权 `org_owner`/`org_admin`/`super_admin` 可一键切换并同步更新卡片徽标）；同时保留局域网协同同事与 `inv_` 邀请预览入口。
   - [App.tsx](App.tsx)、[AuthGateView](components/AuthGateView.tsx) 与 [Sidebar](components/Sidebar.tsx) 区分 `loopback`（本机免密态显示「切换账号」）、`session`（账号会话显示「退出登录」）与 `legacy_token`（内网体验访客显示「恢复所有者/退出」）；携带 `?invite=orginv_...` 访问时若当前浏览器尚未登录则默认展开含邀请组织提示的「注册账号」表单，若已登录则弹出确认弹窗由用户选择以当前账号加入或「退出并注册新成员」（不静默自动消耗同浏览器旧会话的邀请次数）。
   - [MaterialsView](components/MaterialsView.tsx) 登记仓库支持切换「从 Git 地址克隆到组织主目录（`cloned`）」与受平台策略控制的「指定服务器本地目录（`local`）」，并可配置仓库可见范围（`org` / `restricted` 授权成员）。
   - [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 支持设置新建事项范围（`org` 组织可见 / `private` 仅发起人与指定人类成员）与选择组织人类同事；已授权的 `org_member` 可直接向 AI 派发任务。

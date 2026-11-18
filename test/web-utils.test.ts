@@ -7,6 +7,7 @@ import {
 	shouldFoldPastedText,
 } from "../web/src/textAttachments.ts";
 import {
+	applyPrimaryContactToMembers,
 	collectMatterMemories,
 	collectMatterParticipantIds,
 	formatByteSize,
@@ -22,6 +23,7 @@ import {
 	parseMessageImages,
 	parseProgressSnapshot,
 	pickDefaultWorkspaceId,
+	resolveEffectivePrimaryContactId,
 	stripMarkdownFormatting,
 } from "../web/src/utils.ts";
 
@@ -403,4 +405,88 @@ test("formatByteSize, shouldFoldPastedText, and createPastedTextAttachment handl
 	const binPrepared = await prepareComposerFiles([binFile], 0);
 	assert.equal(binPrepared.attachments.length, 0);
 	assert.equal(binPrepared.warnings.length, 1);
+});
+
+test("resolveEffectivePrimaryContactId and applyPrimaryContactToMembers respect org overrides", () => {
+	const baseMembers = [
+		{
+			id: "product-manager",
+			templateId: "product-manager",
+			displayName: "Product Manager",
+			roleTitle: "产品",
+			roleScope: "global" as const,
+			keywords: [],
+			identitySummary: "产品负责人",
+			provider: "kimi",
+			model: "k2.5",
+			thinkingLevel: "medium" as const,
+			isPrimaryContact: true,
+			gitName: "Product Manager",
+			gitEmail: "product-manager@team.local",
+		},
+		{
+			id: "engineering-manager",
+			templateId: "engineering-manager",
+			displayName: "Engineering Manager",
+			roleTitle: "研发",
+			roleScope: "global" as const,
+			keywords: [],
+			identitySummary: "研发负责人",
+			provider: "kimi",
+			model: "k2.5",
+			thinkingLevel: "medium" as const,
+			isPrimaryContact: false,
+			gitName: "Engineering Manager",
+			gitEmail: "engineering-manager@team.local",
+		},
+		{
+			id: "personal-helper",
+			templateId: "personal-helper",
+			displayName: "Personal Helper",
+			roleTitle: "助手",
+			roleScope: "personal" as const,
+			keywords: [],
+			identitySummary: "个人助手",
+			provider: "kimi",
+			model: "k2.5",
+			thinkingLevel: "medium" as const,
+			isPrimaryContact: true,
+			gitName: "Personal Helper",
+			gitEmail: "personal@team.local",
+		},
+	];
+	const orgAiRoles = {
+		org_beta: {
+			configured: true,
+			effectiveMemberIds: ["engineering-manager", "product-manager"],
+			configs: [
+				{
+					orgId: "org_beta",
+					memberId: "engineering-manager",
+					enabled: true,
+					isPrimaryContact: true,
+					displayNameOverride: null,
+					modelOverride: null,
+					updatedAt: "2026-11-19T00:00:00.000Z",
+				},
+				{
+					orgId: "org_beta",
+					memberId: "product-manager",
+					enabled: true,
+					isPrimaryContact: false,
+					displayNameOverride: null,
+					modelOverride: null,
+					updatedAt: "2026-11-19T00:00:00.000Z",
+				},
+			],
+		},
+	};
+
+	assert.equal(resolveEffectivePrimaryContactId(baseMembers, null, orgAiRoles), "product-manager");
+	assert.equal(resolveEffectivePrimaryContactId(baseMembers, "org_unconfigured", orgAiRoles), "product-manager");
+	assert.equal(resolveEffectivePrimaryContactId(baseMembers, "org_beta", orgAiRoles), "engineering-manager");
+
+	const projected = applyPrimaryContactToMembers(baseMembers, "engineering-manager");
+	assert.equal(projected.find((m) => m.id === "engineering-manager")?.isPrimaryContact, true);
+	assert.equal(projected.find((m) => m.id === "product-manager")?.isPrimaryContact, false);
 });

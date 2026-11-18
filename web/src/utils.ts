@@ -9,6 +9,7 @@ import type {
 	MemoryCategory,
 	MessageFileDto,
 	MessageImageDto,
+	OrganizationAiRoleConfigDto,
 	OrganizationDto,
 	ProgressActivityDto,
 	ProgressSnapshotDto,
@@ -817,4 +818,53 @@ export function formatRoleToolTierLabel(tools: string[] | undefined): string {
 	if (tools.includes("edit") || tools.includes("write")) return "可改代码";
 	if (tools.includes("bash")) return "含命令";
 	return "只读";
+}
+
+export interface OrgAiRolesRosterEntry {
+	configured: boolean;
+	configs: OrganizationAiRoleConfigDto[];
+	effectiveMemberIds: string[];
+}
+
+/** Resolves the effective primary AI contact id for an organization (or global fallback). */
+export function resolveEffectivePrimaryContactId(
+	members: TeamMemberDto[],
+	orgId: string | null | undefined,
+	orgAiRolesByOrgId?: Record<string, OrgAiRolesRosterEntry>,
+): string | null {
+	const entry = orgId ? orgAiRolesByOrgId?.[orgId] : undefined;
+	if (entry && (entry.configured || entry.configs.length > 0)) {
+		const enabledIds =
+			entry.effectiveMemberIds.length > 0
+				? entry.effectiveMemberIds
+				: entry.configs.filter((c) => c.enabled).map((c) => c.memberId);
+		const enabledSet = new Set(enabledIds);
+		const orgPrimary = entry.configs.find(
+			(c) => c.enabled && c.isPrimaryContact && (enabledSet.size === 0 || enabledSet.has(c.memberId)),
+		);
+		if (orgPrimary) return orgPrimary.memberId;
+		const globalPrimaryInOrg = members.find(
+			(m) => (enabledSet.size === 0 || enabledSet.has(m.id)) && m.isPrimaryContact,
+		);
+		if (globalPrimaryInOrg) return globalPrimaryInOrg.id;
+		if (enabledIds[0]) return enabledIds[0];
+	}
+	return (
+		members.find((m) => m.roleScope !== "personal" && m.isPrimaryContact)?.id ??
+		members.find((m) => m.isPrimaryContact)?.id ??
+		members.find((m) => m.id !== "role-architect" && m.roleScope !== "personal")?.id ??
+		members[0]?.id ??
+		null
+	);
+}
+
+/** Projects effective primary contact state onto a scoped member array for UI pickers. */
+export function applyPrimaryContactToMembers(
+	members: TeamMemberDto[],
+	primaryMemberId: string | null | undefined,
+): TeamMemberDto[] {
+	if (!primaryMemberId) return members;
+	return members.map((m) =>
+		m.isPrimaryContact === (m.id === primaryMemberId) ? m : { ...m, isPrimaryContact: m.id === primaryMemberId },
+	);
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { RoleScope } from "../api.ts";
 import {
 	type AccountUserDto,
@@ -12,9 +12,11 @@ import {
 	type RoleTemplateDto,
 	setPrimaryMember,
 	type TeamMemberDto,
+	updateOrgAiRoles,
 	type WorkspaceDto,
 } from "../api.ts";
 import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
+import { resolveEffectivePrimaryContactId } from "../utils.ts";
 import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
@@ -36,6 +38,7 @@ interface TeamViewProps {
 		{ configured: boolean; configs: OrganizationAiRoleConfigDto[]; effectiveMemberIds: string[] }
 	>;
 	matters?: MatterDto[];
+	selectedOrgId?: string | null;
 	defaultWorkspaceId?: string | null;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
@@ -66,6 +69,7 @@ export function TeamView({
 	orgMembersByOrgId = {},
 	orgAiRolesByOrgId = {},
 	matters = [],
+	selectedOrgId = null,
 	defaultWorkspaceId = null,
 	memoriesByMember,
 	templateByRoleId,
@@ -106,6 +110,8 @@ export function TeamView({
 	} | null>(null);
 	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
 	const [inspectState, setInspectState] = useState<{ memberId: string; tab: "identity" | "memories" } | null>(null);
+	const [customPrimaryScope, setCustomPrimaryScope] = useState<string | null>(null);
+	const [savingPrimary, setSavingPrimary] = useState(false);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
 	const visibleBusinessMembers = useMemo(() => {
 		if (scopeFilter === "all") return businessMembers;
@@ -145,14 +151,112 @@ export function TeamView({
 		() => (activeWorkspace?.orgId ? (organizations.find((org) => org.id === activeWorkspace.orgId) ?? null) : null),
 		[activeWorkspace, organizations],
 	);
+	const canManageOrgPrimary = useCallback(
+		(org: OrganizationDto | null | undefined) =>
+			Boolean(
+				org &&
+					(isSuperAdmin ||
+						org.orgRole === "org_owner" ||
+						org.orgRole === "org_admin" ||
+						(!accountUser && isOwner)),
+			),
+		[isSuperAdmin, accountUser, isOwner],
+	);
+	const defaultPrimaryScope = useMemo(() => {
+		const selectedOrgObj = selectedOrgId ? (organizations.find((org) => org.id === selectedOrgId) ?? null) : null;
+		if (selectedOrgObj && canManageOrgPrimary(selectedOrgObj)) return selectedOrgObj.id;
+		if (activeOrg && canManageOrgPrimary(activeOrg)) return activeOrg.id;
+		const manageableDefault =
+			organizations.find((org) => org.isDefault && canManageOrgPrimary(org)) ??
+			organizations.find((org) => canManageOrgPrimary(org));
+		if (manageableDefault) return manageableDefault.id;
+		if (selectedOrgObj) return selectedOrgObj.id;
+		if (activeOrg) return activeOrg.id;
+		const fallbackOrg = organizations.find((org) => org.isDefault) ?? organizations[0];
+		return fallbackOrg ? fallbackOrg.id : "__global__";
+	}, [selectedOrgId, activeOrg, organizations, canManageOrgPrimary]);
+	const activePrimaryScope = useMemo(() => {
+		if (
+			customPrimaryScope &&
+			(customPrimaryScope === "__global__" || organizations.some((org) => org.id === customPrimaryScope))
+		) {
+			return customPrimaryScope;
+		}
+		return defaultPrimaryScope;
+	}, [customPrimaryScope, defaultPrimaryScope, organizations]);
+	const primaryTargetOrg = useMemo(
+		() =>
+			activePrimaryScope === "__global__"
+				? null
+				: (organizations.find((org) => org.id === activePrimaryScope) ?? null),
+		[activePrimaryScope, organizations],
+	);
+	const canSwitchPrimary = useMemo(() => {
+		if (!primaryTargetOrg) return isOwner;
+		return canManageOrgPrimary(primaryTargetOrg);
+	}, [primaryTargetOrg, isOwner, canManageOrgPrimary]);
+	const eligiblePrimaryMembers = useMemo(() => {
+		if (!primaryTargetOrg) {
+			return businessMembers.filter((m) => (m.roleScope ?? (m.ownerOrgId ? "org" : "global")) === "global");
+		}
+		const orgEligible = businessMembers.filter(
+			(m) => m.roleScope !== "personal" && (m.roleScope !== "org" || m.ownerOrgId === primaryTargetOrg.id),
+		);
+		const entry = orgAiRolesByOrgId[primaryTargetOrg.id];
+		if (entry?.configured && entry.effectiveMemberIds.length > 0) {
+			const enabledSet = new Set(entry.effectiveMemberIds);
+			const enabled = orgEligible.filter((m) => enabledSet.has(m.id));
+			if (enabled.length > 0) return enabled;
+		}
+		return orgEligible;
+	}, [businessMembers, primaryTargetOrg, orgAiRolesByOrgId]);
+	const eligiblePrimaryIds = useMemo(() => new Set(eligiblePrimaryMembers.map((m) => m.id)), [eligiblePrimaryMembers]);
+	const effectivePrimaryId = useMemo(
+		() => resolveEffectivePrimaryContactId(members, primaryTargetOrg?.id ?? null, orgAiRolesByOrgId),
+		[members, primaryTargetOrg, orgAiRolesByOrgId],
+	);
 
 	const handleSetPrimary = async (memberId: string) => {
+		if (!memberId || savingPrimary || memberId === effectivePrimaryId) return;
+		setSavingPrimary(true);
 		try {
-			await setPrimaryMember(memberId);
-			onNotice(`已将「${memberName(memberId)}」设为默认主联系人`);
+			const entry = primaryTargetOrg ? orgAiRolesByOrgId[primaryTargetOrg.id] : undefined;
+			if (primaryTargetOrg && (Boolean(accountUser) || entry?.configured)) {
+				const orgEligible = businessMembers.filter(
+					(m) => m.roleScope !== "personal" && (m.roleScope !== "org" || m.ownerOrgId === primaryTargetOrg.id),
+				);
+				const configByMemberId = new Map((entry?.configs ?? []).map((cfg) => [cfg.memberId, cfg]));
+				const enabledSet = new Set(
+					entry?.configured && entry.effectiveMemberIds.length > 0
+						? entry.effectiveMemberIds
+						: orgEligible.map((m) => m.id),
+				);
+				enabledSet.add(memberId);
+				const payload = orgEligible.map((m) => {
+					const existingCfg = configByMemberId.get(m.id);
+					return {
+						memberId: m.id,
+						enabled: enabledSet.has(m.id),
+						isPrimaryContact: m.id === memberId,
+						...(existingCfg
+							? {
+									displayNameOverride: existingCfg.displayNameOverride,
+									modelOverride: existingCfg.modelOverride,
+								}
+							: {}),
+					};
+				});
+				await updateOrgAiRoles(primaryTargetOrg.id, payload);
+				onNotice(`已将「${primaryTargetOrg.name}」的主联系人切换为「${memberName(memberId)}」`);
+			} else {
+				await setPrimaryMember(memberId);
+				onNotice(`已将「${memberName(memberId)}」设为全局默认主联系人`);
+			}
 			await onRefresh();
 		} catch (error: unknown) {
 			onError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setSavingPrimary(false);
 		}
 	};
 
@@ -267,6 +371,55 @@ export function TeamView({
 								)}
 							</div>
 						</div>
+						{eligiblePrimaryMembers.length > 0 && (
+							<div className="team-primary-bar">
+								<div className="team-primary-bar-label">
+									<span className="pill live">主联系人</span>
+									{organizations.length > 1 || (organizations.length === 1 && isOwner) ? (
+										<select
+											aria-label="主联系人所属组织范围"
+											className="select-sm"
+											value={activePrimaryScope}
+											onChange={(e) => setCustomPrimaryScope(e.target.value)}
+										>
+											{organizations.map((org) => (
+												<option key={org.id} value={org.id}>
+													组织：{org.name}
+												</option>
+											))}
+											{isOwner && <option value="__global__">平台全局默认</option>}
+										</select>
+									) : primaryTargetOrg ? (
+										<span className="muted-tiny">当前组织：{primaryTargetOrg.name}</span>
+									) : null}
+								</div>
+								{canSwitchPrimary ? (
+									<div className="team-primary-bar-control">
+										<select
+											aria-label="切换主联系人"
+											className="select-sm team-primary-select"
+											value={effectivePrimaryId ?? ""}
+											disabled={savingPrimary}
+											onChange={(e) => void handleSetPrimary(e.target.value)}
+										>
+											{eligiblePrimaryMembers.map((m) => (
+												<option key={m.id} value={m.id}>
+													{m.displayName}（{m.roleTitle}）
+												</option>
+											))}
+										</select>
+										<span className="muted-tiny">新事项或未点名对话默认由主联系人首接响应</span>
+									</div>
+								) : (
+									<div className="team-primary-bar-control">
+										<span className="pill">
+											{effectivePrimaryId ? memberName(effectivePrimaryId) : "未指定"}
+										</span>
+										<span className="muted-tiny">仅组织所有者 / 管理员可切换主联系人</span>
+									</div>
+								)}
+							</div>
+						)}
 						<div className="team-grid">
 							{visibleBusinessMembers.map((member, idx) => (
 								<MemberCard
@@ -276,7 +429,7 @@ export function TeamView({
 									template={templateByRoleId.get(member.templateId)}
 									memories={memoriesByMember[member.id] ?? []}
 									activeWorkspace={activeWorkspace}
-									activeOrg={activeOrg}
+									activeOrg={primaryTargetOrg ?? activeOrg}
 									organizationName={organizationName}
 									canManage={canMemberManageRole(member, {
 										isSuperAdmin,
@@ -284,8 +437,10 @@ export function TeamView({
 										currentUser,
 										organizations,
 									})}
-									canSetPrimary={
-										isOwner && (member.roleScope ?? (member.ownerOrgId ? "org" : "global")) === "global"
+									isPrimary={member.id === effectivePrimaryId}
+									canSetPrimary={canSwitchPrimary && eligiblePrimaryIds.has(member.id)}
+									primaryActionLabel={
+										primaryTargetOrg ? `设为「${primaryTargetOrg.name}」主联系人` : "设为全局默认主联系"
 									}
 									canDispatch={canDispatchAny}
 									onAssignTask={onAssignTask}
@@ -351,11 +506,12 @@ export function TeamView({
 				canCurateMemories={
 					isOwner || Boolean(inspectedMember && inspectedMember.roleScope === "personal" && inspectedCanManage)
 				}
+				isPrimary={inspectedMember ? inspectedMember.id === effectivePrimaryId : undefined}
 				members={members}
 				workspaces={workspaces}
 				organizations={organizations}
 				activeWorkspace={activeWorkspace}
-				activeOrg={activeOrg}
+				activeOrg={primaryTargetOrg ?? activeOrg}
 				defaultWorkspaceId={defaultWorkspaceId}
 				matterWorkspaceById={matterWorkspaceById}
 				memberName={memberName}

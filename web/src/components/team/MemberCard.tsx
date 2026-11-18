@@ -20,7 +20,9 @@ interface MemberCardProps {
 	activeOrg: OrganizationDto | null;
 	organizationName?: (id: string | null) => string | null;
 	canManage?: boolean;
+	isPrimary?: boolean;
 	canSetPrimary?: boolean;
+	primaryActionLabel?: string;
 	canDispatch?: boolean;
 	onAssignTask: (memberId: string) => void;
 	onSetPrimary: (memberId: string) => Promise<void>;
@@ -40,7 +42,9 @@ export function MemberCard({
 	activeOrg,
 	organizationName,
 	canManage = true,
+	isPrimary: isPrimaryProp,
 	canSetPrimary = false,
+	primaryActionLabel = "设为主联系人",
 	canDispatch = true,
 	onAssignTask,
 	onSetPrimary,
@@ -125,6 +129,7 @@ export function MemberCard({
 		: "";
 	const antiJobsCount = template?.antiJobs?.length ?? 0;
 	const scopeBadge = getMemberScopeBadge(member, organizationName);
+	const isPrimary = isPrimaryProp ?? member.isPrimaryContact;
 
 	return (
 		<div className="member-card">
@@ -134,7 +139,7 @@ export function MemberCard({
 					<div className="member-ident-copy">
 						<div className="member-name-row">
 							<strong>{member.displayName}</strong>
-							{member.isPrimaryContact && <span className="pill live">主联系</span>}
+							{isPrimary && <span className="pill live">主联系</span>}
 							<span className={`pill role-scope-pill is-${scopeBadge.scope}`}>{scopeBadge.label}</span>
 						</div>
 						{member.roleTitle &&
@@ -234,7 +239,7 @@ export function MemberCard({
 							>
 								身份与 Git 署名
 							</button>
-							{!member.isPrimaryContact && canSetPrimary && (
+							{!isPrimary && canSetPrimary && (
 								<button
 									type="button"
 									className="member-more-item"
@@ -244,7 +249,7 @@ export function MemberCard({
 										void onSetPrimary(member.id);
 									}}
 								>
-									设为默认主联系
+									{primaryActionLabel}
 								</button>
 							)}
 							<button
@@ -258,7 +263,8 @@ export function MemberCard({
 							>
 								导出能力包
 							</button>
-							{!member.isPrimaryContact &&
+							{!isPrimary &&
+								!member.isPrimaryContact &&
 								canManage &&
 								(confirmDelete ? (
 									<div className="member-more-confirm">

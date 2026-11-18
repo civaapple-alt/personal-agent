@@ -350,6 +350,28 @@
 .team-members-heading .ui-section-desc {
 	margin: 0;
 }
+.team-primary-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px 14px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+	padding: 10px 14px;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--border);
+	background: var(--bg-subtle, rgba(15, 36, 28, 0.025));
+}
+.team-primary-bar-label,
+.team-primary-bar-control {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.team-primary-select {
+	min-width: 180px;
+}
 .team-admin-head {
 	align-items: center;
 }

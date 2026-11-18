@@ -32,6 +32,7 @@ interface MemberInspectorModalProps {
 	initialTab: "identity" | "memories";
 	canEditIdentity?: boolean;
 	canCurateMemories?: boolean;
+	isPrimary?: boolean;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
@@ -59,6 +60,7 @@ export function MemberInspectorModal({
 	initialTab,
 	canEditIdentity = true,
 	canCurateMemories = true,
+	isPrimary,
 	members,
 	workspaces,
 	organizations,
@@ -171,7 +173,9 @@ export function MemberInspectorModal({
 						<div className="member-ident-copy">
 							<div className="member-name-row">
 								<strong>{member.displayName}</strong>
-								{member.isPrimaryContact && <span className="pill live">默认主联系</span>}
+								{(isPrimary ?? member.isPrimaryContact) && (
+									<span className="pill live">{isPrimary !== undefined ? "主联系" : "默认主联系"}</span>
+								)}
 								<span
 									className={`pill role-scope-pill is-${getMemberScopeBadge(member, organizationName).scope}`}
 								>
