@@ -346,8 +346,11 @@ export class UserAuthRepo {
 	getSessionAndUserByToken(rawToken: string): { session: UserSessionRecord; user: PlatformUser } | null {
 		const trimmed = rawToken.trim();
 		if (!trimmed) return null;
-		const hashedId = hashOpaqueToken(trimmed);
-		const row = this.db.prepare("SELECT * FROM user_sessions WHERE id = ?").get(hashedId) as
+		return this.getSessionAndUserByHash(hashOpaqueToken(trimmed));
+	}
+
+	getSessionAndUserByHash(sessionHash: string): { session: UserSessionRecord; user: PlatformUser } | null {
+		const row = this.db.prepare("SELECT * FROM user_sessions WHERE id = ?").get(sessionHash) as
 			| Record<string, unknown>
 			| undefined;
 		if (!row) return null;

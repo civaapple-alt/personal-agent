@@ -3,7 +3,14 @@ import type { ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { RoleScope } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, OrgMemberRole, PlatformSettings, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import type {
+	Matter,
+	MemberMemory,
+	OrgMemberRole,
+	PlatformSettings,
+	TeamMember,
+	WorkspaceLink,
+} from "../storage/types.ts";
 import { isSuperAdminActor, type RequestActor, requireActiveActor } from "./auth.ts";
 import { sendError } from "./http.ts";
 
@@ -159,6 +166,20 @@ export function canActorManageMember(
 	return isSuperAdminActor(actor);
 }
 
+export function canActorAccessMemory(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	memory: Pick<MemberMemory, "memberId" | "scope" | "orgId" | "workspaceId">,
+	member = store.getMember(memory.memberId),
+): boolean {
+	if (!canActorUseMember(store, actor, member)) return false;
+	if (memory.scope === "role_general") return true;
+	if (memory.scope === "company_private" && memory.orgId) {
+		return canAccessOrganization(store, actor, memory.orgId);
+	}
+	return Boolean(memory.workspaceId && canAccessWorkspace(store, actor, store.getWorkspace(memory.workspaceId)));
+}
+
 export function canAccessWorkspace(
 	store: PersonalAgentStore,
 	actor: RequestActor | null,
@@ -294,11 +315,11 @@ export function canActorAccessUpload(store: PersonalAgentStore, actor: RequestAc
 	if (isGlobalUnscopedActor(actor)) return true;
 	const record = store.getUploadRecord(filename);
 	if (!record) {
-		return true;
+		const matterId = store.findLegacyUploadMatterId(filename);
+		return Boolean(matterId && canAccessMatter(store, actor, store.getMatter(matterId)));
 	}
 	if (record.matterId) {
-		const matter = store.getMatter(record.matterId);
-		if (matter) return canAccessMatter(store, actor, matter);
+		return canAccessMatter(store, actor, store.getMatter(record.matterId));
 	}
 	if (record.orgId) {
 		return canAccessOrganization(store, actor, record.orgId);

@@ -435,6 +435,11 @@ export function SettingsView({
 																	</div>
 																)}
 															</div>
+														) : base.envFlags.pstackDirEnvConfigured ? (
+															<p className="muted-hint">
+																请修正启动环境变量 <code>PA_PSTACK_DIR</code>{" "}
+																指定的路径，或移除该变量后重启。
+															</p>
 														) : isSuperAdmin ? (
 															<div className="settings-pstack-setup">
 																<div className="settings-pstack-form-row">

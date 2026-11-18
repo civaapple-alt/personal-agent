@@ -334,6 +334,9 @@ export class PersonalAgentStore {
 	getSessionAndUserByToken(rawToken: string) {
 		return this.userAuth.getSessionAndUserByToken(rawToken);
 	}
+	getSessionAndUserByHash(sessionHash: string) {
+		return this.userAuth.getSessionAndUserByHash(sessionHash);
+	}
 	revokeSessionByToken(rawToken: string) {
 		return this.userAuth.revokeSessionByToken(rawToken);
 	}
@@ -423,6 +426,9 @@ export class PersonalAgentStore {
 	}
 	getUploadRecord(filename: string) {
 		return this.orgRbac.getUploadRecord(filename);
+	}
+	findLegacyUploadMatterId(filename: string) {
+		return this.orgRbac.findLegacyUploadMatterId(filename);
 	}
 	updateMatterVisibility(matterId: string, visibility: Parameters<MatterRepo["updateMatterVisibility"]>[1]) {
 		return this.matters.updateMatterVisibility(matterId, visibility);

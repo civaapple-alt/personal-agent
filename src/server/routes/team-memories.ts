@@ -1,3 +1,4 @@
+import { DistillationMemberAccessError } from "../../orchestrator/distiller.ts";
 import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import { assessRoleCapabilities, validateSkillReference } from "../../roles/capabilities.ts";
@@ -13,8 +14,10 @@ import {
 } from "../../roles/role-architect.ts";
 import {
 	allowedSkillScopesForRole,
+	assertNewSkillNamesAvailable,
 	buildScopedRoleId,
 	deleteRolePackage,
+	SkillNameConflictError,
 	saveRolePackage,
 	validateNewSkillDrafts,
 } from "../../roles/role-package-store.ts";
@@ -34,6 +37,7 @@ import {
 	canAccessMatter,
 	canAccessOrganization,
 	canAccessWorkspace,
+	canActorAccessMemory,
 	canActorCreateRoleInScope,
 	canActorManageMember,
 	canActorUseMember,
@@ -45,7 +49,7 @@ import { isSuperAdminActor, type RequestActor, requireActiveActor, requireOwner 
 import { HttpRequestError, readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
 	auditActorAction,
-	broadcastDistilledMemories,
+	broadcastMemoryUpdates,
 	MEMORY_CATEGORIES,
 	type RouteRequest,
 	type ServerRouteContext,
@@ -352,6 +356,18 @@ async function materializeMembersBatch(
 	r: RouteRequest,
 	planned: PlannedMember[],
 ): Promise<TeamMember[]> {
+	const packages = planned.map(({ template, newSkills }) => ({
+		rolesDir: ctx.rolesDir,
+		skillsDir: ctx.skillsDir,
+		template,
+		newSkills,
+	}));
+	try {
+		assertNewSkillNamesAvailable(packages);
+	} catch (error) {
+		if (error instanceof SkillNameConflictError) throw new HttpRequestError(409, error.message);
+		throw error;
+	}
 	const created: TeamMember[] = [];
 	for (const { template, identity, newSkills } of planned) {
 		const saved = await saveRolePackage({
@@ -359,6 +375,9 @@ async function materializeMembersBatch(
 			skillsDir: ctx.skillsDir,
 			template,
 			newSkills,
+		}).catch((error: unknown) => {
+			if (error instanceof SkillNameConflictError) throw new HttpRequestError(409, error.message);
+			throw error;
 		});
 		const member = ctx.orchestrator.registerRoleTemplate(saved.template);
 		const updated = ctx.store.updateMemberIdentity(member.id, identity);
@@ -874,7 +893,6 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 				detail: { roleScope: deleted.roleScope },
 			});
 			broadcastTeamUpdateForMember(broadcast, { removedMemberId: deleted.id }, deleted);
-			broadcast("matter_updated", { reason: "member_deleted", memberId: deleted.id });
 			sendJson(res, 200, { ok: true, deletedMemberId: deleted.id });
 		} catch (error) {
 			sendError(res, 409, error instanceof Error ? error.message : String(error));
@@ -1049,6 +1067,13 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
+		if (
+			(orgId && !canAccessOrganization(store, actor, orgId)) ||
+			(workspaceId && !canAccessWorkspace(store, actor, store.getWorkspace(workspaceId)))
+		) {
+			sendError(res, 403, "无权在该组织或项目中添加经验");
+			return true;
+		}
 		const rawStatus = body.status;
 		const status: MemoryStatus =
 			rawStatus === "candidate" || rawStatus === "verified" || rawStatus === "rejected" || rawStatus === "superseded"
@@ -1072,7 +1097,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			supersedesMemoryId:
 				typeof body.supersedesMemoryId === "string" && body.supersedesMemoryId ? body.supersedesMemoryId : null,
 		});
-		broadcast("memory_updated", { memberId, memory });
+		broadcastMemoryUpdates(broadcast, [memory]);
 		sendJson(res, 201, { memory });
 		return true;
 	}
@@ -1086,13 +1111,13 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Memory not found: ${memoryId}`);
 			return true;
 		}
-		if (memory.orgId && !canAccessOrganization(store, actor, memory.orgId)) {
-			sendError(res, 403, "无权查看其他组织的经验使用溯源");
+		if (!canActorAccessMemory(store, actor, memory)) {
+			sendError(res, 403, "无权查看该经验的使用溯源");
 			return true;
 		}
 		const apps = store.listMemoryApplications(memoryId).filter((app) => {
 			const matter = store.getMatter(app.matterId);
-			return !matter || canAccessMatter(store, actor, matter);
+			return Boolean(matter && canAccessMatter(store, actor, matter));
 		});
 		sendJson(res, 200, { memory, applications: apps });
 		return true;
@@ -1107,6 +1132,10 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Memory not found: ${memoryId}`);
 			return true;
 		}
+		if (!canActorAccessMemory(store, actor, existing)) {
+			sendError(res, 403, "无权评价该经验");
+			return true;
+		}
 		const body = await readJsonBody(req);
 		if (body.outcome !== "positive" && body.outcome !== "negative") {
 			sendError(res, 400, "outcome must be positive or negative");
@@ -1119,7 +1148,7 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			memberId: existing.memberId,
 			note: typeof body.note === "string" ? body.note.trim() : "",
 		});
-		broadcast("memory_updated", { memberId: memory.memberId, memory });
+		broadcastMemoryUpdates(broadcast, [memory]);
 		sendJson(res, 200, { memory });
 		return true;
 	}
@@ -1131,6 +1160,10 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		const existing = store.getMemory(memoryId);
 		if (!existing) {
 			sendError(res, 404, `Memory not found: ${memoryId}`);
+			return true;
+		}
+		if (!canActorAccessMemory(store, actor, existing)) {
+			sendError(res, 403, "无权修改该经验");
 			return true;
 		}
 		const body = await readJsonBody(req);
@@ -1174,6 +1207,17 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
+		if (
+			!canActorAccessMemory(store, actor, {
+				memberId: memberId ?? existing.memberId,
+				scope: scope ?? existing.scope,
+				orgId: orgId === undefined ? existing.orgId : orgId,
+				workspaceId: workspaceId === undefined ? existing.workspaceId : workspaceId,
+			})
+		) {
+			sendError(res, 403, "无权将经验移至该角色或作用域");
+			return true;
+		}
 		const status = typeof body.status === "string" ? (body.status as MemoryStatus) : undefined;
 		if (
 			status &&
@@ -1201,10 +1245,15 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 						? body.supersedesMemoryId
 						: undefined,
 		});
-		if (existing.memberId !== memory.memberId) {
-			broadcast("memory_updated", { memberId: existing.memberId, memory });
+		if (
+			existing.memberId !== memory.memberId ||
+			existing.scope !== memory.scope ||
+			existing.orgId !== memory.orgId ||
+			existing.workspaceId !== memory.workspaceId
+		) {
+			broadcast("memory_updated", {}, { memory: existing });
 		}
-		broadcast("memory_updated", { memberId: memory.memberId, memory });
+		broadcastMemoryUpdates(broadcast, [memory]);
 		sendJson(res, 200, { memory });
 		return true;
 	}
@@ -1215,6 +1264,11 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 		if (!matterId) {
 			sendError(res, 400, "matterId is required");
+			return true;
+		}
+		const matter = store.getMatter(matterId);
+		if (matter && !canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
 			return true;
 		}
 		const aborted = orchestrator.abortDistillation(matterId);
@@ -1228,6 +1282,11 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 		const matterId = typeof body.matterId === "string" ? body.matterId.trim() : "";
 		if (!matterId) {
 			sendError(res, 400, "matterId is required");
+			return true;
+		}
+		const matter = store.getMatter(matterId);
+		if (matter && !canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
 			return true;
 		}
 		const deliverableId =
@@ -1249,10 +1308,16 @@ async function handleTeamMemoryRoutesUnlocked(ctx: ServerRouteContext, r: RouteR
 				rating,
 				scopeMode,
 				signal: cancellation.signal,
+				canReviewMember: (member) => canActorUseMember(store, actor, member),
 			});
-			broadcastDistilledMemories(broadcast, result.member.id, result.createdMemories);
-			sendJson(res, 200, { ok: true, ...result });
+			broadcastMemoryUpdates(broadcast, result.createdMemories);
+			sendJson(res, 200, {
+				ok: true,
+				...result,
+				createdMemories: result.createdMemories.filter((memory) => canActorAccessMemory(store, actor, memory)),
+			});
 		} catch (err) {
+			if (err instanceof DistillationMemberAccessError) throw new HttpRequestError(403, err.message);
 			if (
 				cancellation.signal.aborted ||
 				(err instanceof Error && err.message === "Experience distillation was aborted")

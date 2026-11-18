@@ -406,6 +406,16 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: bobCookie } })).status, 403);
 		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: aliceFreshCookie } })).status, 200);
 
+		// Pre-index uploads retain the ACL of the matter whose message references them.
+		db.prepare("DELETE FROM uploads_index WHERE filename = ?").run(uploadUrl.split("/").at(-1)!);
+		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: bobCookie } })).status, 403);
+		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: aliceFreshCookie } })).status, 200);
+		writeFileSync(join(tempDir, "uploads", "unreferenced.txt"), "An orphaned upload");
+		assert.equal(
+			(await fetch(`${baseUrl}/api/uploads/unreferenced.txt`, { headers: { Cookie: aliceFreshCookie } })).status,
+			403,
+		);
+
 		// Open SSE for Bob and create a matter in orgA -> Bob must NOT receive orgA SSE event
 		const bobSseAbort = new AbortController();
 		const bobSseRes = await fetch(`${baseUrl}/api/events`, {
@@ -507,6 +517,21 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 			false,
 		);
 
+		const sharedMatter = store.createMatter({
+			title: "Shared discussion",
+			leadMemberId: "product-manager",
+			orgId: orgA.id,
+			createdByUserId: bobRegBody.accountUser.id,
+		});
+		const mismatchedWorkspace = await fetch(`${baseUrl}/api/matters/${sharedMatter.id}/messages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: bobCookie },
+			body: JSON.stringify({ workspaceId: clonedWs.id, prompt: "Follow up within the current matter" }),
+		});
+		assert.equal(mismatchedWorkspace.status, 409);
+		assert.equal(store.getMatter(sharedMatter.id)?.workspaceId, null);
+		assert.equal(store.listMessages(sharedMatter.id).length, 0);
+
 		// Ordinary org_member Bob CAN trigger AI directly inside orgA!
 		const bobDispatch = await fetch(`${baseUrl}/api/matters`, {
 			method: "POST",
@@ -579,6 +604,140 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
 		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test("Team event streams share the resource ACL and logout closes only the current session", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const orchestrator = new TeamOrchestrator({ store, templates });
+	const org = store.ensureDefaultOrganization();
+	const owner = store.createUser({
+		email: "events-owner@example.test",
+		displayName: "Owner",
+		password: "FixturePass1!",
+		status: "active",
+		platformRole: "super_admin",
+	});
+	const teammate = store.createUser({
+		email: "events-member@example.test",
+		displayName: "Teammate",
+		password: "FixturePass2!",
+		status: "active",
+	});
+	store.upsertOrgMember({ orgId: org.id, userId: owner.id, orgRole: "org_owner" });
+	store.upsertOrgMember({ orgId: org.id, userId: teammate.id, orgRole: "org_member" });
+	const memberId = "product-manager";
+	const workspace = store.upsertWorkspace({
+		name: "Restricted fixture",
+		repoPath: "/fixture/events-private",
+		orgId: org.id,
+		visibility: "restricted",
+	});
+	const matter = store.createMatter({
+		title: "Private fixture",
+		leadMemberId: memberId,
+		workspaceId: workspace.id,
+		orgId: org.id,
+		createdByUserId: owner.id,
+		visibility: "private",
+	});
+	const [delivery] = store.recordDeliverables([
+		{ matterId: matter.id, memberId, type: "document", title: "Fixture", contentOrPath: "Document" },
+	]);
+	assert.ok(delivery);
+	const ownerCookie = `pa_session=${store.createSession(owner.id).rawToken}`;
+	const otherOwnerCookie = `pa_session=${store.createSession(owner.id).rawToken}`;
+	const teammateCookie = `pa_session=${store.createSession(teammate.id).rawToken}`;
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager: new PreviewManager(),
+		dialogBroker: new DialogBroker(),
+		requireAuth: true,
+	});
+	await new Promise<void>((listen) => server.listen(0, "127.0.0.1", listen));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+	const controller = new AbortController();
+	const openStream = async (cookie: string) => {
+		const response = await fetch(`${baseUrl}/api/events`, {
+			headers: { Cookie: cookie },
+			signal: AbortSignal.any([controller.signal, AbortSignal.timeout(3000)]),
+		});
+		assert.equal(response.status, 200);
+		return response;
+	};
+	const post = (route: string, cookie: string, body: unknown) =>
+		fetch(`${baseUrl}${route}`, {
+			method: "POST",
+			headers: { Cookie: cookie, "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	const readThrough = async (response: Response, marker: string) => {
+		const reader = response.body!.getReader();
+		const decoder = new TextDecoder();
+		let content = "";
+		try {
+			while (!content.includes(marker)) {
+				const { value, done } = await reader.read();
+				assert.equal(done, false, "SSE closed before the expected event");
+				content += decoder.decode(value, { stream: true });
+			}
+			return content;
+		} finally {
+			await reader.cancel();
+		}
+	};
+
+	try {
+		const signedOutStream = await openStream(ownerCookie);
+		const ownerStream = await openStream(otherOwnerCookie);
+		const teammateStream = await openStream(teammateCookie);
+		assert.equal((await post("/api/auth/logout", ownerCookie, {})).status, 200);
+		assert.match(await signedOutStream.text(), /event: connected/);
+
+		const privateMemory = await post("/api/memories", otherOwnerCookie, {
+			memberId,
+			scope: "project_private",
+			workspaceId: workspace.id,
+			content: "RESTRICTED_PROJECT_MEMORY",
+		});
+		assert.equal(privateMemory.status, 201);
+		const { memory } = (await privateMemory.json()) as { memory: { id: string } };
+		const applicationsUrl = `${baseUrl}/api/memories/${memory.id}/applications`;
+		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: otherOwnerCookie } })).status, 200);
+		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: teammateCookie } })).status, 403);
+
+		assert.equal(
+			(
+				await post("/api/previews", otherOwnerCookie, {
+					title: "RESTRICTED_PREVIEW",
+					url: "https://preview.example.test/",
+					deliverableId: delivery.id,
+				})
+			).status,
+			201,
+		);
+		assert.equal(
+			(await post("/api/memories", otherOwnerCookie, { memberId, content: "VISIBLE_MEMORY_SIGNAL" })).status,
+			201,
+		);
+		const [ownerEvents, teammateEvents] = await Promise.all([
+			readThrough(ownerStream, "VISIBLE_MEMORY_SIGNAL"),
+			readThrough(teammateStream, "VISIBLE_MEMORY_SIGNAL"),
+		]);
+		assert.match(ownerEvents, /RESTRICTED_PROJECT_MEMORY/);
+		assert.match(ownerEvents, /RESTRICTED_PREVIEW/);
+		assert.doesNotMatch(teammateEvents, /RESTRICTED_PROJECT_MEMORY|RESTRICTED_PREVIEW/);
+	} finally {
+		controller.abort();
+		await new Promise<void>((close) => server.close(() => close()));
+		await orchestrator.shutdown();
+		db.close();
 	}
 });
 

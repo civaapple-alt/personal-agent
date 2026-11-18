@@ -262,7 +262,7 @@ async function startBarePstackHttpRepo(
 	rootDir: string,
 	name: string,
 	populate: (workDir: string) => void,
-): Promise<{ cloneUrl: string; close: () => Promise<void> }> {
+): Promise<{ cloneUrl: string; publish: (change: (dir: string) => void) => void; close: () => Promise<void> }> {
 	const workDir = join(rootDir, `${name}-src`);
 	const bareDir = join(rootDir, `${name}.git`);
 	mkdirSync(workDir, { recursive: true });
@@ -293,6 +293,13 @@ async function startBarePstackHttpRepo(
 	assert.ok(addr && typeof addr === "object");
 	return {
 		cloneUrl: `http://127.0.0.1:${addr.port}/${name}.git`,
+		publish: (change) => {
+			change(workDir);
+			execFileSync("git", ["add", "-A"], { cwd: workDir, stdio: "ignore" });
+			execFileSync("git", ["commit", "-m", "Update fixture"], { cwd: workDir, stdio: "ignore" });
+			execFileSync("git", ["push", bareDir, "main"], { cwd: workDir, stdio: "ignore" });
+			execFileSync("git", ["update-server-info"], { cwd: bareDir, stdio: "ignore" });
+		},
 		close: () => new Promise<void>((resolveClose) => httpServer.close(() => resolveClose())),
 	};
 }
@@ -419,6 +426,41 @@ test("Super admin can clone/enable pstack into .data/extensions/repo/<name>, per
 			?.overridden,
 		true,
 	);
+
+	const postPstackUpdate = () =>
+		fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+			body: JSON.stringify({ update: true }),
+		});
+	const activeRevision = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: expectedValidDir, encoding: "utf8" });
+	const originalRevision = activeRevision();
+	validRepo.publish((dir) => rmSync(join(dir, "plugin.json")));
+	const invalidUpdate = await postPstackUpdate();
+	assert.equal(invalidUpdate.status, 502);
+	assert.match(await invalidUpdate.text(), /plugin\.json/);
+	assert.equal(activeRevision(), originalRevision);
+	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, enableJson.repoPath);
+
+	validRepo.publish((dir) => {
+		writeFileSync(join(dir, "plugin.json"), JSON.stringify({ name: "pstack", version: "0.15.43" }));
+	});
+	const validUpdate = await postPstackUpdate();
+	assert.equal(validUpdate.status, 200, await validUpdate.clone().text());
+	const updateJson = (await validUpdate.json()) as {
+		source: string;
+		repoPath: string;
+		overview: RuntimeOverviewPayload;
+	};
+	assert.equal(updateJson.source, "updated");
+	assert.equal(updateJson.repoPath, enableJson.repoPath);
+	assert.equal(updateJson.overview.base.pstack.version, "0.15.43");
+	assert.notEqual(activeRevision(), originalRevision);
+
+	process.env.PA_PSTACK_DIR = expectedValidDir;
+	assert.equal((await postPstackUpdate()).status, 409);
+	delete process.env.PA_PSTACK_DIR;
 
 	// Simulated server restart reads persisted pstackDir from DB without PA_PSTACK_DIR env
 	const reopenedSettings = store.getPlatformSettings();

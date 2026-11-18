@@ -4,8 +4,8 @@ import { resolveRepoGitUserIdentity } from "../../orchestrator/execution-context
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../../storage/repositories.ts";
-import type { MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
-import { canAccessOrganization, canAccessWorkspace, canActorUseMember, canManageOrganization } from "../acl.ts";
+import type { MemberMemory, MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
+import { canActorAccessMemory, canActorUseMember, canManageOrganization } from "../acl.ts";
 import { extractClientIp, isSuperAdminActor, type RequestActor } from "../auth.ts";
 import type { DialogBroker } from "../dialog-broker.ts";
 import type { ActiveRunState, BackgroundDispatchInput } from "../dispatch-runner.ts";
@@ -38,6 +38,7 @@ export interface ServerRouteContext {
 	activeRuns: Map<string, ActiveRunState>;
 	broadcast: (eventName: string, payload: unknown, scope?: SseBroadcastScope) => void;
 	revokeTokenSessions: (collaboratorId: string, reason: string) => void;
+	closeAccountSession: (sessionHash: string) => void;
 	runDispatchInBackground: (input: BackgroundDispatchInput) => void;
 	requireAuth?: boolean;
 	defaultWorkspacesRoot?: string;
@@ -81,26 +82,13 @@ export function formatWorkspaceForActor(
 
 export function formatScopedMemoryMap(store: PersonalAgentStore, actor: RequestActor): Record<string, unknown[]> {
 	const result: Record<string, unknown[]> = {};
-	const wsCache = new Map<string, WorkspaceLink | null>();
-	const getWs = (wsId: string) => {
-		if (!wsCache.has(wsId)) wsCache.set(wsId, store.getWorkspace(wsId));
-		return wsCache.get(wsId) ?? null;
-	};
 	for (const member of store.listMembers()) {
 		if (!canActorUseMember(store, actor, member)) {
 			continue;
 		}
-		result[member.id] = store.listMemberMemories(member.id).filter((mem) => {
-			if (mem.scope === "role_general") return true;
-			if (mem.scope === "company_private") {
-				return mem.orgId ? canAccessOrganization(store, actor, mem.orgId) : false;
-			}
-			if (mem.workspaceId) {
-				const ws = getWs(mem.workspaceId);
-				if (ws) return canAccessWorkspace(store, actor, ws);
-			}
-			return mem.orgId ? canAccessOrganization(store, actor, mem.orgId) : false;
-		});
+		result[member.id] = store
+			.listMemberMemories(member.id)
+			.filter((memory) => canActorAccessMemory(store, actor, memory, member));
 	}
 	return result;
 }
@@ -138,21 +126,9 @@ export function auditActorAction(
 	});
 }
 
-export function broadcastDistilledMemories(
-	broadcast: (event: string, data: unknown) => void,
-	fallbackMemberId: string,
-	createdMemories: Array<{ memberId: string }>,
-): void {
-	if (createdMemories.length === 0) return;
-	const memberIds = Array.from(new Set(createdMemories.map((m) => m.memberId)));
-	for (const targetMemberId of memberIds) {
-		broadcast("memory_updated", {
-			memberId: targetMemberId,
-			createdMemories: createdMemories.filter((m) => m.memberId === targetMemberId),
-		});
-	}
-	if (!memberIds.includes(fallbackMemberId)) {
-		broadcast("memory_updated", { memberId: fallbackMemberId, createdMemories: [] });
+export function broadcastMemoryUpdates(broadcast: ServerRouteContext["broadcast"], memories: MemberMemory[]): void {
+	for (const memory of memories) {
+		broadcast("memory_updated", { memberId: memory.memberId, memory }, { memory });
 	}
 }
 

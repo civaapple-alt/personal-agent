@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Team scope, Skill creation, and pstack update reliability
+
+- Apply memory and matter access rules to SSE, memory provenance, and experience review workers. Revalidate account sessions on active streams and close the signed-out session immediately. Legacy uploads now inherit access from the message that references them.
+- Keep existing-matter messages on the selected workspace and validate explicitly requested AI roles and observers against the matter's organization.
+- Reject duplicate new Skill destinations before creating roles. Preserve existing Skill files and clean up new files if a role package write fails.
+- Update the active managed pstack checkout after validating the fetched revision in a temporary checkout. Preserve startup control through `PA_PSTACK_DIR`.
+
 ### Team accounts, Super Admin console (#/admin), org RBAC & scoped workspace/matter security
 
 - Fix false `"请先创建或加入一个组织后再创建事项"` error for signed-in non-super-admin users who belong to an organization when starting a `Role Architect` chat or submitting an empty/null org selection ([useMatterActions.ts](web/src/hooks/useMatterActions.ts), [App.tsx](web/src/App.tsx), [ChatStage.tsx](web/src/components/ChatStage.tsx), [ComposerDock.tsx](web/src/components/chat/ComposerDock.tsx), and [matters.ts](src/server/routes/matters.ts)), resolving to the actor's selected or default organization automatically while hiding the `"不归属组织"` option when unauthorized.

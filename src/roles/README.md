@@ -6,6 +6,8 @@
 
 frontmatter 是本项目支持的简单字段/数组格式，不是完整 YAML 解析器。
 方法路径与作用域 Skill 目录清单位于 [capabilities.ts](capabilities.ts)，提供 `validateSkillReference`（拒绝 `..`、`\` 与绝对路径越界）、`resolveAllowedSkillRoots` 与 `listScopedSkillCatalog`；草案检查只标记 Skill 文件存在/缺失与 MCP 待运行核查，不安装依赖，也不证明效果；实际能力仍由执行器核查。
+
+确认新 Skill 时按目标作用域检查名称。批量请求在创建任何角色前检查所有文件目标。同名文件返回 HTTP 409，用户可以改名或选用已有 Skill。
 [pstack.ts](pstack.ts) 独立读取显式配置的外部完整方法包，保留模式哈希和目录，并限制方法资源的路径、类型与大小；不把用户机器上的绝对路径写进共享角色定义。装配与范围见[pstack 内循环](../../docs/pstack-runtime.md)。
 `id` 同时作为文件名，只接受最长 128 字符的小写字母、数字和连接短横线，不接受 `readme`。解析与 HTTP 新建使用相同校验，思考档位也共用解析器；既有非法 ID 不自动改名或重写历史关联。
 

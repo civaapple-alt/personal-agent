@@ -317,6 +317,7 @@ export async function handleAdminAndAuthRoutes(
 		if (rawToken) {
 			store.revokeSessionByToken(rawToken);
 		}
+		if (actor?.sessionTokenHash) ctx.closeAccountSession(actor.sessionTokenHash);
 		clearSessionCookie(res);
 		sendJson(res, 200, { ok: true });
 		return true;
@@ -557,13 +558,26 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 	}
 
 	if (method === "POST" && pathname === "/api/admin/runtime/pstack/enable") {
+		if (process.env.PA_PSTACK_DIR?.trim()) {
+			sendError(res, 409, "当前由启动环境变量 PA_PSTACK_DIR 接管，请从启动参数移除后重启服务");
+			return true;
+		}
 		const body = await readJsonBody(req);
-		const cloneUrl = typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : undefined;
 		const update = body.update === true;
+		const updateRepoPath = update ? store.getPlatformSettings(ctx.defaultWorkspacesRoot).pstackDir : null;
+		if (update && !updateRepoPath) {
+			sendError(res, 409, "请先启用一个由工作台管理的 pstack 仓库");
+			return true;
+		}
+		const cloneUrl = !update && typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : undefined;
 		const dataDir = ctx.dataDir ?? resolve(process.cwd(), ".data");
 		let installed: Awaited<ReturnType<typeof installOrEnablePstackRepo>>;
 		try {
-			installed = await installOrEnablePstackRepo({ dataDir, cloneUrl, update });
+			installed = await installOrEnablePstackRepo({
+				dataDir,
+				cloneUrl,
+				updateRepoPath: updateRepoPath ?? undefined,
+			});
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			const status = msg.startsWith("克隆 pstack 仓库失败") || msg.startsWith("同步更新 pstack") ? 502 : 400;

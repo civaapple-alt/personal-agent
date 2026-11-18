@@ -2,6 +2,8 @@ import type { FeedbackRating, WorkspaceVisibility } from "../../storage/types.ts
 import {
 	canAccessMatter,
 	canAccessOrganization,
+	canActorAccessMemory,
+	canActorUseMember,
 	canManageOrganization,
 	canParticipateInMatter,
 	isGlobalUnscopedActor,
@@ -13,7 +15,7 @@ import { cloneGitWorkspaceIntoOrgRoot, resolveOrgWorkspacesDir } from "../git-cl
 import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
 import {
 	auditActorAction,
-	broadcastDistilledMemories,
+	broadcastMemoryUpdates,
 	formatWorkspaceForActor,
 	type RouteRequest,
 	type ServerRouteContext,
@@ -72,9 +74,10 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			feedback || existing.feedback || "",
 			rating,
 		);
-		const evaluatedMemoryIds = evaluatedMemories.map((memory) => memory.id);
-		for (const memberId of new Set(evaluatedMemories.map((memory) => memory.memberId)))
-			broadcast("memory_updated", { memberId, evaluatedMemoryIds });
+		const evaluatedMemoryIds = evaluatedMemories
+			.filter((memory) => canActorAccessMemory(store, actor, memory))
+			.map((memory) => memory.id);
+		broadcastMemoryUpdates(broadcast, evaluatedMemories);
 		let distilledMemories: unknown[] = [];
 		let distillationError: string | undefined;
 		if (body.autoDistill === true) {
@@ -87,9 +90,12 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					rating: rating ?? null,
 					scopeMode: body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined,
 					signal: cancellation.signal,
+					canReviewMember: (member) => canActorUseMember(store, actor, member),
 				});
-				distilledMemories = distilled.createdMemories;
-				broadcastDistilledMemories(broadcast, distilled.member.id, distilled.createdMemories);
+				distilledMemories = distilled.createdMemories.filter((memory) =>
+					canActorAccessMemory(store, actor, memory),
+				);
+				broadcastMemoryUpdates(broadcast, distilled.createdMemories);
 			} catch (error) {
 				distillationError = error instanceof Error ? error.message : String(error);
 			} finally {
@@ -370,7 +376,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			orgId: ws.orgId,
 			detail: { name: ws.name, sourceType, visibility },
 		});
-		broadcast("workspace_updated", ws, { workspaceId: ws.id, orgId: ws.orgId });
+		broadcast("workspace_updated", { id: ws.id, orgId: ws.orgId }, { workspaceId: ws.id });
 		sendJson(res, 201, { workspace: ws });
 		return true;
 	}
@@ -431,7 +437,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			orgId: ws.orgId,
 			detail: { visibility: ws.visibility ?? "org" },
 		});
-		broadcast("workspace_updated", ws, { workspaceId: ws.id, orgId: ws.orgId });
+		broadcast("workspace_updated", { id: ws.id, orgId: ws.orgId }, { workspaceId: ws.id });
 		sendJson(res, 200, { workspace: ws });
 		return true;
 	}

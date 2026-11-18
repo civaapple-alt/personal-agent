@@ -217,6 +217,7 @@ export interface DistillExperiencesInput {
 	rating?: FeedbackRating | null;
 	timeoutMs?: number;
 	signal?: AbortSignal;
+	canReviewMember?: (member: TeamMember) => boolean;
 }
 
 export interface DistillExperiencesResult {

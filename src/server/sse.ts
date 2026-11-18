@@ -1,7 +1,8 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import { canAccessMatter, canAccessOrganization, canAccessWorkspace } from "./acl.ts";
-import type { RequestActor } from "./auth.ts";
+import type { MemberMemory } from "../storage/types.ts";
+import { canAccessMatter, canAccessOrganization, canAccessWorkspace, canActorAccessMemory } from "./acl.ts";
+import { isSuperAdminActor, type RequestActor } from "./auth.ts";
 
 export interface SseBroadcastScope {
 	orgId?: string | null;
@@ -9,6 +10,7 @@ export interface SseBroadcastScope {
 	workspaceId?: string | null;
 	userId?: string | null;
 	adminOnly?: boolean;
+	memory?: MemberMemory;
 }
 
 interface SseClientMeta {
@@ -18,28 +20,32 @@ interface SseClientMeta {
 /** Manages Server-Sent Event subscriptions, heartbeats, scoped broadcasts, and revoked-session teardown. */
 export function createSseHub(store?: PersonalAgentStore) {
 	const clients = new Map<ServerResponse, SseClientMeta>();
+	const endClient = (client: ServerResponse): void => {
+		clients.delete(client);
+		if (!client.destroyed && !client.writableEnded) client.end();
+	};
 
-	const isRecipientAuthorized = (meta: SseClientMeta, scope?: SseBroadcastScope): boolean => {
+	const refreshAccountActor = (actor: RequestActor): RequestActor | null => {
+		if (!store || actor.authKind !== "session") return actor;
+		const user = actor.sessionTokenHash ? store.getSessionAndUserByHash(actor.sessionTokenHash)?.user : null;
+		return user?.status === "active" ? { ...actor, user } : null;
+	};
+
+	const isRecipientAuthorized = (actor: RequestActor, scope?: SseBroadcastScope): boolean => {
 		if (!scope || !store) return true;
-		const { actor } = meta;
 		if (actor.user && actor.user.status !== "active") return false;
 		if (scope.adminOnly) {
-			return (
-				actor.authKind === "loopback" ||
-				actor.user?.platformRole === "super_admin" ||
-				(actor.authKind === "legacy_token" && actor.collaborator.permissionRole === "owner")
-			);
+			return isSuperAdminActor(actor);
 		}
+		if (scope.memory) return canActorAccessMemory(store, actor, scope.memory);
 		if (scope.userId) {
 			return Boolean(actor.user && actor.user.id === scope.userId);
 		}
 		if (scope.matterId) {
-			const matter = store.getMatter(scope.matterId);
-			if (matter) return canAccessMatter(store, actor, matter);
+			return canAccessMatter(store, actor, store.getMatter(scope.matterId));
 		}
 		if (scope.workspaceId) {
-			const ws = store.getWorkspace(scope.workspaceId);
-			if (ws) return canAccessWorkspace(store, actor, ws);
+			return canAccessWorkspace(store, actor, store.getWorkspace(scope.workspaceId));
 		}
 		if (scope.orgId !== undefined) {
 			return canAccessOrganization(store, actor, scope.orgId);
@@ -67,9 +73,11 @@ export function createSseHub(store?: PersonalAgentStore) {
 			const deliv = store.getDeliverable(obj.deliverableId);
 			if (deliv) return { matterId: deliv.matterId };
 		}
-		if (eventName === "memory_updated") {
-			const mem = obj.memory as Record<string, unknown> | undefined;
-			if (typeof mem?.orgId === "string") return { orgId: mem.orgId };
+		if (eventName === "preview_updated") {
+			const deliverable = typeof obj.deliverableId === "string" ? store.getDeliverable(obj.deliverableId) : null;
+			return deliverable && store.getMatter(deliverable.matterId)
+				? { matterId: deliverable.matterId }
+				: { adminOnly: true };
 		}
 		return undefined;
 	};
@@ -82,7 +90,12 @@ export function createSseHub(store?: PersonalAgentStore) {
 				clients.delete(client);
 				continue;
 			}
-			if (!isRecipientAuthorized(meta, effectiveScope)) continue;
+			const actor = refreshAccountActor(meta.actor);
+			if (!actor) {
+				endClient(client);
+				continue;
+			}
+			if (!isRecipientAuthorized(actor, effectiveScope)) continue;
 			client.write(frame);
 		}
 	};
@@ -102,7 +115,13 @@ export function createSseHub(store?: PersonalAgentStore) {
 		}
 	};
 
-	const handleEventsStream = (req: IncomingMessage, res: ServerResponse, actor: RequestActor | null): void => {
+	const closeAccountSession = (sessionHash: string): void => {
+		for (const [client, { actor }] of clients) {
+			if (actor.sessionTokenHash === sessionHash) endClient(client);
+		}
+	};
+
+	const handleEventsStream = (res: ServerResponse, actor: RequestActor | null): void => {
 		res.writeHead(200, {
 			"Content-Type": "text/event-stream; charset=utf-8",
 			"Cache-Control": "no-cache, no-transform",
@@ -113,11 +132,14 @@ export function createSseHub(store?: PersonalAgentStore) {
 			clients.set(res, { actor });
 		}
 		const heartbeat = setInterval(() => {
-			if (!res.destroyed && !res.writableEnded) {
-				res.write(": ping\n\n");
+			if (res.destroyed || res.writableEnded) return;
+			if (actor && !refreshAccountActor(actor)) {
+				endClient(res);
+				return;
 			}
+			res.write(": ping\n\n");
 		}, 15000);
-		req.on("close", () => {
+		res.on("close", () => {
 			clearInterval(heartbeat);
 			clients.delete(res);
 		});
@@ -130,5 +152,5 @@ export function createSseHub(store?: PersonalAgentStore) {
 		clients.clear();
 	};
 
-	return { broadcast, revokeTokenSessions, handleEventsStream, closeAll };
+	return { broadcast, revokeTokenSessions, closeAccountSession, handleEventsStream, closeAll };
 }

@@ -104,6 +104,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		activeRuns,
 		broadcast: sse.broadcast,
 		revokeTokenSessions: sse.revokeTokenSessions,
+		closeAccountSession: sse.closeAccountSession,
 		runDispatchInBackground,
 		innerMatterDemo,
 		requireAuth: Boolean(options.requireAuth),
@@ -156,7 +157,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			}
 
 			if (method === "GET" && pathname === "/api/events") {
-				sse.handleEventsStream(req, res, actor);
+				sse.handleEventsStream(res, actor);
 				return;
 			}
 

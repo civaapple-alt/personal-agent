@@ -77,6 +77,12 @@ export interface DistillerDeps {
 	routeMemberForRequest: (prompt: string, preferredMemberId?: string) => TeamMember;
 }
 
+export class DistillationMemberAccessError extends Error {
+	constructor() {
+		super("无权使用该角色提炼经验");
+	}
+}
+
 /** Run isolated multi-role RSI experience reflection over a matter / deliverable / feedback. */
 export async function performDistillationPass(
 	deps: DistillerDeps,
@@ -100,6 +106,8 @@ export async function performDistillationPass(
 		throw new Error("Deliverable does not have provenance in the current workspace");
 	const targetMemberId = input.memberId ?? deliverable?.memberId ?? matter.leadMemberId ?? undefined;
 	const member = deps.routeMemberForRequest(matter.title, targetMemberId);
+	const canReviewMember = input.canReviewMember ?? (() => true);
+	if (!canReviewMember(member)) throw new DistillationMemberAccessError();
 	const publicationIndex = input.deliverableId
 		? scoped.messages.findIndex(
 				(message) =>
@@ -126,7 +134,7 @@ export async function performDistillationPass(
 	}
 	const participatingMembers = [...participantIds]
 		.map((id) => deps.store.getMember(id))
-		.filter((m): m is TeamMember => m !== null);
+		.filter((m): m is TeamMember => m !== null && canReviewMember(m));
 	const participantSet = new Set(participatingMembers.map((m) => m.id));
 
 	const existingMemoryLines: string[] = [];

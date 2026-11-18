@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { hashOpaqueToken } from "../storage/repos/user-auth-repo.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../storage/repositories.ts";
 import type { Collaborator, CollaboratorRole, PlatformUser } from "../storage/types.ts";
 import { sendError } from "./http.ts";
@@ -128,7 +127,7 @@ export function resolveRequestActor(
 				user: sessionHit.user,
 				viaToken: true,
 				authKind: "session",
-				sessionTokenHash: hashOpaqueToken(rawToken),
+				sessionTokenHash: sessionHit.session.id,
 			};
 		}
 		const legacyMatched = store.getCollaboratorByToken(rawToken);

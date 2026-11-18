@@ -5,6 +5,10 @@
 日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 
 [app.ts](app.ts) 装配 HTTP 服务，并由 [auth.ts](auth.ts)、[acl.ts](acl.ts)、[git-clone.ts](git-clone.ts)、[sse.ts](sse.ts)、[uploads.ts](uploads.ts)、[dispatch-runner.ts](dispatch-runner.ts) 与 [routes/](routes/context.ts) 分担鉴权与 CSRF/限流、组织/工作区/事项 ACL、Git 地址协议安全检验与组织主目录克隆、作用域隔离 SSE 推送、上传权限索引、后台派发与超级管理员/认证/业务路由。消息异步派发，事件交给 [web/src](../../web/src/README.md) 消费。
+
+- 经验查询与事件共用角色、组织和工作区访问规则。经验提炼只读取请求者有权使用的角色的经验。预览事件按所关联事项推送，独立预览仅对平台管理员推送。工作区更新事件用 ID 通知刷新。账号 SSE 在发送时复核会话，登出立即关闭该会话的连接。
+- 已索引附件按其事项归属校验。旧版无索引的附件按引用消息和事项授权。非全局账号只可访问能确认归属的旧附件。
+- 已有事项的消息沿用现有工作区。先通过事项设置切换工作区，再发送消息。请求指定的负责人、成员与旁听角色按事项的有效组织校验。
 修改接口时同时核对 `api.ts` 的 DTO 和 `App.tsx` 的刷新/收尾逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
 [inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/inner-matter-demo.md)。

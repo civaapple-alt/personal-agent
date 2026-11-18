@@ -496,6 +496,31 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 			400,
 		);
 
+		const duplicateDraft = {
+			name: "duplicate-batch-skill",
+			description: "Draft checklist",
+			body: "# Draft checklist",
+			storageScope: "personal",
+		};
+		const duplicateBatch = await fetch(`${base}/api/members/batch`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: alice.cookie },
+			body: JSON.stringify({
+				members: ["draft-one", "draft-two"].map((id) => ({
+					id,
+					name: id,
+					title: id,
+					roleScope: "personal",
+					newSkills: [duplicateDraft],
+				})),
+			}),
+		});
+		assert.equal(duplicateBatch.status, 409);
+		assert.equal(existsSync(join(skillsDir, "users", alice.user.id, duplicateDraft.name, "SKILL.md")), false);
+		assert.ok(
+			!store.listMembers().some((entry) => entry.displayName === "draft-one" || entry.displayName === "draft-two"),
+		);
+
 		// 6. Alice confirms creating her personal role #1 with confirmed role_local Skill + personal shared Skill!
 		const createAlice1 = await fetch(`${base}/api/members`, {
 			method: "POST",
@@ -530,7 +555,26 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 		assert.ok(
 			existsSync(join(rolesDir, "users", alice.user.id, aliceRole1.id, "skills", "note-digest-sop", "SKILL.md")),
 		);
-		assert.ok(existsSync(join(skillsDir, "users", alice.user.id, "alice-personal-lib", "SKILL.md")));
+		const personalSkill = join(skillsDir, "users", alice.user.id, "alice-personal-lib", "SKILL.md");
+		const originalSkill = await readFile(personalSkill, "utf8");
+		const conflict = await fetch(`${base}/api/members`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: alice.cookie },
+			body: JSON.stringify({
+				id: "conflicting-role",
+				name: "Conflicting Role",
+				title: "Conflicting Role",
+				roleScope: "personal",
+				newSkills: [
+					{ ...duplicateDraft, name: "unwritten-skill" },
+					{ ...duplicateDraft, name: "alice-personal-lib" },
+				],
+			}),
+		});
+		assert.equal(conflict.status, 409);
+		assert.equal(await readFile(personalSkill, "utf8"), originalSkill);
+		assert.equal(existsSync(join(skillsDir, "users", alice.user.id, "unwritten-skill", "SKILL.md")), false);
+		assert.ok(!store.listMembers().some((entry) => entry.displayName === "Conflicting Role"));
 
 		// Create Alice personal role #2 (single .md without role_local skills) + verify 3rd hits quota 403
 		const createAlice2 = await fetch(`${base}/api/members`, {
@@ -662,6 +706,14 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 		const argsJoined = capturedSkillArgs[0]!.join(" ");
 		assert.ok(argsJoined.includes("note-digest-sop/SKILL.md"));
 		assert.ok(argsJoined.includes("alice-personal-lib/SKILL.md"));
+		const workerCount = capturedSkillArgs.length;
+		const distillation = await fetch(`${base}/api/rsi/distill`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: adminCookie },
+			body: JSON.stringify({ matterId: aliceMatterId }),
+		});
+		assert.equal(distillation.status, 403);
+		assert.equal(capturedSkillArgs.length, workerCount, "Personal role review must stop before worker creation");
 		const aliceRt = (await (await fetch(`${base}/api/runtime`, { headers: { Cookie: alice.cookie } })).json()) as {
 			extensions: Array<{ id: string; declaredByRoles?: string[]; mcpServers?: string[] }>;
 		};

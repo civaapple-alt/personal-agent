@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { serializeRoleTemplateMarkdown, validateRoleTemplateId } from "./template-loader.ts";
 import type { NewSkillDraft, RoleScope, RoleTemplate, SkillStorageScope } from "./types.ts";
@@ -167,24 +167,64 @@ export function resolveScopedSkillsBaseDir(
 	return resolve(skillsDir, "users", assertSafeSegment(scope.ownerUserId, "ownerUserId"));
 }
 
-async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+async function atomicWriteFile(filePath: string, content: string, createOnly = false): Promise<void> {
 	const parentDir = resolve(filePath, "..");
 	await mkdir(parentDir, { recursive: true });
 	const tmp = join(parentDir, `.tmp-${randomUUID()}.md`);
 	try {
 		await writeFile(tmp, content, { encoding: "utf8", flag: "wx" });
-		await rename(tmp, filePath);
+		if (createOnly) await link(tmp, filePath);
+		else await rename(tmp, filePath);
 	} finally {
 		await rm(tmp, { force: true });
 	}
 }
 
-export async function saveRolePackage(params: {
+interface RolePackageInput {
 	rolesDir?: string;
 	skillsDir?: string;
 	template: RoleTemplate;
 	newSkills?: NewSkillDraft[];
-}): Promise<{ template: RoleTemplate; roleFilePath?: string; writtenSkillPaths: string[] }> {
+}
+
+export class SkillNameConflictError extends Error {
+	constructor(name: string) {
+		super(`Skill "${name}" already exists in this scope. Select the existing Skill or choose a new name.`);
+	}
+}
+
+function planSkillWrites(params: RolePackageInput): Array<{ skill: NewSkillDraft; path: string }> {
+	if (!params.rolesDir) return [];
+	const rolePackageDir = join(resolveScopedRolesBaseDir(params.rolesDir, params.template), params.template.id);
+	return (params.newSkills ?? []).map((skill) => {
+		if (skill.storageScope === "role_local") {
+			return { skill, path: join(rolePackageDir, "skills", skill.name, "SKILL.md") };
+		}
+		if (!params.skillsDir) {
+			throw new Error(`skillsDir is required to save ${skill.storageScope} skill "${skill.name}"`);
+		}
+		const targetBase = resolveScopedSkillsBaseDir(params.skillsDir, {
+			storageScope: skill.storageScope,
+			ownerOrgId: params.template.ownerOrgId,
+			ownerUserId: params.template.ownerUserId,
+		});
+		return { skill, path: join(targetBase, skill.name, "SKILL.md") };
+	});
+}
+
+export function assertNewSkillNamesAvailable(packages: RolePackageInput[]): void {
+	const reserved = new Set<string>();
+	for (const entry of packages) {
+		for (const { skill, path } of planSkillWrites(entry)) {
+			if (reserved.has(path) || existsSync(path)) throw new SkillNameConflictError(skill.name);
+			reserved.add(path);
+		}
+	}
+}
+
+export async function saveRolePackage(
+	params: RolePackageInput,
+): Promise<{ template: RoleTemplate; roleFilePath?: string; writtenSkillPaths: string[] }> {
 	const roleScope: RoleScope = params.template.roleScope ?? "global";
 	const newSkills = params.newSkills ?? [];
 	const nextSkills = [...params.template.skills];
@@ -221,28 +261,24 @@ export async function saveRolePackage(params: {
 		? join(rolePackageDir, `${nextTemplate.id}.md`)
 		: join(scopeRolesDir, `${nextTemplate.id}.md`);
 
-	for (const skill of newSkills) {
-		if (skill.storageScope === "role_local") {
-			const skillPath = join(rolePackageDir, "skills", skill.name, "SKILL.md");
-			await atomicWriteFile(skillPath, formatSkillMarkdown(skill));
-			writtenSkillPaths.push(skillPath);
-			continue;
+	try {
+		for (const { skill, path } of planSkillWrites(params)) {
+			try {
+				await atomicWriteFile(path, formatSkillMarkdown(skill), true);
+			} catch (error) {
+				if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+					throw new SkillNameConflictError(skill.name);
+				}
+				throw error;
+			}
+			writtenSkillPaths.push(path);
 		}
-		if (!params.skillsDir) {
-			throw new Error(`skillsDir is required to save ${skill.storageScope} skill "${skill.name}"`);
-		}
-		const targetBase = resolveScopedSkillsBaseDir(params.skillsDir, {
-			storageScope: skill.storageScope,
-			ownerOrgId: nextTemplate.ownerOrgId,
-			ownerUserId: nextTemplate.ownerUserId,
-		});
-		const skillPath = join(targetBase, skill.name, "SKILL.md");
-		await atomicWriteFile(skillPath, formatSkillMarkdown(skill));
-		writtenSkillPaths.push(skillPath);
+		nextTemplate.sourcePath = roleFilePath;
+		await atomicWriteFile(roleFilePath, serializeRoleTemplateMarkdown(nextTemplate));
+	} catch (error) {
+		await Promise.allSettled(writtenSkillPaths.map((path) => rm(path, { force: true })));
+		throw error;
 	}
-
-	nextTemplate.sourcePath = roleFilePath;
-	await atomicWriteFile(roleFilePath, serializeRoleTemplateMarkdown(nextTemplate));
 
 	if (usePackageDir) {
 		await rm(join(scopeRolesDir, `${nextTemplate.id}.md`), { force: true });

@@ -81,7 +81,7 @@ function ensureOrgEnabledAiRequest(
 	) {
 		return false;
 	}
-	if (!orgId || !ctx.store.hasOrgAiRolesConfigured(orgId)) return true;
+	if (!orgId) return true;
 	const allowed = new Set(ctx.store.resolveEffectiveOrgMembersForUser(orgId, actor.user?.id).map((m) => m.id));
 	if (preferredMemberId && preferredMemberId !== ROLE_ARCHITECT_MEMBER_ID && !allowed.has(preferredMemberId)) {
 		sendError(res, 403, `角色 ${preferredMemberId} 未在该组织中启用`);
@@ -282,13 +282,13 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const hasVisibilityUpdate = Object.hasOwn(body, "visibility");
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
+		const targetWorkspace = hasWorkspaceUpdate && workspaceId ? store.getWorkspace(workspaceId) : null;
 		if (hasWorkspaceUpdate && workspaceId) {
-			const targetWs = store.getWorkspace(workspaceId);
-			if (!targetWs) {
+			if (!targetWorkspace) {
 				sendError(res, 404, `Workspace not found: ${workspaceId}`);
 				return true;
 			}
-			if (!canAccessWorkspace(store, actor, targetWs)) {
+			if (!canAccessWorkspace(store, actor, targetWorkspace)) {
 				sendError(res, 403, "无权将事项切换到未授权的项目仓库");
 				return true;
 			}
@@ -353,16 +353,13 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, or lead member");
 			return true;
 		}
+		const rosterOrgId = targetWorkspace ? targetWorkspace.orgId : hasOrgUpdate ? nextOrgId : existing.orgId;
 		if (
-			!ensureActorAllowedMembers(res, ctx, actor, [
-				nextLeadId,
-				...(Array.isArray(parsedAiMemberIds) ? parsedAiMemberIds : []),
+			!ensureOrgEnabledAiRequest(res, ctx, actor, rosterOrgId, nextLeadId, [
+				...(parsedAiMemberIds ?? []),
 				...(observerMemberIds ?? []),
 			])
 		) {
-			return true;
-		}
-		if (!ensureOrgEnabledAiRequest(res, ctx, actor, nextOrgId, nextLeadId, parsedAiMemberIds)) {
 			return true;
 		}
 		let updated = existing;
@@ -606,10 +603,12 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			}
 		}
 		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
-		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
-			return true;
-		}
-		if (!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, aiMemberIds)) {
+		if (
+			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, [
+				...(aiMemberIds ?? []),
+				...(observerMemberIds ?? []),
+			])
+		) {
 			return true;
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
@@ -766,10 +765,7 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 409, "AI request scope changed; submit a new request in the current organization/workspace");
 			return true;
 		}
-		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
-			return true;
-		}
-		if (!ensureOrgEnabledAiRequest(res, ctx, actor, effectiveOrgId, preferredMemberId, undefined)) {
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, effectiveOrgId, preferredMemberId, observerMemberIds)) {
 			return true;
 		}
 		if (
@@ -911,19 +907,18 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		const preferredMemberId =
 			explicitPreferredMemberId ??
 			(leadMember && canActorUseMember(store, actor, leadMember) ? leadMember.id : undefined);
-		const workspaceId =
-			typeof body.workspaceId === "string" && body.workspaceId.length > 0
-				? body.workspaceId
-				: (matter.workspaceId ?? undefined);
+		const requestedWorkspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+		if (requestedWorkspaceId && requestedWorkspaceId !== matter.workspaceId) {
+			sendError(res, 409, "请先通过事项设置切换工作区，再发送消息");
+			return true;
+		}
+		const workspaceId = matter.workspaceId ?? undefined;
 		const deliverableTitle =
 			typeof body.deliverableTitle === "string" && body.deliverableTitle.trim().length > 0
 				? body.deliverableTitle.trim()
 				: undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
-		if (!ensureActorAllowedMembers(res, ctx, actor, observerMemberIds ?? [])) {
-			return true;
-		}
-		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, undefined)) {
+		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, observerMemberIds)) {
 			return true;
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
