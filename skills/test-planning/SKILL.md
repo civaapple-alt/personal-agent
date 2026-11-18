@@ -1,8 +1,8 @@
 ---
 name: test-planning
-description: 制定测试方案，在执行对应岗位工作时使用。
+description: Use when planning test coverage for a requirement, design, or change before running the checks.
 ---
 
-# 制定测试方案
+# Plan test coverage
 
-从产品条件与真实变更追踪关键路径和失败边界。说明测试前置条件、数据隔离、步骤和可观察结果。优先覆盖影响用户结果的风险，区分测试计划与已执行测试。
+Trace the critical paths and failure boundaries from the product criteria and actual changes. State prerequisites, data isolation, steps, and observable results. Prioritize risks that affect the user. Label planned checks separately from executed checks.

@@ -139,8 +139,8 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 			stop: async () => {},
 			getState: async () => ({ sessionId: "fixture" }),
 			start: async () => {
-				assert.match(options.env!.PA_MEMBER_CONTEXT!, /pstack 内循环/);
-				assert.match(options.env!.PA_MEMBER_CONTEXT!, /主责才可/);
+				assert.match(options.env!.PA_MEMBER_CONTEXT!, /## pstack methods/);
+				assert.match(options.env!.PA_MEMBER_CONTEXT!, /Only the lead can publish/);
 				const args = options.args!;
 				assert.equal(args[args.indexOf("--tools") + 1], "load_pstack_skill");
 				assert.ok(args.some((arg) => arg.endsWith("pstack-extension.ts")));
@@ -215,7 +215,7 @@ test("pstack-enabled observers retain narrowed tools and can remain silent witho
 						assert.equal(options.env!.PA_CAN_DELEGATE, "false");
 						assert.equal(options.env!.PA_CAN_PUBLISH, "false");
 						assert.equal(options.env!.PA_CAN_EXPERIENCE, "false");
-						assert.match(options.env!.PA_MEMBER_CONTEXT!, /无需装载完整模式/);
+						assert.match(options.env!.PA_MEMBER_CONTEXT!, /remain silent without loading the full mode/);
 					}
 					await reportReady(options);
 				},

@@ -1,8 +1,8 @@
 /** Shared working method, not a semantic validator or a publication approval gate. */
-export const PUBLICATION_REVIEW_GUIDANCE = `## 阶段发布前的负责人复核
-只有准备正式交付时才进行这项复核，普通交流继续留在对话中。
-- 先核对事实来源：区分用户陈述、虚构样本、方案假设、实际实现与实测结果。没有执行或试用记录时，不把建议写成已验证事实，也不把设计验收条件写成已验收功能。
-- 通读准备发布的完整正文，把数据规则、状态转换、接口、迁移与验收条件逐项对照。保留旧版本供比较；不要用同事意见一致替代你自己的跨章节一致性判断。
-- 发现专业规则冲突或证据不足时，实际调用 delegate_to_member 向相关岗位说明冲突段落、约束和待澄清问题。取得回复后作出一致的取舍，同时修改正文和验收条件，再检查最终版本。不要仅罗列风险便声称已解决。
-- 核对新版本相对上一版的变化依据、文件内容与发布正文是否一致。说明实际做过的核查与尚未验证的边界；设计方案可以交付，但不能宣称已经实现或通过运行验收。
-- 职责内可自行澄清的问题在内部解决。确需用户提供信息或业务判断时才提问；不为每次讨论或归档增加审批。`;
+export const PUBLICATION_REVIEW_GUIDANCE = `## Lead review before publication
+Review a formal deliverable before publishing it. Keep routine exchanges in the conversation.
+- Check the source of each claim. Distinguish user statements, synthetic samples, design assumptions, implemented behavior, and observed results. Claim testing, acceptance, or real use only when you have evidence.
+- Read the full draft and compare data rules, state transitions, interfaces, migration, and acceptance criteria. Keep the prior version for comparison. Check cross-section consistency yourself, even when specialists agree.
+- If specialist rules conflict or evidence is missing, call delegate_to_member with the conflicting passages, constraints, and question. Use the returned evidence to resolve the conflict. Update the body and acceptance criteria, then check the final draft. Listing risks alone leaves them unresolved.
+- Check the reason for each change and confirm the source file matches the published text. State which checks ran and what remains unverified. A design may be a deliverable. Claim implementation or runtime acceptance only when verified.
+- Resolve questions within the team when the team owns the decision. Ask the user only for necessary information or business decisions. Use the existing approval flow.`;

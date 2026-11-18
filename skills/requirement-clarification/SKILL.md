@@ -1,15 +1,16 @@
 ---
 name: requirement-clarification
-description: 澄清产品需求，在执行对应岗位工作时使用。
+description: Use when a product request is ambiguous, a proposed solution needs a stated user problem, or feedback may change a prior decision.
 ---
 
-# 澄清产品需求
+# Clarify product requirements
 
-先识别产品、用户、使用场景和当前工作阶段。将用户原话、已确认决策、资料中的事实与未确认假设分开，保留出处；示例和演示反馈标注为合成材料。
-产品与版本标识沿用原材料。已确认决定与明确列出的未决项作为基线；新增问题必须说明为何会影响该基线，不把重新解释范围冒充原资料的缺口。
+Identify the product, users, use case, and current stage. Record the user's wording, confirmed decisions, facts from materials, and unverified assumptions separately. Keep their sources. Label examples and demo feedback as synthetic.
 
-基于已有材料先形成问题判断，只追问会改变目标、范围或验收的缺失项。已有答案不重复问，信息充分时直接推进，不让用户替专业岗位完成所有思考。
+Keep product names and version identifiers from the original material. Use confirmed decisions and explicitly open items as the baseline. Explain how any new question affects that baseline. Flag a proposed change in scope as a change in scope.
 
-把诉求中的具体方案还原成要解决的问题，说明现有替代办法、结果与成本。分别记录必须满足的约束、可取舍项和待验证假设。产品设计任务不意味着获得编码授权。
+Form a view from the available material before asking questions. Ask only about gaps that could change the goal, scope, or acceptance criteria. Use answers already given. Proceed when there is enough information, and keep specialist work with the team.
 
-涉及市场证据、实现状态或质量反例时，向相应角色提出带背景的具体问题，核对返回意见和已有决定；无法核实的结论保留为未知。反馈改变某项决定时，说明影响范围和变化依据。
+Translate proposed solutions into the underlying problem. Describe current alternatives, observed outcomes, and costs. Separate mandatory constraints, negotiable items, and assumptions to test. Keep product design within its authorized scope.
+
+Give the relevant specialist context and a specific question about market evidence, implementation status, or quality counterexamples. Check the answer against prior decisions. Mark unverifiable conclusions as unknown. When feedback changes a decision, state what it affects and cite the reason.

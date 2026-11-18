@@ -51,28 +51,28 @@ export function buildInterruptionResumeBrief(input: {
 	const snapshot = parseSnapshotFromMetadata(lastOutcome.metadata);
 	const errorDetail = typeof lastOutcome.metadata?.error === "string" ? lastOutcome.metadata.error : "";
 	const cancelReason = typeof lastOutcome.metadata?.cancelReason === "string" ? lastOutcome.metadata.cancelReason : "";
-	const lines: string[] = ["## 上次中断状态简报（用于基于断点快速续跑）"];
+	const lines: string[] = ["## Previous interruption and resume brief"];
 
 	if (isFailed) {
 		lines.push(
-			`- 中断原因：执行异常未完成${errorDetail ? `（${truncateInline(errorDetail, 120)}）` : ""}${snapshot ? `，停滞前已运行 ${snapshot.elapsedSeconds}s` : ""}`,
+			`- Interruption reason: The run failed${errorDetail ? ` (${truncateInline(errorDetail, 120)})` : ""}${snapshot ? ` after ${snapshot.elapsedSeconds}s` : ""}.`,
 		);
 	} else {
-		const reasonText = cancelReason === "shutdown" ? "服务重启/关闭中止" : "用户手动停止";
-		lines.push(`- 中断原因：${reasonText}${snapshot ? `，停止前已运行 ${snapshot.elapsedSeconds}s` : ""}`);
+		const reasonText = cancelReason === "shutdown" ? "Service shutdown or restart" : "Stopped by the user";
+		lines.push(`- Interruption reason: ${reasonText}${snapshot ? ` after ${snapshot.elapsedSeconds}s` : ""}.`);
 	}
 
 	if (snapshot) {
-		lines.push(`- 停滞阶段：${snapshot.stage}（${truncateInline(snapshot.label, 96)}）`);
+		lines.push(`- Stage at interruption: ${snapshot.stage} (${truncateInline(snapshot.label, 96)})`);
 		if (snapshot.activeDelegations && snapshot.activeDelegations.length > 0) {
 			lines.push(
-				`- 中断时仍在协同的岗位：${snapshot.activeDelegations.map((entry) => `${entry.memberName}（${entry.stageLabel}）`).join("、")}`,
+				`- Active delegations at interruption: ${snapshot.activeDelegations.map((entry) => `${entry.memberName} (${entry.stageLabel})`).join(", ")}`,
 			);
 		}
 		if (snapshot.recentLogs && snapshot.recentLogs.length > 0) {
-			lines.push("- 中断前最近执行轨迹：");
+			lines.push("- Recent actions before interruption:");
 			for (const entry of snapshot.recentLogs) {
-				lines.push(`  - ${entry.memberName}：${truncateInline(entry.summary, 96)}`);
+				lines.push(`  - ${entry.memberName}: ${truncateInline(entry.summary, 96)}`);
 			}
 		}
 	}
@@ -101,23 +101,23 @@ export function buildInterruptionResumeBrief(input: {
 			msg.createdAt <= lastOutcome.createdAt,
 	);
 	if (turnDelegations.length > 0) {
-		lines.push("- 上轮内部委托情况：");
+		lines.push("- Delegations from the previous turn:");
 		for (const req of turnDelegations.slice(-6)) {
 			const toId = String(req.metadata?.toMemberId ?? "");
 			const toName = input.store.getMember(toId)?.displayName ?? toId;
 			const resp = responseByReqId.get(req.id);
 			const statusLabel = resp
 				? resp.metadata?.failed === true || resp.senderType === "system"
-					? "未完成/中断"
-					: "已完成"
-				: "未返回/中断";
+					? "Incomplete or interrupted"
+					: "Completed"
+				: "No result returned";
 			const taskSnippet = truncateInline(req.content.replace(/^@[^:：]+[:：]\s*/, ""), 64);
-			lines.push(`  - ${toName}【${statusLabel}】：${taskSnippet}`);
+			lines.push(`  - ${toName} [${statusLabel}]: ${taskSnippet}`);
 		}
 	}
 
 	lines.push(
-		"- 续跑指引：你与已接入协同岗位的原有 Pi 会话均已自动恢复；请优先核查上述断点与现场文件/进程状态，直接衔接未完成工作，避免重复已完成步骤。",
+		"- Resume the unfinished work in the existing Pi sessions. First verify the interruption point and the current file and process state. Reuse completed work.",
 	);
 	return lines.join("\n");
 }
@@ -134,9 +134,9 @@ export function formatMessageHistorySpeaker(message: MatterMessage): string {
 				: null;
 		const modeTag =
 			message.metadata?.mode === "discussion"
-				? "[团队讨论]"
+				? "[Team discussion]"
 				: message.metadata?.mode === "ai_request"
-					? "[同事提请]"
+					? "[Teammate request]"
 					: "";
 		if (authorName) {
 			const rolePart = authorRole ? ` (${authorRole})` : "";
@@ -151,7 +151,7 @@ export function formatMessageHistoryContent(message: MatterMessage): string {
 	const rawImages = Array.isArray(message.metadata?.images) ? message.metadata.images : [];
 	const trimmed = message.content.trim();
 	if (rawImages.length === 0) return message.content;
-	const badge = `[附带 ${rawImages.length} 张图片]`;
+	const badge = `[Image attachments: ${rawImages.length}]`;
 	return trimmed ? `${trimmed}\n${badge}` : badge;
 }
 
@@ -163,17 +163,17 @@ export function buildObserverTaskPrompt(input: {
 }): string {
 	const trimmedUser = input.userPrompt.trim();
 	const userPart = trimmedUser
-		? `${truncateInline(trimmedUser, 2000)}${input.imageCount ? `\n（用户同时附带了 ${input.imageCount} 张图片）` : ""}`
-		: `（用户发送了 ${input.imageCount ?? 1} 张图片，未附带额外文字）`;
+		? `${truncateInline(trimmedUser, 2000)}${input.imageCount ? `\n[Image attachments: ${input.imageCount}]` : ""}`
+		: `[Image attachments: ${input.imageCount ?? 1}. The user provided no text.]`;
 	const leadPart = input.leadReply.trim().slice(0, 6000);
 	return [
-		"请从你的本职岗位视角快速审视本轮讨论，判断是否需要主动插话补充：",
+		"Review this turn from your area of expertise and decide whether to speak.",
 		"",
-		`【用户发言】\n${userPart}`,
+		`[User message]\n${userPart}`,
 		"",
-		`【主负责人 ${input.leadMember.displayName}（${input.leadMember.roleTitle}）的最新回复】\n${leadPart}`,
+		`[Latest reply from lead ${input.leadMember.displayName} (${input.leadMember.roleTitle})]\n${leadPart}`,
 		"",
-		`如果有重要风险、关键遗漏或必须提前纠正/补充的专业建议，请直接面向用户给出简洁具体的发言；如果已妥当或暂无需要补充的实质内容，请仅回复 ${OBSERVER_SILENT_SENTINEL}。`,
+		`Address the user directly with a concise, specific comment if you find a material risk or omission or have a correction the user needs now. Otherwise, return only ${OBSERVER_SILENT_SENTINEL}.`,
 	].join("\n");
 }
 
@@ -185,16 +185,16 @@ export function buildObserverContextDigest(input: {
 }): string {
 	const parts: string[] = [];
 	if (input.includeMatterHeader && input.matter) {
-		if (input.matter.title) parts.push(`事项主题：${truncateInline(input.matter.title, 120)}`);
-		if (input.matter.summary) parts.push(`阶段摘要：${truncateInline(input.matter.summary, 280)}`);
+		if (input.matter.title) parts.push(`Matter title: ${truncateInline(input.matter.title, 120)}`);
+		if (input.matter.summary) parts.push(`Progress summary: ${truncateInline(input.matter.summary, 280)}`);
 		if (input.deliverables.length > 0) {
 			const latestByTitle = new Map<string, Deliverable>();
 			for (const item of input.deliverables) {
 				const prev = latestByTitle.get(item.title);
 				if (!prev || item.version > prev.version) latestByTitle.set(item.title, item);
 			}
-			const list = [...latestByTitle.values()].map((d) => `${d.title} (V${d.version})`).join("、");
-			if (list) parts.push(`已归档成果：${truncateInline(list, 240)}`);
+			const list = [...latestByTitle.values()].map((d) => `${d.title} (V${d.version})`).join(", ");
+			if (list) parts.push(`Archived deliverables: ${truncateInline(list, 240)}`);
 		}
 	}
 	if (input.history.length > 0) {
@@ -214,7 +214,7 @@ export function buildObserverContextDigest(input: {
 			kept.unshift(line);
 			used += line.length + 1;
 		}
-		parts.push(`此前最近对话摘录：\n${kept.join("\n")}`);
+		parts.push(`Recent conversation excerpts:\n${kept.join("\n")}`);
 	}
 	return parts.join("\n");
 }
@@ -238,72 +238,71 @@ export function buildMemberSystemPrompt(input: {
 	const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
 	const repoGitUser = input.repoGitUser;
 	const identityLines = [
-		`- 成员标识：\`${input.member.id}\`（${input.member.displayName} · ${input.member.roleTitle}）`,
+		`- Member: \`${input.member.id}\` (${input.member.displayName} · ${input.member.roleTitle})`,
 		organization
-			? `- 所属组织：${organization.name}${organization.description ? `（${organization.description}）` : ""}`
+			? `- Organization: ${organization.name}${organization.description ? ` (${organization.description})` : ""}`
 			: null,
-		`- Git Author（角色署名）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>`,
+		`- Git author (role identity): ${gitIdentity.gitName} <${gitIdentity.gitEmail}>`,
 		repoGitUser
-			? `- Git Committer（真实用户保留）：${repoGitUser.name} <${repoGitUser.email}>（执行环境已分别注入 GIT_AUTHOR_* 与 GIT_COMMITTER_*，提交时将区分角色作者并保留真实提交者，请勿修改全局或仓库 Git 配置）`
-			: `- Git 提交署名（Author / Committer）：${gitIdentity.gitName} <${gitIdentity.gitEmail}>（执行环境已自动注入 GIT_AUTHOR_* / GIT_COMMITTER_*，请勿修改全局 Git 配置）`,
-		input.member.identitySummary ? `- 角色背景与专长：${input.member.identitySummary}` : null,
+			? `- Git committer (repository user): ${repoGitUser.name} <${repoGitUser.email}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_* separately. Keep the global and repository Git configuration intact.`
+			: `- Git author and committer: ${gitIdentity.gitName} <${gitIdentity.gitEmail}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_*. Keep the global Git configuration intact.`,
+		input.member.identitySummary ? `- Role background and expertise: ${input.member.identitySummary}` : null,
 	].filter(Boolean);
 	const sections: string[] = [
-		`你当前担任 Personal Agent 团队中的【${input.member.displayName} (${input.member.roleTitle})】。`,
-		`## 角色与组织身份（Role & Organization Identity）\n${identityLines.join("\n")}`,
+		`You are ${input.member.displayName} (${input.member.roleTitle}) on the Personal Agent team.`,
+		"Use the language of the user's request for replies and deliverables unless the user asks for another language. If given a transcript, take the language from the human user's message. Preserve identifiers, commands, and file paths verbatim. Follow any required output format.",
+		`## Role and organization identity\n${identityLines.join("\n")}`,
 	];
 
 	if (input.template) {
 		if (input.template.sections.responsibilitiesAndBoundaries) {
-			sections.push(`## 岗位职责与边界\n${input.template.sections.responsibilitiesAndBoundaries}`);
+			sections.push(`## Responsibilities and boundaries\n${input.template.sections.responsibilitiesAndBoundaries}`);
 		}
 		if (input.template.antiJobs && input.template.antiJobs.length > 0) {
-			sections.push(
-				`## 明确不做清单（Anti-Jobs）\n${input.template.antiJobs.map((rule) => `- ${rule}`).join("\n")}`,
-			);
+			sections.push(`## Anti-Jobs\n${input.template.antiJobs.map((rule) => `- ${rule}`).join("\n")}`);
 		}
 		if (input.template.sections.skillsAndMethods) {
-			sections.push(`## 工作方法\n${input.template.sections.skillsAndMethods}`);
+			sections.push(`## Skills and methods\n${input.template.sections.skillsAndMethods}`);
 		}
 		if (input.template.sections.toolsAndEnvironment) {
-			sections.push(`## 工具与环境依赖\n${input.template.sections.toolsAndEnvironment}`);
+			sections.push(`## Tools and environment\n${input.template.sections.toolsAndEnvironment}`);
 		}
 		if (input.template.sections.collaborationConventions) {
-			sections.push(`## 协作和沟通约定\n${input.template.sections.collaborationConventions}`);
+			sections.push(`## Collaboration and communication\n${input.template.sections.collaborationConventions}`);
 		}
 		if (input.template.sections.deliveryAndVerification) {
-			sections.push(`## 交付与验收标准\n${input.template.sections.deliveryAndVerification}`);
+			sections.push(`## Delivery and verification\n${input.template.sections.deliveryAndVerification}`);
 		}
 	}
 
 	if (input.memories.length > 0) {
 		const formatMemoryLine = (m: MemberMemory): string => {
-			const tag = m.status === "verified" ? `已验证 · ${m.scope}` : `待验证 · ${m.scope}`;
+			const tag = m.status === "verified" ? `verified · ${m.scope}` : `unverified · ${m.scope}`;
 			const catPrefix =
 				m.category && m.category !== "general"
-					? `【${MEMORY_CATEGORY_PROMPT_LABELS[m.category] ?? m.category}】`
+					? `[${MEMORY_CATEGORY_PROMPT_LABELS[m.category] ?? m.category}] `
 					: "";
 			const suffix =
 				m.status === "candidate"
-					? "（待核实：若在当前工作中发现不成立或需修正，可调用 propose_experience 提出替代）"
+					? " (Unverified. If current work shows this is incorrect or needs revision, use propose_experience to propose a replacement.)"
 					: "";
 			return `- [${m.id} | ${tag}] ${catPrefix}${m.content}${suffix}`;
 		};
 		const groups: Array<{ title: string; items: MemberMemory[] }> = [
 			{
-				title: "### 岗位通用经验（role_general，跨组织与跨仓库通用）",
+				title: "### Role-wide experience (role_general, shared across organizations and repositories)",
 				items: input.memories.filter((m) => m.scope === "role_general"),
 			},
 			{
 				title: organization
-					? `### 组织经验与记忆（company_private · ${organization.name}，同组织跨仓库共享）`
-					: "### 组织/团队经验与记忆（company_private）",
+					? `### Organization experience (company_private · ${organization.name}, shared across its repositories)`
+					: "### Organization or team experience (company_private)",
 				items: input.memories.filter((m) => m.scope === "company_private"),
 			},
 			{
 				title: input.workspace
-					? `### 当前仓库经验与记忆（project_private · ${input.workspace.name}）`
-					: "### 当前仓库经验与记忆（project_private）",
+					? `### Current repository experience (project_private · ${input.workspace.name})`
+					: "### Current repository experience (project_private)",
 				items: input.memories.filter((m) => m.scope === "project_private"),
 			},
 		];
@@ -311,28 +310,28 @@ export function buildMemberSystemPrompt(input: {
 			.filter((group) => group.items.length > 0)
 			.map((group) => `${group.title}\n${group.items.map(formatMemoryLine).join("\n")}`)
 			.join("\n\n");
-		sections.push(`## 个人与组织积累经验（分作用域记忆）\n${memoryBlocks}`);
+		sections.push(`## Scoped memories\n${memoryBlocks}`);
 	}
 
 	if (input.workspace) {
 		sections.push(
-			`## 目标工作区约束\n- 项目：${input.workspace.name}\n- 本地路径：${input.workspace.repoPath}\n- 默认分支：${input.workspace.defaultBranch}\n- 原则：仓库自身维护的信息，以目标工作区实际文件与 Git 状态为准。`,
+			`## Target workspace\n- Project: ${input.workspace.name}\n- Local path: ${input.workspace.repoPath}\n- Default branch: ${input.workspace.defaultBranch}\n- Use the actual files and Git state in this workspace as the source of truth for the repository.`,
 		);
 	}
 
 	if (mode === "internal") {
 		sections.push(
-			"## 协作模式\n这是一次团队内部的角色委托协作。请从本职视角直接给出有依据的判断、风险与结论。结果返回委托者，由主要负责人整合和决定正式交付；你不直接向用户登记成果。",
+			"## Internal delegation\nGive the requester evidence-backed findings, risks, and conclusions from your role. The lead integrates your findings and decides what to publish.",
 		);
 	} else if (mode === "observer") {
 		sections.push(
-			`## 旁听与主动发言规则\n你当前作为旁听同事列席主负责人与用户的实时讨论会议。\n- 仅当从你的本职专业视角发现关键技术/测试/业务风险、可行性冲突、重要前提遗漏，或能给出主负责人尚未覆盖的关键建议时，才直接面向用户发表简洁、有依据的补充。\n- 若主负责人已妥当回应、当前属于普通澄清/闲聊或无实质增量，请仅输出 ${OBSERVER_SILENT_SENTINEL}（不要客套、附和、复述或解释原因）。\n- 只有主负责人保留正式交付归档权，你不得代为调用 publish_deliverable，也不自行发起二次团队委托。`,
+			`## Observer participation\nYou are observing a discussion between the lead and the user.\n- Speak directly to the user only when you identify a material risk, feasibility conflict, missing prerequisite, or important recommendation the lead missed. Keep your comment concise and evidence-backed.\n- If the lead has addressed the issue, the turn is routine, or you have nothing material to add, return exactly ${OBSERVER_SILENT_SENTINEL}.\n- Leave formal publication and team delegation to the lead.`,
 		);
 	}
 
 	const isArchitect = isArchitectRoleTemplate(input.template ?? { id: input.member.id });
 	sections.push(
-		`## 当前团队\n${input.teamMembers.map((member) => `- ${member.id}: ${member.displayName}，${member.roleTitle}`).join("\n")}`,
+		`## Current team\n${input.teamMembers.map((member) => `- ${member.id}: ${member.displayName} (${member.roleTitle})`).join("\n")}`,
 	);
 	if (input.extraGuidance) {
 		sections.push(input.extraGuidance);
@@ -340,18 +339,24 @@ export function buildMemberSystemPrompt(input: {
 	if (mode !== "observer" && !isArchitect) {
 		const isSoloMatter = mode === "lead" && input.teamMembers.length <= 1;
 		const collabLine = isSoloMatter
-			? "本事项采用「单兵专办」配置（仅你 1 位 AI 成员参与，不进行跨岗位内部委托）。请直接在本职边界内核查事实、独立推进并给出完整结论；若判断诉求明显超出自身岗位职责或缺少必要角色，请直说原因与建议补充的角色方向。"
-			: "你负责持续推进本轮任务。需要其他岗位的专业工作时调用 delegate_to_member，提供目标、必要事实与约束，并将同事的依据整合为用户需要的结论。内部过程不向用户逐条汇报。只有缺少信息或业务判断时询问用户。不要仅声称已咨询。";
+			? "This is a solo matter. Verify the facts and complete the work within your role without internal delegation. If the request exceeds your remit or needs an unavailable role, explain the gap and suggest what expertise is needed."
+			: "Advance the task within your role. When specialist work is needed, call delegate_to_member with the goal, relevant facts, and constraints. Integrate the specialist's evidence into the result. Keep routine coordination internal. Ask the user only when information or a business decision is missing.";
 		sections.push(
-			`## 自主协作与真实成果\n${collabLine}` +
-				"\n只有负责用户交流的主成员在形成可审阅的阶段成果、用户指定版本或实质变化时，才调用 publish_deliverable。提供完整文档、实际文件或服务链接，标题保持稳定以形成版本。成果表达遵循「简练、有重点、有过程」：changeNote 控制在 1–3 句讲清本版结论、核心改动与关键依据；document 正文先给核心结论与重点清单，再分节写清主体内容，最后用精简的「交付过程与验证依据」小结交代关键核查、数据结论与遗留边界（不贴整段原始日志）。普通回复、需求澄清、过程进度和细小讨论调整只保留对话，不按回复长度或轮数决定交付，也不逐次要求用户批准归档。登记后必须在本轮完成必要验证。\n若在执行、排障或用户纠偏过程中总结出明确可复用的**效率突破、问题排障定位法、岗位协同契约或项目硬规范**（不只是进度记录），可调用 propose_experience 附带合适 category 与 scope 记录为待验证候选经验。",
+			[
+				"## Collaboration and publication",
+				collabLine,
+				"Only the lead can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
+				"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
+				"Keep routine replies, clarifications, progress, and minor adjustments in the conversation. Base publication on the significance of the work. Publication alone requires no extra approval. Complete the necessary verification in the same turn.",
+				"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
+			].join("\n"),
 		);
 	}
 	if (mode === "lead" && !isArchitect) sections.push(PUBLICATION_REVIEW_GUIDANCE);
 	if (mode === "lead" && !isArchitect)
 		sections.push(
-			"## 文档发布来源\n文档已经保存为工作区文件时，publish_deliverable 必须传 sourcePath，由宿主读取最终正文；不要再次传 content 改写另一份。只有没有落盘文件的文档才直接传 content。来源文件登记后如有修改，完成前须重新登记同标题的最终文件。",
+			"## Document publication source\nFor a document saved in the workspace, call publish_deliverable with sourcePath alone so the host can read the final text. Use content only for documents without a source file. If the source changes after registration, register the final file under the same title before finishing.",
 		);
-	if (input.taskPrompt) sections.push(`## 当前任务\n${input.taskPrompt}`);
+	if (input.taskPrompt) sections.push(`## Current task\n${input.taskPrompt}`);
 	return sections.join("\n\n");
 }

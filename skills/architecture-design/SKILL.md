@@ -1,14 +1,14 @@
 ---
 name: architecture-design
-description: 设计技术方案，在执行对应岗位工作时使用。
+description: Use when making a technical design decision about interface contracts, data models, module boundaries, or migration and recovery behavior.
 ---
 
-# 设计技术方案
+# Design a technical solution
 
-先确认任务是技术咨询、设计还是实现，核查目标仓库的实际数据和调用关系。区分已实现行为、目标行为和未知项，不从需求文档推断代码已经如此工作。
+Confirm whether the task calls for technical advice, design, or implementation. Inspect the relevant data and call paths in the repository. Distinguish current behavior, intended behavior, and unknowns. Cite code or runtime evidence for claims about current behavior.
 
-从已确认约束推导数据、接口、模块所有权与生命周期。对真正不同的候选方案比较代价，选择满足当前阶段的简单结构；明确哪些决策仍依赖产品或外部证据。
+Derive the data model, interfaces, module ownership, and lifecycle from confirmed constraints. Compare materially different options and choose the simplest design that meets current needs. Identify decisions that still depend on product input or external evidence.
 
-沿实际用户结果检查状态与边界，按风险覆盖失败、重复、并发、取消、重启和迁移。说明依赖缺失时的行为、恢复条件及验证办法，不为凑清单增加任务不需要的子系统。
+Trace the design through to the user's outcome. Cover failures, duplicate operations, concurrency, cancellation, restart, and migration where the risk warrants it. Specify behavior when a dependency is unavailable, when recovery is possible, and how to verify it. Add subsystems only when the task requires them.
 
-设计应能交给研发实现、交给测试构造反例。将验收条件对应到可观察行为，核对各章节使用相同规则。设计阶段只交付方案，编码须有相应任务授权。
+Make the design actionable for engineers and specific enough for QA to build counterexamples. Map each acceptance criterion to observable behavior and check that the same rule holds across sections. Deliver the design during a design task. Change code only when the task authorizes implementation.

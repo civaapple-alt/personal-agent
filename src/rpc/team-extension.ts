@@ -200,6 +200,6 @@ export default function teamExtension(pi: PiExtensionApi): void {
 		});
 	});
 	pi.on("before_agent_start", (event) => ({
-		systemPrompt: `${event.systemPrompt}\n\n${env.PA_MEMBER_CONTEXT ?? ""}\n\n当前已装配工具：${pi.getActiveTools().join(", ")}。仅能使用实际工具，不得把依赖声明当作工具已执行。`,
+		systemPrompt: `${event.systemPrompt}\n\n${env.PA_MEMBER_CONTEXT ?? ""}\n\nActive tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
 	}));
 }

@@ -1,42 +1,27 @@
 ---
 name: technical-writing
-description: "Deliverable & technical-writing clarity standard: concise phrasing, lead-with-conclusion structure, mode separation, and traceable process/evidence without log bloat."
+description: Use when writing or revising a technical document or formal deliverable that needs a clear conclusion and traceable evidence.
 ---
 
-# 技术与成果写作规范（简练 · 有重点 · 有过程）
+# Write technical documents and deliverables
 
-来源：改编自 [pstack technical-writing](https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing)，加入本项目成果字段与阅读结构约定。上游归属和 MIT 许可见[第三方说明](../../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method)。
+Adapted from [pstack technical-writing](https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing) for Personal Agent's deliverable fields and document structure. See the [third-party notices](../../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method) for attribution and the MIT license.
 
-目标：让疲惫的阅读者在**第一遍**就能看懂核心结论、改动重点与验证依据，不在密集文字墙里找答案。
+Put the conclusion, important changes, and verification evidence where a reader can find them on the first pass.
 
-## 三条总原则
+## Write for the reader's decision
 
-1. **简练：删掉不做功的词与套话**
-   - 能用短句、常用词说清，不用长定语、空洞修饰词（如"非常重要的是""旨在赋能""全方位推进"）或多余括号嵌套。
-   - **一句话只讲一个意思**；超过两层条件或并列关系时拆成多句或短列表。
-   - **用真实名称**：直接写仓库内真实的文件路径、模块名、命令或指标名，不生造黑话或含糊代词。
+- Use short sentences and plain words. Give each sentence one main point. Split nested conditions or long lists. Use actual file paths, modules, commands, and metric names.
+- Lead with the conclusion or decision for this version. Give each section one purpose. State the outcome and its boundaries up front, then put the facts, interfaces, rules, and criteria in the body. Put any required actions in a numbered procedure. Put lookup tables, thresholds, and script references in a reference section or appendix. Use headings that name the decision or action.
+- Explain the checks or specialist input that support the conclusion, the key trade-offs, what changed since the prior version, and what remains unverified. Cite concise results, commands, and source evidence. Keep full logs, stacks, and tool JSON in the conversation or workspace.
 
-2. **有重点：先下结论，再按用途分流（不把多种模式炖成一锅）**
-   - 开头先亮结论或本版拍板点，再展开细节；不要把背景、规范、操作命令和未决待办混在同一个段落里。
-   - 参考 **Diátaxis 四种用途** 保持区块职责单一：
-     - **核心结论与边界**（决定做什么、不做什么）
-     - **方案 / 规格正文**（客观事实、接口、规则、验收标准）
-     - **执行指南**（需要用户或下游按步骤执行的动作，用编号序列写成直接指令）
-     - **参考与附录**（对照表、阈值、原始脚本入口）
-   - 小标题直接亮观点或动作（如"M1 结论：主体达标，待补 S1 实拍"），不用空洞主题词（如"相关情况说明"）。
+## Structure a formal deliverable
 
-3. **有过程：结论可追溯，但不贴原始日志墙**
-   - 成果不能只丢一个孤立结论，必须简要交代**关键过程**：经过了哪几步验证或协同核查、做了什么关键取舍、相对上一版改了什么、还有哪些未覆盖边界。
-   - **用"总结 + 依据引用"替代原始堆栈/JSON/整段终端日志**：过程明细保留在原对话和工作区文件里，成果正文只提炼关键实测数据、校验命令名及参与方结论。
+For `publish_deliverable`, use the requested deliverable language.
 
-## 交付结构与长度控制（`publish_deliverable` 适用）
+- Write `changeNote` and `summary` in one to three short sentences. State this version's conclusion, the key change, and the evidence. Aim for about 120 characters in Chinese. Keep long action lists, parameter tables, and path lists in the document body.
+- Structure the Markdown body in this order.
 
-- **`changeNote` / `summary`（展示在成果卡片顶部与列表摘要）**：
-  - 控制在 **1–3 句（建议 ≤ 120 字）**。
-  - 按「本版结论 + 核心变化 + 一句依据」书写，例如：`M1 收口归档：QA 10/10 回归通过（recall 89.9%），默认档切为 T1；唯一遗留 S1 实拍待补。`
-  - **禁止**把多条编号待办、长参数表、完整文件路径串全都塞进 `changeNote`。
-
-- **`content`（成果正文 Markdown）**：
-  1. **一、核心结论与关键重点**：3–5 条要点，让用户 10 秒掌握现状、拍板结果与需要关注的决策项。
-  2. **二、正文内容**：按逻辑分节或紧凑表格呈现（优先表格与短列表，单段不超过 4–5 行）。
-  3. **三、交付过程与验证依据**：用简洁列表记录关键协同/实测节点、核查人结论、版本变化及遗留风险或下一步。
+  1. **Conclusion and key points.** Use three to five points to state the current result, decisions made, and choices that still need attention.
+  2. **Main content.** Organize the details into sections, short lists, or compact tables. Keep paragraphs short.
+  3. **Verification and delivery evidence.** Record key checks, specialist findings, version changes, remaining risks, or next actions.

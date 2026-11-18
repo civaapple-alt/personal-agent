@@ -12,6 +12,7 @@ import {
 	PersonalAgentStore,
 	type PiRpcWorkerOptions,
 	type PromptRunResult,
+	parseRoleTemplateMarkdown,
 	type RpcExtensionUIDialogRequest,
 	type RpcExtensionUIResponsePayload,
 	type RpcWorkerLike,
@@ -122,7 +123,17 @@ test("loads 4 shareable role templates alongside README and serializes without p
 
 	const roundTripped = serializeRoleTemplateMarkdown(pm);
 	assert.match(roundTripped, /id: product-manager/);
-	assert.match(roundTripped, /## 职责与边界/);
+	assert.match(roundTripped, /## Responsibilities and Boundaries/);
+	assert.equal(pm.name, "Product Manager");
+	const legacy = roundTripped
+		.replace("## Responsibilities and Boundaries", "## 职责与边界")
+		.replace("## Skills and Methods", "## 技能与工作方法")
+		.replace("## Tools and Environment", "## 工具与环境依赖")
+		.replace("## Collaboration and Communication", "## 协作和沟通约定")
+		.replace("## Delivery and Verification", "## 交付与验证方式");
+	const parsedLegacy = parseRoleTemplateMarkdown(legacy);
+	assert.deepEqual(parsedLegacy.sections, pm.sections);
+	assert.equal(serializeRoleTemplateMarkdown(parsedLegacy), legacy);
 });
 
 test("isolates project-private memories across workspaces while preserving shared role/company memories", async () => {
@@ -208,6 +219,8 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	});
 
 	// 1. Route an engineering architecture task to engineering-manager with workspace cwd
+	assert.equal(orchestrator.routeMemberForRequest("请研发经理看看").id, "engineering-manager");
+	assert.equal(orchestrator.routeMemberForRequest("Ask Engineering Manager to take a look").id, "engineering-manager");
 	const engResult = await orchestrator.dispatchMatter({
 		title: "评估架构依赖",
 		prompt: "帮我评估一下仓库的架构和 SQLite 接口依赖",
@@ -217,6 +230,8 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 
 	assert.equal(engResult.assignedMember.id, "engineering-manager");
 	assert.equal(spawnedWorkers[0]?.options.cwd, "/tmp/personal-agent");
+	assert.match(spawnedWorkers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Use the language of the user's request/);
+	assert.match(spawnedWorkers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Turn confirmed goals into working/);
 	assert.deepEqual(seenStatusesDuringDialog, ["waiting_user"]);
 	assert.equal(engResult.matter.status, "delivered");
 	assert.ok(engResult.deliverable);
@@ -415,10 +430,10 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.equal(pmWorkerA.options.env?.PA_ORG_NAME, "Acme Engineering");
 
 		const ctxA = pmWorkerA.options.env?.PA_MEMBER_CONTEXT ?? "";
-		assert.match(ctxA, /## 角色与组织身份（Role & Organization Identity）/);
+		assert.match(ctxA, /## Role and organization identity/);
 		assert.match(ctxA, /Acme Engineering/);
 		assert.match(ctxA, /PM Alice <product-manager@acme\.dev>/);
-		assert.match(ctxA, /Git Committer（真实用户保留）：Real Repo Owner <owner@company\.com>/);
+		assert.match(ctxA, /Git committer \(repository user\): Real Repo Owner <owner@company\.com>/);
 		assert.match(ctxA, /Owns checkout product metrics across Acme/);
 		assert.match(ctxA, /GLOBAL_RULE/);
 		assert.match(ctxA, /ACME_ORG_MEM/);
@@ -733,7 +748,10 @@ test("TeamOrchestrator preserves multi-human discussion speaker attribution and 
 		});
 
 		assert.equal(workers.length, 1);
-		assert.match(workers[0]?.receivedPrompts[0] ?? "", /\[团队讨论\] Alice \(后端研发\): 我这边建议先做房间人员展示/);
+		assert.match(
+			workers[0]?.receivedPrompts[0] ?? "",
+			/\[Team discussion\] Alice \(后端研发\): 我这边建议先做房间人员展示/,
+		);
 		const updatedMatter = store.getMatter(matter.id);
 		assert.ok(updatedMatter?.collaboratorIds.includes("collab-bob"));
 	} finally {

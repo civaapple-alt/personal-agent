@@ -1,8 +1,8 @@
 ---
 name: scope-prioritization
-description: 选择迭代范围，在执行对应岗位工作时使用。
+description: Use when deciding what to include in an iteration, defer, or prioritize given user value and cost.
 ---
 
-# 选择迭代范围
+# Choose the scope of an iteration
 
-逐项连接目标用户、痛点、预期收益和成本依据。请研发评估关键技术不确定性。给出本轮范围、暂缓项与取舍理由，标明仍需用户决定的取舍。
+For each option, link the target users, their problem, the expected benefit, and evidence of cost. Ask engineering to assess key technical uncertainties. State what fits this iteration, what to defer, and why. Flag trade-offs that still need a user decision.

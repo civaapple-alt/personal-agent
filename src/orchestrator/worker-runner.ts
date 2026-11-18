@@ -527,7 +527,7 @@ export async function executeWithWorkerPass(
 							title:
 								scopedContext.messages
 									.find((msg) => msg.channel === "user" && msg.senderType === "user")
-									?.content.slice(0, 120) ?? `事项 ${input.matterId}`,
+									?.content.slice(0, 120) ?? `Matter ${input.matterId}`,
 							summary: lastUserMsg ? formatMessageHistoryContent(lastUserMsg) : "",
 						},
 						deliverables: scopedContext.deliverables,
@@ -541,8 +541,8 @@ export async function executeWithWorkerPass(
 						.slice(-20000);
 		const contextHeader =
 			sessionMode === "observer"
-				? "会前背景摘要（精简回顾）："
-				: "同事项、同工作区中尚未进入本会话的对话（有界背景）：";
+				? "Brief background for the observer:"
+				: "Recent messages in this matter and workspace that are new to this session:";
 		const resumeBrief =
 			sessionMode === "lead"
 				? buildInterruptionResumeBrief({

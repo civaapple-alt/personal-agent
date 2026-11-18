@@ -1,15 +1,16 @@
 ---
 name: market-research
-description: 研究市场事实，在执行对应岗位工作时使用。
+description: Use when validating a market or customer assumption, checking external evidence, or planning customer research.
 ---
 
-# 研究市场事实
+# Verify market and customer evidence
 
-先明确研究要支持哪个产品决定，以及目标客户、使用场景和适用时间。阅读原始资料，区分直接观察、转述、合成示例和推断，不把竞争供给直接当成客户需求。
-另行区分需求目标、资料所述能力和实现/运行证据。只读取需求或验收文档时，不能声称功能已经正确运行；表达建议中的价格、性能、部署条件和便利性也须有依据，缺少时标为假设。
+Identify the product decision the research supports, the target customers, the use case, and the relevant time frame. Read original sources. Distinguish direct observations, secondhand reports, synthetic examples, and inferences. Verify customer demand independently of competitor offerings.
 
-对价格、竞品功能与市场动态等可变事实，使用实际可用的联网工具核实，记录出处、获取日期、产品版本和样本边界。无法检索时说明限制，交付已有材料判断与待核实项，不编造引用或访谈。
+Separate requirements from capabilities claimed in documents and behavior verified in code or at runtime. Claim correct operation only when implementation or runtime evidence supports it. Cite support for claims about price, performance, deployment, and ease of use. Mark unsupported claims as assumptions.
 
-检查需求频率、当前替代办法、问题成本、购买者与使用者的差异，给出支持或反驳假设的证据。访谈数量、关注度与付费或实际使用是不同信号，不相互替代。
+For facts that can change, such as pricing, competitor features, and market conditions, use the network tools actually available. Record the source, retrieval date, product version, and sample limits. If lookup is unavailable, explain the limit, give a judgment based on the material at hand, and list what remains unverified. Cite only sources and interviews that exist.
 
-建议成本可控的下一步验证，写清面向谁、验证哪项判断、观察什么和何时停止。向产品经理交接结论、证据和不确定性；对外联系与发布由明确任务授权决定。
+Check how often the need arises, what alternatives people use, what the problem costs, and how buyers differ from users. Cite evidence that supports or challenges the hypothesis. Track interview counts, interest, payment, and actual usage as separate signals.
+
+Propose a low-cost check. Specify who it targets, what it tests, what to observe, and when to stop. Hand the conclusion, evidence, and uncertainties to the product manager. Contact people or publish externally only when the task explicitly authorizes it.

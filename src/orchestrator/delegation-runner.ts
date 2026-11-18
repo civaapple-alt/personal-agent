@@ -80,7 +80,7 @@ export async function delegateBetweenMembers(
 				matterId: input.matterId,
 				member: toMember,
 				workspace,
-				taskPrompt: `来自 ${fromMember.displayName} 的内部委托：\n${input.question}`,
+				taskPrompt: `Internal delegation from ${fromMember.displayName}:\n${input.question}`,
 				isInternalDelegation: true,
 				run,
 				chain: [...chain, toMember.id],

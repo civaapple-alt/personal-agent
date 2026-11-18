@@ -31,7 +31,15 @@ test("All built-in roles load declared methods, explicit boundaries and round-tr
 	for (const template of templates) {
 		assert.ok(template.antiJobs?.length, template.id);
 		assert.ok((await resolveRoleSkills(template)).length > 0, template.id);
-		assert.deepEqual(parseRoleTemplateMarkdown(serializeRoleTemplateMarkdown(template)).skills, template.skills);
+		const parsed = parseRoleTemplateMarkdown(serializeRoleTemplateMarkdown(template));
+		assert.deepEqual(parsed.skills, template.skills);
+		assert.deepEqual(parsed.responsibilityKeywords, template.responsibilityKeywords);
+		assert.deepEqual(parsed.sections, template.sections);
+		assert.deepEqual(parsed.antiJobs, template.antiJobs);
+		assert.ok(
+			Object.values(parsed.sections).every((section) => section.trim()),
+			template.id,
+		);
 		assert.deepEqual(
 			(await assessRoleCapabilities(template)).skills.map((skill) => skill.state),
 			template.skills.map(() => "file_present"),
@@ -234,8 +242,9 @@ test("Architect receives the complete design method while all team actions are r
 				setDialogHandler: () => {},
 				runPromptAndWait: async () => {
 					assert.equal(options.env?.PA_CAN_PUBLISH, "false");
-					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /每个角色聚焦一个核心结果/);
-					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /已安装方法目录/);
+					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Give each role one core outcome/);
+					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Write user-facing prose in the user's language/);
+					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /## Installed Skill catalog/);
 					await assert.rejects(
 						invokeTool(options, "publish_deliverable", {
 							type: "document",

@@ -15,6 +15,7 @@ import {
 	type RoleWorkspaceScope,
 } from "../../roles/role-architect.ts";
 import {
+	formatRoleTemplateBody,
 	parseRoleTemplateMarkdown,
 	parseRoleThinkingLevel,
 	serializeRoleTemplateMarkdown,
@@ -128,22 +129,13 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 			? customSections.deliveryAndVerification.trim()
 			: "- 产出结构化说明或可执行验证结果。";
 
-	const rawBody = [
-		"## 职责与边界",
-		responsibilities,
-		"",
-		"## 技能与工作方法",
+	const sections = {
+		responsibilitiesAndBoundaries: responsibilities,
 		skillsAndMethods,
-		"",
-		"## 工具与环境依赖",
 		toolsAndEnvironment,
-		"",
-		"## 协作和沟通约定",
 		collaborationConventions,
-		"",
-		"## 交付与验证方式",
 		deliveryAndVerification,
-	].join("\n");
+	};
 
 	const template: RoleTemplate = {
 		id: rawId,
@@ -160,14 +152,8 @@ function planMemberFromBody(body: Record<string, unknown>, existingIds: Set<stri
 		skills,
 		mcpDependencies,
 		...(antiJobs.length > 0 ? { antiJobs } : {}),
-		sections: {
-			responsibilitiesAndBoundaries: responsibilities,
-			skillsAndMethods,
-			toolsAndEnvironment,
-			collaborationConventions,
-			deliveryAndVerification,
-		},
-		rawBody,
+		sections,
+		rawBody: formatRoleTemplateBody(sections),
 	};
 
 	return {

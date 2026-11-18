@@ -216,7 +216,7 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 test("shipped tool delegates to a real colleague execution and returns internal results, with idempotency and cycle boundaries", async (t) => {
 	let engineerCalls = 0;
 	const f = await fixture(t, async (worker) => {
-		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			engineerCalls++;
 			assert.match(worker.prompt, /用户目标/);
 			await assert.rejects(
@@ -249,7 +249,7 @@ test("shipped tool delegates to a real colleague execution and returns internal 
 	assert.equal(internal.length, 2);
 	assert.match(internal[1]?.content ?? "", /技术依据/);
 	assert.ok(f.workers[0]?.options.args?.some((arg) => arg.endsWith("requirement-clarification/SKILL.md")));
-	assert.match(f.workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /协作和沟通约定/);
+	assert.match(f.workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Collaboration and communication/);
 });
 
 test("archives explicit verified deliverables and versions them, rejects missing/outside files, discards drafts on failure", async (t) => {
@@ -333,7 +333,7 @@ test("cancellation propagates into delegated worker, rejects concurrent turns, c
 	let continueNormally = false;
 	const f = await fixture(t, async (worker, _prompt, options) => {
 		if (continueNormally) return "继续处理完成";
-		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			notifyStarted();
 			await new Promise<void>((_resolve, reject) =>
 				options.signal?.addEventListener(
@@ -383,12 +383,12 @@ test("cancellation propagates into delegated worker, rejects concurrent turns, c
 	continueNormally = true;
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "停止后继续" });
 	assert.equal(f.workers[2]?.options.sessionFile, f.workers[0]?.sessionFile);
-	assert.match(f.workers[2]?.prompt ?? "", /## 上次中断状态简报/);
-	assert.match(f.workers[2]?.prompt ?? "", /用户手动停止/);
-	assert.match(f.workers[2]?.prompt ?? "", /研发经理/);
+	assert.match(f.workers[2]?.prompt ?? "", /## Previous interruption and resume brief/);
+	assert.match(f.workers[2]?.prompt ?? "", /Stopped by the user/);
+	assert.match(f.workers[2]?.prompt ?? "", /Engineering Manager/);
 	assert.match(f.workers[2]?.prompt ?? "", /耗时设计/);
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "正常完成后的下一问" });
-	assert.doesNotMatch(f.workers[3]?.prompt ?? "", /## 上次中断状态简报/);
+	assert.doesNotMatch(f.workers[3]?.prompt ?? "", /## Previous interruption and resume brief/);
 });
 
 test("fails clearly for missing sessions, skills or required runtime tools and cleans up startup failures", async (t) => {
@@ -435,7 +435,7 @@ test("fails clearly for missing sessions, skills or required runtime tools and c
 
 test("internal specialists cannot publish user deliverables and the lead receives their failure", async (t) => {
 	const f = await fixture(t, async (worker) => {
-		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			const draft = { type: "document", changeNote: "内部讨论不应归档", title: "不完整草稿", content: "尚未验证" };
 			assert.equal(worker.tools.has("publish_deliverable"), false);
 			await assert.rejects(worker.call("publish_deliverable", draft), /Missing shipped extension tool/);
@@ -461,13 +461,12 @@ test("internal specialists cannot publish user deliverables and the lead receive
 
 test("delegations enforce depth and turn budget without preventing professional handoffs", async (t) => {
 	const f = await fixture(t, async (worker) => {
-		const context = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
-		if (context.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			await worker.call("delegate_to_member", { memberId: "qa-manager", task: "复核风险" });
 			return "技术建议";
 		}
-		if (context.includes("(QA Manager)")) {
-			if (!worker.prompt.includes("来自 研发经理")) return "测试意见";
+		if (worker.options.env?.PA_MEMBER_ID === "qa-manager") {
+			if (!worker.prompt.includes("Internal delegation from Engineering Manager")) return "测试意见";
 			await assert.rejects(
 				worker.call("delegate_to_member", { memberId: "marketing-lead", task: "第四层委托" }),
 				/depth limit/,
@@ -630,7 +629,7 @@ test("multiple process conversations stay in chat; explicit substantial mileston
 
 test("delegation suspends parent idle watchdog and forwards colleague progress and collab updates", async (t) => {
 	const f = await fixture(t, async (worker) => {
-		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			assert.equal(f.workers[0]?.idleSuspendActive, true);
 			worker.emitEvent({
 				type: "tool_execution_start",
@@ -672,16 +671,22 @@ test("delegation suspends parent idle watchdog and forwards colleague progress a
 		},
 	});
 	assert.match(result.replyText, /已汇总研发分析结论/);
-	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.includes("研发经理")));
-	assert.ok(events.some((evt) => evt.stage === "tool" && /研发经理/.test(evt.label) && /读取文件/.test(evt.label)));
-	assert.ok(events.some((evt) => evt.recentSummaries.some((line) => /研发经理:读取文件：docs\/prd\.md/.test(line))));
+	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.includes("Engineering Manager")));
+	assert.ok(
+		events.some((evt) => evt.stage === "tool" && /Engineering Manager/.test(evt.label) && /读取文件/.test(evt.label)),
+	);
+	assert.ok(
+		events.some((evt) =>
+			evt.recentSummaries.some((line) => /Engineering Manager:读取文件：docs\/prd\.md/.test(line)),
+		),
+	);
 	assert.ok(events.some((evt) => evt.collabUpdated === true && evt.activeNames.length === 0));
 });
 
 test("failed delegation is not permanently cached so same-task retry runs a fresh worker", async (t) => {
 	let engineerAttempts = 0;
 	const f = await fixture(t, async (worker) => {
-		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			engineerAttempts += 1;
 			if (engineerAttempts === 1) throw new Error("temporary network interruption");
 			return "重试后已完成评估。";
@@ -707,17 +712,17 @@ test("proactive observer chimes in with independent user bubble while silent obs
 	let qaPromptCount = 0;
 	const f = await fixture(t, async (worker, prompt) => {
 		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
-		if (ctx.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			emPromptCount += 1;
 			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
 			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
 			assert.equal(worker.tools.has("publish_deliverable"), false);
 			assert.equal(worker.tools.has("delegate_to_member"), false);
-			assert.match(ctx, /旁听与主动发言规则/);
+			assert.match(ctx, /## Observer participation/);
 			assert.match(prompt, /方案将直接同步拉取全库 10 万条记录/);
 			return "技术提醒：首屏直接同步拉取 10 万条会阻塞主线程，建议改为分页+IndexedDB 增量缓存。";
 		}
-		if (ctx.includes("(QA Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "qa-manager") {
 			qaPromptCount += 1;
 			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
 			return "[SILENT]";
@@ -753,8 +758,7 @@ test("proactive observer chimes in with independent user bubble while silent obs
 test("late-joining observer receives summarized background digest rather than full historical session logs", async (t) => {
 	const observerPrompts: string[] = [];
 	const f = await fixture(t, async (worker, prompt) => {
-		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
-		if (ctx.includes("(Engineering Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			observerPrompts.push(prompt);
 			return "[SILENT]";
 		}
@@ -784,7 +788,7 @@ test("late-joining observer receives summarized background digest rather than fu
 	});
 	assert.equal(observerPrompts.length, 1);
 	const seen = observerPrompts[0]!;
-	assert.match(seen, /会前背景摘要（精简回顾）/);
+	assert.match(seen, /Brief background for the observer/);
 	assert.doesNotMatch(seen, /INTERNAL_SECRET_TRACE_SHOULD_NOT_LEAK/);
 	assert.doesNotMatch(seen, /TAIL_MARKER_IGNORED/);
 	assert.match(seen, /第2轮讨论：先定边界再开发/);
@@ -830,12 +834,12 @@ test("dispatchMatter forwards attached images to lead and observer workers witho
 	const pngBase64 = Buffer.from("fake-png-bytes").toString("base64");
 
 	const f = await fixture(t, async (worker, prompt, options) => {
-		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
-		if (ctx.includes("(QA Manager)")) {
+		if (worker.options.env?.PA_MEMBER_ID === "qa-manager") {
 			lateObserverPrompts.push(prompt);
 			return "[SILENT]";
 		}
-		const memberKey = ctx.includes("(Engineering Manager)") ? "engineering-manager" : "product-manager";
+		const memberKey =
+			worker.options.env?.PA_MEMBER_ID === "engineering-manager" ? "engineering-manager" : "product-manager";
 		if (options.images) {
 			receivedImagesByMember.set(memberKey, options.images);
 		}
@@ -886,5 +890,5 @@ test("dispatchMatter forwards attached images to lead and observer workers witho
 		observerMemberIds: ["engineering-manager", "qa-manager"],
 	});
 	assert.equal(lateObserverPrompts.length, 1);
-	assert.match(lateObserverPrompts[0]!, /\[附带 1 张图片\]/);
+	assert.match(lateObserverPrompts[0]!, /\[Image attachments: 1\]/);
 });

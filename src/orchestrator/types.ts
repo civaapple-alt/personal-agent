@@ -251,12 +251,12 @@ export interface MatterRun {
 }
 
 export const MEMORY_CATEGORY_PROMPT_LABELS: Record<MemoryCategory, string> = {
-	general: "通用",
-	efficiency: "提效方法",
-	troubleshooting: "问题排障",
-	collaboration: "高效协同",
-	user_correction: "用户纠偏",
-	domain_constraint: "项目规范",
+	general: "General",
+	efficiency: "Efficiency",
+	troubleshooting: "Troubleshooting",
+	collaboration: "Collaboration",
+	user_correction: "User correction",
+	domain_constraint: "Project constraint",
 };
 
 const TOOL_LABELS: Record<string, string> = {

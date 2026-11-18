@@ -4,6 +4,20 @@ import { join } from "node:path";
 import type { ThinkingLevel } from "../rpc/types.ts";
 import type { RoleTemplate, RoleTemplateSections } from "./types.ts";
 
+const ROLE_SECTION_HEADINGS = [
+	["responsibilitiesAndBoundaries", "Responsibilities and Boundaries", "职责与边界"],
+	["skillsAndMethods", "Skills and Methods", "技能与工作方法"],
+	["toolsAndEnvironment", "Tools and Environment", "工具与环境依赖"],
+	["collaborationConventions", "Collaboration and Communication", "协作和沟通约定"],
+	["deliveryAndVerification", "Delivery and Verification", "交付与验证方式"],
+] as const satisfies ReadonlyArray<readonly [keyof RoleTemplateSections, string, string]>;
+
+export function formatRoleTemplateBody(sections: RoleTemplateSections): string {
+	return ROLE_SECTION_HEADINGS.filter(([key]) => sections[key].trim())
+		.map(([key, heading]) => `## ${heading}\n${sections[key]}`)
+		.join("\n\n");
+}
+
 export function parseRoleThinkingLevel(value: unknown): ThinkingLevel {
 	if (
 		value === "off" ||
@@ -87,16 +101,20 @@ function extractSections(body: string): RoleTemplateSections {
 		const next = matches[i + 1];
 		const sliceEnd = next ? next.start : body.length;
 		const content = body.slice(current.contentStart, sliceEnd).trim();
-		sectionMap.set(current.heading, content);
+		sectionMap.set(current.heading.toLowerCase(), content);
 	}
 
-	return {
-		responsibilitiesAndBoundaries: sectionMap.get("职责与边界") ?? "",
-		skillsAndMethods: sectionMap.get("技能与工作方法") ?? "",
-		toolsAndEnvironment: sectionMap.get("工具与环境依赖") ?? "",
-		collaborationConventions: sectionMap.get("协作和沟通约定") ?? "",
-		deliveryAndVerification: sectionMap.get("交付与验证方式") ?? "",
+	const sections: RoleTemplateSections = {
+		responsibilitiesAndBoundaries: "",
+		skillsAndMethods: "",
+		toolsAndEnvironment: "",
+		collaborationConventions: "",
+		deliveryAndVerification: "",
 	};
+	for (const [key, heading, legacyHeading] of ROLE_SECTION_HEADINGS) {
+		sections[key] = sectionMap.get(heading.toLowerCase()) ?? sectionMap.get(legacyHeading) ?? "";
+	}
+	return sections;
 }
 
 function requireString(meta: Record<string, string | boolean | string[]>, key: string, source?: string): string {
@@ -135,6 +153,7 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 
 	const thinkingRaw = parseRoleThinkingLevel(requireString(meta, "thinkingLevel", sourcePath));
 	const roleKind = meta.roleKind === "architect" ? "architect" : undefined;
+	const responsibilityKeywords = meta.responsibilityKeywords;
 
 	return {
 		id: validateRoleTemplateId(requireString(meta, "id", sourcePath)),
@@ -148,6 +167,7 @@ export function parseRoleTemplateMarkdown(markdown: string, sourcePath?: string)
 		thinkingLevel: thinkingRaw,
 		isPrimaryContact: typeof meta.isPrimaryContact === "boolean" ? meta.isPrimaryContact : false,
 		keywords: optionalStringArray(meta, "keywords"),
+		...(Array.isArray(responsibilityKeywords) ? { responsibilityKeywords } : {}),
 		tools: optionalStringArray(meta, "tools"),
 		skills: optionalStringArray(meta, "skills"),
 		mcpDependencies: optionalStringArray(meta, "mcpDependencies"),
@@ -211,6 +231,9 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		`thinkingLevel: ${template.thinkingLevel}`,
 		`isPrimaryContact: ${String(template.isPrimaryContact)}`,
 		`keywords: ${formatList(template.keywords)}`,
+		...(template.responsibilityKeywords
+			? [`responsibilityKeywords: ${formatList(template.responsibilityKeywords)}`]
+			: []),
 		`tools: ${formatList(template.tools)}`,
 		`skills: ${formatList(template.skills)}`,
 		`mcpDependencies: ${formatList(template.mcpDependencies)}`,

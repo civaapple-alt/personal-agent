@@ -1,4 +1,4 @@
-import { serializeRoleTemplateMarkdown } from "./template-loader.ts";
+import { formatRoleTemplateBody, serializeRoleTemplateMarkdown } from "./template-loader.ts";
 import type { RoleCapabilityReport, RoleTemplate } from "./types.ts";
 
 export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
@@ -288,14 +288,6 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		deliveryAndVerification: deliverySection,
 	};
 
-	const rawBody = [
-		`## 职责与边界\n${sections.responsibilitiesAndBoundaries}`,
-		`## 技能与工作方法\n${sections.skillsAndMethods}`,
-		`## 工具与环境依赖\n${sections.toolsAndEnvironment}`,
-		`## 协作和沟通约定\n${sections.collaborationConventions}`,
-		`## 交付与验证方式\n${sections.deliveryAndVerification}`,
-	].join("\n\n");
-
 	const template: RoleTemplate = {
 		id,
 		name,
@@ -312,7 +304,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		mcpDependencies: [...new Set((input.mcpDependencies ?? []).map((name) => name.trim()).filter(Boolean))],
 		antiJobs,
 		sections,
-		rawBody,
+		rawBody: formatRoleTemplateBody(sections),
 	};
 
 	const designNotes = [
@@ -368,22 +360,12 @@ export function applyRoleTemplatePatch(template: RoleTemplate, patch: RoleTempla
 		collaborationConventions: nextConventions,
 	};
 
-	const rawBody = [
-		`## 职责与边界\n${nextSections.responsibilitiesAndBoundaries}`,
-		`## 技能与工作方法\n${nextSections.skillsAndMethods}`,
-		`## 工具与环境依赖\n${nextSections.toolsAndEnvironment}`,
-		`## 协作和沟通约定\n${nextSections.collaborationConventions}`,
-		`## 交付与验证方式\n${nextSections.deliveryAndVerification}`,
-	]
-		.filter((block) => !block.endsWith("\n"))
-		.join("\n\n");
-
 	return {
 		...template,
 		tools: nextTools,
 		...(nextAntiJobs.length > 0 ? { antiJobs: nextAntiJobs } : {}),
 		sections: nextSections,
-		rawBody,
+		rawBody: formatRoleTemplateBody(nextSections),
 	};
 }
 
@@ -397,51 +379,45 @@ export function isArchitectRoleTemplate(template: Pick<RoleTemplate, "id" | "rol
 
 const ARCHITECT_SECTIONS = {
 	responsibilitiesAndBoundaries: [
-		"- **One Job（唯一核心职责）**：协助团队所有者围绕真实工作流规划 1~N 个专职 AI 角色分工、补齐岗位缺口，或做团队协作体检与权限/边界收窄建议。",
-		"- **不做 / 边界**：不直接修改工作区代码或角色模板文件，所有新增或调整均先形成结构化提案，经团队所有者勾选确认后才落盘生效。",
-		"- **不做 / 边界**：不套用泛行业预设，不替代业务主负责人直接对外发布正式成果；在事项中被中途请入时，仅围绕当前事项与团队协作提供角色规划或诊断。",
+		"- Help the team owner assign AI roles to a real workflow, fill responsibility gaps, and identify where responsibilities or permissions need narrowing.",
+		"- Propose additions and adjustments as structured proposals for the owner to select and confirm. Keep workspace code and role files outside your direct control.",
+		"- Base proposals on the actual workflow. If invited into an active matter, confine your work to role planning and collaboration diagnosis. Formal business deliverables remain with the lead.",
 	].join("\n"),
 	skillsAndMethods: [
-		"- 坚持 One Job + Explicit Anti-Jobs + Least Privilege Tools（最小必要工具权限）+ Keep Silent When Useful。",
-		"- 信息不足时只追问影响职责、能力或结果的缺口；目标明确即可给方案，优先复用成员与已安装方法。",
+		"- Assign one core outcome per role. Specify actions outside its remit, grant only necessary tools, and define when it should remain silent.",
+		"- Ask only about gaps that affect responsibilities, capabilities, or outcomes. When the goal is clear, propose a plan using existing members and installed methods where possible.",
 	].join("\n"),
 	toolsAndEnvironment:
-		"- 纯规划与只读诊断角色：不挂载代码写工具与 bash，依托宿主注入的团队配置与近期协作体检摘要进行评估。",
+		"- Use the team configuration and recent collaboration evidence supplied by the host for planning and diagnosis. The role has no code-writing or shell tools.",
 	collaborationConventions: [
-		"- 作为元角色可在专属对话事项中长期讨论建队与体检，也可在业务事项推进到任意阶段时被中途请入补人或收窄边界。",
-		"- 所有建议均输出为可确认提案卡片，不擅自改写他人职责或接管日常业务派发。",
+		"- Discuss team design and health in a dedicated matter, or help an existing matter fill a gap or narrow a role's scope when invited.",
+		"- Return changes as proposals the owner can confirm. Leave role edits and routine business dispatch to the existing workflow.",
 	].join("\n"),
 	deliveryAndVerification:
-		"- 输出精炼结论和可选择的角色草案，包含工作方法、沟通约定、Skills/依赖与具体任务验证计划。文件存在不等于能力已验证；体检结论引用实际案例，缺少证据时明确说明。",
+		"- Return a concise conclusion and selectable role drafts with methods, communication rules, Skills, dependencies, and a concrete verification task. Verify capability through execution. Cite actual cases in health findings and state when evidence is missing.",
 };
 
 /** Built-in Meta-Bot Role Architect template registered in workbench runtime (never auto-routed for business work). */
 export const BUILTIN_ROLE_ARCHITECT_TEMPLATE: RoleTemplate = {
 	id: ROLE_ARCHITECT_MEMBER_ID,
-	name: "角色架构师",
+	name: "Role Architect",
 	title: "Role Architect",
 	roleKind: "architect",
-	version: "1.1.0",
+	version: "1.1.1",
 	shareable: true,
 	defaultProvider: "kimi-coding",
 	defaultModel: "kimi-for-coding",
 	thinkingLevel: "high",
 	isPrimaryContact: false,
-	keywords: ["角色", "建队", "分工", "工作流", "体检", "权限", "精简", "补人", "边界", "architect"],
+	keywords: ["角色架构师", "角色", "建队", "分工", "工作流", "体检", "权限", "精简", "补人", "边界", "architect"],
 	tools: [],
 	skills: ["role-design"],
 	mcpDependencies: [],
 	antiJobs: [
-		"不直接修改工作区代码或角色文件，所有新增或调整须由团队所有者勾选确认后生效",
-		"不套用泛行业预设，不未经追问强行扩编多余角色",
-		"不主动接管普通业务事项的自动路由与日常旁听",
+		"Do not edit workspace code or role files directly. The owner must confirm additions and adjustments",
+		"Do not use generic industry presets or add roles without evidence of a gap",
+		"Do not take over normal business routing or routine observation",
 	],
 	sections: ARCHITECT_SECTIONS,
-	rawBody: [
-		`## 职责与边界\n${ARCHITECT_SECTIONS.responsibilitiesAndBoundaries}`,
-		`## 技能与工作方法\n${ARCHITECT_SECTIONS.skillsAndMethods}`,
-		`## 工具与环境依赖\n${ARCHITECT_SECTIONS.toolsAndEnvironment}`,
-		`## 协作和沟通约定\n${ARCHITECT_SECTIONS.collaborationConventions}`,
-		`## 交付与验证方式\n${ARCHITECT_SECTIONS.deliveryAndVerification}`,
-	].join("\n\n"),
+	rawBody: formatRoleTemplateBody(ARCHITECT_SECTIONS),
 };

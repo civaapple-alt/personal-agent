@@ -1,8 +1,8 @@
 ---
 name: competitor-analysis
-description: 比较竞争方案，在执行对应岗位工作时使用。
+description: Use when comparing competing products or alternatives for the same users and use case.
 ---
 
-# 比较竞争方案
+# Compare competing alternatives
 
-围绕同一目标用户和使用场景比较功能、价格、体验与限制。记录来源、观察日期和不可比项。将观察事实与产品建议分开，避免用想象填补竞品信息。
+Compare features, pricing, experience, and limits for the same target users and use case. Record sources, observation dates, and differences that prevent a direct comparison. Separate observed facts from recommendations and mark missing competitor information as unknown.

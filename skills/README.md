@@ -17,7 +17,9 @@
   - 绝对路径、相对角色文件的路径等解析细节由 [execution-context.ts](../src/orchestrator/execution-context.ts) 维护。
   - Worker 用显式 `--skill` 装载，文件缺失会报错，不依赖目录 README 被模型自动发现。
 
-编辑时让方法可执行且职责明确，避免在多个文件重复运行规则或写入公司/项目事实。新增方法须同时检查引用角色和真实依赖；一个 Skill 文件不能创造尚未提供的工具，也不能证明岗位能力或完整 RSI 已实现。
+模型根据可用 Skill 的 `name` 和 `description` 判断是否需要读取正文。内置 Skill 和 [pstack 方法目录](../src/roles/pstack.ts)都沿用这两个发现字段。Role 的 `keywords` 用于[事项派单和立项](../roles/README.md)。
+
+内置 Skill 的 `description` 和正文使用英文。描述写明适用的任务情境，正文写明动作和完成标准。用户交流与交付语言由本轮请求决定。编辑时避免重复运行规则或写入公司、项目事实。新增方法须同时检查引用角色和真实依赖。
 
 - 文档链接检查在仓库根运行 `npm run check:docs`；加载路径或声明变化可用 `node --test test/continuity-collaboration.test.ts` 验证。
 - 真实模型验证的选择与成本边界见 [demo](../src/demo/README.md)。

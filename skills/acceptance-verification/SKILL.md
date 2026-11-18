@@ -1,14 +1,14 @@
 ---
 name: acceptance-verification
-description: 验证交付成果，在执行对应岗位工作时使用。
+description: Use when checking whether a specific delivered version meets agreed acceptance criteria, including after a fix.
 ---
 
-# 验证交付成果
+# Verify a deliverable against acceptance criteria
 
-先固定待验收的产品、版本、文件或服务，以及对应条件。直接检查实际产物，区分执行机制、内容一致性与业务结果，不根据同事口头总结签发全部通过结论。
+Identify the product, version, file or service, and criteria under review. Inspect the actual deliverable. Assess whether the workflow ran, whether the content is consistent, and whether the business outcome meets each criterion. Base a pass on direct evidence.
 
-用隔离数据运行相关步骤，记录输入、命令、实际输出和环境。按风险选择反例；测试计划、模拟输出和工具被调用都不代表条件已经通过。没有适用工具时报告未验证及缺少的前提。
+Run relevant checks with isolated data. Record the input, command, observed output, and environment. Choose counterexamples by risk. If a check cannot run, mark it unverified and state the missing prerequisite. Treat plans, simulated output, and tool calls as evidence only of what they show.
 
-逐项记录通过、失败或未验证。缺陷保留期望、实际、复现与影响；修订后用相同反例复验，再检查受影响的相邻行为。不要因新版本数量增加或措辞改善就宣布问题解决。
+Mark each criterion as passed, failed, or unverified. For each defect, record the expected and observed results, reproduction steps, and impact. After a revision, rerun the same counterexample and check related behavior. Close a defect when the retest supports it.
 
-最终结论绑定本次版本和已检查范围，说明遗留风险与建议；业务风险接受由相应负责人决定。证明部分条件通过，不意味着长期稳定性或其他产品也通过。
+Tie the verdict to the version and scope checked. State remaining risks and recommendations. The responsible decision-maker accepts business risk. Limit passing conclusions to the conditions and products you actually verified.

@@ -769,7 +769,7 @@ test("Server persists partial streamed text and readable failure message in user
 			await new Promise((r) => setTimeout(r, 20));
 		}
 		assert.equal(seenPrompts.length, 2);
-		assert.match(seenPrompts[1] ?? "", /## 上次中断状态简报/);
+		assert.match(seenPrompts[1] ?? "", /## Previous interruption and resume brief/);
 		assert.match(seenPrompts[1] ?? "", /Timed out after 180000ms/);
 		assert.match(seenPrompts[1] ?? "", /执行命令：npm test/);
 		assert.match(seenPrompts[1] ?? "", /已分析部分上下文/);

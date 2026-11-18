@@ -520,7 +520,7 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 			};
 			poll();
 		});
-		assert.match(capturedPrompts[0] ?? "", /\[团队讨论\] 李四 \(后端研发\): 大家先讨论一下接口协议字段名/);
+		assert.match(capturedPrompts[0] ?? "", /\[Team discussion\] 李四 \(后端研发\): 大家先讨论一下接口协议字段名/);
 		assert.match(capturedPrompts[0] ?? "", /Owner 已确认同事 李四 的 AI 提请并安排执行/);
 
 		// Collaborator can rate deliverable without autoDistill, but autoDistill: true returns 403

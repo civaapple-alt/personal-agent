@@ -13,12 +13,12 @@
 
 frontmatter 字段与依赖校验约定：
 
-- `defaultProvider`、`defaultModel`、`thinkingLevel` 是执行配置；`keywords` 只参与新事项初始路由。
+- `defaultProvider`、`defaultModel`、`thinkingLevel` 是执行配置。`keywords` 用于新事项初始路由和立项评分，业务角色保留原中文岗位名作为路由别名。`responsibilityKeywords` 可为本地立项规则显式指定职责匹配词，省略时沿用正文匹配。
 - `skills` 对应[实际 Skill 文件](../skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。
 - 声明、导入、序列化成功都不是依赖已安装或工具已执行的证据。
 
 五段正文分别承载职责边界、方法、工具环境、协作约定及交付验证。保留“内部咨询返回主成员、正式阶段成果才发布”的协作语义，具体机制以[运行说明](../docs/runtime-collaboration.md)为准。
-四个基线角色与内置角色架构师当前为 `1.1.0`，岗位分工、默认工具、能力组合和验证边界见[角色设计说明](../docs/role-design.md)。已有 `.data/roles/` 同 ID 自定义模板仍优先，本轮不自动覆盖用户配置。
+四个基线角色与内置角色架构师当前为 `1.1.1`。内置模板的显示名、五个章节标题、正文和 `antiJobs` 使用英文。解析器也接受旧版中文章节标题。岗位分工、默认工具和验证边界见[角色设计说明](../docs/role-design.md)。已有 `.data/roles/` 同 ID 自定义模板仍优先。
 
 只放通用岗位定义，不写用户密钥、公司私有背景或项目会话；导出不会自动发现正文中的秘密。运行后积累的经验属于私有 storage，不回填进分享定义。
 

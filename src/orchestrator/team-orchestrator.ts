@@ -435,7 +435,7 @@ export class TeamOrchestrator {
 			const effectiveTaskPrompt =
 				trimmedPrompt.length > 0
 					? input.prompt
-					: `请查看用户随消息附带的 ${rpcImages.length} 张图片，结合图片内容理解需求并直接回复。`;
+					: `Review the user's image attachments (${rpcImages.length}) and reply directly. If the conversation has no requested language, reply in Chinese.`;
 			let result: PromptRunResult;
 			try {
 				result = await this.executeWithWorker({

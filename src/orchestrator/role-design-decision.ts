@@ -166,7 +166,7 @@ export async function designRoleDraftWithModel(
 		"",
 		"## 设计准则",
 		"1. **One Job & Explicit Anti-Jobs**：`oneJob` 提炼为清晰单一句；`antiJobs` 写 2~4 条明确不做边界（防止与现有成员重叠或越权改代码/拍板）。",
-		"2. **名称与标识符规范**：`name` 用 2~8 字简短中文岗位称谓；`title` 用地道简短英文头衔（如 `Release Ops Lead`）；`id` 用小写英文 kebab-case 标识且不得与现有成员重名。",
+		"2. Use a short English display name unless the user supplies a name. Use a short English title and a unique lowercase kebab-case ID.",
 		"3. **技能仅选已安装目录**：`skills` 只能从以下已安装技能 ID 中挑选确有帮助的项，不得编造名称。",
 		"4. **完整验证计划**：`verificationPlan` 必须包含具体小任务 `task`、可观察通过条件 `successCriteria` 与越界校验 `boundaryCheck`。",
 		"",
@@ -174,7 +174,7 @@ export async function designRoleDraftWithModel(
 		JSON.stringify(
 			{
 				id: "release-ops",
-				name: "发布运维专员",
+				name: "Release Ops Specialist",
 				title: "Release Ops Specialist",
 				oneJob: "一句话明确核心职责",
 				antiJobs: ["不做边界1", "不做边界2"],
@@ -212,7 +212,7 @@ export async function designRoleDraftWithModel(
 		[
 			"## 用户创建请求",
 			`- 核心职责输入: ${oneJob}`,
-			input.roleName?.trim() ? `- 指定中文名: ${input.roleName.trim()}` : "",
+			input.roleName?.trim() ? `- 指定显示名: ${input.roleName.trim()}` : "",
 			input.roleTitle?.trim() ? `- 指定英文头衔: ${input.roleTitle.trim()}` : "",
 			input.workspaceScope ? `- 用户指定工具范围: ${input.workspaceScope}` : "",
 			input.interactionStyle ? `- 用户指定协作站位: ${input.interactionStyle}` : "",

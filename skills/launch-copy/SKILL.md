@@ -1,8 +1,8 @@
 ---
 name: launch-copy
-description: 撰写发布内容，在执行对应岗位工作时使用。
+description: Use when drafting release announcements or launch copy for a specific audience and channel.
 ---
 
-# 撰写发布内容
+# Draft launch copy
 
-依据已验证的产品能力、目标受众和发布渠道写作。保留具体使用收益与行动入口。先核对能力与价格等事实；未上线的计划应明确表达为计划。
+Write for the intended audience and channel using verified product capabilities. Include a concrete user benefit and a clear next action. Check factual claims such as capabilities and prices before writing. Label unreleased plans as plans.

@@ -31,6 +31,7 @@ export interface RoleTemplate {
 	thinkingLevel: ThinkingLevel;
 	isPrimaryContact: boolean;
 	keywords: string[];
+	responsibilityKeywords?: string[];
 	tools: string[];
 	skills: string[];
 	mcpDependencies: string[];

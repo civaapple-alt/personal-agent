@@ -82,8 +82,8 @@ test("Solo and selective observer runtime scopes enforce delegate restrictions, 
 						await reportReady(options);
 					},
 					runPromptAndWait: async () => {
-						if (ctx.includes("旁听与主动发言规则")) {
-							const match = ctx.match(/成员标识：`([^`]+)`/);
+						if (ctx.includes("## Observer participation")) {
+							const match = ctx.match(/- Member: `([^`]+)`/);
 							if (match?.[1]) observerInvokedFor.push(match[1]);
 							return {
 								disposition: "started",
@@ -137,8 +137,8 @@ test("Solo and selective observer runtime scopes enforce delegate restrictions, 
 		assert.ok(!promptsBySession[0]!.tools.includes("delegate_to_member"));
 		assert.ok(!promptsBySession[0]!.tools.includes("bash"));
 		assert.ok(!promptsBySession[0]!.tools.includes("edit"));
-		assert.ok(promptsBySession[0]!.prompt.includes("单兵专办"));
-		assert.ok(promptsBySession[0]!.prompt.includes("## 明确不做清单（Anti-Jobs）"));
+		assert.ok(promptsBySession[0]!.prompt.includes("This is a solo matter"));
+		assert.ok(promptsBySession[0]!.prompt.includes("## Anti-Jobs"));
 		assert.ok(promptsBySession[0]!.prompt.includes("绝不直接修改代码"));
 
 		// 2) Selective observers on createMatter: observersEnabled: true + observerMemberIds: ["qa-manager"] must NOT pull in all non-lead members
@@ -215,6 +215,22 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 	assert.equal(soloCheck.recommendedMode, "solo");
 	assert.deepEqual(soloCheck.recommendedAiMemberIds, ["product-manager"]);
 	assert.notEqual(soloCheck.fitStatus, "gap_detected");
+
+	const genericEnglish = assessMatterInitiation({
+		prompt: "Please look into the current version",
+		members: seededMembers,
+		templatesByRoleId: templatesMap,
+	});
+	assert.equal(genericEnglish.recommendedMode, "solo");
+	assert.equal(genericEnglish.fitStatus, "ambiguous");
+	assert.ok(genericEnglish.candidates.every((candidate) => candidate.matchedSignals.length === 0));
+
+	const technicalDesign = assessMatterInitiation({
+		prompt: "帮我做一份技术设计",
+		members: seededMembers,
+		templatesByRoleId: templatesMap,
+	});
+	assert.deepEqual(technicalDesign.candidates[0]?.matchedSignals, ["职责:技术设计"]);
 
 	const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: tmp, noSession: true });
 	const dialogBroker = new DialogBroker();
@@ -476,7 +492,7 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 		assert.ok(observedPrompts[0]!.args.includes("--tools"));
 		const toolsVal = observedPrompts[0]!.args[observedPrompts[0]!.args.indexOf("--tools") + 1];
 		assert.equal(toolsVal, "");
-		assert.ok(observedPrompts[0]!.prompt.includes("团队近期运行摩擦与健康摘要"));
+		assert.ok(observedPrompts[0]!.prompt.includes("## Recent team health evidence"));
 		assert.equal(store.listMembers().length, initialCount);
 
 		// Turn 2: Proposes 2 complementary roles + recommended formation; STILL does not auto-create any member
@@ -740,7 +756,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		assert.equal(archTurn.replyText, "已检查现有分工与工具权限，建议收窄产品经理权限。");
 		const archRun = capturedRuns.at(-1)!;
 		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "");
-		assert.ok(archRun.context.includes("当前已有业务 AI 成员"));
+		assert.ok(archRun.context.includes("## Current business roles"));
 		const archPersistedMsg = store
 			.listMessages(archTurn.matter.id, "user")
 			.find((m) => m.senderType === "member" && m.senderId === ROLE_ARCHITECT_MEMBER_ID)!;

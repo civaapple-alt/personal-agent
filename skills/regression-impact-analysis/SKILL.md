@@ -1,8 +1,8 @@
 ---
 name: regression-impact-analysis
-description: 分析回归影响，在执行对应岗位工作时使用。
+description: Use when tracing which callers, data consumers, and lifecycle paths a proposed or completed change could break.
 ---
 
-# 分析回归影响
+# Trace regression risk
 
-从修改的接口和数据向调用方、存储消费者与生命周期追踪。列出具体受影响路径及理由，为每条主要风险选择验证。不要把代码阅读当作运行验证。
+Trace changed interfaces and data through callers, storage consumers, and lifecycle paths. Name each affected path and explain why it is affected. Choose a check for each material risk. Record code inspection and runtime verification separately.

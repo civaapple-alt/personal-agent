@@ -43,12 +43,13 @@ test("HTTP API persists observerMemberIds and broadcasts proactive observer mess
 			},
 			setDialogHandler() {},
 			async runPromptAndWait() {
-				const ctx = workerOptions.env?.PA_MEMBER_CONTEXT ?? "";
-				const assistantText = ctx.includes("(Engineering Manager)")
-					? "技术补充：需要核查 SQLite 锁与连接复用。"
-					: ctx.includes("(QA Manager)")
-						? "[SILENT]"
-						: "我先整理产品需求范围。";
+				const roleId = workerOptions.env?.PA_MEMBER_ID;
+				const assistantText =
+					roleId === "engineering-manager"
+						? "技术补充：需要核查 SQLite 锁与连接复用。"
+						: roleId === "qa-manager"
+							? "[SILENT]"
+							: "我先整理产品需求范围。";
 				return {
 					disposition: "started",
 					aborted: false,

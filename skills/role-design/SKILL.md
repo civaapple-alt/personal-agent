@@ -1,20 +1,20 @@
 ---
 name: role-design
-description: 从真实工作设计角色职责、方法、能力组合与验证方案，或依据具体协作案例调整已有团队。
+description: Use when designing a role for a real workflow or changing team responsibilities, tools, or handoffs based on collaboration evidence.
 ---
 
-# 设计能履职的角色
+# Design a role around real work
 
-先确认用户要完成什么、已有材料和可观察结果，再决定是否需要新成员。查看现有成员能否承担，能复用或调整就不扩编。
+Identify what the user needs to achieve, the material already available, and the observable result. Check whether an existing member can take the work or be adjusted before proposing a new role.
 
-信息不足时只问会改变职责、权限或验收的问题，集中提出最多三个；已有答案不重复问。信息足够时直接给最小方案，不把对话变成固定问卷。
+If information is missing, ask at most three questions that would change responsibilities, permissions, or acceptance criteria. Reuse answers already given. When the target is clear, give the smallest workable proposal.
 
-每个角色聚焦一个核心结果，写清接收什么、怎样处理、向谁交接、何时算完成。边界要落在动作上，例如起草不等于发送、核查不等于改代码、指出风险不等于业务拍板。沟通方式放进协作约定，符合岗位和用户需要即可，不复制参考 Bot 的口吻。
+Give each role one core outcome. State what it receives, what it does, whom it hands off to, and when it is done. Set boundaries in terms of actions. For example, name who can draft, send, inspect, change code, raise a risk, or accept it. Put communication style in the collaboration agreement. Use language suited to the role and user.
 
-根据实际任务选择目录中可用的 Skills 和最小工具，写出工作步骤、事实依据、异常处理及验证方法。缺少的 Skill 或集成可以提出，但标明未配置；不为满足字段而编造依赖，不假设工具名称代表联网、浏览器或第三方服务可用。方法文本和工具权限分别判断。
+Select available Skills from the catalog and grant only the tools needed for the work. Describe the steps, evidence, failure handling, and verification. Label missing Skills or integrations as unconfigured. Verify actual access to the network, browser, or third-party service independently of tool names. Assess method text and tool permissions separately.
 
-给新角色一个可以实际执行的小任务和结果标准，包含一项职责边界。检查真实工具记录和产物；没有执行时只报告方案，不说已经胜任。创建实际成员与整理可分享模板分开处理，私有业务经验不进入共享定义。
+Give a new role a small runnable task with success criteria and a check for one responsibility boundary. Review the actual tool records and output. Until the task runs, describe the verification as a plan. Keep shareable templates separate from member creation and private work experience.
 
-体检从宿主提供的案例和配置出发，引用其证据 ID。异常次数、旁听发言和负反馈是线索，不能独立证明配置错误。区分原因、推测和待核实项；给出最小调整及用同一问题复验的办法。无具体问题时可以没有发现和调整提案，不为凑健康卡片而扩编。
+For a team health check, use the cases and configuration supplied by the host and cite their evidence IDs. Treat error counts, observer comments, and negative feedback as leads. Distinguish confirmed causes, inferences, and open questions. Propose the smallest adjustment and use the same issue to define a recheck. Return no findings or adjustments when there is no concrete issue.
 
-按宿主 JSON 契约返回方案，角色变更沿现有用户选择入口生效。普通过程交流不新增审批，也不创建后台任务或安装插件。
+Return proposals using the host's JSON contract. Apply role changes through the existing owner selection flow. Keep ordinary collaboration within the existing workflow. Creating background tasks and installing plugins are outside this role's remit.

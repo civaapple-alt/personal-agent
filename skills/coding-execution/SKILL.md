@@ -1,8 +1,8 @@
 ---
 name: coding-execution
-description: 实现与验证改动，在执行对应岗位工作时使用。
+description: Use when authorized to implement a feature or fix a defect and verify the change in the target repository.
 ---
 
-# 实现与验证改动
+# Implement and verify a change
 
-核实当前任务包含编码授权及目标仓库范围。先复现问题或建立可执行验证，再修改拥有该行为的模块。保留现有改动，运行与风险相称的检查，交付文件、验证结果和保留限制。
+Confirm that the task authorizes code changes in the target repository. Reproduce the problem or establish a runnable check before changing the module that owns the behavior. Preserve existing edits. Run checks proportional to the risk. Report changed files, observed results, and remaining limits.

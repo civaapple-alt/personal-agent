@@ -293,10 +293,10 @@ test("RSI lifecycle tracks injected vs candidate prompts, acceptance evaluation 
 			preferredMemberId: "product-manager",
 		});
 
-		// Prompt must contain oldVerified ([已验证]) and candidateRule ([待验证]), never wsB memory
+		// Prompt must contain oldVerified ([verified]) and candidateRule ([unverified]), never wsB memory
 		assert.equal(seenPrompts.length, 1);
-		assert.match(seenPrompts[0]!, new RegExp(`\\[${oldVerified.id} \\| 已验证 · role_general\\]`));
-		assert.match(seenPrompts[0]!, new RegExp(`\\[${candidateRule.id} \\| 待验证 · project_private\\]`));
+		assert.match(seenPrompts[0]!, new RegExp(`\\[${oldVerified.id} \\| verified · role_general\\]`));
+		assert.match(seenPrompts[0]!, new RegExp(`\\[${candidateRule.id} \\| unverified · project_private\\]`));
 		assert.ok(!seenPrompts[0]!.includes("不要注入到 repo-a"));
 
 		// Applied count incremented once on injection; positive/negative still 0

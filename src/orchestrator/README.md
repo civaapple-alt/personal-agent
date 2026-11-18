@@ -13,6 +13,9 @@
 
 按问题找入口：
 
+- [prompts.ts](prompts.ts) 使用英文组装岗位指令、对话回放、旁听和续接提示。回复与成果默认跟随用户请求的语言，并保留标识符、命令、路径和固定输出格式。[meta-architect.ts](meta-architect.ts) 对架构师的 JSON 回复采用相同语言约定。
+- [matter-initiation.ts](matter-initiation.ts) 优先用角色的 `responsibilityKeywords` 作为本地规则的职责信号。内置岗位通过该字段保留旧的中文匹配词，缺省字段的模板仍从原有正向职责正文推导。
+
 - `pstackDir` 可为正常岗位执行配置完整 pstack 方法包；[pstack.ts](../roles/pstack.ts) 检查来源并提供方法指引，[pstack-extension.ts](../rpc/pstack-extension.ts) 在 Pi 内按需读取模式、原则和 playbook。方法工具需通过握手，不增加岗位业务工具权限；独立 JSON 决策和反思不自动接入。启用与实机证据见[pstack 运行说明](../../docs/pstack-runtime.md)。
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案；只有模型新增的 Skill 限于已安装目录，显式缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
@@ -20,7 +23,7 @@
 - `dispatchMatter`：结合事项 `aiMemberIds`（`NULL` 默认全员 AI）、`observersEnabled` 与旁听成员选择或保留负责人与工作区，
   取得事项占用，保存交流并决定收尾；`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前事项 AI 成员范围约束。
   - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。
-  - `formatMessageHistorySpeaker` 会在回放讨论消息及多人类历史上下文时附带 `[团队讨论]`/`[同事提请]` 与发言人姓名角色。
+  - `formatMessageHistorySpeaker` 回放讨论和提请时附带 `[Team discussion]` 或 `[Teammate request]`，并保留发言人姓名、角色与原文。
   - 支持可选 `images`（`PromptImageAttachment[]`），将轻量图片引用（`{ url, mimeType, name }`，不含原始 base64）存入消息 `metadata.images`。
   - 并将 `ImageContent[]` 同步传给主负责人与旁听 `runObservers` Worker（纯图片消息自动生成标题与指令兜底）。
   - 主成员正常回复后，旁听成员在 `runObservers` 中并行快速评估本轮讨论；无实质风险或补充时返回 `[SILENT]` 保持静默，仅在发现关键问题/遗漏时以独立发言存入 `user` 通道（带 `observerIntervention: true` 元数据）。

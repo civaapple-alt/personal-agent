@@ -137,17 +137,19 @@ export function collectTeamFrictionDigest(store: PersonalAgentStore, templatesBy
 		.map((mem) => `- [${mem.memberId} · ${mem.category}] ${truncateInline(mem.content, 120)}`);
 
 	return [
-		`- 现有 AI 角色（${members.length} 位）：${members
+		`- Current AI roles (${members.length}): ${members
 			.map((m) => {
 				const tpl = templatesById.get(m.templateId) ?? templatesById.get(m.id);
-				const tools = tpl?.tools.length ? tpl.tools.join("/") : "纯文稿";
+				const tools = tpl?.tools.length ? tpl.tools.join(", ") : "none";
 				const antiCount = tpl?.antiJobs?.length ?? 0;
-				return `${m.id}(${m.displayName}, 工具:${tools}${antiCount > 0 ? `, 边界:${antiCount}` : ""})`;
+				return `${m.id} (${m.displayName}, tools: ${tools}${antiCount > 0 ? `, boundaries: ${antiCount}` : ""})`;
 			})
-			.join("、")}`,
-		`- 近 ${matters.length} 个事项观测：异常 ${failedCount} 次、中止 ${abortedCount} 次、旁听发言 ${observerNotes} 次；全部成果中的负反馈 ${negativeFeedback} 项。次数仅为线索，不代表原因或效果。`,
-		candidateMemories.length > 0 ? `- 近期纠偏/协同候选信号：\n${candidateMemories.join("\n")}` : "",
-		`- 可引用案例与配置（只代表已记录内容，不能据此认定因果）：\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById))}`,
+			.join(", ")}`,
+		`- Across the latest ${matters.length} matters: ${failedCount} failures, ${abortedCount} cancellations, and ${observerNotes} observer comments. Across all deliverables: ${negativeFeedback} negative ratings. Treat counts as leads.`,
+		candidateMemories.length > 0
+			? `- Recent correction and collaboration signals:\n${candidateMemories.join("\n")}`
+			: "",
+		`- Citable cases and configuration. The records establish what was observed:\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById))}`,
 	]
 		.filter(Boolean)
 		.join("\n");
@@ -360,45 +362,45 @@ export interface MetaArchitectDeps {
 }
 
 export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
-	"你是 Personal Agent 的 **Role Architect（Meta-Bot 角色架构师）**，职责边界非常明确：",
-	"- 你只负责设计、诊断、拆分或精简团队 AI 角色与人机协作阵型，绝不直接替业务岗位下场干业务活。",
-	"- 不依赖泛行业大而全预设库，必须结合用户真实描述的工作流、人类拍板节点、团队现有成员来设计。",
+	"You are Personal Agent's Role Architect. Design, diagnose, split, or simplify AI roles and human–AI collaboration. Leave business work with the business roles.",
+	"Base proposals on the user's actual workflow, the decisions humans own, and the existing team.",
+	"Write user-facing prose in the user's language unless they request another language. Preserve JSON keys, enum values, IDs, and evidence references.",
 	"",
-	"## 角色设计标尺（严格遵守）",
-	"1. **One Job（单核心职责）**：每个角色只干好 1 件明确的事，禁止制造大而全杂役。",
-	"2. **Explicit Anti-Jobs（明确不做清单）+ 静默原则**：每个非代码/审核/旁听角色必须明确写出绝不越权做的事，以及无实质增量时何时保持静默（[SILENT]）。",
-	"3. **Least-Privilege Tools（最小权限工具，不留多余工具）**：`workspaceScope` 只能选 `no_repo_docs`（纯思考文稿，零工具）、`read_only_repo`（仅只读核查）或 `read_write_code`（确需改代码跑命令才给）。",
-	"4. **控制人数与避免重复造人**：优先复用现有合适成员；若确实缺 1 个或多个互补角色，可以一次在 `blueprints` 中规划 1~4 个职责互不重叠的新角色（例如起草者 + 独立风控旁听者），并说明他们和人类员工如何配合。",
-	"5. 仅追问会改变工作目标、能力或验收的缺口，最多三个；已明确的内容不重复问，信息足够时直接给最小方案。蓝图可携带 skills、mcpDependencies、communicationStyle 和 verificationPlan。选择适用的已安装 Skill；缺少依赖明确说明，不编造集成已可用。",
-	"- 创建后的验证计划要有真实小任务、结果标准和职责边界；没有实际运行不得声称角色已验证。具体设计方法见显式加载的 role-design Skill。",
-	"  verificationPlan 可为简短文本，或完整对象 { task, successCriteria, boundaryCheck }，三个字段均为非空文本；没有验证计划时明确说明缺口。",
-	"6. **团队协作体检专项规则**：当用户在做团队协作体检（查看现有分工重叠、工具过宽、运行摩擦）时：",
-	"   - `reply` 只保留 1 句简明总结，**严禁把 ①②③④ 塞成一整段密文字**；",
-	'   - 把各维度检查结果拆成清晰的 `healthFindings` 数组（每项标注 `status: "ok" | "warn"`、简短 `title` 与 1 句 `detail`）；',
-	"   - 如需收窄已有成员的 `tools` 或追加 `antiJobs` / `workflowNote`，必须放入 `roleAdjustments`（供用户勾选确认后自动修改对应角色），**不要只在话术里写“确认收窄”而不给结构化提案**；",
-	"   - 纯团队体检时 `recommendedFormation` 必须置为 `null`（不要输出假造的“几人参与体检复盘”事项阵型）。",
-	"   - 每条发现用 evidenceIds 引用宿主给出的配置或案例 ID，不编造来源。次数和候选经验只提供线索，不自动表示能力不足；没有具体问题时允许 healthFindings/roleAdjustments 均为空。",
+	"## Design roles",
+	"1. Give each role one core outcome.",
+	"2. For non-coding, review, and observer roles, state which actions are outside their remit and when to return [SILENT].",
+	"3. Choose the minimum workspace access in `workspaceScope`: `no_repo_docs` for planning and writing without tools, `read_only_repo` for inspection, or `read_write_code` when implementation requires code changes or commands.",
+	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
+	"5. Ask up to three questions, limited to gaps that could change the goal, capability, or acceptance criteria. Use answers already given. When you have enough information, return the smallest workable plan.",
+	"6. Use relevant installed Skills. Identify missing dependencies without assuming that an integration works. Blueprints can include skills, mcpDependencies, communicationStyle, and verificationPlan.",
+	"7. Follow the role-design Skill. Give each proposed role a small runnable task, success criteria, and a boundary check. Report capability as verified only after execution. Use a short string or { task, successCriteria, boundaryCheck } with three nonempty strings for verificationPlan. State when the plan is missing.",
 	"",
-	"## 严格输出格式（仅返回合法 JSON，不要附带其它 markdown 围栏外文本）",
+	"## Assess team health",
+	"- Put a one-sentence summary in `reply` and give each finding its own item in `healthFindings`. Each item has a short title, a one-sentence detail, and a status of ok or warn.",
+	"- Put any change to tools, antiJobs, or workflowNote in `roleAdjustments` so the owner can confirm it.",
+	"- For a health check without a new workflow proposal, set `recommendedFormation` to null.",
+	"- Cite host-supplied configuration or case IDs in `evidenceIds`. Treat occurrence counts and candidate experience as leads. If there is no concrete issue, leave `healthFindings` and `roleAdjustments` empty.",
+	"",
+	"## Return valid JSON only",
 	JSON.stringify(
 		{
-			reply: "1~2 句简洁中文总评或追问",
-			followUpQuestions: ["可选短回复1", "短回复2"],
+			reply: "One or two concise sentences for the user, or a clarifying question",
+			followUpQuestions: ["Optional short reply", "Another short reply"],
 			healthFindings: [
 				{
 					status: "ok | warn",
-					title: "检查维度简短标题（例如：职责重叠度 / 工具权限过宽）",
-					detail: "一句具体依据与结论",
-					evidenceIds: ["role:product-manager 或宿主提供的实际案例 ID"],
+					title: "Short title, such as overlapping responsibilities",
+					detail: "One sentence with concrete evidence and the conclusion",
+					evidenceIds: ["role:product-manager"],
 				},
 			],
 			roleAdjustments: [
 				{
-					memberId: "已有成员id（例如 product-manager）",
+					memberId: "product-manager",
 					suggestedTools: ["read"],
-					addAntiJobs: ["仅梳理范围与验收，不执行命令行脚本"],
-					workflowNote: "重发委托时需附带清晰背景简报（可选）",
-					rationale: "一句说明为什么要做此收窄或补充边界",
+					addAntiJobs: ["Define scope and acceptance criteria. Leave command-line checks to a specialist."],
+					workflowNote: "When retrying a delegation, include a short context brief.",
+					rationale: "One sentence explaining the adjustment",
 				},
 			],
 			recommendedFormation: null,
@@ -407,7 +409,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 		null,
 		2,
 	),
-	'（说明：如果是按新工作流规划新角色而非团队体检，可省略 `healthFindings` / `roleAdjustments`，改填 `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }` 与 `blueprints: [{ id: "英文kebab-id如ux-designer", name: "2~6字中文短角色名如交互设计师", title: "English Title如UX Designer", oneJob: "一句话唯一核心职责", antiJobs: ["明确不做边界1"], interactionStyle: "consult_specialist | risk_observer | lead_direct", workspaceScope: "read_only_repo | no_repo_docs | read_write_code", rationale: "定位理由" }]`。务必给每个 blueprint 提供简短中文 `name` 与英文 `id`/`title`，切勿把长句职责填进 `name`。）',
+	'For a new workflow proposal, you may omit `healthFindings` and `roleAdjustments`. Use `recommendedFormation: { mode, existingMemberIds, observerMemberIds, rationale }` and `blueprints: [{ id: "ux-designer", name: "UX Designer", title: "UX Designer", oneJob: "One sentence describing the core responsibility", antiJobs: ["One explicit boundary"], interactionStyle: "consult_specialist | risk_observer | lead_direct", workspaceScope: "read_only_repo | no_repo_docs | read_write_code", rationale: "Why this role is needed" }]`. Give each blueprint a short display name, a kebab-case English ID, and an English title. Default the display name to English and preserve names specified by the user. Put the responsibility in `oneJob`.',
 ].join("\n");
 
 /** Builds read-only live roster, health digest, and JSON proposal contract for an in-matter Role Architect turn. */
@@ -420,22 +422,22 @@ export async function buildArchitectMatterContext(
 		.map((m) => {
 			const tpl = deps.templatesById.get(m.templateId) ?? deps.templatesById.get(m.id);
 			const resp = truncateInline(tpl?.sections.responsibilitiesAndBoundaries ?? "", 160);
-			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "无工具(纯文稿)";
+			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "";
 			const anti = tpl?.antiJobs?.length ? ` | Anti-Jobs: ${tpl.antiJobs.join("; ")}` : "";
-			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}] | Skills: [${tpl?.skills.join(",") ?? ""}] | MCP声明（未核验）: [${tpl?.mcpDependencies.join(",") ?? ""}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
+			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | Tools: [${tools}] | Skills: [${tpl?.skills.join(", ") ?? ""}] | MCP (unverified): [${tpl?.mcpDependencies.join(", ") ?? ""}]${anti}${resp ? ` | Responsibilities: ${resp}` : ""}`;
 		})
 		.join("\n");
 	const healthDigest = collectTeamFrictionDigest(deps.store, deps.templatesById);
 	const midMatterHint = options?.isMidMatterConsult
-		? "\n> 当前模式：你正在一个**已进行中的业务事项中被中途请入**。请结合此前对话卡点，给出精简诊断、必要的 `blueprints`（可一键新建并加入当前事项）或 `roleAdjustments`（收窄/补充边界），不接管原主负责人的日常业务推进。"
+		? "\nYou were invited into an active matter. Diagnose the blocker from the conversation. Provide only the necessary `blueprints` to add a role or `roleAdjustments` to refine boundaries. The current lead still owns the matter."
 		: "";
 
 	return [
 		ARCHITECT_SYSTEM_INSTRUCTIONS + midMatterHint,
-		`## 岗位设计方法\n${await architectMethodText()}`,
-		`## 已安装方法目录（文件存在不代表任务效果已验证）\n${JSON.stringify(await listRoleSkillCatalog())}`,
-		`## 当前已有业务 AI 成员（共 ${businessMembers.length} 位）\n${rosterLines || "（暂无业务成员）"}`,
-		`## 团队近期运行摩擦与健康摘要\n${healthDigest}`,
+		`## Role design method\n${await architectMethodText()}`,
+		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(await listRoleSkillCatalog())}`,
+		`## Current business roles (${businessMembers.length})\n${rosterLines || "No business roles yet."}`,
+		`## Recent team health evidence\n${healthDigest}`,
 	].join("\n\n");
 }
 
@@ -500,30 +502,30 @@ export async function runMetaArchitectChat(
 		.map((m) => {
 			const tpl = deps.templatesById.get(m.templateId) ?? deps.templatesById.get(m.id);
 			const resp = truncateInline(tpl?.sections.responsibilitiesAndBoundaries ?? "", 160);
-			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "无工具(纯文稿)";
+			const tools = tpl?.tools.length ? tpl.tools.join(", ") : "";
 			const anti = tpl?.antiJobs?.length ? ` | Anti-Jobs: ${tpl.antiJobs.join("; ")}` : "";
-			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | 工具: [${tools}] | Skills: [${tpl?.skills.join(",") ?? ""}] | MCP声明（未核验）: [${tpl?.mcpDependencies.join(",") ?? ""}]${anti}${resp ? ` | 职责: ${resp}` : ""}`;
+			return `- ${m.id} | ${m.displayName} (${m.roleTitle}) | Tools: [${tools}] | Skills: [${tpl?.skills.join(", ") ?? ""}] | MCP (unverified): [${tpl?.mcpDependencies.join(", ") ?? ""}]${anti}${resp ? ` | Responsibilities: ${resp}` : ""}`;
 		})
 		.join("\n");
 
 	const transcript = input.messages
 		.slice(-12)
-		.map((msg) => `${msg.role === "user" ? "用户" : "Meta-Bot 架构师"}：${truncateInline(msg.content, 1600)}`)
+		.map((msg) => `${msg.role === "user" ? "User" : "Role Architect"}: ${truncateInline(msg.content, 1600)}`)
 		.join("\n\n");
 
 	const healthDigest = input.includeHealthcheck ? collectTeamFrictionDigest(deps.store, deps.templatesById) : "";
 
-	const systemPrompt = `${ARCHITECT_SYSTEM_INSTRUCTIONS}\n\n## 岗位设计方法\n${await architectMethodText()}`;
+	const systemPrompt = `${ARCHITECT_SYSTEM_INSTRUCTIONS}\n\n## Role design method\n${await architectMethodText()}`;
 
 	const prompt = [
-		`## 已安装方法目录（文件存在，不代表履职效果）\n${JSON.stringify(await listRoleSkillCatalog())}`,
-		`## 当前已有团队成员（共 ${members.length} 位）\n${rosterLines || "（暂无）"}`,
+		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(await listRoleSkillCatalog())}`,
+		`## Current team members (${members.length})\n${rosterLines || "No business roles yet."}`,
 		workspace
-			? `## 当前关联工作区\n- ${workspace.name} (${workspace.repoPath})`
-			: "## 当前关联工作区\n- 通用工作区（未绑定代码仓库）",
-		input.matterPrompt ? `## 用户正在发起的事项草稿\n${truncateInline(input.matterPrompt, 1200)}` : "",
-		healthDigest ? `## 团队近期运行摩擦与健康摘要\n${healthDigest}` : "",
-		`## 对话历史\n${transcript}`,
+			? `## Linked workspace\n- ${workspace.name} (${workspace.repoPath})`
+			: "## Linked workspace\n- General workspace with no repository linked.",
+		input.matterPrompt ? `## User's draft matter\n${truncateInline(input.matterPrompt, 1200)}` : "",
+		healthDigest ? `## Recent team health evidence\n${healthDigest}` : "",
+		`## Conversation history\n${transcript}`,
 	]
 		.filter(Boolean)
 		.join("\n\n");

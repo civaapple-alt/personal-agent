@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+### Built-in role and Skill instruction language
+
+- Write the 15 built-in Skills and their task triggers in English. Bump the four business templates and the Role Architect to 1.1.1 with English display names, headings, instructions, and boundaries. Continue reading legacy Chinese section headings.
+- Assemble worker prompts in English and ask for replies and deliverables in the user's language. Preserve Chinese role aliases and responsibility signals in routing and local initiation scoring. Skills are discoverable by name and description.
+- Hide redundant `roleTitle` subtitles on `MemberCard` when identical to `displayName`, allow two-line wrapping on sidebar `.roster-name` tiles for multi-word English role names, align `test/rsi-lifecycle.test.ts` with English memory status prompt labels, and refresh `docs/assets/workbench-home.png` and `docs/assets/workbench-team.png`.
+
 ### Post-a1706c5 reliability follow-up
 
 - Preserve the local `.notes` archive decision and the lighter team/new-matter layouts. Add keyboard focus, arrow/Home/End navigation, Escape return and Tab dismissal to member menus; show role details first when no experience exists. Hide organization mutations from collaborators to match existing server authorization.

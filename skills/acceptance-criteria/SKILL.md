@@ -1,8 +1,8 @@
 ---
 name: acceptance-criteria
-description: 定义验收条件，在执行对应岗位工作时使用。
+description: Use when defining what a feature, workflow, or release must do before the team can accept it.
 ---
 
-# 定义验收条件
+# Define acceptance criteria
 
-把每个需求转为可观察的输入、操作、结果和失败表现。请测试岗位审阅遗漏。分开产品验收条件与已经运行的验证证据。
+Turn each requirement into an observable input, action, expected result, and relevant failure behavior. Ask QA to review gaps. Keep the acceptance criteria separate from evidence of checks already run.

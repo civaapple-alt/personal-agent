@@ -126,9 +126,12 @@ export function MemberCard({
 							<strong>{member.displayName}</strong>
 							{member.isPrimaryContact && <span className="pill live">主联系</span>}
 						</div>
-						<div className="member-sub" title={`${member.roleTitle} · ${member.model}`}>
-							{member.roleTitle}
-						</div>
+						{member.roleTitle &&
+							member.roleTitle.trim().toLowerCase() !== member.displayName.trim().toLowerCase() && (
+								<div className="member-sub" title={`${member.roleTitle} · ${member.model}`}>
+									{member.roleTitle}
+								</div>
+							)}
 					</div>
 				</div>
 				{(candidateCount > 0 || verifiedCount > 0) && (

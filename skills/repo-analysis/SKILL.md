@@ -1,10 +1,10 @@
 ---
 name: repo-analysis
-description: 核查仓库事实，在执行对应岗位工作时使用。
+description: Use when answering how a repository behaves, tracing a call path, or checking a claim against source code.
 ---
 
-# 核查仓库事实
+# Verify repository behavior
 
-先读取工作区自身说明、约定与 Git 状态，再追踪真实入口、调用、存储与测试。用路径和符号支撑结论。将已实现行为与设计文档、建议、未验证推断区分。
+Read the workspace's documentation, project instructions, and Git status. Trace the actual entry point, call path, storage, and tests. Support conclusions with paths and symbols. Distinguish implemented behavior, documented intent, proposals, and unverified inferences.
 
-说明已读文件和实际检索范围。只有执行了相应范围的查找，才能说已排查调用方或引用；仅阅读局部文件时，其他调用和回归影响仍属未知。运行已有反例可以证明该场景的行为，不自动证明不存在其他问题。
+State which files you read and the scope you searched. Claim caller or reference coverage only for the scope you searched. If you inspected only part of the code, leave other callers and regression effects open. A reproduced case establishes behavior for that case.

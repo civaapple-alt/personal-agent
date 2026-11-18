@@ -120,6 +120,13 @@ function extractPositiveResponsibilityText(raw: string): string {
 		.join("\n");
 }
 
+function responsibilityRoutingText(template: RoleTemplate | undefined): string {
+	return (
+		template?.responsibilityKeywords?.join(" ") ??
+		extractPositiveResponsibilityText(template?.sections.responsibilitiesAndBoundaries ?? "")
+	);
+}
+
 function scoreMember(
 	member: TeamMember,
 	template: RoleTemplate | undefined,
@@ -142,7 +149,7 @@ function scoreMember(
 		}
 	}
 
-	const respTokens = extractPositiveResponsibilityText(template?.sections.responsibilitiesAndBoundaries ?? "")
+	const respTokens = responsibilityRoutingText(template)
 		.split(/[\s,，、。；：\-*]+/)
 		.map((token) => token.trim().toLowerCase())
 		.filter((token) => token.length >= 2 && token.length <= 8);
@@ -300,11 +307,7 @@ export function assessMatterInitiation(input: {
 				c.score >= 3 &&
 				(matchedSpecialRule.patterns.some((p) => p.test(`${c.displayName} ${c.roleTitle}`)) ||
 					matchedSpecialRule.patterns.some((pattern) =>
-						pattern.test(
-							extractPositiveResponsibilityText(
-								input.templatesByRoleId.get(c.memberId)?.sections.responsibilitiesAndBoundaries ?? "",
-							),
-						),
+						pattern.test(responsibilityRoutingText(input.templatesByRoleId.get(c.memberId))),
 					)),
 		);
 

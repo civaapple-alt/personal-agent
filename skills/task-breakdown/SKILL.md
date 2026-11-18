@@ -1,8 +1,8 @@
 ---
 name: task-breakdown
-description: 拆解专业工作，在执行对应岗位工作时使用。
+description: Use when splitting an agreed outcome into specialist work with clear dependencies, handoffs, and completion criteria.
 ---
 
-# 拆解专业工作
+# Break work into verifiable steps
 
-按可独立验证的结果划分步骤，说明依赖与完成标准。直接向已有专业成员委托需要其判断的工作，并整合其依据。不要把内部步骤变成要求用户监督的工单。
+Define steps by independently verifiable results. State the dependencies and completion criteria for each step. Delegate work that requires specialist judgment to an existing team member and integrate their evidence. Keep routine coordination within the team.
