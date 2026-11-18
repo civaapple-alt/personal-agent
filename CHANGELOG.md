@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Keep LF line endings in Windows Git checkouts so Biome and the cross-platform checks use the same source files.
+
 ## [0.6.0] - 2026-11-18
 
 First public MIT release. See the [0.6.0 release guide](docs/releases/v0.6.0.md) for the feature summary, downloads, and validation scope.
