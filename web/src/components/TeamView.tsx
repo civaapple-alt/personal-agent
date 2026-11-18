@@ -16,7 +16,7 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
-import { resolveEffectivePrimaryContactId } from "../utils.ts";
+import { applyOrgAiRoleOverrides, resolveEffectivePrimaryContactId } from "../utils.ts";
 import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
@@ -215,6 +215,14 @@ export function TeamView({
 		() => resolveEffectivePrimaryContactId(members, primaryTargetOrg?.id ?? null, orgAiRolesByOrgId),
 		[members, primaryTargetOrg, orgAiRolesByOrgId],
 	);
+	const cardDisplayMembers = useMemo(
+		() => applyOrgAiRoleOverrides(visibleBusinessMembers, primaryTargetOrg?.id ?? null, orgAiRolesByOrgId),
+		[visibleBusinessMembers, primaryTargetOrg, orgAiRolesByOrgId],
+	);
+	const inspectedEffectiveGitConfig = useMemo(() => {
+		if (!inspectedMember || !primaryTargetOrg) return null;
+		return orgAiRolesByOrgId[primaryTargetOrg.id]?.configs.find((c) => c.memberId === inspectedMember.id) ?? null;
+	}, [inspectedMember, primaryTargetOrg, orgAiRolesByOrgId]);
 
 	const handleSetPrimary = async (memberId: string) => {
 		if (!memberId || savingPrimary || memberId === effectivePrimaryId) return;
@@ -242,6 +250,8 @@ export function TeamView({
 							? {
 									displayNameOverride: existingCfg.displayNameOverride,
 									modelOverride: existingCfg.modelOverride,
+									gitNameOverride: existingCfg.gitNameOverride ?? null,
+									gitEmailOverride: existingCfg.gitEmailOverride ?? null,
 								}
 							: {}),
 					};
@@ -421,7 +431,7 @@ export function TeamView({
 							</div>
 						)}
 						<div className="team-grid">
-							{visibleBusinessMembers.map((member, idx) => (
+							{cardDisplayMembers.map((member, idx) => (
 								<MemberCard
 									key={member.id}
 									member={member}
@@ -507,6 +517,7 @@ export function TeamView({
 					isOwner || Boolean(inspectedMember && inspectedMember.roleScope === "personal" && inspectedCanManage)
 				}
 				isPrimary={inspectedMember ? inspectedMember.id === effectivePrimaryId : undefined}
+				effectiveGitOverride={inspectedEffectiveGitConfig}
 				members={members}
 				workspaces={workspaces}
 				organizations={organizations}

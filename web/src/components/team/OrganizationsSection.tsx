@@ -21,6 +21,7 @@ import {
 	type WorkspaceDto,
 } from "../../api.ts";
 import { copyTextToClipboard } from "../../clipboard.ts";
+import { formatMemberGitIdentity } from "../../utils.ts";
 import { ModalDialog } from "../ModalDialog.tsx";
 
 interface OrganizationsSectionProps {
@@ -67,6 +68,7 @@ export function OrganizationsSection({
 	const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
 	const [orgNameInput, setOrgNameInput] = useState("");
 	const [orgDomainInput, setOrgDomainInput] = useState("");
+	const [orgUseRoleGitInput, setOrgUseRoleGitInput] = useState(false);
 	const [orgDescInput, setOrgDescInput] = useState("");
 	const [initialAiMemberIds, setInitialAiMemberIds] = useState<string[]>([]);
 	const [saving, setSaving] = useState(false);
@@ -89,12 +91,17 @@ export function OrganizationsSection({
 	const [aiModalOrgId, setAiModalOrgId] = useState<string | null>(null);
 	const [draftEnabledAiIds, setDraftEnabledAiIds] = useState<string[]>([]);
 	const [draftPrimaryAiId, setDraftPrimaryAiId] = useState<string>("");
+	const [draftUseRoleGitIdentity, setDraftUseRoleGitIdentity] = useState(false);
+	const [draftGitByMemberId, setDraftGitByMemberId] = useState<Record<string, { gitName: string; gitEmail: string }>>(
+		{},
+	);
 	const [savingAiRoles, setSavingAiRoles] = useState(false);
 
 	const openCreateOrgForm = () => {
 		setEditingOrgId(null);
 		setOrgNameInput("");
 		setOrgDomainInput("");
+		setOrgUseRoleGitInput(false);
 		setOrgDescInput("");
 		setInitialAiMemberIds(businessMembers.map((m) => m.id));
 		setShowOrgForm(true);
@@ -104,6 +111,7 @@ export function OrganizationsSection({
 		setEditingOrgId(org.id);
 		setOrgNameInput(org.name);
 		setOrgDomainInput(org.gitEmailDomain);
+		setOrgUseRoleGitInput(Boolean(org.useRoleGitIdentity));
 		setOrgDescInput(org.description);
 		setShowOrgForm(true);
 	};
@@ -122,6 +130,7 @@ export function OrganizationsSection({
 				await updateOrganization(editingOrgId, {
 					name: orgNameInput.trim(),
 					gitEmailDomain: orgDomainInput.trim(),
+					useRoleGitIdentity: orgUseRoleGitInput,
 					description: orgDescInput.trim(),
 				});
 				onNotice(`组织「${orgNameInput.trim()}」已更新`);
@@ -129,6 +138,7 @@ export function OrganizationsSection({
 				await createOrganization({
 					name: orgNameInput.trim(),
 					gitEmailDomain: orgDomainInput.trim(),
+					useRoleGitIdentity: orgUseRoleGitInput,
 					description: orgDescInput.trim(),
 					...(businessMembers.length > 0 ? { aiMemberIds: initialAiMemberIds } : {}),
 				});
@@ -228,27 +238,48 @@ export function OrganizationsSection({
 
 	const openAiModal = (orgId: string) => {
 		const eligible = getEligibleOrgMembers(orgId);
+		const targetOrg = organizations.find((o) => o.id === orgId) ?? null;
 		const entry = orgAiRolesByOrgId[orgId];
 		const enabledIds = entry ? entry.effectiveMemberIds : eligible.map((m) => m.id);
 		const primaryConfig = entry?.configs.find((c) => c.enabled && c.isPrimaryContact);
 		const fallbackPrimary =
 			eligible.find((m) => enabledIds.includes(m.id) && m.isPrimaryContact)?.id ?? enabledIds[0] ?? "";
+		const gitDrafts: Record<string, { gitName: string; gitEmail: string }> = {};
+		for (const m of eligible) {
+			const cfg = entry?.configs.find((c) => c.memberId === m.id);
+			gitDrafts[m.id] = {
+				gitName: cfg?.gitNameOverride ?? "",
+				gitEmail: cfg?.gitEmailOverride ?? "",
+			};
+		}
 		setDraftEnabledAiIds(enabledIds);
 		setDraftPrimaryAiId(primaryConfig?.memberId ?? fallbackPrimary);
+		setDraftUseRoleGitIdentity(Boolean(targetOrg?.useRoleGitIdentity));
+		setDraftGitByMemberId(gitDrafts);
 		setAiModalOrgId(orgId);
 	};
 
 	const handleSaveAiRoles = async () => {
 		if (!aiModalOrgId || savingAiRoles) return;
 		const eligible = getEligibleOrgMembers(aiModalOrgId);
+		const entry = orgAiRolesByOrgId[aiModalOrgId];
+		const configByMemberId = new Map((entry?.configs ?? []).map((c) => [c.memberId, c]));
 		setSavingAiRoles(true);
 		try {
-			const payload = eligible.map((m) => ({
-				memberId: m.id,
-				enabled: draftEnabledAiIds.includes(m.id),
-				isPrimaryContact: draftEnabledAiIds.includes(m.id) && draftPrimaryAiId === m.id,
-			}));
-			await updateOrgAiRoles(aiModalOrgId, payload);
+			const payload = eligible.map((m) => {
+				const existingCfg = configByMemberId.get(m.id);
+				const draftGit = draftGitByMemberId[m.id];
+				return {
+					memberId: m.id,
+					enabled: draftEnabledAiIds.includes(m.id),
+					isPrimaryContact: draftEnabledAiIds.includes(m.id) && draftPrimaryAiId === m.id,
+					displayNameOverride: existingCfg?.displayNameOverride ?? null,
+					modelOverride: existingCfg?.modelOverride ?? null,
+					gitNameOverride: draftGit?.gitName.trim() || null,
+					gitEmailOverride: draftGit?.gitEmail.trim() || null,
+				};
+			});
+			await updateOrgAiRoles(aiModalOrgId, payload, { useRoleGitIdentity: draftUseRoleGitIdentity });
 			setAiModalOrgId(null);
 			onNotice("组织 AI 角色配置已保存");
 			await onRefresh();
@@ -362,6 +393,9 @@ export function OrganizationsSection({
 											)}
 										</div>
 										<div className="org-chip-meta">
+											{org.useRoleGitIdentity
+												? "Git 署名：角色独立 Author · "
+												: "Git 署名：默认使用仓库目录配置 · "}
 											{org.gitEmailDomain ? `Git 域名：@${org.gitEmailDomain} · ` : ""}
 											{boundWs.length > 0
 												? `已关联仓库：${boundWs.map((w) => w.name).join("、")}`
@@ -424,6 +458,16 @@ export function OrganizationsSection({
 						/>
 					</label>
 				</div>
+				<label className="admin-check-field">
+					<input
+						type="checkbox"
+						checked={orgUseRoleGitInput}
+						onChange={(e) => setOrgUseRoleGitInput(e.target.checked)}
+					/>
+					<span>
+						启用本组织 AI 角色的 Git Author 署名（未开启时默认使用仓库目录自身的 Git user.name / user.email 提交）
+					</span>
+				</label>
 				<label className="identity-field">
 					<span className="identity-field-label">组织背景与共同准则（可选）</span>
 					<textarea
@@ -662,8 +706,8 @@ export function OrganizationsSection({
 			<ModalDialog
 				open={Boolean(activeAiModalOrg)}
 				title={activeAiModalOrg ? `配置启用 AI 角色 · ${activeAiModalOrg.name}` : "配置 AI 角色"}
-				subtitle="勾选本组织工作时允许启动、路由及委托的 AI 岗位，并指定组织主联系人。"
-				size="sm"
+				subtitle="勾选本组织工作时允许启动、路由及委托的 AI 岗位，指定组织主联系人并可按组织覆写角色的 Git 署名信息。"
+				size="md"
 				closeDisabled={savingAiRoles}
 				onClose={() => !savingAiRoles && setAiModalOrgId(null)}
 				footer={
@@ -687,37 +731,92 @@ export function OrganizationsSection({
 					</>
 				}
 			>
+				<div className="org-git-mode-banner">
+					<label className="admin-check-field">
+						<input
+							type="checkbox"
+							checked={draftUseRoleGitIdentity}
+							onChange={(e) => setDraftUseRoleGitIdentity(e.target.checked)}
+						/>
+						<strong>启用本组织 AI 角色的 Git Author 署名</strong>
+					</label>
+					<div className="muted-tiny">
+						{draftUseRoleGitIdentity
+							? `已启用：AI 提交时使用下方配置的 Git user.name / user.email 作为 Author（留空时沿用角色默认署名${activeAiModalOrg?.gitEmailDomain ? `与 @${activeAiModalOrg.gitEmailDomain}` : ""}）。`
+							: "当前未开启：AI 提交默认使用目标仓库目录自身的 Git user.name 与 user.email，不注入角色 Git 信息。"}
+					</div>
+				</div>
 				<div className="org-ai-checklist">
 					{getEligibleOrgMembers(aiModalOrgId).map((m) => {
 						const enabled = draftEnabledAiIds.includes(m.id);
+						const fallbackGit = formatMemberGitIdentity(m, activeAiModalOrg);
+						const draftGit = draftGitByMemberId[m.id] ?? { gitName: "", gitEmail: "" };
 						return (
-							<div key={m.id} className="org-ai-config-row">
-								<label className="org-ai-check-item">
-									<input
-										type="checkbox"
-										checked={enabled}
-										onChange={(e) => {
-											if (e.target.checked) {
-												setDraftEnabledAiIds((prev) => [...prev, m.id]);
-											} else {
-												setDraftEnabledAiIds((prev) => prev.filter((id) => id !== m.id));
-											}
-										}}
-									/>
-									<span>
-										<strong>{m.displayName}</strong> · <small className="muted-hint">{m.roleTitle}</small>
-									</span>
-								</label>
-								{enabled && (
-									<label className="org-ai-primary-radio">
+							<div key={m.id} className="org-ai-config-card">
+								<div className="org-ai-config-row-top">
+									<label className="org-ai-check-item">
 										<input
-											type="radio"
-											name="orgPrimaryAi"
-											checked={draftPrimaryAiId === m.id}
-											onChange={() => setDraftPrimaryAiId(m.id)}
+											type="checkbox"
+											checked={enabled}
+											onChange={(e) => {
+												if (e.target.checked) {
+													setDraftEnabledAiIds((prev) => [...prev, m.id]);
+												} else {
+													setDraftEnabledAiIds((prev) => prev.filter((id) => id !== m.id));
+												}
+											}}
 										/>
-										<span>主联系人</span>
+										<span>
+											<strong>{m.displayName}</strong> · <small className="muted-hint">{m.roleTitle}</small>
+										</span>
 									</label>
+									{enabled && (
+										<label className="org-ai-primary-radio">
+											<input
+												type="radio"
+												name="orgPrimaryAi"
+												checked={draftPrimaryAiId === m.id}
+												onChange={() => setDraftPrimaryAiId(m.id)}
+											/>
+											<span>主联系人</span>
+										</label>
+									)}
+								</div>
+								{enabled && (
+									<div className="org-ai-git-grid">
+										<label className="identity-field compact">
+											<span className="muted-tiny">Git user.name</span>
+											<input
+												className="input-field input-xs"
+												aria-label={`${m.displayName} Git 名称`}
+												placeholder={`默认：${fallbackGit.gitName}`}
+												value={draftGit.gitName}
+												onChange={(e) => {
+													const next = e.target.value;
+													setDraftGitByMemberId((prev) => ({
+														...prev,
+														[m.id]: { gitName: next, gitEmail: prev[m.id]?.gitEmail ?? "" },
+													}));
+												}}
+											/>
+										</label>
+										<label className="identity-field compact">
+											<span className="muted-tiny">Git user.email</span>
+											<input
+												className="input-field input-xs"
+												aria-label={`${m.displayName} Git 邮箱`}
+												placeholder={`默认：${fallbackGit.gitEmail}`}
+												value={draftGit.gitEmail}
+												onChange={(e) => {
+													const next = e.target.value;
+													setDraftGitByMemberId((prev) => ({
+														...prev,
+														[m.id]: { gitName: prev[m.id]?.gitName ?? "", gitEmail: next },
+													}));
+												}}
+											/>
+										</label>
+									</div>
 								)}
 							</div>
 						);

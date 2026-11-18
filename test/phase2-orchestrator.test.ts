@@ -349,6 +349,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			gitEmailDomain: "acme.dev",
 			description: "Core engineering org",
 		});
+		assert.equal(orgAcme.useRoleGitIdentity, false);
 		const orgBeta = store.upsertOrganization({
 			id: "org-beta",
 			name: "Beta Labs",
@@ -360,7 +361,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		const wsC = store.upsertWorkspace({ id: "ws-c", name: "standalone-c", repoPath: repoC });
 
 		// Customize member identities:
-		// 1) product-manager overrides gitName & identitySummary, keeps default email so org domain (@acme.dev) applies
+		// 1) product-manager overrides gitName & identitySummary, keeps default email so org domain (@acme.dev) applies when enabled
 		store.updateMemberIdentity("product-manager", {
 			gitName: "PM Alice",
 			identitySummary: "Owns checkout product metrics across Acme",
@@ -415,13 +416,37 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			content: "REPO_B_MEM: repo-b uses SQLite",
 		});
 
+		// Default behavior (useRoleGitIdentity = false): do NOT inject AI role Git env; commit using repository's own Git user
+		await orchestrator.dispatchMatter({
+			prompt: "默认仓库身份提交验证",
+			preferredMemberId: "engineering-manager",
+			workspaceId: wsA.id,
+		});
+		const defaultWorker = workers[0]!;
+		assert.equal(defaultWorker.options.env?.GIT_AUTHOR_NAME, undefined);
+		assert.equal(defaultWorker.options.env?.GIT_AUTHOR_EMAIL, undefined);
+		assert.equal(defaultWorker.options.env?.GIT_COMMITTER_NAME, undefined);
+		assert.equal(defaultWorker.options.env?.GIT_COMMITTER_EMAIL, undefined);
+		assert.match(
+			defaultWorker.options.env?.PA_MEMBER_CONTEXT ?? "",
+			/Git identity \(repository default\): Real Repo Owner <owner@company\.com>/,
+		);
+		const defaultGitLog = execFileSync("git", ["log", "-1", "--format=%an|%ae|%cn|%ce"], {
+			cwd: repoA,
+			encoding: "utf8",
+		}).trim();
+		assert.equal(defaultGitLog, "Real Repo Owner|owner@company.com|Real Repo Owner|owner@company.com");
+
+		// Enable role Git authorship on orgAcme
+		store.updateOrganization(orgAcme.id, { useRoleGitIdentity: true });
+
 		// Dispatch PM in wsA (Acme)
 		await orchestrator.dispatchMatter({
 			prompt: "分析 service-a 需求",
 			preferredMemberId: "product-manager",
 			workspaceId: wsA.id,
 		});
-		const pmWorkerA = workers[0]!;
+		const pmWorkerA = workers[1]!;
 		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_NAME, "PM Alice");
 		assert.equal(pmWorkerA.options.env?.GIT_AUTHOR_EMAIL, "product-manager@acme.dev");
 		assert.equal(pmWorkerA.options.env?.GIT_COMMITTER_NAME, "Real Repo Owner");
@@ -447,22 +472,23 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			preferredMemberId: "product-manager",
 			workspaceId: wsB.id,
 		});
-		const ctxB = workers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		const ctxB = workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "";
 		assert.match(ctxB, /GLOBAL_RULE/);
 		assert.match(ctxB, /ACME_ORG_MEM/);
 		assert.match(ctxB, /REPO_B_MEM/);
 		assert.doesNotMatch(ctxB, /REPO_A_MEM/);
 		assert.doesNotMatch(ctxB, /BETA_ORG_MEM/);
 
-		// Dispatch PM in wsC (standalone workspace without org)
+		// Dispatch PM in wsC (standalone workspace without org -> always keeps repo default Git user)
 		await orchestrator.dispatchMatter({
 			prompt: "分析独立仓库需求",
 			preferredMemberId: "product-manager",
 			workspaceId: wsC.id,
 		});
-		const ctxC = workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "";
-		assert.equal(workers[2]?.options.env?.GIT_AUTHOR_EMAIL, "product-manager@team.local");
-		assert.equal(workers[2]?.options.env?.GIT_COMMITTER_EMAIL, "owner@company.com");
+		const ctxC = workers[3]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		assert.equal(workers[3]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
+		assert.equal(workers[3]?.options.env?.GIT_COMMITTER_EMAIL, undefined);
+		assert.match(ctxC, /Git identity \(repository default\): Real Repo Owner <owner@company\.com>/);
 		assert.match(ctxC, /GLOBAL_RULE/);
 		assert.doesNotMatch(ctxC, /ACME_ORG_MEM/);
 		assert.doesNotMatch(ctxC, /BETA_ORG_MEM/);
@@ -479,6 +505,44 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			encoding: "utf8",
 		}).trim();
 		assert.equal(gitLog, "Eng Bob|bob@custom.org|Real Repo Owner|owner@company.com");
+
+		// Configure per-organization AI role Git override inside orgAcme
+		store.setOrgAiRolesBatch(orgAcme.id, [
+			{ memberId: "product-manager", enabled: true, isPrimaryContact: true },
+			{
+				memberId: "engineering-manager",
+				enabled: true,
+				gitNameOverride: "Acme Eng Bot",
+				gitEmailOverride: "eng-bot@acme.dev",
+			},
+		]);
+		await orchestrator.dispatchMatter({
+			prompt: "使用组织覆盖的研发 Git 信息提交",
+			preferredMemberId: "engineering-manager",
+			workspaceId: wsA.id,
+		});
+		const orgOverrideGitLog = execFileSync("git", ["log", "-1", "--format=%an|%ae|%cn|%ce"], {
+			cwd: repoA,
+			encoding: "utf8",
+		}).trim();
+		assert.equal(orgOverrideGitLog, "Acme Eng Bot|eng-bot@acme.dev|Real Repo Owner|owner@company.com");
+
+		// Disabling useRoleGitIdentity reverts commits to the repository directory's own Git user while preserving saved overrides
+		store.updateOrganization(orgAcme.id, { useRoleGitIdentity: false });
+		await orchestrator.dispatchMatter({
+			prompt: "关闭角色 Git 后恢复仓库默认身份提交",
+			preferredMemberId: "engineering-manager",
+			workspaceId: wsA.id,
+		});
+		const revertedGitLog = execFileSync("git", ["log", "-1", "--format=%an|%ae|%cn|%ce"], {
+			cwd: repoA,
+			encoding: "utf8",
+		}).trim();
+		assert.equal(revertedGitLog, "Real Repo Owner|owner@company.com|Real Repo Owner|owner@company.com");
+		assert.equal(
+			store.listOrgAiRoleConfigs(orgAcme.id).find((c) => c.memberId === "engineering-manager")?.gitNameOverride,
+			"Acme Eng Bot",
+		);
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
@@ -681,10 +745,19 @@ test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII
 			prompt: "Draft architecture plan",
 			preferredMemberId: "architect-lead",
 		});
-		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_NAME, "System Architect");
-		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_EMAIL, "architect-lead@test-team.local");
+		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_NAME, undefined);
+		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
 		assert.equal(workers[0]?.options.env?.PA_ORG_ID, org.id);
 		assert.match(workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /TEST_ORG_ONLY/);
+
+		store.updateOrganization(org.id, { useRoleGitIdentity: true });
+		await orchestrator.dispatchMatter({
+			matterId: matter.id,
+			prompt: "Draft architecture plan with role Git identity",
+			preferredMemberId: "architect-lead",
+		});
+		assert.equal(workers[1]?.options.env?.GIT_AUTHOR_NAME, "System Architect");
+		assert.equal(workers[1]?.options.env?.GIT_AUTHOR_EMAIL, "architect-lead@test-team.local");
 	} finally {
 		reopened.close();
 		rmSync(tempRoot, { recursive: true, force: true });

@@ -103,6 +103,8 @@ export interface OrganizationAiRoleConfig {
 	providerOverride: string | null;
 	modelOverride: string | null;
 	thinkingLevelOverride: ThinkingLevel | null;
+	gitNameOverride?: string | null;
+	gitEmailOverride?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -149,6 +151,7 @@ export interface Organization {
 	name: string;
 	slug?: string;
 	gitEmailDomain: string;
+	useRoleGitIdentity?: boolean;
 	description: string;
 	isDefault: boolean;
 	workspacesDir?: string | null;

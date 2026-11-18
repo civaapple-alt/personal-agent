@@ -34,6 +34,14 @@ function mapOrgAiRoleRow(row: Record<string, unknown>): OrganizationAiRoleConfig
 		thinkingLevelOverride: row.thinking_level_override
 			? (String(row.thinking_level_override) as ThinkingLevel)
 			: null,
+		gitNameOverride:
+			typeof row.git_name_override === "string" && row.git_name_override.trim()
+				? row.git_name_override.trim()
+				: null,
+		gitEmailOverride:
+			typeof row.git_email_override === "string" && row.git_email_override.trim()
+				? row.git_email_override.trim()
+				: null,
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),
 	};
@@ -311,6 +319,8 @@ export class OrgRbacRepo {
 			providerOverride?: string | null;
 			modelOverride?: string | null;
 			thinkingLevelOverride?: ThinkingLevel | null;
+			gitNameOverride?: string | null;
+			gitEmailOverride?: string | null;
 		}>,
 	): OrganizationAiRoleConfig[] {
 		const timestamp = nowIso();
@@ -323,8 +333,8 @@ export class OrgRbacRepo {
 				`INSERT INTO organization_ai_roles (
 					org_id, member_id, enabled, is_primary_contact,
 					display_name_override, provider_override, model_override, thinking_level_override,
-					created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					git_name_override, git_email_override, created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			);
 			for (const role of roles) {
 				const member = this.memberRepo.getMember(role.memberId);
@@ -340,6 +350,8 @@ export class OrgRbacRepo {
 					role.providerOverride?.trim() || null,
 					role.modelOverride?.trim() || null,
 					role.thinkingLevelOverride ?? null,
+					role.gitNameOverride?.trim() || null,
+					role.gitEmailOverride?.trim() || null,
 					timestamp,
 					timestamp,
 				);
@@ -381,9 +393,17 @@ export class OrgRbacRepo {
 					provider: cfg.providerOverride ?? member.provider,
 					model: cfg.modelOverride ?? member.model,
 					thinkingLevel: cfg.thinkingLevelOverride ?? member.thinkingLevel,
+					gitName: cfg.gitNameOverride?.trim() || member.gitName,
+					gitEmail: cfg.gitEmailOverride?.trim() || member.gitEmail,
 					isPrimaryContact: hasPrimaryOverride ? cfg.isPrimaryContact : member.isPrimaryContact,
 				};
 			});
+	}
+
+	resolveMemberForOrg(orgId: string | null | undefined, member: TeamMember): TeamMember {
+		if (!orgId || member.roleScope === "personal") return member;
+		const resolved = this.resolveEffectiveOrgMembers(orgId).find((m) => m.id === member.id);
+		return resolved ?? member;
 	}
 
 	resolveEffectiveOrgMembersForUser(orgId: string, userId?: string | null): TeamMember[] {

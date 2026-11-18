@@ -166,16 +166,47 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		});
 		assert.equal(orgCreate.status, 201);
 		const { organization } = (await orgCreate.json()) as {
-			organization: { id: string; name: string; gitEmailDomain: string };
+			organization: { id: string; name: string; gitEmailDomain: string; useRoleGitIdentity?: boolean };
 		};
 		assert.equal(organization.gitEmailDomain, "acme.dev");
+		assert.equal(organization.useRoleGitIdentity, false);
 
 		const orgPatch = await fetch(`${baseUrl}/api/organizations/${organization.id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ description: "Updated org description" }),
+			body: JSON.stringify({ description: "Updated org description", useRoleGitIdentity: true }),
 		});
 		assert.equal(orgPatch.status, 200);
+		const patchedOrgPayload = (await orgPatch.json()) as { organization: { useRoleGitIdentity?: boolean } };
+		assert.equal(patchedOrgPayload.organization.useRoleGitIdentity, true);
+
+		const aiRolesPut = await fetch(`${baseUrl}/api/organizations/${organization.id}/ai-roles`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				useRoleGitIdentity: false,
+				roles: [
+					{
+						memberId: "product-manager",
+						enabled: true,
+						isPrimaryContact: true,
+						gitNameOverride: "Acme PM Lead",
+						gitEmailOverride: "pm-lead@acme.dev",
+					},
+				],
+			}),
+		});
+		assert.equal(aiRolesPut.status, 200);
+		const aiRolesPayload = (await aiRolesPut.json()) as {
+			organization?: { useRoleGitIdentity?: boolean };
+			configs: Array<{ memberId: string; gitNameOverride?: string | null; gitEmailOverride?: string | null }>;
+			effectiveMembers: Array<{ id: string; gitName: string; gitEmail: string }>;
+		};
+		assert.equal(aiRolesPayload.organization?.useRoleGitIdentity, false);
+		assert.equal(aiRolesPayload.configs[0]?.gitNameOverride, "Acme PM Lead");
+		assert.equal(aiRolesPayload.configs[0]?.gitEmailOverride, "pm-lead@acme.dev");
+		assert.equal(aiRolesPayload.effectiveMembers[0]?.gitName, "Acme PM Lead");
+		assert.equal(aiRolesPayload.effectiveMembers[0]?.gitEmail, "pm-lead@acme.dev");
 
 		const wsCreate = await fetch(`${baseUrl}/api/workspaces`, {
 			method: "POST",

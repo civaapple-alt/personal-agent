@@ -33,6 +33,7 @@ interface MemberInspectorModalProps {
 	canEditIdentity?: boolean;
 	canCurateMemories?: boolean;
 	isPrimary?: boolean;
+	effectiveGitOverride?: { gitNameOverride?: string | null; gitEmailOverride?: string | null } | null;
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
@@ -61,6 +62,7 @@ export function MemberInspectorModal({
 	canEditIdentity = true,
 	canCurateMemories = true,
 	isPrimary,
+	effectiveGitOverride = null,
 	members,
 	workspaces,
 	organizations,
@@ -112,7 +114,15 @@ export function MemberInspectorModal({
 	if (!member) return null;
 
 	const theme = getBotTheme(memberIndex >= 0 ? memberIndex : 0);
-	const gitIdentity = formatMemberGitIdentity(member, activeOrg);
+	const effectiveMemberForGit =
+		effectiveGitOverride?.gitNameOverride || effectiveGitOverride?.gitEmailOverride
+			? {
+					...member,
+					gitName: effectiveGitOverride.gitNameOverride?.trim() || member.gitName,
+					gitEmail: effectiveGitOverride.gitEmailOverride?.trim() || member.gitEmail,
+				}
+			: member;
+	const gitIdentity = formatMemberGitIdentity(effectiveMemberForGit, activeOrg);
 	const verifiedCount = memories.filter((m) => m.status === "verified" || (!m.status && m.verified)).length;
 	const candidateMemories = memories.filter((m) => m.status === "candidate" || (!m.status && !m.verified));
 	const candidateCount = candidateMemories.length;
@@ -217,11 +227,25 @@ export function MemberInspectorModal({
 				{tab === "identity" ? (
 					<div className="architect-form-body">
 						<div className="identity-form-hint">
-							Git 提交区分 Author（{gitIdentity.formatted}）与 Committer（保留当前仓库真实用户
-							{activeWorkspace?.repoGitUser
-								? `：${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>`
-								: ""}
-							）。
+							{activeOrg?.useRoleGitIdentity ? (
+								<>
+									当前组织「{activeOrg.name}」已启用角色 Git 署名：提交 Author 为{" "}
+									<strong>{gitIdentity.formatted}</strong>
+									{activeWorkspace?.repoGitUser
+										? `，Committer 保留仓库真实用户（${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>）`
+										: "，未检测到仓库 Git 配置时 Committer 回退为角色署名"}
+									。可在「组织 → AI 角色」按组织覆盖或关闭。
+								</>
+							) : (
+								<>
+									默认使用仓库目录自身的 Git user.name / user.email 提交
+									{activeWorkspace?.repoGitUser
+										? `（当前仓库：${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>）`
+										: ""}
+									，不注入角色 Git 信息；下方为角色默认署名档案，可在「组织 → AI 角色」中开启角色 Git
+									署名并按组织重新配置。
+								</>
+							)}
 						</div>
 
 						<div className="form-grid">

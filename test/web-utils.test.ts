@@ -7,6 +7,7 @@ import {
 	shouldFoldPastedText,
 } from "../web/src/textAttachments.ts";
 import {
+	applyOrgAiRoleOverrides,
 	applyPrimaryContactToMembers,
 	collectMatterMemories,
 	collectMatterParticipantIds,
@@ -489,4 +490,29 @@ test("resolveEffectivePrimaryContactId and applyPrimaryContactToMembers respect 
 	const projected = applyPrimaryContactToMembers(baseMembers, "engineering-manager");
 	assert.equal(projected.find((m) => m.id === "engineering-manager")?.isPrimaryContact, true);
 	assert.equal(projected.find((m) => m.id === "product-manager")?.isPrimaryContact, false);
+
+	const overridden = applyOrgAiRoleOverrides(baseMembers, "org_beta", {
+		org_beta: {
+			configured: true,
+			effectiveMemberIds: ["engineering-manager", "product-manager"],
+			configs: [
+				{
+					orgId: "org_beta",
+					memberId: "engineering-manager",
+					enabled: true,
+					isPrimaryContact: true,
+					displayNameOverride: "Beta Eng",
+					modelOverride: null,
+					gitNameOverride: "Beta Eng Author",
+					gitEmailOverride: "eng@beta.example",
+					updatedAt: "2026-11-19T00:00:00.000Z",
+				},
+			],
+		},
+	});
+	const engOverride = overridden.find((m) => m.id === "engineering-manager");
+	assert.equal(engOverride?.displayName, "Beta Eng");
+	assert.equal(engOverride?.gitName, "Beta Eng Author");
+	assert.equal(engOverride?.gitEmail, "eng@beta.example");
+	assert.equal(overridden.find((m) => m.id === "product-manager")?.gitName, "Product Manager");
 });

@@ -422,6 +422,9 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 					modelOverride: typeof item.modelOverride === "string" ? item.modelOverride.trim() || null : null,
 					thinkingLevelOverride:
 						typeof item.thinkingLevelOverride === "string" ? (item.thinkingLevelOverride as ThinkingLevel) : null,
+					gitNameOverride: typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
+					gitEmailOverride:
+						typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
 				}))
 				.filter((item) => item.memberId.length > 0);
 			if (!parsedRoles.some((role) => role.enabled)) {
@@ -439,6 +442,12 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 					return true;
 				}
 			}
+			let updatedOrganization = null;
+			if (typeof body.useRoleGitIdentity === "boolean") {
+				updatedOrganization = store.updateOrganization(orgId, {
+					useRoleGitIdentity: body.useRoleGitIdentity,
+				});
+			}
 			const configs = store.setOrgAiRolesBatch(orgId, parsedRoles);
 			const effectiveMembers = store.resolveEffectiveOrgMembers(orgId);
 			auditActorAction(ctx, req, actor, {
@@ -446,10 +455,20 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				targetType: "organization",
 				targetId: orgId,
 				orgId,
-				detail: { enabledMemberIds: effectiveMembers.map((m) => m.id) },
+				detail: {
+					enabledMemberIds: effectiveMembers.map((m) => m.id),
+					...(typeof body.useRoleGitIdentity === "boolean" ? { useRoleGitIdentity: body.useRoleGitIdentity } : {}),
+				},
 			});
+			if (updatedOrganization) {
+				broadcast("organization_updated", { organization: updatedOrganization }, { orgId });
+			}
 			broadcast("team_updated", { orgId }, { orgId });
-			sendJson(res, 200, { configs, effectiveMembers });
+			sendJson(res, 200, {
+				...(updatedOrganization ? { organization: updatedOrganization } : {}),
+				configs,
+				effectiveMembers,
+			});
 			return true;
 		}
 	}

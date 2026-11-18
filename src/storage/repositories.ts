@@ -408,6 +408,9 @@ export class PersonalAgentStore {
 	resolveEffectiveOrgMembersForUser(orgId: string, userId?: string | null) {
 		return this.orgRbac.resolveEffectiveOrgMembersForUser(orgId, userId);
 	}
+	resolveMemberForOrg(orgId: string | null | undefined, member: Parameters<OrgRbacRepo["resolveMemberForOrg"]>[1]) {
+		return this.orgRbac.resolveMemberForOrg(orgId, member);
+	}
 	setWorkspaceAccess(
 		workspaceId: string,
 		visibility: Parameters<OrgRbacRepo["setWorkspaceAccess"]>[1],

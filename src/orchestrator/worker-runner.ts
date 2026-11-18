@@ -273,18 +273,20 @@ export async function executeWithWorkerPass(
 			),
 		);
 
-		const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
+		const effectiveMember = activeOrgId ? deps.store.resolveMemberForOrg(activeOrgId, input.member) : input.member;
+		const useRoleGitIdentity = Boolean(organization?.useRoleGitIdentity);
+		const gitIdentity = resolveEffectiveGitIdentity(effectiveMember, organization);
 		const repoGitUser = resolveRepoGitUserIdentity(cwd);
 		const workspaceTopLevelEntries = input.workspace ? listWorkspaceTopLevelEntries(cwd) : undefined;
 		const committerName = repoGitUser?.name || gitIdentity.gitName;
 		const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
-		const relevantMemories = deps.store.listRelevantMemories(input.member.id, input.workspace?.id ?? null, {
+		const relevantMemories = deps.store.listRelevantMemories(effectiveMember.id, input.workspace?.id ?? null, {
 			orgId: activeOrgId,
 		});
 		worker = deps.workerFactory({
 			cwd,
-			provider: input.member.provider,
-			model: input.member.model,
+			provider: effectiveMember.provider,
+			model: effectiveMember.model,
 			sessionDir: deps.sessionDir,
 			sessionFile,
 			noSession: deps.noSession,
@@ -293,13 +295,17 @@ export async function executeWithWorkerPass(
 				...bridge.env,
 				...(pstack ? { PA_PSTACK_DIR: pstack.root } : {}),
 				PA_TARGET_WORKSPACE_ROOT: input.workspace ? cwd : "__none__",
-				GIT_AUTHOR_NAME: gitIdentity.gitName,
-				GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
-				GIT_COMMITTER_NAME: committerName,
-				GIT_COMMITTER_EMAIL: committerEmail,
-				PA_MEMBER_ID: input.member.id,
-				PA_MEMBER_NAME: input.member.displayName,
-				PA_MEMBER_TITLE: input.member.roleTitle,
+				...(useRoleGitIdentity
+					? {
+							GIT_AUTHOR_NAME: gitIdentity.gitName,
+							GIT_AUTHOR_EMAIL: gitIdentity.gitEmail,
+							GIT_COMMITTER_NAME: committerName,
+							GIT_COMMITTER_EMAIL: committerEmail,
+						}
+					: {}),
+				PA_MEMBER_ID: effectiveMember.id,
+				PA_MEMBER_NAME: effectiveMember.displayName,
+				PA_MEMBER_TITLE: effectiveMember.roleTitle,
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
 				PA_CAN_PUBLISH: String(canPublish && !isArchitect),
 				PA_CAN_DELEGATE: String(canDelegate && !isArchitect),
@@ -312,7 +318,7 @@ export async function executeWithWorkerPass(
 				]),
 				PA_MEMBER_CONTEXT:
 					buildMemberSystemPrompt({
-						member: input.member,
+						member: effectiveMember,
 						template,
 						memories: relevantMemories,
 						workspace: input.workspace,

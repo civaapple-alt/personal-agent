@@ -262,15 +262,24 @@ export function buildMemberSystemPrompt(input: {
 	const organization = input.organization ?? null;
 	const gitIdentity = resolveEffectiveGitIdentity(input.member, organization);
 	const repoGitUser = input.repoGitUser;
+	const useRoleGitIdentity = Boolean(organization?.useRoleGitIdentity);
 	const identityLines = [
 		`- Member: \`${input.member.id}\` (${input.member.displayName} · ${input.member.roleTitle})`,
 		organization
 			? `- Organization: ${organization.name}${organization.description ? ` (${organization.description})` : ""}`
 			: null,
-		`- Git author (role identity): ${gitIdentity.gitName} <${gitIdentity.gitEmail}>`,
-		repoGitUser
-			? `- Git committer (repository user): ${repoGitUser.name} <${repoGitUser.email}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_* separately. Keep the global and repository Git configuration intact.`
-			: `- Git author and committer: ${gitIdentity.gitName} <${gitIdentity.gitEmail}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_*. Keep the global Git configuration intact.`,
+		...(useRoleGitIdentity
+			? [
+					`- Git author (role identity): ${gitIdentity.gitName} <${gitIdentity.gitEmail}>`,
+					repoGitUser
+						? `- Git committer (repository user): ${repoGitUser.name} <${repoGitUser.email}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_* separately. Keep the global and repository Git configuration intact.`
+						: `- Git author and committer: ${gitIdentity.gitName} <${gitIdentity.gitEmail}>. The environment sets GIT_AUTHOR_* and GIT_COMMITTER_*. Keep the global Git configuration intact.`,
+				]
+			: [
+					repoGitUser
+						? `- Git identity (repository default): ${repoGitUser.name} <${repoGitUser.email}>. Role Git authorship is disabled; use the repository's own Git configuration for commits and keep global and repository Git configuration intact.`
+						: `- Git identity: Role Git authorship is disabled; use the repository or host Git configuration as-is and keep global Git configuration intact.`,
+				]),
 		input.member.identitySummary ? `- Role background and expertise: ${input.member.identitySummary}` : null,
 	].filter(Boolean);
 	const sections: string[] = [

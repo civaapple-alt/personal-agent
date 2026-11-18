@@ -131,6 +131,7 @@ export function mapOrganizationRow(row: Record<string, unknown>): Organization {
 		name: String(row.name),
 		...(slug ? { slug } : {}),
 		gitEmailDomain: typeof row.git_email_domain === "string" ? row.git_email_domain : "",
+		useRoleGitIdentity: Boolean(row.use_role_git_identity),
 		description: typeof row.description === "string" ? row.description : "",
 		isDefault: Boolean(row.is_default),
 		...(workspacesDir ? { workspacesDir } : {}),

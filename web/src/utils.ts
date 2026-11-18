@@ -868,3 +868,37 @@ export function applyPrimaryContactToMembers(
 		m.isPrimaryContact === (m.id === primaryMemberId) ? m : { ...m, isPrimaryContact: m.id === primaryMemberId },
 	);
 }
+
+/** Applies per-organization AI role display/Git identity overrides onto member records. */
+export function applyOrgAiRoleOverrides(
+	members: TeamMemberDto[],
+	orgId: string | null | undefined,
+	orgAiRolesByOrgId?: Record<string, OrgAiRolesRosterEntry>,
+): TeamMemberDto[] {
+	const configs = orgId ? orgAiRolesByOrgId?.[orgId]?.configs : undefined;
+	if (!configs || configs.length === 0) return members;
+	const byId = new Map(configs.map((c) => [c.memberId, c]));
+	return members.map((m) => {
+		const cfg = byId.get(m.id);
+		if (!cfg) return m;
+		const nextGitName = cfg.gitNameOverride?.trim() || m.gitName;
+		const nextGitEmail = cfg.gitEmailOverride?.trim() || m.gitEmail;
+		const nextDisplayName = cfg.displayNameOverride?.trim() || m.displayName;
+		const nextModel = cfg.modelOverride?.trim() || m.model;
+		if (
+			nextGitName === m.gitName &&
+			nextGitEmail === m.gitEmail &&
+			nextDisplayName === m.displayName &&
+			nextModel === m.model
+		) {
+			return m;
+		}
+		return {
+			...m,
+			displayName: nextDisplayName,
+			model: nextModel,
+			gitName: nextGitName,
+			gitEmail: nextGitEmail,
+		};
+	});
+}

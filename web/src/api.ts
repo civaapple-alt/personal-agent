@@ -77,6 +77,8 @@ export interface OrganizationAiRoleConfigDto {
 	isPrimaryContact: boolean;
 	displayNameOverride: string | null;
 	modelOverride: string | null;
+	gitNameOverride?: string | null;
+	gitEmailOverride?: string | null;
 	updatedAt: string;
 }
 
@@ -98,6 +100,7 @@ export interface OrganizationDto {
 	name: string;
 	slug?: string;
 	gitEmailDomain: string;
+	useRoleGitIdentity?: boolean;
 	description: string;
 	isDefault?: boolean;
 	workspacesDir?: string | null;
@@ -814,6 +817,7 @@ export function createOrganization(input: {
 	id?: string;
 	name: string;
 	gitEmailDomain?: string;
+	useRoleGitIdentity?: boolean;
 	description?: string;
 	aiMemberIds?: string[];
 	primaryAiMemberId?: string;
@@ -826,7 +830,13 @@ export function createOrganization(input: {
 
 export function updateOrganization(
 	orgId: string,
-	input: { name?: string; gitEmailDomain?: string; description?: string; isDefault?: boolean },
+	input: {
+		name?: string;
+		gitEmailDomain?: string;
+		useRoleGitIdentity?: boolean;
+		description?: string;
+		isDefault?: boolean;
+	},
 ): Promise<{ organization: OrganizationDto }> {
 	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}`, {
 		method: "PATCH",
@@ -1293,14 +1303,21 @@ export function updateOrgAiRoles(
 		isPrimaryContact?: boolean;
 		displayNameOverride?: string | null;
 		modelOverride?: string | null;
+		gitNameOverride?: string | null;
+		gitEmailOverride?: string | null;
 	}>,
+	options?: { useRoleGitIdentity?: boolean },
 ): Promise<{
+	organization?: OrganizationDto;
 	configs: OrganizationAiRoleConfigDto[];
 	effectiveMembers: TeamMemberDto[];
 }> {
 	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/ai-roles`, {
 		method: "PUT",
-		body: JSON.stringify({ roles }),
+		body: JSON.stringify({
+			roles,
+			...(options?.useRoleGitIdentity !== undefined ? { useRoleGitIdentity: options.useRoleGitIdentity } : {}),
+		}),
 	});
 }
 

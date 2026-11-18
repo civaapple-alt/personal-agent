@@ -382,8 +382,10 @@ export class TeamOrchestrator {
 		const workspaceTopLevelEntries = input.workspace
 			? listWorkspaceTopLevelEntries(input.workspace.repoPath)
 			: undefined;
+		const effectiveMember = this.store.resolveMemberForOrg(organization?.id ?? matterForPrompt?.orgId, input.member);
 		return buildMemberSystemPrompt({
 			...input,
+			member: effectiveMember,
 			workspaceTopLevelEntries,
 			organization,
 			teamMembers: this.resolveMatterAiMembers(matterForPrompt),
@@ -711,7 +713,10 @@ export class TeamOrchestrator {
 				!aborted && !run.cancelled && !assignedIsArchitect
 					? updatedMatter.observerMemberIds
 							.filter((id, idx, arr) => id !== assignedMember.id && arr.indexOf(id) === idx)
-							.map((id) => this.store.getMember(id))
+							.map((id) => {
+								const raw = this.store.getMember(id);
+								return raw ? this.store.resolveMemberForOrg(updatedMatter.orgId, raw) : null;
+							})
 							.filter((member): member is TeamMember => member !== null)
 					: [];
 			const observerMessages =

@@ -23,6 +23,7 @@ export class OrganizationRepo {
 		name: string;
 		slug?: string;
 		gitEmailDomain?: string;
+		useRoleGitIdentity?: boolean;
 		description?: string;
 		isDefault?: boolean;
 		workspacesDir?: string | null;
@@ -43,19 +44,28 @@ export class OrganizationRepo {
 					}
 					const nextDefault =
 						input.isDefault !== undefined ? (input.isDefault ? 1 : 0) : existing.isDefault ? 1 : 0;
+					const nextUseRoleGitIdentity =
+						input.useRoleGitIdentity !== undefined
+							? input.useRoleGitIdentity
+								? 1
+								: 0
+							: existing.useRoleGitIdentity
+								? 1
+								: 0;
 					const nextSlug = input.slug?.trim() || existing.slug || slugifyOrganizationName(name, existing.id);
 					const nextWorkspacesDir =
 						input.workspacesDir !== undefined ? input.workspacesDir : (existing.workspacesDir ?? null);
 					this.db
 						.prepare(
 							`UPDATE organizations
-							 SET name = ?, slug = ?, git_email_domain = ?, description = ?, is_default = ?, workspaces_dir = ?, updated_at = ?
+							 SET name = ?, slug = ?, git_email_domain = ?, use_role_git_identity = ?, description = ?, is_default = ?, workspaces_dir = ?, updated_at = ?
 							 WHERE id = ?`,
 						)
 						.run(
 							name,
 							nextSlug,
 							gitEmailDomain,
+							nextUseRoleGitIdentity,
 							description,
 							nextDefault,
 							nextWorkspacesDir,
@@ -74,6 +84,7 @@ export class OrganizationRepo {
 		const slug = input.slug?.trim() || slugifyOrganizationName(name, id);
 		const hasDefault = Boolean(this.db.prepare("SELECT 1 FROM organizations WHERE is_default = 1 LIMIT 1").get());
 		const shouldBeDefault = input.isDefault !== undefined ? input.isDefault : !hasDefault;
+		const useRoleGitIdentity = input.useRoleGitIdentity === true ? 1 : 0;
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
 			if (shouldBeDefault) {
@@ -81,14 +92,15 @@ export class OrganizationRepo {
 			}
 			this.db
 				.prepare(
-					`INSERT INTO organizations (id, name, slug, git_email_domain, description, is_default, workspaces_dir, created_by_user_id, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					`INSERT INTO organizations (id, name, slug, git_email_domain, use_role_git_identity, description, is_default, workspaces_dir, created_by_user_id, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				)
 				.run(
 					id,
 					name,
 					slug,
 					gitEmailDomain,
+					useRoleGitIdentity,
 					description,
 					shouldBeDefault ? 1 : 0,
 					input.workspacesDir ?? null,
@@ -106,7 +118,13 @@ export class OrganizationRepo {
 
 	updateOrganization(
 		id: string,
-		patch: { name?: string; gitEmailDomain?: string; description?: string; isDefault?: boolean },
+		patch: {
+			name?: string;
+			gitEmailDomain?: string;
+			useRoleGitIdentity?: boolean;
+			description?: string;
+			isDefault?: boolean;
+		},
 	): Organization {
 		const existing = this.getOrganization(id);
 		if (!existing) throw new Error(`Organization not found: ${id}`);
@@ -114,6 +132,8 @@ export class OrganizationRepo {
 		const name = patch.name !== undefined ? patch.name.trim() || existing.name : existing.name;
 		const gitEmailDomain =
 			patch.gitEmailDomain !== undefined ? patch.gitEmailDomain.trim().replace(/^@+/, "") : existing.gitEmailDomain;
+		const useRoleGitIdentity =
+			patch.useRoleGitIdentity !== undefined ? patch.useRoleGitIdentity : Boolean(existing.useRoleGitIdentity);
 		const description = patch.description !== undefined ? patch.description.trim() : existing.description;
 		const nextDefault = patch.isDefault !== undefined ? patch.isDefault : existing.isDefault;
 		this.db.exec("BEGIN IMMEDIATE");
@@ -124,10 +144,10 @@ export class OrganizationRepo {
 			this.db
 				.prepare(
 					`UPDATE organizations
-					 SET name = ?, git_email_domain = ?, description = ?, is_default = ?, updated_at = ?
+					 SET name = ?, git_email_domain = ?, use_role_git_identity = ?, description = ?, is_default = ?, updated_at = ?
 					 WHERE id = ?`,
 				)
-				.run(name, gitEmailDomain, description, nextDefault ? 1 : 0, timestamp, id);
+				.run(name, gitEmailDomain, useRoleGitIdentity ? 1 : 0, description, nextDefault ? 1 : 0, timestamp, id);
 			this.db.exec("COMMIT");
 		} catch (err) {
 			this.db.exec("ROLLBACK");

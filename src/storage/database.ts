@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 	name TEXT NOT NULL,
 	slug TEXT NOT NULL DEFAULT '',
 	git_email_domain TEXT NOT NULL DEFAULT '',
+	use_role_git_identity INTEGER NOT NULL DEFAULT 0,
 	description TEXT NOT NULL DEFAULT '',
 	is_default INTEGER NOT NULL DEFAULT 0,
 	workspaces_dir TEXT,
@@ -79,6 +80,8 @@ CREATE TABLE IF NOT EXISTS organization_ai_roles (
 	provider_override TEXT,
 	model_override TEXT,
 	thinking_level_override TEXT,
+	git_name_override TEXT,
+	git_email_override TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
 	PRIMARY KEY (org_id, member_id)
@@ -371,8 +374,16 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 	};
 	ensureOrgCol("is_default", "is_default INTEGER NOT NULL DEFAULT 0");
 	ensureOrgCol("slug", "slug TEXT NOT NULL DEFAULT ''");
+	ensureOrgCol("use_role_git_identity", "use_role_git_identity INTEGER NOT NULL DEFAULT 0");
 	ensureOrgCol("workspaces_dir", "workspaces_dir TEXT");
 	ensureOrgCol("created_by_user_id", "created_by_user_id TEXT");
+	const orgAiRoleColumns = db.prepare("PRAGMA table_info(organization_ai_roles)").all();
+	if (!orgAiRoleColumns.some((column) => column.name === "git_name_override")) {
+		db.exec("ALTER TABLE organization_ai_roles ADD COLUMN git_name_override TEXT");
+	}
+	if (!orgAiRoleColumns.some((column) => column.name === "git_email_override")) {
+		db.exec("ALTER TABLE organization_ai_roles ADD COLUMN git_email_override TEXT");
+	}
 	const workspaceColumns = db.prepare("PRAGMA table_info(workspace_links)").all();
 	const ensureWsCol = (name: string, ddl: string) => {
 		if (!workspaceColumns.some((column) => column.name === name)) {
