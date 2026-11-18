@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -1307,5 +1308,153 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		await orchestrator.shutdown();
 		db.close();
+	}
+});
+
+test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots an isolated auth server", async () => {
+	const sandboxDir = mkdtempSync(join(tmpdir(), "pa-team-sandbox-test-"));
+	try {
+		const sandboxScript = resolve(process.cwd(), "scripts/start-team-sandbox.mjs");
+		const seedStdout = execFileSync(process.execPath, [sandboxScript, "--seed-only", `--dir=${sandboxDir}`], {
+			encoding: "utf8",
+		});
+		const seededSummary = JSON.parse(seedStdout);
+		assert.equal(seededSummary.seeded, true);
+		assert.equal(seededSummary.deliverableCount, 6);
+		assert.deepEqual(seededSummary.organizations, ["Alpha Studio", "Beta Labs"]);
+		assert.ok(seededSummary.inviteToken?.startsWith("orginv_"));
+
+		// Re-running on an already seeded dir is idempotent
+		const secondStdout = execFileSync(process.execPath, [sandboxScript, "--seed-only", `--dir=${sandboxDir}`], {
+			encoding: "utf8",
+		});
+		const secondSummary = JSON.parse(secondStdout);
+		assert.equal(secondSummary.seeded, false);
+		assert.equal(secondSummary.deliverableCount, 6);
+
+		// Reserve an ephemeral loopback port cleanly before spawning the sandbox server
+		const probe = createServer();
+		await new Promise<void>((resolveListen) => probe.listen(0, "127.0.0.1", () => resolveListen()));
+		const addr = probe.address();
+		assert.ok(addr && typeof addr === "object");
+		const port = addr.port;
+		await new Promise<void>((resolveClose) => probe.close(() => resolveClose()));
+
+		const child = spawn(
+			process.execPath,
+			[sandboxScript, `--dir=${sandboxDir}`, `--port=${port}`, "--host=127.0.0.1"],
+			{
+				cwd: process.cwd(),
+				stdio: ["ignore", "pipe", "pipe", "ipc"],
+			},
+		);
+		let output = "";
+		child.stdout?.on("data", (chunk) => {
+			output += chunk.toString();
+		});
+		child.stderr?.on("data", (chunk) => {
+			output += chunk.toString();
+		});
+		const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, rejectExit) => {
+			child.once("error", rejectExit);
+			child.once("exit", (code, signal) => resolveExit({ code, signal }));
+		});
+
+		try {
+			const deadline = Date.now() + 12_000;
+			while (!output.includes("团队版独立验证沙盒已就绪")) {
+				if (child.exitCode !== null || Date.now() > deadline) {
+					throw new Error(`Sandbox startup timed out: ${output}`);
+				}
+				await new Promise((resolveWait) => setTimeout(resolveWait, 40));
+			}
+
+			const base = `http://127.0.0.1:${port}`;
+			assert.equal((await fetch(`${base}/api/bootstrap`)).status, 401);
+			const anonSession = (await (await fetch(`${base}/api/auth/session`)).json()) as {
+				authenticated: boolean;
+				requireAuth: boolean;
+				needsAdminSetup: boolean;
+			};
+			assert.equal(anonSession.authenticated, false);
+			assert.equal(anonSession.requireAuth, true);
+			assert.equal(anonSession.needsAdminSetup, false);
+
+			const signIn = async (email: string): Promise<string> => {
+				const res = await fetch(`${base}/api/auth/login`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ email, password: seededSummary.password }),
+				});
+				assert.equal(res.status, 200, `Login failed for ${email}`);
+				const setCookie = res.headers.get("set-cookie");
+				assert.ok(setCookie);
+				return setCookie.split(";")[0]!;
+			};
+
+			const ownerCookie = await signIn("owner@alpha.local");
+			const peerCookie = await signIn("peer@alpha.local");
+			const viewerCookie = await signIn("viewer@alpha.local");
+			const adminCookie = await signIn("admin@sandbox.local");
+
+			const ownerDelivs = (await (
+				await fetch(`${base}/api/deliverables`, { headers: { Cookie: ownerCookie } })
+			).json()) as { deliverables: Array<{ id: string; title: string; version: number; orgId: string | null }> };
+			assert.equal(ownerDelivs.deliverables.length, 6);
+
+			const ownerBoot = (await (
+				await fetch(`${base}/api/bootstrap`, { headers: { Cookie: ownerCookie } })
+			).json()) as { organizations: Array<{ id: string; slug: string }> };
+			const betaOrg = ownerBoot.organizations.find((o) => o.slug === "beta-labs");
+			assert.ok(betaOrg);
+			const ownerBetaOnly = (await (
+				await fetch(`${base}/api/deliverables?orgId=${betaOrg.id}`, { headers: { Cookie: ownerCookie } })
+			).json()) as { deliverables: Array<{ title: string }> };
+			assert.equal(ownerBetaOnly.deliverables.length, 2);
+			assert.ok(ownerBetaOnly.deliverables.every((d) => d.title === "Beta 开放平台接口规范"));
+
+			const peerDelivs = (await (
+				await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerCookie } })
+			).json()) as { deliverables: Array<{ title: string }> };
+			assert.equal(peerDelivs.deliverables.length, 2);
+			assert.ok(peerDelivs.deliverables.every((d) => d.title === "Q4 发布计划与架构方案"));
+
+			const viewerDelivs = (await (
+				await fetch(`${base}/api/deliverables`, { headers: { Cookie: viewerCookie } })
+			).json()) as { deliverables: Array<{ id: string; title: string }> };
+			assert.equal(viewerDelivs.deliverables.length, 2);
+			assert.equal(
+				(
+					await fetch(`${base}/api/deliverables/${viewerDelivs.deliverables[0]!.id}/feedback`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json", Cookie: viewerCookie },
+						body: JSON.stringify({ feedback: "Viewer blocked", rating: "positive" }),
+					})
+				).status,
+				403,
+			);
+
+			const adminOverview = (await (
+				await fetch(`${base}/api/admin/overview`, { headers: { Cookie: adminCookie } })
+			).json()) as { users: Array<{ email: string; status: string }> };
+			assert.ok(
+				adminOverview.users.some((u) => u.email === "pending@sandbox.local" && u.status === "pending_review"),
+			);
+
+			assert.ok(child.connected, "Expected IPC channel to sandbox wrapper");
+			child.send("shutdown");
+			const exitRes = await Promise.race([
+				exited,
+				new Promise<never>((_, rejectTimeout) =>
+					setTimeout(() => rejectTimeout(new Error("Sandbox shutdown timed out")), 5000),
+				),
+			]);
+			assert.deepEqual(exitRes, { code: 0, signal: null });
+		} finally {
+			if (child.exitCode === null) child.kill("SIGKILL");
+			await exited.catch(() => {});
+		}
+	} finally {
+		rmSync(sandboxDir, { recursive: true, force: true });
 	}
 });

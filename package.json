@@ -16,6 +16,7 @@
     "build:web": "node scripts/build-web.mjs",
     "build": "tsc -p tsconfig.build.json && npm run build:web",
     "start:web": "npm run build:web && node src/server/main.ts",
+    "start:team:sandbox": "npm run build:web && node scripts/start-team-sandbox.mjs",
     "test": "node --test test/**/*.test.ts",
     "demo:rpc": "node src/demo/rpc-smoke.ts",
     "demo:team": "node src/demo/team-smoke.ts",

@@ -5,6 +5,7 @@
 | 脚本与命令 | 输入、输出及执行边界 |
 | --- | --- |
 | [build-web.mjs](build-web.mjs)：`npm run build:web` | 将 `web/src/main.tsx` 和 HTML 构建到 `web/dist/`，同时复制项目许可及第三方说明，不调用模型。`npm run build` 另外先编译后端 |
+| [start-team-sandbox.mjs](start-team-sandbox.mjs)：`npm run start:team:sandbox` | 构建网页并在系统临时目录启动独立团队版沙盒（`PA_REQUIRE_AUTH=1`，默认端口 `4399`，退出自动清理除非传 `--keep` 或 `--dir=`）；预置超级管理员、待审核账号、多组织 RBAC 角色（`org_owner`/`org_admin`/`org_member`/`org_viewer`）、公开与受限仓库及跨组织/多版本/私密/受限交付成果、验收反馈与候选经验，不触碰 `.data/`，登录界面保持标准表单 |
 | [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；源码/编译入口分别检查文件与内存数据库，使用临时工作目录、模板副本、端口并固定绑定 `127.0.0.1`，不继承 `PA_HOST`（Windows 用 junction）。检查 bootstrap、演示准备、角色隔离、首页与退出；非 Windows 文件库用 `SIGTERM`、内存库用 IPC，Windows 全用 IPC，不派发 AI |
 | [check-docs.mjs](check-docs.mjs)：`npm run check:docs` | 零额外依赖，核对仓库 Markdown 的本地链接、章节锚点、npm 脚本与直接 Node 文件入口，包含使用/开发/贡献指南、README/AGENTS 和岗位方法；跳过隐藏目录、依赖与构建物，只读且不运行文档中的命令 |
 | [check-open-source.mjs](check-open-source.mjs)：`npm run check:opensource` | 只读核对许可/版本、Git 跟踪路径与有限凭据模式；`--history` 检查可达对象，`--public` 对待审参考图返回非零。匹配值不输出，不检查 `.data/` 内容，不代表穷尽的凭据或权利审查 |

@@ -14,6 +14,7 @@
 | `PORT` | `4310` | [服务入口](../src/server/main.ts) | Web 工作台 HTTP/SSE 监听端口 |
 | `PA_HOST` | `127.0.0.1` | [服务入口](../src/server/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
+| `PA_SESSION_DIR` | `<cwd>/.data/pi-sessions` | [服务入口](../src/server/main.ts) | Pi CLI 会话文件持久化根目录；隔离脚本（如 [start-team-sandbox.mjs](../scripts/start-team-sandbox.mjs)）可单独重定向以避免写入 `.data/pi-sessions` |
 | `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../src/server/main.ts) → [HTTP 鉴权](../src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
 | `PA_WORKSPACES_ROOT` | `<dataDir>/workspaces` | [服务入口](../src/server/main.ts) → [Git 克隆](../src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
 | `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../src/server/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |

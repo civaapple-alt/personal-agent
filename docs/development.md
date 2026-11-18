@@ -20,7 +20,7 @@ npm run check:startup
 
 开发真实 AI 执行与运行 `demo:*` 任务必须另装本地 Pi CLI；它是当前唯一执行底座，不由 `npm ci` 安装。多平台安装与产品说明以 [pi.dev](https://pi.dev/) 为入口，模型匹配及本项目验证基线见[首次运行](getting-started.md)。离线测试的受控 Worker 不构成替代执行底座。
 
-需要实际操作工作台时运行 `npm run start:web`。它会使用默认 `.data/`，已有用户数据的检出目录不要直接拿来做破坏性开发实验。`check:startup` 自动使用临时库、模板目录和端口，适合验证启动；它不会证明模型协作可用。
+需要实际操作工作台时运行 `npm run start:web`。它会使用默认 `.data/`，已有用户数据的检出目录不要直接拿来做破坏性开发实验。若要快速验证团队版多组织权限、审核后台与多版本成果库交互而不影响 `.data/`，运行 `npm run start:team:sandbox` 在临时目录拉起预置完整样本数据的隔离沙盒（`PA_REQUIRE_AUTH=1`，退出自动清理）。`check:startup` 自动使用临时库、模板目录和端口，适合验证启动；它不会证明模型协作可用。
 
 ## 找到行为所属模块
 

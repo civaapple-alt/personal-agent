@@ -63,7 +63,9 @@ async function main(): Promise<void> {
 		noSession: false,
 		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
 		pstackDir: effectivePstackDir,
-		sessionDir: resolve(rootDir, ".data/pi-sessions"),
+		sessionDir: process.env.PA_SESSION_DIR?.trim()
+			? resolve(process.env.PA_SESSION_DIR.trim())
+			: resolve(rootDir, ".data/pi-sessions"),
 		skillsDir: customSkillsDir,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
