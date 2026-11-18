@@ -4,7 +4,7 @@
 
 产品经理关注需求与范围，研发经理核查技术方案，测试经理检查验收与风险，市场与营销负责人补充用户和市场依据。同一位成员可以参与不同项目，具体工作通过事项关联对应的组织、仓库和资料。
 
-**当前为 0.6.0 开源准备版，尚未正式发布。** 已有可运行的本地网页工作台，执行底座为本机 Pi RPC。最近本地发布为 [0.5.0](docs/releases/v0.5.0.md)，新版范围及公开前待办见 [0.6.0 准备说明](docs/releases/v0.6.0.md)。
+**0.6.0 是首个公开发布版本。** 工作台在本机运行，通过 Pi RPC 执行 AI 任务。查看[版本说明](docs/releases/v0.6.0.md)或从 [GitHub Release](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.0)下载源码包和预构建包。
 
 ## 可以怎样使用
 
@@ -85,4 +85,4 @@ PA_REQUIRE_AUTH=1 PA_HOST=0.0.0.0 PORT=4310 npm run start:web
 
 项目原创代码、岗位定义和文档采用 [MIT](LICENSE)，第三方改编与分发范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。`private: true` 防止误发 npm，不影响 MIT 授权。
 
-当前没有公开仓库地址、托管服务或正式 0.6.0 下载页。发布准备不等于已对外发布，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+完整变更见 [CHANGELOG.md](CHANGELOG.md)。提交问题和补丁前，请阅读[贡献指南](CONTRIBUTING.md)。

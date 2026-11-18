@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
+First public MIT release. See the [0.6.0 release guide](docs/releases/v0.6.0.md) for the feature summary, downloads, and validation scope.
+
 ### Team scope, Skill creation, and pstack update reliability
 
 - Apply memory and matter access rules to SSE, memory provenance, and experience review workers. Revalidate account sessions on active streams and close the signed-out session immediately. Legacy uploads now inherit access from the message that references them.
@@ -65,20 +69,20 @@ All notable changes to Personal Agent are documented in this file.
 
 ### Local notes isolation
 
-- Move early V1–V4 prototypes (`docs/prototypes/`) and third-party/reference notes (`docs/references/`, including the three unconfirmed reference `.webp` images) out of Git tracking into gitignored `.notes/`, block `.notes/` in `scripts/release-policy.mjs` (`forbiddenReleasePath`), and update public documentation links and `v0.6.0.md` status accordingly. Pre-move commits remain in local Git history unless a clean public snapshot or history rewrite is used.
+- Keep early V1–V4 prototypes and research notes in the ignored `.notes/` directory. Preserve the local commit history and omit these materials from the public history.
 
 ### Open-source documentation
 
 - Make local Pi CLI an explicit required AI runtime dependency, point users to pi.dev for product information and platform-specific installers, and place Pi setup before workbench startup. Keep the tested Pi version separate from installation requirements and from Personal Agent platform validation.
 - Reorganize the project README around the product, a concrete collaboration example, current capabilities and limits, and reader-specific entry points. Add installation, everyday use, design rationale, development, contribution and security guides.
 - Document Pi/model setup, actual participation modes, version feedback, partial data-path overrides, local execution privileges and network exposure. Clarify early product questions against current implementation; retain historical prototypes and evaluation failures.
-- Record remaining publication prerequisites without inventing a repository URL, private security contact or support commitment. Documentation changes do not establish new runtime capabilities or model-quality improvements.
+- Document the public repository and the private GitHub security reporting channel.
 - Extend the read-only documentation check to all repository Markdown, including usage and contribution guides, role methods and historical references, with local-link, anchor, command and root-navigation checks.
 
-### 0.6.0 MIT preparation
+### MIT release
 
-- Set development metadata to 0.6.0 and MIT while retaining npm `private: true`; no 0.6.0 tag or public release is created. Add the project license, upstream pstack adaptation attribution and bundled React runtime notices.
-- Preserve local prototype/research history, use official reference links, and exclude three unconfirmed third-party images from Git archives. Archive exclusions do not remove them from repository history; public-history scope remains a release decision.
+- Release 0.6.0 under MIT and retain npm `private: true`. Include the project license, pstack adaptation attribution, and bundled React runtime notices in the release.
+- Use official reference links and exclude three third-party reference images from the public history and downloads.
 - Add a read-only current/history audit with redacted finite credential checks and a stricter public-scope option. Share private-path guards with the packager, require legal notices in archives, and copy notices into web output. Generalize developer-specific paths and prior business-project names in current documentation.
 - Add `package:release -- --preview` for commit-scoped source/prebuilt previews, isolated builds and extracted startup checks without occupying the final version directory, changing tags or publishing externally.
 ### Natural pstack method selection
@@ -619,8 +623,7 @@ All notable changes to Personal Agent are documented in this file.
     streaming, and bidirectional dialogs.
 - **Engineering Baseline**:
   - Added TypeScript strict configuration (`tsconfig.json`, `tsconfig.build.json`) targeting Node.js `>= 22.19.0`.
-  - Added `@biomejs/biome` `2.3.5` (`biome.json`) aligned with `pi-source` (`tab` indentation, `120`
-    line width, `useConst`).
+  - Added `@biomejs/biome` `2.3.5` (`biome.json`) with tab indentation, a 120-column line width, and `useConst`.
   - Added root `README.md` and `CHANGELOG.md`.
 
 ### Documentation

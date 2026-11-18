@@ -68,6 +68,6 @@ These files were saved from Grok Bot's official product materials for local rese
 - `docs/references/grok-bot/official-learning.webp`
 - `docs/references/grok-bot/official-collaboration.webp`
 
-They were moved out of the tracked source tree into gitignored `.notes/references/`; `.gitattributes` also excludes any `docs/references/grok-bot/*.webp` pattern from `git archive` and the source/prebuilt archives derived from it, while public-facing documentation uses official source links (`https://x.ai/bot`). Untracking does not remove files from prior local Git commits; before publishing an existing Git history, establish permission or prepare a clean public snapshot that omits those historical objects.
+These files remain in the local research notes. The public Git history and release archives omit them. Public documentation links to [the official product site](https://x.ai/bot).
 
 Pi, pstack, Grok Bot and other referenced products are separate projects. References and compatibility work do not imply affiliation or endorsement.
