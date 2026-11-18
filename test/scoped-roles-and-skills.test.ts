@@ -854,6 +854,67 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 			"utf8",
 		);
 		assert.match(skillOnDisk, /name: note-digest-sop/);
+
+		// 12. Regression: non-superAdmin session user who owns/belongs to an org can start Role Architect (even if orgId: null is sent)
+		store.createUser({
+			email: "orphan@test.local",
+			displayName: "Orphan",
+			password: "UserPass123!",
+			status: "active",
+		});
+		const orphanLogin = await fetch(`${base}/api/auth/login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "orphan@test.local", password: "UserPass123!" }),
+		});
+		const orphanCookie = extractCookie(orphanLogin);
+		assert.equal(
+			(
+				await fetch(`${base}/api/matters`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", Cookie: orphanCookie },
+					body: JSON.stringify({
+						mode: "dispatch",
+						prompt: "No org yet",
+						preferredMemberId: BUILTIN_ROLE_ARCHITECT_TEMPLATE.id,
+						aiMemberIds: [BUILTIN_ROLE_ARCHITECT_TEMPLATE.id],
+						orgId: null,
+					}),
+				})
+			).status,
+			403,
+		);
+		const orphanOrgRes = await fetch(`${base}/api/organizations`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: orphanCookie },
+			body: JSON.stringify({ name: "civa-team" }),
+		});
+		assert.equal(orphanOrgRes.status, 201);
+		const orphanOrgId = ((await orphanOrgRes.json()) as { organization: { id: string } }).organization.id;
+		const architectCreateRes = await fetch(`${base}/api/matters`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: orphanCookie },
+			body: JSON.stringify({
+				mode: "dispatch",
+				prompt: "提供一个 github ci 检查的角色",
+				preferredMemberId: BUILTIN_ROLE_ARCHITECT_TEMPLATE.id,
+				aiMemberIds: [BUILTIN_ROLE_ARCHITECT_TEMPLATE.id],
+				observersEnabled: false,
+				observerMemberIds: [],
+				orgId: null,
+			}),
+		});
+		assert.equal(architectCreateRes.status, 202);
+		const architectMatter = ((await architectCreateRes.json()) as { matter: { id: string; orgId: string | null } })
+			.matter;
+		assert.equal(architectMatter.orgId, orphanOrgId);
+		for (let i = 0; i < 80; i++) {
+			const detail = (await (
+				await fetch(`${base}/api/matters/${architectMatter.id}`, { headers: { Cookie: orphanCookie } })
+			).json()) as { activeRun: unknown };
+			if (!detail.activeRun) break;
+			await new Promise((r) => setTimeout(r, 25));
+		}
 	} finally {
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		await orchestrator.shutdown();

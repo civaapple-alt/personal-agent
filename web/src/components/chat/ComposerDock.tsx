@@ -41,6 +41,7 @@ interface ComposerDockProps {
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	composerMode: "discussion" | "dispatch";
 	isOwner: boolean;
+	allowUnboundOrg?: boolean;
 	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
 	sendBlockedByTurn: boolean;
@@ -78,6 +79,7 @@ export function ComposerDock({
 	composerRef,
 	composerMode,
 	isOwner,
+	allowUnboundOrg = true,
 	isArchitectMode = false,
 	isTurnRunning,
 	sendBlockedByTurn,
@@ -340,7 +342,11 @@ export function ComposerDock({
 												{org.isDefault ? "（默认）" : ""}
 											</option>
 										))}
-										<option value="">不归属组织</option>
+										{allowUnboundOrg && (
+											<option value="">
+												{organizations.length === 0 ? "暂无组织（请先在「我的团队」新建）" : "不归属组织"}
+											</option>
+										)}
 									</select>
 									<select
 										className="composer-ctx-select"

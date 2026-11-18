@@ -13,9 +13,7 @@
 | 测试 | [测试计划](test-planning/SKILL.md)、[回归影响](regression-impact-analysis/SKILL.md)、[验收验证](acceptance-verification/SKILL.md) |
 | 市场与营销 | [市场研究](market-research/SKILL.md)、[竞品分析](competitor-analysis/SKILL.md)、[发布内容](launch-copy/SKILL.md) |
 
-- [角色资产](../roles/README.md)的 `skills` 名称解析到本层对应的 `SKILL.md`。
-  - 绝对路径、相对角色文件的路径等解析细节由 [execution-context.ts](../src/orchestrator/execution-context.ts) 维护。
-  - Worker 用显式 `--skill` 装载，文件缺失会报错，不依赖目录 README 被模型自动发现。
+- [角色资产](../roles/README.md)的 `skills` 可用方法名称或角色包内的相对引用 `skills/<name>/SKILL.md`。名称按角色作用域查找，依次回退到平台通用与内置目录。宿主校验实际文件路径位于允许的目录，再用 `--skill` 装载。引用绝对路径、越界或文件缺失时返回错误。见[名称解析](../src/roles/capabilities.ts)与[执行装配](../src/orchestrator/execution-context.ts)。
 
 模型根据可用 Skill 的 `name` 和 `description` 判断是否需要读取正文。内置 Skill 和 [pstack 方法目录](../src/roles/pstack.ts)都沿用这两个发现字段。Role 的 `keywords` 用于[事项派单和立项](../roles/README.md)。
 

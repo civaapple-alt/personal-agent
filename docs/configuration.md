@@ -101,7 +101,7 @@
 | 字段 | 是否必填 | 默认 / 合法值 | 说明 |
 | --- | --- | --- | --- |
 | `id` | 必填 | 最长 128 字符的小写字母、数字和连接短横线，如 `contract-reviewer`；不接受 `readme` | 成员主键与文件名；新建冲突返回 409，导入同 ID 可更新业务模板，内置 `role-architect` 不可覆盖 |
-| `name` | 必填 | 字符串 | 团队展示名（如「产品经理」） |
+| `name` | 必填 | 字符串 | 团队展示名。内置模板使用英文，如 `Product Manager` |
 | `title` | 必填 | 字符串 | 岗位英文头衔（如 `Product Manager`） |
 | `version` | 必填 | 版本串（如 `1.0.0`） | 模板版本号 |
 | `defaultProvider` | 必填 | 字符串（内置默认 `kimi-coding`） | 默认模型提供商 |
@@ -110,21 +110,22 @@
 | `shareable` | 可选 | 布尔，默认 `true` | 是否允许作为通用岗位定义导出 |
 | `isPrimaryContact` | 可选 | 布尔，默认 `false` | 是否为新安装默认主要联系人（无关键词命中时兜底） |
 | `roleKind` | 可选 | `"architect"` 或省略 | 为 `"architect"` 时标识系统元角色（如内置「角色架构师」），与普通业务团队名录隔离 |
-| `keywords` | 可选 | 字符串数组 `[]` | 仅用于**新建事项未指定成员**时的初始关键词匹配评分 |
+| `keywords` | 可选 | 字符串数组 `[]` | 用于事项初始派单与立项评分。内置业务角色同时保留中文岗位名作为别名 |
+| `responsibilityKeywords` | 可选 | 字符串数组 | 为本地立项评分显式提供职责匹配词。省略时从职责正文推导 |
 | `tools` | 可选 | 字符串数组 `[]` | 声明启用工具；`mcp` 分类标记会在装配时过滤；`TeamOrchestrator` 未读取到声明时兜底 `["read", "bash", "edit", "write"]`；通过架构师/快速设计官新建的非研发角色按最小权限默认收缩至只读或无工具 |
-| `skills` | 可选 | 字符串数组 `[]` | 技能清单。解析顺序：绝对路径 → 含 `/` 时相对角色文件目录 → `skills/<name>/SKILL.md` |
+| `skills` | 可选 | 字符串数组 `[]` | 使用 Skill 名称或角色包相对引用 `skills/<name>/SKILL.md`。名称优先从角色的个人或组织范围查找，再查平台通用和内置目录 |
 | `mcpDependencies` | 可选 | 字符串数组 `[]` | 声明依赖的 MCP 服务名，启动前校验存在对应 `mcp__<name>__*` 工具 |
 | `antiJobs` | 可选 | 字符串数组 `[]` | 显式「不做清单 / 边界约束」（One Job + Explicit Anti-Jobs）；每轮通过 `before_agent_start` 与单兵模式上下文注入提醒 |
 
 ### 正文结构要求
 
-正文支持五个标准二级标题，每轮通过 `before_agent_start` 注入最新角色上下文：
+正文使用以下五个标准二级标题。解析器也接受旧版中文标题。每轮通过 `before_agent_start` 注入最新角色上下文。
 
-- `## 职责与边界`
-- `## 技能与工作方法`
-- `## 工具与环境依赖`
-- `## 协作和沟通约定`
-- `## 交付与验证方式`
+- `## Responsibilities and Boundaries`
+- `## Skills and Methods`
+- `## Tools and Environment`
+- `## Collaboration and Communication`
+- `## Delivery and Verification`
 
 ---
 

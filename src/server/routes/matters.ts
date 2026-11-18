@@ -555,9 +555,11 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		const orgId = boundWorkspace
 			? boundWorkspace.orgId
-			: hasExplicitOrg
+			: requestedOrgId !== null
 				? requestedOrgId
-				: resolveActorDefaultOrgId(ctx, actor);
+				: hasExplicitOrg && !(actor.authKind === "session" && !isSuperAdminActor(actor))
+					? null
+					: resolveActorDefaultOrgId(ctx, actor);
 		if (orgId && !canAccessOrganization(store, actor, orgId)) {
 			sendError(res, 403, "无权在非所属组织内创建事项");
 			return true;

@@ -164,6 +164,13 @@ export function useMatterActions({
 				const preferredForCreate =
 					options?.preferredMemberId ?? (selectedMemberId === "auto" ? undefined : selectedMemberId);
 				const isArchitectCreate = preferredForCreate === ROLE_ARCHITECT_MEMBER_ID;
+				const defaultUserOrgId =
+					bootstrap?.organizations.find((o) => o.isDefault)?.id ?? bootstrap?.organizations[0]?.id ?? "";
+				const canLeaveOrgUnbound =
+					bootstrap?.authKind !== "session" || bootstrap?.accountUser?.platformRole === "super_admin";
+				const orgForCreate = isArchitectCreate
+					? selectedOrgId || defaultUserOrgId || undefined
+					: selectedOrgId || (canLeaveOrgUnbound ? null : defaultUserOrgId || undefined);
 				const created = await createMatter({
 					mode: effectiveMode,
 					prompt: text,
@@ -171,7 +178,7 @@ export function useMatterActions({
 					files: filesPayload.length > 0 ? filesPayload : undefined,
 					preferredMemberId: preferredForCreate,
 					workspaceId: isArchitectCreate ? undefined : selectedWorkspaceId || undefined,
-					orgId: isArchitectCreate ? null : selectedOrgId || null,
+					orgId: orgForCreate,
 					aiMemberIds: isArchitectCreate ? [ROLE_ARCHITECT_MEMBER_ID] : draftAiMemberIds,
 					observersEnabled: isArchitectCreate
 						? false

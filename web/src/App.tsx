@@ -212,8 +212,10 @@ export function App() {
 			if (prev && data.organizations.some((o) => o.id === prev)) return prev;
 			if (resolvedWs?.orgId) return resolvedWs.orgId;
 			const savedOrg = readStoredSetting("pa.defaultOrgId", "__unset__");
+			const canLeaveOrgUnbound = data.authKind !== "session" || data.accountUser?.platformRole === "super_admin";
 			if (savedOrg !== "__unset__") {
-				return savedOrg && data.organizations.some((o) => o.id === savedOrg) ? savedOrg : "";
+				if (savedOrg && data.organizations.some((o) => o.id === savedOrg)) return savedOrg;
+				if (savedOrg === "" && canLeaveOrgUnbound) return "";
 			}
 			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
 		});

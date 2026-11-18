@@ -18,7 +18,8 @@ PA_PSTACK_DIR=/path/to/pstack npm run start:web
 
 1. 以**超级管理员**（或未启用强制认证时的本机所有者）进入工作台 **设置 → 扩展插件**（`#/settings/extensions`）。
 2. 在 **pstack-extension** 卡片内确认仓库地址（默认 `https://github.com/backnotprop/pstack.git`），点击 **「克隆并启用 pstack」**。
-3. 服务端会自动克隆（或复检复用已有目录）到 `<dataDir>/extensions/repo/<仓库名>`（默认仓库为 `.data/extensions/repo/pstack`），校验 `plugin.json` 与 `skills/poteto-mode/SKILL.md` 完整性后立即生效，并将该路径持久化保存在 `platform_settings.pstackDir` 中；后续不传 `PA_PSTACK_DIR` 重启服务仍会自动加载。可在同一卡片内按需「同步更新」或「停用」（如通过启动环境变量 `PA_PSTACK_DIR` 启动，则环境变量优先接管）。
+3. 服务端克隆到 `<dataDir>/extensions/repo/<仓库名>` 或复检已有目录。默认位置为 `.data/extensions/repo/pstack`。校验通过后，服务端保存路径到 `platform_settings.pstackDir`，后续启动的 Pi Worker 使用该配置。不传 `PA_PSTACK_DIR` 重启时也会读取保存的路径。
+4. 在同一卡片可选择「同步更新」或「停用」。更新已有 Git 克隆时使用 `git pull --ff-only`。如果通过 `PA_PSTACK_DIR` 指定了启动路径，先移除启动配置并重启，再从页面停用。
 
 `PA_PSTACK_DIR` 指向同时包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md` 的完整包根目录。无论通过启动参数还是页面克隆目录，运行时均以只读方式读取其 Markdown 正文，不自动修改包内容；程序化调用仍可向 `TeamOrchestrator` 传入 `pstackDir`。
 

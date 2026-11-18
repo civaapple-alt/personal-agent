@@ -60,6 +60,7 @@
   - [App.tsx](App.tsx)、[AuthGateView](components/AuthGateView.tsx) 与 [Sidebar](components/Sidebar.tsx) 区分 `loopback`（本机免密态显示「切换账号」）、`session`（账号会话显示「退出登录」）与 `legacy_token`（内网体验访客显示「恢复所有者/退出」）；携带 `?invite=orginv_...` 访问时若当前浏览器尚未登录则默认展开含邀请组织提示的「注册账号」表单，若已登录则弹出确认弹窗由用户选择以当前账号加入或「退出并注册新成员」（不静默自动消耗同浏览器旧会话的邀请次数）。
   - [MaterialsView](components/MaterialsView.tsx) 登记仓库支持切换「从 Git 地址克隆到组织主目录（`cloned`）」与受平台策略控制的「指定服务器本地目录（`local`）」，并可配置仓库可见范围（`org` / `restricted` 授权成员）。
   - [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 支持设置新建事项范围（`org` 组织可见 / `private` 仅发起人与指定人类成员）与选择组织人类同事；已授权的 `org_member` 可直接向 AI 派发任务。
+  - [ComposerDock](components/chat/ComposerDock.tsx) 对团队版非超管账号隐藏「不归属组织」。[useMatterActions](hooks/useMatterActions.ts) 在普通新建事项和 Role Architect 对话中提交用户所选或默认可用组织。Role Architect 对话隐藏仓库选择，组织归属由服务端复核。
   - 支持默认组织徽标与「设为默认」切换、组织创建/编辑、新仓库默认选定默认组织（可选独立无组织）、
     仓库 `Git Committer` 真实用户展示、成员 `Git Author（角色）` vs `Git Committer（真实用户）` 与三层记忆筛选；
     经验表单与卡片亦优先预选默认组织。

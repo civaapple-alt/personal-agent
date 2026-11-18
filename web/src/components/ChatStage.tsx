@@ -474,7 +474,10 @@ export function ChatStage({
 		[matterDetail, isTurnRunning],
 	);
 
-	const effectiveOrgId = selectedWorkspace ? selectedWorkspace.orgId : selectedOrgId || null;
+	const fallbackOrgId = !isSuperAdmin
+		? ((organizations.find((o) => o.isDefault) ?? organizations[0])?.id ?? null)
+		: null;
+	const effectiveOrgId = selectedWorkspace ? selectedWorkspace.orgId : selectedOrgId || fallbackOrgId;
 	const selectedOrganization = useMemo(
 		() => (effectiveOrgId ? (organizations.find((org) => org.id === effectiveOrgId) ?? null) : null),
 		[effectiveOrgId, organizations],
@@ -818,6 +821,7 @@ export function ChatStage({
 				composerRef={composerRef}
 				composerMode={composerMode}
 				isOwner={isOwner}
+				allowUnboundOrg={isSuperAdmin || organizations.length === 0}
 				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}
 				sendBlockedByTurn={sendBlockedByTurn}

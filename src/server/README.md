@@ -35,6 +35,7 @@
   - 任何已启用账号成员均可在 `maxOrgs` 配额内自建组织（`POST /api/organizations`），经 `/api/organizations/:id/members*`、`invites*`、`POST /api/organizations/join` 与 `PUT /api/organizations/:id/ai-roles` 配置组织人类成员、邀请链接与启用 AI 角色（`ensureOrgEnabledAiRequest` 拦截未启用角色）。
   - `POST /api/workspaces` 支持 `sourceType: "clone"`（校验 `cloneUrl` 禁用 `file:`/`ext::`/参数注入后安全克隆至 `<workspacesRoot>/<orgSlug>/`）与 `sourceType: "local"`（非超管受 `allowLocalWorkspacePath`、`localWorkspaceAllowlist` 与内部运行目录隔离保护），并按 `visibility: "org" | "restricted"` 控制可见成员。
   - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 与受限内网 `legacy_token` 仍禁止直接触发 AI；`/api/bootstrap`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL 严格隔离。
+  - `POST /api/matters` 优先使用仓库所属组织，再使用请求中指定的组织。普通账号在未绑定仓库时省略 `orgId`，或传入 `null`、空字符串，均解析为其所属的默认组织或首个组织。无所属组织时返回 403。Role Architect 与普通事项共用此规则。
   - 多人类受限协作与显式讨论隔离（兼容模式）：
   - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式
     登出）；非回环局域网与 `requireAuth: true` 须通过 `/api/auth/login` 签发 `pa_session` 或携带 `x-pa-token` / `Bearer`。
