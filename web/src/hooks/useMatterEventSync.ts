@@ -1,4 +1,4 @@
-import { type MutableRefObject, useEffect, useState } from "react";
+import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto } from "../api.ts";
 import { formatHashRoute, type NavTab } from "../hashRouter.ts";
 
@@ -6,7 +6,6 @@ interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
 	activeTabRef: MutableRefObject<NavTab>;
 	selectedMatterIdRef: MutableRefObject<string | null>;
-	progressByMatter: Record<string, MatterProgressDto>;
 	setProgressByMatter: React.Dispatch<React.SetStateAction<Record<string, MatterProgressDto>>>;
 	setProgressStartedAt: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 	setStreamingDelta: React.Dispatch<React.SetStateAction<string>>;
@@ -20,12 +19,11 @@ interface UseMatterEventSyncParams {
 	applyRevokedSession: (message?: string) => void;
 }
 
-/** Subscribes to `/api/events` SSE notifications, tracks active turn elapsed timers, and handles auth revocation. */
+/** Subscribes to `/api/events` SSE notifications, tracks active turn start times, and handles auth revocation. */
 export function useMatterEventSync({
 	authStatus,
 	activeTabRef,
 	selectedMatterIdRef,
-	progressByMatter,
 	setProgressByMatter,
 	setProgressStartedAt,
 	setStreamingDelta,
@@ -38,15 +36,6 @@ export function useMatterEventSync({
 	refreshDetail,
 	applyRevokedSession,
 }: UseMatterEventSyncParams) {
-	const [nowMs, setNowMs] = useState(() => Date.now());
-	const activeProgressCount = Object.keys(progressByMatter).length;
-
-	useEffect(() => {
-		if (activeProgressCount === 0) return;
-		const timer = setInterval(() => setNowMs(Date.now()), 1000);
-		return () => clearInterval(timer);
-	}, [activeProgressCount]);
-
 	useEffect(() => {
 		if (authStatus !== "authenticated") return;
 		const clearMatterProgress = (matterId: string) => {
@@ -180,6 +169,4 @@ export function useMatterEventSync({
 		refreshDetail,
 		applyRevokedSession,
 	]);
-
-	return nowMs;
 }

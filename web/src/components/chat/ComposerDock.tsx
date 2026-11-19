@@ -22,7 +22,8 @@ import {
 	MAX_COMPOSER_IMAGES,
 	shouldFoldPastedText,
 } from "../../imageAttachments.ts";
-import { formatByteSize, formatElapsedDuration, STAGE_LABELS } from "../../utils.ts";
+import { formatByteSize, STAGE_LABELS } from "../../utils.ts";
+import { ElapsedTimer } from "../ElapsedTimer.tsx";
 
 export interface PreviewableTextAttachment {
 	id?: string;
@@ -60,7 +61,7 @@ interface ComposerDockProps {
 	selectedWorkspaceId: string;
 	selectedMatterId: string | null;
 	activeMatterProgress: MatterProgressDto | null;
-	elapsedSeconds: number;
+	progressStartedAt: number | null;
 	organizations: OrganizationDto[];
 	orgFilteredWorkspaces: WorkspaceDto[];
 	onCloseRoster: () => void;
@@ -104,7 +105,7 @@ export function ComposerDock({
 	selectedWorkspaceId,
 	selectedMatterId,
 	activeMatterProgress,
-	elapsedSeconds,
+	progressStartedAt,
 	organizations,
 	orgFilteredWorkspaces,
 	onCloseRoster,
@@ -393,7 +394,7 @@ export function ComposerDock({
 									{STAGE_LABELS[activeMatterProgress.stage]}
 								</span>
 								<span className="composer-run-label">{activeMatterProgress.label}</span>
-								<span className="composer-run-elapsed">{formatElapsedDuration(elapsedSeconds)}</span>
+								<ElapsedTimer className="composer-run-elapsed" startedAt={progressStartedAt} />
 							</div>
 							<div className="composer-run-actions">
 								{isOwner && sendBlockedByTurn && (

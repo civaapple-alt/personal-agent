@@ -26,7 +26,7 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
-import { type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
+import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
 import { useAuthSession } from "./hooks/useAuthSession.ts";
 import { useComposerDraft } from "./hooks/useComposerDraft.ts";
 import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
@@ -35,6 +35,7 @@ import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
 import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useMatterScope } from "./hooks/useMatterScope.ts";
 import { useRsiDistill } from "./hooks/useRsiDistill.ts";
+import { useStableCallback } from "./hooks/useStableCallback.ts";
 import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
 import { getBotTheme } from "./utils.ts";
 
@@ -235,11 +236,10 @@ export function App() {
 		void refreshDetail(selectedMatterId).catch(() => {});
 	}, [authStatus, selectedMatterId, refreshDetail]);
 
-	const nowMs = useMatterEventSync({
+	useMatterEventSync({
 		authStatus,
 		activeTabRef,
 		selectedMatterIdRef,
-		progressByMatter,
 		setProgressByMatter,
 		setProgressStartedAt,
 		setStreamingDelta,
@@ -567,9 +567,40 @@ export function App() {
 
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
 	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
-	const elapsedSeconds = selectedMatterId
-		? Math.max(0, Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000))
-		: 0;
+	const activeProgressStartedAt = selectedMatterId ? (progressStartedAt[selectedMatterId] ?? null) : null;
+
+	// Stable handlers keep the memoized Sidebar from re-rendering on every streamed text delta.
+	const handleCloseMobileNav = useStableCallback(() => setMobileNavOpen(false));
+	const handleSidebarNavigate = useStableCallback((route: HashRoute) => {
+		setMobileNavOpen(false);
+		navigateRoute(route);
+	});
+	const handleSidebarToggleMember = useStableCallback((memberId: string) => {
+		setMobileNavOpen(false);
+		const nextSelected =
+			activeTab === "chats" && selectedMatterId === null && selectedMemberId === memberId ? "auto" : memberId;
+		const pickingArchitect = isArchitectMemberId(nextSelected, bootstrap?.members, templateByRoleId);
+		if (activeTab !== "chats" || selectedMatterId !== null) {
+			navigateRoute({ tab: "chats", isNewMatter: true });
+		}
+		setSelectedMemberId(nextSelected);
+		if (pickingArchitect) {
+			setDraftAiMemberIds([nextSelected]);
+			initiation.setDraftPresetMode("solo");
+			setDraftObserversEnabled(false);
+		} else {
+			setDraftAiMemberIds(null);
+		}
+		composerRef.current?.focus();
+	});
+	const handleSidebarNewMatter = useStableCallback(() => {
+		setMobileNavOpen(false);
+		startNewMatter();
+	});
+	const handleSidebarSwitchOrLogout = useStableCallback(() => {
+		setMobileNavOpen(false);
+		void handleLogoutOrRestore();
+	});
 
 	if (authStatus !== "authenticated") {
 		return <AuthGateView status={authStatus} {...auth.gateProps} />;
@@ -627,40 +658,12 @@ export function App() {
 				sseConnected={sseConnected}
 				searchQuery={searchQuery}
 				mobileOpen={mobileNavOpen}
-				onCloseMobile={() => setMobileNavOpen(false)}
+				onCloseMobile={handleCloseMobileNav}
 				onSearchQueryChange={setSearchQuery}
-				onNavigate={(route) => {
-					setMobileNavOpen(false);
-					navigateRoute(route);
-				}}
-				onToggleMember={(memberId) => {
-					setMobileNavOpen(false);
-					const nextSelected =
-						activeTab === "chats" && selectedMatterId === null && selectedMemberId === memberId
-							? "auto"
-							: memberId;
-					const pickingArchitect = isArchitectMemberId(nextSelected, bootstrap?.members, templateByRoleId);
-					if (activeTab !== "chats" || selectedMatterId !== null) {
-						navigateRoute({ tab: "chats", isNewMatter: true });
-					}
-					setSelectedMemberId(nextSelected);
-					if (pickingArchitect) {
-						setDraftAiMemberIds([nextSelected]);
-						initiation.setDraftPresetMode("solo");
-						setDraftObserversEnabled(false);
-					} else {
-						setDraftAiMemberIds(null);
-					}
-					composerRef.current?.focus();
-				}}
-				onNewMatter={() => {
-					setMobileNavOpen(false);
-					startNewMatter();
-				}}
-				onSwitchOrLogout={() => {
-					setMobileNavOpen(false);
-					void handleLogoutOrRestore();
-				}}
+				onNavigate={handleSidebarNavigate}
+				onToggleMember={handleSidebarToggleMember}
+				onNewMatter={handleSidebarNewMatter}
+				onSwitchOrLogout={handleSidebarSwitchOrLogout}
 			/>
 
 			<main className="main-stage">
@@ -732,7 +735,7 @@ export function App() {
 						deliverablesCount={bootstrap?.deliverables.length ?? 0}
 						selectedDeliverableId={selectedDeliverableId}
 						activeMatterProgress={activeMatterProgress}
-						elapsedSeconds={elapsedSeconds}
+						progressStartedAt={activeProgressStartedAt}
 						streamingDelta={streamingDelta}
 						submitting={submitting}
 						composerText={composerText}

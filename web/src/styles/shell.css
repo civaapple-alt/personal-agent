@@ -447,6 +447,14 @@
 	gap: 10px;
 	text-align: left;
 	cursor: pointer;
+	/* Skip layout/paint for off-screen rows in long matter lists. */
+	content-visibility: auto;
+	contain-intrinsic-size: auto 56px;
+}
+/* Paint containment would clip the focus ring, so lift it while focused. */
+.matter-item:focus-visible,
+.matter-item:focus-within {
+	content-visibility: visible;
 }
 .matter-item:hover {
 	background: rgba(255, 255, 255, 0.72);

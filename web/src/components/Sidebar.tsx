@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
@@ -30,7 +30,8 @@ interface SidebarProps {
 	onSwitchOrLogout?: () => void;
 }
 
-export function Sidebar({
+/** Memoized so streamed text deltas and run timers in the workbench do not re-render the navigation tree. */
+export const Sidebar = memo(function Sidebar({
 	activeTab,
 	bootstrap,
 	currentUser,
@@ -309,4 +310,4 @@ export function Sidebar({
 			</div>
 		</aside>
 	);
-}
+});

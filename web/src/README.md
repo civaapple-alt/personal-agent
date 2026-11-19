@@ -14,7 +14,7 @@
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
 | 布局与共用样式/格式 | [styles/tokens.css](styles/tokens.css)（`--text-*` 字号阶梯、`--page-pad-*`/`--section-gap`）、[styles/primitives.css](styles/primitives.css)（`.ui-sections-stack`、`.ui-section*`、`.ui-card` 等原语）及 [utils.ts](utils.ts)（聚合导出 [formatters.ts](utils/formatters.ts)、[matterStream.ts](utils/matterStream.ts)、[deliverableSummary.ts](utils/deliverableSummary.ts)、[orgRoster.ts](utils/orgRoster.ts) 与 [starterTasks.ts](utils/starterTasks.ts)） |
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
-| 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护）、[ExploringStatus](components/ExploringStatus.tsx) |
+| 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](components/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](components/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护）、[ExploringStatus](components/ExploringStatus.tsx) |
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx)（对应 `#/settings` 与 `#/settings/{base,extensions,config}`，按类目展示 Pi 底座、扩展插件及按节分组的运行配置，支持超级管理员在页面一键克隆并持久化启用/更新/停用 `pstack` 至 `.data/extensions/repo/<仓库名>`） |
@@ -25,6 +25,7 @@
 
 ## 运行状态与事件同步
 
+- 运行耗时只向下传递开始时间 `progressStartedAt`，不要在 `App` 或 `ChatStage` 重新引入每秒更新的状态。
 - `matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。
 - `fetchBootstrap` 与 `fetchMatterDetail` 消费服务端返回的 `organizations` 与 `activeRuns` / `activeRun`，保证页面刷新（F5）后立即恢复进行中进度、计时与停止按钮。
 - 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`memory_updated`、`matter_message`、

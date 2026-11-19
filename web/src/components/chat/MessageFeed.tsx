@@ -52,7 +52,7 @@ interface MessageFeedProps {
 	matterDetail: MatterDetailPayload | null;
 	activeMatterProgress: MatterProgressDto | null;
 	activeDialogs: PendingDialogDto[];
-	elapsedSeconds: number;
+	progressStartedAt: number | null;
 	streamingDelta: string;
 	isOwner: boolean;
 	isSuperAdmin?: boolean;
@@ -109,7 +109,7 @@ export function MessageFeed({
 	matterDetail,
 	activeMatterProgress,
 	activeDialogs,
-	elapsedSeconds,
+	progressStartedAt,
 	streamingDelta,
 	isOwner,
 	isSuperAdmin = false,
@@ -575,7 +575,7 @@ export function MessageFeed({
 						{activeMatterProgress && selectedMatterId && (
 							<ExploringStatus
 								progress={activeMatterProgress}
-								elapsedSeconds={elapsedSeconds}
+								startedAt={progressStartedAt}
 								members={members}
 								leadMemberId={matterDetail?.matter.leadMemberId ?? headerContact?.id}
 								leadDisplayName={

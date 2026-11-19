@@ -16,6 +16,7 @@ import {
 	STAGE_ORDER,
 } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
+import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
 interface ProgressDetailsProps {
 	stage: MatterProgressDto["stage"];
@@ -98,7 +99,7 @@ function ProgressDetails({
 
 interface ExploringStatusProps {
 	progress: MatterProgressDto;
-	elapsedSeconds: number;
+	startedAt: number | null;
 	members?: TeamMemberDto[];
 	leadMemberId?: string | null;
 	leadDisplayName?: string;
@@ -107,7 +108,7 @@ interface ExploringStatusProps {
 
 export function ExploringStatus({
 	progress,
-	elapsedSeconds,
+	startedAt,
 	members,
 	leadMemberId,
 	leadDisplayName,
@@ -125,7 +126,7 @@ export function ExploringStatus({
 					<div className="exploring-row">
 						<span className="exploring-actor">{leadName}</span>
 						<span className={`exploring-stage stage-${progress.stage}`}>{STAGE_LABELS[progress.stage]}</span>
-						<span className="exploring-time">{formatElapsedDuration(elapsedSeconds)}</span>
+						<ElapsedTimer className="exploring-time" startedAt={startedAt} />
 						{onAbort && (
 							<button type="button" className="btn-stop-pill" onClick={onAbort}>
 								停止

@@ -71,7 +71,7 @@ interface ChatStageProps {
 	deliverablesCount: number;
 	selectedDeliverableId: string | null;
 	activeMatterProgress: MatterProgressDto | null;
-	elapsedSeconds: number;
+	progressStartedAt: number | null;
 	streamingDelta: string;
 	submitting: boolean;
 	composerText: string;
@@ -181,7 +181,7 @@ export function ChatStage({
 	deliverablesCount,
 	selectedDeliverableId,
 	activeMatterProgress,
-	elapsedSeconds,
+	progressStartedAt,
 	streamingDelta,
 	submitting,
 	composerText,
@@ -580,7 +580,7 @@ export function ChatStage({
 				matterDetail={matterDetail}
 				activeMatterProgress={activeMatterProgress}
 				activeDialogs={activeDialogs}
-				elapsedSeconds={elapsedSeconds}
+				progressStartedAt={progressStartedAt}
 				streamingDelta={streamingDelta}
 				isOwner={isOwner}
 				isSuperAdmin={isSuperAdmin}
@@ -674,7 +674,7 @@ export function ChatStage({
 				selectedWorkspaceId={selectedWorkspaceId}
 				selectedMatterId={selectedMatterId}
 				activeMatterProgress={activeMatterProgress}
-				elapsedSeconds={elapsedSeconds}
+				progressStartedAt={progressStartedAt}
 				organizations={organizations}
 				orgFilteredWorkspaces={orgFilteredWorkspaces}
 				onCloseRoster={closeRoster}
