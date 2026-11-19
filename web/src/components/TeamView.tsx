@@ -10,9 +10,9 @@ import {
 	type OrganizationDto,
 	type OrganizationMemberDto,
 	type RoleTemplateDto,
+	setOrgAiPrimaryContact,
 	setPrimaryMember,
 	type TeamMemberDto,
-	updateOrgAiRoles,
 	type WorkspaceDto,
 } from "../api.ts";
 import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
@@ -228,35 +228,8 @@ export function TeamView({
 		if (!memberId || savingPrimary || memberId === effectivePrimaryId) return;
 		setSavingPrimary(true);
 		try {
-			const entry = primaryTargetOrg ? orgAiRolesByOrgId[primaryTargetOrg.id] : undefined;
-			if (primaryTargetOrg && (Boolean(accountUser) || entry?.configured)) {
-				const orgEligible = businessMembers.filter(
-					(m) => m.roleScope !== "personal" && (m.roleScope !== "org" || m.ownerOrgId === primaryTargetOrg.id),
-				);
-				const configByMemberId = new Map((entry?.configs ?? []).map((cfg) => [cfg.memberId, cfg]));
-				const enabledSet = new Set(
-					entry?.configured && entry.effectiveMemberIds.length > 0
-						? entry.effectiveMemberIds
-						: orgEligible.map((m) => m.id),
-				);
-				enabledSet.add(memberId);
-				const payload = orgEligible.map((m) => {
-					const existingCfg = configByMemberId.get(m.id);
-					return {
-						memberId: m.id,
-						enabled: enabledSet.has(m.id),
-						isPrimaryContact: m.id === memberId,
-						...(existingCfg
-							? {
-									displayNameOverride: existingCfg.displayNameOverride,
-									modelOverride: existingCfg.modelOverride,
-									gitNameOverride: existingCfg.gitNameOverride ?? null,
-									gitEmailOverride: existingCfg.gitEmailOverride ?? null,
-								}
-							: {}),
-					};
-				});
-				await updateOrgAiRoles(primaryTargetOrg.id, payload);
+			if (primaryTargetOrg) {
+				await setOrgAiPrimaryContact(primaryTargetOrg.id, memberId);
 				onNotice(`已将「${primaryTargetOrg.name}」的主联系人切换为「${memberName(memberId)}」`);
 			} else {
 				await setPrimaryMember(memberId);

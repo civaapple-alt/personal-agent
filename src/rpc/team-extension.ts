@@ -23,8 +23,10 @@ export interface PiExtensionApi {
 			systemPromptOptions?: {
 				cwd?: string;
 				contextFiles?: Array<{ path: string; content: string }>;
+				appendSystemPrompt?: string;
+				forceSystemPrompt?: string;
 			};
-		}) => { systemPrompt: string },
+		}) => { systemPrompt: string } | undefined,
 	): void;
 	getActiveTools(): string[];
 	getAllTools(): { name: string }[];
@@ -240,14 +242,26 @@ export default function teamExtension(pi: PiExtensionApi): void {
 		});
 	});
 	pi.on("before_agent_start", (event) => {
-		if (env.PA_TARGET_WORKSPACE_ROOT !== undefined && Array.isArray(event.systemPromptOptions?.contextFiles)) {
-			event.systemPromptOptions.contextFiles = filterContextFilesForTargetWorkspace(
-				event.systemPromptOptions.contextFiles,
+		const options = event.systemPromptOptions;
+		if (env.PA_TARGET_WORKSPACE_ROOT !== undefined && Array.isArray(options?.contextFiles)) {
+			options.contextFiles = filterContextFilesForTargetWorkspace(
+				options.contextFiles,
 				env.PA_TARGET_WORKSPACE_ROOT,
 			);
 		}
+		const context = [
+			env.PA_MEMBER_CONTEXT,
+			`Active tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
+		]
+			.filter(Boolean)
+			.join("\n\n");
+		if (options && options.forceSystemPrompt === undefined) {
+			// Keep Pi's structured prompt so later hooks and tool-loadout updates can still contribute.
+			options.appendSystemPrompt = [options.appendSystemPrompt, context].filter(Boolean).join("\n\n");
+			return;
+		}
 		return {
-			systemPrompt: `${event.systemPrompt}\n\n${env.PA_MEMBER_CONTEXT ?? ""}\n\nActive tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
+			systemPrompt: `${event.systemPrompt}\n\n${context}`,
 		};
 	});
 }

@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Switch an organization's primary AI contact without resaving its roster. Preserve existing provider, model, thinking and Git overrides, and save roster and Git policy changes in one transaction.
+- Keep delivered matters and saved replies intact if a discussion reply fails. Attribute the failure to the message that started that discussion.
+- Append role instructions through Pi's structured prompt options so workspace filtering and later extension contributions are both retained.
+
 ## [0.6.1] - 2026-11-19
 
 See the [0.6.1 release guide](docs/releases/v0.6.1.md) for downloads, upgrade instructions, and validation.

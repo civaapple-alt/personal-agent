@@ -190,9 +190,14 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 						memberId: "product-manager",
 						enabled: true,
 						isPrimaryContact: true,
+						providerOverride: "fixture-provider",
+						modelOverride: "fixture-model",
+						thinkingLevelOverride: "medium",
 						gitNameOverride: "Acme PM Lead",
 						gitEmailOverride: "pm-lead@acme.dev",
 					},
+					{ memberId: "qa-manager", enabled: true },
+					{ memberId: "engineering-manager", enabled: false },
 				],
 			}),
 		});
@@ -203,10 +208,51 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 			effectiveMembers: Array<{ id: string; gitName: string; gitEmail: string }>;
 		};
 		assert.equal(aiRolesPayload.organization?.useRoleGitIdentity, false);
-		assert.equal(aiRolesPayload.configs[0]?.gitNameOverride, "Acme PM Lead");
-		assert.equal(aiRolesPayload.configs[0]?.gitEmailOverride, "pm-lead@acme.dev");
-		assert.equal(aiRolesPayload.effectiveMembers[0]?.gitName, "Acme PM Lead");
-		assert.equal(aiRolesPayload.effectiveMembers[0]?.gitEmail, "pm-lead@acme.dev");
+		const configuredPm = aiRolesPayload.configs.find(({ memberId }) => memberId === "product-manager");
+		const effectivePm = aiRolesPayload.effectiveMembers.find(({ id }) => id === "product-manager");
+		assert.equal(configuredPm?.gitNameOverride, "Acme PM Lead");
+		assert.equal(configuredPm?.gitEmailOverride, "pm-lead@acme.dev");
+		assert.equal(effectivePm?.gitName, "Acme PM Lead");
+		assert.equal(effectivePm?.gitEmail, "pm-lead@acme.dev");
+
+		const rolesUrl = `${baseUrl}/api/organizations/${organization.id}/ai-roles`;
+		const changePrimary = (primaryMemberId: string) =>
+			fetch(rolesUrl, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ primaryMemberId }),
+			});
+		const originalConfigs = store.listOrgAiRoleConfigs(organization.id);
+		assert.equal((await changePrimary("qa-manager")).status, 200);
+		assert.equal((await changePrimary("engineering-manager")).status, 400);
+		const currentConfigs = store.listOrgAiRoleConfigs(organization.id);
+		const persistedPm = currentConfigs.find((role) => role.memberId === "product-manager");
+		assert.equal(persistedPm?.providerOverride, "fixture-provider");
+		assert.equal(persistedPm?.modelOverride, "fixture-model");
+		assert.equal(persistedPm?.thinkingLevelOverride, "medium");
+		assert.equal(persistedPm?.gitEmailOverride, "pm-lead@acme.dev");
+		assert.deepEqual(
+			currentConfigs.filter((role) => role.isPrimaryContact).map((role) => role.memberId),
+			["qa-manager"],
+		);
+		assert.deepEqual(
+			currentConfigs.map(({ memberId, enabled }) => ({ memberId, enabled })),
+			originalConfigs.map(({ memberId, enabled }) => ({ memberId, enabled })),
+		);
+		const duplicateRoleSettings = await fetch(rolesUrl, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				useRoleGitIdentity: true,
+				roles: [
+					{ memberId: "qa-manager", enabled: true },
+					{ memberId: "qa-manager", enabled: false },
+				],
+			}),
+		});
+		assert.equal(duplicateRoleSettings.status, 400);
+		assert.deepEqual(store.listOrgAiRoleConfigs(organization.id), currentConfigs);
+		assert.equal(store.getOrganization(organization.id)?.useRoleGitIdentity, false);
 
 		const wsCreate = await fetch(`${baseUrl}/api/workspaces`, {
 			method: "POST",

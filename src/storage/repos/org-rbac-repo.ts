@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type {
 	Organization,
@@ -309,6 +310,37 @@ export class OrgRbacRepo {
 		return rows.map(mapOrgAiRoleRow);
 	}
 
+	setOrgAiPrimaryContact(orgId: string, memberId: string): boolean {
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			const enabled = this.resolveEffectiveOrgMembers(orgId).filter(
+				(member) => member.id !== ROLE_ARCHITECT_MEMBER_ID,
+			);
+			if (!enabled.some((member) => member.id === memberId)) {
+				this.db.exec("ROLLBACK");
+				return false;
+			}
+			const timestamp = nowIso();
+			const insert = this.db.prepare(
+				`INSERT INTO organization_ai_roles (org_id, member_id, enabled, is_primary_contact, created_at, updated_at)
+				 VALUES (?, ?, 1, 0, ?, ?) ON CONFLICT(org_id, member_id) DO NOTHING`,
+			);
+			const memberIds = this.hasOrgAiRolesConfigured(orgId) ? [memberId] : enabled.map((member) => member.id);
+			for (const id of memberIds) insert.run(orgId, id, timestamp, timestamp);
+			this.db
+				.prepare(
+					`UPDATE organization_ai_roles SET is_primary_contact = (member_id = ?), updated_at = ?
+					 WHERE org_id = ? AND is_primary_contact <> (member_id = ?)`,
+				)
+				.run(memberId, timestamp, orgId, memberId);
+			this.db.exec("COMMIT");
+			return true;
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
+	}
+
 	setOrgAiRolesBatch(
 		orgId: string,
 		roles: Array<{
@@ -322,6 +354,7 @@ export class OrgRbacRepo {
 			gitNameOverride?: string | null;
 			gitEmailOverride?: string | null;
 		}>,
+		useRoleGitIdentity?: boolean,
 	): OrganizationAiRoleConfig[] {
 		const timestamp = nowIso();
 		const primaryId =
@@ -355,6 +388,11 @@ export class OrgRbacRepo {
 					timestamp,
 					timestamp,
 				);
+			}
+			if (useRoleGitIdentity !== undefined) {
+				this.db
+					.prepare("UPDATE organizations SET use_role_git_identity = ?, updated_at = ? WHERE id = ?")
+					.run(useRoleGitIdentity ? 1 : 0, timestamp, orgId);
 			}
 			this.db.exec("COMMIT");
 		} catch (err) {

@@ -405,8 +405,16 @@ export class PersonalAgentStore {
 	listOrgAiRoleConfigs(orgId: string) {
 		return this.orgRbac.listOrgAiRoleConfigs(orgId);
 	}
-	setOrgAiRolesBatch(orgId: string, roles: Parameters<OrgRbacRepo["setOrgAiRolesBatch"]>[1]) {
-		return this.orgRbac.setOrgAiRolesBatch(orgId, roles);
+	setOrgAiPrimaryContact(orgId: string, memberId: string) {
+		return this.orgRbac.setOrgAiPrimaryContact(orgId, memberId);
+	}
+
+	setOrgAiRolesBatch(
+		orgId: string,
+		roles: Parameters<OrgRbacRepo["setOrgAiRolesBatch"]>[1],
+		useRoleGitIdentity?: boolean,
+	) {
+		return this.orgRbac.setOrgAiRolesBatch(orgId, roles, useRoleGitIdentity);
 	}
 	resolveEffectiveOrgMembers(orgId: string) {
 		return this.orgRbac.resolveEffectiveOrgMembers(orgId);

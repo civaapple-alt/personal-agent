@@ -770,6 +770,7 @@ export class TeamOrchestrator {
 						replyText.slice(0, 200),
 					);
 			const extraMentionMessages: MatterMessage[] = [];
+			let extraReplyAborted = false;
 			if (isDiscussionTurn && !aborted && !run.cancelled && mentionedTargets.length > 1) {
 				for (const extraSpeaker of mentionedTargets.slice(1)) {
 					if (run.cancelled || run.controller.signal.aborted) break;
@@ -794,7 +795,8 @@ export class TeamOrchestrator {
 						if (run.cancelled) break;
 						throw error;
 					}
-					if (extraResult.aborted || run.cancelled || run.controller.signal.aborted) break;
+					if (extraResult.aborted) extraReplyAborted = true;
+					if (extraReplyAborted || run.cancelled || run.controller.signal.aborted) break;
 					const extraText = extraResult.assistantText.trim() || "本轮暂无补充看法。";
 					extraMentionMessages.push(
 						this.store.appendMessage({
@@ -817,6 +819,9 @@ export class TeamOrchestrator {
 						}),
 					);
 				}
+			}
+			if (isDiscussionTurn && !run.cancelled && !aborted && !extraReplyAborted) {
+				run.controller.signal.throwIfAborted();
 			}
 			const observerCandidates =
 				!aborted && !run.cancelled && !assignedIsArchitect && !(isDiscussionTurn && mentionedTargets.length > 0)
@@ -856,7 +861,7 @@ export class TeamOrchestrator {
 				replyText,
 				deliverable: deliveries.at(-1) ?? null,
 				observerMessages: [...extraMentionMessages, ...observerMessages],
-				runResult: { ...result, aborted },
+				runResult: { ...result, aborted: aborted || (isDiscussionTurn && (extraReplyAborted || run.cancelled)) },
 			};
 		} catch (error) {
 			if (!isDiscussionTurn) this.store.updateMatterStatus(matter.id, "open");

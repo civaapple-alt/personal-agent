@@ -163,7 +163,13 @@ async function fixture(t: test.TestContext, respond: Responder) {
 }
 
 test("team discussion is opt-in, preserves the roster and deliverables, and uses separate Pi sessions", async (t) => {
-	const f = await fixture(t, async (worker) => `Reply from ${worker.options.env?.PA_MEMBER_ID}`);
+	const failingPrompt = "@qa-manager @engineering-manager Confirm the second discussion reply";
+	const f = await fixture(t, async (worker, prompt) => {
+		const memberId = worker.options.env?.PA_MEMBER_ID;
+		if (memberId === "engineering-manager" && prompt.endsWith(failingPrompt))
+			throw new Error("Discussion worker failed");
+		return `Reply from ${memberId}`;
+	});
 	const { server } = createPersonalAgentServer({
 		store: f.store,
 		orchestrator: f.orchestrator,
@@ -289,6 +295,22 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 			["member", "qa-manager"],
 		],
 	);
+
+	f.store.updateMatterStatus(first.matter.id, "delivered", "Published summary");
+	const failingDiscussion = await request(`${matterPath}/messages`, "POST", {
+		mode: "discussion",
+		prompt: failingPrompt,
+	});
+	assert.equal(failingDiscussion.aiDiscussionTriggered, true);
+	await waitForTurn(first.matter.id);
+	assert.equal(f.store.getMatter(first.matter.id)?.status, "delivered");
+	assert.equal(f.store.getMatter(first.matter.id)?.summary, "Published summary");
+	const replies = f.store
+		.listMessages(first.matter.id, "user")
+		.filter(({ metadata }) => metadata?.sourceUserMessageId === failingDiscussion.message.id);
+	assert.equal(replies[0]?.senderId, "qa-manager");
+	assert.equal(replies[1]?.metadata?.failed, true);
+	assert.match(replies[1]?.content ?? "", /AI 讨论未完成/);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {

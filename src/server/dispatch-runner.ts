@@ -118,17 +118,18 @@ export function createDispatchRunner(deps: {
 				const message = error instanceof Error ? error.message : String(error);
 				const currentMatter = store.getMatter(input.matterId);
 				const leadMember = currentMatter?.leadMemberId ? store.getMember(currentMatter.leadMemberId) : null;
-				const lastUserMsg = [...store.listMessages(input.matterId, "user")]
-					.reverse()
-					.find((msg) => msg.senderType === "user");
+				const messages = store.listMessages(input.matterId, "user");
+				const sourceMessage = input.existingUserMessageId
+					? store.getMessage(input.existingUserMessageId)
+					: messages.findLast((msg) => msg.senderType === "user");
 				const resolvedWorkspaceId =
-					lastUserMsg?.metadata && "workspaceId" in lastUserMsg.metadata
-						? ((lastUserMsg.metadata.workspaceId as string | null) ?? null)
+					sourceMessage?.metadata && "workspaceId" in sourceMessage.metadata
+						? ((sourceMessage.metadata.workspaceId as string | null) ?? null)
 						: (input.workspaceId ?? currentMatter?.workspaceId ?? null);
 				const workspaceLink = resolvedWorkspaceId ? store.getWorkspace(resolvedWorkspaceId) : null;
 				const resolvedRepoPath =
-					typeof lastUserMsg?.metadata?.repoPath === "string"
-						? lastUserMsg.metadata.repoPath
+					typeof sourceMessage?.metadata?.repoPath === "string"
+						? sourceMessage.metadata.repoPath
 						: resolve(workspaceLink?.repoPath ?? process.cwd());
 				const progressSnapshot = lastActive
 					? buildProgressSnapshot({
@@ -145,22 +146,32 @@ export function createDispatchRunner(deps: {
 					senderId: "orchestrator",
 					content: JSON.stringify({ method: "error", message }),
 				});
-				const partialNote = accumulatedDelta.trim() ? `${accumulatedDelta.trim()}\n\n---\n\n` : "";
+				const hasSavedReply =
+					isDiscussion &&
+					sourceMessage &&
+					messages.some(
+						(msg) => msg.senderType === "member" && msg.metadata?.sourceUserMessageId === sourceMessage.id,
+					);
+				const partialText = hasSavedReply ? "" : accumulatedDelta.trim();
+				const partialNote = partialText ? `${partialText}\n\n---\n\n` : "";
 				store.appendMessage({
 					matterId: input.matterId,
 					channel: "user",
 					senderType: "system",
 					senderId: "orchestrator",
-					content: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
+					content: isDiscussion
+						? `${partialNote}⚠️ AI 讨论未完成（${message}）。讨论消息已保留。`
+						: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
 					metadata: {
 						failed: true,
 						error: message,
 						workspaceId: resolvedWorkspaceId,
 						repoPath: resolvedRepoPath,
+						...(isDiscussion ? { discussionTurn: true, sourceUserMessageId: sourceMessage?.id } : {}),
 						...(progressSnapshot ? { progressSnapshot } : {}),
 					},
 				});
-				store.updateMatterStatus(input.matterId, "open");
+				if (!isDiscussion) store.updateMatterStatus(input.matterId, "open");
 				broadcast("matter_failed", {
 					matterId: input.matterId,
 					error: message,

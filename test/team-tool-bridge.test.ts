@@ -163,15 +163,7 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		assert.deepEqual(filterContextFilesForTargetWorkspace([{ path: hostAgents, content: "host" }], "__none__"), []);
 
 		const envBefore = { ...process.env };
-		let beforeStartHandler:
-			| ((event: {
-					systemPrompt: string;
-					systemPromptOptions?: {
-						cwd?: string;
-						contextFiles?: Array<{ path: string; content: string }>;
-					};
-			  }) => { systemPrompt: string })
-			| undefined;
+		let beforeStartHandler: Parameters<PiExtensionApi["on"]>[1] | undefined;
 		Object.assign(process.env, {
 			PA_TARGET_WORKSPACE_ROOT: workspaceRoot,
 			PA_MEMBER_CONTEXT: "## Target workspace\n- Project: hello-rust",
@@ -195,6 +187,7 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		assert.ok(beforeStartHandler);
 		const options = {
 			cwd: workspaceRoot,
+			appendSystemPrompt: "Existing appended instructions",
 			contextFiles: [
 				{ path: hostAgents, content: "# Host" },
 				{ path: targetAgents, content: "# Target" },
@@ -202,16 +195,20 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		};
 		const event = {
 			get systemPrompt() {
-				return (options.contextFiles ?? []).map((f) => f.content).join("\n");
+				return [...options.contextFiles.map((f) => f.content), options.appendSystemPrompt].join("\n");
 			},
 			systemPromptOptions: options,
 		};
-		const res = beforeStartHandler(event);
+		assert.equal(beforeStartHandler(event), undefined);
 		assert.equal(options.contextFiles.length, 1);
 		assert.equal(options.contextFiles[0]?.path, targetAgents);
-		assert.doesNotMatch(res.systemPrompt, /# Host/);
-		assert.match(res.systemPrompt, /# Target/);
-		assert.match(res.systemPrompt, /Project: hello-rust/);
+		assert.doesNotMatch(event.systemPrompt, /# Host/);
+		assert.match(event.systemPrompt, /# Target/);
+		assert.match(event.systemPrompt, /Project: hello-rust/);
+		assert.match(event.systemPrompt, /Existing appended instructions/);
+		options.appendSystemPrompt += "\nLater extension instructions";
+		assert.match(event.systemPrompt, /Later extension instructions/);
+		assert.match(beforeStartHandler({ systemPrompt: "Legacy Pi prompt" })?.systemPrompt ?? "", /Legacy Pi prompt/);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

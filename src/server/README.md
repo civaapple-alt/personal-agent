@@ -23,7 +23,9 @@
     - 文本/折叠粘贴文件约束：最多 6 个、单文件 UTF-8 文本 <= 512KB（拒绝含 NUL 的二进制负载），支持 `kind: "file" | "pasted_text"`，允许纯附件提交。
   - 上传图片与 `.txt` 规范化文本附件均落盘 `uploadsDir`（默认 `.data/uploads`，测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问（`.txt` 响应带 `Content-Type: text/plain; charset=utf-8` 与 `X-Content-Type-Options: nosniff`），消息仅存轻量引用 `metadata.images` / `metadata.files`。
   - 新事项和升级前的已有事项默认关闭 `discussionAiEnabled`。创建请求或事项配置接口可开启，讨论消息在具备组织 AI 派发权限及并发额度时启动讨论 Worker。响应 `aiDiscussionTriggered` 表示已启动，否则 `aiDiscussionSkippedReason` 表示关闭、权限受限、事项繁忙或额度用尽。
+  - AI 讨论失败时保留已发消息、已保存的回复及原事项状态。失败消息关联触发本轮讨论的消息。
 - 组织与成员身份接口：
+  - `PATCH /api/organizations/:id/ai-roles` 接收 `primaryMemberId`，供组织管理员切换到已启用的业务 AI 角色。已有角色配置保留模型、思考档位和 Git 署名。批量更新名册与组织 Git 署名开关时在同一事务保存。
   - [main.ts](main.ts) 启动时自动保证默认组织存在（`ensureDefaultOrganization`），并在首次无任何组织时将既有无归属工作区及自举仓库归入默认组织。
   - `GET /api/bootstrap` 下发 `organizations`；`GET /api/organizations`、`POST /api/organizations`、
     `PATCH /api/organizations/:id` 与 `POST /api/organizations/:id/default` 管理组织字段与默认组织切换。

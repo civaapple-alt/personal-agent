@@ -402,11 +402,33 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			});
 			return true;
 		}
+		if (method === "PATCH") {
+			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
+			const body = await readJsonBody(req);
+			const memberId = typeof body.primaryMemberId === "string" ? body.primaryMemberId.trim() : "";
+			if (!memberId || !store.setOrgAiPrimaryContact(orgId, memberId)) {
+				sendError(res, 400, "请选择本组织已启用的业务 AI 角色");
+				return true;
+			}
+			auditActorAction(ctx, req, actor, {
+				action: "org.update_ai_primary",
+				targetType: "organization",
+				targetId: orgId,
+				orgId,
+				detail: { memberId },
+			});
+			broadcast("team_updated", { orgId }, { orgId });
+			sendJson(res, 200, { primaryMemberId: memberId });
+			return true;
+		}
 		if (method === "PUT") {
 			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
 			const body = await readJsonBody(req);
-			if (!Array.isArray(body.roles)) {
-				sendError(res, 400, "roles 必须是数组");
+			if (
+				!Array.isArray(body.roles) ||
+				body.roles.some((item) => !item || typeof item !== "object" || typeof item.enabled !== "boolean")
+			) {
+				sendError(res, 400, "roles 必须是包含启用状态的角色配置数组");
 				return true;
 			}
 			const parsedRoles = body.roles
@@ -425,30 +447,33 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 					gitNameOverride: typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
 					gitEmailOverride:
 						typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
-				}))
-				.filter((item) => item.memberId.length > 0);
+				}));
+			if (new Set(parsedRoles.map((role) => role.memberId)).size !== parsedRoles.length) {
+				sendError(res, 400, "每个角色只能配置一次");
+				return true;
+			}
 			if (!parsedRoles.some((role) => role.enabled)) {
 				sendError(res, 400, "每个组织至少需要启用 1 位 AI 角色");
 				return true;
 			}
 			for (const role of parsedRoles) {
 				const target = store.getMember(role.memberId);
-				if (target && target.roleScope === "personal") {
+				if (!target) {
+					sendError(res, 400, "角色配置包含不存在的成员");
+					return true;
+				}
+				if (target.roleScope === "personal") {
 					sendError(res, 400, "个人私有 AI 角色不能加入组织共享角色配置");
 					return true;
 				}
-				if (target && target.roleScope === "org" && target.ownerOrgId !== orgId) {
+				if (target.roleScope === "org" && target.ownerOrgId !== orgId) {
 					sendError(res, 403, `角色 ${target.displayName} 属于其他组织，无法在本组织启用`);
 					return true;
 				}
 			}
-			let updatedOrganization = null;
-			if (typeof body.useRoleGitIdentity === "boolean") {
-				updatedOrganization = store.updateOrganization(orgId, {
-					useRoleGitIdentity: body.useRoleGitIdentity,
-				});
-			}
-			const configs = store.setOrgAiRolesBatch(orgId, parsedRoles);
+			const useRoleGitIdentity = typeof body.useRoleGitIdentity === "boolean" ? body.useRoleGitIdentity : undefined;
+			const configs = store.setOrgAiRolesBatch(orgId, parsedRoles, useRoleGitIdentity);
+			const updatedOrganization = useRoleGitIdentity === undefined ? null : store.getOrganization(orgId);
 			const effectiveMembers = store.resolveEffectiveOrgMembers(orgId);
 			auditActorAction(ctx, req, actor, {
 				action: "org.update_ai_roles",

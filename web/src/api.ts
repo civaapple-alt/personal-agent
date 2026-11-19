@@ -76,7 +76,9 @@ export interface OrganizationAiRoleConfigDto {
 	enabled: boolean;
 	isPrimaryContact: boolean;
 	displayNameOverride: string | null;
+	providerOverride?: string | null;
 	modelOverride: string | null;
+	thinkingLevelOverride?: string | null;
 	gitNameOverride?: string | null;
 	gitEmailOverride?: string | null;
 	updatedAt: string;
@@ -1332,6 +1334,13 @@ export function revokeOrgInvite(orgId: string, inviteId: string): Promise<{ invi
 	);
 }
 
+export function setOrgAiPrimaryContact(orgId: string, primaryMemberId: string): Promise<{ primaryMemberId: string }> {
+	return requestJson(`/api/organizations/${encodeURIComponent(orgId)}/ai-roles`, {
+		method: "PATCH",
+		body: JSON.stringify({ primaryMemberId }),
+	});
+}
+
 export function updateOrgAiRoles(
 	orgId: string,
 	roles: Array<{
@@ -1339,7 +1348,9 @@ export function updateOrgAiRoles(
 		enabled: boolean;
 		isPrimaryContact?: boolean;
 		displayNameOverride?: string | null;
+		providerOverride?: string | null;
 		modelOverride?: string | null;
+		thinkingLevelOverride?: string | null;
 		gitNameOverride?: string | null;
 		gitEmailOverride?: string | null;
 	}>,

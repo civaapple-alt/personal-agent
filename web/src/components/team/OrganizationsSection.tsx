@@ -274,7 +274,9 @@ export function OrganizationsSection({
 					enabled: draftEnabledAiIds.includes(m.id),
 					isPrimaryContact: draftEnabledAiIds.includes(m.id) && draftPrimaryAiId === m.id,
 					displayNameOverride: existingCfg?.displayNameOverride ?? null,
+					providerOverride: existingCfg?.providerOverride ?? null,
 					modelOverride: existingCfg?.modelOverride ?? null,
+					thinkingLevelOverride: existingCfg?.thinkingLevelOverride ?? null,
 					gitNameOverride: draftGit?.gitName.trim() || null,
 					gitEmailOverride: draftGit?.gitEmail.trim() || null,
 				};
