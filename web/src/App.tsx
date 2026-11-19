@@ -1,42 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-	type AccountUserDto,
-	type AdminOverviewPayload,
-	abortAdminMatter,
 	type BootstrapPayload,
-	type CollaboratorDto,
-	type ComposerFileAttachment,
-	type ComposerImageAttachment,
 	type DeliverableDto,
 	type FeedbackRating,
-	fetchAdminOverview,
-	fetchAuthSession,
 	fetchBootstrap,
 	fetchMatterDetail,
-	fetchOrgInvitePreview,
-	fetchRuntimeOverview,
 	type InnerMatterStep,
-	joinOrganizationByInvite,
-	loginWithEmail,
-	loginWithInviteToken,
-	logoutAuthSession,
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type MatterVisibility,
-	type OrgInvitePreviewDto,
 	openInnerMatterDemo,
 	type PreviewServiceDto,
-	type RegistrationMode,
-	type RoleTemplateDto,
-	type RuntimeOverviewDto,
-	registerWithEmail,
-	setAuthRevokedHandler,
-	setupInitialAdmin,
 	stopPreview,
 	submitDeliverableFeedback,
-	type TeamMemberDto,
-	updateAdminSettings,
-	updateAdminUser,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
 import { AdminView } from "./components/AdminView.tsx";
@@ -44,69 +20,33 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
-import { ModalDialog } from "./components/ModalDialog.tsx";
+import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
+import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
 import { type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
+import { useAuthSession } from "./hooks/useAuthSession.ts";
+import { useComposerDraft } from "./hooks/useComposerDraft.ts";
 import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
 import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts";
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
 import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
+import { useMatterScope } from "./hooks/useMatterScope.ts";
 import { useRsiDistill } from "./hooks/useRsiDistill.ts";
-import {
-	createPastedTextAttachment,
-	isSupportedImageFile,
-	MAX_COMPOSER_FILE_BYTES,
-	MAX_COMPOSER_FILES,
-	MAX_COMPOSER_IMAGES,
-	prepareComposerFiles,
-	prepareComposerImages,
-} from "./imageAttachments.ts";
-import { applyPrimaryContactToMembers, getBotTheme, resolveEffectivePrimaryContactId } from "./utils.ts";
+import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
+import { getBotTheme } from "./utils.ts";
 
 function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
 	if (typeof requireAuth !== "boolean") return;
 	document.title = requireAuth ? "Personal Agent · 团队版" : "Personal Agent · 个人版";
 }
 
-function extractInitialInviteToken(): string {
-	try {
-		const searchToken = new URLSearchParams(window.location.search).get("invite")?.trim();
-		if (searchToken) return searchToken;
-		const hash = window.location.hash;
-		const match = hash.match(/invite=([^&]+)/);
-		if (match?.[1]) return decodeURIComponent(match[1]).trim();
-	} catch {
-		// Ignore URL parsing errors.
-	}
-	return "";
-}
-
 /** Root application shell coordinating authentication, SSE state sync, hash routing, and workspace tabs. */
 export function App() {
-	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
-	const initialOrgInvite = initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
-	const initialLegacyInvite =
-		initialInviteToken && !initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
-	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 	const [serverRequireAuth, setServerRequireAuth] = useState<boolean | null>(null);
-	const [permissionRequired, setPermissionRequired] = useState(true);
-	const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
-	const [pendingApproval, setPendingApproval] = useState(false);
-	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_review");
-	const [sessionAccountUser, setSessionAccountUser] = useState<AccountUserDto | null>(null);
-	const [authKind, setAuthKind] = useState<"session" | "legacy_token" | "loopback" | null>(null);
-	const [activeOrgInviteToken, setActiveOrgInviteToken] = useState(initialOrgInvite);
-	const [invitePreview, setInvitePreview] = useState<OrgInvitePreviewDto | null>(null);
-	const [showInviteSwitchModal, setShowInviteSwitchModal] = useState(false);
-	const [inviteActionBusy, setInviteActionBusy] = useState(false);
-	const [authPreferredTab, setAuthPreferredTab] = useState<"login" | "register" | "legacy_token" | null>(null);
-	const [authTokenInput, setAuthTokenInput] = useState(initialLegacyInvite);
-	const [authError, setAuthError] = useState<string | null>(null);
-	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
 	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
 	const [draftMatterVisibility, setDraftMatterVisibility] = useState<MatterVisibility>("org");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
@@ -127,34 +67,34 @@ export function App() {
 	);
 	const [draftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
 	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(false);
-	const [composerText, setComposerText] = useState("");
-	const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
-	const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
-	composerImagesRef.current = composerImages;
-	const [composerFiles, setComposerFiles] = useState<ComposerFileAttachment[]>([]);
-	const composerFilesRef = useRef<ComposerFileAttachment[]>([]);
-	composerFilesRef.current = composerFiles;
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [demoOpening, setDemoOpening] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
-	const [noticePaused, setNoticePaused] = useState(false);
+	const dismissError = useCallback(() => setErrorBanner(null), []);
+	const dismissNotice = useCallback(() => setNoticeBanner(null), []);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
-	const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewDto | null>(null);
-	const [runtimeLoading, setRuntimeLoading] = useState(false);
-	const [runtimeError, setRuntimeError] = useState<string | null>(null);
-	const [adminOverview, setAdminOverview] = useState<AdminOverviewPayload | null>(null);
-	const [adminLoading, setAdminLoading] = useState(false);
-	const [adminError, setAdminError] = useState<string | null>(null);
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
+	const {
+		composerText,
+		setComposerText,
+		composerImages,
+		setComposerImages,
+		composerFiles,
+		setComposerFiles,
+		composerAttachmentText,
+		handleAddComposerAttachments,
+		handleAddPastedText,
+		handleRemoveComposerImage,
+		handleRemoveComposerFile,
+		handleExpandPastedFile,
+	} = useComposerDraft(composerRef, setErrorBanner);
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
-	const runtimeAutoFetchedRef = useRef(false);
-	const adminAutoFetchedRef = useRef(false);
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
@@ -241,186 +181,53 @@ export function App() {
 		}
 	}, []);
 
-	const applyRevokedSession = useCallback(
-		(message?: string) => {
-			setCurrentUserOverride(null);
-			setSessionAccountUser(null);
-			setBootstrap(null);
-			setMatterDetail(null);
-			setRuntimeOverview(null);
-			setRuntimeError(null);
-			setAdminOverview(null);
-			setAdminError(null);
-			runtimeAutoFetchedRef.current = false;
-			adminAutoFetchedRef.current = false;
-			setProgressByMatter({});
-			setSseConnected(false);
-			setAuthError(message ?? "当前登录凭证已失效或已被管理员吊销，请重新登录");
-			setAuthStatus("unauthenticated");
-			void fetchAuthSession()
-				.then((s) => {
-					applyEditionState(s.requireAuth);
-					setPermissionRequired(s.permissionRequired);
-					setNeedsAdminSetup(Boolean(s.needsAdminSetup));
-					setPendingApproval(Boolean(s.pendingApproval));
-					setRegistrationMode(s.registrationMode ?? "open_review");
-					setSessionAccountUser(s.accountUser ?? null);
-				})
-				.catch(() => {});
+	const {
+		runtimeOverview,
+		clearAdminOverview,
+		clearPanels,
+		openRuntimePanel,
+		openAdminPanel,
+		settingsProps,
+		adminProps,
+	} = useWorkbenchPanels(refreshBootstrap);
+
+	const resetRevokedWorkspace = useCallback(() => {
+		setBootstrap(null);
+		setMatterDetail(null);
+		clearPanels();
+		setProgressByMatter({});
+		setSseConnected(false);
+	}, [clearPanels]);
+
+	const auth = useAuthSession({
+		bootstrapAuthKind: bootstrap?.authKind,
+		applyEditionState,
+		refreshBootstrap,
+		setComposerMode,
+		setErrorBanner,
+		setNoticeBanner,
+		onRevoked: resetRevokedWorkspace,
+		onResetAdmin: clearAdminOverview,
+		onClearBootstrap: () => setBootstrap(null),
+		onExitAdmin: () => {
+			if (activeTab === "admin") navigateRoute({ tab: "chats" }, { replace: true });
 		},
-		[applyEditionState],
-	);
+	});
+	const {
+		authStatus,
+		authKind,
+		currentUserOverride,
+		sessionAccountUser,
+		permissionRequired,
+		setPermissionRequired,
+		applyRevokedSession,
+		handleLogoutOrRestore,
+	} = auth;
 
 	useEffect(() => {
-		setAuthRevokedHandler((message) => applyRevokedSession(message));
-		return () => setAuthRevokedHandler(null);
-	}, [applyRevokedSession]);
-
-	const syncSessionAndBootstrap = useCallback(async () => {
-		const session = await fetchAuthSession();
-		applyEditionState(session.requireAuth);
-		setPermissionRequired(session.permissionRequired);
-		setNeedsAdminSetup(Boolean(session.needsAdminSetup));
-		setPendingApproval(Boolean(session.pendingApproval));
-		setRegistrationMode(session.registrationMode ?? "open_review");
-		setSessionAccountUser(session.accountUser ?? null);
-		setAuthKind(session.authKind ?? null);
-		if (!session.authenticated) {
-			if (session.revokedSession) {
-				setAuthError("当前登录凭证已失效或已被重置，请重新登录");
-			}
-			setAuthStatus("unauthenticated");
-			return false;
-		}
-		setCurrentUserOverride(session.currentUser);
-		if (
-			session.accountUser
-				? !session.accountUser.canDispatchAi
-				: session.currentUser?.permissionRole === "collaborator"
-		) {
-			setComposerMode("discussion");
-		} else {
-			setComposerMode("dispatch");
-		}
-		setAuthStatus("authenticated");
-		await refreshBootstrap();
-		return true;
-	}, [applyEditionState, refreshBootstrap]);
-
-	useEffect(() => {
-		let cancelled = false;
-		const initSession = async () => {
-			if (initialLegacyInvite) {
-				try {
-					const loginRes = await loginWithInviteToken(initialLegacyInvite);
-					if (cancelled) return;
-					setCurrentUserOverride(loginRes.currentUser);
-					if (loginRes.currentUser.permissionRole === "collaborator") {
-						setComposerMode("discussion");
-					}
-					const cleanHash = window.location.hash.includes("invite=") ? "#chats" : window.location.hash || "#chats";
-					window.history.replaceState(null, "", `${window.location.pathname}${cleanHash}`);
-					setAuthStatus("authenticated");
-					await refreshBootstrap();
-					return;
-				} catch (err: unknown) {
-					if (cancelled) return;
-					setAuthError(err instanceof Error ? err.message : "邀请链接无效或已失效，请重新向所有者获取");
-					setAuthStatus("unauthenticated");
-					void fetchAuthSession()
-						.then((s) => {
-							if (!cancelled) {
-								applyEditionState(s.requireAuth);
-								setPermissionRequired(s.permissionRequired);
-								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
-								setPendingApproval(Boolean(s.pendingApproval));
-								setRegistrationMode(s.registrationMode ?? "open_review");
-							}
-						})
-						.catch(() => {});
-					return;
-				}
-			}
-			try {
-				if (initialOrgInvite) {
-					void fetchOrgInvitePreview(initialOrgInvite)
-						.then((preview) => {
-							if (!cancelled) setInvitePreview(preview);
-						})
-						.catch(() => {});
-				}
-				const ok = await syncSessionAndBootstrap();
-				if (cancelled) return;
-				if (ok && initialOrgInvite) {
-					setShowInviteSwitchModal(true);
-				}
-			} catch (err: unknown) {
-				if (cancelled) return;
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-			}
-		};
-		void initSession();
-		return () => {
-			cancelled = true;
-		};
-	}, [applyEditionState, initialLegacyInvite, initialOrgInvite, refreshBootstrap, syncSessionAndBootstrap]);
-
-	const refreshRuntimeOverview = useCallback(async () => {
-		setRuntimeLoading(true);
-		setRuntimeError(null);
-		try {
-			const data = await fetchRuntimeOverview();
-			setRuntimeOverview(data);
-		} catch (err: unknown) {
-			setRuntimeError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setRuntimeLoading(false);
-		}
-	}, []);
-
-	const refreshAdminOverview = useCallback(async () => {
-		setAdminLoading(true);
-		setAdminError(null);
-		try {
-			const data = await fetchAdminOverview();
-			setAdminOverview(data);
-		} catch (err: unknown) {
-			setAdminError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setAdminLoading(false);
-		}
-	}, []);
-
-	useEffect(() => {
-		if (authStatus !== "authenticated") {
-			runtimeAutoFetchedRef.current = false;
-			adminAutoFetchedRef.current = false;
-			setRuntimeOverview(null);
-			setRuntimeError(null);
-			setAdminOverview(null);
-			setAdminError(null);
-			return;
-		}
-		if (activeTab === "settings" && !runtimeAutoFetchedRef.current) {
-			runtimeAutoFetchedRef.current = true;
-			void refreshRuntimeOverview();
-		}
-	}, [authStatus, activeTab, refreshRuntimeOverview]);
-
-	useEffect(() => {
-		if (!noticeBanner || noticePaused) return;
-		const timer = window.setTimeout(() => {
-			setNoticeBanner(null);
-			setNoticePaused(false);
-		}, 4500);
-		return () => window.clearTimeout(timer);
-	}, [noticeBanner, noticePaused]);
-
-	useEffect(() => {
-		if (!noticeBanner) {
-			setNoticePaused(false);
-		}
-	}, [noticeBanner]);
+		if (authStatus !== "authenticated") clearPanels();
+		else if (activeTab === "settings") openRuntimePanel();
+	}, [authStatus, activeTab, clearPanels, openRuntimePanel]);
 
 	useEffect(() => {
 		if (authStatus !== "authenticated") return;
@@ -470,69 +277,25 @@ export function App() {
 		[bootstrap],
 	);
 
-	const selectedWorkspace = useMemo(
-		() => bootstrap?.workspaces.find((w) => w.id === selectedWorkspaceId) ?? null,
-		[bootstrap, selectedWorkspaceId],
-	);
-	const draftEffectiveOrgId = selectedWorkspace?.orgId ?? (selectedOrgId || null);
-	const effectiveOrgIdForScope =
-		(selectedMatterId ? matterDetail?.matter.orgId : null) ?? selectedWorkspace?.orgId ?? (selectedOrgId || null);
-	const headerContact: TeamMemberDto | null = useMemo(() => {
-		if (!bootstrap) return null;
-		if (selectedMatterId && matterDetail?.matter.leadMemberId) {
-			return bootstrap.members.find((m) => m.id === matterDetail.matter.leadMemberId) ?? null;
-		}
-		if (selectedMemberId !== "auto") {
-			return bootstrap.members.find((m) => m.id === selectedMemberId) ?? null;
-		}
-		const primaryId = resolveEffectivePrimaryContactId(
-			bootstrap.members,
-			effectiveOrgIdForScope,
-			bootstrap.orgAiRolesByOrgId,
-		);
-		return bootstrap.members.find((m) => m.id === primaryId) ?? bootstrap.members[0] ?? null;
-	}, [bootstrap, matterDetail, selectedMatterId, selectedMemberId, effectiveOrgIdForScope]);
-
-	const memberThemeMap = useMemo(() => {
-		const map = new Map<string, { bg: string; tilt: string }>();
-		bootstrap?.members.forEach((member, index) => {
-			map.set(member.id, getBotTheme(index));
-		});
-		return map;
-	}, [bootstrap]);
-
-	const activeDialogs = useMemo(() => {
-		if (!bootstrap) return [];
-		return selectedMatterId
-			? bootstrap.pendingDialogs.filter((d) => d.matterId === selectedMatterId)
-			: bootstrap.pendingDialogs;
-	}, [bootstrap, selectedMatterId]);
-
-	const templateByRoleId = useMemo(() => {
-		const map = new Map<string, RoleTemplateDto>();
-		for (const tpl of bootstrap?.templates ?? []) {
-			map.set(tpl.id, tpl);
-		}
-		return map;
-	}, [bootstrap]);
-
-	const initiationScopedMembers = useMemo(() => {
-		const all = bootstrap?.members ?? [];
-		const enabledIds = draftEffectiveOrgId
-			? bootstrap?.orgAiRolesByOrgId?.[draftEffectiveOrgId]?.effectiveMemberIds
-			: undefined;
-		const filtered =
-			!enabledIds || enabledIds.length === 0
-				? all
-				: all.filter(
-						(m) =>
-							enabledIds.includes(m.id) ||
-							m.roleScope === "personal" ||
-							isArchitectMemberId(m.id, all, templateByRoleId),
-					);
-		const primaryId = resolveEffectivePrimaryContactId(all, draftEffectiveOrgId, bootstrap?.orgAiRolesByOrgId);
-		return applyPrimaryContactToMembers(filtered, primaryId);
-	}, [bootstrap, draftEffectiveOrgId, templateByRoleId]);
+	const {
+		selectedWorkspace,
+		draftEffectiveOrgId,
+		effectiveOrgIdForScope,
+		headerContact,
+		memberThemeMap,
+		activeDialogs,
+		templateByRoleId,
+		initiationScopedMembers,
+		effectiveOrg,
+		orgEffectiveMemberIds,
+	} = useMatterScope({
+		bootstrap,
+		matterDetail,
+		selectedMatterId,
+		selectedMemberId,
+		selectedOrgId,
+		selectedWorkspaceId,
+	});
 
 	const filteredMatters = useMemo(() => {
 		const list = bootstrap?.matters ?? [];
@@ -561,15 +324,6 @@ export function App() {
 			return deliv.serviceUrl ?? linked?.url ?? null;
 		},
 		[bootstrap],
-	);
-
-	const composerAttachmentText = useMemo(
-		() =>
-			composerFiles
-				.map((item) => item.content)
-				.join("\n")
-				.slice(0, 1200),
-		[composerFiles],
 	);
 
 	const initiation = useMatterInitiationState({
@@ -664,76 +418,8 @@ export function App() {
 		return initiation.draftDiscussionAiEnabled;
 	}, [initiation.draftDiscussionAiEnabled, matterDetail, selectedMatterId]);
 
-	const handleAddComposerAttachments = useCallback(async (files: FileList | File[]) => {
-		const incoming = Array.from(files ?? []);
-		if (incoming.length === 0) return;
-		const imageFiles: File[] = [];
-		const docFiles: File[] = [];
-		for (const file of incoming) {
-			if (isSupportedImageFile(file)) {
-				imageFiles.push(file);
-			} else {
-				docFiles.push(file);
-			}
-		}
-		const warnings: string[] = [];
-		if (imageFiles.length > 0) {
-			const res = await prepareComposerImages(imageFiles, composerImagesRef.current.length);
-			if (res.attachments.length > 0) {
-				setComposerImages((prev) => [...prev, ...res.attachments].slice(0, MAX_COMPOSER_IMAGES));
-			}
-			warnings.push(...res.warnings);
-		}
-		if (docFiles.length > 0) {
-			const res = await prepareComposerFiles(docFiles, composerFilesRef.current.length);
-			if (res.attachments.length > 0) {
-				setComposerFiles((prev) => [...prev, ...res.attachments].slice(0, MAX_COMPOSER_FILES));
-			}
-			warnings.push(...res.warnings);
-		}
-		if (warnings.length > 0) {
-			setErrorBanner(warnings[0]!);
-		}
-	}, []);
-
-	const handleAddPastedText = useCallback((text: string) => {
-		if (composerFilesRef.current.length >= MAX_COMPOSER_FILES) {
-			setErrorBanner(`每次最多附带 ${MAX_COMPOSER_FILES} 个文本文件或长文本片段`);
-			return;
-		}
-		const pastedIndex = composerFilesRef.current.filter((item) => item.kind === "pasted_text").length + 1;
-		const attachment = createPastedTextAttachment(text, pastedIndex);
-		if (attachment.sizeBytes > MAX_COMPOSER_FILE_BYTES) {
-			setErrorBanner(`粘贴文本超过 512KB 上限，请分段后再发送`);
-			return;
-		}
-		setComposerFiles((prev) => [...prev, attachment].slice(0, MAX_COMPOSER_FILES));
-	}, []);
-
-	const handleRemoveComposerImage = useCallback((imageId: string) => {
-		setComposerImages((prev) => prev.filter((item) => item.id !== imageId));
-	}, []);
-
-	const handleRemoveComposerFile = useCallback((fileId: string) => {
-		setComposerFiles((prev) => prev.filter((item) => item.id !== fileId));
-	}, []);
-
-	const handleExpandPastedFile = useCallback((fileId: string) => {
-		const target = composerFilesRef.current.find((item) => item.id === fileId);
-		if (!target) return;
-		setComposerFiles((prev) => prev.filter((item) => item.id !== fileId));
-		setComposerText((prev) => (prev.trim() ? `${prev}\n${target.content}` : target.content));
-		composerRef.current?.focus();
-	}, []);
-
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
 	const accountUser = bootstrap?.accountUser ?? sessionAccountUser ?? null;
-	const effectiveOrg = effectiveOrgIdForScope
-		? (bootstrap?.organizations.find((o) => o.id === effectiveOrgIdForScope) ?? null)
-		: null;
-	const orgEffectiveMemberIds = effectiveOrgIdForScope
-		? (bootstrap?.orgAiRolesByOrgId?.[effectiveOrgIdForScope]?.effectiveMemberIds ?? null)
-		: null;
 	const isSuperAdmin = accountUser
 		? accountUser.platformRole === "super_admin"
 		: !permissionRequired && currentUser?.permissionRole !== "collaborator";
@@ -744,11 +430,8 @@ export function App() {
 			navigateRoute({ tab: "chats" }, { replace: true });
 			return;
 		}
-		if (!adminAutoFetchedRef.current) {
-			adminAutoFetchedRef.current = true;
-			void refreshAdminOverview();
-		}
-	}, [authStatus, activeTab, isSuperAdmin, navigateRoute, refreshAdminOverview]);
+		openAdminPanel();
+	}, [authStatus, activeTab, isSuperAdmin, navigateRoute, openAdminPanel]);
 	const canDispatchAi = accountUser
 		? accountUser.status === "active" && accountUser.canDispatchAi && effectiveOrg?.orgRole !== "org_viewer"
 		: currentUser?.permissionRole !== "collaborator";
@@ -812,195 +495,6 @@ export function App() {
 			setErrorBanner(error instanceof Error ? error.message : String(error));
 		} finally {
 			setSubmitting(false);
-		}
-	};
-
-	const handleSetupAdmin = async (input: { email: string; password: string; displayName: string }) => {
-		setAuthError(null);
-		try {
-			await setupInitialAdmin(input);
-			await syncSessionAndBootstrap();
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "初始化超级管理员失败");
-		}
-	};
-
-	const handleRegisterEmail = async (input: {
-		email: string;
-		password: string;
-		displayName: string;
-		inviteToken?: string;
-	}) => {
-		setAuthError(null);
-		try {
-			const res = await registerWithEmail(input);
-			setSessionAccountUser(res.accountUser);
-			if (res.pendingApproval) {
-				setPendingApproval(true);
-				setAuthStatus("unauthenticated");
-				return;
-			}
-			await syncSessionAndBootstrap();
-			if (activeOrgInviteToken) {
-				setActiveOrgInviteToken("");
-				setShowInviteSwitchModal(false);
-				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
-			}
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "注册失败");
-		}
-	};
-
-	const handleLoginEmail = async (input: { email: string; password: string; inviteToken?: string }) => {
-		setAuthError(null);
-		try {
-			const res = await loginWithEmail(input);
-			if (res.pendingApproval) {
-				setSessionAccountUser(res.accountUser ?? null);
-				setPendingApproval(true);
-				setAuthStatus("unauthenticated");
-				return;
-			}
-			await syncSessionAndBootstrap();
-			if (activeOrgInviteToken) {
-				setActiveOrgInviteToken("");
-				setShowInviteSwitchModal(false);
-				window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
-			}
-			if (res.joinedOrgId) {
-				setNoticeBanner("登录成功并已自动加入邀请组织");
-			}
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "邮箱或密码错误");
-		}
-	};
-
-	const clearPendingInviteFromUrl = () => {
-		setShowInviteSwitchModal(false);
-		setActiveOrgInviteToken("");
-		window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/chats"}`);
-	};
-
-	const handleSwitchToInviteAuth = async (targetTab: "register" | "login") => {
-		if (inviteActionBusy) return;
-		setInviteActionBusy(true);
-		try {
-			const currentKind = bootstrap?.authKind ?? authKind;
-			if (currentKind && currentKind !== "loopback") {
-				await logoutAuthSession();
-			}
-			setAdminOverview(null);
-			adminAutoFetchedRef.current = false;
-			setPendingApproval(false);
-			setSessionAccountUser(null);
-			setCurrentUserOverride(null);
-			setBootstrap(null);
-			setAuthKind(null);
-			setAuthError(null);
-			setAuthPreferredTab(targetTab);
-			setShowInviteSwitchModal(false);
-			if (activeOrgInviteToken) {
-				const preview = await fetchOrgInvitePreview(activeOrgInviteToken).catch(() => null);
-				if (preview) setInvitePreview(preview);
-			}
-			setAuthStatus("unauthenticated");
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		} finally {
-			setInviteActionBusy(false);
-		}
-	};
-
-	const handleAcceptInviteWithCurrentUser = async () => {
-		if (!activeOrgInviteToken || inviteActionBusy) return;
-		setInviteActionBusy(true);
-		try {
-			const joined = await joinOrganizationByInvite(activeOrgInviteToken);
-			clearPendingInviteFromUrl();
-			setNoticeBanner(`已使用当前账号加入组织「${joined.organization.name}」`);
-			await refreshBootstrap();
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : "加入组织失败");
-		} finally {
-			setInviteActionBusy(false);
-		}
-	};
-
-	const handleRefreshAuthSession = async () => {
-		setAuthError(null);
-		try {
-			await syncSessionAndBootstrap();
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "刷新登录状态失败");
-		}
-	};
-
-	const handleInviteLogin = async (tokenValue: string) => {
-		const token = tokenValue.trim();
-		if (!token) return;
-		setAuthError(null);
-		try {
-			const res = await loginWithInviteToken(token);
-			setCurrentUserOverride(res.currentUser);
-			setComposerMode(res.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
-			setAuthTokenInput("");
-			setAuthStatus("authenticated");
-			await refreshBootstrap();
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "邀请口令无效");
-		}
-	};
-
-	const handleLogoutOrRestore = async () => {
-		const effectiveKind = bootstrap?.authKind ?? authKind;
-		try {
-			// On localhost免登录模式, clicking "切换账号" opens the login/registration gate without loop-bouncing.
-			if (effectiveKind === "loopback" && !permissionRequired) {
-				setAuthError(null);
-				setAuthStatus("unauthenticated");
-				return;
-			}
-			await logoutAuthSession();
-			setAdminOverview(null);
-			adminAutoFetchedRef.current = false;
-			setPendingApproval(false);
-			setSessionAccountUser(null);
-			setAuthKind(null);
-			if (activeTab === "admin") {
-				navigateRoute({ tab: "chats" }, { replace: true });
-			}
-			const session = await fetchAuthSession();
-			applyEditionState(session.requireAuth);
-			setPermissionRequired(session.permissionRequired);
-			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
-			setRegistrationMode(session.registrationMode ?? "open_review");
-			// If exiting a legacy LAN guest preview on localhost, seamlessly restore the host owner view.
-			if (effectiveKind === "legacy_token" && session.authenticated && session.currentUser) {
-				setAuthKind(session.authKind ?? "loopback");
-				setCurrentUserOverride(session.currentUser);
-				setComposerMode(session.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
-				await refreshBootstrap();
-				setNoticeBanner(`已结束协同体验，恢复本机所有者「${session.currentUser.name}」`);
-			} else {
-				setCurrentUserOverride(null);
-				setBootstrap(null);
-				setAuthStatus("unauthenticated");
-			}
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
-
-	const handleRestoreLoopbackOwner = async () => {
-		setAuthError(null);
-		try {
-			await logoutAuthSession();
-			const ok = await syncSessionAndBootstrap();
-			if (ok) {
-				setNoticeBanner("已返回本机免密所有者视图");
-			}
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
 		}
 	};
 
@@ -1077,30 +571,8 @@ export function App() {
 		? Math.max(0, Math.floor((nowMs - (progressStartedAt[selectedMatterId] ?? nowMs)) / 1000))
 		: 0;
 
-	if (authStatus === "checking" || authStatus === "unauthenticated") {
-		return (
-			<AuthGateView
-				status={authStatus}
-				permissionRequired={permissionRequired}
-				needsAdminSetup={needsAdminSetup}
-				pendingApproval={pendingApproval}
-				registrationMode={registrationMode}
-				accountUser={sessionAccountUser}
-				authError={authError}
-				authTokenInput={authTokenInput}
-				orgInviteToken={activeOrgInviteToken}
-				invitePreview={invitePreview}
-				preferredTab={authPreferredTab}
-				onTokenInputChange={setAuthTokenInput}
-				onSubmitInvite={(token) => void handleInviteLogin(token)}
-				onSetupAdmin={handleSetupAdmin}
-				onLoginEmail={handleLoginEmail}
-				onRegisterEmail={handleRegisterEmail}
-				onRefreshSession={handleRefreshAuthSession}
-				onLogoutPending={handleLogoutOrRestore}
-				onRestoreOwner={() => void handleRestoreLoopbackOwner()}
-			/>
-		);
+	if (authStatus !== "authenticated") {
+		return <AuthGateView status={authStatus} {...auth.gateProps} />;
 	}
 
 	const mobileViewTitle =
@@ -1192,51 +664,12 @@ export function App() {
 			/>
 
 			<main className="main-stage">
-				{(errorBanner || noticeBanner) && (
-					<div className="app-banners">
-						{errorBanner && (
-							<div className="approval-card banner-gap" role="alert">
-								<div className="banner-row">
-									<span>
-										<strong>操作提示：</strong> {errorBanner}
-									</span>
-									<button
-										type="button"
-										className="btn-inline"
-										onClick={() => setErrorBanner(null)}
-										aria-label="关闭操作提示"
-									>
-										关闭
-									</button>
-								</div>
-							</div>
-						)}
-						{noticeBanner && (
-							<output
-								className="notice-card banner-gap"
-								aria-live="polite"
-								onMouseEnter={() => setNoticePaused(true)}
-								onMouseLeave={() => setNoticePaused(false)}
-								onFocus={() => setNoticePaused(true)}
-								onBlur={() => setNoticePaused(false)}
-							>
-								<div className="banner-row">
-									<span>{noticeBanner}</span>
-									<button
-										type="button"
-										className="btn-inline"
-										onClick={() => {
-											setNoticePaused(false);
-											setNoticeBanner(null);
-										}}
-									>
-										知道了
-									</button>
-								</div>
-							</output>
-						)}
-					</div>
-				)}
+				<WorkbenchBanners
+					errorBanner={errorBanner}
+					noticeBanner={noticeBanner}
+					onDismissError={dismissError}
+					onDismissNotice={dismissNotice}
+				/>
 				<div className="mobile-topbar">
 					<button
 						type="button"
@@ -1436,7 +869,7 @@ export function App() {
 						onRefresh={refreshBootstrap}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
-						onPreviewAsCollaborator={(token) => void handleInviteLogin(token)}
+						onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
 						onRestoreOwner={() => void handleLogoutOrRestore()}
 						onAssignTask={(memberId) => {
 							startNewMatter();
@@ -1473,15 +906,11 @@ export function App() {
 
 				{activeTab === "settings" && (
 					<SettingsView
+						{...settingsProps}
 						currentUser={currentUser}
 						isSuperAdmin={isSuperAdmin}
 						activeSection={settingsSection}
-						overview={runtimeOverview}
-						loading={runtimeLoading}
-						error={runtimeError}
 						onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
-						onRefresh={refreshRuntimeOverview}
-						onOverviewChange={setRuntimeOverview}
 						onNotice={(msg) => setNoticeBanner(msg)}
 						onError={(msg) => setErrorBanner(msg)}
 						onOpenTeam={() => navigateRoute({ tab: "team" })}
@@ -1489,27 +918,7 @@ export function App() {
 				)}
 
 				{activeTab === "admin" && isSuperAdmin && (
-					<AdminView
-						overview={adminOverview}
-						loading={adminLoading}
-						error={adminError}
-						currentUserId={accountUser?.id ?? null}
-						onRefresh={refreshAdminOverview}
-						onSaveSettings={async (input) => {
-							await updateAdminSettings(input);
-							await refreshAdminOverview();
-							await refreshBootstrap();
-						}}
-						onUpdateUser={async (userId, input) => {
-							await updateAdminUser(userId, input);
-							await refreshAdminOverview();
-						}}
-						onAbortMatter={async (matterId) => {
-							await abortAdminMatter(matterId);
-							await refreshAdminOverview();
-							await refreshBootstrap();
-						}}
-					/>
+					<AdminView {...adminProps} currentUserId={accountUser?.id ?? null} />
 				)}
 			</main>
 
@@ -1546,114 +955,12 @@ export function App() {
 				onError={(msg) => setErrorBanner(msg)}
 			/>
 
-			<ModalDialog
-				open={showInviteSwitchModal && Boolean(activeOrgInviteToken)}
-				title={
-					invitePreview?.valid === false
-						? "组织邀请链接提示"
-						: invitePreview?.alreadyMember
-							? `当前浏览器已登录「${accountUser?.displayName ?? currentUser?.name ?? "当前账号"}」`
-							: `受邀加入组织「${invitePreview?.orgName ?? "目标组织"}」`
-				}
-				subtitle={
-					invitePreview?.valid === false
-						? (invitePreview.reason ?? "邀请链接无效或已过期")
-						: (bootstrap?.authKind ?? authKind) === "loopback"
-							? "当前为本机免密视图，请切换或注册个人账号后再加入组织。"
-							: invitePreview?.alreadyMember
-								? `当前浏览器中的账号（${accountUser?.email ?? ""}）已是该组织成员；如需测试或为新同事注册账号加入，请先退出当前账号。`
-								: `受邀加入组织「${invitePreview?.orgName ?? ""}」，你可以用当前已登录账号加入，或退出并注册新账号。`
-				}
-				size="sm"
-				closeDisabled={inviteActionBusy}
-				onClose={clearPendingInviteFromUrl}
-				footer={
-					invitePreview?.valid === false ? (
-						<button type="button" className="btn-pill-dark" onClick={clearPendingInviteFromUrl}>
-							知道了
-						</button>
-					) : (bootstrap?.authKind ?? authKind) === "loopback" ? (
-						<>
-							<button
-								type="button"
-								className="btn-pill-outline"
-								disabled={inviteActionBusy}
-								onClick={clearPendingInviteFromUrl}
-							>
-								暂不处理
-							</button>
-							<button
-								type="button"
-								className="btn-inline"
-								disabled={inviteActionBusy}
-								onClick={() => void handleSwitchToInviteAuth("login")}
-							>
-								登录已有账号
-							</button>
-							<button
-								type="button"
-								className="btn-pill-dark"
-								disabled={inviteActionBusy}
-								onClick={() => void handleSwitchToInviteAuth("register")}
-							>
-								注册新账号并加入
-							</button>
-						</>
-					) : invitePreview?.alreadyMember ? (
-						<>
-							<button
-								type="button"
-								className="btn-pill-outline"
-								disabled={inviteActionBusy}
-								onClick={clearPendingInviteFromUrl}
-							>
-								留在当前账号
-							</button>
-							<button
-								type="button"
-								className="btn-pill-dark"
-								disabled={inviteActionBusy}
-								onClick={() => void handleSwitchToInviteAuth("register")}
-							>
-								退出并注册新成员
-							</button>
-						</>
-					) : (
-						<>
-							<button
-								type="button"
-								className="btn-pill-outline"
-								disabled={inviteActionBusy}
-								onClick={clearPendingInviteFromUrl}
-							>
-								暂不加入
-							</button>
-							<button
-								type="button"
-								className="btn-inline"
-								disabled={inviteActionBusy}
-								onClick={() => void handleSwitchToInviteAuth("register")}
-							>
-								退出并注册新账号
-							</button>
-							<button
-								type="button"
-								className="btn-pill-dark"
-								disabled={inviteActionBusy}
-								onClick={() => void handleAcceptInviteWithCurrentUser()}
-							>
-								用当前账号加入
-							</button>
-						</>
-					)
-				}
-			>
-				{invitePreview?.valid && !invitePreview.alreadyMember && accountUser && (
-					<div className="muted-hint">
-						当前账号：{accountUser.displayName}（{accountUser.email}）
-					</div>
-				)}
-			</ModalDialog>
+			<OrgInviteModal
+				{...auth.inviteDialogProps}
+				authKind={bootstrap?.authKind ?? authKind}
+				accountUser={accountUser}
+				currentUser={currentUser}
+			/>
 		</div>
 	);
 }

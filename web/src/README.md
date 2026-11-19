@@ -1,24 +1,26 @@
 # 前端状态与组件
 
-[main.tsx](main.tsx) 挂载应用，[App.tsx](App.tsx) 持有事项选择、bootstrap/detail 刷新、SSE 订阅和顶层操作。
-页面内局部展开、输入等状态尽量留在所属组件，避免继续扩大根组件状态。
+[main.tsx](main.tsx) 挂载应用并排列样式加载顺序。[App.tsx](App.tsx) 装配页面、导航、bootstrap/事项详情刷新与 SSE 同步。认证、草稿、事项范围和面板加载分别由下表中的 hooks 维护，页面内的临时状态留在所属组件。
 
-[App.tsx](App.tsx) 在各页共用的区域显示操作错误与通知，支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](components/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
+[WorkbenchBanners](components/WorkbenchBanners.tsx) 在各页共用的区域显示操作错误与通知，支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](components/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
 
 | 修改目标 | 入口 |
 | --- | --- |
-| HTTP DTO 和请求 | [api.ts](api.ts)，与服务响应一起核对 |
+| HTTP DTO 和请求 | [api.ts](api.ts) 集中导出。[client.ts](api/client.ts) 处理请求错误和会话吊销。[matters.ts](api/matters.ts)、[team.ts](api/team.ts)、[organizations.ts](api/organizations.ts)、[deliverables.ts](api/deliverables.ts)、[experiences.ts](api/experiences.ts) 按业务维护契约，与各自服务响应一起核对 |
+| 会话、注册和邀请 | [useAuthSession](hooks/useAuthSession.ts)、[OrgInviteModal](components/OrgInviteModal.tsx) |
+| 当前事项有效工作区、组织与成员 | [useMatterScope](hooks/useMatterScope.ts) |
+| 设置及超管页面加载与刷新 | [useWorkbenchPanels](hooks/useWorkbenchPanels.ts) |
 | Hash 路由与浏览器前进后退 | [hashRouter.ts](hashRouter.ts) |
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
 | 布局与共用样式/格式 | [styles/tokens.css](styles/tokens.css)（`--text-*` 字号阶梯、`--page-pad-*`/`--section-gap`）、[styles/primitives.css](styles/primitives.css)（`.ui-sections-stack`、`.ui-section*`、`.ui-card` 等原语）及 [utils.ts](utils.ts) |
-| 附件前端预处理与粘贴折叠 | [imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断） |
+| 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断） |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx)、[ExploringStatus](components/ExploringStatus.tsx) |
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx)（对应 `#/settings` 与 `#/settings/{base,extensions,config}`，按类目展示 Pi 底座、扩展插件及按节分组的运行配置，支持超级管理员在页面一键克隆并持久化启用/更新/停用 `pstack` 至 `.data/extensions/repo/<仓库名>`） |
 | 账号门禁与超级管理员控制台 | [AuthGateView](components/AuthGateView.tsx)（超管首次初始化、邮箱密码登录/开放注册、待审核提示及 `?invite=` / `orginv_` 加入组织）、[AdminView](components/AdminView.tsx)（对应 `#/admin`，管理用户审核/配额含 `maxPersonalRoles`/`defaultMaxPersonalRoles`、注册策略、克隆主目录、运行任务紧急中止与审计日志） |
 
-组件数量尚小，本页直接定位文件，`components/` 不再加一层重复目录说明。
+样式按页面职责定位到[团队](styles/team.css)、[角色架构师](styles/role-architect.css)、[设置](styles/settings.css)、[账号与超管](styles/account-admin.css)、[对话流](styles/chat-stream.css)和[对话卡片](styles/chat-cards.css)。修改共用选择器时按 [main.tsx](main.tsx) 中的加载顺序检查作用范围。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。
 
 ## 运行状态与事件同步
@@ -59,7 +61,7 @@
 
 - [TeamView](components/TeamView.tsx)、[OrganizationsSection](components/team/OrganizationsSection.tsx) 与 [MaterialsView](components/MaterialsView.tsx) 覆盖多组织团队协同与项目接入边界：
   - 任何已启用账号可在配额内自建组织，在组织卡片内管理人类成员角色（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、生成 `orginv_` 邀请链接、通过邀请码加入其他组织，以及在「AI 角色」与「编辑组织身份」中切换本组织是否启用 AI 角色独立 Git Author 署名（默认关闭，提交直接沿用目标仓库目录自身的 Git `user.name` / `user.email`）、勾选启用的 AI 角色、指定组织主联系人并为已启用角色单独覆写本组织的 `gitNameOverride` / `gitEmailOverride`（[Sidebar](components/Sidebar.tsx)、[ChatStage](components/ChatStage.tsx) 与 [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 同步按当前组织有效 AI 名册及组织主联系人过滤/预设，[TeamView](components/TeamView.tsx) 顶部另提供按组织或全局直达的主联系人切换栏并投影组织级名称与 Git 覆盖，[MemberInspectorModal](components/team/MemberInspectorModal.tsx) 如实提示当前默认仓库提交或角色署名启用状态）；同时保留局域网协同同事与 `inv_` 邀请预览入口。
-  - [App.tsx](App.tsx)、[AuthGateView](components/AuthGateView.tsx) 与 [Sidebar](components/Sidebar.tsx) 区分 `loopback`（本机免密态显示「切换账号」）、`session`（账号会话显示「退出登录」）与 `legacy_token`（内网体验访客显示「恢复所有者/退出」）；携带 `?invite=orginv_...` 访问时若当前浏览器尚未登录则默认展开含邀请组织提示的「注册账号」表单，若已登录则弹出确认弹窗由用户选择以当前账号加入或「退出并注册新成员」（不静默自动消耗同浏览器旧会话的邀请次数）。
+  - [useAuthSession](hooks/useAuthSession.ts)、[AuthGateView](components/AuthGateView.tsx) 与 [Sidebar](components/Sidebar.tsx) 区分 `loopback`（本机免密态显示「切换账号」）、`session`（账号会话显示「退出登录」）与 `legacy_token`（内网体验访客显示「恢复所有者/退出」）；携带 `?invite=orginv_...` 访问时若当前浏览器尚未登录则默认展开含邀请组织提示的「注册账号」表单，若已登录则弹出确认弹窗由用户选择以当前账号加入或「退出并注册新成员」（不静默自动消耗同浏览器旧会话的邀请次数）。
   - [MaterialsView](components/MaterialsView.tsx) 登记仓库支持切换「从 Git 地址克隆到组织主目录（`cloned`）」与受平台策略控制的「指定服务器本地目录（`local`）」，并可配置仓库可见范围（`org` / `restricted` 授权成员）。
   - [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx) 支持设置新建事项范围（`org` 组织可见 / `private` 仅发起人与指定人类成员）与选择组织人类同事；已授权的 `org_member` 可直接向 AI 派发任务。
   - [ComposerDock](components/chat/ComposerDock.tsx) 对团队版非超管账号隐藏「不归属组织」。[useMatterActions](hooks/useMatterActions.ts) 在普通新建事项和 Role Architect 对话中提交用户所选或默认可用组织。Role Architect 对话隐藏仓库选择，组织归属由服务端复核。

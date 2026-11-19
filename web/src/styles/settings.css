@@ -1,0 +1,288 @@
+/* Settings view (categorized runtime base, extensions & config sections) */
+.settings-category-tabs {
+	margin-top: 14px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--border);
+}
+.settings-alert-gap {
+	margin-top: 14px;
+}
+.settings-base-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.settings-kv-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+.settings-kv-item {
+	background: var(--bg-sidebar);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	padding: 9px 11px;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.settings-kv-label {
+	font-size: var(--text-micro);
+	color: var(--text-muted);
+	font-weight: 600;
+}
+.settings-kv-value {
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+.settings-base-card code,
+.settings-ext-card code,
+.settings-config-card code,
+.ui-section code,
+.muted-hint code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 0.9em;
+	background: var(--bg-subtle);
+	padding: 1px 5px;
+	border-radius: 5px;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	max-width: 100%;
+}
+.mono-wrap {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+.settings-details {
+	border-top: 1px solid var(--border);
+	padding-top: 8px;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+}
+.settings-details > summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--text-secondary);
+}
+.settings-details > summary:hover {
+	color: var(--text-primary);
+}
+.settings-isolation-list {
+	margin-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.settings-isolation-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding: 7px 10px;
+	border-radius: var(--radius-sm);
+	background: var(--bg-sidebar);
+	border: 1px solid var(--border);
+}
+.settings-isolation-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-xs);
+}
+.settings-isolation-tags {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.settings-filter-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.settings-ext-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.settings-ext-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.settings-ext-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.settings-ext-name-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.settings-ext-name {
+	font-size: var(--text-sm);
+	color: var(--text-primary);
+}
+.settings-ext-path {
+	font-size: var(--text-micro);
+	color: var(--text-muted);
+}
+.settings-ext-summary {
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+.settings-ext-error {
+	font-size: var(--text-xs);
+	color: var(--danger-text);
+}
+.settings-ext-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.settings-pstack-panel {
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+.settings-pstack-active-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.settings-pstack-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	flex: 1 1 260px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.settings-pstack-path-line {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	flex-wrap: wrap;
+	color: var(--text-muted);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.settings-pstack-path-label {
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.settings-pstack-setup {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.settings-pstack-form-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.settings-pstack-form-row .text-input {
+	flex: 1 1 280px;
+	min-width: 0;
+}
+.settings-config-sections {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.settings-config-card {
+	padding: 10px 14px;
+}
+.settings-config-summary {
+	list-style: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	cursor: pointer;
+}
+.settings-config-summary::-webkit-details-marker {
+	display: none;
+}
+.settings-config-title {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--text-primary);
+}
+.settings-config-grid {
+	margin-top: 10px;
+	padding-top: 8px;
+	border-top: 1px solid var(--border);
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px 16px;
+}
+.settings-config-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 0;
+	border-bottom: 1px dashed var(--border);
+	min-width: 0;
+}
+.settings-config-keycol {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	flex: 0 0 auto;
+	max-width: 48%;
+}
+.settings-config-keycol code {
+	white-space: nowrap;
+}
+.settings-config-valcol {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	text-align: right;
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+	flex: 1 1 0%;
+	min-width: 0;
+}
+.settings-config-valcol > strong {
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}

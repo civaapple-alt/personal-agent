@@ -142,8 +142,8 @@ flowchart TB
 
 | 源码入口 | 负责的事实与行为 |
 | --- | --- |
-| [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../src/server/auth.ts)、[sse](../src/server/sse.ts)、[uploads](../src/server/uploads.ts)、[dispatch-runner](../src/server/dispatch-runner.ts) 与 [routes](../src/server/routes/matters.ts) 维护 |
-| [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 事项生命周期与归档；[worker-runner](../src/orchestrator/worker-runner.ts)、[delegation-runner](../src/orchestrator/delegation-runner.ts)、[observer-runner](../src/orchestrator/observer-runner.ts)、[distiller](../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
+| [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../src/server/auth.ts)、[sse](../src/server/sse.ts)、[uploads](../src/server/uploads.ts)、[dispatch-runner](../src/server/dispatch-runner.ts) 与 [业务路由](../src/server/README.md#业务路由) 维护 |
+| [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../src/orchestrator/worker-runner.ts)、[delegation-runner](../src/orchestrator/delegation-runner.ts)、[observer-runner](../src/orchestrator/observer-runner.ts)、[distiller](../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
 | [`matter-initiation.ts`](../src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
 | [`execution-context.ts`](../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
 | [`team-extension.ts`](../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
@@ -151,6 +151,30 @@ flowchart TB
 | [`pi-rpc-worker.ts`](../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
 | [`storage/`](../src/storage/) | `PersonalAgentStore` 门面委托各域 [repos](../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
 | [`dialog-broker.ts`](../src/server/dialog-broker.ts)、[`preview-manager.ts`](../src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
+
+### 目录组织与源文件行数
+
+后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../src/README.md)和[前端状态与组件](../web/src/README.md)。
+
+统计范围为 `src/` 和 `web/` 的 TypeScript、JavaScript、CSS 和 HTML 源文件。计入注释与空行，排除文档、依赖和构建产物。基线为 `ab40a07`。
+
+| 目录 | 文件数（调整前 → 调整后） | 总行数 | ≥500 行 | ≥1,000 行 |
+| --- | ---: | ---: | ---: | ---: |
+| `src/` | 86 → 93 | 24,942 → 25,073 | 16 → 16 | 3 → 0 |
+| `web/` | 59 → 79 | 26,293 → 26,618 | 22 → 21 | 4 → 0 |
+| 合计 | 145 → 172 | 51,235 → 51,691 | 38 → 37 | 7 → 0 |
+
+| 原入口 | 调整前 | 调整后 |
+| --- | ---: | --- |
+| 网页根组件 | 1,659 | [App.tsx](../web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
+| 网页 API | 1,570 | [api.ts](../web/src/api.ts) 11 行，业务模块最大 402 行 |
+| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../web/src/styles/role-architect.css) 551 行 |
+| 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../src/server/routes/role-packages.ts) 442 行 |
+| 团队编排 | 1,205 | [team-orchestrator.ts](../src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../src/orchestrator/matter-dispatch.ts) 542 行 |
+| 事项路由 | 1,133 | [matters.ts](../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../src/server/routes/matter-messages.ts) 743 行 |
+| 对话流样式 | 1,014 | [chat-stream.css](../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../web/src/styles/chat-cards.css) 269 行 |
+
+行数用于定位阅读和修改成本。后续对话改动优先梳理 [ChatStage.tsx](../web/src/components/ChatStage.tsx)（971 行）的顶栏、消息流与输入区，再检查 [chat-composer.css](../web/src/styles/chat-composer.css)（945 行）的浮层与输入样式。新增格式化或筛选逻辑时，优先放到调用页面附近，逐步收窄 [utils.ts](../web/src/utils.ts)（904 行）的共用范围。后端最大的 [pi-rpc-worker.ts](../src/rpc/pi-rpc-worker.ts)（781 行）集中维护同一进程和请求生命周期，适合在相关协议变更时再复核边界。
 
 ### 领域模型与当前范围
 

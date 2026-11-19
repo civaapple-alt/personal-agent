@@ -15,8 +15,12 @@ import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth
 import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
 import { handleDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
+import { handleMatterMessageRoutes } from "./routes/matter-messages.ts";
+import { handleMatterSettingsRoutes } from "./routes/matter-settings.ts";
 import { handleMatterRoutes } from "./routes/matters.ts";
-import { handleTeamMemoryRoutes } from "./routes/team-memories.ts";
+import { handleMemoryRoutes } from "./routes/memories.ts";
+import { handleRoleDesignRoutes } from "./routes/role-design.ts";
+import { handleTeamRoutes } from "./routes/team.ts";
 import { createSseHub } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
 
@@ -116,8 +120,12 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		handleAdminRoutes,
 		handleBootstrapAndCollaboratorRoutes,
 		handleMatterRoutes,
+		handleMatterSettingsRoutes,
+		handleMatterMessageRoutes,
 		handleDeliverableOrgPreviewRoutes,
-		handleTeamMemoryRoutes,
+		handleRoleDesignRoutes,
+		handleTeamRoutes,
+		handleMemoryRoutes,
 	];
 
 	const server = createServer(async (req, res) => {
