@@ -174,7 +174,7 @@ flowchart TB
 | 事项路由 | 1,133 | [matters.ts](../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../src/server/routes/matter-messages.ts) 743 行 |
 | 对话流样式 | 1,014 | [chat-stream.css](../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../web/src/styles/chat-cards.css) 269 行 |
 
-行数用于定位阅读和修改成本。后续对话改动优先梳理 [ChatStage.tsx](../web/src/components/ChatStage.tsx)（971 行）的顶栏、消息流与输入区，再检查 [chat-composer.css](../web/src/styles/chat-composer.css)（945 行）的浮层与输入样式。新增格式化或筛选逻辑时，优先放到调用页面附近，逐步收窄 [utils.ts](../web/src/utils.ts)（904 行）的共用范围。后端最大的 [pi-rpc-worker.ts](../src/rpc/pi-rpc-worker.ts)（781 行）集中维护同一进程和请求生命周期，适合在相关协议变更时再复核边界。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../web/src/utils/formatters.ts)、[matterStream.ts](../web/src/utils/matterStream.ts)、[deliverableSummary.ts](../web/src/utils/deliverableSummary.ts)、[orgRoster.ts](../web/src/utils/orgRoster.ts)、[starterTasks.ts](../web/src/utils/starterTasks.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 

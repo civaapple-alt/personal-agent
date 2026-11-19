@@ -146,6 +146,13 @@ export class PiRpcWorker {
 	private terminalError: Error | null = null;
 	private externalIdleSuspendCount = 0;
 	private dialogHandler: ExtensionUiDialogHandler | undefined;
+	private activePromptRun = false;
+	private activePromptDialogInterceptor:
+		| ((
+				request: RpcExtensionUIDialogRequest,
+				next: ExtensionUiDialogHandler,
+		  ) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload)
+		| null = null;
 
 	constructor(options: PiRpcWorkerOptions = {}) {
 		this.options = options;
@@ -436,9 +443,18 @@ export class PiRpcWorker {
 	 * Send a prompt, handle extension UI requests, and wait until `agent_settled`.
 	 * If the prompt returns `disposition: "handled"`, returns immediately without
 	 * waiting for `agent_settled` as required by the Pi RPC specification.
+	 *
+	 * Contract:
+	 * - Only one `runPromptAndWait` may be active per worker instance at a time.
+	 * - `options.signal` cancels the local wait only; callers remain responsible for
+	 *   issuing `abort()` and/or `stop()` on the child process when cancelling a turn.
 	 */
 	async runPromptAndWait(message: string, options: RunPromptOptions = {}): Promise<PromptRunResult> {
 		options.signal?.throwIfAborted();
+		if (this.activePromptRun) {
+			throw new Error("PiRpcWorker already has an active prompt run");
+		}
+		this.activePromptRun = true;
 		const parseNonNegativeMs = (raw: string | undefined, fallback: number): number => {
 			if (raw === undefined || raw.trim() === "") return fallback;
 			const parsed = Number(raw);
@@ -555,21 +571,18 @@ export class PiRpcWorker {
 			resetIdleTimer();
 		});
 
-		const previousHandler = this.dialogHandler;
-		if (previousHandler) {
-			this.dialogHandler = async (request) => {
-				inDialog = true;
-				if (idleTimer) clearTimeout(idleTimer);
-				try {
-					const response = await previousHandler(request);
-					dialogs.push({ request, response });
-					return response;
-				} finally {
-					inDialog = false;
-					resetIdleTimer();
-				}
-			};
-		}
+		this.activePromptDialogInterceptor = async (request, next) => {
+			inDialog = true;
+			if (idleTimer) clearTimeout(idleTimer);
+			try {
+				const response = await next(request);
+				dialogs.push({ request, response });
+				return response;
+			} finally {
+				inDialog = false;
+				resetIdleTimer();
+			}
+		};
 
 		const onAbort = () => rejectSettled(new Error("Prompt cancelled", { cause: options.signal?.reason }));
 		options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -618,6 +631,8 @@ export class PiRpcWorker {
 			};
 		} finally {
 			settledDone = true;
+			this.activePromptRun = false;
+			this.activePromptDialogInterceptor = null;
 			this.idleStateListeners.delete(resetIdleTimer);
 			options.signal?.removeEventListener("abort", onAbort);
 			if (hardTimer) clearTimeout(hardTimer);
@@ -625,9 +640,6 @@ export class PiRpcWorker {
 			offEvent();
 			offNotice();
 			child?.off("exit", onChildExit);
-			if (previousHandler) {
-				this.dialogHandler = previousHandler;
-			}
 		}
 	}
 
@@ -682,13 +694,16 @@ export class PiRpcWorker {
 	}
 
 	private async handleDialogRequest(request: RpcExtensionUIDialogRequest): Promise<void> {
-		if (!this.dialogHandler) {
+		const handler = this.dialogHandler;
+		if (!handler) {
 			this.safeSendUiResponse(request.id, { cancelled: true });
 			return;
 		}
 
 		try {
-			const payload = await this.dialogHandler(request);
+			const payload = this.activePromptDialogInterceptor
+				? await this.activePromptDialogInterceptor(request, handler)
+				: await handler(request);
 			this.safeSendUiResponse(request.id, payload);
 		} catch {
 			this.safeSendUiResponse(request.id, { cancelled: true });

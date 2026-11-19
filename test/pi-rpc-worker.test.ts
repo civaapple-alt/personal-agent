@@ -384,3 +384,57 @@ test("PiRpcWorker signal interrupts an unsettled real subprocess promptly and st
 		await Promise.all([worker.stop(), worker.stop()]);
 	}
 });
+
+test("PiRpcWorker rejects overlapping runPromptAndWait calls and preserves dynamic setDialogHandler updates", async () => {
+	const mock = makeInlineMockScript(`
+		let buf = "";
+		process.stdin.setEncoding("utf8");
+		const send = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
+		process.stdin.on("data", (chunk) => {
+			buf += chunk;
+			while (buf.includes("\\n")) {
+				const idx = buf.indexOf("\\n");
+				const msg = JSON.parse(buf.slice(0, idx));
+				buf = buf.slice(idx + 1);
+				if (msg.type === "prompt") {
+					send({ id: msg.id, type: "response", command: "prompt", success: true, data: { disposition: "started" } });
+					if (msg.message === "first") {
+						setTimeout(() => {
+							send({ type: "extension_ui_request", id: "dlg-dyn", method: "confirm", title: "Confirm", message: "Proceed?" });
+						}, 40);
+					} else {
+						send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "second ok" }] } });
+						send({ type: "agent_settled", aborted: false });
+					}
+				} else if (msg.type === "extension_ui_response" && msg.id === "dlg-dyn") {
+					send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "confirmed=" + String(msg.confirmed) }] } });
+					send({ type: "agent_settled", aborted: false });
+				}
+			}
+		});
+	`);
+	const worker = new PiRpcWorker({
+		executable: mock.executable,
+		leadingArgs: mock.leadingArgs,
+		onDialog: async () => ({ confirmed: false }),
+	});
+	await worker.start();
+	try {
+		const firstRun = worker.runPromptAndWait("first");
+		await assert.rejects(worker.runPromptAndWait("overlap"), /already has an active prompt run/);
+		let dynamicCalls = 0;
+		worker.setDialogHandler(async () => {
+			dynamicCalls += 1;
+			return { confirmed: true };
+		});
+		const firstResult = await firstRun;
+		assert.equal(firstResult.assistantText, "confirmed=true");
+		assert.equal(dynamicCalls, 1);
+		assert.equal(firstResult.dialogs.length, 1);
+
+		const secondResult = await worker.runPromptAndWait("second");
+		assert.equal(secondResult.assistantText, "second ok");
+	} finally {
+		await worker.stop();
+	}
+});

@@ -1,0 +1,425 @@
+import type {
+	ActiveDelegationDto,
+	DeliverableDto,
+	MatterDto,
+	MatterMessageDto,
+	MatterProgressDto,
+	MemberMemoryDto,
+	MessageFileDto,
+	MessageImageDto,
+	ProgressActivityDto,
+	ProgressSnapshotDto,
+} from "../api.ts";
+import { STAGE_ORDER } from "./formatters.ts";
+
+export function parseProgressSnapshot(
+	metadata: Record<string, unknown> | null | undefined,
+): ProgressSnapshotDto | null {
+	const raw = metadata?.progressSnapshot;
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+	const rec = raw as Record<string, unknown>;
+	const stage =
+		typeof rec.stage === "string" && STAGE_ORDER.includes(rec.stage as MatterProgressDto["stage"])
+			? (rec.stage as MatterProgressDto["stage"])
+			: null;
+	const outcome = rec.outcome === "aborted" ? "aborted" : rec.outcome === "failed" ? "failed" : null;
+	const label = typeof rec.label === "string" ? rec.label : "";
+	if (!stage || !outcome || !label) return null;
+	const activeDelegations = Array.isArray(rec.activeDelegations)
+		? rec.activeDelegations.filter(
+				(item): item is ActiveDelegationDto =>
+					Boolean(item) &&
+					typeof item === "object" &&
+					typeof (item as ActiveDelegationDto).memberId === "string" &&
+					typeof (item as ActiveDelegationDto).memberName === "string" &&
+					typeof (item as ActiveDelegationDto).stageLabel === "string",
+			)
+		: undefined;
+	const recentLogs = Array.isArray(rec.recentLogs)
+		? rec.recentLogs.filter(
+				(item): item is ProgressActivityDto =>
+					Boolean(item) &&
+					typeof item === "object" &&
+					typeof (item as ProgressActivityDto).memberName === "string" &&
+					typeof (item as ProgressActivityDto).summary === "string" &&
+					typeof (item as ProgressActivityDto).at === "string",
+			)
+		: undefined;
+	return {
+		outcome,
+		stage,
+		label,
+		toolName: typeof rec.toolName === "string" ? rec.toolName : undefined,
+		toolSummary: typeof rec.toolSummary === "string" ? rec.toolSummary : undefined,
+		startedAt: typeof rec.startedAt === "string" ? rec.startedAt : "",
+		capturedAt: typeof rec.capturedAt === "string" ? rec.capturedAt : "",
+		elapsedSeconds:
+			typeof rec.elapsedSeconds === "number" && Number.isFinite(rec.elapsedSeconds) ? rec.elapsedSeconds : 0,
+		activeDelegations: activeDelegations?.length ? activeDelegations : undefined,
+		recentLogs: recentLogs?.length ? recentLogs : undefined,
+		leadMemberId: typeof rec.leadMemberId === "string" ? rec.leadMemberId : undefined,
+		leadMemberName: typeof rec.leadMemberName === "string" ? rec.leadMemberName : undefined,
+	};
+}
+
+export function mapDeliverablesToMessages(
+	userMessages: MatterMessageDto[],
+	deliverables: DeliverableDto[],
+): { byMessageId: Map<string, DeliverableDto[]>; unattached: DeliverableDto[] } {
+	const byMessageId = new Map<string, DeliverableDto[]>();
+	const unattached: DeliverableDto[] = [];
+	const memberMessages = userMessages.filter((m) => m.senderType === "member");
+	const orderedDeliverables = [...deliverables].sort(
+		(a, b) => a.createdAt.localeCompare(b.createdAt) || a.version - b.version,
+	);
+	const matchedMessageIds = new Set<string>();
+
+	const attach = (msgId: string, deliv: DeliverableDto) => {
+		const list = byMessageId.get(msgId);
+		if (list) {
+			list.push(deliv);
+		} else {
+			byMessageId.set(msgId, [deliv]);
+		}
+	};
+
+	for (const deliv of orderedDeliverables) {
+		const exactMatch = memberMessages.find(
+			(msg) =>
+				!matchedMessageIds.has(msg.id) && msg.senderId === deliv.memberId && msg.content === deliv.contentOrPath,
+		);
+		if (exactMatch) {
+			matchedMessageIds.add(exactMatch.id);
+			attach(exactMatch.id, deliv);
+			continue;
+		}
+
+		// Fall back to the nearest earlier member reply in the turn when contentOrPath differs (e.g. artifact path).
+		let fallbackMsg: MatterMessageDto | undefined;
+		for (const msg of memberMessages) {
+			if (!matchedMessageIds.has(msg.id) && msg.createdAt <= deliv.createdAt) {
+				fallbackMsg = msg;
+			}
+		}
+		if (fallbackMsg) {
+			matchedMessageIds.add(fallbackMsg.id);
+			attach(fallbackMsg.id, deliv);
+		} else {
+			unattached.push(deliv);
+		}
+	}
+
+	return { byMessageId, unattached };
+}
+
+export interface DelegationSummaryItem {
+	id: string;
+	fromMemberId: string;
+	toMemberId: string;
+	targetLabel: string;
+	question: string;
+	answer?: string;
+	status: "running" | "completed" | "failed";
+	createdAt: string;
+}
+
+function stripMentionPrefix(text: string): { targetLabel: string; body: string } {
+	const match = text.match(/^@([^:\n：]+)[:：]\s*([\s\S]*)$/);
+	if (match) {
+		return { targetLabel: match[1]!.trim(), body: match[2]!.trim() };
+	}
+	return { targetLabel: "", body: text.trim() };
+}
+
+export function buildDelegationItems(
+	internalCollabMessages: MatterMessageDto[],
+	isTurnRunning = false,
+): DelegationSummaryItem[] {
+	const responsesByRequestId = new Map<string, MatterMessageDto>();
+	const orphanMessages: MatterMessageDto[] = [];
+
+	for (const msg of internalCollabMessages) {
+		const reqId = typeof msg.metadata?.requestMessageId === "string" ? msg.metadata.requestMessageId : null;
+		if (reqId) {
+			responsesByRequestId.set(reqId, msg);
+		}
+	}
+
+	const items: DelegationSummaryItem[] = [];
+	const sorted = [...internalCollabMessages].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+	for (const msg of sorted) {
+		const isResponse = typeof msg.metadata?.requestMessageId === "string";
+		if (isResponse) continue;
+		const parsed = stripMentionPrefix(msg.content);
+		const toMemberId = typeof msg.metadata?.toMemberId === "string" ? msg.metadata.toMemberId : "";
+		if (!toMemberId && !parsed.targetLabel) {
+			orphanMessages.push(msg);
+			continue;
+		}
+		const reply = responsesByRequestId.get(msg.id);
+		const isFailed = Boolean(reply?.metadata?.failed || reply?.senderType === "system");
+		const status: DelegationSummaryItem["status"] = reply
+			? isFailed
+				? "failed"
+				: "completed"
+			: isTurnRunning
+				? "running"
+				: "failed";
+		items.push({
+			id: msg.id,
+			fromMemberId: msg.senderId,
+			toMemberId: toMemberId || (reply?.senderId ?? ""),
+			targetLabel: parsed.targetLabel,
+			question: parsed.body || msg.content,
+			answer: reply?.content,
+			status,
+			createdAt: msg.createdAt,
+		});
+	}
+
+	for (const orphan of orphanMessages) {
+		items.push({
+			id: orphan.id,
+			fromMemberId: orphan.senderId,
+			toMemberId: "",
+			targetLabel: "",
+			question: orphan.content,
+			status: orphan.senderType === "system" ? "failed" : "completed",
+			createdAt: orphan.createdAt,
+		});
+	}
+
+	return items;
+}
+
+export function mapDelegationsToMessages(
+	userMessages: MatterMessageDto[],
+	internalCollabMessages: MatterMessageDto[],
+	isTurnRunning: boolean,
+): {
+	byMessageId: Map<string, DelegationSummaryItem[]>;
+	unattached: DelegationSummaryItem[];
+	all: DelegationSummaryItem[];
+} {
+	const items = buildDelegationItems(internalCollabMessages, isTurnRunning);
+	const byMessageId = new Map<string, DelegationSummaryItem[]>();
+	const unattached: DelegationSummaryItem[] = [];
+	if (items.length === 0) return { byMessageId, unattached, all: items };
+
+	const userTurns = userMessages.filter((m) => m.senderType === "user");
+	const pushTo = (msgId: string, item: DelegationSummaryItem) => {
+		const list = byMessageId.get(msgId);
+		if (list) list.push(item);
+		else byMessageId.set(msgId, [item]);
+	};
+
+	for (const item of items) {
+		let turnIndex = -1;
+		for (let i = 0; i < userTurns.length; i += 1) {
+			if (userTurns[i]!.createdAt <= item.createdAt) {
+				turnIndex = i;
+			}
+		}
+		const turnStart = turnIndex >= 0 ? userTurns[turnIndex]!.createdAt : "";
+		const nextTurnStart =
+			turnIndex >= 0 && turnIndex + 1 < userTurns.length ? userTurns[turnIndex + 1]!.createdAt : null;
+		const turnReplies = userMessages.filter(
+			(m) =>
+				m.senderType !== "user" &&
+				m.createdAt >= turnStart &&
+				(nextTurnStart === null || m.createdAt < nextTurnStart),
+		);
+		const anchorMsg = turnReplies.at(-1) ?? (turnIndex >= 0 ? userTurns[turnIndex] : undefined);
+		if (anchorMsg) {
+			pushTo(anchorMsg.id, item);
+		} else {
+			unattached.push(item);
+		}
+	}
+
+	return { byMessageId, unattached, all: items };
+}
+
+export function isKeyNoticeEvent(rawContent: string): boolean {
+	try {
+		const parsed = JSON.parse(rawContent) as {
+			type?: string;
+			method?: string;
+			isError?: boolean;
+		};
+		if (parsed.type === "tool_execution_start") return false;
+		if (parsed.type === "tool_execution_end") return Boolean(parsed.isError);
+		return true;
+	} catch {
+		if (rawContent.includes('"type":"tool_execution_start"')) return false;
+		if (rawContent.includes('"type":"tool_execution_end"')) {
+			return rawContent.includes('"isError":true');
+		}
+		return true;
+	}
+}
+
+export function formatNoticeEventLine(rawContent: string): string {
+	try {
+		const parsed = JSON.parse(rawContent) as {
+			type?: string;
+			method?: string;
+			toolName?: string;
+			args?: { path?: string; command?: string; title?: string };
+			isError?: boolean;
+			message?: string;
+			tools?: string[];
+			scope?: string;
+			content?: string;
+			createdCount?: number;
+		};
+		const detail = parsed.args?.path
+			? ` (${parsed.args.path})`
+			: parsed.args?.command
+				? ` (${parsed.args.command.replace(/\s+/g, " ").trim().slice(0, 80)})`
+				: parsed.args?.title
+					? ` (${parsed.args.title})`
+					: "";
+		if (parsed.type === "tool_execution_start") {
+			return `开始工具 ${parsed.toolName ?? "tool"}${detail}`;
+		}
+		if (parsed.type === "tool_execution_end") {
+			return `结束工具 ${parsed.toolName ?? "tool"}${parsed.isError ? "（失败）" : ""}`;
+		}
+		if (parsed.method === "runtime_ready") {
+			return `工作进程就绪（${parsed.tools?.join(", ") ?? "标准工具"}）`;
+		}
+		if (parsed.method === "rsi_candidate_proposed") {
+			const snippet = (parsed.content ?? "").slice(0, 48);
+			return `提出待核验经验（${parsed.scope ?? "role_general"}）：${snippet}`;
+		}
+		if (parsed.method === "rsi_distilled") {
+			return `AI 经验提炼完成（新增 ${parsed.createdCount ?? 0} 条待核验候选）`;
+		}
+		if (parsed.method === "error" && parsed.message) {
+			return `执行异常：${parsed.message}`;
+		}
+		if (parsed.message) return parsed.message;
+	} catch {
+		// Gracefully recover truncated historical JSON notices (e.g. large tool outputs).
+		const typeMatch = rawContent.match(/"type"\s*:\s*"(tool_execution_start|tool_execution_end)"/);
+		if (typeMatch) {
+			const toolName = rawContent.match(/"toolName"\s*:\s*"([^"]+)"/)?.[1] ?? "tool";
+			const isError = /"isError"\s*:\s*true/.test(rawContent);
+			if (typeMatch[1] === "tool_execution_start") {
+				const pathArg = rawContent.match(/"path"\s*:\s*"([^"]+)"/)?.[1];
+				const cmdArg = rawContent.match(/"command"\s*:\s*"([^"]{1,80})/)?.[1];
+				const detail = pathArg ? ` (${pathArg})` : cmdArg ? ` (${cmdArg})` : "";
+				return `开始工具 ${toolName}${detail}`;
+			}
+			return `结束工具 ${toolName}${isError ? "（失败）" : ""}`;
+		}
+	}
+	return rawContent.length > 240 ? `${rawContent.slice(0, 240)}…` : rawContent;
+}
+
+const MEMORY_STATUS_SORT_ORDER: Record<string, number> = {
+	candidate: 0,
+	verified: 1,
+	superseded: 2,
+	rejected: 3,
+};
+
+export function collectMatterMemories(
+	memoriesByMember: Record<string, MemberMemoryDto[]>,
+	matterId: string,
+	deliverableId?: string,
+): MemberMemoryDto[] {
+	const items: MemberMemoryDto[] = [];
+	for (const list of Object.values(memoriesByMember)) {
+		for (const memory of list) {
+			if (memory.sourceMatterId === matterId || (deliverableId && memory.sourceDeliverableId === deliverableId)) {
+				items.push(memory);
+			}
+		}
+	}
+	return items.sort((a, b) => {
+		const aDeliv = deliverableId && a.sourceDeliverableId === deliverableId ? 0 : 1;
+		const bDeliv = deliverableId && b.sourceDeliverableId === deliverableId ? 0 : 1;
+		if (aDeliv !== bDeliv) return aDeliv - bDeliv;
+		const aRank = MEMORY_STATUS_SORT_ORDER[a.status] ?? 9;
+		const bRank = MEMORY_STATUS_SORT_ORDER[b.status] ?? 9;
+		if (aRank !== bRank) return aRank - bRank;
+		return b.createdAt.localeCompare(a.createdAt);
+	});
+}
+
+export function collectMatterParticipantIds(params: {
+	matter?: MatterDto | null;
+	userMessages?: MatterMessageDto[];
+	internalCollabMessages?: MatterMessageDto[];
+	deliverables?: DeliverableDto[];
+}): string[] {
+	const ids = new Set<string>();
+	if (params.matter?.leadMemberId) ids.add(params.matter.leadMemberId);
+	for (const id of params.matter?.observerMemberIds ?? []) {
+		if (id) ids.add(id);
+	}
+	for (const msg of params.userMessages ?? []) {
+		if (msg.senderType === "member" && msg.senderId) ids.add(msg.senderId);
+	}
+	for (const msg of params.internalCollabMessages ?? []) {
+		if (msg.senderType === "member" && msg.senderId) ids.add(msg.senderId);
+		const toMemberId =
+			msg.metadata && typeof msg.metadata.toMemberId === "string" ? msg.metadata.toMemberId : undefined;
+		if (toMemberId) ids.add(toMemberId);
+	}
+	for (const d of params.deliverables ?? []) {
+		if (d.memberId) ids.add(d.memberId);
+	}
+	return Array.from(ids);
+}
+
+/** Extracts lightweight image attachment references stored on a user message's metadata. */
+export function parseMessageImages(metadata: Record<string, unknown> | null | undefined): MessageImageDto[] {
+	const raw = metadata?.images;
+	if (!Array.isArray(raw)) return [];
+	const images: MessageImageDto[] = [];
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
+		const record = entry as Record<string, unknown>;
+		const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "";
+		const url = typeof record.url === "string" ? record.url.trim() : undefined;
+		const name = typeof record.name === "string" ? record.name.trim() : undefined;
+		if (!mimeType && !url) continue;
+		images.push({
+			...(url ? { url } : {}),
+			mimeType: mimeType || "image/png",
+			...(name ? { name } : {}),
+		});
+	}
+	return images;
+}
+
+/** Extracts lightweight uploaded file and pasted-text attachment references stored on message metadata. */
+export function parseMessageFiles(metadata: Record<string, unknown> | null | undefined): MessageFileDto[] {
+	const raw = metadata?.files;
+	if (!Array.isArray(raw)) return [];
+	const files: MessageFileDto[] = [];
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
+		const record = entry as Record<string, unknown>;
+		const name = typeof record.name === "string" ? record.name.trim() : "";
+		const mimeType = typeof record.mimeType === "string" ? record.mimeType.trim() : "text/plain";
+		const url = typeof record.url === "string" ? record.url.trim() : undefined;
+		const kind = record.kind === "pasted_text" ? "pasted_text" : "file";
+		if (!name && !url) continue;
+		files.push({
+			...(url ? { url } : {}),
+			kind,
+			name: name || "attachment.txt",
+			mimeType: mimeType || "text/plain",
+			...(typeof record.sizeBytes === "number" ? { sizeBytes: record.sizeBytes } : {}),
+			...(typeof record.lineCount === "number" ? { lineCount: record.lineCount } : {}),
+			...(typeof record.charCount === "number" ? { charCount: record.charCount } : {}),
+			...(typeof record.previewText === "string" ? { previewText: record.previewText } : {}),
+		});
+	}
+	return files;
+}

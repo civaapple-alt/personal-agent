@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Tighten responsibility boundaries across `ChatStage`, `web/src/utils`, and `PiRpcWorker`: extract per-matter bounded scroll state ([useChatScroll.ts](web/src/hooks/useChatScroll.ts)), participant/roster projection ([useChatStageParticipants.ts](web/src/hooks/useChatStageParticipants.ts)), and abortable attachment preview modals ([AttachmentPreviewModals.tsx](web/src/components/chat/AttachmentPreviewModals.tsx)) out of [ChatStage.tsx](web/src/components/ChatStage.tsx); split [utils.ts](web/src/utils.ts) into domain modules under `web/src/utils/`; and guard [PiRpcWorker](src/rpc/pi-rpc-worker.ts) against overlapping `runPromptAndWait` calls while preserving dynamic `setDialogHandler` updates.
 - Commit workspace configuration and restricted access grants together. Reject organization changes for workspaces with matters, experience, execution history, or existing grants. Suppress workspace-private experience when legacy records show conflicting organization ownership.
 - Run versioned SQLite migrations in a transaction. Restore legacy workspace and experience foreign keys, preserve saved Git author names, and remove deleted roles from matter rosters.
 - Allow one accepted replacement per experience. Keep competing candidates out of execution context until an applicable replacement is verified.

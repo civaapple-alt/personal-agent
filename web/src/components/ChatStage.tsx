@@ -1,4 +1,4 @@
-import { type RefObject, type UIEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
@@ -16,37 +16,28 @@ import type {
 	MemberMemoryDto,
 	OrganizationDto,
 	OrganizationMemberDto,
-	OrgMemberRole,
 	PendingDialogDto,
 	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../api.ts";
-
-const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
-	org_owner: "组织所有者",
-	org_admin: "组织管理员",
-	org_member: "普通成员",
-	org_viewer: "只读访客",
-};
-
-import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
-import { copyTextToClipboard } from "../clipboard.ts";
+import { filterBusinessMembers } from "../architectApi.ts";
+import { useChatScroll } from "../hooks/useChatScroll.ts";
+import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
 import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
-	formatByteSize,
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
-} from "../utils.ts";
+} from "../utils/matterStream.ts";
+import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
-import { ComposerDock, type PreviewableTextAttachment } from "./chat/ComposerDock.tsx";
+import { ComposerDock } from "./chat/ComposerDock.tsx";
 import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
-import { ModalDialog } from "./ModalDialog.tsx";
 
 interface ChatStageProps {
 	onOpenDemo?: () => void;
@@ -156,8 +147,6 @@ interface ChatStageProps {
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
 }
-
-const chatScrollMemory = new Map<string, { scrollTop: number; atBottom: boolean }>();
 
 /** Coordinates the active matter workspace: header bar, participant/collab popovers, scrollable stream, and composer. */
 export function ChatStage({
@@ -272,25 +261,14 @@ export function ChatStage({
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-	const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
-	const [previewFile, setPreviewFile] = useState<{
-		file: PreviewableTextAttachment;
-		loading: boolean;
-		error: string | null;
-	} | null>(null);
 
-	const chatScrollRef = useRef<HTMLDivElement | null>(null);
-	const chatStreamInnerRef = useRef<HTMLDivElement | null>(null);
-	const messagesEndRef = useRef<HTMLDivElement | null>(null);
-	const lastScrolledMatterIdRef = useRef<string | null>(null);
-	const prevMessageCountRef = useRef(0);
-	const prevStreamLenRef = useRef(0);
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
 	const rosterPanelRef = useRef<HTMLDivElement | null>(null);
 	const headerHumansBtnRef = useRef<HTMLButtonElement | null>(null);
 
+	const { lightboxImage, setLightboxImage, previewFile, openFilePreview, closeFilePreview } = useAttachmentPreview();
 	const isOwner = canDispatchAi ?? currentUser?.permissionRole !== "collaborator";
 
 	const closeRoster = () => {
@@ -299,43 +277,8 @@ export function ChatStage({
 		setRosterSearch("");
 	};
 
-	const openFilePreview = (file: PreviewableTextAttachment) => {
-		if (typeof file.content === "string") {
-			setPreviewFile({ file, loading: false, error: null });
-			return;
-		}
-		if (!file.url) {
-			setPreviewFile({ file, loading: false, error: "文件内容不可用。" });
-			return;
-		}
-		setPreviewFile({ file, loading: true, error: null });
-		void fetch(file.url)
-			.then(async (res) => {
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				return await res.text();
-			})
-			.then((text) => {
-				setPreviewFile((prev) =>
-					prev && prev.file.url === file.url
-						? { ...prev, file: { ...prev.file, content: text }, loading: false }
-						: prev,
-				);
-			})
-			.catch((err) => {
-				setPreviewFile((prev) =>
-					prev && prev.file.url === file.url
-						? {
-								...prev,
-								loading: false,
-								error: err instanceof Error ? err.message : "读取文件内容失败。",
-							}
-						: prev,
-				);
-			});
-	};
-
 	useEffect(() => {
-		if (!collabOpen && !rosterOpen && !moreMenuOpen && !lightboxImage) return;
+		if (!collabOpen && !rosterOpen && !moreMenuOpen) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
@@ -358,7 +301,6 @@ export function ChatStage({
 				setMoreMenuOpen(false);
 				setRosterMode("view");
 				setRosterSearch("");
-				setLightboxImage(null);
 			}
 		};
 		document.addEventListener("mousedown", onMouseDown);
@@ -367,7 +309,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, rosterOpen, moreMenuOpen, lightboxImage]);
+	}, [collabOpen, rosterOpen, moreMenuOpen]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -418,64 +360,11 @@ export function ChatStage({
 	const messageCount = matterDetail?.userMessages.length ?? 0;
 	const streamLen = streamingDelta.length;
 
-	useLayoutEffect(() => {
-		const el = chatScrollRef.current;
-		if (!el || !activeLoadedId) {
-			lastScrolledMatterIdRef.current = null;
-			prevMessageCountRef.current = 0;
-			prevStreamLenRef.current = 0;
-			return;
-		}
-		if (lastScrolledMatterIdRef.current !== activeLoadedId) {
-			lastScrolledMatterIdRef.current = activeLoadedId;
-			prevMessageCountRef.current = messageCount;
-			prevStreamLenRef.current = streamLen;
-			const saved = chatScrollMemory.get(activeLoadedId);
-			if (saved && !saved.atBottom) {
-				el.scrollTop = saved.scrollTop;
-			} else {
-				el.scrollTop = el.scrollHeight;
-				chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
-			}
-			return;
-		}
-		const hadNewMessage = messageCount > prevMessageCountRef.current;
-		const hadStreamGrowth = streamLen > prevStreamLenRef.current;
-		prevMessageCountRef.current = messageCount;
-		prevStreamLenRef.current = streamLen;
-		if (!hadNewMessage && !hadStreamGrowth) return;
-		const saved = chatScrollMemory.get(activeLoadedId);
-		if (saved && !saved.atBottom) return;
-		if (hadNewMessage) {
-			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollHeight, atBottom: true });
-		} else if (hadStreamGrowth) {
-			el.scrollTop = el.scrollHeight;
-			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
-		}
-	}, [activeLoadedId, messageCount, streamLen]);
-
-	useEffect(() => {
-		const el = chatScrollRef.current;
-		const inner = chatStreamInnerRef.current;
-		if (!el || !inner || !activeLoadedId || typeof ResizeObserver === "undefined") return;
-		const observer = new ResizeObserver(() => {
-			if (lastScrolledMatterIdRef.current !== activeLoadedId) return;
-			const saved = chatScrollMemory.get(activeLoadedId);
-			if (saved && !saved.atBottom) return;
-			el.scrollTop = el.scrollHeight;
-			chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom: true });
-		});
-		observer.observe(inner);
-		return () => observer.disconnect();
-	}, [activeLoadedId]);
-
-	const handleStreamScroll = (e: UIEvent<HTMLDivElement>) => {
-		if (!activeLoadedId || lastScrolledMatterIdRef.current !== activeLoadedId) return;
-		const el = e.currentTarget;
-		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 100;
-		chatScrollMemory.set(activeLoadedId, { scrollTop: el.scrollTop, atBottom });
-	};
+	const { chatScrollRef, chatStreamInnerRef, messagesEndRef, handleStreamScroll } = useChatScroll({
+		activeLoadedId,
+		messageCount,
+		streamLen,
+	});
 
 	const deliverablesPlacement = useMemo(
 		() => mapDeliverablesToMessages(matterDetail?.userMessages ?? [], matterDetail?.deliverables ?? []),
@@ -492,129 +381,48 @@ export function ChatStage({
 		[matterDetail, isTurnRunning],
 	);
 
-	const fallbackOrgId = !isSuperAdmin
-		? ((organizations.find((o) => o.isDefault) ?? organizations[0])?.id ?? null)
-		: null;
-	const effectiveOrgId = selectedWorkspace ? selectedWorkspace.orgId : selectedOrgId || fallbackOrgId;
-	const selectedOrganization = useMemo(
-		() => (effectiveOrgId ? (organizations.find((org) => org.id === effectiveOrgId) ?? null) : null),
-		[effectiveOrgId, organizations],
-	);
-	const orgFilteredWorkspaces = useMemo(
-		() =>
-			effectiveOrgId ? workspaces.filter((ws) => ws.orgId === effectiveOrgId) : workspaces.filter((ws) => !ws.orgId),
-		[effectiveOrgId, workspaces],
-	);
-
-	const orgMembers = effectiveOrgId ? (orgMembersByOrgId[effectiveOrgId] ?? []) : [];
-	const scopedMembers = useMemo(() => {
-		if (!orgEffectiveMemberIds || orgEffectiveMemberIds.length === 0) return members;
-		return members.filter(
-			(m) =>
-				orgEffectiveMemberIds.includes(m.id) ||
-				m.roleScope === "personal" ||
-				isArchitectMemberId(m.id, members, templateByRoleId) ||
-				m.id === matterDetail?.matter.leadMemberId,
-		);
-	}, [members, orgEffectiveMemberIds, templateByRoleId, matterDetail?.matter.leadMemberId]);
-
-	const ownerCollab =
-		orgMembers.length > 0
-			? (() => {
-					const orgOwner = orgMembers.find((om) => om.orgRole === "org_owner") ?? orgMembers[0];
-					return orgOwner
-						? {
-								id: orgOwner.userId,
-								name: orgOwner.displayName ?? orgOwner.email ?? orgOwner.userId,
-								roleTitle: orgOwner.roleTitle || ORG_ROLE_LABEL[orgOwner.orgRole],
-								permissionRole: "owner" as const,
-								orgId: orgOwner.orgId,
-								createdAt: orgOwner.createdAt,
-								updatedAt: orgOwner.updatedAt,
-							}
-						: null;
-				})()
-			: currentUser?.id.startsWith("usr_")
-				? currentUser
-				: (collaborators.find((c) => c.permissionRole === "owner") ?? null);
-	const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
-	const humanPeerCandidates = useMemo(() => {
-		const map = new Map<string, CollaboratorDto>();
-		for (const om of orgMembers) {
-			if (ownerCollab?.id === om.userId) continue;
-			map.set(om.userId, {
-				id: om.userId,
-				name: om.displayName ?? om.email ?? om.userId,
-				roleTitle: om.roleTitle || ORG_ROLE_LABEL[om.orgRole],
-				permissionRole: om.orgRole === "org_owner" || om.orgRole === "org_admin" ? "owner" : "collaborator",
-				orgId: om.orgId,
-				createdAt: om.createdAt,
-				updatedAt: om.updatedAt,
-			});
-		}
-		for (const col of nonOwnerCollaborators) {
-			if (!map.has(col.id)) map.set(col.id, col);
-		}
-		return [...map.values()];
-	}, [orgMembers, nonOwnerCollaborators, ownerCollab?.id]);
-	const assignedCollabIds = matterDetail ? (matterDetail.matter.collaboratorIds ?? []) : draftCollaboratorIds;
-	const messageHumanAuthorIds = useMemo(() => {
-		const ids = new Set<string>();
-		for (const msg of matterDetail?.userMessages ?? []) {
-			if (msg.senderType === "user" && msg.senderId && msg.senderId !== "user") {
-				ids.add(msg.senderId);
-			}
-		}
-		return ids;
-	}, [matterDetail?.userMessages]);
-	const matterHumanParticipants = humanPeerCandidates.filter(
-		(c) => assignedCollabIds.includes(c.id) || messageHumanAuthorIds.has(c.id) || currentUser?.id === c.id,
-	);
-	const allActiveHumans = useMemo(() => {
-		const list: CollaboratorDto[] = [];
-		const seenIds = new Set<string>();
-		if (ownerCollab) {
-			list.push(ownerCollab);
-			seenIds.add(ownerCollab.id);
-		}
-		for (const col of matterHumanParticipants) {
-			if (!seenIds.has(col.id)) {
-				list.push(col);
-				seenIds.add(col.id);
-			}
-		}
-		return list;
-	}, [ownerCollab, matterHumanParticipants]);
-
-	const leadAi =
-		(matterDetail?.matter.leadMemberId
-			? scopedMembers.find((m) => m.id === matterDetail.matter.leadMemberId)
-			: null) ?? headerContact;
-	const inGroupAiMembers = useMemo(() => {
-		const idSet = new Set(matterAiMemberIds);
-		if (leadAi) idSet.add(leadAi.id);
-		const filtered = scopedMembers.filter((m) => idSet.has(m.id));
-		if (leadAi && filtered.some((m) => m.id === leadAi.id)) {
-			return [leadAi, ...filtered.filter((m) => m.id !== leadAi.id)];
-		}
-		return filtered.length > 0 ? filtered : scopedMembers;
-	}, [leadAi, matterAiMemberIds, scopedMembers]);
-	const nonLeadGroupAiMembers = inGroupAiMembers.filter((m) => m.id !== leadAi?.id);
-	const removedAiMembers = scopedMembers.filter((m) => !inGroupAiMembers.some((g) => g.id === m.id));
-	const observerAis = observersEnabled
-		? observerMemberIds.length > 0
-			? nonLeadGroupAiMembers.filter((m) => observerMemberIds.includes(m.id))
-			: matterDetail
-				? []
-				: nonLeadGroupAiMembers
-		: [];
-	const specialistIds = Array.from(new Set(delegationsPlacement.all.map((d) => d.toMemberId).filter(Boolean))).filter(
-		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
-	);
-	const isArchitectMode = selectedMatterId
-		? Boolean(matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId))
-		: isArchitectMemberId(selectedMemberId, members, templateByRoleId);
-	const businessCount = filterBusinessMembers(members, templateByRoleId).length;
+	const {
+		effectiveOrgId,
+		selectedOrganization,
+		orgFilteredWorkspaces,
+		orgMembers,
+		scopedMembers,
+		ownerCollab,
+		nonOwnerCollaborators,
+		humanPeerCandidates,
+		assignedCollabIds,
+		matterHumanParticipants,
+		allActiveHumans,
+		leadAi,
+		inGroupAiMembers,
+		nonLeadGroupAiMembers,
+		removedAiMembers,
+		observerAis,
+		specialistIds,
+		isArchitectMode,
+		businessCount,
+	} = useChatStageParticipants({
+		isSuperAdmin,
+		currentUser,
+		collaborators,
+		orgMembersByOrgId,
+		orgEffectiveMemberIds,
+		selectedWorkspace,
+		selectedOrgId,
+		workspaces,
+		organizations,
+		members,
+		selectedMemberId,
+		headerContact,
+		selectedMatterId,
+		matterDetail,
+		templateByRoleId,
+		matterAiMemberIds,
+		observerMemberIds,
+		observersEnabled,
+		draftCollaboratorIds,
+		delegations: delegationsPlacement.all,
+	});
 
 	return (
 		<div className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}`}>
@@ -885,87 +693,14 @@ export function ChatStage({
 				onPreviewFile={openFilePreview}
 			/>
 
-			{lightboxImage && (
-				<div className="image-lightbox-backdrop">
-					<button
-						type="button"
-						className="image-lightbox-scrim"
-						aria-label="关闭预览"
-						onClick={() => setLightboxImage(null)}
-					/>
-					<div className="image-lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-						<img src={lightboxImage.src} alt={lightboxImage.alt} />
-						<div className="image-lightbox-footer">
-							<span>{lightboxImage.alt}</span>
-							<button type="button" className="btn-inline" onClick={() => setLightboxImage(null)}>
-								关闭
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
-
-			<ModalDialog
-				open={previewFile !== null}
-				title={previewFile?.file.name ?? ""}
-				subtitle={
-					previewFile
-						? [
-								previewFile.file.kind === "pasted_text" ? "折叠粘贴文本" : "文本文件",
-								previewFile.file.lineCount !== undefined ? `${previewFile.file.lineCount} 行` : null,
-								previewFile.file.charCount !== undefined
-									? `${previewFile.file.charCount.toLocaleString()} 字`
-									: null,
-								previewFile.file.sizeBytes !== undefined ? formatByteSize(previewFile.file.sizeBytes) : null,
-							]
-								.filter(Boolean)
-								.join(" · ")
-						: undefined
-				}
-				size="lg"
-				onClose={() => setPreviewFile(null)}
-				footer={
-					previewFile ? (
-						<>
-							{previewFile.file.pendingPastedId && (
-								<button
-									type="button"
-									className="btn-inline"
-									onClick={() => {
-										const id = previewFile.file.pendingPastedId;
-										setPreviewFile(null);
-										if (id) onExpandPastedFile(id);
-									}}
-								>
-									放回输入框
-								</button>
-							)}
-							{typeof previewFile.file.content === "string" && (
-								<button
-									type="button"
-									className="btn-inline"
-									onClick={() => {
-										void copyTextToClipboard(previewFile.file.content ?? "", "附件文本", onNotice);
-									}}
-								>
-									复制内容
-								</button>
-							)}
-							<button type="button" className="btn-inline" onClick={() => setPreviewFile(null)}>
-								关闭
-							</button>
-						</>
-					) : undefined
-				}
-			>
-				{previewFile?.loading ? (
-					<div className="muted small">正在读取文件内容...</div>
-				) : previewFile?.error ? (
-					<div className="error-text small">{previewFile.error}</div>
-				) : (
-					<pre className="composer-file-preview-pre">{previewFile?.file.content ?? ""}</pre>
-				)}
-			</ModalDialog>
+			<AttachmentPreviewModals
+				lightboxImage={lightboxImage}
+				previewFile={previewFile}
+				onCloseLightbox={() => setLightboxImage(null)}
+				onCloseFilePreview={closeFilePreview}
+				onExpandPastedFile={onExpandPastedFile}
+				onNotice={onNotice}
+			/>
 		</div>
 	);
 }
