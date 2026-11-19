@@ -450,9 +450,9 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			sourceType,
 			cloneUrl,
 			visibility,
+			allowedUserIds,
 		});
-		store.setWorkspaceAccess(savedWs.id, visibility, allowedUserIds);
-		const ws = formatWorkspaceForActor(store, store.getWorkspace(savedWs.id)!, actor);
+		const ws = formatWorkspaceForActor(store, savedWs, actor);
 		auditActorAction(ctx, req, actor, {
 			action: sourceType === "cloned" ? "workspace.clone" : "workspace.create_local",
 			targetType: "workspace",
@@ -468,13 +468,13 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 	const wsPatchMatch = pathname.match(/^\/api\/workspaces\/([^/]+)$/);
 	if (method === "PATCH" && wsPatchMatch) {
 		const workspaceId = decodeURIComponent(wsPatchMatch[1]!);
+		const body = await readJsonBody(req);
 		const existingWs = store.getWorkspace(workspaceId);
 		if (!existingWs) {
 			sendError(res, 404, `Workspace not found: ${workspaceId}`);
 			return true;
 		}
 		if (!requireOrgAdmin(res, store, actor, existingWs.orgId)) return true;
-		const body = await readJsonBody(req);
 		const orgId =
 			body.orgId === null
 				? null
@@ -499,21 +499,15 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 		}
 		const nextVisibility: WorkspaceVisibility | undefined =
 			body.visibility === "restricted" ? "restricted" : body.visibility === "org" ? "org" : undefined;
-		const updatedRaw = store.updateWorkspace(workspaceId, {
+		const updated = store.updateWorkspace(workspaceId, {
 			orgId,
 			name: typeof body.name === "string" ? body.name : undefined,
 			defaultBranch: typeof body.defaultBranch === "string" ? body.defaultBranch : undefined,
 			description: typeof body.description === "string" ? body.description : undefined,
-			...(nextVisibility ? { visibility: nextVisibility } : {}),
+			visibility: nextVisibility,
+			allowedUserIds: Array.isArray(body.allowedUserIds) ? parseUserIdList(body.allowedUserIds) : undefined,
 		});
-		if (nextVisibility !== undefined || Array.isArray(body.allowedUserIds)) {
-			const effectiveVis = nextVisibility ?? updatedRaw.visibility ?? "org";
-			const nextUsers = Array.isArray(body.allowedUserIds)
-				? parseUserIdList(body.allowedUserIds)
-				: store.listWorkspaceMemberIds(workspaceId);
-			store.setWorkspaceAccess(workspaceId, effectiveVis, nextUsers);
-		}
-		const ws = formatWorkspaceForActor(store, store.getWorkspace(workspaceId)!, actor);
+		const ws = formatWorkspaceForActor(store, updated, actor);
 		auditActorAction(ctx, req, actor, {
 			action: "workspace.update",
 			targetType: "workspace",

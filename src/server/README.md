@@ -38,11 +38,11 @@
   - AI 讨论失败时保留已发消息、已保存的回复及原事项状态。失败消息关联触发本轮讨论的消息。
 - 组织与成员身份接口：
   - `PATCH /api/organizations/:id/ai-roles` 接收 `primaryMemberId`，供组织管理员切换到已启用的业务 AI 角色。已有角色配置保留模型、思考档位和 Git 署名。批量更新名册与组织 Git 署名开关时在同一事务保存。
-  - [main.ts](main.ts) 启动时自动保证默认组织存在（`ensureDefaultOrganization`），并在首次无任何组织时将既有无归属工作区及自举仓库归入默认组织。
+  - [main.ts](main.ts) 启动时自动保证默认组织存在（`ensureDefaultOrganization`），并在首次无任何组织时将无历史、无授权的独立工作区归入默认组织。
   - `GET /api/bootstrap` 下发 `organizations`；`GET /api/organizations`、`POST /api/organizations`、
     `PATCH /api/organizations/:id` 与 `POST /api/organizations/:id/default` 管理组织字段与默认组织切换。
   - 字段覆盖名称、Git 邮箱域名、`isDefault` 与简介；`POST /api/workspaces` 省略 `orgId` 自动归入默认组织
-    （显式传 `null` 保留独立工作区），`PATCH /api/workspaces/:id` 调整绑定（未知 `orgId` 返回 404），工作区返回含 `repoGitUser`。
+    （显式传 `null` 保留独立工作区）。工作区配置和受限成员名单在同一事务保存。已有事项、经验、执行历史或授权名单时，改变所属组织返回 409。工作区返回含 `repoGitUser`。
   - `POST /api/members/architect/chat`（对已激活非只读成员开放，无工具隔离、支持中断与按作用域筛选的团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图（含 `roleScope` 与可选 `newSkills` 草案，确认前不写盘）、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 同时支持即时 `mode: "rules"` 离线草案与显式 `mode: "model"`（`responseCancellation` + Pi 角色设计决策模型生成名称/英文头衔/已安装 Skills/可选 `newSkills` 草案/完整验证计划）；`POST /api/members`、`POST /api/members/batch` 与 `POST /api/members/import` 支持显式传入 `roleScope`（`global` 限超管、`org` 限对应 `org_owner`/`org_admin`/`super_admin`、`personal` 对活跃非 `org_viewer` 用户在 `maxPersonalRoles` 配额内开放）、`ownerOrgId`、已确认落盘的 `newSkills`（写入角色包 `<roleDir>/skills/<name>/SKILL.md` 或 `.data/skills/{global,orgs,users}/`）、`tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 同步删除对应角色包目录与仅本人私有库文件；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 角色可见性与私有作用域隔离由 [acl.ts](acl.ts) 的 `canActorCreateRoleInScope`、`canActorUseMember` 与 `canActorManageMember` 强制校验：`personal` 角色、模板、`GET /api/runtime` 声明的 MCP 依赖、工具委派、`POST /api/memories` 与 `team_updated` SSE 仅对创建者自身可见与可用，其余用户及超管均不可读取或触发。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。

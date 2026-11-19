@@ -4,6 +4,9 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Commit workspace configuration and restricted access grants together. Reject organization changes for workspaces with matters, experience, execution history, or existing grants. Suppress workspace-private experience when legacy records show conflicting organization ownership.
+- Run versioned SQLite migrations in a transaction. Restore legacy workspace and experience foreign keys, preserve saved Git author names, and remove deleted roles from matter rosters.
+- Allow one accepted replacement per experience. Keep competing candidates out of execution context until an applicable replacement is verified.
 - Split HTTP routes, turn dispatch, web API clients, workbench state and styles into modules by responsibility. See the [architecture inventory](docs/architecture-and-plan.md#目录组织与源文件行数).
 - Switch an organization's primary AI contact without resaving its roster. Preserve existing provider, model, thinking and Git overrides, and save roster and Git policy changes in one transaction.
 - Keep delivered matters and saved replies intact if a discussion reply fails. Attribute the failure to the message that started that discussion.

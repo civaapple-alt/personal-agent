@@ -1,6 +1,7 @@
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
+import type { MemberMemory } from "../storage/types.ts";
 
 export interface TeamHealthEvidence {
 	id: string;
@@ -34,6 +35,14 @@ export function filterTeamMembersForScope<
 		}
 		return true;
 	});
+}
+
+export function isTeamHealthMemoryInScope(memory: MemberMemory, scope?: TeamHealthScopeFilter): boolean {
+	// Team health summaries have no workspace ACL. Keep workspace-bound experience in worker context.
+	if (memory.workspaceId || memory.status === "rejected" || memory.status === "superseded") return false;
+	if (!memory.orgId) return memory.scope === "role_general";
+	if (scope?.orgId && memory.orgId !== scope.orgId) return false;
+	return !scope?.allowedOrgIds || scope.allowedOrgIds.has(memory.orgId);
 }
 
 /** Bounded source records, separate from the model's interpretation of their cause or importance. */
@@ -104,18 +113,7 @@ export function collectTeamHealthEvidence(
 	for (const member of members) {
 		const corrections = store
 			.listMemberMemories(member.id)
-			.filter((memory) => {
-				if (
-					memory.category !== "user_correction" ||
-					memory.status === "rejected" ||
-					memory.status === "superseded"
-				) {
-					return false;
-				}
-				if (scope?.orgId && memory.orgId && memory.orgId !== scope.orgId) return false;
-				if (scope?.allowedOrgIds && memory.orgId && !scope.allowedOrgIds.has(memory.orgId)) return false;
-				return true;
-			})
+			.filter((memory) => memory.category === "user_correction" && isTeamHealthMemoryInScope(memory, scope))
 			.slice(0, 1);
 		for (const memory of corrections)
 			sources.push({

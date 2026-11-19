@@ -4,9 +4,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { collectTeamFrictionDigest } from "../src/orchestrator/meta-architect.ts";
 import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult } from "../src/rpc/pi-rpc-worker.ts";
+import { canActorAccessMemory } from "../src/server/acl.ts";
+import type { RequestActor } from "../src/server/auth.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
 import { reportReady } from "./worker-helpers.ts";
@@ -128,7 +131,7 @@ test("an organization change during reflection invalidates its candidate instead
 	assert.equal(f.store.listMemberMemories("product-manager").length, 0);
 });
 
-test("reassigning a workspace isolates both lead and observer sessions from its previous organization", async (t) => {
+test("legacy workspace reassignment isolates sessions and workspace-private memory", async (t) => {
 	const f = await fixture(t);
 	const workspace = f.store.upsertWorkspace({ name: "reassigned", repoPath: f.root, orgId: f.a.id });
 	const first = await f.orchestrator.dispatchMatter({
@@ -137,7 +140,33 @@ test("reassigning a workspace isolates both lead and observer sessions from its 
 		preferredMemberId: "product-manager",
 		observerMemberIds: ["engineering-manager"],
 	});
-	f.store.updateWorkspace(workspace.id, { orgId: f.b.id });
+	const memory = f.store.addMemory({
+		memberId: "product-manager",
+		scope: "project_private",
+		workspaceId: workspace.id,
+		content: "PRIVATE_WORKSPACE_A_MEMORY",
+		category: "user_correction",
+		verified: true,
+	});
+	const localOwner: RequestActor = {
+		authKind: "loopback",
+		collaborator: f.store.ensureOwnerCollaborator("Fixture owner"),
+		user: null,
+		viaToken: false,
+	};
+	assert.ok(canActorAccessMemory(f.store, localOwner, memory));
+	assert.ok(f.store.listRelevantMemories("product-manager", workspace.id).some((item) => item.id === memory.id));
+	assert.throws(() => f.store.updateWorkspace(workspace.id, { orgId: f.b.id }), /无法更改所属组织/);
+	assert.equal(f.store.getWorkspace(workspace.id)?.orgId, f.a.id);
+
+	// Emulate a reassignment already stored by an older version.
+	f.db.prepare("UPDATE workspace_links SET org_id = ? WHERE id = ?").run(f.b.id, workspace.id);
+	assert.equal(f.store.hasWorkspaceScopeConflict(workspace.id), true);
+	assert.equal(canActorAccessMemory(f.store, localOwner, memory), false);
+	assert.equal(f.store.getMemory(memory.id)?.content, "PRIVATE_WORKSPACE_A_MEMORY");
+	assert.ok(!f.store.listRelevantMemories("product-manager", workspace.id).some((item) => item.id === memory.id));
+	const teamDigest = collectTeamFrictionDigest(f.store, new Map(), { orgId: f.b.id });
+	assert.doesNotMatch(teamDigest, /PRIVATE_WORKSPACE_A_MEMORY/);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "CURRENT_WORKSPACE_B" });
 	assert.equal(f.calls.length, 4);
 	for (const call of f.calls.slice(2)) {

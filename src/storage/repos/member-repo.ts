@@ -3,7 +3,7 @@ import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { RoleScope } from "../../roles/types.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type { TeamMember } from "../types.ts";
-import { defaultMemberGitName, mapMemberRow, nowIso } from "./helpers.ts";
+import { defaultMemberGitName, mapMemberRow, nowIso, parseUniqueIds } from "./helpers.ts";
 
 /** Manages persisted AI team members, primary contact selection, and Git author identity profiles. */
 export class MemberRepo {
@@ -233,23 +233,27 @@ export class MemberRepo {
 			}
 
 			const matterRows = this.db
-				.prepare("SELECT id, ai_member_ids_json, observer_ids_json FROM matters")
-				.all() as Array<{ id: string; ai_member_ids_json: string | null; observer_ids_json: string | null }>;
+				.prepare(
+					"SELECT id, ai_member_ids_json, consult_member_ids_json, observer_ids_json, observers_enabled FROM matters",
+				)
+				.all();
 			const timestamp = nowIso();
+			const updateRoster = this.db.prepare(`UPDATE matters SET ai_member_ids_json = ?, consult_member_ids_json = ?,
+				observer_ids_json = ?, observers_enabled = ?, updated_at = ? WHERE id = ?`);
 			for (const row of matterRows) {
-				const rawAi = row.ai_member_ids_json ? (JSON.parse(row.ai_member_ids_json) as string[]) : null;
-				const rawObs = row.observer_ids_json ? (JSON.parse(row.observer_ids_json) as string[]) : [];
-				const aiChanged = Boolean(rawAi?.includes(memberId));
-				const obsChanged = rawObs.includes(memberId);
-				if (aiChanged || obsChanged) {
-					const nextAi = rawAi && aiChanged ? rawAi.filter((id) => id !== memberId) : rawAi;
-					const nextObs = obsChanged ? rawObs.filter((id) => id !== memberId) : rawObs;
-					this.db
-						.prepare(
-							"UPDATE matters SET ai_member_ids_json = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?",
-						)
-						.run(nextAi === null ? null : JSON.stringify(nextAi), JSON.stringify(nextObs), timestamp, row.id);
-				}
+				const ai = parseUniqueIds(row.ai_member_ids_json);
+				const consult = parseUniqueIds(row.consult_member_ids_json);
+				const observers = parseUniqueIds(row.observer_ids_json);
+				if (![ai, consult, observers].some((ids) => ids.includes(memberId))) continue;
+				const nextObservers = observers.filter((id) => id !== memberId);
+				updateRoster.run(
+					row.ai_member_ids_json == null ? null : JSON.stringify(ai.filter((id) => id !== memberId)),
+					row.consult_member_ids_json == null ? null : JSON.stringify(consult.filter((id) => id !== memberId)),
+					JSON.stringify(nextObservers),
+					observers.includes(memberId) && nextObservers.length === 0 ? 0 : Number(row.observers_enabled),
+					timestamp,
+					String(row.id),
+				);
 			}
 
 			this.db.prepare("DELETE FROM memory_applications WHERE member_id = ?").run(memberId);

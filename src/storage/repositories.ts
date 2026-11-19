@@ -8,6 +8,7 @@ import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
+import { WorkspaceRepo } from "./repos/workspace-repo.ts";
 
 export {
 	DEFAULT_LOCAL_ADMIN_USER_ID,
@@ -22,11 +23,13 @@ export {
 	toPublicCollaborator,
 	toPublicUser,
 } from "./repos/helpers.ts";
+export { WorkspaceMutationError } from "./repos/workspace-repo.ts";
 
 /** Unified SQLite store facade delegating to domain-focused repositories. */
 export class PersonalAgentStore {
 	private readonly members: MemberRepo;
 	private readonly orgs: OrganizationRepo;
+	private readonly workspaces: WorkspaceRepo;
 	private readonly collaborators: CollaboratorRepo;
 	private readonly memories: MemoryRepo;
 	private readonly deliverables: DeliverableRepo;
@@ -38,15 +41,16 @@ export class PersonalAgentStore {
 	constructor(db: DatabaseSync) {
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
+		this.workspaces = new WorkspaceRepo(db, this.orgs);
 		this.collaborators = new CollaboratorRepo(db, this.orgs);
 		this.memories = new MemoryRepo({
 			db,
 			memberRepo: this.members,
-			orgRepo: this.orgs,
+			workspaceRepo: this.workspaces,
 			getDeliverable: (id) => this.deliverables.getDeliverable(id),
 		});
 		this.deliverables = new DeliverableRepo(db, this.memories);
-		this.matters = new MatterRepo(db, this.members, this.orgs);
+		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
 		this.sessions = new SessionRepo(db);
 		this.userAuth = new UserAuthRepo(db);
 		this.orgRbac = new OrgRbacRepo(db, this.members);
@@ -149,7 +153,7 @@ export class PersonalAgentStore {
 		return this.orgs.ensureDefaultOrganization();
 	}
 	assignOrphanWorkspacesToDefaultOrganization() {
-		return this.orgs.assignOrphanWorkspacesToDefaultOrganization();
+		return this.workspaces.assignOrphanWorkspacesToDefaultOrganization();
 	}
 	getOrganization(id: string) {
 		return this.orgs.getOrganization(id);
@@ -157,17 +161,20 @@ export class PersonalAgentStore {
 	listOrganizations() {
 		return this.orgs.listOrganizations();
 	}
-	upsertWorkspace(input: Parameters<OrganizationRepo["upsertWorkspace"]>[0]) {
-		return this.orgs.upsertWorkspace(input);
+	upsertWorkspace(input: Parameters<WorkspaceRepo["upsertWorkspace"]>[0]) {
+		return this.workspaces.upsertWorkspace(input);
 	}
-	updateWorkspace(id: string, patch: Parameters<OrganizationRepo["updateWorkspace"]>[1]) {
-		return this.orgs.updateWorkspace(id, patch);
+	updateWorkspace(id: string, patch: Parameters<WorkspaceRepo["updateWorkspace"]>[1]) {
+		return this.workspaces.updateWorkspace(id, patch);
 	}
 	getWorkspace(id: string) {
-		return this.orgs.getWorkspace(id);
+		return this.workspaces.getWorkspace(id);
 	}
 	listWorkspaces() {
-		return this.orgs.listWorkspaces();
+		return this.workspaces.listWorkspaces();
+	}
+	hasWorkspaceScopeConflict(workspaceId: string) {
+		return this.workspaces.hasWorkspaceScopeConflict(workspaceId);
 	}
 
 	// ---- Collaborators ----
@@ -427,16 +434,16 @@ export class PersonalAgentStore {
 	}
 	setWorkspaceAccess(
 		workspaceId: string,
-		visibility: Parameters<OrgRbacRepo["setWorkspaceAccess"]>[1],
+		visibility: Parameters<WorkspaceRepo["setWorkspaceAccess"]>[1],
 		allowedUserIds: string[],
 	) {
-		return this.orgRbac.setWorkspaceAccess(workspaceId, visibility, allowedUserIds);
+		return this.workspaces.setWorkspaceAccess(workspaceId, visibility, allowedUserIds);
 	}
 	listWorkspaceMemberIds(workspaceId: string) {
-		return this.orgRbac.listWorkspaceMemberIds(workspaceId);
+		return this.workspaces.listWorkspaceMemberIds(workspaceId);
 	}
 	isWorkspaceMember(workspaceId: string, userId: string) {
-		return this.orgRbac.isWorkspaceMember(workspaceId, userId);
+		return this.workspaces.isWorkspaceMember(workspaceId, userId);
 	}
 	recordUpload(input: Parameters<OrgRbacRepo["recordUpload"]>[0]) {
 		return this.orgRbac.recordUpload(input);

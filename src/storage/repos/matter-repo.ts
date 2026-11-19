@@ -12,17 +12,20 @@ import type {
 import { mapMatterRow, mapMessageRow, normalizeUniqueIds, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
 import type { OrganizationRepo } from "./organization-repo.ts";
+import type { WorkspaceRepo } from "./workspace-repo.ts";
 
 /** Manages matters, participant/observer configuration, and persisted matter messages. */
 export class MatterRepo {
 	private readonly db: DatabaseSync;
 	private readonly memberRepo: MemberRepo;
 	private readonly orgRepo: OrganizationRepo;
+	private readonly workspaceRepo: WorkspaceRepo;
 
-	constructor(db: DatabaseSync, memberRepo: MemberRepo, orgRepo: OrganizationRepo) {
+	constructor(db: DatabaseSync, memberRepo: MemberRepo, orgRepo: OrganizationRepo, workspaceRepo: WorkspaceRepo) {
 		this.db = db;
 		this.memberRepo = memberRepo;
 		this.orgRepo = orgRepo;
+		this.workspaceRepo = workspaceRepo;
 	}
 
 	private resolveEffectiveAiIds(aiMemberIds: string[] | null): string[] {
@@ -95,8 +98,7 @@ export class MatterRepo {
 					: input.observersEnabled === true;
 		const discussionAiEnabled = input.discussionAiEnabled ?? false;
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
-		const workspace = input.workspaceId ? this.orgRepo.getWorkspace(input.workspaceId) : null;
-		const effectiveOrgId = workspace ? workspace.orgId : (input.orgId ?? null);
+		const workspaceId = input.workspaceId ?? null;
 		const visibility: MatterVisibility = input.visibility === "private" ? "private" : "org";
 		this.db
 			.prepare(
@@ -105,15 +107,19 @@ export class MatterRepo {
 					ai_member_ids_json, consult_member_ids_json, observers_enabled, observer_ids_json, discussion_ai_enabled,
 					collaborator_ids_json, created_at, updated_at
 				)
-				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, 'open', ?, ?,
+						CASE WHEN ? IS NULL THEN ? ELSE (SELECT org_id FROM workspace_links WHERE id = ?) END,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
 				input.title,
 				input.summary ?? "",
 				input.leadMemberId ?? null,
-				input.workspaceId ?? null,
-				effectiveOrgId,
+				workspaceId,
+				workspaceId,
+				input.orgId ?? null,
+				workspaceId,
 				input.createdByUserId ?? null,
 				visibility,
 				storedAiIds === null ? null : JSON.stringify(storedAiIds),
@@ -163,11 +169,11 @@ export class MatterRepo {
 		const timestamp = nowIso();
 		const existing = this.getMatter(matterId);
 		if (!existing) throw new Error(`Matter not found: ${matterId}`);
-		const workspace = workspaceId ? this.orgRepo.getWorkspace(workspaceId) : null;
-		const nextOrgId = workspace ? workspace.orgId : existing.orgId;
 		this.db
-			.prepare("UPDATE matters SET workspace_id = ?, org_id = ?, updated_at = ? WHERE id = ?")
-			.run(workspaceId, nextOrgId, timestamp, matterId);
+			.prepare(`UPDATE matters SET workspace_id = ?,
+				org_id = CASE WHEN ? IS NULL THEN org_id ELSE (SELECT org_id FROM workspace_links WHERE id = ?) END,
+				updated_at = ? WHERE id = ?`)
+			.run(workspaceId, workspaceId, workspaceId, timestamp, matterId);
 		return this.getMatter(matterId)!;
 	}
 
@@ -178,7 +184,7 @@ export class MatterRepo {
 		if (orgId && !this.orgRepo.getOrganization(orgId)) {
 			throw new Error(`Organization not found: ${orgId}`);
 		}
-		const currentWs = existing.workspaceId ? this.orgRepo.getWorkspace(existing.workspaceId) : null;
+		const currentWs = existing.workspaceId ? this.workspaceRepo.getWorkspace(existing.workspaceId) : null;
 		const nextWorkspaceId = currentWs && currentWs.orgId !== orgId ? null : existing.workspaceId;
 		this.db
 			.prepare("UPDATE matters SET org_id = ?, workspace_id = ?, updated_at = ? WHERE id = ?")
@@ -402,7 +408,9 @@ export class MatterRepo {
 		const timestamp = nowIso();
 		// Snapshot provenance when writing, never infer an old message's organization at read time.
 		const workspace =
-			typeof input.metadata?.workspaceId === "string" ? this.orgRepo.getWorkspace(input.metadata.workspaceId) : null;
+			typeof input.metadata?.workspaceId === "string"
+				? this.workspaceRepo.getWorkspace(input.metadata.workspaceId)
+				: null;
 		const metadata = {
 			orgId: workspace ? workspace.orgId : (this.getMatter(input.matterId)?.orgId ?? null),
 			...input.metadata,

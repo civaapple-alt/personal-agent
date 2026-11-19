@@ -12,7 +12,7 @@ import type {
 } from "../types.ts";
 import { MemoryValidationError, mapMemoryRow, normalizeMemoryCategory, normalizeUniqueIds, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
-import type { OrganizationRepo } from "./organization-repo.ts";
+import type { WorkspaceRepo } from "./workspace-repo.ts";
 
 export interface AddMemoryInput {
 	memberId: string;
@@ -27,13 +27,12 @@ export interface AddMemoryInput {
 	status?: MemoryStatus;
 	verified?: boolean;
 	supersedesMemoryId?: string | null;
-	supersededBy?: string | null;
 }
 
 export interface MemoryRepoDeps {
 	db: DatabaseSync;
 	memberRepo: MemberRepo;
-	orgRepo: OrganizationRepo;
+	workspaceRepo: WorkspaceRepo;
 	getDeliverable: (id: string) => Deliverable | null;
 }
 
@@ -41,17 +40,21 @@ export interface MemoryRepoDeps {
 export class MemoryRepo {
 	private readonly db: DatabaseSync;
 	private readonly memberRepo: MemberRepo;
-	private readonly orgRepo: OrganizationRepo;
+	private readonly workspaceRepo: WorkspaceRepo;
 	private readonly getDeliverable: (id: string) => Deliverable | null;
 
 	constructor(deps: MemoryRepoDeps) {
 		this.db = deps.db;
 		this.memberRepo = deps.memberRepo;
-		this.orgRepo = deps.orgRepo;
+		this.workspaceRepo = deps.workspaceRepo;
 		this.getDeliverable = deps.getDeliverable;
 	}
 
 	addMemory(input: AddMemoryInput): MemberMemory {
+		return this.writeMemory(() => this.insertMemory(input));
+	}
+
+	private insertMemory(input: AddMemoryInput): MemberMemory {
 		const id = `mem_${randomUUID()}`;
 		const timestamp = nowIso();
 		const status: MemoryStatus = input.status ?? (input.verified ? "verified" : "candidate");
@@ -92,7 +95,7 @@ export class MemoryRepo {
 				input.sourceDeliverableId ?? null,
 				status,
 				verified ? 1 : 0,
-				input.supersededBy ?? null,
+				null,
 				supersedesId,
 				timestamp,
 				timestamp,
@@ -145,10 +148,13 @@ export class MemoryRepo {
 			workspaceId?: string | null;
 			status?: MemoryStatus;
 			rationale?: string;
-			supersededBy?: string | null;
 			supersedesMemoryId?: string | null;
 		},
 	): MemberMemory {
+		return this.writeMemory(() => this.patchMemory(id, patch));
+	}
+
+	private patchMemory(id: string, patch: Parameters<MemoryRepo["updateMemory"]>[1]): MemberMemory {
 		const existing = this.getMemory(id);
 		if (!existing) throw new Error(`Memory not found: ${id}`);
 		const timestamp = nowIso();
@@ -173,7 +179,9 @@ export class MemoryRepo {
 		const nextStatus = patch.status ?? existing.status;
 		const nextVerified = nextStatus === "verified";
 		const nextRationale = patch.rationale !== undefined ? patch.rationale : existing.rationale;
-		const nextSupersededBy = patch.supersededBy !== undefined ? patch.supersededBy : existing.supersededBy;
+		if (existing.supersededBy && nextStatus !== "superseded") {
+			throw new MemoryValidationError("Cannot reactivate a memory with an established replacement");
+		}
 		const nextSupersedesId =
 			patch.supersedesMemoryId !== undefined ? patch.supersedesMemoryId : existing.supersedesMemoryId;
 
@@ -185,7 +193,7 @@ export class MemoryRepo {
 			.prepare(
 				`UPDATE member_memories
 				 SET member_id = ?, scope = ?, category = ?, org_id = ?, workspace_id = ?, content = ?, rationale = ?,
-				     status = ?, verified = ?, superseded_by = ?, supersedes_memory_id = ?, updated_at = ?
+				     status = ?, verified = ?, supersedes_memory_id = ?, updated_at = ?
 				 WHERE id = ?`,
 			)
 			.run(
@@ -198,7 +206,6 @@ export class MemoryRepo {
 				nextRationale,
 				nextStatus,
 				nextVerified ? 1 : 0,
-				nextSupersededBy,
 				nextSupersedesId,
 				timestamp,
 				id,
@@ -263,13 +270,30 @@ export class MemoryRepo {
 	}
 
 	private markMemorySuperseded(targetMemoryId: string, replacementId: string, timestamp: string): void {
-		this.db
+		const result = this.db
 			.prepare(
 				`UPDATE member_memories
 				 SET status = 'superseded', verified = 0, superseded_by = ?, updated_at = ?
-				 WHERE id = ? AND status IN ('candidate', 'verified')`,
+				 WHERE id = ? AND status IN ('candidate', 'verified') AND superseded_by IS NULL`,
 			)
 			.run(replacementId, timestamp, targetMemoryId);
+		if (result.changes) return;
+		const target = this.getMemory(targetMemoryId);
+		if (target?.status === "superseded" && target.supersededBy === replacementId) return;
+		throw new MemoryValidationError("The prior memory already has a replacement or is no longer active");
+	}
+
+	private writeMemory<T>(operation: () => T): T {
+		// Outcome commits can already be in a transaction when they add a memory.
+		this.db.exec("SAVEPOINT write_memory");
+		try {
+			const result = operation();
+			this.db.exec("RELEASE write_memory");
+			return result;
+		} catch (error) {
+			this.db.exec("ROLLBACK TO write_memory; RELEASE write_memory");
+			throw error;
+		}
 	}
 
 	/** Inject role-general facts, organization-shared memory for the workspace's org (or single-workspace legacy company memory), and workspace-specific facts. */
@@ -279,18 +303,25 @@ export class MemoryRepo {
 		options?: { includeCandidates?: boolean; orgId?: string | null },
 	): MemberMemory[] {
 		const includeCandidates = options?.includeCandidates ?? true;
-		const workspace = workspaceId ? this.orgRepo.getWorkspace(workspaceId) : null;
+		const workspace = workspaceId ? this.workspaceRepo.getWorkspace(workspaceId) : null;
 		const activeOrgId = workspace ? workspace.orgId : (options?.orgId ?? null);
-		return this.listMemberMemories(memberId)
+		const canUseWorkspaceMemories = workspace !== null && !this.workspaceRepo.hasWorkspaceScopeConflict(workspace.id);
+		const memories = this.listMemberMemories(memberId);
+		const byId = new Map(memories.map((memory) => [memory.id, memory]));
+		return memories
 			.filter((memory) => {
 				if (memory.status === "rejected" || memory.status === "superseded") return false;
+				if (memory.supersedesMemoryId) {
+					const target = byId.get(memory.supersedesMemoryId);
+					if (memory.status !== "verified" || target?.supersededBy !== memory.id) return false;
+				}
 				if (!includeCandidates && memory.status !== "verified") return false;
 				if (memory.scope === "role_general") return true;
 				if (memory.scope === "company_private") {
 					if (activeOrgId !== null && memory.orgId === activeOrgId) return true;
-					return workspaceId !== null && !memory.orgId && memory.workspaceId === workspaceId;
+					return canUseWorkspaceMemories && !memory.orgId && memory.workspaceId === workspaceId;
 				}
-				return workspaceId !== null && memory.workspaceId === workspaceId;
+				return canUseWorkspaceMemories && memory.workspaceId === workspaceId;
 			})
 			.sort((a, b) => {
 				const rankA = a.status === "verified" ? 0 : 1;

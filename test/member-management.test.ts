@@ -224,3 +224,56 @@ test("Repeated adjustments are rejected before changing any role", async (t) => 
 		409,
 	);
 });
+
+test("Deleting the last observer removes the role from both rosters", async (t) => {
+	const { store, request } = await fixture(t);
+	const memberId = "retired-reviewer";
+	assert.equal((await request("/api/members", newRole(memberId))).status, 201);
+	const matter = store.createMatter({
+		title: "Role roster",
+		leadMemberId: "product-manager",
+		aiMemberIds: ["product-manager", memberId],
+		consultMemberIds: [memberId],
+		observerMemberIds: [memberId],
+	});
+	assert.equal((await request(`/api/members/${memberId}`, {}, "DELETE")).status, 200);
+	const updated = store.getMatter(matter.id);
+	assert.deepEqual(updated?.aiMemberIds, ["product-manager"]);
+	assert.deepEqual(updated?.consultMemberIds, []);
+	assert.deepEqual(updated?.observerMemberIds, []);
+	assert.equal(updated?.observersEnabled, false);
+});
+
+test("Workspace writes roll back invalid grants and protect existing organization history", async (t) => {
+	const { store, request, directory } = await fixture(t);
+	const first = store.upsertOrganization({ name: "Origin" });
+	const second = store.upsertOrganization({ name: "Destination" });
+	const path = "/api/workspaces";
+	const createWorkspace = (repoPath: string, orgId: string, change = {}) =>
+		request(path, { name: "Repository", repoPath, orgId, ...change });
+	const invalidGrant = { visibility: "restricted", allowedUserIds: ["unknown-user"] };
+	assert.equal((await createWorkspace(directory, first.id, invalidGrant)).status, 400);
+	assert.deepEqual(store.listWorkspaces(), []);
+
+	const created = await createWorkspace(directory, first.id);
+	assert.equal(created.status, 201);
+	const workspace = store.listWorkspaces()[0]!;
+	const edit = (body: unknown) => request(`${path}/${workspace.id}`, body, "PATCH");
+	assert.equal((await edit({ ...invalidGrant, name: "Partially applied" })).status, 400);
+	assert.deepEqual(store.getWorkspace(workspace.id), workspace);
+
+	const user = store.ensureLocalBootstrapAdmin("Workspace owner");
+	assert.equal((await edit({ visibility: "restricted", allowedUserIds: [user.id] })).status, 200);
+	assert.equal((await edit({ ...invalidGrant, name: "Partially applied" })).status, 400);
+	assert.deepEqual(store.listWorkspaceMemberIds(workspace.id), [user.id]);
+	assert.equal(store.getWorkspace(workspace.id)?.name, workspace.name);
+
+	assert.equal((await edit({ orgId: second.id })).status, 409);
+	assert.equal((await edit({ visibility: "org" })).status, 200);
+	assert.equal((await edit({ orgId: second.id })).status, 200);
+	const matter = store.createMatter({ title: "History", workspaceId: workspace.id });
+	assert.equal((await edit({ orgId: first.id })).status, 409);
+	assert.equal((await createWorkspace(directory, first.id)).status, 409);
+	assert.equal(store.getWorkspace(workspace.id)?.orgId, second.id);
+	assert.equal(store.getMatter(matter.id)?.orgId, second.id);
+});

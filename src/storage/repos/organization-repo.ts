@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { Organization, WorkspaceLink, WorkspaceSourceType, WorkspaceVisibility } from "../types.ts";
+import type { Organization } from "../types.ts";
 import {
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
 	mapOrganizationRow,
-	mapWorkspaceRow,
 	nowIso,
 	slugifyOrganizationName,
 } from "./helpers.ts";
@@ -188,12 +187,6 @@ export class OrganizationRepo {
 		});
 	}
 
-	assignOrphanWorkspacesToDefaultOrganization(): number {
-		const defaultOrg = this.ensureDefaultOrganization();
-		const res = this.db.prepare("UPDATE workspace_links SET org_id = ? WHERE org_id IS NULL").run(defaultOrg.id);
-		return Number(res.changes ?? 0);
-	}
-
 	getOrganization(id: string): Organization | null {
 		const row = this.db.prepare("SELECT * FROM organizations WHERE id = ?").get(id) as
 			| Record<string, unknown>
@@ -207,114 +200,5 @@ export class OrganizationRepo {
 			unknown
 		>[];
 		return rows.map((row) => mapOrganizationRow(row));
-	}
-
-	upsertWorkspace(input: {
-		id?: string;
-		orgId?: string | null;
-		name: string;
-		repoPath: string;
-		defaultBranch?: string;
-		description?: string;
-		sourceType?: WorkspaceSourceType;
-		cloneUrl?: string | null;
-		visibility?: WorkspaceVisibility;
-	}): WorkspaceLink {
-		const existing = this.db.prepare("SELECT * FROM workspace_links WHERE repo_path = ?").get(input.repoPath) as
-			| Record<string, unknown>
-			| undefined;
-		if (existing) {
-			const nextOrgId = input.orgId !== undefined ? input.orgId : existing.org_id ? String(existing.org_id) : null;
-			const nextSourceType = input.sourceType ?? (existing.source_type === "cloned" ? "cloned" : "local");
-			const nextCloneUrl =
-				input.cloneUrl !== undefined ? input.cloneUrl : existing.clone_url ? String(existing.clone_url) : null;
-			const nextVisibility = input.visibility ?? (existing.visibility === "restricted" ? "restricted" : "org");
-			this.db
-				.prepare(
-					`UPDATE workspace_links
-					 SET org_id = ?, name = ?, default_branch = ?, description = ?, source_type = ?, clone_url = ?, visibility = ?
-					 WHERE id = ?`,
-				)
-				.run(
-					nextOrgId,
-					input.name,
-					input.defaultBranch ?? String(existing.default_branch),
-					input.description ?? String(existing.description),
-					nextSourceType,
-					nextCloneUrl,
-					nextVisibility,
-					String(existing.id),
-				);
-			return this.getWorkspace(String(existing.id))!;
-		}
-
-		const id = input.id ?? `ws_${randomUUID()}`;
-		const timestamp = nowIso();
-		this.db
-			.prepare(
-				`INSERT INTO workspace_links (id, org_id, name, repo_path, default_branch, description, source_type, clone_url, visibility, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			)
-			.run(
-				id,
-				input.orgId ?? null,
-				input.name,
-				input.repoPath,
-				input.defaultBranch ?? "main",
-				input.description ?? "",
-				input.sourceType ?? "local",
-				input.cloneUrl ?? null,
-				input.visibility ?? "org",
-				timestamp,
-			);
-		return this.getWorkspace(id)!;
-	}
-
-	updateWorkspace(
-		id: string,
-		patch: {
-			orgId?: string | null;
-			name?: string;
-			defaultBranch?: string;
-			description?: string;
-			visibility?: WorkspaceVisibility;
-		},
-	): WorkspaceLink {
-		const existing = this.getWorkspace(id);
-		if (!existing) throw new Error(`Workspace not found: ${id}`);
-		const nextOrgId = patch.orgId !== undefined ? patch.orgId : existing.orgId;
-		if (nextOrgId && !this.getOrganization(nextOrgId)) {
-			throw new Error(`Organization not found: ${nextOrgId}`);
-		}
-		const nextName = patch.name !== undefined ? patch.name.trim() || existing.name : existing.name;
-		const nextBranch =
-			patch.defaultBranch !== undefined
-				? patch.defaultBranch.trim() || existing.defaultBranch
-				: existing.defaultBranch;
-		const nextDesc = patch.description !== undefined ? patch.description.trim() : existing.description;
-		const nextVisibility = patch.visibility ?? existing.visibility ?? "org";
-		this.db
-			.prepare(
-				`UPDATE workspace_links
-				 SET org_id = ?, name = ?, default_branch = ?, description = ?, visibility = ?
-				 WHERE id = ?`,
-			)
-			.run(nextOrgId, nextName, nextBranch, nextDesc, nextVisibility, id);
-		return this.getWorkspace(id)!;
-	}
-
-	getWorkspace(id: string): WorkspaceLink | null {
-		const row = this.db.prepare("SELECT * FROM workspace_links WHERE id = ?").get(id) as
-			| Record<string, unknown>
-			| undefined;
-		return row ? mapWorkspaceRow(row) : null;
-	}
-
-	listWorkspaces(): WorkspaceLink[] {
-		const rows = this.db.prepare("SELECT * FROM workspace_links ORDER BY created_at ASC").all() as Record<
-			string,
-			unknown
-		>[];
-		return rows.map((row) => mapWorkspaceRow(row));
 	}
 }

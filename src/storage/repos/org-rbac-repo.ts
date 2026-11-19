@@ -10,7 +10,6 @@ import type {
 	OrgMemberRole,
 	TeamMember,
 	UploadRecord,
-	WorkspaceVisibility,
 } from "../types.ts";
 import { mapMemberRow, mapOrganizationRow, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
@@ -457,43 +456,6 @@ export class OrgRbacRepo {
 		if (personalRows.length === 0) return shared;
 		const seen = new Set(shared.map((m) => m.id));
 		return [...shared, ...personalRows.map(mapMemberRow).filter((m) => !seen.has(m.id))];
-	}
-
-	// ---- Project / Workspace Access Members ----
-	setWorkspaceAccess(workspaceId: string, visibility: WorkspaceVisibility, allowedUserIds: string[]): void {
-		const timestamp = nowIso();
-		this.db.exec("BEGIN IMMEDIATE");
-		try {
-			this.db.prepare("UPDATE workspace_links SET visibility = ? WHERE id = ?").run(visibility, workspaceId);
-			this.db.prepare("DELETE FROM workspace_members WHERE workspace_id = ?").run(workspaceId);
-			if (visibility === "restricted") {
-				const stmt = this.db.prepare(
-					"INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, created_at) VALUES (?, ?, ?)",
-				);
-				for (const userId of allowedUserIds) {
-					const trimmed = userId.trim();
-					if (trimmed) stmt.run(workspaceId, trimmed, timestamp);
-				}
-			}
-			this.db.exec("COMMIT");
-		} catch (err) {
-			this.db.exec("ROLLBACK");
-			throw err;
-		}
-	}
-
-	listWorkspaceMemberIds(workspaceId: string): string[] {
-		const rows = this.db
-			.prepare("SELECT user_id FROM workspace_members WHERE workspace_id = ? ORDER BY created_at ASC")
-			.all(workspaceId) as Record<string, unknown>[];
-		return rows.map((r) => String(r.user_id));
-	}
-
-	isWorkspaceMember(workspaceId: string, userId: string): boolean {
-		const row = this.db
-			.prepare("SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?")
-			.get(workspaceId, userId);
-		return Boolean(row);
 	}
 
 	// ---- Upload ACL Index ----

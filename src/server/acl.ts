@@ -178,7 +178,11 @@ export function canActorAccessMemory(
 	if (memory.scope === "company_private" && memory.orgId) {
 		return canAccessOrganization(store, actor, memory.orgId);
 	}
-	return Boolean(memory.workspaceId && canAccessWorkspace(store, actor, store.getWorkspace(memory.workspaceId)));
+	return Boolean(
+		memory.workspaceId &&
+			canAccessWorkspace(store, actor, store.getWorkspace(memory.workspaceId)) &&
+			!store.hasWorkspaceScopeConflict(memory.workspaceId),
+	);
 }
 
 export function canAccessWorkspace(

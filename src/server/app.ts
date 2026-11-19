@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
-import { MemoryValidationError, type PersonalAgentStore } from "../storage/repositories.ts";
+import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
 import { canActorAccessUpload } from "./acl.ts";
 import { requireActiveActor, requireOwner, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
@@ -194,7 +194,11 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			const statusCode =
-				error instanceof HttpRequestError ? error.statusCode : error instanceof MemoryValidationError ? 400 : 500;
+				error instanceof HttpRequestError || error instanceof WorkspaceMutationError
+					? error.statusCode
+					: error instanceof MemoryValidationError
+						? 400
+						: 500;
 			sendError(res, statusCode, message);
 		}
 	});

@@ -23,6 +23,7 @@ import {
 	collectTeamHealthEvidence,
 	filterTeamMembersForScope,
 	formatTeamHealthEvidence,
+	isTeamHealthMemoryInScope,
 	type TeamHealthEvidence,
 	type TeamHealthScopeFilter,
 } from "./team-health.ts";
@@ -162,9 +163,7 @@ export function collectTeamFrictionDigest(
 	const candidateMemories = members
 		.flatMap((m) => store.listMemberMemories(m.id))
 		.filter((mem) => {
-			if (!memberIds.has(mem.memberId)) return false;
-			if (scope?.orgId && mem.orgId && mem.orgId !== scope.orgId) return false;
-			if (scope?.allowedOrgIds && mem.orgId && !scope.allowedOrgIds.has(mem.orgId)) return false;
+			if (!memberIds.has(mem.memberId) || !isTeamHealthMemoryInScope(mem, scope)) return false;
 			return mem.status === "candidate" || mem.category === "user_correction" || mem.category === "collaboration";
 		})
 		.slice(-8)

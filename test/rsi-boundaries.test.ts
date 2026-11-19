@@ -498,3 +498,37 @@ test("org-bound propose_experience and distillation route company_private to org
 		/same member, scope, organization and workspace/,
 	);
 });
+
+test("Promoting a competing experience keeps the accepted replacement authoritative", async (t) => {
+	const f = await fixture(t, async () => result());
+	const original = f.store.addMemory({
+		memberId: "product-manager",
+		scope: "role_general",
+		content: "Original rule",
+		verified: true,
+	});
+	const candidate = (content: string) =>
+		f.store.addMemory({
+			memberId: original.memberId,
+			scope: original.scope,
+			content,
+			supersedesMemoryId: original.id,
+		});
+	const accepted = candidate("Accepted rule");
+	const competing = candidate("Competing rule");
+
+	assert.deepEqual(
+		f.store.listRelevantMemories(original.memberId, null).map(({ id }) => id),
+		[original.id],
+	);
+	f.store.updateMemory(accepted.id, { status: "verified" });
+	assert.equal(f.store.updateMemory(accepted.id, { status: "verified" }).status, "verified");
+	assert.throws(() => f.store.updateMemory(competing.id, { status: "verified" }), /already has a replacement/);
+	assert.throws(() => f.store.updateMemory(original.id, { status: "verified" }), /established replacement/);
+	assert.equal(f.store.getMemory(competing.id)?.status, "candidate");
+	assert.equal(f.store.getMemory(original.id)?.supersededBy, accepted.id);
+	assert.deepEqual(
+		f.store.listRelevantMemories(original.memberId, null).map(({ id }) => id),
+		[accepted.id],
+	);
+});

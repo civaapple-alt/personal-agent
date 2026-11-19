@@ -595,6 +595,7 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			repo_path TEXT NOT NULL UNIQUE,
+			org_id TEXT,
 			default_branch TEXT NOT NULL DEFAULT 'main',
 			description TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
@@ -615,6 +616,7 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 			scope TEXT NOT NULL,
 			workspace_id TEXT,
 			content TEXT NOT NULL,
+			source_deliverable_id TEXT,
 			verified INTEGER NOT NULL DEFAULT 1,
 			created_at TEXT NOT NULL
 		);
@@ -646,8 +648,8 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 			'legacy-pm', 'product-manager', 'Legacy PM', 'Product Manager', 1,
 			'kimi-coding', 'kimi-for-coding', 'high', '[]', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
 		);
-		INSERT INTO workspace_links VALUES ('ws-1', 'legacy-repo', '/tmp/legacy-repo', 'main', '', '2026-01-01T00:00:00Z');
-		INSERT INTO member_memories VALUES ('mem-1', 'legacy-pm', 'company_private', 'ws-1', 'Legacy workspace memory', 1, '2026-01-01T00:00:00Z');
+		INSERT INTO workspace_links VALUES ('ws-1', 'legacy-repo', '/tmp/legacy-repo', NULL, 'main', '', '2026-01-01T00:00:00Z');
+		INSERT INTO member_memories VALUES ('mem-1', 'legacy-pm', 'company_private', 'ws-1', 'Legacy workspace memory', NULL, 1, '2026-01-01T00:00:00Z');
 	`);
 	raw.close();
 
@@ -668,13 +670,34 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 		assert.equal(relevant.length, 1);
 		assert.equal(relevant[0]?.orgId, null);
 		assert.equal(relevant[0]?.workspaceId, "ws-1");
+		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 2);
+		assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+		const fresh = openPersonalAgentDatabase();
+		try {
+			for (const table of ["workspace_links", "member_memories"]) {
+				const keys = (source: DatabaseSync) =>
+					source
+						.prepare(`PRAGMA foreign_key_list(${table})`)
+						.all()
+						.map((row) => [row.from, row.table, row.on_delete].join(":"))
+						.sort();
+				assert.deepEqual(keys(db), keys(fresh));
+			}
+		} finally {
+			fresh.close();
+		}
+		assert.throws(() => db.prepare("UPDATE workspace_links SET org_id = ?").run("missing-org"), /FOREIGN KEY/);
+		assert.throws(
+			() => db.prepare("UPDATE member_memories SET source_deliverable_id = ?").run("missing-result"),
+			/FOREIGN KEY/,
+		);
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });
 
-test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII auto-backfills", async () => {
+test("default gitName uses English roleTitle/id and preserves explicitly saved Unicode identity", async () => {
 	const tempRoot = mkdtempSync(join(tmpdir(), "pa-gitname-en-"));
 	const dbPath = join(tempRoot, "team.sqlite");
 	const db = openPersonalAgentDatabase(dbPath);
@@ -694,8 +717,9 @@ test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII
 		assert.equal(pm.gitName, "System Architect");
 		assert.equal(defaultMemberGitName({ id: "sec-ops", displayName: "安全官", roleTitle: "安全负责人" }), "sec-ops");
 
-		// Simulate an untouched Chinese auto-backfill from older version (git_name = display_name)
-		db.prepare("UPDATE team_members SET git_name = ? WHERE id = ?").run("系统架构师", "architect-lead");
+		store.updateMemberIdentity("architect-lead", { gitName: "系统架构师" });
+		// Released databases never recorded a schema version.
+		db.exec("PRAGMA user_version = 0");
 	} finally {
 		db.close();
 	}
@@ -703,7 +727,7 @@ test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII
 	const reopened = openPersonalAgentDatabase(dbPath);
 	try {
 		const store = new PersonalAgentStore(reopened);
-		assert.equal(store.getMember("architect-lead")?.gitName, "System Architect");
+		assert.equal(store.getMember("architect-lead")?.gitName, "系统架构师");
 
 		// Workspace-less matter under an explicit org injects org context & company_private memories
 		const org = store.upsertOrganization({
@@ -756,7 +780,7 @@ test("default gitName uses English roleTitle/id and upgrades untouched non-ASCII
 			prompt: "Draft architecture plan with role Git identity",
 			preferredMemberId: "architect-lead",
 		});
-		assert.equal(workers[1]?.options.env?.GIT_AUTHOR_NAME, "System Architect");
+		assert.equal(workers[1]?.options.env?.GIT_AUTHOR_NAME, "系统架构师");
 		assert.equal(workers[1]?.options.env?.GIT_AUTHOR_EMAIL, "architect-lead@test-team.local");
 	} finally {
 		reopened.close();
