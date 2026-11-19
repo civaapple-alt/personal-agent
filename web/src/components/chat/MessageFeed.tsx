@@ -348,6 +348,8 @@ export function MessageFeed({
 																	<img
 																		src={img.url}
 																		alt={img.name ?? `附件图片 ${idx + 1}`}
+																		width={112}
+																		height={112}
 																		loading="lazy"
 																	/>
 																</button>
@@ -535,7 +537,7 @@ export function MessageFeed({
 													className="input-field"
 													value={dialogInput}
 													onChange={(e) => setDialogInput(e.target.value)}
-													placeholder={dlg.request.placeholder ?? "输入答复..."}
+													placeholder={dlg.request.placeholder ?? "输入答复…"}
 												/>
 												<button
 													type="button"
@@ -563,7 +565,7 @@ export function MessageFeed({
 
 						{streamingDelta && (
 							<div className="stream-msg from-member">
-								<div className="stream-sender">正在整理回复...</div>
+								<div className="stream-sender">正在整理回复…</div>
 								<div className="stream-bubble member">
 									<MarkdownView content={streamingDelta} />
 								</div>

@@ -91,7 +91,7 @@ export function AuthGateView({
 			<div className="auth-gate-shell">
 				<div className="auth-gate-card">
 					<div className="brand-mark">PA</div>
-					<h1>正在连接团队协同工作台...</h1>
+					<h1>正在连接团队协同工作台…</h1>
 					<p className="muted-hint">正在校验访问身份与工作台状态</p>
 				</div>
 			</div>
@@ -125,6 +125,8 @@ export function AuthGateView({
 							<span>管理员显示名称</span>
 							<input
 								className="input-field"
+								name="name"
+								autoComplete="name"
 								value={displayName}
 								onChange={(e) => setDisplayName(e.target.value)}
 								placeholder="例如：Alice（平台管理员）"
@@ -136,6 +138,9 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="email"
+								name="email"
+								autoComplete="email"
+								spellCheck={false}
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								placeholder="admin@company.com"
@@ -147,10 +152,12 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="password"
+								name="new-password"
+								autoComplete="new-password"
 								minLength={8}
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
-								placeholder="输入至少 8 位密码..."
+								placeholder="输入至少 8 位密码…"
 								required
 							/>
 						</label>
@@ -159,7 +166,7 @@ export function AuthGateView({
 							className="btn-pill-dark"
 							disabled={submitting || !email.trim() || password.length < 8 || !displayName.trim()}
 						>
-							{submitting ? "正在初始化..." : "创建超级管理员并进入工作台"}
+							{submitting ? "正在初始化…" : "创建超级管理员并进入工作台"}
 						</button>
 					</form>
 				</div>
@@ -279,6 +286,9 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="email"
+								name="email"
+								autoComplete="username"
+								spellCheck={false}
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								placeholder="member@company.com"
@@ -290,14 +300,16 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="password"
+								name="password"
+								autoComplete="current-password"
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
-								placeholder="输入密码..."
+								placeholder="输入密码…"
 								required
 							/>
 						</label>
 						<button type="submit" className="btn-pill-dark" disabled={submitting || !email.trim() || !password}>
-							{submitting ? "正在登录..." : "登录进入工作台"}
+							{submitting ? "正在登录…" : "登录进入工作台"}
 						</button>
 					</form>
 				)}
@@ -321,6 +333,8 @@ export function AuthGateView({
 							<span>显示名称</span>
 							<input
 								className="input-field"
+								name="name"
+								autoComplete="name"
 								value={displayName}
 								onChange={(e) => setDisplayName(e.target.value)}
 								placeholder="例如：张工 / Leo"
@@ -332,6 +346,9 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="email"
+								name="email"
+								autoComplete="email"
+								spellCheck={false}
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								placeholder="member@company.com"
@@ -343,10 +360,12 @@ export function AuthGateView({
 							<input
 								className="input-field"
 								type="password"
+								name="new-password"
+								autoComplete="new-password"
 								minLength={8}
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
-								placeholder="至少 8 位密码..."
+								placeholder="至少 8 位密码…"
 								required
 							/>
 						</label>
@@ -354,9 +373,12 @@ export function AuthGateView({
 							<span>组织邀请码（{registrationMode === "invite_only" ? "必填" : "选填"}）</span>
 							<input
 								className="input-field"
+								name="invite"
+								autoComplete="off"
+								spellCheck={false}
 								value={inviteInput}
 								onChange={(e) => setInviteInput(e.target.value)}
-								placeholder="orginv_..."
+								placeholder="orginv_…"
 								required={registrationMode === "invite_only"}
 							/>
 						</label>
@@ -371,7 +393,7 @@ export function AuthGateView({
 								(registrationMode === "invite_only" && !inviteInput.trim())
 							}
 						>
-							{submitting ? "正在提交..." : "创建账号"}
+							{submitting ? "正在提交…" : "创建账号"}
 						</button>
 					</form>
 				)}
@@ -386,9 +408,13 @@ export function AuthGateView({
 					>
 						<input
 							className="input-field"
+							name="legacy-token"
+							aria-label="内网协同口令"
+							autoComplete="off"
+							spellCheck={false}
 							value={authTokenInput}
 							onChange={(e) => onTokenInputChange(e.target.value)}
-							placeholder="粘贴内网协同口令（如 inv_xxx）..."
+							placeholder="粘贴内网协同口令（如 inv_xxx）…"
 						/>
 						<button type="submit" className="btn-pill-dark" disabled={!authTokenInput.trim()}>
 							使用协同口令进入

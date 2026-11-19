@@ -164,7 +164,7 @@ export function SettingsView({
 							onClick={() => void onRefresh()}
 							disabled={loading}
 						>
-							{loading ? "检测中..." : "刷新"}
+							{loading ? "检测中…" : "刷新"}
 						</button>
 					</div>
 				</div>
@@ -422,7 +422,7 @@ export function SettingsView({
 																			onClick={() => void handleEnablePstack(true)}
 																			disabled={pstackBusy !== null}
 																		>
-																			{pstackBusy === "update" ? "更新中..." : "同步更新"}
+																			{pstackBusy === "update" ? "更新中…" : "同步更新"}
 																		</button>
 																		<button
 																			type="button"
@@ -430,7 +430,7 @@ export function SettingsView({
 																			onClick={() => void handleDisablePstack()}
 																			disabled={pstackBusy !== null}
 																		>
-																			{pstackBusy === "disable" ? "停用中..." : "停用"}
+																			{pstackBusy === "disable" ? "停用中…" : "停用"}
 																		</button>
 																	</div>
 																)}
@@ -445,6 +445,9 @@ export function SettingsView({
 																<div className="settings-pstack-form-row">
 																	<input
 																		type="url"
+																		name="pstack-url"
+																		autoComplete="off"
+																		spellCheck={false}
 																		className="text-input"
 																		aria-label="pstack Git 仓库地址"
 																		placeholder="https://github.com/backnotprop/pstack.git"
@@ -458,9 +461,7 @@ export function SettingsView({
 																		onClick={() => void handleEnablePstack(false)}
 																		disabled={pstackBusy !== null}
 																	>
-																		{pstackBusy === "enable"
-																			? "克隆并校验中..."
-																			: "克隆并启用 pstack"}
+																		{pstackBusy === "enable" ? "克隆并校验中…" : "克隆并启用 pstack"}
 																	</button>
 																</div>
 																<p className="muted-hint">

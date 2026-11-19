@@ -433,7 +433,7 @@ export function OrganizationsSection({
 							disabled={!orgNameInput.trim() || saving}
 							onClick={() => void handleSaveOrg()}
 						>
-							{saving ? "保存中..." : "保存组织"}
+							{saving ? "保存中…" : "保存组织"}
 						</button>
 					</>
 				}
@@ -531,7 +531,7 @@ export function OrganizationsSection({
 							disabled={!joinTokenInput.trim() || joining}
 							onClick={() => void handleJoinOrg()}
 						>
-							{joining ? "加入中..." : "立即加入"}
+							{joining ? "加入中…" : "立即加入"}
 						</button>
 					</>
 				}
@@ -540,7 +540,7 @@ export function OrganizationsSection({
 					<span className="identity-field-label">组织邀请码</span>
 					<input
 						className="input-field"
-						placeholder="粘贴 orginv_..."
+						placeholder="粘贴 orginv_…"
 						value={joinTokenInput}
 						onChange={(e) => setJoinTokenInput(e.target.value)}
 					/>
@@ -559,7 +559,7 @@ export function OrganizationsSection({
 						<div className="org-member-add-row">
 							<input
 								className="input-field"
-								placeholder="输入已注册用户的邮箱..."
+								placeholder="输入已注册用户的邮箱…"
 								value={addMemberEmail}
 								onChange={(e) => setAddMemberEmail(e.target.value)}
 							/>
@@ -728,7 +728,7 @@ export function OrganizationsSection({
 							disabled={savingAiRoles || draftEnabledAiIds.length === 0}
 							onClick={() => void handleSaveAiRoles()}
 						>
-							{savingAiRoles ? "保存中..." : "保存 AI 角色配置"}
+							{savingAiRoles ? "保存中…" : "保存 AI 角色配置"}
 						</button>
 					</>
 				}

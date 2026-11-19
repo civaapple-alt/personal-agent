@@ -478,7 +478,7 @@ export function DeliverablesView({
 						</div>
 						<input
 							className="input-field deliverables-search"
-							placeholder="按成果标题、摘要或负责人筛选..."
+							placeholder="按成果标题、摘要或负责人筛选…"
 							value={localSearch}
 							onChange={(e) => setLocalSearch(e.target.value)}
 						/>

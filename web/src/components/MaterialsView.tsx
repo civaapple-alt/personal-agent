@@ -274,8 +274,8 @@ export function MaterialsView({
 						>
 							{submitting
 								? newWsSourceType === "cloned"
-									? "正在克隆并绑定..."
-									: "绑定中..."
+									? "正在克隆并绑定…"
+									: "绑定中…"
 								: newWsSourceType === "cloned"
 									? "克隆并绑定"
 									: "绑定工作区"}
@@ -427,7 +427,7 @@ export function MaterialsView({
 							disabled={savingAccess}
 							onClick={() => void handleSaveAccess()}
 						>
-							{savingAccess ? "保存中..." : "保存权限"}
+							{savingAccess ? "保存中…" : "保存权限"}
 						</button>
 					</>
 				}

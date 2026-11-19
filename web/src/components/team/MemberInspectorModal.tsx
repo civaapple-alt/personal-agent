@@ -411,7 +411,7 @@ export function MemberInspectorModal({
 										disabled={batchApproving}
 										onClick={() => void handleApproveAllCandidates()}
 									>
-										{batchApproving ? "核验中..." : `全部通过 (${candidateCount})`}
+										{batchApproving ? "核验中…" : `全部通过 (${candidateCount})`}
 									</button>
 								)}
 								{canCurateMemories && (

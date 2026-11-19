@@ -183,7 +183,7 @@ export function AdminView({
 							onClick={() => void onRefresh()}
 							disabled={loading}
 						>
-							{loading ? "刷新中..." : "刷新总览"}
+							{loading ? "刷新中…" : "刷新总览"}
 						</button>
 					</div>
 				</div>
@@ -581,7 +581,7 @@ export function AdminView({
 
 									<div className="actions-row compact">
 										<button type="submit" className="btn-pill-dark" disabled={savingSettings}>
-											{savingSettings ? "保存中..." : "保存平台安全配置"}
+											{savingSettings ? "保存中…" : "保存平台安全配置"}
 										</button>
 									</div>
 								</form>

@@ -185,7 +185,7 @@ export function AttachmentPreviewModals({
 				}
 			>
 				{previewFile?.loading ? (
-					<div className="muted small">正在读取文件内容...</div>
+					<div className="muted small">正在读取文件内容…</div>
 				) : previewFile?.error ? (
 					<div className="error-text small">{previewFile.error}</div>
 				) : (

@@ -597,7 +597,7 @@ export function ManualExperienceForm({
 					className="input-field"
 					value={content}
 					onChange={(e) => setContent(e.target.value)}
-					placeholder="写下可复用的做法规则（提效 / 排障 / 协同规范）..."
+					placeholder="写下可复用的做法规则（提效 / 排障 / 协同规范）…"
 				/>
 				<button
 					type="button"
@@ -605,7 +605,7 @@ export function ManualExperienceForm({
 					disabled={saving || !content.trim()}
 					onClick={() => void handleSave()}
 				>
-					{saving ? "保存中..." : "保存经验"}
+					{saving ? "保存中…" : "保存经验"}
 				</button>
 				{onCancel && (
 					<button type="button" className="btn-pill-outline btn-sm" onClick={onCancel}>
@@ -762,7 +762,7 @@ export function InlineExperienceReviewSection({
 							disabled={batchApproving}
 							onClick={() => void handleApproveAll()}
 						>
-							{batchApproving ? "核验中..." : `全部核验通过 (${pendingMemories.length})`}
+							{batchApproving ? "核验中…" : `全部核验通过 (${pendingMemories.length})`}
 						</button>
 					)}
 					{onOpenTeam && (

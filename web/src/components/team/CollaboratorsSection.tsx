@@ -206,7 +206,7 @@ export function CollaboratorsSection({
 							disabled={!collabNameInput.trim() || submitting}
 							onClick={() => void handleCreateCollaborator()}
 						>
-							{submitting ? "创建中..." : "保存并生成邀请"}
+							{submitting ? "创建中…" : "保存并生成邀请"}
 						</button>
 					</>
 				}

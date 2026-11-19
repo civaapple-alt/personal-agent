@@ -628,6 +628,7 @@
 	min-height: 0;
 	max-height: 62vh;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -718,7 +719,7 @@
 	font-size: var(--text-xs);
 	font-weight: 500;
 	cursor: pointer;
-	transition: all 0.14s ease;
+	transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
 }
 .composer-discussion-ai-pill:hover:not(:disabled) {
 	border-color: #0284c7;
@@ -768,6 +769,7 @@
 	max-width: 360px;
 	max-height: 220px;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 	background: #fff;
 	border: 1px solid var(--border-strong);
 	border-radius: var(--radius-md);
@@ -817,7 +819,7 @@
 	font-size: var(--text-xs);
 	font-weight: 500;
 	cursor: pointer;
-	transition: all 0.14s ease;
+	transition: background-color 0.14s ease, color 0.14s ease;
 }
 .composer-mode-tab.active.discussion {
 	background: #0284c7;
@@ -896,7 +898,7 @@
 	background: #fff;
 	cursor: pointer;
 	user-select: none;
-	transition: all 0.14s ease;
+	transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
 }
 .role-flag-pill input {
 	position: absolute;

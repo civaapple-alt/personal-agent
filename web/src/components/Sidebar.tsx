@@ -142,7 +142,7 @@ export function Sidebar({
 				<div className="sidebar-search">
 					<input
 						className="input-field"
-						placeholder="搜索事项或交付标题..."
+						placeholder="搜索事项或交付标题…"
 						value={searchQuery}
 						onChange={(e) => onSearchQueryChange(e.target.value)}
 					/>

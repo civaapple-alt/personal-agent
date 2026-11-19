@@ -338,21 +338,21 @@ export function ComposerDock({
 	const uploadLimitReached = pendingImages.length >= MAX_COMPOSER_IMAGES && pendingFiles.length >= MAX_COMPOSER_FILES;
 
 	const placeholder = isArchitectMode
-		? "描述你们的工作流程或角色缺口（Enter 发送，Shift+Enter 换行）..."
+		? "描述你们的工作流程或角色缺口（Enter 发送，Shift+Enter 换行）…"
 		: composerMode === "discussion"
 			? discussionAiEnabled && isOwner
-				? "在团队聊天讨论中交流想法（已开启 AI 探讨，可 @角色 点名；切到「给 AI 安排事项」再正式派工）..."
-				: "和团队成员同步想法，支持附带文件或截图（纯人类讨论，不触发 AI）..."
+				? "在团队聊天讨论中交流想法（已开启 AI 探讨，可 @角色 点名；切到「给 AI 安排事项」再正式派工）…"
+				: "和团队成员同步想法，支持附带文件或截图（纯人类讨论，不触发 AI）…"
 			: !isOwner
-				? "写下希望 AI 协助处理的内容，提交后由团队所有者确认派发..."
+				? "写下希望 AI 协助处理的内容，提交后由团队所有者确认派发…"
 				: isTurnRunning
-					? "当前 AI 正在执行；可先停止，或切到「团队聊天讨论」继续沟通..."
+					? "当前 AI 正在执行；可先停止，或切到「团队聊天讨论」继续沟通…"
 					: isNewMatter
-						? "向你的 AI 团队布置任务，支持上传/拖拽文件与图片、自动折叠大段粘贴文本..."
-						: "继续安排工作、提出修改，或拖入文件与截图...";
+						? "向你的 AI 团队布置任务，支持上传/拖拽文件与图片、自动折叠大段粘贴文本…"
+						: "继续安排工作、提出修改，或拖入文件与截图…";
 
 	const sendLabel = submitting
-		? "发送中..."
+		? "发送中…"
 		: isArchitectMode
 			? "发送"
 			: composerMode === "discussion"
@@ -545,7 +545,7 @@ export function ComposerDock({
 												onClick={() => onOpenLightbox({ src: img.previewUrl, alt: img.name })}
 												aria-label={`预览图片 ${img.name}`}
 											>
-												<img src={img.previewUrl} alt={img.name} />
+												<img src={img.previewUrl} alt={img.name} width={58} height={58} />
 											</button>
 											<button
 												type="button"

@@ -309,7 +309,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							{memoryOpen ? "收起手动沉淀" : "手动沉淀经验"}
 						</button>
 						<button type="button" className="btn-pill-outline" disabled={distilling} onClick={handleDistillClick}>
-							{distilling ? "复盘提炼中..." : "AI 提炼团队经验"}
+							{distilling ? "复盘提炼中…" : "AI 提炼团队经验"}
 						</button>
 					</>
 				)}
@@ -410,7 +410,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							placeholder={
 								props.deliverable.feedback
 									? `补充或更新反馈：${props.deliverable.feedback}`
-									: "记录这条交付的验收反馈..."
+									: "记录这条交付的验收反馈…"
 							}
 						/>
 						<button
@@ -419,7 +419,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							disabled={submittingFeedback || (!feedbackText.trim() && !selectedRating)}
 							onClick={handleFeedbackSubmit}
 						>
-							{submittingFeedback ? "保存中..." : "保存验收"}
+							{submittingFeedback ? "保存中…" : "保存验收"}
 						</button>
 					</div>
 				</div>

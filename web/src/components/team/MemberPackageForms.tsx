@@ -115,7 +115,7 @@ export function MemberPackageForms({
 							disabled={importing || !importMarkdown.trim()}
 							onClick={() => void handleImportMember()}
 						>
-							{importing ? "导入中..." : "确认导入"}
+							{importing ? "导入中…" : "确认导入"}
 						</button>
 					</>
 				}
@@ -141,7 +141,7 @@ export function MemberPackageForms({
 				<textarea
 					rows={8}
 					className="composer-input mono-input"
-					placeholder="粘贴角色模板 Markdown（含 --- frontmatter ---）..."
+					placeholder="粘贴角色模板 Markdown（含 --- frontmatter ---）…"
 					value={importMarkdown}
 					onChange={(e) => setImportMarkdown(e.target.value)}
 				/>

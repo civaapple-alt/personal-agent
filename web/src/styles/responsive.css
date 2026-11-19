@@ -2,7 +2,10 @@
 	.bot-avatar-inner,
 	.bot-eye-pair,
 	.bot-mood-pip,
-	.bot-mood-pip span {
+	.bot-mood-pip span,
+	.composer-run-dot,
+	.exploring-step.active .exploring-seg,
+	.matter-dot-pulse {
 		animation: none !important;
 	}
 }
