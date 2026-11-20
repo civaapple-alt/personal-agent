@@ -41,6 +41,8 @@
   - 指定成果时证据截止其发布回复；候选仅可归属实际参与成员或明确指定成员，写入前再次检查工作区与取消状态，且仅允许同成员、同 scope、同 org、同 workspace 的无环替代关系。
 - `delegate`：由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者。
   - 桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
+  - [独立验收](independent-verification.ts) 解析具体提交、文件或文档草稿，绑定版本和来源委托。验收专用会话限制工具范围。送审文档在 [单轮派发](matter-dispatch.ts) 中按最终摘要重验归档条件。
+- [运行巡检](turn-monitor.ts) 追踪当轮 Worker 的活动、工具和等待状态。计时器由单轮派发清理，停滞提醒通过现有进度流和事项事件传播。
 - `abortMatter`、`abortDistillation`、`shutdown`：传播取消并等待执行树与全部复盘清理后返回。
   - 中止与失败路径通过 `buildProgressSnapshot` 保留停滞阶段、耗时、`activeDelegations` 与最近步骤摘要，并在同一事项工作区续跑时为主负责人注入一次「上次中断状态简报」。
   - `abortDistillation(matterId)` 会立即中止进行中的 `distillExperiences` Worker 并丢弃未完成候选。

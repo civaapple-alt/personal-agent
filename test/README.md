@@ -7,6 +7,7 @@
 | Pi RPC、JSONL、超时或退出 | [pi-rpc-worker.test.ts](pi-rpc-worker.test.ts) |
 | 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |
 | 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
+| 运行巡检、等待豁免与恢复 | [turn-monitor.test.ts](turn-monitor.test.ts) |
 | 文档文件来源、精确正文、越界/编码/大小、变更拒绝及重复登记 | [document-publication.test.ts](document-publication.test.ts) |
 | 角色 Markdown、私有记忆与基本编排 | [phase2-orchestrator.test.ts](phase2-orchestrator.test.ts) |
 | 立项适配诊断、单兵/定向旁听边界与引导式角色设计（Role Architect） | [matter-initiation-and-architect.test.ts](matter-initiation-and-architect.test.ts) |

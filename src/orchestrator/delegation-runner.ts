@@ -1,6 +1,8 @@
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
+import type { VerificationOutcome } from "../rpc/team-verification.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { WorkspaceLink } from "../storage/types.ts";
+import { prepareVerification, readVerificationOutcome, verificationPrompt } from "./independent-verification.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -65,12 +67,45 @@ export async function delegateBetweenMembers(
 	}
 	if (chain.includes(toMember.id)) throw new Error("Delegation cycle: cannot call yourself or an ancestor");
 	if (chain.length >= 3) throw new Error("Delegation depth limit reached (3 members)");
-	const key = JSON.stringify([fromMember.id, toMember.id, input.question.trim()]);
+	const verification = options?.verification;
+	const subject = verification
+		? await prepareVerification(
+				deps.store,
+				run,
+				{
+					matterId: input.matterId,
+					verifierId: toMember.id,
+					cwd: workspace?.repoPath,
+					verification,
+					deliveries: effectsTarget.deliveries,
+				},
+				signal,
+			)
+		: undefined;
+	const key = JSON.stringify([
+		fromMember.id,
+		toMember.id,
+		input.question.trim(),
+		verification,
+		subject?.target.digest,
+	]);
 	const cached = run.delegations.get(key);
 	if (cached) return await cached;
 	if (run.delegationCount >= 8) throw new Error("Delegation limit reached (8 per user turn)");
 	run.delegationCount += 1;
 	const delegationNumber = run.delegationCount;
+	const review = subject
+		? {
+				target: subject.target,
+				sourceAssignmentId: subject.relatedRequest?.id,
+				criteria: verification?.criteria,
+			}
+		: undefined;
+	const draftReview =
+		subject?.target.kind === "draft"
+			? { digest: subject.target.digest, verdict: "inconclusive" as const }
+			: undefined;
+	if (draftReview && subject) run.draftVerifications.set(subject.target.reference, draftReview);
 	const scope = {
 		sourceUserMessageId: run.userMessageId || null,
 		workspaceId: workspace?.id ?? null,
@@ -86,6 +121,7 @@ export async function delegateBetweenMembers(
 				...scope,
 				toMemberId: toMember.id,
 				delegationNumber,
+				...(review ? { verification: review } : {}),
 				...(options?.parentRequestMessageId ? { parentRequestMessageId: options.parentRequestMessageId } : {}),
 			},
 		});
@@ -95,16 +131,18 @@ export async function delegateBetweenMembers(
 			requestMessageId: delegationKey,
 			parentRequestMessageId: options?.parentRequestMessageId,
 			delegationNumber,
+			...(review ? { verification: true as const } : {}),
 			fromMemberId: fromMember.id,
 			fromMemberName: fromMember.displayName,
 			memberId: toMember.id,
 			memberName: toMember.displayName,
 		};
 		pushRunLog(run, fromMember.displayName, `委托${toMember.displayName}：${truncateInline(input.question, 44)}`);
-		run.activeDelegations.set(delegationKey, { ...edge, stageLabel: "已接入任务" });
+		const initialLabel = review ? "开始独立验收" : "已接入任务";
+		run.activeDelegations.set(delegationKey, { ...edge, stageLabel: initialLabel });
 		onProgress?.({
 			stage: "tool",
-			label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, "已接入任务"),
+			label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, initialLabel),
 			toolName: "delegate_to_member",
 			activeDelegations: [...run.activeDelegations.values()],
 			recentLogs: [...run.recentLogs],
@@ -114,13 +152,15 @@ export async function delegateBetweenMembers(
 		let lastStreamBroadcastAt = 0;
 		try {
 			const effects = emptyEffects();
+			const assignment = `Internal delegation from ${fromMember.displayName}:\nAssignment #${delegationNumber} for this turn.\n${input.question}`;
 			const result = await deps.executeWithWorker({
 				effectsTarget: effects,
 				matterId: input.matterId,
 				member: toMember,
 				workspace,
-				taskPrompt: `Internal delegation from ${fromMember.displayName}:\nAssignment #${delegationNumber} for this turn.\n${input.question}`,
+				taskPrompt: subject && verification ? verificationPrompt(subject, verification, assignment) : assignment,
 				isInternalDelegation: true,
+				...(subject ? { sessionMode: "verifier" as const } : {}),
 				delegationRequestId: delegationKey,
 				discussionMode: options?.discussionMode,
 				run,
@@ -168,7 +208,27 @@ export async function delegateBetweenMembers(
 			});
 			signal.throwIfAborted();
 			if (result.aborted) throw new Error("Colleague execution was aborted");
-			const answerText = result.assistantText.trim();
+			let outcome: VerificationOutcome | undefined;
+			if (subject) {
+				outcome = readVerificationOutcome(result, subject.requiresWorkspaceEvidence);
+				try {
+					await subject.assertCurrent?.();
+				} catch {
+					outcome = {
+						verdict: "inconclusive",
+						summary: "验收对象已变更或无法读取，请对最新版本复验。",
+						evidence: [],
+					};
+				}
+				signal.throwIfAborted();
+				run.delegations.delete(key);
+				if (draftReview && run.draftVerifications.get(subject.target.reference) === draftReview) {
+					run.draftVerifications.set(subject.target.reference, { ...draftReview, verdict: outcome.verdict });
+				}
+			}
+			const answerText = outcome
+				? [outcome.summary, ...outcome.evidence.map((item) => `- ${item}`)].join("\n")
+				: result.assistantText.trim();
 			if (!answerText) throw new Error("Colleague returned no answer");
 			mergeEffects(effectsTarget, effects);
 			const responseMessage = deps.store.appendMessage({
@@ -181,6 +241,7 @@ export async function delegateBetweenMembers(
 					...scope,
 					replyToMemberId: fromMember.id,
 					requestMessageId: requestMessage.id,
+					...(outcome ? { verification: outcome } : {}),
 				},
 			});
 			run.activeDelegations.delete(delegationKey);
@@ -197,7 +258,15 @@ export async function delegateBetweenMembers(
 				recentLogs: [...run.recentLogs],
 				collabUpdated: true,
 			});
-			return { fromMember, toMember, delegationNumber, requestMessage, responseMessage, answerText };
+			return {
+				fromMember,
+				toMember,
+				delegationNumber,
+				requestMessage,
+				responseMessage,
+				answerText,
+				verification: outcome,
+			};
 		} catch (error) {
 			run.delegations.delete(key);
 			deps.store.appendMessage({

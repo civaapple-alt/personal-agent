@@ -86,7 +86,7 @@ async function resolveWorkspaceFile(sourcePath: string, cwd: string): Promise<st
 	return path;
 }
 
-async function readWorkspaceDocument(sourcePath: string, cwd: string) {
+export async function readWorkspaceDocument(sourcePath: string, cwd: string) {
 	const path = resolve(cwd, sourcePath);
 	const resolved = await resolveWorkspaceFile(path, cwd);
 	const maxBytes = 1_048_576;

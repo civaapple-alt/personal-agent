@@ -497,6 +497,7 @@ export class TeamOrchestrator {
 			contexts: new Set(),
 			delegations: new Map(),
 			activeDelegations: new Map(),
+			draftVerifications: new Map(),
 			recentLogs: [],
 			delegationCount: 0,
 			effects: emptyEffects(),

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -687,6 +688,117 @@ test("delegations enforce depth and turn budget without preventing professional 
 					event.activeDelegations[0]?.requestMessageId === first.id,
 			),
 	);
+});
+
+test("independent review links to a completed assignment and gates the exact final document", async (t) => {
+	const title = "Implementation report";
+	const evidence = "Checked the exact supplied version and acceptance criteria";
+	const f = await fixture(t, async (worker, prompt) => {
+		const member = worker.options.env?.PA_MEMBER_ID;
+		if (member === "engineering-manager") return "First version of report completed";
+		if (member === "qa-manager") {
+			assert.match(prompt, /\[Acceptance criteria\]/);
+			assert.match(prompt, /\[Document snapshot\]/);
+			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]");
+			assert.ok(manifest.every((name: string) => name === "read" || name === "bash"));
+			assert.equal(worker.tools.has("delegate_to_member"), false);
+			assert.equal(worker.tools.has("publish_deliverable"), false);
+			assert.equal(worker.tools.has("propose_experience"), false);
+			const revised = prompt.includes("Reviewed content with checks");
+			return JSON.stringify({
+				verdict: revised ? "passed" : "changes_requested",
+				summary: revised ? "OK" : "Missing checks",
+				evidence: [evidence],
+			});
+		}
+		await worker.call("delegate_to_member", { memberId: "engineering-manager", task: "Write the report" });
+		const stage = (content: string) =>
+			worker.call("publish_deliverable", {
+				type: "document",
+				title,
+				content,
+				changeNote: "Include check evidence",
+			});
+		const verify = (memberId: string) =>
+			worker.call("delegate_to_member", {
+				memberId,
+				task: "Verify the report",
+				verification: {
+					assignmentNumber: 1,
+					target: { kind: "draft", reference: title },
+					criteria: "Include check results",
+				},
+			});
+		await stage("First version without checks");
+		await assert.rejects(verify("engineering-manager"), /cannot verify their own work/);
+		assert.match(JSON.stringify(await verify("qa-manager")), /changes_requested/);
+		await stage("Reviewed content with checks");
+		assert.match(JSON.stringify(await verify("qa-manager")), /"verdict"\s*:\s*"passed"/);
+		if (prompt.endsWith("Change after inspection")) await stage("Unreviewed different version");
+		return "Report ready";
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "Review and publish the exact report",
+		preferredMemberId: "product-manager",
+		workspaceId: f.workspace.id,
+	});
+	assert.equal(result.deliverable?.contentOrPath, "Reviewed content with checks");
+	const records = f.store.listMessages(result.matter.id, "internal_collab");
+	const [work] = records;
+	const reviews = records.filter(
+		(entry) => entry.metadata?.verification && typeof entry.metadata?.toMemberId === "string",
+	);
+	assert.equal(reviews.length, 2);
+	for (const entry of reviews)
+		assert.match(JSON.stringify(entry.metadata?.verification), new RegExp(work?.id ?? "missing"));
+	assert.notDeepEqual(reviews[0]?.metadata?.verification, reviews[1]?.metadata?.verification);
+	assert.ok(
+		records.some((entry) => entry.metadata?.requestMessageId === reviews[1]?.id && entry.content.includes(evidence)),
+	);
+	await assert.rejects(
+		f.orchestrator.dispatchMatter({ matterId: result.matter.id, prompt: "Change after inspection" }),
+		/Independent verification has not passed for the final draft/,
+	);
+	assert.equal(f.store.listDeliverables(result.matter.id).length, 1);
+});
+
+test("file reviews detect changed snapshots and commit reviews require observed workspace checks", async (t) => {
+	let revision = "";
+	const f = await fixture(t, async (worker, prompt) => {
+		if (worker.options.env?.PA_MEMBER_ID === "qa-manager") {
+			if (prompt.includes("[File snapshot]")) {
+				assert.match(prompt, /Original fixture source/);
+				await writeFile(join(f.root, "notes.md"), "Changed during the review");
+			} else assert.ok(prompt.includes(revision));
+			return JSON.stringify({ verdict: "passed", summary: "Checked", evidence: ["Reported result"] });
+		}
+		const review = (kind: "file" | "commit", reference: string) =>
+			worker.call("delegate_to_member", {
+				memberId: "qa-manager",
+				task: "Review the pinned source",
+				verification: { target: { kind, reference }, criteria: "Check contents" },
+			});
+		await assert.rejects(review("commit", "HEAD"), /full Git commit hash/);
+		const fileReview = JSON.stringify(await review("file", "notes.md"));
+		assert.match(fileReview, /inconclusive.*验收对象已变更/);
+		const commitReview = JSON.stringify(await review("commit", revision));
+		assert.match(commitReview, /inconclusive.*未观察到成功完成的仓库读取/);
+		return "Review records saved";
+	});
+	const git = (...args: string[]) => execFileSync("git", args, { cwd: f.root, encoding: "utf8" });
+	await writeFile(join(f.root, "notes.md"), "Original fixture source");
+	git("init", "-q");
+	git("add", "notes.md");
+	git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Initial fixture");
+	revision = git("rev-parse", "HEAD").trim();
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "Review the exact inputs",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+	});
+	const board = f.store.listMessages(result.matter.id, "internal_collab");
+	assert.equal(board.length, 4);
+	assert.ok(board.some((post) => JSON.stringify(post.metadata?.verification).includes(revision)));
 });
 
 test("a changed saved session header is rejected, and the session directory alone never chooses a conversation", async (t) => {

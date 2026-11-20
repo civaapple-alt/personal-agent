@@ -197,3 +197,41 @@
 	color: var(--text-secondary);
 	overflow-wrap: anywhere;
 }
+
+.delegation-board-filter {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-weight: 600;
+}
+
+.delegation-board-filter select {
+	min-width: 0;
+	max-width: 100%;
+}
+
+.delegation-review-target {
+	display: flex;
+	gap: 4px 10px;
+	flex-wrap: wrap;
+	margin-top: 4px;
+	color: var(--text-secondary);
+	overflow-wrap: anywhere;
+}
+
+.exploring-stall-notices {
+	list-style: none;
+	margin: 10px 0 0;
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: #fff3e6;
+	color: #9a3412;
+	font-size: var(--text-xs);
+}
+
+.exploring-stall-notices li {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+}

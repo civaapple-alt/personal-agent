@@ -130,10 +130,39 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "delegate_to_member",
 			label: "咨询团队成员",
 			description:
-				"Ask an existing colleague to perform specialist work and return evidence. In task, include the objective, relevant decisions, ownership or constraints, and what evidence to return. The answer includes the assignment number for this turn's handoff board. Internal conversation is kept off the user channel. Do not delegate to yourself or an ancestor.",
+				"Ask an existing colleague to perform specialist work and return evidence. Include the objective, constraints, and expected evidence. During authorized work, the lead can set verification to assign independent review of a commit, workspace text file, or a staged document draft. Use a different member from the author and refer to their completed assignment when applicable. The answer includes the assignment number for this turn's handoff board.",
 			parameters: {
 				type: "object",
-				properties: { memberId: { type: "string" }, task: { type: "string" } },
+				properties: {
+					memberId: { type: "string" },
+					task: { type: "string" },
+					verification: {
+						type: "object",
+						properties: {
+							assignmentNumber: {
+								type: "integer",
+								minimum: 1,
+								description: "Completed assignment number in this turn, when there is one",
+							},
+							target: {
+								type: "object",
+								properties: {
+									kind: { type: "string", enum: ["commit", "file", "draft"] },
+									reference: {
+										type: "string",
+										description:
+											"Full commit hash, workspace-relative text path, or exact staged document title",
+									},
+								},
+								required: ["kind", "reference"],
+								additionalProperties: false,
+							},
+							criteria: { type: "string" },
+						},
+						required: ["target", "criteria"],
+						additionalProperties: false,
+					},
+				},
 				required: ["memberId", "task"],
 				additionalProperties: false,
 			},

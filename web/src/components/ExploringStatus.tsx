@@ -134,6 +134,23 @@ export function ExploringStatus({
 					<div className="exploring-label">{progress.label}</div>
 				</div>
 			</div>
+			{progress.stalledMembers && progress.stalledMembers.length > 0 && (
+				<ul className="exploring-stall-notices" aria-live="polite">
+					{progress.stalledMembers.map(
+						({ memberId, memberName, assignmentNumber, lastActivityAt, lastAction }) => (
+							<li key={`${memberId}:${assignmentNumber ?? "turn"}`}>
+								<strong>
+									{assignmentNumber ? `#${assignmentNumber} · ` : ""}
+									{memberName}长时间无进展
+								</strong>
+								<span>
+									最后活动 {formatClockTime(lastActivityAt)} · {lastAction}
+								</span>
+							</li>
+						),
+					)}
+				</ul>
+			)}
 
 			<ProgressDetails
 				stage={progress.stage}

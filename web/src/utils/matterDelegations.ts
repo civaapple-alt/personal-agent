@@ -1,3 +1,4 @@
+import { isVerificationVerdict, type VerificationVerdict } from "../../../src/rpc/team-verification.ts";
 import type { ActiveDelegationDto, MatterMessageDto } from "../api/matters.ts";
 
 export interface DelegationAssignment {
@@ -7,6 +8,14 @@ export interface DelegationAssignment {
 	toMemberId: string;
 	targetLabel: string;
 	parentRequestMessageId?: string;
+	verification?: {
+		reference: string;
+		digest: string;
+		kind: "commit" | "file" | "draft";
+		assignmentId?: string;
+		criteria?: string;
+		verdict?: VerificationVerdict;
+	};
 	status: "running" | "completed" | "failed";
 }
 
@@ -89,6 +98,7 @@ export function buildMatterDelegations(
 			byTurn.set(turnId, board);
 		}
 		const parent = message.metadata?.parentRequestMessageId;
+		const verification = readVerification(message.metadata?.verification, answer?.metadata?.verification);
 		const actualAssignment = Boolean(toMemberId || targetLabel);
 		const number = message.metadata?.delegationNumber;
 		const assignment: DelegationAssignment = {
@@ -98,6 +108,7 @@ export function buildMatterDelegations(
 			toMemberId,
 			targetLabel,
 			parentRequestMessageId: typeof parent === "string" ? parent : undefined,
+			verification,
 			status: answer
 				? answer.metadata?.failed || answer.senderType === "system"
 					? "failed"
@@ -133,6 +144,56 @@ export function buildMatterDelegations(
 	return { byTurn, history, assignments };
 }
 
+function readVerification(raw: unknown, outcome: unknown): DelegationAssignment["verification"] {
+	if (!raw || typeof raw !== "object" || !("target" in raw) || !raw.target || typeof raw.target !== "object") return;
+	if (!("kind" in raw.target) || !("reference" in raw.target) || !("digest" in raw.target)) return;
+	const { kind, reference, digest } = raw.target;
+	if (
+		(kind !== "commit" && kind !== "file" && kind !== "draft") ||
+		typeof reference !== "string" ||
+		typeof digest !== "string"
+	)
+		return;
+	return {
+		kind,
+		reference,
+		digest,
+		assignmentId:
+			"sourceAssignmentId" in raw && typeof raw.sourceAssignmentId === "string" ? raw.sourceAssignmentId : undefined,
+		criteria: "criteria" in raw && typeof raw.criteria === "string" ? raw.criteria : undefined,
+		verdict:
+			outcome && typeof outcome === "object" && "verdict" in outcome && isVerificationVerdict(outcome.verdict)
+				? outcome.verdict
+				: undefined,
+	};
+}
+
+export type BoardFilter = "all" | "verification" | `member:${string}` | `branch:${string}`;
+
+export function filterDelegationBoard(assignments: DelegationAssignment[], filter: BoardFilter) {
+	if (filter === "all") return assignments;
+	if (filter === "verification") return assignments.filter((assignment) => assignment.verification);
+	if (filter.startsWith("member:")) {
+		const member = filter.slice("member:".length);
+		return assignments.filter(({ fromMemberId, toMemberId }) => fromMemberId === member || toMemberId === member);
+	}
+	const rootId = filter.slice("branch:".length);
+	const parents = new Map(
+		assignments.map((assignment) => [
+			assignment.id,
+			assignment.parentRequestMessageId ?? assignment.verification?.assignmentId,
+		]),
+	);
+	return assignments.filter((assignment) => {
+		const seen = new Set<string>();
+		for (let id: string | undefined = assignment.id; id && !seen.has(id); id = parents.get(id)) {
+			if (id === rootId) return true;
+			seen.add(id);
+		}
+		return false;
+	});
+}
+
 export interface DelegationEdge {
 	id: string;
 	number?: number;
@@ -142,6 +203,8 @@ export interface DelegationEdge {
 	status: DelegationAssignment["status"];
 	stageLabel?: string;
 	observer?: boolean;
+	verification?: boolean;
+	verdict?: VerificationVerdict;
 }
 
 /** Keep call IDs distinct when the same pair of roles collaborates more than once. */
@@ -158,5 +221,6 @@ export function liveDelegationEdges(
 		status,
 		stageLabel: entry.stageLabel,
 		observer: entry.kind === "observer",
+		verification: entry.verification,
 	}));
 }

@@ -312,7 +312,7 @@ export function buildMemberSystemPrompt(input: {
 	repoGitUser?: { name: string; email: string } | null;
 	taskPrompt?: string;
 	isInternalDelegation?: boolean;
-	sessionMode?: "lead" | "internal" | "observer";
+	sessionMode?: "lead" | "internal" | "observer" | "verifier";
 	discussionMode?: boolean;
 	leadMemberId?: string | null;
 	consultMemberIds?: string[] | null;
@@ -428,6 +428,10 @@ export function buildMemberSystemPrompt(input: {
 		sections.push(
 			"## Internal delegation\nGive the requester evidence-backed findings, risks, and conclusions from your role. The lead integrates your findings and decides what to publish.",
 		);
+	} else if (mode === "verifier") {
+		sections.push(
+			"## Independent verification\nInspect the supplied version and report the evidence and criteria you checked. Run appropriate read and test commands. Leave source edits, commits, delegation and publication to the lead and authors.",
+		);
 	} else if (mode === "observer") {
 		sections.push(
 			`## Observer participation\nYou are observing a discussion between the lead and the user.\n- Speak directly to the user only when you identify a material risk, feasibility conflict, missing prerequisite, or important recommendation the lead missed. Keep your comment concise and evidence-backed.\n- If the lead has addressed the issue, the turn is routine, or you have nothing material to add, return exactly ${OBSERVER_SILENT_SENTINEL}.\n- Leave formal publication and team delegation to the lead.`,
@@ -477,7 +481,7 @@ export function buildMemberSystemPrompt(input: {
 		} else {
 			const collabLine = isSoloMatter
 				? "This is a solo matter. Verify the facts and complete the work within your role without internal delegation. If the request exceeds your remit or needs an unavailable role, explain the gap and suggest what expertise is needed."
-				: "Advance the task within your role. Use delegate_to_member to give each specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. Keep ownership of edits clear when assignments overlap. When independent review is useful, assign it separately with the result and criteria to verify. Integrate the evidence into your reply. Keep routine coordination internal. Ask the user when information or a business decision is missing.";
+				: "Advance the task within your role. Use delegate_to_member to give each specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. Keep ownership of edits clear when assignments overlap. For independent review, use the verification argument with a different member, exact target and acceptance criteria. Send requested changes to the author and verify the revised version before publishing. To check a draft document, stage it with publish_deliverable first and then verify it by title. Integrate the evidence into your reply. Keep routine coordination internal.";
 			sections.push(
 				[
 					"## Collaboration and publication",

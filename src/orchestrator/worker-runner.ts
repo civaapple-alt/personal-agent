@@ -78,7 +78,7 @@ export interface ExecuteWorkerInput {
 	images?: ImageContent[];
 	isInternalDelegation?: boolean;
 	delegationRequestId?: string;
-	sessionMode?: "lead" | "internal" | "observer";
+	sessionMode?: "lead" | "internal" | "observer" | "verifier";
 	discussionMode?: boolean;
 	excludeMessageIds?: string[];
 	run: MatterRun;
@@ -97,6 +97,7 @@ export async function executeWithWorkerPass(
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const isDiscussionMode = Boolean(input.discussionMode);
+	const isVerifier = sessionMode === "verifier";
 	const canPublish = sessionMode === "lead" && !isDiscussionMode;
 	const matter = deps.store.getMatter(input.matterId);
 	const matterAiMembers = deps.resolveMatterAiMembers(matter);
@@ -108,7 +109,8 @@ export async function executeWithWorkerPass(
 				matter.consultMemberIds.includes(member.id)),
 	);
 	const isSoloMatter = sessionMode === "lead" && matterConsultTargets.length === 0;
-	const canDelegate = sessionMode !== "observer" && !isSoloMatter;
+	const canDelegate = (sessionMode === "lead" || sessionMode === "internal") && !isSoloMatter;
+	const canProposeExperience = canPublish || (sessionMode === "internal" && !isDiscussionMode);
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
@@ -118,6 +120,7 @@ export async function executeWithWorkerPass(
 		input.run.inheritLocalPiResources &&
 		!isArchitect &&
 		!isDiscussionMode &&
+		!isVerifier &&
 		sessionMode !== "observer" &&
 		input.workspace?.sourceType !== "cloned";
 	const contextKey = JSON.stringify([
@@ -131,6 +134,14 @@ export async function executeWithWorkerPass(
 	const executionKey = JSON.stringify([input.member.id, contextKey]);
 	if (input.run.contexts.has(executionKey)) throw new Error("Colleague is already working in this conversation");
 	input.run.contexts.add(executionKey);
+	const activeCall = input.delegationRequestId
+		? input.run.activeDelegations.get(input.delegationRequestId)
+		: undefined;
+	const activity = input.run.monitor?.begin({
+		memberId: input.member.id,
+		memberName: input.member.displayName,
+		assignmentNumber: activeCall?.kind === "delegation" ? activeCall.delegationNumber : undefined,
+	});
 	let worker: RpcWorkerLike | undefined;
 	let sessionRecord: ReturnType<PersonalAgentStore["recordWorkerSession"]> | undefined;
 	let bridge: Awaited<ReturnType<typeof createTeamToolBridge>> | undefined;
@@ -141,8 +152,8 @@ export async function executeWithWorkerPass(
 	const controller = new AbortController();
 	const signal = AbortSignal.any([input.signal, controller.signal]);
 	try {
-		const skillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
-		const pstack = deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
+		const skillPaths = isVerifier ? [] : await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
+		const pstack = !isVerifier && deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
 		const methodTools = pstack ? ["load_pstack_skill"] : [];
 		const previous = deps.noSession
 			? null
@@ -151,12 +162,15 @@ export async function executeWithWorkerPass(
 		const baseTools = isArchitect
 			? []
 			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
-		const requestedTools =
-			sessionMode === "observer" ? baseTools.filter((tool) => tool !== "edit" && tool !== "write") : baseTools;
-		const mcpDependencies = isArchitect ? [] : (template?.mcpDependencies ?? []);
+		const requestedTools = isVerifier
+			? baseTools.filter((tool) => tool === "read" || tool === "bash")
+			: sessionMode === "observer"
+				? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
+				: baseTools;
+		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
 		const teamTools = isArchitect
 			? []
-			: sessionMode === "observer"
+			: sessionMode === "observer" || isVerifier
 				? []
 				: isDiscussionMode
 					? canDelegate
@@ -178,10 +192,18 @@ export async function executeWithWorkerPass(
 			toolSignal.throwIfAborted();
 			if (isArchitect) throw new Error("Role architect cannot execute team tools");
 			const releaseIdle = worker?.suspendIdleTimeout?.();
+			const resumeMonitor = activity?.wait();
 			try {
 				if (call.tool === "delegate_to_member") {
 					if (!canDelegate) {
-						throw new Error("Observing specialists cannot delegate secondary tasks during peer review");
+						throw new Error(
+							sessionMode === "observer"
+								? "Observing specialists cannot delegate secondary tasks during peer review"
+								: "This member cannot delegate secondary tasks",
+						);
+					}
+					if (call.verification && !canPublish) {
+						throw new Error("Only the lead of an authorized work turn can request independent verification");
 					}
 					const result = await deps.delegate(
 						{
@@ -196,17 +218,24 @@ export async function executeWithWorkerPass(
 						toolSignal,
 						effects,
 						input.onProgress,
-						{ discussionMode: isDiscussionMode, parentRequestMessageId: input.delegationRequestId },
+						{
+							discussionMode: isDiscussionMode,
+							parentRequestMessageId: input.delegationRequestId,
+							verification: call.verification,
+						},
 					);
 					return {
 						memberId: result.toMember.id,
 						delegationNumber: result.delegationNumber,
 						answer: result.answerText,
+						...(result.verification ? { verification: result.verification } : {}),
 					};
 				}
 				if (call.tool === "propose_experience") {
-					if (sessionMode === "observer") {
-						throw new Error("Observing specialists cannot propose experiences during peer review");
+					if (!canProposeExperience && !isDiscussionMode) {
+						throw new Error(
+							`${sessionMode === "observer" ? "Observing" : "Verifying"} specialists cannot propose experiences during peer review`,
+						);
 					}
 					if (isDiscussionMode) {
 						throw new Error("Discussion chat mode does not propose experiences directly");
@@ -292,6 +321,7 @@ export async function executeWithWorkerPass(
 				};
 			} finally {
 				releaseIdle?.();
+				resumeMonitor?.();
 			}
 		}, signal);
 
@@ -300,7 +330,7 @@ export async function executeWithWorkerPass(
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", resolveBuiltinExtensionPath("team-extension"));
-		for (const extension of deps.extensions) args.push("--extension", extension);
+		if (!isVerifier) for (const extension of deps.extensions) args.push("--extension", extension);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
@@ -364,7 +394,7 @@ export async function executeWithWorkerPass(
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
 				PA_CAN_PUBLISH: String(canPublish && !isArchitect),
 				PA_CAN_DELEGATE: String(canDelegate && !isArchitect),
-				PA_CAN_EXPERIENCE: String(sessionMode !== "observer" && !isArchitect && !isDiscussionMode),
+				PA_CAN_EXPERIENCE: String(canProposeExperience && !isArchitect),
 				PA_REQUIRED_TOOLS: JSON.stringify([
 					...requestedTools,
 					...teamTools,
@@ -411,6 +441,9 @@ export async function executeWithWorkerPass(
 		const offEvent = worker.onEvent?.((event) => {
 			if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
 				const toolName = String(event.toolName ?? "tool");
+				const toolCallId = String(event.toolCallId);
+				if (event.type === "tool_execution_start") activity?.toolStarted(toolCallId, formatToolAction(toolName));
+				else activity?.toolFinished(toolCallId, `已返回${formatToolAction(toolName)}`);
 				const rawArgs =
 					event.args && typeof event.args === "object" ? (event.args as Record<string, unknown>) : undefined;
 				const compactArgs =
@@ -473,6 +506,7 @@ export async function executeWithWorkerPass(
 					});
 				}
 			} else if (event.type === "agent_start") {
+				activity?.pulse("开始生成回复");
 				if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
 					return;
 				}
@@ -481,11 +515,12 @@ export async function executeWithWorkerPass(
 					label: `${input.member.displayName}正在思考`,
 					recentLogs: [...input.run.recentLogs],
 				});
-			}
+			} else activity?.pulse();
 		});
 		if (offEvent) cleanups.push(offEvent);
 		cleanups.push(
 			worker.onNotice((notice) => {
+				activity?.pulse();
 				deps.store.appendMessage({
 					matterId: input.matterId,
 					channel: "notice",
@@ -499,6 +534,7 @@ export async function executeWithWorkerPass(
 			signal.throwIfAborted();
 			const dialogHandler = deps.getDialogHandler();
 			if (!dialogHandler) return { cancelled: true };
+			const resumeMonitor = activity?.wait();
 			deps.store.updateMatterStatus(input.matterId, "waiting_user");
 			input.onProgress?.({
 				stage: "waiting_user",
@@ -510,6 +546,7 @@ export async function executeWithWorkerPass(
 					signal,
 				);
 			} finally {
+				resumeMonitor?.();
 				deps.store.updateMatterStatus(input.matterId, "open");
 			}
 		});
@@ -643,7 +680,10 @@ export async function executeWithWorkerPass(
 			timeoutMs: remainingTimeoutMs,
 			signal,
 			images: input.images?.length ? input.images : undefined,
-			onTextDelta: input.onTextDelta,
+			onTextDelta: (delta) => {
+				activity?.pulse("收到回复片段");
+				input.onTextDelta?.(delta);
+			},
 		});
 		if (!result.aborted && !input.run.cancelled) {
 			for (const item of stagedExperiences) {
@@ -675,6 +715,7 @@ export async function executeWithWorkerPass(
 				sessionRecord.sessionFile && existsSync(sessionRecord.sessionFile) ? "idle" : "closed",
 			);
 		if (worker) input.run.workers.delete(worker);
+		activity?.stop();
 		input.run.contexts.delete(executionKey);
 	}
 }

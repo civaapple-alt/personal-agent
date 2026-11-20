@@ -1,5 +1,6 @@
 import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
+import type { VerificationOutcome, VerificationRequest } from "../rpc/team-verification.ts";
 import type {
 	ImageContent,
 	RpcExtensionUIDialogRequest,
@@ -21,7 +22,9 @@ import type {
 	WorkspaceLink,
 } from "../storage/types.ts";
 import type { DeliveryDraft } from "./execution-context.ts";
+import type { DraftVerification } from "./independent-verification.ts";
 import type { ReadPiModels } from "./model-selection.ts";
+import type { StalledMember, TurnMonitor } from "./turn-monitor.ts";
 
 export interface DialogContext {
 	matterId: string;
@@ -43,7 +46,13 @@ interface ActiveCollaborationMember {
 
 export type ActiveDelegationProgress = ActiveCollaborationMember &
 	(
-		| { kind: "delegation"; requestMessageId: string; parentRequestMessageId?: string; delegationNumber: number }
+		| {
+				kind: "delegation";
+				requestMessageId: string;
+				parentRequestMessageId?: string;
+				delegationNumber: number;
+				verification?: true;
+		  }
 		| { kind: "observer" }
 	);
 
@@ -61,6 +70,7 @@ export interface DispatchProgressEvent {
 	activeDelegations?: ActiveDelegationProgress[];
 	recentLogs?: ProgressActivityItem[];
 	collabUpdated?: boolean;
+	stalledMembers?: StalledMember[];
 	sourceUserMessageId?: string;
 	speakerMemberId?: string;
 }
@@ -233,6 +243,7 @@ export interface DelegateResult {
 	requestMessage: MatterMessage;
 	responseMessage: MatterMessage;
 	answerText: string;
+	verification?: VerificationOutcome;
 }
 
 export interface DistillExperiencesInput {
@@ -285,6 +296,8 @@ export interface MatterRun {
 	contexts: Set<string>;
 	delegations: Map<string, Promise<DelegateResult>>;
 	activeDelegations: Map<string, ActiveDelegationProgress>;
+	draftVerifications: Map<string, DraftVerification>;
+	monitor?: TurnMonitor;
 	recentLogs: ProgressActivityItem[];
 	delegationCount: number;
 	effects: ExecutionEffects;
@@ -300,6 +313,7 @@ export interface MatterRun {
 export interface DelegationContext {
 	discussionMode?: boolean;
 	parentRequestMessageId?: string;
+	verification?: VerificationRequest;
 }
 
 export const MEMORY_CATEGORY_PROMPT_LABELS: Record<MemoryCategory, string> = {

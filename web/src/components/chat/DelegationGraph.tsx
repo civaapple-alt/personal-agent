@@ -6,6 +6,12 @@ export const DELEGATION_STATUS = {
 	failed: "未完成",
 };
 
+export const VERIFICATION_STATUS = {
+	passed: "验收通过",
+	changes_requested: "需返工",
+	inconclusive: "待复验",
+};
+
 /** A directed call tree. Each branch represents one call, including repeated calls to the same role. */
 export function DelegationGraph({
 	edges,
@@ -54,8 +60,16 @@ export function DelegationGraph({
 								) : (
 									path
 								)}
-								<span className={`delegation-status-tag ${edge.status}`}>
-									{edge.observer ? "旁听" : DELEGATION_STATUS[edge.status]}
+								<span
+									className={`delegation-status-tag ${edge.verdict && edge.verdict !== "passed" ? "failed" : edge.status}`}
+								>
+									{edge.verdict
+										? VERIFICATION_STATUS[edge.verdict]
+										: edge.observer
+											? "旁听"
+											: edge.verification && edge.status === "running"
+												? "验收中"
+												: DELEGATION_STATUS[edge.status]}
 								</span>
 								{edge.stageLabel && <span className="delegation-graph-stage">{edge.stageLabel}</span>}
 							</div>

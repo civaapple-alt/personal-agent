@@ -155,6 +155,7 @@ export interface ActiveDelegationDto {
 	requestMessageId?: string;
 	parentRequestMessageId?: string;
 	delegationNumber?: number;
+	verification?: true;
 	kind?: "delegation" | "observer";
 }
 
@@ -173,6 +174,13 @@ export interface MatterProgressDto {
 	activeDelegations?: ActiveDelegationDto[];
 	recentLogs?: ProgressActivityDto[];
 	collabUpdated?: boolean;
+	stalledMembers?: Array<{
+		memberId: string;
+		memberName: string;
+		assignmentNumber?: number;
+		lastActivityAt: string;
+		lastAction: string;
+	}>;
 	sourceUserMessageId?: string;
 	speakerMemberId?: string;
 }

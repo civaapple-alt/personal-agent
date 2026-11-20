@@ -6,9 +6,11 @@ import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import { validateDelivery } from "./execution-context.ts";
+import { draftDigest } from "./independent-verification.ts";
 import { buildArchitectMessageProposals } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { resolveDiscussionMentionTargets } from "./prompts.ts";
+import { createTurnMonitor, type StalledMember } from "./turn-monitor.ts";
 import {
 	buildProgressSnapshot,
 	type DispatchMatterInput,
@@ -160,6 +162,7 @@ export async function dispatchMatterTurn(
 		contexts: new Set(),
 		delegations: new Map(),
 		activeDelegations: new Map(),
+		draftVerifications: new Map(),
 		recentLogs: [],
 		delegationCount: 0,
 		effects: emptyEffects(),
@@ -171,6 +174,7 @@ export async function dispatchMatterTurn(
 		deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,
 	};
 	let speakerMemberId: string;
+	let stalledMembers: StalledMember[] = [];
 	const emitDispatchProgress = (progress: DispatchProgressEvent) => {
 		if (
 			progress.stage === "starting" &&
@@ -183,6 +187,7 @@ export async function dispatchMatterTurn(
 			...progress,
 			sourceUserMessageId: run.userMessageId,
 			speakerMemberId,
+			stalledMembers,
 			activeDelegations:
 				progress.activeDelegations ??
 				(run.activeDelegations.size > 0 ? [...run.activeDelegations.values()] : undefined),
@@ -191,6 +196,26 @@ export async function dispatchMatterTurn(
 		run.lastProgress = normalized;
 		input.onProgress?.(normalized);
 	};
+	run.monitor = createTurnMonitor((active, raised) => {
+		stalledMembers = active;
+		if (!run.lastProgress || run.cancelled || run.controller.signal.aborted) return;
+		for (const alert of raised) {
+			deps.store.appendMessage({
+				matterId: matter.id,
+				channel: "notice",
+				senderType: "system",
+				senderId: alert.memberId,
+				content: JSON.stringify({
+					method: "turn_stalled",
+					message: `${alert.assignmentNumber ? `#${alert.assignmentNumber} · ` : ""}长时间无进展 · ${alert.lastAction} · ${alert.lastActivityAt}`,
+				}),
+				metadata: { sourceUserMessageId: run.userMessageId },
+			});
+		}
+		const progress = { ...run.lastProgress, stalledMembers, collabUpdated: raised.length > 0 };
+		run.lastProgress = progress;
+		input.onProgress?.(progress);
+	});
 	deps.runs.set(matter.id, run);
 	const deadline =
 		turnDeadlineMs > 0
@@ -348,6 +373,15 @@ export async function dispatchMatterTurn(
 					draft: await validateDelivery(entry.draft, entry.cwd),
 				})),
 			);
+			for (const { draft } of validated) {
+				const review = run.draftVerifications.get(draft.title);
+				if (
+					review &&
+					(draft.type !== "document" || review.digest !== draftDigest(draft) || review.verdict !== "passed")
+				) {
+					throw new Error(`Independent verification has not passed for the final draft: ${draft.title}`);
+				}
+			}
 			run.controller.signal.throwIfAborted();
 			const outcome = deps.store.recordTurnOutcome({
 				deliverables: validated.map(({ memberId, draft }) => ({
@@ -549,6 +583,7 @@ export async function dispatchMatterTurn(
 		throw error;
 	} finally {
 		if (deadline) clearTimeout(deadline);
+		run.monitor.close();
 		run.controller.abort(new Error("Turn finished"));
 		deps.runs.delete(matter.id);
 		deps.store.releaseMatterLease(matter.id, ownerId);

@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
 import type { MemoryCategory } from "../storage/types.ts";
+import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
-	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string }
+	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| ({
 			tool: "publish_deliverable";
 			callId: string;
@@ -32,6 +33,30 @@ function requiredString(value: unknown, name: string, max = 64_000): string {
 	return value.trim();
 }
 
+function parseVerification(value: unknown): VerificationRequest {
+	if (!value || typeof value !== "object" || !("target" in value) || !("criteria" in value)) {
+		throw new Error("Verification requires a target and acceptance criteria");
+	}
+	const target = value.target;
+	if (!target || typeof target !== "object" || !("kind" in target) || !("reference" in target)) {
+		throw new Error("Expected a verification target");
+	}
+	const { kind, reference } = target;
+	if (kind !== "file" && kind !== "commit" && kind !== "draft") throw new Error("Unsupported verification target");
+	const assignmentNumber = "assignmentNumber" in value ? value.assignmentNumber : undefined;
+	if (
+		assignmentNumber !== undefined &&
+		(typeof assignmentNumber !== "number" || !Number.isSafeInteger(assignmentNumber) || assignmentNumber < 1)
+	) {
+		throw new Error("assignmentNumber must be a positive integer");
+	}
+	return {
+		assignmentNumber,
+		target: { kind, reference: requiredString(reference, "verification.target.reference", 4096) },
+		criteria: requiredString(value.criteria, "verification.criteria", 4000),
+	};
+}
+
 function parseCall(value: unknown): TeamToolCall {
 	if (!value || typeof value !== "object") throw new Error("Expected a tool request");
 	if (!("tool" in value) || !("callId" in value) || !("args" in value)) throw new Error("Invalid tool request");
@@ -44,6 +69,7 @@ function parseCall(value: unknown): TeamToolCall {
 			callId,
 			memberId: requiredString(args.memberId, "memberId", 256),
 			task: requiredString(args.task, "task", 16_000),
+			...("verification" in args ? { verification: parseVerification(args.verification) } : {}),
 		};
 	}
 	if (value.tool === "publish_deliverable" && "type" in args && "title" in args) {
