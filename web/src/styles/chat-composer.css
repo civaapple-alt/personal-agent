@@ -382,6 +382,29 @@
 	gap: 8px;
 	min-width: 0;
 }
+.composer-toolbar-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin-inline-start: auto;
+}
+.composer-toolbar-actions > .pill-send-btn {
+	flex-shrink: 0;
+}
+.composer-model-control {
+	min-width: 0;
+	max-inline-size: min(38ch, 42vw);
+}
+.composer-model-control > button {
+	display: block;
+	max-inline-size: 100%;
+	min-inline-size: 0;
+	height: 32px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .composer-plus-btn {
 	width: 30px;
 	height: 30px;
@@ -944,33 +967,4 @@
  .initiation-current-row > button, .initiation-recommendation-row > button { min-height: 36px; }
  .chat-stage.is-new-matter .welcome-hero { padding-top: 20px; }
  .chat-stage.is-new-matter .composer-card.is-new .composer-textarea { min-height: 68px; }
-}
-
-.composer-model-control {
-	display: flex;
-	justify-content: flex-end;
-	padding-top: 8px;
-}
-
-.composer-model-control > button {
-	max-inline-size: 100%;
-	overflow-wrap: anywhere;
-}
-
-.model-picker {
-	display: grid;
-	gap: 8px;
-	min-inline-size: 0;
-}
-
-.model-picker select {
-	inline-size: 100%;
-	min-inline-size: 0;
-}
-
-.model-picker-error {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
 }

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Filter all model pickers by provider and search by model name or ID. Place the matter model control next to the send button.
+
 - Move provider, model, and thinking settings out of role packages. Configure defaults for the workbench or for each organization role, and override the lead model from the matter composer. Use the service account’s Pi default when no override is set.
 
 - Document prebuilt installation, authenticated team deployment, and contributor setup with the sample-data workbench.

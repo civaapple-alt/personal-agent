@@ -7,6 +7,7 @@ import "./styles/shell.css";
 import "./styles/chat-stream.css";
 import "./styles/chat-cards.css";
 import "./styles/chat-composer.css";
+import "./styles/model-picker.css";
 import "./styles/chat-roster.css";
 import "./styles/deliverables.css";
 import "./styles/team.css";

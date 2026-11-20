@@ -733,28 +733,30 @@ export function ComposerDock({
 												: "支持上传文件/图片，粘贴大段文本自动折叠"}
 								</span>
 							</div>
-							<button
-								type="button"
-								className={`pill-send-btn pill-send-labeled ${isArchitectMode ? "dispatch" : composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
-								aria-label={
-									isArchitectMode
-										? "发送给架构师"
-										: composerMode === "discussion"
-											? "发送讨论"
-											: isOwner
-												? "派发 AI"
-												: "提请 AI"
-								}
-								disabled={!canSend}
-								onClick={onSendPrompt}
-							>
-								{sendLabel}
-							</button>
+							<div className="composer-toolbar-actions">
+								{modelControl}
+								<button
+									type="button"
+									className={`pill-send-btn pill-send-labeled ${isArchitectMode ? "dispatch" : composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
+									aria-label={
+										isArchitectMode
+											? "发送给架构师"
+											: composerMode === "discussion"
+												? "发送讨论"
+												: isOwner
+													? "派发 AI"
+													: "提请 AI"
+									}
+									disabled={!canSend}
+									onClick={onSendPrompt}
+								>
+									{sendLabel}
+								</button>
+							</div>
 						</div>
 					</div>
 
 					{initiationPanel}
-					{modelControl}
 				</div>
 			</section>
 		</div>

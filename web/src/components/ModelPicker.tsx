@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { fetchModelDefault, fetchModels, type ModelCatalogDto, type ModelSelection } from "../api/models.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
+import { ModelCatalogChoices } from "./ModelCatalogChoices.tsx";
 
 interface CatalogState {
 	catalog: ModelCatalogDto | null;
@@ -69,10 +70,6 @@ function useEffectiveModel(selection?: ModelSelection | null) {
 	return resolved?.provider === provider && resolved?.model === model ? resolved : selection;
 }
 
-function modelKey(model: ModelSelection) {
-	return JSON.stringify([model.provider, model.model]);
-}
-
 function modelLabel(model: ModelSelection) {
 	return `${model.provider} / ${model.model}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}`;
 }
@@ -82,45 +79,42 @@ export function ModelPicker({
 	onChange,
 	inheritLabel,
 	inheritModel,
+	initiallyOpen,
 	disabled,
 }: {
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection | null) => void;
 	inheritLabel: string;
 	inheritModel?: ModelSelection | null;
+	initiallyOpen?: boolean;
 	disabled?: boolean;
 }) {
 	const { catalog, error, reload } = useModelCatalog();
 	const options = catalog?.models ?? [];
-	const selected = value ? options.find((option) => modelKey(option) === modelKey(value)) : undefined;
+	const selected = value
+		? options.find((option) => option.provider === value.provider && option.model === value.model)
+		: undefined;
 	const levels = selected?.thinkingLevels ?? [];
 	const effective = useEffectiveModel(value ?? inheritModel);
+	const inherited = inheritModel
+		? `${inheritLabel} · ${modelLabel(value ? inheritModel : (effective ?? inheritModel))}`
+		: inheritLabel;
+	const currentLabel = value
+		? selected
+			? `${selected.name} · ${selected.provider}`
+			: `${modelLabel(value)}（当前不可用）`
+		: inherited;
 	return (
 		<div className="model-picker">
-			<label className="identity-field">
-				<span className="identity-field-label">供应商与模型</span>
-				<select
-					className="input-field"
-					value={value ? modelKey(value) : ""}
-					disabled={disabled}
-					onChange={(event) => {
-						const option = options.find((option) => modelKey(option) === event.currentTarget.value);
-						onChange(option ? { provider: option.provider, model: option.model } : null);
-					}}
-				>
-					<option value="">
-						{inheritModel
-							? `${inheritLabel} · ${modelLabel(value ? inheritModel : (effective ?? inheritModel))}`
-							: inheritLabel}
-					</option>
-					{value && !selected && <option value={modelKey(value)}>{modelLabel(value)}（当前不可用）</option>}
-					{options.map((option) => (
-						<option key={modelKey(option)} value={modelKey(option)}>
-							{option.name} [{option.provider}]
-						</option>
-					))}
-				</select>
-			</label>
+			<ModelCatalogChoices
+				models={options}
+				value={value}
+				currentLabel={currentLabel}
+				inheritLabel={inherited}
+				initiallyOpen={initiallyOpen}
+				disabled={disabled}
+				onChange={onChange}
+			/>
 			{value && (
 				<label className="identity-field">
 					<span className="identity-field-label">思考等级</span>
@@ -173,6 +167,7 @@ export function MatterModelControl({
 	onSave: (value: ModelSelection | null) => void | Promise<void>;
 }) {
 	const { catalog, reload } = useModelCatalog();
+	const trigger = useRef<HTMLButtonElement>(null);
 	const [open, setOpen] = useState(false);
 	const [draft, setDraft] = useState<ModelSelection | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -180,12 +175,19 @@ export function MatterModelControl({
 	const inherited = leadKnown ? (roleModel ?? catalog?.platformDefault ?? catalog?.defaultModel) : undefined;
 	const effective = useEffectiveModel(value ?? inherited);
 
+	const buttonLabel = `主责模型 · ${effective ? modelLabel(effective) : "按岗位配置"}`;
+
+	const close = () => {
+		setOpen(false);
+		trigger.current?.focus();
+	};
+
 	const save = async () => {
 		setSaving(true);
 		setError(null);
 		try {
 			await onSave(draft);
-			setOpen(false);
+			close();
 		} catch (error) {
 			setError(error instanceof Error ? error.message : String(error));
 		} finally {
@@ -196,8 +198,11 @@ export function MatterModelControl({
 	return (
 		<div className="composer-model-control">
 			<button
+				ref={trigger}
 				type="button"
 				className="btn-pill-outline btn-xs"
+				title={buttonLabel}
+				aria-haspopup="dialog"
 				disabled={disabled}
 				onClick={() => {
 					reload();
@@ -206,7 +211,7 @@ export function MatterModelControl({
 					setOpen(true);
 				}}
 			>
-				主责模型 · {effective ? modelLabel(effective) : "按岗位配置"}
+				{buttonLabel}
 			</button>
 			<ModalDialog
 				open={open}
@@ -214,7 +219,7 @@ export function MatterModelControl({
 				subtitle="从下一轮起用于本事项的主负责人。请教与旁听按各自岗位的配置执行。"
 				size="sm"
 				closeDisabled={saving}
-				onClose={() => setOpen(false)}
+				onClose={close}
 				footer={
 					<button
 						type="button"
@@ -231,6 +236,7 @@ export function MatterModelControl({
 					onChange={setDraft}
 					inheritLabel="按岗位配置"
 					inheritModel={inherited}
+					initiallyOpen
 					disabled={saving}
 				/>
 				{error && (
