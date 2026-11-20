@@ -317,6 +317,40 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	assert.match(replies[1]?.content ?? "", /AI 讨论未完成/);
 	assert.match(JSON.stringify(replies[1]?.metadata?.progressSnapshot), /"leadMemberId":"qa-manager"/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+
+	const specialist = f.templates.find(({ id }) => id === "qa-manager")!;
+	f.orchestrator.registerRoleTemplate({
+		...specialist,
+		id: "ux-designer",
+		name: "UX & Visual Designer",
+		title: "UX & Visual Designer",
+		isPrimaryContact: false,
+	});
+	await request(matterPath, "PATCH", {
+		aiMemberIds: ["engineering-manager", "qa-manager", "ux-designer"],
+		consultMemberIds: ["ux-designer"],
+	});
+	const workerCountBeforeLookup = f.workers.length;
+	const lookup = await request(`${matterPath}/messages`, "POST", { mode: "discussion", prompt: "现在成员呢" });
+	const roster = f.store
+		.listMessages(first.matter.id, "user")
+		.find((msg) => msg.metadata?.sourceUserMessageId === lookup.message.id);
+	assert.equal(lookup.aiDiscussionTriggered, false);
+	assert.equal(f.workers.length, workerCountBeforeLookup);
+	assert.equal(roster?.senderType, "system");
+	assert.match(roster?.content ?? "", /Engineering Manager · 负责人/);
+	assert.match(roster?.content ?? "", /UX & Visual Designer · 可请教/);
+	assert.doesNotMatch(roster?.content ?? "", /Product Manager/);
+
+	const assignment = await request(`${matterPath}/messages`, "POST", {
+		mode: "discussion",
+		prompt: "现在有哪些成员需要调整分工？",
+	});
+	assert.equal(assignment.aiDiscussionTriggered, true);
+	await waitForTurn(first.matter.id);
+	const context = f.workers.at(-1)?.options.env?.PA_MEMBER_CONTEXT ?? "";
+	assert.match(context, /ux-designer: UX & Visual Designer/);
+	assert.match(context, /Treat earlier replies, plans, and saved proposals as historical/);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {

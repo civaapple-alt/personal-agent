@@ -32,7 +32,7 @@ import {
 	type RouteRequest,
 	type ServerRouteContext,
 } from "./context.ts";
-import { ensureActorAllowedMembers, ensureOrgEnabledAiRequest } from "./matter-roster.ts";
+import { ensureActorAllowedMembers, ensureOrgEnabledAiRequest, replyWithCurrentMatterRoster } from "./matter-roster.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
 function countActiveDispatchesForUser(ctx: ServerRouteContext, userId: string): number {
@@ -134,15 +134,22 @@ function startDiscussionAi(
 	files: PromptFileAttachment[],
 	preferredMemberId?: string,
 ) {
-	const skippedReason = !matter.discussionAiEnabled
-		? "disabled"
-		: !canDispatchAiInOrg(ctx.store, actor, matter.orgId)
-			? "unauthorized"
-			: ctx.orchestrator.isMatterRunning(matter.id) || ctx.activeRuns.has(matter.id)
-				? "matter_busy"
-				: !hasUserDispatchQuotaAvailable(ctx, actor)
-					? "quota_limit"
-					: null;
+	if (!matter.discussionAiEnabled) return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "disabled" };
+	if (!canDispatchAiInOrg(ctx.store, actor, matter.orgId))
+		return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "unauthorized" };
+	if (
+		!preferredMemberId &&
+		images.length === 0 &&
+		files.length === 0 &&
+		replyWithCurrentMatterRoster(ctx, matter, message)
+	)
+		return { aiDiscussionTriggered: false };
+	const skippedReason =
+		ctx.orchestrator.isMatterRunning(matter.id) || ctx.activeRuns.has(matter.id)
+			? "matter_busy"
+			: !hasUserDispatchQuotaAvailable(ctx, actor)
+				? "quota_limit"
+				: null;
 	if (skippedReason) return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: skippedReason };
 
 	ctx.runDispatchInBackground(

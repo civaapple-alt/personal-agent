@@ -439,10 +439,8 @@ export function buildMemberSystemPrompt(input: {
 	}
 
 	const isArchitect = isArchitectRoleTemplate(input.template ?? { id: input.member.id });
-	const hasRoleStandingDiff = input.consultMemberIds != null || (input.observerMemberIds?.length ?? 0) > 0;
 	const formatTeamLine = (member: TeamMember): string => {
 		const base = `- ${member.id}: ${member.displayName} (${member.roleTitle})`;
-		if (!hasRoleStandingDiff) return base;
 		if (input.leadMemberId && member.id === input.leadMemberId) return `${base} [lead]`;
 		const canConsult =
 			input.consultMemberIds == null ? member.id !== input.leadMemberId : input.consultMemberIds.includes(member.id);
@@ -452,7 +450,13 @@ export function buildMemberSystemPrompt(input: {
 		if (isObserver) return `${base} [observer only — do not delegate mid-turn]`;
 		return base;
 	};
-	sections.push(`## Current team\n${input.teamMembers.map(formatTeamLine).join("\n")}`);
+	sections.push(
+		[
+			"## Current team",
+			"Use this runtime roster for current matter membership and participation. Treat earlier replies, plans, and saved proposals as historical when they disagree with it.",
+			...input.teamMembers.map(formatTeamLine),
+		].join("\n"),
+	);
 	if (input.extraGuidance) {
 		sections.push(input.extraGuidance);
 	}

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Answer explicit current-members questions in team discussion from the live matter roster. Give the current roster precedence over older plans in agent prompts.
+
 - Label the new-matter model picker as an action and explain which role settings apply when the lead is matched automatically.
 
 - Show the role that was running when a team discussion failed in its progress snapshot.

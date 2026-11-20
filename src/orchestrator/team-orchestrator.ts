@@ -271,6 +271,17 @@ export class TeamOrchestrator {
 		return filtered.length > 0 ? filtered : sharedOrgMembers;
 	}
 
+	/** Members whose participation can be described in a reply shared with the whole matter. */
+	listSharedMatterAiMembers(matter: Matter): TeamMember[] {
+		return this.resolveMatterAiMembers(matter, null).filter(
+			(member) =>
+				member.roleScope !== "personal" &&
+				(member.id === matter.leadMemberId ||
+					(!this.isArchitectMember(member) &&
+						(matter.aiMemberIds === null || matter.aiMemberIds.includes(member.id)))),
+		);
+	}
+
 	/**
 	 * Evaluate a draft matter before launch for role fit, recommended team size/mode, and role gaps.
 	 */

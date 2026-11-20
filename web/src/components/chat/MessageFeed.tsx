@@ -279,6 +279,7 @@ export function MessageFeed({
 							const decision = readHumanDecision(msg.metadata);
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
+							const isRosterSnapshot = isSystem && msg.metadata?.matterRosterSnapshot === true;
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
 							const isDiscussionReply = !isUser && !isSystem && msg.metadata?.discussionTurn === true;
 							const msgMode = isUser && typeof msg.metadata?.mode === "string" ? msg.metadata.mode : "dispatch";
@@ -358,7 +359,7 @@ export function MessageFeed({
 												<BotFaceIcon bg={speakerTheme.bg} tilt={speakerTheme.tilt} size="xs" mood="idle" />
 											)}
 											<span>
-												{isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
+												{isRosterSnapshot ? "事项名册" : isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
 												{formatClockTime(msg.createdAt)}
 											</span>
 											{isDiscussionReply && <span className="discussion-ai-badge">讨论参与</span>}
@@ -366,7 +367,7 @@ export function MessageFeed({
 										</div>
 									)}
 									<div
-										className={`stream-bubble ${isUser ? "user" : isSystem ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
+										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
 									>
 										{isUser ? (
 											<>
