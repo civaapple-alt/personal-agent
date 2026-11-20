@@ -168,7 +168,7 @@ export function useMatterActions({
 		options?: { preferredMemberId?: string; clearComposer?: boolean; forceDispatch?: boolean },
 	) => {
 		const text = rawText.trim();
-		if ((!text && imagesPayload.length === 0 && filesPayload.length === 0) || submitting) return;
+		if ((!text && imagesPayload.length === 0 && filesPayload.length === 0) || submitting) return false;
 		const effectiveMode: MatterSendMode =
 			!options?.forceDispatch && composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
 		setSubmitting(true);
@@ -250,8 +250,10 @@ export function useMatterActions({
 			if (targetMatterId) {
 				await refreshDetail(targetMatterId);
 			}
+			return true;
 		} catch (err: unknown) {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
+			return false;
 		} finally {
 			setSubmitting(false);
 		}
@@ -269,7 +271,7 @@ export function useMatterActions({
 	};
 
 	const handleSendQuickPrompt = async (prompt: string, options?: { preferredMemberId?: string }) => {
-		await sendPromptInternal(prompt, [], [], {
+		return await sendPromptInternal(prompt, [], [], {
 			preferredMemberId: options?.preferredMemberId,
 			clearComposer: false,
 			forceDispatch: true,

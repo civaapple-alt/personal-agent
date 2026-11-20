@@ -140,7 +140,7 @@ interface ChatStageProps {
 		payload: ApplyMatterRoleProposalsPayload,
 	) => Promise<void>;
 	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
-	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
+	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => Promise<boolean>;
 	onConsultArchitect?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	modelControl?: ReactNode;

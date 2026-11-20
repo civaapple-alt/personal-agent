@@ -409,6 +409,10 @@ export class PersonalAgentStore {
 	hasOrgAiRolesConfigured(orgId: string) {
 		return this.orgRbac.hasOrgAiRolesConfigured(orgId);
 	}
+
+	enableNewGlobalRolesForOrg(orgId: string, memberIds: string[]) {
+		this.orgRbac.enableNewGlobalRolesForOrg(orgId, memberIds);
+	}
 	listOrgAiRoleConfigs(orgId: string) {
 		return this.orgRbac.listOrgAiRoleConfigs(orgId);
 	}

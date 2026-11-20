@@ -2,6 +2,8 @@ import { resolve } from "node:path";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
 import type { Collaborator, DeliverableType, Matter, MatterMessage, MatterVisibility } from "../../storage/types.ts";
 import {
 	canAccessMatter,
@@ -258,7 +260,9 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const preferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
 				? body.preferredMemberId
-				: undefined;
+				: mode === "dispatch" && isExplicitRoleSetupRequest(prompt)
+					? ROLE_ARCHITECT_MEMBER_ID
+					: undefined;
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.length > 0 ? body.workspaceId : undefined;
 		const boundWorkspace = workspaceId ? store.getWorkspace(workspaceId) : null;
@@ -669,6 +673,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const leadMember = matter.leadMemberId ? store.getMember(matter.leadMemberId) : null;
 		const preferredMemberId =
 			explicitPreferredMemberId ??
+			(mode === "dispatch" && isExplicitRoleSetupRequest(prompt) ? ROLE_ARCHITECT_MEMBER_ID : undefined) ??
 			(mode !== "discussion" && leadMember && canActorUseMember(store, actor, leadMember)
 				? leadMember.id
 				: undefined);

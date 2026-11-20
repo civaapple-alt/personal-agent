@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../roles/role-architect.ts";
+import { isExplicitRoleSetupRequest } from "../roles/role-setup-intent.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
@@ -74,6 +76,7 @@ export async function dispatchMatterTurn(
 	const existingLead = existing?.leadMemberId ?? undefined;
 	const preferredMemberId =
 		input.preferredMemberId ??
+		(!isDiscussionTurn && isExplicitRoleSetupRequest(input.prompt) ? ROLE_ARCHITECT_MEMBER_ID : undefined) ??
 		(!existingDiscussionRoster || existingDiscussionRoster.some(({ id }) => id === existingLead)
 			? existingLead
 			: undefined);

@@ -437,6 +437,15 @@ export class OrgRbacRepo {
 			});
 	}
 
+	enableNewGlobalRolesForOrg(orgId: string, memberIds: string[]): void {
+		if (memberIds.length === 0) return;
+		const timestamp = nowIso();
+		const insert =
+			this.db.prepare(`INSERT INTO organization_ai_roles (org_id, member_id, enabled, is_primary_contact, created_at, updated_at)
+			VALUES (?, ?, 1, 0, ?, ?) ON CONFLICT(org_id, member_id) DO NOTHING`);
+		for (const memberId of memberIds) insert.run(orgId, memberId, timestamp, timestamp);
+	}
+
 	resolveMemberForOrg(orgId: string | null | undefined, member: TeamMember): TeamMember {
 		if (!orgId || member.roleScope === "personal") return member;
 		const resolved = this.resolveEffectiveOrgMembers(orgId).find((m) => m.id === member.id);

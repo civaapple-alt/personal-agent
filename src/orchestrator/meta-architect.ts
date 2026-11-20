@@ -364,6 +364,7 @@ export function parseMetaArchitectResponse(
 			quietWhen: typeof bp.quietWhen === "string" ? bp.quietWhen : undefined,
 			interactionStyle: normalizeStyle(bp.interactionStyle),
 			workspaceScope: normalizeScope(bp.workspaceScope),
+			workspaceTools: Array.isArray(bp.tools) ? bp.tools.filter((tool) => typeof tool === "string") : undefined,
 			roleScope,
 			ownerOrgId: options?.ownerOrgId,
 			ownerUserId: options?.ownerUserId,
@@ -425,7 +426,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"## Design roles",
 	"1. Give each role one core outcome.",
 	"2. For non-coding, review, and observer roles, state which actions are outside their remit and when to return [SILENT].",
-	"3. Choose the minimum workspace access in `workspaceScope`: `no_repo_docs` for planning and writing without tools, `read_only_repo` for inspection, or `read_write_code` when implementation requires code changes or commands.",
+	"3. Choose the minimum workspace access. Use `no_repo_docs` for text without tools, `read_only_repo` for inspection, or `read_write_code` for workspace writes. Include an explicit `tools` array using only `read`, `edit`, `write`, or `bash` as needed. For document editing without commands, omit `bash`. Describe any directory limits as working rules, since these tools run with the host's workspace access.",
 	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
 	"5. Ask up to three questions, limited to gaps that could change the goal, capability, or acceptance criteria. Use answers already given. When you have enough information, return the smallest workable plan.",
 	'6. Use relevant installed Skills in `skills`. If the workflow lacks a tailored SOP, also propose an optional draft in `newSkills: [{ name, description, body, storageScope }]` (default `storageScope: "role_local"`) for user confirmation instead of placing unconfirmed names in `skills`. Identify missing dependencies without assuming that an integration works.',
@@ -441,7 +442,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	JSON.stringify(
 		{
 			reply: "One or two concise sentences for the user, or a clarifying question",
-			followUpQuestions: ["Optional short reply", "Another short reply"],
+			followUpQuestions: ["One short question for the user to answer, only if needed"],
 			healthFindings: [
 				{
 					status: "ok | warn",

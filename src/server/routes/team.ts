@@ -1,6 +1,7 @@
 import { validateSkillReference } from "../../roles/capabilities.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { buildScopedRoleId, deleteRolePackage, saveRolePackage } from "../../roles/role-package-store.ts";
+import { hasRoleProposalActions } from "../../roles/role-proposal-state.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../../roles/template-loader.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import {
@@ -98,6 +99,18 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 			sendError(res, 409, "Only pending role proposals may be applied");
 			return true;
 		}
+		const latest = store
+			.listMessages(matterId, "user")
+			.findLast(
+				(message) =>
+					message.senderType === "member" &&
+					message.senderId === targetMsg.senderId &&
+					hasRoleProposalActions(message.metadata?.roleProposals),
+			);
+		if (latest && latest.id !== messageId) {
+			sendError(res, 409, "此提案已有更新，请在最新一版中确认角色");
+			return true;
+		}
 		const matterJoinMode =
 			body.matterJoinMode === "consult" || body.matterJoinMode === "observer" || body.matterJoinMode === "lead"
 				? body.matterJoinMode
@@ -134,18 +147,35 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 			}
 		}
 
-		const memberPlans = planMembersBatch(ctx, actor, rawMembers, { fallbackOrgId: matter.orgId });
+		const matterOrgId = matter.orgId;
+		const memberPlans = planMembersBatch(ctx, actor, rawMembers, { fallbackOrgId: matterOrgId });
+		if (
+			matterJoinMode !== "none" &&
+			memberPlans.some(({ template }) => template.roleScope === "org" && template.ownerOrgId !== matterOrgId)
+		) {
+			sendError(res, 400, "另一组织的角色可以创建到其团队库。加入本事项时请选择当前组织");
+			return true;
+		}
 		const adjustmentPlans = planRoleAdjustmentsBatch(ctx, actor, rawAdjustments);
 		const createdMembers = await materializeMembersBatch(ctx, r, memberPlans);
 		const updatedMembers = await applyRoleAdjustmentsBatch(ctx, r, adjustmentPlans);
 		const newIds = createdMembers.map((m) => m.id);
 		let matterMutated = false;
 		if (matterJoinMode !== "none" && newIds.length > 0) {
+			if (matter.orgId && store.hasOrgAiRolesConfigured(matter.orgId)) {
+				store.enableNewGlobalRolesForOrg(
+					matter.orgId,
+					createdMembers.filter((member) => member.roleScope === "global").map((member) => member.id),
+				);
+			}
 			if (matter.aiMemberIds !== null) {
 				matter = store.updateMatterAiMembers(matter.id, [...matter.aiMemberIds, ...newIds]);
 				matterMutated = true;
 			}
-			if (matterJoinMode === "observer") {
+			if (matterJoinMode === "consult" && matter.consultMemberIds != null) {
+				matter = store.updateMatterConsultMembers(matter.id, [...matter.consultMemberIds, ...newIds]);
+				matterMutated = true;
+			} else if (matterJoinMode === "observer") {
 				matter = store.updateMatterObservers(matter.id, [...matter.observerMemberIds, ...newIds]);
 				matterMutated = true;
 			} else if (matterJoinMode === "lead") {

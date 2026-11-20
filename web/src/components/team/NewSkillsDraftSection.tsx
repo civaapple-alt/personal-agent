@@ -1,5 +1,5 @@
 import type { NewSkillDraftDto, RoleScope, SkillStorageScope } from "../../api.ts";
-import { allowedSkillScopesForRoleScope } from "../../architectApi.ts";
+import { allowedSkillScopesForRoleScope, resolveSkillStorageScopeForRole } from "../../architectApi.ts";
 
 interface NewSkillsDraftSectionProps {
 	skills: NewSkillDraftDto[];
@@ -24,7 +24,6 @@ export function NewSkillsDraftSection({
 	onAddCustomSkill,
 }: NewSkillsDraftSectionProps) {
 	const allowedStorageOptions = allowedSkillScopesForRoleScope(roleScope, isSuperAdmin);
-	const fallbackStorageScope = allowedStorageOptions[0]?.value ?? "role_local";
 
 	const updateItem = (idx: number, patch: Partial<NewSkillDraftDto>) => {
 		onChangeSkills(skills.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
@@ -49,11 +48,7 @@ export function NewSkillsDraftSection({
 				<div className="new-skills-draft-list">
 					{skills.map((skill, idx) => {
 						const checked = selectedIndices.includes(idx);
-						const effectiveScope: SkillStorageScope = allowedStorageOptions.some(
-							(opt) => opt.value === skill.storageScope,
-						)
-							? skill.storageScope
-							: fallbackStorageScope;
+						const effectiveScope = resolveSkillStorageScopeForRole(skill.storageScope, roleScope, isSuperAdmin);
 						return (
 							<div key={`${skill.name}-${idx}`} className={`new-skill-draft-card ${checked ? "selected" : ""}`}>
 								<div className="new-skill-draft-top">
@@ -68,7 +63,7 @@ export function NewSkillsDraftSection({
 									</label>
 									<select
 										className="wechat-row-select"
-										aria-label="Skill 存储位置"
+										aria-label="Skill 保存位置"
 										disabled={disabled || !checked}
 										value={effectiveScope}
 										onChange={(e) => updateItem(idx, { storageScope: e.target.value as SkillStorageScope })}

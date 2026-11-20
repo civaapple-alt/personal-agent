@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Route explicit requests to create AI roles to Role Architect in the current matter. Show clarifications as text with an explicit reply, simplify proposal review, and make confirmed consulting roles immediately available in the matter.
+
 - Record independent verification for exact commits, workspace text files, and staged document drafts. Keep reviewed drafts tied to the verified content, show stalled work during execution, and filter the delegation board by branch, member, or review.
 
 - Give each conversation turn a delegation board with numbered assignments and replies. Show live caller-to-member paths, including nested handoffs, and link the graph back to the original assignment.

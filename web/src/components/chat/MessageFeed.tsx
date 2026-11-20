@@ -1,4 +1,5 @@
 import { type RefObject, type UIEvent, useState } from "react";
+import { hasRoleProposalActions } from "../../../../src/roles/role-proposal-state.ts";
 import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
@@ -81,7 +82,7 @@ interface MessageFeedProps {
 		payload: ApplyMatterRoleProposalsPayload,
 	) => Promise<void>;
 	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
-	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
+	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => Promise<boolean>;
 	onFillComposer?: (text: string) => void;
 	onOpenQuickCreator?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
@@ -141,6 +142,12 @@ export function MessageFeed({
 	const isArchitectMatter = Boolean(
 		matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId),
 	);
+	const latestRolePlanIndices = new Map<string, number>();
+	matterDetail?.userMessages.forEach((message, index) => {
+		if (message.senderType === "member" && hasRoleProposalActions(message.metadata?.roleProposals)) {
+			latestRolePlanIndices.set(message.senderId, index);
+		}
+	});
 	const activeSpeakerId =
 		activeMatterProgress?.speakerMemberId ?? matterDetail?.matter.leadMemberId ?? headerContact?.id;
 	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
@@ -249,7 +256,7 @@ export function MessageFeed({
 								onChooseStep={isOwner ? onDemoStep : undefined}
 							/>
 						)}
-						{matterDetail?.userMessages.map((msg) => {
+						{matterDetail?.userMessages.map((msg, messageIndex) => {
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
@@ -471,6 +478,7 @@ export function MessageFeed({
 											matterId={matterDetail.matter.id}
 											messageId={msg.id}
 											proposals={roleProposals}
+											current={messageIndex >= (latestRolePlanIndices.get(msg.senderId) ?? -1)}
 											isArchitectMatter={isArchitectMatter}
 											isOwner={isOwner}
 											isSuperAdmin={isSuperAdmin}

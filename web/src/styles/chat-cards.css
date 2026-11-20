@@ -52,6 +52,54 @@
 	font-size: var(--text-xs);
 	color: var(--text-primary);
 }
+.architect-blueprints-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px 12px;
+}
+.architect-proposal-details {
+	min-width: 0;
+	color: var(--text-secondary);
+	font-size: var(--text-xs);
+}
+.architect-proposal-details summary {
+	cursor: pointer;
+	color: var(--accent);
+	margin-block: 4px;
+}
+.architect-proposal-details > :not(summary) {
+	margin-top: 6px;
+}
+.architect-tool-choices {
+	min-width: 0;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+}
+.architect-clarification {
+	font-size: var(--text-xs);
+	line-height: 1.5;
+	padding: 8px 10px;
+	background: var(--bg-sidebar);
+	border-radius: var(--radius-sm);
+}
+.architect-clarification ul {
+	margin: 4px 0 8px;
+	padding-inline-start: 20px;
+	overflow-wrap: anywhere;
+}
+.architect-clarification-form {
+	display: grid;
+	gap: 6px;
+}
+.architect-clarification-form textarea {
+	width: 100%;
+	resize: vertical;
+}
 .architect-finding-card {
 	padding: 8px 10px;
 	border-radius: var(--radius-sm);
@@ -141,11 +189,6 @@
 	font-size: var(--text-xs);
 	color: var(--text-secondary);
 	line-height: 1.45;
-}
-.architect-quick-replies {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
 }
 .role-proposal-footer {
 	display: flex;

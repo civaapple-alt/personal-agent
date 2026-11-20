@@ -40,6 +40,7 @@ export interface RoleDesignBriefInput {
 	quietWhen?: string;
 	interactionStyle?: RoleInteractionStyle;
 	workspaceScope?: RoleWorkspaceScope;
+	workspaceTools?: string[];
 	roleScope?: RoleScope;
 	ownerOrgId?: string | null;
 	ownerUserId?: string | null;
@@ -293,7 +294,11 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 					existingIds: existingSet,
 					allowCollisionSuffix: true,
 				});
-	const { tools, summary: toolSummary } = resolveToolsForScope(workspaceScope);
+	const profile = resolveToolsForScope(workspaceScope);
+	const tools = input.workspaceTools
+		? normalizeRoleTools(input.workspaceTools).filter((tool) => profile.tools.includes(tool))
+		: profile.tools;
+	const toolSummary = input.workspaceTools ? tools.join(" / ") || "无工作区工具" : profile.summary;
 	const antiJobs = buildDefaultAntiJobs({
 		interactionStyle,
 		workspaceScope,

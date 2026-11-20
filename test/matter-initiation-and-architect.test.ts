@@ -23,8 +23,33 @@ import {
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
 } from "../src/index.ts";
+import { isExplicitRoleSetupRequest } from "../src/roles/role-setup-intent.ts";
 import { buildStarterTasks, formatRoleToolTierLabel } from "../web/src/utils.ts";
 import { reportReady } from "./worker-helpers.ts";
+
+test("only direct role setup wording is eligible for automatic architectural routing", () => {
+	for (const prompt of [
+		"请在本事项中创建两个 AI 角色",
+		"按刚才的方案创建新的岗位",
+		"请把这两个角色创建出来",
+		"创建一个 AI 角色，负责测试 API",
+		"Create two AI roles for the team",
+	]) {
+		assert.ok(isExplicitRoleSetupRequest(prompt), prompt);
+	}
+	for (const prompt of [
+		"可以",
+		"我们讨论一下是否创建角色",
+		"实现创建角色的接口",
+		"把工作报告创建出来",
+		"请不要创建 AI 角色",
+		"请创建 AI 角色页面",
+		"添加现有 AI 成员",
+		"How to create an AI role?",
+	]) {
+		assert.equal(isExplicitRoleSetupRequest(prompt), false, prompt);
+	}
+});
 
 test("RoleArchitect enforces One Job, Explicit Anti-Jobs, and least-privilege tools across round-trips", async () => {
 	const draft = buildRoleDesignDraft({
@@ -39,6 +64,12 @@ test("RoleArchitect enforces One Job, Explicit Anti-Jobs, and least-privilege to
 	});
 
 	assert.deepEqual(draft.template.tools, []);
+	const limitedDraft = buildRoleDesignDraft({
+		oneJob: "Maintain documents",
+		workspaceScope: "read_write_code",
+		workspaceTools: ["read", "write", "external"],
+	});
+	assert.deepEqual(limitedDraft.template.tools, ["read", "write"]);
 	assert.ok(draft.antiJobs.some((item) => item.includes("不替代团队决定商业合作报价")));
 	assert.ok(draft.antiJobs.some((item) => item.includes("静默原则")));
 	assert.equal(draft.template.id, "contract-risk-reviewer");
@@ -769,6 +800,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 			title: "推进对外合作协议",
 			leadMemberId: pmId,
 			aiMemberIds: [pmId],
+			consultMemberIds: [],
 			observersEnabled: false,
 		});
 		const postBizMsg = await fetch(`${url}/api/matters/${bizMatter.id}/messages`, {
@@ -776,8 +808,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
 				mode: "dispatch",
-				prompt: "这一步卡在合同条文风险核查了，请架构师帮我们加个角色",
-				preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+				prompt: "请在本事项中创建一个合同风控角色",
 			}),
 		});
 		assert.equal(postBizMsg.status, 202);
@@ -800,12 +831,34 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		}
 		assert.ok(detailAfterConsult !== null);
 		assert.equal(detailAfterConsult.matter.leadMemberId, pmId);
-		const proposalMsg = detailAfterConsult.userMessages.find(
+		const originalProposal = detailAfterConsult.userMessages.find(
 			(m) => m.senderType === "member" && m.senderId === ROLE_ARCHITECT_MEMBER_ID,
 		)!;
-		const consultProposals = proposalMsg.metadata?.roleProposals as RoleProposalPayload;
+		const consultProposals = originalProposal.metadata?.roleProposals as RoleProposalPayload;
 		assert.equal(consultProposals.isMidMatterConsult, true);
 		assert.equal(consultProposals.blueprints.length, 1);
+		assert.equal(
+			store.listMembers().some((member) => member.displayName === "合同合规官"),
+			false,
+		);
+		const proposalMsg = store.appendMessage({
+			matterId: bizMatter.id,
+			channel: "user",
+			senderType: "member",
+			senderId: ROLE_ARCHITECT_MEMBER_ID,
+			content: "修订后的提案",
+			metadata: { roleProposals: consultProposals },
+		});
+		const stale = await fetch(
+			`${url}/api/matters/${bizMatter.id}/messages/${originalProposal.id}/apply-role-proposals`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ action: "apply", members: [{ name: "旧角色" }] }),
+			},
+		);
+		assert.equal(stale.status, 409);
+		assert.match(await stale.text(), /请在最新一版中确认/);
 
 		const blueprintDraft = consultProposals.blueprints[0]!.draft;
 		const applyRes = await fetch(
@@ -815,7 +868,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					action: "apply",
-					matterJoinMode: "observer",
+					matterJoinMode: "consult",
 					members: [
 						{
 							name: blueprintDraft.template.name,
@@ -841,13 +894,13 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		const appliedBody = (await applyRes.json()) as {
 			createdMembers: Array<{ id: string }>;
 			updatedMembers: Array<{ id: string }>;
-			matter: { leadMemberId: string; aiMemberIds: string[] | null; observerMemberIds: string[] };
+			matter: { leadMemberId: string; aiMemberIds: string[] | null; consultMemberIds: string[] | null };
 		};
 		assert.equal(appliedBody.createdMembers.length, 1);
 		const newRoleId = appliedBody.createdMembers[0]!.id;
 		assert.equal(appliedBody.matter.leadMemberId, pmId);
 		assert.ok(appliedBody.matter.aiMemberIds?.includes(newRoleId));
-		assert.ok(appliedBody.matter.observerMemberIds.includes(newRoleId));
+		assert.ok(appliedBody.matter.consultMemberIds?.includes(newRoleId));
 
 		// Duplicate apply on the same message returns 409 Conflict
 		const dupRes = await fetch(`${url}/api/matters/${bizMatter.id}/messages/${proposalMsg.id}/apply-role-proposals`, {

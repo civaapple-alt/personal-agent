@@ -93,6 +93,16 @@ export function allowedSkillScopesForRoleScope(
 	return items;
 }
 
+export function resolveSkillStorageScopeForRole(
+	requested: SkillStorageScope,
+	roleScope: RoleScope,
+	isSuperAdmin: boolean,
+): SkillStorageScope {
+	return allowedSkillScopesForRoleScope(roleScope, isSuperAdmin).some(({ value }) => value === requested)
+		? requested
+		: "role_local";
+}
+
 export function getMemberScopeBadge(
 	member: Pick<TeamMemberDto, "roleScope" | "ownerOrgId">,
 	organizationName?: (id: string | null) => string | null,

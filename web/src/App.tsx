@@ -840,7 +840,7 @@ export function App() {
 							}
 							onApplyRoleProposals={actions.handleApplyRoleProposals}
 							onDismissRoleProposals={actions.handleDismissRoleProposals}
-							onSendQuickPrompt={(prompt, opts) => void actions.handleSendQuickPrompt(prompt, opts)}
+							onSendQuickPrompt={actions.handleSendQuickPrompt}
 							onConsultArchitect={() => void actions.handleConsultArchitect()}
 							onLaunchWithNewRoles={launchNewMatterWithMembers}
 							modelControl={
