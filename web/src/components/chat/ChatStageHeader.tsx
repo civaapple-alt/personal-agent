@@ -13,7 +13,7 @@ interface ChatStageHeaderProps {
 	selectedOrganization: OrganizationDto | null;
 	selectedWorkspace: WorkspaceDto | null;
 	headerTheme: { bg: string; tilt: string };
-	headerContact: TeamMemberDto | null;
+	contactLabel: string;
 	matterDetail: MatterDetailPayload | null;
 	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
@@ -49,7 +49,7 @@ export function ChatStageHeader({
 	selectedOrganization,
 	selectedWorkspace,
 	headerTheme,
-	headerContact,
+	contactLabel,
 	matterDetail,
 	isArchitectMode = false,
 	isTurnRunning,
@@ -126,7 +126,7 @@ export function ChatStageHeader({
 					size="sm"
 					mood={isTurnRunning && activeMatterProgress ? activeMatterProgress.stage : "idle"}
 				/>
-				<span className="stage-center-name">{headerContact ? headerContact.displayName : "AI 团队"}</span>
+				<span className="stage-center-name">{contactLabel}</span>
 				{matterDetail && <span className="stage-center-matter">· {matterDetail.matter.title}</span>}
 			</div>
 			<div className="stage-header-right">

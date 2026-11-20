@@ -185,7 +185,7 @@ export function MatterModelControl({
 	const [error, setError] = useState<string | null>(null);
 	const inherited = leadKnown ? (roleModel ?? catalog?.platformDefault ?? catalog?.defaultModel) : undefined;
 	const effective = useEffectiveModel(value ?? inherited);
-	const buttonLabel = `${label} · ${effective ? modelLabel(effective) : "按岗位配置"}`;
+	const buttonLabel = effective ? `${label} · ${modelLabel(effective)}` : `选择${label}`;
 
 	const save = async (close: () => void) => {
 		setSaving(true);
@@ -220,7 +220,7 @@ export function MatterModelControl({
 						<ModelPickerPanel
 							value={draft}
 							onChange={setDraft}
-							inheritLabel="按岗位配置"
+							inheritLabel={leadKnown ? "按岗位配置" : "按自动匹配的岗位配置"}
 							inheritModel={inherited}
 							disabled={saving}
 						/>

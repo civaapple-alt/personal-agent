@@ -486,7 +486,9 @@ export function ChatStage({
 				selectedOrganization={selectedOrganization}
 				selectedWorkspace={selectedWorkspace}
 				headerTheme={headerTheme}
-				headerContact={headerContact}
+				contactLabel={
+					!selectedMatterId && selectedMemberId === "auto" ? "新事项" : (headerContact?.displayName ?? "AI 团队")
+				}
 				matterDetail={matterDetail}
 				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Label the new-matter model picker as an action and explain which role settings apply when the lead is matched automatically.
+
 - Show the role that was running when a team discussion failed in its progress snapshot.
 
 - Keep the team discussion draft free of stray `@` when toggling the role picker. Close the picker when clicking outside.
