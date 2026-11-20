@@ -168,7 +168,7 @@ export async function executeWithWorkerPass(
 				? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
 				: baseTools;
 		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
-		const teamTools = isArchitect
+		const ordinaryTeamTools = isArchitect
 			? []
 			: sessionMode === "observer" || isVerifier
 				? []
@@ -181,6 +181,18 @@ export async function executeWithWorkerPass(
 						: isSoloMatter
 							? ["publish_deliverable", "propose_experience"]
 							: ["delegate_to_member", "publish_deliverable", "propose_experience"];
+		const canRequestClarification =
+			!isArchitect && !isDiscussionMode && (sessionMode === "internal" || sessionMode === "lead");
+		const teamTools = canRequestClarification ? [...ordinaryTeamTools, "request_clarification"] : ordinaryTeamTools;
+		let clarification: PromptRunResult["clarification"];
+		const stageClarification = (request: NonNullable<PromptRunResult["clarification"]>) => {
+			if (clarification) throw new Error("A clarification is already recorded for this execution");
+			clarification = request;
+			return {
+				status: sessionMode === "internal" ? "return_to_delegator" : "staged_for_human",
+				note: "The answer is unavailable this turn. Leave the dependent step pending and finish independent work.",
+			};
+		};
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
 			category: MemoryCategory;
@@ -228,8 +240,24 @@ export async function executeWithWorkerPass(
 						memberId: result.toMember.id,
 						delegationNumber: result.delegationNumber,
 						answer: result.answerText,
+						...(result.clarification
+							? { status: "needs_clarification", clarification: result.clarification }
+							: {}),
 						...(result.verification ? { verification: result.verification } : {}),
 					};
+				}
+				if (call.tool === "request_clarification") {
+					if (!canRequestClarification) throw new Error("This execution cannot request a decision");
+					const { question, context, options, sourceAssignmentNumber } = call;
+					let source: NonNullable<PromptRunResult["clarification"]>["source"];
+					if (sourceAssignmentNumber !== undefined) {
+						const handoff = input.run.completedClarifications?.get(sourceAssignmentNumber);
+						if (!handoff || handoff.toDelegatorId !== input.member.id) {
+							throw new Error("Use the number of a completed assignment to you that returned a clarification");
+						}
+						source = handoff.source;
+					}
+					return stageClarification({ question, context, options, source });
 				}
 				if (call.tool === "propose_experience") {
 					if (!canProposeExperience && !isDiscussionMode) {
@@ -532,6 +560,17 @@ export async function executeWithWorkerPass(
 		);
 		worker.setDialogHandler(async (request) => {
 			signal.throwIfAborted();
+			if (sessionMode !== "lead" || isDiscussionMode) {
+				if (sessionMode === "internal" && !clarification) {
+					const options = request.method === "select" ? request.options.slice(0, 4) : undefined;
+					stageClarification({
+						question: request.title.trim().slice(0, 1000) || "需要补充委托信息",
+						context: request.method === "confirm" ? request.message?.slice(0, 3000) : undefined,
+						options,
+					});
+				}
+				return { cancelled: true };
+			}
 			const dialogHandler = deps.getDialogHandler();
 			if (!dialogHandler) return { cancelled: true };
 			const resumeMonitor = activity?.wait();
@@ -703,7 +742,7 @@ export async function executeWithWorkerPass(
 		}
 		if (!result.aborted && !input.run.cancelled)
 			input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}正在整理结果` });
-		return result;
+		return !result.aborted && !input.run.cancelled && clarification ? { ...result, clarification } : result;
 	} finally {
 		controller.abort(new Error("Worker finished"));
 		for (const cleanup of cleanups) cleanup();

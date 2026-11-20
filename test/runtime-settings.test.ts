@@ -132,7 +132,12 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.ok(teamExt);
 	assert.equal(teamExt.status, "active");
 	assert.equal(teamExt.fileStatus, "present");
-	assert.deepEqual(teamExt.registeredTools, ["delegate_to_member", "publish_deliverable", "propose_experience"]);
+	assert.deepEqual(teamExt.registeredTools, [
+		"delegate_to_member",
+		"request_clarification",
+		"publish_deliverable",
+		"propose_experience",
+	]);
 
 	const pstackExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-pstack-extension");
 	assert.ok(pstackExt);

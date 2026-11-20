@@ -43,12 +43,12 @@ function countActiveDispatchesForUser(ctx: ServerRouteContext, userId: string): 
 	return count;
 }
 
-function hasUserDispatchQuotaAvailable(ctx: ServerRouteContext, actor: RequestActor): boolean {
+export function hasUserDispatchQuotaAvailable(ctx: ServerRouteContext, actor: RequestActor): boolean {
 	if (!actor.user || isSuperAdminActor(actor)) return true;
 	return countActiveDispatchesForUser(ctx, actor.user.id) < actor.user.maxActiveDispatches;
 }
 
-function checkUserDispatchQuota(ctx: ServerRouteContext, actor: RequestActor, res: { end: unknown }): boolean {
+export function checkUserDispatchQuota(ctx: ServerRouteContext, actor: RequestActor, res: { end: unknown }): boolean {
 	if (hasUserDispatchQuotaAvailable(ctx, actor)) return true;
 	sendError(
 		res as Parameters<typeof sendError>[0],

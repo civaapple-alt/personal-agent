@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { DecisionResponse } from "../orchestrator/human-decision.ts";
 import {
 	buildProgressSnapshot,
 	type DispatchMatterResult,
@@ -24,6 +25,7 @@ export interface BackgroundDispatchInput {
 	matterId: string;
 	interactionMode?: "dispatch" | "discussion";
 	existingUserMessageId?: string;
+	decisionResponse?: DecisionResponse;
 	title?: string;
 	prompt: string;
 	images?: PromptImageAttachment[];
@@ -76,6 +78,7 @@ export function createDispatchRunner(deps: {
 				matterId: input.matterId,
 				interactionMode: input.interactionMode,
 				existingUserMessageId: input.existingUserMessageId,
+				decisionResponse: input.decisionResponse,
 				title: input.title,
 				prompt: input.prompt,
 				images: input.images,

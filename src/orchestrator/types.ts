@@ -22,6 +22,7 @@ import type {
 	WorkspaceLink,
 } from "../storage/types.ts";
 import type { DeliveryDraft } from "./execution-context.ts";
+import type { Clarification, DecisionResponse, DecisionSource } from "./human-decision.ts";
 import type { DraftVerification } from "./independent-verification.ts";
 import type { ReadPiModels } from "./model-selection.ts";
 import type { StalledMember, TurnMonitor } from "./turn-monitor.ts";
@@ -191,6 +192,7 @@ export interface DispatchMatterInput {
 	prompt: string;
 	interactionMode?: "dispatch" | "discussion";
 	existingUserMessageId?: string;
+	decisionResponse?: DecisionResponse;
 	images?: PromptImageAttachment[];
 	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
@@ -243,6 +245,7 @@ export interface DelegateResult {
 	requestMessage: MatterMessage;
 	responseMessage: MatterMessage;
 	answerText: string;
+	clarification?: Clarification & { source?: DecisionSource };
 	verification?: VerificationOutcome;
 }
 
@@ -295,6 +298,7 @@ export interface MatterRun {
 	workers: Set<RpcWorkerLike>;
 	contexts: Set<string>;
 	delegations: Map<string, Promise<DelegateResult>>;
+	completedClarifications?: Map<number, { toDelegatorId: string; source: DecisionSource }>;
 	activeDelegations: Map<string, ActiveDelegationProgress>;
 	draftVerifications: Map<string, DraftVerification>;
 	monitor?: TurnMonitor;

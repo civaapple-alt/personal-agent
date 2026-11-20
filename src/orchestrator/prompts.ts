@@ -494,6 +494,13 @@ export function buildMemberSystemPrompt(input: {
 			);
 		}
 	}
+	if (!isArchitect && !input.discussionMode && (mode === "lead" || mode === "internal")) {
+		sections.push(
+			mode === "internal"
+				? "Return questions that block your assignment to your delegator using request_clarification. Give the question, the blocked step, and the facts you already checked. Finish this assignment with any independent findings. Do not assume a human decision."
+				: "Resolve routine questions yourself. If absent human input could materially change scope, acceptance, or authorization, call request_clarification with the question, the blocked step, and distinct choices only when meaningful. Use sourceAssignmentNumber when escalating a colleague's question. Keep the dependent work and final publication pending, do independent work within scope, then end the turn. A human answer supplies only the specific decision recorded. Use the existing approval path for system changes.",
+		);
+	}
 	if (mode === "lead" && !isArchitect && !input.discussionMode) sections.push(PUBLICATION_REVIEW_GUIDANCE);
 	if (mode === "lead" && !isArchitect && !input.discussionMode)
 		sections.push(

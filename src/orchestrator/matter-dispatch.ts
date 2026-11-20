@@ -8,6 +8,7 @@ import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import { validateDelivery } from "./execution-context.ts";
+import type { Clarification, HumanDecision } from "./human-decision.ts";
 import { draftDigest } from "./independent-verification.ts";
 import { buildArchitectMessageProposals } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
@@ -267,17 +268,23 @@ export async function dispatchMatterTurn(
 				channel: "user",
 				senderType: "user",
 				senderId: input.author?.collaboratorId ?? "user",
-				content: input.prompt,
+				content: input.decisionResponse?.text ?? input.prompt,
 				metadata: {
 					...(isDiscussionTurn ? { mode: "discussion" } : {}),
 					workspaceId: workspace?.id ?? null,
 					repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
 					...(assignedIsArchitect ? { targetMemberId: assignedMember.id } : {}),
+					...(input.decisionResponse
+						? {
+								humanDecisionSourceId: input.decisionResponse.sourceMessageId,
+								decisionRespondent: input.decisionResponse.respondent,
+							}
+						: {}),
 					...(isMidMatterArchitectConsult ? { isMidMatterConsult: true } : {}),
 					...(input.author
 						? {
 								authorId: input.author.collaboratorId,
-								authorName: input.author.name,
+								authorName: input.decisionResponse?.respondent.name ?? input.author.name,
 								authorRole: input.author.roleTitle,
 								permissionRole: input.author.permissionRole,
 							}
@@ -340,13 +347,33 @@ export async function dispatchMatterTurn(
 						},
 					})
 				: null;
+		const requests: Clarification[] =
+			architectParsed?.roleProposals?.followUpQuestions?.map((question) => ({ question })) ??
+			(result.clarification ? [result.clarification] : []);
+		const decision: HumanDecision | undefined =
+			!aborted && !isDiscussionTurn && requests.length > 0
+				? {
+						kind: assignedIsArchitect ? "role_clarification" : "planning",
+						status: "pending",
+						requests: requests.map(({ question, context, options }) => ({ question, context, options })),
+						source: result.clarification?.source,
+						assignedUserId: matter.createdByUserId ?? null,
+						assignedName: matter.createdByUserId
+							? deps.store.getUserById(matter.createdByUserId)?.displayName
+							: undefined,
+						revision: 1,
+					}
+				: undefined;
 		const replyText = aborted
 			? formatAbortedReply(rawReply, run.cancelReason)
-			: architectParsed?.replyText || rawReply || "本轮未返回正文，请继续追问；执行记录保留在协作过程中。";
+			: architectParsed?.replyText ||
+				rawReply ||
+				(decision ? "等待你在卡片里提交决定。" : "本轮未返回正文，请继续追问；执行记录保留在协作过程中。");
 		// Keep explicit document exports supported by API callers. Chat has no implicit export.
 		if (
 			!aborted &&
 			!isDiscussionTurn &&
+			!decision &&
 			rawReply &&
 			input.deliverableTitle &&
 			(!input.deliverableType || input.deliverableType === "document") &&
@@ -371,7 +398,7 @@ export async function dispatchMatterTurn(
 		if (!aborted && !isDiscussionTurn) {
 			// Recheck all paths before writing any index entry. Failed/cancelled turns publish nothing.
 			const validated = await Promise.all(
-				run.effects.deliveries.map(async (entry) => ({
+				(decision ? [] : run.effects.deliveries).map(async (entry) => ({
 					...entry,
 					draft: await validateDelivery(entry.draft, entry.cwd),
 				})),
@@ -436,6 +463,7 @@ export async function dispatchMatterTurn(
 				workspaceId: workspace?.id ?? null,
 				repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
 				...(architectParsed?.roleProposals ? { roleProposals: architectParsed.roleProposals } : {}),
+				...(decision ? { humanDecision: decision } : {}),
 				...(aborted
 					? {
 							progressSnapshot: buildProgressSnapshot({
@@ -450,7 +478,11 @@ export async function dispatchMatterTurn(
 		});
 		const updatedMatter = isDiscussionTurn
 			? deps.requireMatter(matter.id)
-			: deps.store.updateMatterStatus(matter.id, deliveries.length ? "delivered" : "open", replyText.slice(0, 200));
+			: deps.store.updateMatterStatus(
+					matter.id,
+					decision ? "waiting_user" : deliveries.length ? "delivered" : "open",
+					replyText.slice(0, 200),
+				);
 		const extraMentionMessages: MatterMessage[] = [];
 		let extraReplyAborted = false;
 		if (isDiscussionTurn && !aborted && !run.cancelled && mentionedTargets.length > 1) {

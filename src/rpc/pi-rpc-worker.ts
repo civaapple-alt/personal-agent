@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import type { Clarification, DecisionSource } from "../orchestrator/human-decision.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
 import type {
 	AgentMessage,
@@ -73,6 +74,7 @@ export interface DialogInteractionRecord {
 }
 
 export interface PromptRunResult {
+	clarification?: Clarification & { source?: DecisionSource };
 	disposition: PromptDisposition;
 	aborted: boolean;
 	assistantText: string;

@@ -220,6 +220,18 @@ export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload
 	return requestJson<MatterDetailPayload>(`/api/matters/${encodeURIComponent(matterId)}`);
 }
 
+export type HumanDecisionAction =
+	| { action: "answer"; revision: number; answer: string }
+	| { action: "assign"; revision: number; assignedUserId: string }
+	| { action: "resume"; revision: number };
+
+export function actOnHumanDecision(matterId: string, messageId: string, input: HumanDecisionAction) {
+	return requestJson<{ message: MatterMessageDto; resumed: boolean }>(
+		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/human-decision`,
+		{ method: "POST", body: JSON.stringify(input) },
+	);
+}
+
 export function openInnerMatterDemo(): Promise<{ matter: MatterDto }> {
 	return requestJson("/api/demos/inner-matter", { method: "POST", body: "{}" });
 }

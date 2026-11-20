@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isCurrentHumanDecision, readHumanDecision } from "../../../src/orchestrator/human-decision.ts";
+import { hasRoleProposalActions } from "../../../src/roles/role-proposal-state.ts";
 import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
@@ -433,6 +435,51 @@ export function ChatStage({
 		delegations: delegations.assignments,
 	});
 
+	const decisionAssignees = matterDetail
+		? (orgMembersByOrgId[matterDetail.matter.orgId ?? ""] ?? []).filter(
+				({ userId, orgRole, userStatus }) =>
+					orgRole !== "org_viewer" &&
+					(!userStatus || userStatus === "active") &&
+					(userId === matterDetail.matter.createdByUserId ||
+						matterDetail.matter.collaboratorIds?.includes(userId)),
+			)
+		: [];
+	const pendingDecisions = [];
+	if (matterDetail && matterDetail.matter.status !== "archived") {
+		const seenRoleProposals = new Set<string>();
+		const messages = matterDetail.userMessages;
+		for (const [index, message] of messages.entries()) {
+			if (message.senderType !== "member") continue;
+			const decision = readHumanDecision(message.metadata);
+			if (
+				decision?.status === "pending" &&
+				isCurrentHumanDecision(message, decision, matterDetail.matter, messages.slice(index + 1))
+			) {
+				pendingDecisions.push({ id: message.id, label: decision.requests[0]?.question ?? "答复澄清" });
+			}
+		}
+		for (const message of messages.toReversed()) {
+			if (message.senderType !== "member" || seenRoleProposals.has(message.senderId)) continue;
+			const roleProposals = message.metadata?.roleProposals;
+			const hasActions = hasRoleProposalActions(roleProposals);
+			const hasClarification = readHumanDecision(message.metadata)?.kind === "role_clarification";
+			if (!hasActions && !hasClarification) continue;
+			seenRoleProposals.add(message.senderId);
+			if (
+				hasActions &&
+				!hasClarification &&
+				roleProposals &&
+				typeof roleProposals === "object" &&
+				"status" in roleProposals &&
+				roleProposals.status === "pending" &&
+				message.metadata?.orgId === (matterDetail.matter.orgId ?? null) &&
+				message.metadata?.workspaceId === matterDetail.matter.workspaceId
+			) {
+				pendingDecisions.push({ id: message.id, label: "确认角色提案" });
+			}
+		}
+	}
+
 	return (
 		<div className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}`}>
 			<ChatStageHeader
@@ -585,6 +632,29 @@ export function ChatStage({
 				</ViewFade>
 			)}
 
+			{pendingDecisions.length > 0 && (
+				<details className="human-decision-jump" key={selectedMatterId}>
+					<summary>待人类决定 · {pendingDecisions.length}</summary>
+					<ul>
+						{pendingDecisions.map(({ id, label }) => (
+							<li key={id}>
+								<button
+									type="button"
+									className="btn-inline"
+									onClick={() => {
+										const target = document.getElementById(`matter-message-${id}`);
+										target?.focus({ preventScroll: true });
+										target?.scrollIntoView({ block: "start" });
+									}}
+								>
+									{label}
+								</button>
+							</li>
+						))}
+					</ul>
+				</details>
+			)}
+
 			<MessageFeed
 				onOpenDemo={onOpenDemo}
 				demoOpening={demoOpening}
@@ -607,6 +677,8 @@ export function ChatStage({
 				progressStartedAt={progressStartedAt}
 				streamingDelta={streamingDelta}
 				isOwner={isOwner}
+				canManageMatter={canManageMatter}
+				decisionAssignees={decisionAssignees}
 				isSuperAdmin={isSuperAdmin}
 				accountUser={accountUser}
 				currentUser={currentUser}

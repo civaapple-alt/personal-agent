@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import type { HumanDecision } from "../../orchestrator/human-decision.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { ModelSelection } from "../../rpc/model-selection.ts";
 import type {
@@ -403,6 +404,17 @@ export class MatterRepo {
 			AND json_extract(metadata_json, '$.mode') = 'ai_request'
 			AND json_extract(metadata_json, '$.aiRequestStatus') = 'pending'`)
 			.run(JSON.stringify(metadata), messageId).changes;
+		return changed ? this.getMessage(messageId) : null;
+	}
+
+	transitionHumanDecision(messageId: string, revision: number, decision: HumanDecision): MatterMessage | null {
+		const changed = this.db
+			.prepare(`UPDATE matter_messages
+				SET metadata_json = json_set(metadata_json, '$.humanDecision', json(?))
+				WHERE id = ? AND channel = 'user' AND sender_type = 'member'
+				AND json_extract(metadata_json, '$.humanDecision.status') = 'pending'
+				AND json_extract(metadata_json, '$.humanDecision.revision') = ?`)
+			.run(JSON.stringify(decision), messageId, revision).changes;
 		return changed ? this.getMessage(messageId) : null;
 	}
 

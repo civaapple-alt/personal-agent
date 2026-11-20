@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import type { Clarification } from "../orchestrator/human-decision.ts";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
 import type { MemoryCategory } from "../storage/types.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
+	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| ({
 			tool: "publish_deliverable";
@@ -70,6 +72,31 @@ function parseCall(value: unknown): TeamToolCall {
 			memberId: requiredString(args.memberId, "memberId", 256),
 			task: requiredString(args.task, "task", 16_000),
 			...("verification" in args ? { verification: parseVerification(args.verification) } : {}),
+		};
+	}
+	if (value.tool === "request_clarification" && "question" in args) {
+		const options = "options" in args ? args.options : undefined;
+		if (options !== undefined && (!Array.isArray(options) || options.length < 2 || options.length > 4)) {
+			throw new Error("Provide two to four options, or omit options for free text");
+		}
+		const choices = options?.map((item) => requiredString(item, "options item", 240));
+		if (choices && new Set(choices).size !== choices.length) throw new Error("Options must be distinct");
+		const sourceAssignmentNumber = "sourceAssignmentNumber" in args ? args.sourceAssignmentNumber : undefined;
+		if (
+			sourceAssignmentNumber !== undefined &&
+			(typeof sourceAssignmentNumber !== "number" ||
+				!Number.isSafeInteger(sourceAssignmentNumber) ||
+				sourceAssignmentNumber < 1)
+		) {
+			throw new Error("sourceAssignmentNumber must be a positive integer");
+		}
+		return {
+			tool: value.tool,
+			callId,
+			question: requiredString(args.question, "question", 1000),
+			context: "context" in args ? requiredString(args.context, "context", 3000) : undefined,
+			options: choices,
+			sourceAssignmentNumber,
 		};
 	}
 	if (value.tool === "publish_deliverable" && "type" in args && "title" in args) {

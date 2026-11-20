@@ -168,6 +168,27 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			},
 		},
 		{
+			name: "request_clarification",
+			label: "提请澄清",
+			description:
+				"Use for a consequential question that available context cannot answer. As a specialist, return the question to your delegator along with any independent findings. As the lead, answer internally when you can; otherwise create a durable human decision in the matter. Acknowledge the blocked step and finish the turn; independent work can still proceed. This tool never grants authorization.",
+			parameters: {
+				type: "object",
+				properties: {
+					question: { type: "string", maxLength: 1000 },
+					context: { type: "string", maxLength: 3000, description: "Why this is needed and what it blocks" },
+					options: { type: "array", minItems: 2, maxItems: 4, items: { type: "string", maxLength: 240 } },
+					sourceAssignmentNumber: {
+						type: "integer",
+						minimum: 1,
+						description: "Direct assignment that raised this question, if applicable",
+					},
+				},
+				required: ["question"],
+				additionalProperties: false,
+			},
+		},
+		{
 			name: "publish_deliverable",
 			label: "登记成果",
 			description:

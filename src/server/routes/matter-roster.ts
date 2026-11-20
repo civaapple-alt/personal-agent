@@ -54,3 +54,19 @@ export function ensureOrgEnabledAiRequest(
 	}
 	return true;
 }
+
+export function canTargetMatterAi(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	orgId: string | null,
+	memberId: string,
+): boolean {
+	const member = ctx.store.getMember(memberId);
+	return Boolean(
+		member &&
+			canActorUseMember(ctx.store, actor, member) &&
+			(!orgId ||
+				memberId === ROLE_ARCHITECT_MEMBER_ID ||
+				ctx.store.resolveEffectiveOrgMembersForUser(orgId, actor.user?.id).some(({ id }) => id === memberId)),
+	);
+}

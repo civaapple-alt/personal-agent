@@ -131,6 +131,7 @@ export interface RoleProposalPayloadDto {
 	appliedMemberIds?: string[];
 	appliedAdjustmentIds?: string[];
 	appliedMatterJoinMode?: MatterRoleJoinMode;
+	confirmation?: { name: string; at: string };
 }
 
 /** True when a team member represents the built-in Role Architect meta role. */
@@ -187,8 +188,20 @@ export function parseRoleProposalsFromMetadata(
 			? (rec.recommendedFormation as MetaArchitectFormationSuggestionDto)
 			: undefined;
 
+	const confirmed = rec.confirmation;
+	const confirmation =
+		confirmed &&
+		typeof confirmed === "object" &&
+		"name" in confirmed &&
+		"at" in confirmed &&
+		typeof confirmed.name === "string" &&
+		typeof confirmed.at === "string"
+			? { name: confirmed.name, at: confirmed.at }
+			: undefined;
+
 	return {
 		status,
+		confirmation,
 		followUpQuestions,
 		...(healthFindings && healthFindings.length > 0 ? { healthFindings } : {}),
 		...(roleAdjustments && roleAdjustments.length > 0 ? { roleAdjustments } : {}),

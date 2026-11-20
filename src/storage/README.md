@@ -36,7 +36,7 @@
 - 人类协作成员与受限房间访问：
   - `collaborators` 表与 `matters.collaborator_ids_json` 维护人类参与者（`owner` / `collaborator`）、岗位头衔及邀请口令；
   - `ensureOwnerCollaborator` 自动初始化所有者记录，`toPublicCollaborator` 用于向非所有者隐藏邀请口令。
-- `appendMessage` 写入当时有效组织的 `metadata.orgId` 快照；读取历史不能使用事项今天的绑定替代来源。`transitionAiRequest` 用条件 UPDATE 认领待处理的人类提请，避免重复批准或忽略。
+- `appendMessage` 写入当时有效组织的 `metadata.orgId` 快照；读取历史不能使用事项今天的绑定替代来源。`transitionAiRequest` 用条件 UPDATE 认领待处理的人类提请，避免重复批准或忽略。待决定问题与答案随来源消息保存，`transitionHumanDecision` 按待答状态与版本原子提交。续跑用户消息引用这条来源消息，已有成功回复时不再派发；角色确认结果与确认人随提案保存。
 - `createMatter` 可由内部调用指定固定 `id`，供按需内置演示复用；普通 HTTP 新建接口不接收该字段，仍生成随机 ID，不新增另一套演示消息或成果存储。
 - 角色 Markdown 与私有运行数据分离；不要把数据库内容导进 [可分享角色](../../roles/README.md)。预览索引和待答对话属于服务内存，未在此持久化。
 

@@ -252,6 +252,9 @@ export class PersonalAgentStore {
 	transitionAiRequest(...args: Parameters<MatterRepo["transitionAiRequest"]>) {
 		return this.matters.transitionAiRequest(...args);
 	}
+	transitionHumanDecision(...args: Parameters<MatterRepo["transitionHumanDecision"]>) {
+		return this.matters.transitionHumanDecision(...args);
+	}
 	appendMessage(input: Parameters<MatterRepo["appendMessage"]>[0]) {
 		return this.matters.appendMessage(input);
 	}

@@ -13,6 +13,7 @@ import {
 	type RoleProposalPayloadDto,
 	resolveSkillStorageScopeForRole,
 } from "../../architectApi.ts";
+import { formatClockTime } from "../../utils.ts";
 import { NewSkillsDraftSection } from "../team/NewSkillsDraftSection.tsx";
 import { RoleCapabilityDetails, RoleFindingEvidence } from "../team/RoleDesignDetails.tsx";
 
@@ -21,6 +22,7 @@ interface RoleProposalCardProps {
 	messageId: string;
 	proposals: RoleProposalPayloadDto;
 	current: boolean;
+	structuredClarification: boolean;
 	isArchitectMatter: boolean;
 	isOwner: boolean;
 	isSuperAdmin?: boolean;
@@ -59,6 +61,7 @@ export function RoleProposalCard({
 	messageId,
 	proposals,
 	current,
+	structuredClarification,
 	isArchitectMatter,
 	isOwner,
 	isSuperAdmin = false,
@@ -210,7 +213,7 @@ export function RoleProposalCard({
 
 	return (
 		<div className="role-proposal-card">
-			{proposals.status === "pending" && proposals.followUpQuestions.length > 0 && (
+			{!structuredClarification && proposals.status === "pending" && proposals.followUpQuestions.length > 0 && (
 				<div className="architect-clarification">
 					<strong>需要澄清</strong>
 					<ul>
@@ -475,54 +478,63 @@ export function RoleProposalCard({
 				</details>
 			)}
 
-			{proposals.status === "pending" && totalSelected > 0 && (canApplyBlueprints || canApplyAdjustments) && (
-				<div className="role-proposal-footer">
-					{canJoinMatter && selectedBlueprintIndices.length > 0 && (
-						<label className="role-proposal-join-select">
-							<span>新角色在本事项中</span>
-							<select
-								className="wechat-row-select"
-								value={joinMode}
-								onChange={(e) => setJoinMode(e.target.value as MatterRoleJoinMode)}
-							>
-								<option value="consult">设为内部协同</option>
-								<option value="observer">设为定向旁听</option>
-								<option value="lead">首个新角色接任主责</option>
-								<option value="none">仅存入团队库</option>
-							</select>
-						</label>
-					)}
-					<div className="role-proposal-actions">
-						<button
-							type="button"
-							className="btn-pill-dark btn-xs"
-							disabled={busy || sendingReply || isTurnRunning}
-							onClick={() => void handleConfirmApply()}
-						>
-							{busy
-								? "应用中…"
-								: selectedBlueprintIndices.length > 0 && effectiveJoinMode !== "none"
-									? "确认创建并加入本事项"
-									: selectedBlueprintIndices.length > 0
-										? "确认创建角色"
-										: "确认调整角色"}
-						</button>
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							disabled={busy}
-							onClick={() => void handleDismiss()}
-						>
-							暂不处理
-						</button>
-					</div>
-				</div>
+			{structuredClarification && proposals.status === "pending" && (
+				<p className="human-decision-note">澄清完成后，请在架构师更新的提案中确认创建。</p>
 			)}
+			{!structuredClarification &&
+				proposals.status === "pending" &&
+				totalSelected > 0 &&
+				(canApplyBlueprints || canApplyAdjustments) && (
+					<div className="role-proposal-footer">
+						{canJoinMatter && selectedBlueprintIndices.length > 0 && (
+							<label className="role-proposal-join-select">
+								<span>新角色在本事项中</span>
+								<select
+									className="wechat-row-select"
+									value={joinMode}
+									onChange={(e) => setJoinMode(e.target.value as MatterRoleJoinMode)}
+								>
+									<option value="consult">设为内部协同</option>
+									<option value="observer">设为定向旁听</option>
+									<option value="lead">首个新角色接任主责</option>
+									<option value="none">仅存入团队库</option>
+								</select>
+							</label>
+						)}
+						<div className="role-proposal-actions">
+							<button
+								type="button"
+								className="btn-pill-dark btn-xs"
+								disabled={busy || sendingReply || isTurnRunning}
+								onClick={() => void handleConfirmApply()}
+							>
+								{busy
+									? "应用中…"
+									: selectedBlueprintIndices.length > 0 && effectiveJoinMode !== "none"
+										? "确认创建并加入本事项"
+										: selectedBlueprintIndices.length > 0
+											? "确认创建角色"
+											: "确认调整角色"}
+							</button>
+							<button
+								type="button"
+								className="btn-pill-outline btn-xs"
+								disabled={busy}
+								onClick={() => void handleDismiss()}
+							>
+								暂不处理
+							</button>
+						</div>
+					</div>
+				)}
 
 			{proposals.status === "applied" && (
 				<div className="role-proposal-status-bar applied">
 					<span>
 						✓ 已生效
+						{proposals.confirmation
+							? ` · ${proposals.confirmation.name} 于 ${formatClockTime(proposals.confirmation.at)} 确认`
+							: ""}
 						{proposals.appliedMemberIds?.length ? ` · 新建 ${proposals.appliedMemberIds.length} 位角色` : ""}
 						{proposals.appliedAdjustmentIds?.length
 							? ` · 调整 ${proposals.appliedAdjustmentIds.length} 位成员`

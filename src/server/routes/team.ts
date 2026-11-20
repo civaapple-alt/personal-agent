@@ -1,3 +1,4 @@
+import { readHumanDecision } from "../../orchestrator/human-decision.ts";
 import { validateSkillReference } from "../../roles/capabilities.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { buildScopedRoleId, deleteRolePackage, saveRolePackage } from "../../roles/role-package-store.ts";
@@ -105,10 +106,15 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 				(message) =>
 					message.senderType === "member" &&
 					message.senderId === targetMsg.senderId &&
-					hasRoleProposalActions(message.metadata?.roleProposals),
+					(hasRoleProposalActions(message.metadata?.roleProposals) ||
+						readHumanDecision(message.metadata)?.kind === "role_clarification"),
 			);
 		if (latest && latest.id !== messageId) {
 			sendError(res, 409, "此提案已有更新，请在最新一版中确认角色");
+			return true;
+		}
+		if (readHumanDecision(targetMsg.metadata)?.kind === "role_clarification") {
+			sendError(res, 409, "请先完成角色澄清，再确认架构师更新后的提案");
 			return true;
 		}
 		const matterJoinMode =
@@ -184,6 +190,26 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 			}
 		}
 
+		const confirmation = {
+			userId: actor.user?.id ?? null,
+			name: actor.user?.displayName ?? actor.collaborator.name,
+			at: new Date().toISOString(),
+			proposalMessageId: messageId,
+			matterJoinMode,
+			roles: createdMembers.map((member, index) => ({
+				id: member.id,
+				name: member.displayName,
+				scope: member.roleScope,
+				orgId: member.ownerOrgId ?? null,
+				tools: memberPlans[index]?.template.tools ?? [],
+				skills: memberPlans[index]?.newSkills.map(({ name, storageScope }) => ({ name, storageScope })) ?? [],
+			})),
+			adjustments: updatedMembers.map((member, index) => ({
+				id: member.id,
+				name: member.displayName,
+				tools: adjustmentPlans[index]?.tools ?? [],
+			})),
+		};
 		const updatedMsg = store.updateMessageMetadata(messageId, {
 			...(targetMsg.metadata ?? {}),
 			roleProposals: {
@@ -192,7 +218,15 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 				appliedMemberIds: newIds,
 				appliedAdjustmentIds: updatedMembers.map((m) => m.id),
 				appliedMatterJoinMode: matterJoinMode,
+				confirmation,
 			},
+		});
+		auditActorAction(ctx, req, actor, {
+			action: "matter.role_proposals.confirm",
+			targetType: "message",
+			targetId: messageId,
+			orgId: matter.orgId,
+			detail: confirmation,
 		});
 		for (const cm of createdMembers) {
 			broadcastTeamUpdateForMember(broadcast, { memberIds: [cm.id] }, cm);

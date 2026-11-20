@@ -39,6 +39,7 @@
   - 注入的经验记入 `memory_applications`；成果草稿、经验提案（工作区属组织时 `company_private` 自动归入对应 `orgId`）与应用 ID 先暂存，主执行成功后再事务提交，失败或取消分支不保留候选。
 - `distillExperiences`：使用无状态、无工具/扩展/Skills 的只读 reflection pass，按当前工作区筛选用户纠偏、内部委托、异常、中断快照与反馈（工作区属组织时 `company_private` 归入 `orgId`）。
   - 指定成果时证据截止其发布回复；候选仅可归属实际参与成员或明确指定成员，写入前再次检查工作区与取消状态，且仅允许同成员、同 scope、同 org、同 workspace 的无环替代关系。
+- 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../docs/reference/runtime-collaboration.md#等待人类决定)。
 - `delegate`：由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者。
   - 桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
   - [独立验收](independent-verification.ts) 解析具体提交、文件或文档草稿，绑定版本和来源委托。验收专用会话限制工具范围。送审文档在 [单轮派发](matter-dispatch.ts) 中按最终摘要重验归档条件。

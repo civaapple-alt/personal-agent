@@ -9,7 +9,7 @@
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
 | [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托、成果和经验提案工具并核查动态装配。按 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先和宿主 `contextFiles`，通过结构化提示词选项追加岗位上下文，保留后续扩展的贡献。通过 `node:http` 调用桥接。内部模式关闭发布，旁听模式关闭经验提案 |
 | [pstack-extension.ts](pstack-extension.ts) | 显式配置时注册只读 `load_pstack_skill`，从批准的方法包读取实际正文和哈希，提供路径指引与读取清单；不注册业务文件、终端或团队权限 |
-| [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
+| [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `request_clarification` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 
 `agent_settled` 表示执行收尾，不能据此自动生成交付；`disposition: handled` 不等待 settled。
 RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误不能伪装为空正文成功。

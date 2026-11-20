@@ -345,7 +345,7 @@ export async function buildRuntimeOverview(options: {
 		fileStatus: teamFileStatus,
 		scopeSummary: "常规岗位必装；按主责/内部/旁听收窄工具",
 		description: "经 loopback bridge 回调编排核，提供委托、成果发布与经验提案。",
-		registeredTools: ["delegate_to_member", "publish_deliverable", "propose_experience"],
+		registeredTools: ["delegate_to_member", "request_clarification", "publish_deliverable", "propose_experience"],
 		hooks: ["session_start", "before_agent_start", "extension_ui"],
 		declaredByRoles: [],
 		mcpServers: [],

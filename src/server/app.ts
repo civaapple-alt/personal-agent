@@ -15,6 +15,7 @@ import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth
 import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
 import { handleDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
+import { handleHumanDecisionRoutes } from "./routes/human-decisions.ts";
 import { handleMatterMessageRoutes } from "./routes/matter-messages.ts";
 import { handleMatterSettingsRoutes } from "./routes/matter-settings.ts";
 import { handleMatterRoutes } from "./routes/matters.ts";
@@ -137,6 +138,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		handleMatterRoutes,
 		handleMatterSettingsRoutes,
 		handleMatterMessageRoutes,
+		handleHumanDecisionRoutes,
 		handleDeliverableOrgPreviewRoutes,
 		handleRoleDesignRoutes,
 		handleTeamRoutes,

@@ -226,9 +226,17 @@ export async function delegateBetweenMembers(
 					run.draftVerifications.set(subject.target.reference, { ...draftReview, verdict: outcome.verdict });
 				}
 			}
+			const clarification = result.clarification && {
+				...result.clarification,
+				source: result.clarification.source ?? {
+					memberId: toMember.id,
+					assignmentNumber: delegationNumber,
+					messageId: requestMessage.id,
+				},
+			};
 			const answerText = outcome
 				? [outcome.summary, ...outcome.evidence.map((item) => `- ${item}`)].join("\n")
-				: result.assistantText.trim();
+				: result.assistantText.trim() || clarification?.question || "";
 			if (!answerText) throw new Error("Colleague returned no answer");
 			mergeEffects(effectsTarget, effects);
 			const responseMessage = deps.store.appendMessage({
@@ -240,12 +248,20 @@ export async function delegateBetweenMembers(
 				metadata: {
 					...scope,
 					replyToMemberId: fromMember.id,
+					...(clarification ? { clarification } : {}),
 					requestMessageId: requestMessage.id,
 					...(outcome ? { verification: outcome } : {}),
 				},
 			});
+			if (clarification) {
+				run.completedClarifications ??= new Map();
+				run.completedClarifications.set(delegationNumber, {
+					toDelegatorId: fromMember.id,
+					source: clarification.source,
+				});
+			}
 			run.activeDelegations.delete(delegationKey);
-			pushRunLog(run, toMember.displayName, "已完成委托并返回结论");
+			pushRunLog(run, toMember.displayName, clarification ? "已将待澄清问题回传委托者" : "已完成委托并返回结论");
 			const remaining = [...run.activeDelegations.values()];
 			onProgress?.({
 				stage: remaining.length > 0 ? "tool" : "thinking",
@@ -265,6 +281,7 @@ export async function delegateBetweenMembers(
 				requestMessage,
 				responseMessage,
 				answerText,
+				clarification,
 				verification: outcome,
 			};
 		} catch (error) {

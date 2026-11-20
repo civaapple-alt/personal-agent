@@ -1,4 +1,9 @@
 import { type RefObject, type UIEvent, useState } from "react";
+import {
+	isCurrentHumanDecision,
+	listCompletedHumanDecisions,
+	readHumanDecision,
+} from "../../../../src/orchestrator/human-decision.ts";
 import { hasRoleProposalActions } from "../../../../src/roles/role-proposal-state.ts";
 import {
 	type AccountUserDto,
@@ -9,6 +14,7 @@ import {
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type OrganizationDto,
+	type OrganizationMemberDto,
 	type PendingDialogDto,
 	type RoleTemplateDto,
 	respondToDialog,
@@ -31,6 +37,7 @@ import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
+import { HumanDecisionCard } from "./HumanDecisionCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
 import type { DelegationScope, DelegationView } from "./MatterDelegationPanel.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
@@ -57,6 +64,8 @@ interface MessageFeedProps {
 	progressStartedAt: number | null;
 	streamingDelta: string;
 	isOwner: boolean;
+	canManageMatter: boolean;
+	decisionAssignees: OrganizationMemberDto[];
 	isSuperAdmin?: boolean;
 	accountUser?: AccountUserDto | null;
 	currentUser?: CollaboratorDto | null;
@@ -112,6 +121,8 @@ export function MessageFeed({
 	progressStartedAt,
 	streamingDelta,
 	isOwner,
+	canManageMatter,
+	decisionAssignees,
 	isSuperAdmin = false,
 	accountUser = null,
 	currentUser = null,
@@ -144,10 +155,18 @@ export function MessageFeed({
 	);
 	const latestRolePlanIndices = new Map<string, number>();
 	matterDetail?.userMessages.forEach((message, index) => {
-		if (message.senderType === "member" && hasRoleProposalActions(message.metadata?.roleProposals)) {
+		if (
+			message.senderType === "member" &&
+			(hasRoleProposalActions(message.metadata?.roleProposals) ||
+				readHumanDecision(message.metadata)?.kind === "role_clarification")
+		) {
 			latestRolePlanIndices.set(message.senderId, index);
 		}
 	});
+	const completedDecisions = listCompletedHumanDecisions(matterDetail?.userMessages ?? []);
+	const matterOrgRole = organizations?.find(({ id }) => id === matterDetail?.matter.orgId)?.orgRole;
+	const canParticipateInDecisions = isSuperAdmin || matterOrgRole !== "org_viewer";
+	const canOperateRoleProposals = accountUser ? accountUser.status === "active" && canParticipateInDecisions : isOwner;
 	const activeSpeakerId =
 		activeMatterProgress?.speakerMemberId ?? matterDetail?.matter.leadMemberId ?? headerContact?.id;
 	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
@@ -257,6 +276,7 @@ export function MessageFeed({
 							/>
 						)}
 						{matterDetail?.userMessages.map((msg, messageIndex) => {
+							const decision = readHumanDecision(msg.metadata);
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
@@ -301,7 +321,7 @@ export function MessageFeed({
 								<div
 									key={msg.id}
 									id={`matter-message-${msg.id}`}
-									tabIndex={isUser ? -1 : undefined}
+									tabIndex={isUser || decision || roleProposals ? -1 : undefined}
 									className={`stream-msg ${isUser ? "from-user" : "from-member"}`}
 								>
 									{isUser ? (
@@ -309,7 +329,13 @@ export function MessageFeed({
 											<span
 												className={`msg-mode-badge ${isDiscussion ? "discussion" : isAiRequest ? "ai-request" : "dispatch"}`}
 											>
-												{isDiscussion ? "团队讨论" : isAiRequest ? "提请 AI" : "AI 安排"}
+												{isDiscussion
+													? "团队讨论"
+													: isAiRequest
+														? "提请 AI"
+														: msg.metadata?.humanDecisionSourceId
+															? "人类答复"
+															: "AI 安排"}
 											</span>
 											<span>
 												{authorName ?? (isDiscussion ? "成员" : "团队所有者")}
@@ -473,14 +499,42 @@ export function MessageFeed({
 											onOpen={() => onOpenDelegations(`turn:${msg.id}`)}
 										/>
 									)}
+									{decision && (
+										<HumanDecisionCard
+											matter={matterDetail.matter}
+											messageId={msg.id}
+											decision={decision}
+											current={isCurrentHumanDecision(
+												msg,
+												decision,
+												matterDetail.matter,
+												matterDetail.userMessages.slice(messageIndex + 1),
+											)}
+											completed={completedDecisions.has(msg.id)}
+											isRunning={isTurnRunning}
+											canDispatch={isOwner}
+											canManage={canManageMatter}
+											canParticipate={canParticipateInDecisions}
+											accountUser={accountUser}
+											currentUser={currentUser}
+											candidates={decisionAssignees}
+											requestedBy={memberName(msg.senderId)}
+											sourceName={
+												decision.source
+													? `${memberName(decision.source.memberId)}（委托 #${decision.source.assignmentNumber}）`
+													: undefined
+											}
+										/>
+									)}
 									{roleProposals && matterDetail && onApplyRoleProposals && onDismissRoleProposals && (
 										<RoleProposalCard
 											matterId={matterDetail.matter.id}
 											messageId={msg.id}
 											proposals={roleProposals}
+											structuredClarification={decision?.kind === "role_clarification"}
 											current={messageIndex >= (latestRolePlanIndices.get(msg.senderId) ?? -1)}
 											isArchitectMatter={isArchitectMatter}
-											isOwner={isOwner}
+											isOwner={canOperateRoleProposals}
 											isSuperAdmin={isSuperAdmin}
 											accountUser={accountUser}
 											currentUser={currentUser}
