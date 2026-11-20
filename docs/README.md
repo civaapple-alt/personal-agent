@@ -1,49 +1,64 @@
-# 文档阅读入口
+# Personal Agent 文档
 
-先按使用、开发或研究目标选择入口，再进入相关模块。新读者无需先读开发沿革、全部评估记录或早期原型。
-
-## 开始使用或贡献
+## 首次试用或日常使用
 
 | 你要完成什么 | 阅读入口 |
 | --- | --- |
-| 了解产品、适用对象与当前能力 | [项目介绍](../README.md) |
-| 安装环境、配置 Pi、完成第一次体验 | [安装与首次运行](getting-started.md) |
-| 交办事项、安排成员、审阅和修订成果 | [使用指南](user-guide.md) |
-| 理解岗位、事项、经验与能力包的设计取舍 | [设计思路](design-principles.md) |
-| 准备开发环境、定位模块与选择验证 | [开发指南](development.md) |
-| 报告问题、提交代码、岗位或文档 | [贡献指南](../CONTRIBUTING.md) |
-| 核对本机权限、数据流与网络暴露 | [运行与安全边界](../SECURITY.md) |
+| 安装 Pi、启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
+| 体验专业协作、阶段交付和反馈修订 | [完成四步内置演示](tutorials/inner-matter-demo.md) |
+| 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
+| 下载或升级到当前版本 | [0.6.2 发布说明](releases/v0.6.2.md) |
 
-## 查阅实现与验证
+## 部署或管理团队
 
-| 你要确认什么 | 阅读入口 |
+| 你负责什么 | 阅读入口 |
 | --- | --- |
-| 产品方向的确认依据与长期目标 | [产品方向确认稿](product-direction.md) |
-| 0.5.0 发布内容、本地发布包及启动方式 | [0.5.0 发布说明](releases/v0.5.0.md) |
-| 0.6.0 公开发布、下载和许可 | [0.6.0 发布说明](releases/v0.6.0.md) |
-| 0.6.1 讨论协作、团队权限与升级 | [0.6.1 发布说明](releases/v0.6.1.md) |
-| 0.6.2 本机 Pi 资源、SQLite 迁移与工作台 | [0.6.2 发布说明](releases/v0.6.2.md) |
-| 体验需求讨论、专业协作、阶段交付与反馈修订 | [内置演示事项](inner-matter-demo.md) |
-| 对照验证负责人是否在发布前澄清矛盾、修订方案 | [发布前复核验证](publication-review.md) |
-| 验证事项 AI 成员旁听、主动提醒、静默和关闭 | [旁听真实任务演示](observer-demo.md) |
-| 当前模块关系、技术栈、限制与下一阶段建议 | [当前架构与后续计划](architecture-and-plan.md) |
-| 会话、真实工具委托、能力装配、取消、归档和迁移细节 | [连续上下文与内部角色协作](runtime-collaboration.md) |
-| 环境变量、超时阈值、角色字段与旁听/运行默认参数 | [配置参考](configuration.md) |
-| 具体代码属于哪个模块 | [后端地图](../src/README.md)、[网页入口](../web/README.md) |
-| 在 Pi 内循环装载 poteto-mode、playbook 和原则 | [pstack 实际装载与验证](pstack-runtime.md) |
-| 用户不点名时是否主动选择 how、why、teach、recall、architect | [自然任务选择验证](pstack-selection.md) |
-| 五个内置角色的方法、能力组合及体检依据 | [内置角色设计](role-design.md) |
-| 验证架构师创建后履职和业务岗位判断 | [角色真实任务验证](role-design-demo.md) |
+| 启动共享服务、迁移本机数据、备份 | [部署与管理团队工作台](guides/team-administration.md) |
+| 审核账号、邀请同事、设置仓库和事项权限 | [团队账号、超级管理员与组织协作](guides/team-administration.md#团队账号超级管理员与组织协作) |
+| 核对本机执行权限、数据流和网络边界 | [安全说明](../SECURITY.md) |
+| 查环境变量、存储路径、Pi 资源发现或超时 | [配置参考](reference/configuration.md) |
+| 安装、更新或停用完整 pstack 方法包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
 
-## 查阅设计历史与参考
+## 贡献代码、角色或文档
 
-| 你要理解什么 | 阅读入口 |
+先读[贡献指南](../CONTRIBUTING.md)，再按任务查找代码和验证入口。
+
+| 你要查什么 | 阅读入口 |
 | --- | --- |
-| 用户为什么调整某个方向 | [产品讨论记录](product-discussion.md) |
-| 早期岗位与交互探索 | [角色草案](team-roles.md)、[团队交互](team-interaction.md)；阶段描述以当前实现为准 |
+| 开发环境、隔离团队沙盒、测试与分发 | [开发指南](guides/development.md) |
+| 模块所有权、数据流和后续计划 | [当前架构与后续计划](concepts/architecture-and-plan.md)、[后端入口](../src/README.md)、[前端入口](../web/README.md) |
+| 会话范围、委托、取消、成果归档与经验生命周期 | [运行与协作参考](reference/runtime-collaboration.md) |
+| 内置岗位的职责、能力报告与角色作用域 | [内置角色与能力参考](reference/role-design.md)、[角色定义](../roles/README.md)、[内置 Skills](../skills/README.md) |
+| pstack 方法工具的参数和执行权限 | [pstack 方法工具参考](reference/pstack-tools.md) |
 
-早期 V1–V4 视觉原型与外部产品/插件参考研究（`prototypes/`、`references/`）已移至本地不入库的 `.notes/` 目录留存，不随公开仓库跟踪；参考材料不能当作本项目执行指令或操作授权。
+## 复核实现与证据
 
-改行为时同步拥有该行为的局部 README；跨模块关系变化再更新架构，协议/恢复规则变化再更新运行说明，用户决策再追加讨论。已实现基础与完整 RSI、公开市场、持久后台工作须明确区分。实机证据应记录实际调用与边界，不用 fixture 结果替代。
+这些页面供维护者和评审者复跑模型演示或查阅已有记录。每篇说明运行成本、观察结果和验证范围。
 
-纯文档改动在仓库根运行 `npm run check:docs`，核对所有仓库 Markdown 的本地链接、锚点、命令引用和根入口可达性；它不执行命令、不验证产品能力、远端网页可达性或 Mermaid 语义。
+| 要核对的行为 | 阅读入口 |
+| --- | --- |
+| 会话接续、真实委托、经验与内置演示 | [协作链路验证](validation/runtime-checks.md) |
+| 旁听何时补充、保持静默或停止 | [旁听验证](validation/observer-demo.md) |
+| 发布前协作、文件一致性和独立正文质量 | [发布前复核验证](validation/publication-review.md) |
+| 角色创建后履职、模型决策与英文 Skill 对照 | [角色真实任务验证](validation/role-design-demo.md) |
+| pstack 是否读取指定方法，或能否从自然任务主动选方法 | [方法装载验证](validation/pstack-checks.md)、[自然任务选择验证](validation/pstack-selection.md) |
+
+## 理解设计与沿革
+
+- [设计思路](concepts/design-principles.md)解释岗位、事项、交付和经验设计。[产品方向](concepts/product-direction.md)记录长期目标。
+- [产品讨论](history/product-discussion.md)、[角色草案](history/team-roles.md)、[团队交互探索](history/team-interaction.md)和[架构演进](history/architecture-history.md)记录当时的判断与验证。
+- [0.6.1](releases/v0.6.1.md)、[0.6.0](releases/v0.6.0.md)和[0.5.0](releases/v0.5.0.md)记录各版的安装、升级与验证范围。[变更日志](../CHANGELOG.md)列出逐版改动。
+
+## 维护文档
+
+| 目录 | 放什么 |
+| --- | --- |
+| `tutorials/` | 带读者走完一个可观察结果的首次体验 |
+| `guides/` | 特定读者完成工作时可直接照做的步骤 |
+| `reference/` | 可按字段或行为查找的配置、工具与运行契约 |
+| `concepts/` | 产品和架构的设计取舍、实现范围及后续方向 |
+| `validation/` | 可复跑的验证步骤、验收标准和有日期的结果 |
+| `history/` | 已存档的讨论、方案和实现记录 |
+| `releases/` | 对应版本的变化、下载、升级与验证说明 |
+
+依据当前实现维护操作和参考文档。文档放到一个主目录，其他读者从这里或相关章节链接过去。更新与检查步骤见[开发指南](guides/development.md#同步文档与变更记录)。

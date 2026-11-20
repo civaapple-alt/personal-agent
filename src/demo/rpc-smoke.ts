@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 		});
 
 		const result = await worker.runPromptAndWait(
-			"Read docs/architecture-and-plan.md and reply in 2 short Chinese sentences confirming what the Phase 1 goal is.",
+			"Read docs/concepts/architecture-and-plan.md and reply in two short Chinese sentences explaining what the workbench and Pi Worker each do.",
 			{
 				timeoutMs: 90_000,
 				onTextDelta: (delta) => process.stdout.write(delta),

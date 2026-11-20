@@ -23,7 +23,7 @@
 - 已有事项的消息沿用现有工作区。先通过事项设置切换工作区，再发送消息。请求指定的负责人、成员与旁听角色按事项的有效组织校验。
 修改接口时同时核对[网页 API 模块](../../web/src/README.md#前端状态与组件)的 DTO 和调用方的刷新逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
-[inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/inner-matter-demo.md)。
+[inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/tutorials/inner-matter-demo.md)。
 
 - 并发、工作区切换与图片上传：
   - 同事项运行中再次派发、切换工作区或负责人返回 409。团队讨论消息仍保存，待本轮结束后可再次邀请 AI。调整全局旁听开关（`observersEnabled`）、
@@ -46,8 +46,8 @@
   - `POST /api/members/architect/chat`（对已激活非只读成员开放，无工具隔离、支持中断与按作用域筛选的团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图（含 `roleScope` 与可选 `newSkills` 草案，确认前不写盘）、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 同时支持即时 `mode: "rules"` 离线草案与显式 `mode: "model"`（`responseCancellation` + Pi 角色设计决策模型生成名称/英文头衔/已安装 Skills/可选 `newSkills` 草案/完整验证计划）；`POST /api/members`、`POST /api/members/batch` 与 `POST /api/members/import` 支持显式传入 `roleScope`（`global` 限超管、`org` 限对应 `org_owner`/`org_admin`/`super_admin`、`personal` 对活跃非 `org_viewer` 用户在 `maxPersonalRoles` 配额内开放）、`ownerOrgId`、已确认落盘的 `newSkills`（写入角色包 `<roleDir>/skills/<name>/SKILL.md` 或 `.data/skills/{global,orgs,users}/`）、`tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 同步删除对应角色包目录与仅本人私有库文件；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 角色可见性与私有作用域隔离由 [acl.ts](acl.ts) 的 `canActorCreateRoleInScope`、`canActorUseMember` 与 `canActorManageMember` 强制校验：`personal` 角色、模板、`GET /api/runtime` 声明的 MCP 依赖、工具委派、`POST /api/memories` 与 `team_updated` SSE 仅对创建者自身可见与可用，其余用户及超管均不可读取或触发。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
-  - 角色设计、创建和提案应用保留 `skills`、`mcpDependencies` 及正文中的沟通/验证约定；设计返回 `capabilityReport`，bootstrap 模板附带 MCP 声明。其状态不代替运行时能力核查，见[角色设计](../../docs/role-design.md)。
-  - 角色写入在当前服务内依次处理；批量提案先校验全部新增与调整，只有待应用提案可生效。新建 ID 冲突返回 409，非法文件名或思考档位返回 400；导入可更新业务模板，内置架构师不可覆盖。文件采用临时文件替换，删除标记保存在数据库，防止启动复活。具体边界见[角色管理一致性](../../docs/runtime-collaboration.md#角色管理一致性)。
+  - 角色设计、创建和提案应用保留 `skills`、`mcpDependencies` 及正文中的沟通/验证约定；设计返回 `capabilityReport`，bootstrap 模板附带 MCP 声明。其状态不代替运行时能力核查，见[角色设计](../../docs/reference/role-design.md)。
+  - 角色写入在当前服务内依次处理；批量提案先校验全部新增与调整，只有待应用提案可生效。新建 ID 冲突返回 409，非法文件名或思考档位返回 400；导入可更新业务模板，内置架构师不可覆盖。文件采用临时文件替换，删除标记保存在数据库，防止启动复活。具体边界见[角色管理一致性](../../docs/reference/runtime-collaboration.md#角色管理一致性)。
 - 多用户团队账号、超级管理员与权限作用域（`PA_REQUIRE_AUTH=1` / `#/admin`）：
   - `GET /api/auth/session`、`GET /api/auth/invite-preview`（未登录安全预览 `orginv_` 邀请组织名/角色及当前用户是否已成员）、`POST /api/auth/setup-admin`（仅零已设密超管时开放一次性初始化超级管理员，支持原地升级 `usr_local_owner`）、`POST /api/auth/register`（支持 `open_auto` / `open_review` / `invite_only`，默认 `open_review`）、`POST /api/auth/login`（邮箱密码 + 可选组织邀请码，或内网 `inv_` 口令；受滑动窗口限流 `429` 保护）、`POST /api/auth/logout`（服务端即时吊销）与 `POST /api/auth/change-password` 在 [routes/admin-auth.ts](routes/admin-auth.ts) 维护；`consumeOrgInviteByToken` 对已是成员的用户幂等返回且不扣减使用次数。
   - `GET /api/admin/overview`、`PATCH /api/admin/settings`、`PATCH /api/admin/users/:id`、`GET /api/admin/audit`、`POST /api/admin/matters/:id/abort` 及 `POST /api/admin/runtime/pstack/{enable,disable}`（超级管理员在页面一键只读克隆 `backnotprop/pstack` 至 `<dataDir>/extensions/repo/<repoName>`、校验后持久化 `platform_settings.pstackDir` 并动态注入 `orchestrator.setPstackDir`）仅供 `super_admin`（或未启用强制认证时的本机回环所有者）访问；变更写入 `audit_logs`，禁用账号立即吊销全量会话并断开 SSE。
@@ -83,4 +83,4 @@
 从仓库根先运行 `npm run build:web`，再运行 `node --test test/phase3-server.test.ts`。
 验证完整启动入口则先 `npm run build`，再 `npm run check:startup`（使用临时数据库且不发模型请求）。不要为验证重启用户现有服务或把模型任务送进业务工作区。
 
-更多执行约束在 [orchestrator](../orchestrator/README.md)，整体服务关系见[当前架构](../../docs/architecture-and-plan.md)。
+更多执行约束在 [orchestrator](../orchestrator/README.md)，整体服务关系见[当前架构](../../docs/concepts/architecture-and-plan.md)。

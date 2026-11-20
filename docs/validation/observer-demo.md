@@ -53,13 +53,13 @@ npm run demo:observer -- --summarize <证据目录>
 
 ## 代码入口与验证边界
 
-- [observer-case.ts](../src/demo/observer-case.ts)：虚构输入、五个阶段及独立审阅标准。
-- [observer-runner.ts](../src/demo/observer-runner.ts)：隔离资源、真实执行与证据记录；不是生产旁听实现。
-- [observer-evidence.ts](../src/demo/observer-evidence.ts)：运行/行为检查与离线审阅汇总。
-- [observer-smoke.ts](../src/demo/observer-smoke.ts)：CLI 入口。
-- [observer-demo.test.ts](../test/observer-demo.test.ts)：替换模型但保留编排、桥接、SQLite 和会话文件，检查接续、权限、静默与失败区分。
+- [observer-case.ts](../../src/demo/observer-case.ts)：虚构输入、五个阶段及独立审阅标准。
+- [observer-runner.ts](../../src/demo/observer-runner.ts)：隔离资源、真实执行与证据记录；不是生产旁听实现。
+- [observer-evidence.ts](../../src/demo/observer-evidence.ts)：运行/行为检查与离线审阅汇总。
+- [observer-smoke.ts](../../src/demo/observer-smoke.ts)：CLI 入口。
+- [observer-demo.test.ts](../../test/observer-demo.test.ts)：替换模型但保留编排、桥接、SQLite 和会话文件，检查接续、权限、静默与失败区分。
 
-生产旁听路径在 [observer-runner.ts](../src/orchestrator/observer-runner.ts)。本演示不覆盖浏览器气泡渲染、运行中变更旁听席的界面操作或长期旁听稳定性；这些需要各自的验证证据。
+生产旁听路径在 [observer-runner.ts](../../src/orchestrator/observer-runner.ts)。本演示不覆盖浏览器气泡渲染、运行中变更旁听席的界面操作或长期旁听稳定性；这些需要各自的验证证据。
 
 ## 实机验证跟进
 

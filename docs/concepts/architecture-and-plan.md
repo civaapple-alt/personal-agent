@@ -1,34 +1,10 @@
 # Personal Agent 当前架构与后续计划
 
-状态：
-
-- 2026-11-18 更新内置角色与 Skill 的英文指令，并将角色和 Skill 划分为平台通用、组织共享和个人私有范围。新增按个人配额创建角色和确认后写入 Skill 草案。团队用户空选组织创建事项时，服务端从其已加入的组织中确定归属。扩展设置支持由管理员克隆、更新和启用 pstack。见[角色设计](role-design.md)、[使用指南](user-guide.md#团队账号超级管理员与组织协作)和[pstack 运行说明](pstack-runtime.md)。
-
-- 2026-11-18 新增多用户团队协作与安全边界：支持 `PA_REQUIRE_AUTH=1` 强制认证模式与超级管理员控制台（`#/admin`，含注册策略、用户审核/配额、`workspacesRoot` 与本地路径白名单、运行任务紧急中止及 `audit_logs`）、开放邮箱+密码注册、`organization_members` / `organization_invites` / 分组织 `organization_ai_roles`、按 `<workspacesRoot>/<orgSlug>/` 隔离的 Git 克隆与项目/事项可见性 ACL（组织 `org_member` 可在授权范围直接派发 AI），配套 [test/multi-tenant-auth-admin.test.ts](../test/multi-tenant-auth-admin.test.ts) 与隔离浏览器走查通过；底层 Pi 进程仍非容器沙箱，运行和部署约束见[安全说明](../SECURITY.md)。
-
-- 2026-11-18 跟进 `a1706c5..e4ceddf` 的 3 个提交，保留资料移至本地 `.notes/` 的整理与新版轻量界面。补齐成员菜单键盘/焦点、空经验时的职责入口、协同成员的组织只读入口及全页面操作提示；启动检查固定回环地址并在 macOS 同时实际验证 `SIGTERM` 和 IPC 退出。修正 Windows 打包的 npm 调用，新增最低版本/Node 26 CI 矩阵及 Windows 预览验证；本轮仅本机 macOS 执行结果，不宣称 Linux/Windows CI 已通过。
-
-- `v0.6.0` 是首个 MIT 公开发布版本。版本范围、下载和公开历史见 [0.6.0 发布说明](releases/v0.6.0.md)。
-- 2026-11-17 补充不点名方法的 pstack 自然任务基线：五项主任务中四项读取模式，目标 `how`、`why`、`teach`、`recall`、`architect` 均未观察到；另有三项原则被主动选择。执行和会话接续通过，回答审阅四项通过、一项技术设计因五分钟窗口与永久唯一约束冲突失败。不能据方法装载宣称质量提升，也尚未证明专门 Skills 的主动选择稳定，见[自然任务验证](pstack-selection.md)。
-- 2026-11-17 新增显式配置的 pstack 内循环接入：复用跨宿主镜像原文，让普通岗位执行能按需读取 `poteto-mode`、playbook 与原则，保留版本、路径及哈希证据。任务委托和发布权限仍由 Personal Agent 控制，不新增任意子代理或后台任务。启用方式、首轮失败及后续验证见[pstack 运行说明](pstack-runtime.md)。
-- 2026-11-17 跟进 `5001069..fca5970` 的 4 个提交：事项创建页已区分当前参与设置与可选推荐，并新增显式调用的 Pi 阵型决策、模型角色设计和 `demo:decision`。本轮修正模型草案丢失用户验证/依赖要求，以及将读取权限误当读取证据的问题；135 项离线测试与 4 场景真实决策验证通过，不据此宣称判断质量提升。具体契约见[编排说明](../src/orchestrator/README.md)，结果范围见[决策验证记录](role-design.md#2026-11-17模型决策接口跟进)。
-- 0.5.0 是此前的本地版本，原标签和发布包保留在本地。见 [0.5.0 发布说明](releases/v0.5.0.md)。
-- 内置四个业务岗位与角色架构师定义更新为 `1.1.0`，补充岗位方法、沟通、职责边界与验证；蓝图可携带 Skills/依赖及验证计划，体检可追溯到实际来源。实现与验证范围见[内置角色设计](role-design.md)，不据此认定能力提升。
-- 新增 `demo:architect` 与 `demo:roles` 并完成同题前后真实执行：已修复结构化验证计划丢失，新角色实际核查通过定向标准；产品、市场与研发仍有内容判断问题，不能据模板丰富程度宣称能力改善。初轮失败、复跑与证据范围见[角色验证](role-design-demo.md)。
-- 2026-11-17 重新对照 dr eggbot 公开配置，随后补齐能力组合、创建后任务验证及有来源的团队体检；外部集成效果、体检因果解释与岗位持续改善仍未验证（对照笔记已移至 `.notes/references/`）。没有导入参考 Bot 或新增自动任务。
-- 2026-11-17 跟进 `72f27bc..2a64dcc` 的 15 个提交，新增内容集中于立项适配、角色架构师对话与提案、团队体检及管理页弹窗。本轮修复角色路径与覆盖、提案校验和重复应用、删除后启动复活等问题，验证与限制见[角色管理一致性](runtime-collaboration.md#角色管理一致性)。
-- 新增 `demo:observer` 旁听真实任务演示，覆盖点名后加入、前情接续、主动风险提醒、意见回到负责人、独立事项静默和关闭；使用临时资源，保留原始旁听回复与阶段成果。验证进展见[旁听演示](observer-demo.md)。
-- `demo:review` 已拆分发布、按场景协作和独立正文审阅三层结果，支持自主、明确跨岗位与轻量文案场景，以及独立重复轮次和离线汇总。待审阅不会计为质量通过；这是评估工具改进，未给生产岗位增加强制会签，见[评估说明](publication-review.md)。
-- 文档文件发布新增 `sourcePath`，宿主读取最终正文并在提交前校验快照，修复保存文件与归档正文分别生成的问题；同轮同标题文档重新登记替换草稿，历史版本保留。验证范围及旧失败记录见[文件一致性跟进](publication-review.md#文件正文不一致的复跑与修复)。
-- 2026-11-16 新增主负责人发布前复核方法及真实模型对照入口；首轮观察到发布前专业咨询，但最终稿仍有状态与迁移矛盾，尚未证明交付质量提升，见[复核验证结果](publication-review.md#2026-11-16-首轮结果咨询发生质量尚未达标)。
-- 2026-11-16 新增按需内置演示事项，使用独立工作区跑通需求讨论、专业协作、阶段交付与反馈修订；初始化与验证入口见[演示说明](inner-matter-demo.md)。
-- 2026-11-15 按当前源码核对，调查范围为 `793b46b..1f68160` 的 26 笔提交，本轮补齐组织上下文隔离、提请状态与并发派发边界，产品说明基线为 `ee79e90`。
-- 环境变量、超时阈值与运行默认参数另见[配置参考](configuration.md)。
-- 本文说明模块关系、当前实现范围和下一阶段计划；协议细节、迁移规则与实机证据见[连续上下文与内部角色协作](runtime-collaboration.md)。
+供贡献者和维护者查阅工作台、编排器、Pi Worker 与存储之间的关系，以及当前实现和后续计划。具体运行契约见[会话与协作参考](../reference/runtime-collaboration.md)，历史基线见[架构演进记录](../history/architecture-history.md)。
 
 ## 1. 产品目标与实现边界
 
-新读者先读[产品介绍](../README.md)与[设计思路](design-principles.md)，实际操作见[使用指南](user-guide.md)，修改代码见[开发指南](development.md)和[贡献约定](../CONTRIBUTING.md)。本文保留架构、实现进展与后续验证计划，运行和网络约束见[安全说明](../SECURITY.md)。
+产品的使用方式和设计取舍见[设计思路](design-principles.md)。运行和网络约束见[安全说明](../../SECURITY.md)。
 
 产品定位与使用方式：
 
@@ -41,9 +17,9 @@
 
 - 已实现本机工作台、角色定义管理、工作区关联、持久会话接续、会议室旁听列席、真实工具驱动的内部委托、显式成果归档与清晰阅读视图，以及 RSI 多角色候选经验提炼、人工核验、替代与应用记录的基础链路。
 - 这里的“自主”指成员在一轮任务内自行使用工具、委托同事并整合结果，并在中断后可按快照简报续接；不代表已有跨重启自动运行的定时后台任务系统，也不代表完整岗位能力与无人值守长期演进已验证。
-- 产品依据见[产品方向确认稿](product-direction.md)与[产品讨论记录](product-discussion.md)。本轮实现不涉及先前试用的业务项目，该项目只作为网页体验背景。
+- 产品依据见[产品方向确认稿](product-direction.md)与[产品讨论记录](../history/product-discussion.md)。本轮实现不涉及先前试用的业务项目，该项目只作为网页体验背景。
 
-内置的“小团队反馈收集盒”提供四步体验入口，按需创建 `.data/inner-matter` 工作区与独立演示事项，复用普通岗位协作、会话和版本归档。准备资料不调用模型，阶段进度依据实际记录计算，未预制回复或成果。使用方法及保存边界见[内置演示事项](inner-matter-demo.md)。
+内置的“小团队反馈收集盒”提供四步体验入口，按需创建 `.data/inner-matter` 工作区与独立演示事项，复用普通岗位协作、会话和版本归档。准备资料不调用模型，阶段进度依据实际记录计算，未预制回复或成果。使用方法及保存边界见[内置演示事项](../tutorials/inner-matter-demo.md)。
 
 角色与可分发能力包的设计边界见[设计思路](design-principles.md)。当前可显式装载角色声明的 Skill，并通过配置的 pstack 方法源按需读取模式与原则；尚未实现完整第三方插件导入、版本依赖解析或跨宿主子代理/hooks 适配。
 
@@ -142,19 +118,19 @@ flowchart TB
 
 | 源码入口 | 负责的事实与行为 |
 | --- | --- |
-| [`src/server/app.ts`](../src/server/app.ts)、[`main.ts`](../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../src/server/auth.ts)、[sse](../src/server/sse.ts)、[uploads](../src/server/uploads.ts)、[dispatch-runner](../src/server/dispatch-runner.ts) 与 [业务路由](../src/server/README.md#业务路由) 维护 |
-| [`team-orchestrator.ts`](../src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../src/orchestrator/worker-runner.ts)、[delegation-runner](../src/orchestrator/delegation-runner.ts)、[observer-runner](../src/orchestrator/observer-runner.ts)、[distiller](../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
-| [`matter-initiation.ts`](../src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
-| [`execution-context.ts`](../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
-| [`team-extension.ts`](../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
-| [`team-tool-bridge.ts`](../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
-| [`pi-rpc-worker.ts`](../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
-| [`storage/`](../src/storage/) | `PersonalAgentStore` 门面委托各域 [repos](../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
-| [`dialog-broker.ts`](../src/server/dialog-broker.ts)、[`preview-manager.ts`](../src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
+| [`src/server/app.ts`](../../src/server/app.ts)、[`main.ts`](../../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../../src/server/auth.ts)、[sse](../../src/server/sse.ts)、[uploads](../../src/server/uploads.ts)、[dispatch-runner](../../src/server/dispatch-runner.ts) 与 [业务路由](../../src/server/README.md#业务路由) 维护 |
+| [`team-orchestrator.ts`](../../src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../../src/orchestrator/worker-runner.ts)、[delegation-runner](../../src/orchestrator/delegation-runner.ts)、[observer-runner](../../src/orchestrator/observer-runner.ts)、[distiller](../../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
+| [`matter-initiation.ts`](../../src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../../src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
+| [`execution-context.ts`](../../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
+| [`team-extension.ts`](../../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
+| [`team-tool-bridge.ts`](../../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
+| [`pi-rpc-worker.ts`](../../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
+| [`storage/`](../../src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
+| [`dialog-broker.ts`](../../src/server/dialog-broker.ts)、[`preview-manager.ts`](../../src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
 
 ### 目录组织与源文件行数
 
-后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../src/README.md)和[前端状态与组件](../web/src/README.md)。
+后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../../src/README.md)和[前端状态与组件](../../web/src/README.md)。
 
 统计范围为 `src/` 和 `web/` 的 TypeScript、JavaScript、CSS 和 HTML 源文件。计入注释与空行，排除文档、依赖和构建产物。下表比较重构前的 `ab40a07` 与重构完成时的 `1a0c04d`。
 
@@ -166,15 +142,15 @@ flowchart TB
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |
-| 网页根组件 | 1,659 | [App.tsx](../web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
-| 网页 API | 1,570 | [api.ts](../web/src/api.ts) 11 行，业务模块最大 402 行 |
-| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../web/src/styles/role-architect.css) 551 行 |
-| 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../src/server/routes/role-packages.ts) 442 行 |
-| 团队编排 | 1,205 | [team-orchestrator.ts](../src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../src/orchestrator/matter-dispatch.ts) 542 行 |
-| 事项路由 | 1,133 | [matters.ts](../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../src/server/routes/matter-messages.ts) 743 行 |
-| 对话流样式 | 1,014 | [chat-stream.css](../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../web/src/styles/chat-cards.css) 269 行 |
+| 网页根组件 | 1,659 | [App.tsx](../../web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
+| 网页 API | 1,570 | [api.ts](../../web/src/api.ts) 11 行，业务模块最大 402 行 |
+| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../../web/src/styles/role-architect.css) 551 行 |
+| 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../../src/server/routes/role-packages.ts) 442 行 |
+| 团队编排 | 1,205 | [team-orchestrator.ts](../../src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../../src/orchestrator/matter-dispatch.ts) 542 行 |
+| 事项路由 | 1,133 | [matters.ts](../../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../src/server/routes/matter-messages.ts) 743 行 |
+| 对话流样式 | 1,014 | [chat-stream.css](../../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../web/src/styles/chat-cards.css) 269 行 |
 
-行数用于定位阅读和修改成本。[ChatStage.tsx](../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../web/src/utils/formatters.ts)、[matterStream.ts](../web/src/utils/matterStream.ts)、[deliverableSummary.ts](../web/src/utils/deliverableSummary.ts)、[orgRoster.ts](../web/src/utils/orgRoster.ts)、[starterTasks.ts](../web/src/utils/starterTasks.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../web/src/utils/formatters.ts)、[matterStream.ts](../../web/src/utils/matterStream.ts)、[deliverableSummary.ts](../../web/src/utils/deliverableSummary.ts)、[orgRoster.ts](../../web/src/utils/orgRoster.ts)、[starterTasks.ts](../../web/src/utils/starterTasks.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 
@@ -221,7 +197,7 @@ flowchart TB
 - `candidate` 与 `verified` 在系统上下文中分开标记；候选当前仍可被注入用于验证，状态标签不是自动正确性或隐私审计。
 - `appliedCount` 只表示宿主注入了该经验，不证明模型实际采用，更不等于因果评估或长期能力提升。
 - 会话映射承接 Pi 历史，内存 `activeRuns` 支持同一宿主内网页刷新，失败/停止消息中的快照辅助下一轮显式续接；这些基础不构成重启后自动调度的持久后台任务。
-- 更详细的迁移与边界见[运行说明](runtime-collaboration.md)。
+- 更详细的迁移与边界见[运行说明](../reference/runtime-collaboration.md)。
 
 ### 人类协作与执行入口
 
@@ -231,7 +207,7 @@ flowchart TB
 - `discussion` 只记录交流，`ai_request` 等待所有者处理，`dispatch` 启动 AI。只有待处理的人类提请能原子转换为 `approved` 或 `dismissed`，重复处理返回 409。
 - 批准前校验来源组织/仓库、参与成员与已上传附件（图片及文本/折叠粘贴文件）；来源变化返回 409，附件失效返回 410，均保持提请待处理。提请批准记录表示已安排执行，实际结果由事项运行状态表达，崩溃后不自动重派。
 - 图片与文本/折叠粘贴附件落盘是异步步骤。`dispatch-runner` 在更新运行视图或广播前统一拒绝重叠派发，避免两次上传完成后覆盖同一事项的运行记录。
-- 新会话使用含组织 ID 的 `v2` 范围键。旧 `v1` 或无范围映射继续保存，但不能证明组织归属，因此升级后首次执行建立新会话；只有来源明确的新背景会补入。历史会话文件、消息、成果不被重写。详见[迁移说明](runtime-collaboration.md#兼容历史数据)。
+- 新会话使用含组织 ID 的 `v2` 范围键。旧 `v1` 或无范围映射继续保存，但不能证明组织归属，因此升级后首次执行建立新会话；只有来源明确的新背景会补入。历史会话文件、消息、成果不被重写。详见[迁移说明](../reference/runtime-collaboration.md#兼容历史数据)。
 
 ## 4. 一轮交流、内部协作与成果的数据流
 
@@ -242,7 +218,7 @@ flowchart TB
    - 由事项、成员、有效组织 ID、工作区 ID、绝对路径和主/内部/旁听模式共同确定。
    - 找到历史映射时校验 Pi 文件首行的 session ID 与真实 `cwd`，再用确切 `--session` 路径启动；没有映射才建立新会话。
 4. 能力与上下文注入：
-   - 显式加载角色 Skills（含通用成果写作规范 [technical-writing](../skills/technical-writing/SKILL.md)）、团队扩展和批准的扩展，核查实际注册的普通工具及 MCP 依赖。
+   - 显式加载角色 Skills（含通用成果写作规范 [technical-writing](../../skills/technical-writing/SKILL.md)）、团队扩展和批准的扩展，核查实际注册的普通工具及 MCP 依赖。
    - 当前岗位五段定义、适用私有记忆和团队信息进入系统上下文；若上次同作用域执行曾中止或失败，宿主一次性注入结构化的中断状态简报（停滞阶段、未完成委托及最近关键步骤）辅助续接。
    - 主要历史由 Pi 原生会话承接，宿主只补充有界的新交流。
 5. 主成员需要其他岗位工作时调用 `delegate_to_member`：
@@ -328,7 +304,7 @@ sequenceDiagram
 | 并发 | 同事项由运行表和 SQLite 占用限制为一轮；不同事项可并行；同委托树中忙碌的同范围成员返回工具错误 |
 | 停止与失败 | 整轮默认 `0`，不设固定总时长；单 Worker 默认 15 分钟无活动看门狗，桥接等待时暂停父计时，可显式配置总上限。取消传到执行树，快照区分用户停止和服务关闭；复盘从注册到结果丢弃/提交及 Worker 清理全程被追踪，shutdown 等待其结束后才可关闭库 |
 | 网页运行中纠偏 | 当前仍采用停止后发新消息（或运行中增减旁听席列席）；底层 `steer`、`follow_up` 等封装不构成已实现的网页实时插话 |
-| 委托边界 | 防止自身/祖先循环，限制深度与每轮数量，复用同轮相同委托；具体数值及错误约定见[运行说明](runtime-collaboration.md#并发失败与停止) |
+| 委托边界 | 防止自身/祖先循环，限制深度与每轮数量，复用同轮相同委托；具体数值及错误约定见[运行说明](../reference/runtime-collaboration.md#并发失败与停止) |
 | 崩溃与去重 | 去重限于本轮内存；PID 占用用于单机防并发，不是跨崩溃 exactly-once。已写文件和外部操作不会因取消自动回滚 |
 | 扩展与 MCP | 按工具声明和批准的扩展核查实际清单，MCP 沿用已有 Pi 配置；未实现自动安装，外部 MCP 尚无本轮实机验证 |
 | 执行权限 | `cwd`、上下文范围和 bridge 鉴权不是操作系统沙箱。Pi 以本机用户权限运行，没有容器隔离或组织级安全边界 |
@@ -347,7 +323,7 @@ sequenceDiagram
 状态标记与导出兼容：
 
 - `delivered` 表示本轮正式成果已归档，不代表用户已验收；普通交流、取消或失败保持 `open`。
-- API 显式提供 `deliverableTitle` 的文档导出兼容入口仍存在，网页已移除“修改”前缀自动导出逻辑。详见[成果归档](runtime-collaboration.md#成果归档)。
+- API 显式提供 `deliverableTitle` 的文档导出兼容入口仍存在，网页已移除“修改”前缀自动导出逻辑。详见[成果归档](../reference/runtime-collaboration.md#成果归档)。
 
 预览进程边界：
 
@@ -360,7 +336,7 @@ sequenceDiagram
 
 | 工作面 | 已有基础 | 验证边界 |
 | --- | --- | --- |
-| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
+| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
 | 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、单兵 `solo`/定向旁听运行时收窄、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
 | 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、多角色经验复盘/取消、上下文直接核验替代与效果回写 | 连续过程交流不新增交付、多角色 AI 提炼、取消与评估 API 均有离线测试覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
 | 角色复用与建队 | Markdown 导入导出、`.data/roles/` 运行时隔离、不同角色 ID 组建与安全删除、内置 Meta-Bot「角色架构师」（对话建队、团队协作体检与事项中途介入补人）、实际 Skill 装载（含 `technical-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |
@@ -378,11 +354,11 @@ sequenceDiagram
 
 这一阶段优先验证主负责人能否在发布前核对事实依据、跨章节规则和验收条件，发现矛盾后自行找相关角色澄清，再形成保留历史的新版本。用相同问题的修订前后结果评估改进，不能只凭新增角色提示词或版本数量宣称质量提升；也不为每次过程交流增加用户审批。
 
-现已提供主负责人复核方法与[发布前复核对照验证](publication-review.md)。验证使用相同合成问题的隔离基线/当前方法运行，宿主记录真实工具顺序、版本保留与正文一致性，正文质量由独立审阅判断。它没有增加语义自动验收门禁；演示默认反馈也已明确标注为虚构使用情境，已有用户反馈保持原样。
+现已提供主负责人复核方法与[发布前复核对照验证](../validation/publication-review.md)。验证使用相同合成问题的隔离基线/当前方法运行，宿主记录真实工具顺序、版本保留与正文一致性，正文质量由独立审阅判断。它没有增加语义自动验收门禁；演示默认反馈也已明确标注为虚构使用情境，已有用户反馈保持原样。
 
 首轮真实对照中，当前方法组在发布前咨询了研发与测试，基线组没有咨询；两组均保留旧版并发布 V3，但当前稿仍有组合状态路径和迁移验收矛盾，结构迁移说明也不充分。因此尚未证明交付质量提升。下一轮应检验最终成稿对具体反例的修订，而不是只增加咨询次数；逐项结果与反例见上述验证说明。
 
-后续重复运行又出现基线组咨询、当前组未咨询的相反结果。工具记录确认当前组没有发起委托，文件来源和正文一致性检查仍通过。复核方法未形成强制门禁，咨询行为尚不稳定；重复运行结果见[验证记录](publication-review.md#再次复跑文件一致当前组未触发咨询)。
+后续重复运行又出现基线组咨询、当前组未咨询的相反结果。工具记录确认当前组没有发起委托，文件来源和正文一致性检查仍通过。复核方法未形成强制门禁，咨询行为尚不稳定；重复运行结果见[验证记录](../validation/publication-review.md#再次复跑文件一致当前组未触发咨询)。
 
 评估入口已改为按场景定义协作要求，最终归档正文的独立审阅另存带哈希与行号依据的记录，同时保留新增问题。默认自主场景只观察咨询，不把未咨询直接等同于质量失败；明确跨岗位场景则核对两位岗位是否在最终登记前返回。重复汇总展示已修正、退步和仍失败的标准，不自动宣布方法有效或岗位能力提升。
 
@@ -399,29 +375,3 @@ sequenceDiagram
 | 权限与运行环境 | 按实际使用风险设计命令授权和隔离环境，不能把本机 `cwd` 当作沙箱 |
 
 上述方向尚未完成，持续成长也不能由一次测试通过或一份 `SKILL.md` 的存在证明。
-
-## 7. 核对方式与演进记录
-
-立项评估、角色架构师与管理界面收口（`v0.5.0` 之后演进）：新增立项适配评估与缺口诊断（`matter-initiation.ts`）、内置元角色「角色架构师」（`meta-architect.ts`，无工具只读规划、`teams/healthcheck` 协作体检与事项中途介入补人）、运行时角色隔离目录 `.data/roles/`、非默认成员安全删除（`DELETE /api/members/:id`）、团队/资料页管理动作与慢速 AI 操作弹窗化/二次确认。`npm run check`、`npm run build`、112 项 `npm test`、`npm run check:startup` 与 `npm run check:docs` 均通过（使用隔离临时库与受控 Worker，未触发真实模型调用或真实浏览器端到端走查）。
-
-事项旁听真实任务：新增 `demo:observer`，使用隔离资源执行五轮主任务与三次选定测试经理旁听，验证后加入前情、意见接续、独立静默、关闭和阶段交付边界。运行/行为检查及本例独立旁听审阅通过，保留阶段方案待澄清的时间口径等备注；首轮发现并修正了纯引号包装导致的控制输入误判，原始失败未覆盖。107 项测试、代码检查、构建、源码/编译入口启动与文档检查通过，详见[旁听实机记录](observer-demo.md#实机验证跟进)。
-
-三层评估版本：默认自主、明确跨岗位、轻量文案三个场景各完成一次真实配对，共六轮主任务。发布检查全部通过，明确协作两组均履行委托；独立最终稿审阅为三份通过、三份失败，失败含新增阻塞项，未把咨询完成等同于正文达标。102 项离线测试、代码检查、构建、源码/编译入口启动和文档检查通过；重复统计功能有离线覆盖，本轮没有多次真实统计结论，见[实机结果](publication-review.md#三层版本实机验证发布通过正文仍有失败)。
-
-文档来源一致性修复：用户真实复跑暴露文件与归档正文分叉；新增文件来源快照和提交校验后，再次真实 `demo:review` 的两组文件来源、精确正文匹配与历史保留均通过。新增六项回归，完整 97 项离线测试、代码检查、构建、源码/编译入口启动及文档检查通过。仅验证文件发布机制，不据此宣称方案语义质量达标，见[修复记录](publication-review.md#文件正文不一致的复跑与修复)。
-
-2026-11-16 发布前复核跟进：新增可重复的基线/当前方法真实 Pi 对照，记录咨询顺序、历史保留、正文一致性和独立审阅结果，保留未达标产物。代码检查、构建、91 项离线测试、源码/编译入口启动及文档检查通过；这些检查不等于内容质量验收。具体发现与下一轮反例见[复核验证说明](publication-review.md)。
-
-本轮核对 `793b46b..1f68160` 的组织与 Git 身份、图片、多人协作、花名册及模块拆分；基线代码检查、构建与 75 项离线测试通过。新增回归先复现组织会话串用、复盘范围缺失、重复批准及并发图片派发覆盖运行状态，再验证修复。修复后 `npm run check`、`npm run build`、86 项 `npm test`、`npm run check:startup`、`npm run check:docs` 均通过。新增 11 项用例使用临时数据库、会话文件、HTTP 服务与受控 Worker，不调用模型；本轮未进行网页视觉验收，也未重跑历史真实 Pi 演示。
-
-既有真实模型证据仍以[运行说明](runtime-collaboration.md#已留存实机证据)中的日期、脚本与范围为准，不把新增权限或组织用例当作长期自主能力证明。
-
-上一轮 `793b46b` 的核对记录：
-
-- 本轮从 `6897e78..90be687` 的 28 笔提交核对了旁听、刷新恢复、中断续接、经验提炼/审核/取消、成果阅读器与写作 Skill 的真实调用路径。
-- 调查起点 `90be687` 的 `check` 与 52 项离线测试通过；新增边界回归先复现了跨范围替代、复盘串入旧项目、子提案提前落库及误评分历史版本的问题，再验证修复。
-- 本轮 `check`、构建、62 项离线测试、源码与构建入口隔离启动和 `check:docs` 均通过，另外校验了本文两张 Mermaid 图与文档锚点。
-- 新增 `demo:rsi` 只在临时工作区/数据库运行，验证实际 `propose_experience`、正式发布、无工具复盘和版本反馈，不把一次成功当作长期成长。
-- 历史 `demo:team` 仍保留跨宿主连续会话证据，未因本轮更新而重跑所有旧实机场景；旁听持续运行、外部 MCP、后台自驱循环与学习效果仍需独立证据。
-- 原始开发前架构保存在 Git 提交 `a91c1cf`，可用 `git show a91c1cf:docs/architecture-and-plan.md` 查阅。
-- 当前文档只描述现状和明确标注的后续计划；早期 V1–V4 原型与外部参考研究已整理到本地 `.notes/` 目录留存，不纳入 Git 公开跟踪。

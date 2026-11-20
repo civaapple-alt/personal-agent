@@ -73,4 +73,31 @@ npm run demo:architect -- --summarize <证据目录>
 
 这是每条场景各一组同题前后观察，没有重复统计或随机分组，不证明因果改善、所有 Skill 已被采用、持续学习或长期自主稳定性。上述业务判断问题仍需后续有界任务验证；本轮没有增加生产自动语义门禁。
 
-实现入口见 [case](../src/demo/role-design-case.ts)、[runner](../src/demo/role-design-runner.ts)、[report](../src/demo/role-design-report.ts)、[CLI](../src/demo/role-design-smoke.ts)，离线边界见[测试](../test/role-design-demo.test.ts)。岗位设计说明见[内置角色设计](role-design.md)。
+实现入口见 [case](../../src/demo/role-design-case.ts)、[runner](../../src/demo/role-design-runner.ts)、[report](../../src/demo/role-design-report.ts)、[CLI](../../src/demo/role-design-smoke.ts)，离线边界见[测试](../../test/role-design-demo.test.ts)。岗位设计说明见[内置角色设计](../reference/role-design.md)。
+
+## 角色配置与能力装配回归
+
+离线覆盖包括五个内置角色正文和边界的解析与序列化、英文指令进入 Worker、真实来源过滤、设计与导出字段保留、缺失 Skill 提前失败，以及宿主拒绝架构师发布。参见[能力测试](../../test/role-capabilities.test.ts)和[编排测试](../../test/phase2-orchestrator.test.ts)。
+
+此前角色能力组合改动通过了 124 项离线测试、代码检查、构建与四种启动检查。使用临时数据库和受控方案在真实浏览器核对 1440px 桌面、390px 移动端，未见横向溢出。实际点击提案应用后确认 Skills 与 MCP 声明均保留。该页面检查不调用模型。
+
+### 英文 Skill 小样本对照
+
+此次对照发生在宿主提示和角色显示名切换为英文之前。在隔离的合成工作区，用 `kimi-for-coding` 的相同配置重复四次中文技术设计任务。每次使用独立数据库，无会话接续，只切换 `architecture-design` 的英文版与等义中文版。四轮都成功读取 `retry.ts`、用中文回复，原文件未变，未登记成果。英文配置的两轮均未观察到 Skill 正文读取，中文配置两轮中观察到一次。两组答复都出现了提交与崩溃顺序方面的歧义。样本不足以判断语言对方法选择或指令遵循率的影响。
+
+## 2026-11-17：模型决策接口跟进
+
+跟进 `5001069..fca5970` 后，为以下问题补充相同输入的离线回归：
+
+| 问题 | 修订前观察 | 修订后检查 |
+| --- | --- | --- |
+| 用户指定角色配置丢失 | 指定 ID 被模型 ID 替换；验证计划与依赖路径存在丢弃分支 | ID、七条显式边界、用户验证计划和额外约束保留；未安装的显式 Skill 标记缺失，模型虚构 Skill 不进入草案 |
+| 仓库读取证据误报 | 仅开放读取工具，没有调用也返回 `usedRepoRead: true` | 区分开放权限与实际读取；未调用、未完成、失败、越界及工作区外符号链接不算成功读取 |
+| 校验器抛错未分类 | 普通异常漏出类型化决策接口 | 清理 Worker 后返回带原始输出与原因的 `validation_error` |
+
+三个新用例修订前失败，修订后通过，另补 HTTP 层的用户计划/约束/依赖保留检查。完整 135 项离线测试、代码检查、构建、文档检查及四种启动检查通过；均使用临时资源，不访问已登记业务工作区。
+
+同日执行一次真实 `npm run demo:decision`，4 个场景通过：人类先对齐、否定职责下的法务缺口、实际查仓后的研发牵头与定向旁听、模型角色草案。查仓记录包含 `README.md`、`package.json` 两个成功读取路径。原始报告保留于临时目录 `personal-agent-decision-I0TXEK/decision-report.json`。本次未做独立正文质量审阅，也没有修订前后的同题真实模型对照，不能将集成通过认定为岗位判断质量提升。
+
+已增加 `demo:architect` 与 `demo:roles`，分别验证创建后履职与四个岗位的实际任务。[真实验证记录](role-design-demo.md)保留了初轮失败及同题修订后结果：结构化计划丢失已修复，业务岗位内容判断仍有失败，尚未证明整体能力改善。
+后续回归共 130 项离线测试通过，代码检查、构建和四种启动检查通过；真实岗位内容失败仍作为独立结果保留，不计入离线机制通过结论。

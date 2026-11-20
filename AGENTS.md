@@ -2,7 +2,7 @@
 
 本项目是跨项目工作的轻量 AI 岗位团队，使用 TypeScript/Node、React 和本机 Pi RPC。当前能力及后续计划见[文档入口](docs/README.md)，不要把长期自主运行、完整 RSI 或人才市场写成已完成。
 
-人类贡献者从[贡献指南](CONTRIBUTING.md)和[开发指南](docs/development.md)开始；执行环境、私有数据及网络边界见[安全说明](SECURITY.md)。
+人类贡献者从[贡献指南](CONTRIBUTING.md)和[开发指南](docs/guides/development.md)开始；执行环境、私有数据及网络边界见[安全说明](SECURITY.md)。
 
 ## 按任务阅读
 
@@ -20,7 +20,7 @@
 
 命令均在仓库根运行，脚本定义以 [package.json](package.json) 为准。
 
-- `npm install` 安装依赖；`npm run start:web` 启动本地工作台，默认使用 `.data/` 中的用户数据；`npm run start:team:sandbox` 在临时目录启动预置多组织、全角色（`org_owner`/`org_admin`/`org_member`/`org_viewer`/`super_admin`）与多版本交付成果的团队版隔离沙盒（`PA_REQUIRE_AUTH=1`，默认端口 `4399`，账号表见 [开发指南](docs/development.md#团队版一键验证沙盒)）。
+- `npm install` 安装依赖；`npm run start:web` 启动本地工作台，默认使用 `.data/` 中的用户数据；`npm run start:team:sandbox` 在临时目录启动预置多组织、全角色（`org_owner`/`org_admin`/`org_member`/`org_viewer`/`super_admin`）与多版本交付成果的团队版隔离沙盒（`PA_REQUIRE_AUTH=1`，默认端口 `4399`，账号表见 [开发指南](docs/guides/development.md#团队版一键验证沙盒)）。
 - 代码改动选择相关离线测试，再运行 `npm run check`、`npm run build`、`npm test`；首次运行涉及网页的测试前要构建网页资源；涉及团队页面、多组织或成果库交互且不污染 `.data/` 时，可直接启动 `npm run start:team:sandbox` 主动完成页面验证。
 - `npm run check:startup` 需要已有构建，使用临时数据库检查源码和构建后的入口，不调用真实模型。
 - 文档改动使用 `npm run check:docs`；无需因此重跑整套应用测试或真实模型。

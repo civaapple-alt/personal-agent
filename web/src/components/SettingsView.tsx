@@ -500,7 +500,7 @@ export function SettingsView({
 								<div className="ui-section-head">
 									<div className="ui-inline-head">
 										<h2 className="ui-section-title">运行配置</h2>
-										<span className="ui-inline-sub">对应 docs/configuration.md，按节展示当前生效值</span>
+										<span className="ui-inline-sub">查看当前运行实例的配置值</span>
 									</div>
 									{activeSection === "config" && (
 										<div className="settings-filter-row" role="tablist" aria-label="配置分组筛选">

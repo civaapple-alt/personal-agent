@@ -15,7 +15,7 @@
 3. 形成可审阅的 V1 方案，保存文件并登记为正式成果。
 4. 对具体版本给出反馈，修订成 V2，保留 V1 及变化依据。
 
-这个过程已有[内置演示](docs/inner-matter-demo.md)。打开演示只准备虚构资料；发送给 AI 后，才实际执行并使用模型额度。四步记录代表流程发生，正文仍需验收。
+这个过程已有[内置演示](docs/tutorials/inner-matter-demo.md)。打开演示只准备虚构资料；发送给 AI 后，才实际执行并使用模型额度。四步记录代表流程发生，正文仍需验收。
 
 普通交流不会在每轮结束后自动变成交付物。日常视图聚焦成果和关键沟通，内部委托与过程按需查看，也不要求你为每次过程交流审批。
 
@@ -44,9 +44,7 @@
 
 运行需要 Node.js ≥ 22.19、npm、Git，以及**本地 Pi CLI**。Pi 是当前 AI 执行的必需依赖，须单独安装并配置模型访问，本项目不会自动安装或捆绑 Pi。Pi 的产品说明及 macOS、Linux、Windows 安装入口见 [pi.dev](https://pi.dev/)。
 
-完成 Pi 安装后，在源码目录按场景二选一启动：
-
-**个人本机试用（默认免密回环模式）：**
+完成 Pi 安装后，在源码目录启动本机工作台。
 
 ```bash
 pi --version
@@ -54,32 +52,19 @@ npm ci
 npm run start:web
 ```
 
-浏览器打开 `http://127.0.0.1:4310` 即可直接以本机所有者视角体验，左下角保留「切换账号」方便随时测试账号体系。
+打开 `http://127.0.0.1:4310`，按[首次运行教程](docs/tutorials/getting-started.md)发送第一条提问。运行资料默认保存在启动目录的 `.data/`。接入真实工作区、局域网或外部工具前，请阅读[安全说明](SECURITY.md)。
 
-**团队多成员共享部署（开启账号认证与超管控制）：**
+## 文档入口
 
-```bash
-PA_REQUIRE_AUTH=1 PA_HOST=0.0.0.0 PORT=4310 npm run start:web
-```
-
-首次访问网页会引导你设置**首个超级管理员的邮箱与密码**（无默认硬编码密码），开放注册默认策略为**管理员审核开通（`open_review`）**，随后可在 `#/admin` 调整注册策略、审核配额、安全边界与多团队仓库目录；若通过反向代理对外提供服务，请务必配置 HTTPS 并保持 `PA_REQUIRE_AUTH=1`。从本机免密试用切换团队部署的兼容性说明与首次上手见[安装与首次运行](docs/getting-started.md#从个人本机试用切换到团队共享部署)及[使用指南 · 团队与超管引导](docs/user-guide.md#团队账号超级管理员与组织协作)。
-
-没有 Pi 时仍可启动和浏览工作台，但不能执行 AI 任务，也没有其他执行底座的自动替代。运行数据默认保存于 `.data/`。角色以本机用户权限执行，工作区路径不是沙箱；接入真实仓库、局域网或外部工具前先读[运行与安全边界](SECURITY.md)。
-
-## 按目标阅读
-
-| 你的目标 | 入口 |
+| 你要做什么 | 从这里开始 |
 | --- | --- |
-| 安装并完成第一次体验（含个人 / 团队启动方式） | [安装与首次运行](docs/getting-started.md) |
-| 交办事项、团队/超管协作、组织与仓库权限配置 | [使用指南](docs/user-guide.md) |
-| 理解岗位、事项、能力包与经验的设计 | [设计思路](docs/design-principles.md) |
-| 查环境变量、数据位置与超时 | [配置参考](docs/configuration.md) |
-| 启用完整 pstack 方法包 | [pstack 内循环](docs/pstack-runtime.md) |
-| 运行、修改和验证代码 | [开发指南](docs/development.md) |
-| 报告问题、贡献代码、角色或文档 | [贡献指南](CONTRIBUTING.md) |
-| 查看实现细节、证据和历史 | [文档索引](docs/README.md) |
+| 第一次体验 | [安装与首次运行](docs/tutorials/getting-started.md) |
+| 在工作台交办事项和审阅成果 | [使用指南](docs/guides/user-guide.md) |
+| 为团队部署服务、管理账号与仓库权限 | [团队管理指南](docs/guides/team-administration.md) |
+| 准备开发环境、修改和验证代码 | [开发指南](docs/guides/development.md) |
+| 查配置、设计、验证或历史 | [完整文档索引](docs/README.md) |
 
-开发代理从 [AGENTS.md](AGENTS.md) 开始，再读相关目录 README。模块入口位于 [src](src/README.md)、[web](web/README.md)、[roles](roles/README.md)、[skills](skills/README.md)、[test](test/README.md) 和 [scripts](scripts/README.md)。
+开发代理从 [AGENTS.md](AGENTS.md) 开始，再读相关目录 README。
 
 ## 许可证与发布状态
 
