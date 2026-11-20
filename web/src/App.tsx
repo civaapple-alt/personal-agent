@@ -106,6 +106,8 @@ export function App() {
 	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
 	selectedMatterIdRef.current = selectedMatterId;
+	const matterStreamRevision = useRef({ total: 0, byMatter: new Map<string, number>() });
+	const detailRequest = useRef(0);
 
 	const navigateRoute = useHashRouteNav({
 		initialRoute,
@@ -124,10 +126,11 @@ export function App() {
 	}, []);
 
 	const refreshBootstrap = useCallback(async () => {
+		const revision = matterStreamRevision.current.total;
 		const data = await fetchBootstrap();
 		setBootstrap(data);
 		applyEditionState(data.platformPolicy?.requireAuth);
-		if (data.activeRuns) {
+		if (data.activeRuns && revision === matterStreamRevision.current.total) {
 			const nextProgress: Record<string, MatterProgressDto> = {};
 			const nextStartedAt: Record<string, number> = {};
 			for (const [id, snapshot] of Object.entries(data.activeRuns)) {
@@ -170,22 +173,23 @@ export function App() {
 	}, [applyEditionState]);
 
 	const refreshDetail = useCallback(async (matterId: string | null) => {
+		const request = ++detailRequest.current;
 		if (!matterId) {
 			setMatterDetail(null);
 			return;
 		}
+		const revision = matterStreamRevision.current.byMatter.get(matterId);
 		const detail = await fetchMatterDetail(matterId);
+		if (request !== detailRequest.current) return;
 		setMatterDetail(detail);
 		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
 		setSelectedOrgId(detail.matter.orgId ?? "");
-		if (detail.activeRun) {
-			const snapshot = detail.activeRun;
-			setProgressByMatter((prev) => ({ ...prev, [matterId]: snapshot }));
-			setProgressStartedAt((prev) => ({ ...prev, [matterId]: snapshot.startedAt }));
-			if (snapshot.streamingDelta !== undefined) {
-				setStreamingDelta(snapshot.streamingDelta);
-			}
-		}
+		if (revision !== matterStreamRevision.current.byMatter.get(matterId)) return;
+		const snapshot = detail.activeRun;
+		if (!snapshot) return;
+		setProgressByMatter((prev) => ({ ...prev, [matterId]: snapshot }));
+		setProgressStartedAt((prev) => ({ ...prev, [matterId]: snapshot.startedAt }));
+		if (snapshot.streamingDelta !== undefined) setStreamingDelta(snapshot.streamingDelta);
 	}, []);
 
 	const {
@@ -246,6 +250,7 @@ export function App() {
 		authStatus,
 		activeTabRef,
 		selectedMatterIdRef,
+		matterStreamRevision,
 		setProgressByMatter,
 		setProgressStartedAt,
 		setStreamingDelta,
@@ -796,7 +801,7 @@ export function App() {
 							headerContact={headerContact}
 							headerTheme={headerTheme}
 							selectedMatterId={selectedMatterId}
-							matterDetail={matterDetail}
+							matterDetail={currentMatter ? matterDetail : null}
 							activeDialogs={activeDialogs}
 							activeChatDeliverable={activeChatDeliverable}
 							deliverablesCount={bootstrap?.deliverables.length ?? 0}

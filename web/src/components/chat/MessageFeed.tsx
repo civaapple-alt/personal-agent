@@ -16,8 +16,8 @@ import {
 } from "../../api.ts";
 import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEMBER_ID } from "../../architectApi.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import type { MatterDelegations } from "../../utils/matterDelegations.ts";
 import {
-	type DelegationSummaryItem,
 	formatByteSize,
 	formatClockTime,
 	getMemberThemeById,
@@ -31,6 +31,7 @@ import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
+import type { DelegationScope, DelegationView } from "./MatterDelegationPanel.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
 
 interface MessageFeedProps {
@@ -67,10 +68,8 @@ interface MessageFeedProps {
 		byMessageId: Map<string, DeliverableDto[]>;
 		unattached: DeliverableDto[];
 	};
-	delegationsPlacement: {
-		byMessageId: Map<string, DelegationSummaryItem[]>;
-		unattached: DelegationSummaryItem[];
-	};
+	delegations: MatterDelegations;
+	onOpenDelegations: (scope: DelegationScope, view?: DelegationView) => void;
 	onOpenLightbox: (img: { src: string; alt: string }) => void;
 	onPreviewFile: (file: PreviewableTextAttachment) => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
@@ -121,7 +120,8 @@ export function MessageFeed({
 	memberName,
 	previewUrlFor,
 	deliverablesPlacement,
-	delegationsPlacement,
+	delegations,
+	onOpenDelegations,
 	onOpenLightbox,
 	onPreviewFile,
 	onOpenDeliverables,
@@ -141,6 +141,9 @@ export function MessageFeed({
 	const isArchitectMatter = Boolean(
 		matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId),
 	);
+	const activeSpeakerId =
+		activeMatterProgress?.speakerMemberId ?? matterDetail?.matter.leadMemberId ?? headerContact?.id;
+	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
 
 	const renderDeliverablePill = (deliv: DeliverableDto) => {
 		const url = previewUrlFor(deliv);
@@ -268,7 +271,7 @@ export function MessageFeed({
 									: "所有者";
 							const speakerTheme = getMemberThemeById(members, msg.senderId);
 							const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
-							const attachedDelegations = delegationsPlacement.byMessageId.get(msg.id) ?? [];
+							const attachedDelegations = delegations.byTurn.get(msg.id)?.assignments;
 							const progressSnapshot = parseProgressSnapshot(msg.metadata);
 							const roleProposals = !isUser && !isSystem ? parseRoleProposalsFromMetadata(msg.metadata) : null;
 							const leadFallback =
@@ -288,7 +291,12 @@ export function MessageFeed({
 								: "";
 
 							return (
-								<div key={msg.id} className={`stream-msg ${isUser ? "from-user" : "from-member"}`}>
+								<div
+									key={msg.id}
+									id={`matter-message-${msg.id}`}
+									tabIndex={isUser ? -1 : undefined}
+									className={`stream-msg ${isUser ? "from-user" : "from-member"}`}
+								>
 									{isUser ? (
 										<div className="stream-sender user-sender">
 											<span
@@ -452,11 +460,12 @@ export function MessageFeed({
 											}
 										/>
 									)}
-									<DelegationSummaryCard
-										anchorKey={msg.id}
-										items={attachedDelegations}
-										memberName={memberName}
-									/>
+									{attachedDelegations && (
+										<DelegationSummaryCard
+											items={attachedDelegations}
+											onOpen={() => onOpenDelegations(`turn:${msg.id}`)}
+										/>
+									)}
 									{roleProposals && matterDetail && onApplyRoleProposals && onDismissRoleProposals && (
 										<RoleProposalCard
 											matterId={matterDetail.matter.id}
@@ -558,9 +567,9 @@ export function MessageFeed({
 
 						{deliverablesPlacement.unattached.map((deliv) => renderDeliverablePill(deliv))}
 						<DelegationSummaryCard
-							anchorKey="unattached"
-							items={delegationsPlacement.unattached}
-							memberName={memberName}
+							items={delegations.history.assignments}
+							history
+							onOpen={() => onOpenDelegations("history")}
 						/>
 
 						{streamingDelta && (
@@ -577,11 +586,10 @@ export function MessageFeed({
 								progress={activeMatterProgress}
 								startedAt={progressStartedAt}
 								members={members}
-								leadMemberId={matterDetail?.matter.leadMemberId ?? headerContact?.id}
-								leadDisplayName={
-									matterDetail?.matter.leadMemberId
-										? memberName(matterDetail.matter.leadMemberId)
-										: headerContact?.displayName
+								leadMemberId={activeSpeakerId}
+								leadDisplayName={activeSpeakerId ? memberName(activeSpeakerId) : undefined}
+								onOpenDelegations={
+									activeTurnId ? () => onOpenDelegations(`turn:${activeTurnId}`, "graph") : undefined
 								}
 								onAbort={() => onAbortMatter(selectedMatterId)}
 							/>

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Give each conversation turn a delegation board with numbered assignments and replies. Show live caller-to-member paths, including nested handoffs, and link the graph back to the original assignment.
+
 - Show model settings in anchored popovers and let Role Architect conversations select their own model.
 
 - Filter all model pickers by provider and search by model name or ID. Place the matter model control next to the send button.

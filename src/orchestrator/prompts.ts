@@ -477,7 +477,7 @@ export function buildMemberSystemPrompt(input: {
 		} else {
 			const collabLine = isSoloMatter
 				? "This is a solo matter. Verify the facts and complete the work within your role without internal delegation. If the request exceeds your remit or needs an unavailable role, explain the gap and suggest what expertise is needed."
-				: "Advance the task within your role. When specialist work is needed, call delegate_to_member with the goal, relevant facts, and constraints. Integrate the specialist's evidence into the result. Keep routine coordination internal. Ask the user only when information or a business decision is missing.";
+				: "Advance the task within your role. Use delegate_to_member to give each specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. Keep ownership of edits clear when assignments overlap. When independent review is useful, assign it separately with the result and criteria to verify. Integrate the evidence into your reply. Keep routine coordination internal. Ask the user when information or a business decision is missing.";
 			sections.push(
 				[
 					"## Collaboration and publication",

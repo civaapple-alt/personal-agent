@@ -20,10 +20,10 @@ import type {
 import { filterBusinessMembers } from "../architectApi.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
+import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import {
 	collectMatterMemories,
 	collectMatterParticipantIds,
-	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
 } from "../utils/matterStream.ts";
 import { transitionView } from "../viewTransitions.ts";
@@ -31,6 +31,7 @@ import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/Attachment
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
 import { ComposerDock } from "./chat/ComposerDock.tsx";
 import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
+import { type DelegationScope, type DelegationView, MatterDelegationPanel } from "./chat/MatterDelegationPanel.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
@@ -233,8 +234,11 @@ export function ChatStage({
 }: ChatStageProps) {
 	const { onExpandPastedFile, ...dockDraft } = composerDraft;
 	const { composerText, pendingFiles } = dockDraft;
-	const [collabOpen, setCollabOpen] = useState(false);
+	const [collabMatterId, setCollabMatterId] = useState<string | null>(null);
+	const collabOpen = collabMatterId !== null && collabMatterId === selectedMatterId;
 	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
+	const [delegationScope, setDelegationScope] = useState<DelegationScope>("latest");
+	const [delegationView, setDelegationView] = useState<DelegationView>("board");
 	const [distillingMatter, setDistillingMatter] = useState(false);
 	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
 	const [rosterOpen, setRosterOpen] = useState(false);
@@ -244,6 +248,7 @@ export function ChatStage({
 
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
+	const collabTriggerRef = useRef<HTMLElement | null>(null);
 	const composerDockRef = useRef<HTMLDivElement | null>(null);
 	const rosterPanelRef = useRef<HTMLDivElement | null>(null);
 	const headerHumansBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -257,14 +262,41 @@ export function ChatStage({
 		setRosterSearch("");
 	}, []);
 	const closeRoster = () => transitionView("panel", () => resetRoster(false));
+	const closeCollab = useCallback(() => {
+		setCollabMatterId(null);
+		const trigger = collabTriggerRef.current;
+		collabTriggerRef.current = null;
+		if (trigger) requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+	}, []);
+	const openDelegations = (scope: DelegationScope, view: DelegationView = "board") => {
+		if (!selectedMatterId) return;
+		if (document.activeElement instanceof HTMLElement && !collabPanelRef.current?.contains(document.activeElement)) {
+			collabTriggerRef.current = document.activeElement;
+		}
+		transitionView("panel", () => {
+			setDelegationScope(scope);
+			setDelegationView(view);
+			setCollabTab("delegations");
+			setCollabMatterId(selectedMatterId);
+			collabPanelRef.current?.focus({ preventScroll: true });
+		});
+	};
 
 	useEffect(() => {
 		if (!collabOpen && !rosterOpen && !moreMenuOpen) return;
 		const onMouseDown = (event: MouseEvent) => {
 			const target = event.target as Node | null;
 			if (!target) return;
-			if (collabOpen && !collabPanelRef.current?.contains(target) && !moreMenuWrapRef.current?.contains(target)) {
-				transitionView("panel", () => setCollabOpen(false));
+			if (
+				collabOpen &&
+				!collabPanelRef.current?.contains(target) &&
+				!moreMenuWrapRef.current?.contains(target) &&
+				!(target instanceof Element && target.closest("[data-open-delegations]"))
+			) {
+				transitionView("panel", () => {
+					setCollabMatterId(null);
+					collabTriggerRef.current = null;
+				});
 			}
 			if (rosterOpen && !rosterPanelRef.current?.contains(target) && !headerHumansBtnRef.current?.contains(target)) {
 				transitionView("panel", () => resetRoster(false));
@@ -277,7 +309,7 @@ export function ChatStage({
 			if (event.key === "Escape") {
 				setMoreMenuOpen(false);
 				transitionView("panel", () => {
-					setCollabOpen(false);
+					closeCollab();
 					resetRoster(false);
 				});
 			}
@@ -288,7 +320,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, rosterOpen, moreMenuOpen, resetRoster]);
+	}, [closeCollab, collabOpen, rosterOpen, moreMenuOpen, resetRoster]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -350,14 +382,12 @@ export function ChatStage({
 		[matterDetail],
 	);
 
-	const delegationsPlacement = useMemo(
-		() =>
-			mapDelegationsToMessages(
-				matterDetail?.userMessages ?? [],
-				matterDetail?.internalCollabMessages ?? [],
-				isTurnRunning,
-			),
-		[matterDetail, isTurnRunning],
+	const delegationMessages = matterDetail?.internalCollabMessages;
+	const conversationMessages = matterDetail?.userMessages;
+	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
+	const delegations = useMemo(
+		() => buildMatterDelegations(conversationMessages ?? [], delegationMessages ?? [], activeTurnId),
+		[conversationMessages, delegationMessages, activeTurnId],
 	);
 
 	const {
@@ -400,7 +430,7 @@ export function ChatStage({
 		observerMemberIds,
 		observersEnabled,
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
-		delegations: delegationsPlacement.all,
+		delegations: delegations.assignments,
 	});
 
 	return (
@@ -427,7 +457,6 @@ export function ChatStage({
 				moreMenuOpen={moreMenuOpen}
 				pendingMatterMemoriesCount={pendingMatterMemoriesCount}
 				matterMemoriesCount={matterMemories.length}
-				delegationsCount={delegationsPlacement.all.length}
 				deliverablesCount={deliverablesCount}
 				activeChatDeliverableId={activeChatDeliverable?.id ?? null}
 				selectedDeliverableId={selectedDeliverableId}
@@ -436,7 +465,7 @@ export function ChatStage({
 				onToggleRoster={() => {
 					transitionView("panel", () => {
 						setMoreMenuOpen(false);
-						setCollabOpen(false);
+						closeCollab();
 						resetRoster(!rosterOpen);
 					});
 				}}
@@ -446,26 +475,16 @@ export function ChatStage({
 				}}
 				onSelectMoreCollab={() => {
 					setMoreMenuOpen(false);
-					const willOpen = !(collabOpen && collabTab !== "experiences");
-					transitionView("panel", () => {
-						if (
-							willOpen &&
-							delegationsPlacement.all.length === 0 &&
-							(matterDetail?.noticeMessages.length ?? 0) > 0
-						) {
-							setCollabTab("events");
-						} else if (willOpen) {
-							setCollabTab("delegations");
-						}
-						setCollabOpen(willOpen);
-					});
+					if (collabOpen && collabTab !== "experiences") transitionView("panel", closeCollab);
+					else openDelegations("latest");
 				}}
 				onSelectMoreExperiences={() => {
 					setMoreMenuOpen(false);
 					const willOpen = !(collabOpen && collabTab === "experiences");
 					transitionView("panel", () => {
 						setCollabTab("experiences");
-						setCollabOpen(willOpen);
+						if (willOpen) setCollabMatterId(selectedMatterId);
+						else closeCollab();
 					});
 				}}
 				onOpenDeliverables={onOpenDeliverables}
@@ -514,14 +533,34 @@ export function ChatStage({
 				</ViewFade>
 			)}
 
-			{collabOpen && matterDetail && (
+			{collabOpen && activeLoadedId && matterDetail && (
 				<ViewFade type="panel">
 					<MatterCollabDrawer
 						panelRef={collabPanelRef}
 						collabTab={collabTab}
 						matterDetail={matterDetail}
 						selectedMemberId={selectedMemberId}
-						delegations={delegationsPlacement.all}
+						delegationPanel={
+							<MatterDelegationPanel
+								delegations={delegations}
+								messages={matterDetail.userMessages}
+								progress={activeMatterProgress}
+								scope={delegationScope}
+								view={delegationView}
+								memberName={memberName}
+								onSelectScope={setDelegationScope}
+								onSelectView={setDelegationView}
+								onLocateTurn={(id) => {
+									setCollabMatterId(null);
+									collabTriggerRef.current = null;
+									requestAnimationFrame(() => {
+										const message = document.getElementById(`matter-message-${id}`);
+										message?.focus({ preventScroll: true });
+										message?.scrollIntoView({ block: "center" });
+									});
+								}}
+							/>
+						}
 						matterMemories={matterMemories}
 						matterParticipantIds={matterParticipantIds}
 						members={members}
@@ -533,7 +572,7 @@ export function ChatStage({
 						workspaceName={workspaceName}
 						organizationName={organizationName}
 						onSelectTab={setCollabTab}
-						onClose={() => transitionView("panel", () => setCollabOpen(false))}
+						onClose={() => transitionView("panel", closeCollab)}
 						onDistill={() => void handleDistillCurrentMatter()}
 						onCancelDistill={
 							onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
@@ -577,7 +616,8 @@ export function ChatStage({
 				memberName={memberName}
 				previewUrlFor={previewUrlFor}
 				deliverablesPlacement={deliverablesPlacement}
-				delegationsPlacement={delegationsPlacement}
+				delegations={delegations}
+				onOpenDelegations={openDelegations}
 				onOpenLightbox={setLightboxImage}
 				onPreviewFile={openFilePreview}
 				onOpenDeliverables={onOpenDeliverables}

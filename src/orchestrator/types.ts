@@ -33,11 +33,19 @@ export type OrchestratorDialogHandler = (
 	ctx: DialogContext,
 ) => Promise<RpcExtensionUIResponsePayload> | RpcExtensionUIResponsePayload;
 
-export interface ActiveDelegationProgress {
+interface ActiveCollaborationMember {
 	memberId: string;
 	memberName: string;
 	stageLabel: string;
+	fromMemberId: string;
+	fromMemberName: string;
 }
+
+export type ActiveDelegationProgress = ActiveCollaborationMember &
+	(
+		| { kind: "delegation"; requestMessageId: string; parentRequestMessageId?: string; delegationNumber: number }
+		| { kind: "observer" }
+	);
 
 export interface ProgressActivityItem {
 	memberName: string;
@@ -53,6 +61,8 @@ export interface DispatchProgressEvent {
 	activeDelegations?: ActiveDelegationProgress[];
 	recentLogs?: ProgressActivityItem[];
 	collabUpdated?: boolean;
+	sourceUserMessageId?: string;
+	speakerMemberId?: string;
 }
 
 export interface ProgressSnapshot {
@@ -219,6 +229,7 @@ export interface DelegateInput {
 export interface DelegateResult {
 	fromMember: TeamMember;
 	toMember: TeamMember;
+	delegationNumber: number;
 	requestMessage: MatterMessage;
 	responseMessage: MatterMessage;
 	answerText: string;
@@ -284,6 +295,11 @@ export interface MatterRun {
 	lastProgress?: DispatchProgressEvent;
 	timeoutMs: number;
 	deadlineAt: number | null;
+}
+
+export interface DelegationContext {
+	discussionMode?: boolean;
+	parentRequestMessageId?: string;
 }
 
 export const MEMORY_CATEGORY_PROMPT_LABELS: Record<MemoryCategory, string> = {

@@ -29,6 +29,7 @@ import { resolveBuiltinExtensionPath } from "./runtime-info.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
+	type DelegationContext,
 	type DispatchProgressEvent,
 	type ExecutionEffects,
 	emptyEffects,
@@ -65,7 +66,7 @@ export interface WorkerRunnerDeps {
 		signal: AbortSignal,
 		effectsTarget: ExecutionEffects,
 		onProgress?: (progress: DispatchProgressEvent) => void,
-		options?: { discussionMode?: boolean },
+		options?: DelegationContext,
 	) => Promise<DelegateResult>;
 }
 
@@ -76,6 +77,7 @@ export interface ExecuteWorkerInput {
 	taskPrompt: string;
 	images?: ImageContent[];
 	isInternalDelegation?: boolean;
+	delegationRequestId?: string;
 	sessionMode?: "lead" | "internal" | "observer";
 	discussionMode?: boolean;
 	excludeMessageIds?: string[];
@@ -194,9 +196,13 @@ export async function executeWithWorkerPass(
 						toolSignal,
 						effects,
 						input.onProgress,
-						{ discussionMode: isDiscussionMode },
+						{ discussionMode: isDiscussionMode, parentRequestMessageId: input.delegationRequestId },
 					);
-					return { memberId: result.toMember.id, answer: result.answerText };
+					return {
+						memberId: result.toMember.id,
+						delegationNumber: result.delegationNumber,
+						answer: result.answerText,
+					};
 				}
 				if (call.tool === "propose_experience") {
 					if (sessionMode === "observer") {

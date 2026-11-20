@@ -4,6 +4,7 @@ import type { WorkspaceLink } from "../storage/types.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
+	type DelegationContext,
 	type DispatchProgressEvent,
 	type ExecutionEffects,
 	emptyEffects,
@@ -31,7 +32,7 @@ export async function delegateBetweenMembers(
 	signal: AbortSignal,
 	effectsTarget: ExecutionEffects,
 	onProgress?: (progress: DispatchProgressEvent) => void,
-	options?: { discussionMode?: boolean },
+	options?: DelegationContext,
 ): Promise<DelegateResult> {
 	signal.throwIfAborted();
 	const fromMember = deps.store.getMember(input.fromMemberId);
@@ -69,6 +70,11 @@ export async function delegateBetweenMembers(
 	if (cached) return await cached;
 	if (run.delegationCount >= 8) throw new Error("Delegation limit reached (8 per user turn)");
 	run.delegationCount += 1;
+	const delegationNumber = run.delegationCount;
+	const scope = {
+		sourceUserMessageId: run.userMessageId || null,
+		workspaceId: workspace?.id ?? null,
+	};
 	const operation = (async () => {
 		const requestMessage = deps.store.appendMessage({
 			matterId: input.matterId,
@@ -76,15 +82,26 @@ export async function delegateBetweenMembers(
 			senderType: "member",
 			senderId: fromMember.id,
 			content: `@${toMember.displayName}: ${input.question}`,
-			metadata: { toMemberId: toMember.id, workspaceId: workspace?.id ?? null },
+			metadata: {
+				...scope,
+				toMemberId: toMember.id,
+				delegationNumber,
+				...(options?.parentRequestMessageId ? { parentRequestMessageId: options.parentRequestMessageId } : {}),
+			},
 		});
 		const delegationKey = requestMessage.id;
-		pushRunLog(run, fromMember.displayName, `委托${toMember.displayName}：${truncateInline(input.question, 44)}`);
-		run.activeDelegations.set(delegationKey, {
+		const edge = {
+			kind: "delegation" as const,
+			requestMessageId: delegationKey,
+			parentRequestMessageId: options?.parentRequestMessageId,
+			delegationNumber,
+			fromMemberId: fromMember.id,
+			fromMemberName: fromMember.displayName,
 			memberId: toMember.id,
 			memberName: toMember.displayName,
-			stageLabel: "已接入任务",
-		});
+		};
+		pushRunLog(run, fromMember.displayName, `委托${toMember.displayName}：${truncateInline(input.question, 44)}`);
+		run.activeDelegations.set(delegationKey, { ...edge, stageLabel: "已接入任务" });
 		onProgress?.({
 			stage: "tool",
 			label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, "已接入任务"),
@@ -102,8 +119,9 @@ export async function delegateBetweenMembers(
 				matterId: input.matterId,
 				member: toMember,
 				workspace,
-				taskPrompt: `Internal delegation from ${fromMember.displayName}:\n${input.question}`,
+				taskPrompt: `Internal delegation from ${fromMember.displayName}:\nAssignment #${delegationNumber} for this turn.\n${input.question}`,
 				isInternalDelegation: true,
+				delegationRequestId: delegationKey,
 				discussionMode: options?.discussionMode,
 				run,
 				chain: [...chain, toMember.id],
@@ -120,11 +138,7 @@ export async function delegateBetweenMembers(
 					if (!snippet) return;
 					lastStreamBroadcastAt = now;
 					const label = `撰写结论：${truncateInline(snippet, 28)}`;
-					run.activeDelegations.set(delegationKey, {
-						memberId: toMember.id,
-						memberName: toMember.displayName,
-						stageLabel: label,
-					});
+					run.activeDelegations.set(delegationKey, { ...edge, stageLabel: label });
 					onProgress?.({
 						stage: "tool",
 						label: summarizeActiveDelegations(run.activeDelegations, toMember.displayName, label),
@@ -134,12 +148,11 @@ export async function delegateBetweenMembers(
 					});
 				},
 				onProgress: (childProgress) => {
-					const stageLabel = mapChildStageLabel(childProgress);
-					run.activeDelegations.set(delegationKey, {
-						memberId: toMember.id,
-						memberName: toMember.displayName,
-						stageLabel,
-					});
+					const childIsActive = [...run.activeDelegations.values()].some(
+						(entry) => entry.kind === "delegation" && entry.parentRequestMessageId === delegationKey,
+					);
+					const stageLabel = childIsActive ? "等待下游回报" : mapChildStageLabel(childProgress);
+					run.activeDelegations.set(delegationKey, { ...edge, stageLabel });
 					onProgress?.({
 						stage: childProgress.stage === "waiting_user" ? "waiting_user" : "tool",
 						label:
@@ -149,6 +162,7 @@ export async function delegateBetweenMembers(
 						toolName: childProgress.toolName ?? "delegate_to_member",
 						activeDelegations: [...run.activeDelegations.values()],
 						recentLogs: [...run.recentLogs],
+						collabUpdated: childProgress.collabUpdated,
 					});
 				},
 			});
@@ -164,9 +178,9 @@ export async function delegateBetweenMembers(
 				senderId: toMember.id,
 				content: answerText,
 				metadata: {
+					...scope,
 					replyToMemberId: fromMember.id,
 					requestMessageId: requestMessage.id,
-					workspaceId: workspace?.id ?? null,
 				},
 			});
 			run.activeDelegations.delete(delegationKey);
@@ -183,7 +197,7 @@ export async function delegateBetweenMembers(
 				recentLogs: [...run.recentLogs],
 				collabUpdated: true,
 			});
-			return { fromMember, toMember, requestMessage, responseMessage, answerText };
+			return { fromMember, toMember, delegationNumber, requestMessage, responseMessage, answerText };
 		} catch (error) {
 			run.delegations.delete(key);
 			deps.store.appendMessage({
@@ -192,7 +206,7 @@ export async function delegateBetweenMembers(
 				senderType: "system",
 				senderId: toMember.id,
 				content: `内部委托未完成：${error instanceof Error ? error.message : String(error)}`,
-				metadata: { requestMessageId: requestMessage.id, failed: true },
+				metadata: { ...scope, requestMessageId: requestMessage.id, failed: true },
 			});
 			const errMessage = error instanceof Error ? error.message : String(error);
 			const abortedOrCancelled = signal.aborted || run.cancelled;

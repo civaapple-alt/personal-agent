@@ -67,12 +67,15 @@ export async function runObserversPass(
 	});
 	const observerNames = input.observers.map((member) => member.displayName).join("、");
 	pushRunLog(input.run, "旁听席", `${observerNames}正在审视本轮讨论`);
+	const observerEdge = (observer: TeamMember) => ({
+		kind: "observer" as const,
+		fromMemberId: input.assignedMember.id,
+		fromMemberName: input.assignedMember.displayName,
+		memberId: observer.id,
+		memberName: observer.displayName,
+	});
 	for (const observer of input.observers) {
-		input.run.activeDelegations.set(`obs:${observer.id}`, {
-			memberId: observer.id,
-			memberName: observer.displayName,
-			stageLabel: "旁听审视中",
-		});
+		input.run.activeDelegations.set(`obs:${observer.id}`, { ...observerEdge(observer), stageLabel: "旁听审视中" });
 	}
 	input.onProgress?.({
 		stage: "thinking",
@@ -103,8 +106,7 @@ export async function runObserversPass(
 					onProgress: (childProgress) => {
 						const stageLabel = mapChildStageLabel(childProgress, "旁听审视中");
 						input.run.activeDelegations.set(observerKey, {
-							memberId: observer.id,
-							memberName: observer.displayName,
+							...observerEdge(observer),
 							stageLabel,
 						});
 						input.onProgress?.({

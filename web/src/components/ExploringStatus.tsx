@@ -5,17 +5,18 @@ import type {
 	ProgressSnapshotDto,
 	TeamMemberDto,
 } from "../api.ts";
+import { liveDelegationEdges } from "../utils/matterDelegations.ts";
 import {
 	formatClockTime,
 	formatElapsedDuration,
 	getBotTheme,
 	getMemberThemeById,
-	inferDelegationMood,
 	SHORT_STAGE_LABELS,
 	STAGE_LABELS,
 	STAGE_ORDER,
 } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
+import { DelegationGraph } from "./chat/DelegationGraph.tsx";
 import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
 interface ProgressDetailsProps {
@@ -25,6 +26,7 @@ interface ProgressDetailsProps {
 	members?: TeamMemberDto[];
 	delegationHeading?: string;
 	stoppedMode?: boolean;
+	onOpenDelegations?: () => void;
 }
 
 function ProgressDetails({
@@ -32,8 +34,9 @@ function ProgressDetails({
 	activeDelegations,
 	recentLogs,
 	members,
-	delegationHeading = "正在协同的团队岗位",
+	delegationHeading = "本轮协作路径",
 	stoppedMode = false,
+	onOpenDelegations,
 }: ProgressDetailsProps) {
 	const activeIndex = STAGE_ORDER.indexOf(stage);
 	return (
@@ -53,27 +56,20 @@ function ProgressDetails({
 
 			{activeDelegations && activeDelegations.length > 0 && (
 				<div className="exploring-delegations">
-					<div className="exploring-section-head">{delegationHeading}</div>
-					<div className="exploring-desk-grid">
-						{activeDelegations.map((entry) => {
-							const colleagueTheme = getMemberThemeById(members, entry.memberId);
-							const colleagueMood = stoppedMode ? "idle" : inferDelegationMood(entry.stageLabel);
-							return (
-								<div key={entry.memberId} className="exploring-desk-card">
-									<BotFaceIcon
-										bg={colleagueTheme.bg}
-										tilt={colleagueTheme.tilt}
-										size="sm"
-										mood={colleagueMood}
-									/>
-									<div className="exploring-desk-meta">
-										<div className="exploring-desk-name">{entry.memberName}</div>
-										<div className="exploring-desk-action">{entry.stageLabel}</div>
-									</div>
-								</div>
-							);
-						})}
+					<div className="exploring-section-head delegation-live-heading">
+						<span>{delegationHeading}</span>
+						{onOpenDelegations && activeDelegations.some((entry) => entry.kind === "delegation") && (
+							<button
+								type="button"
+								className="btn-inline btn-xs"
+								data-open-delegations
+								onClick={onOpenDelegations}
+							>
+								查看本轮关系图
+							</button>
+						)}
 					</div>
+					<DelegationGraph edges={liveDelegationEdges(activeDelegations, stoppedMode ? "failed" : "running")} />
 				</div>
 			)}
 
@@ -104,6 +100,7 @@ interface ExploringStatusProps {
 	leadMemberId?: string | null;
 	leadDisplayName?: string;
 	onAbort?: () => void;
+	onOpenDelegations?: () => void;
 }
 
 export function ExploringStatus({
@@ -113,6 +110,7 @@ export function ExploringStatus({
 	leadMemberId,
 	leadDisplayName,
 	onAbort,
+	onOpenDelegations,
 }: ExploringStatusProps) {
 	const leadTheme = getMemberThemeById(members, leadMemberId);
 	const leadName =
@@ -142,6 +140,7 @@ export function ExploringStatus({
 				activeDelegations={progress.activeDelegations}
 				recentLogs={progress.recentLogs}
 				members={members}
+				onOpenDelegations={onOpenDelegations}
 			/>
 		</div>
 	);

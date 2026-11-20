@@ -4,7 +4,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { type RpcWorkerLike, TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
+import {
+	type DispatchProgressEvent,
+	type RpcWorkerLike,
+	TeamOrchestrator,
+} from "../src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
 import teamExtension, { type PiExtensionApi } from "../src/rpc/team-extension.ts";
@@ -374,6 +378,7 @@ test("shipped tool delegates to a real colleague execution and returns internal 
 		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			engineerCalls++;
 			assert.match(worker.prompt, /用户目标/);
+			assert.match(worker.prompt, /Assignment #1/);
 			await assert.rejects(
 				worker.call("delegate_to_member", { memberId: "product-manager", task: "call ancestor" }),
 				/cycle/,
@@ -383,6 +388,7 @@ test("shipped tool delegates to a real colleague execution and returns internal 
 		const args = { memberId: "engineering-manager", task: "请针对用户目标提供技术意见" };
 		const answer = await worker.call("delegate_to_member", args, "same-call");
 		assert.match(JSON.stringify(answer), /技术依据/);
+		assert.match(JSON.stringify(answer), /delegationNumber/);
 		assert.deepEqual(await worker.call("delegate_to_member", args, "same-call"), answer);
 		await worker.call("delegate_to_member", args, "different-call-same-question");
 		await assert.rejects(
@@ -637,12 +643,50 @@ test("delegations enforce depth and turn budget without preventing professional 
 		);
 		return "已整合专业意见";
 	});
-	await f.orchestrator.dispatchMatter({
+	const progress: DispatchProgressEvent[] = [];
+	const result = await f.orchestrator.dispatchMatter({
 		prompt: "协作边界",
 		preferredMemberId: "product-manager",
 		workspaceId: f.workspace.id,
+		onProgress: (event) => progress.push(event),
 	});
 	assert.equal(f.workers.length, 9);
+	const [turn] = f.store.listMessages(result.matter.id, "user");
+	const records = f.store.listMessages(result.matter.id, "internal_collab");
+	assert.equal(records.length, 16);
+	assert.ok(records.every((message) => message.metadata?.sourceUserMessageId === turn?.id));
+	const [first, nested] = records.filter((message) => message.metadata?.toMemberId);
+	assert.ok(first && nested);
+	assert.equal(first.metadata?.delegationNumber, 1);
+	assert.equal(nested.metadata?.delegationNumber, 2);
+	assert.equal(nested.metadata?.parentRequestMessageId, first.id);
+	assert.ok(progress.every((event) => event.sourceUserMessageId === turn?.id));
+	const handoffIndex = progress.findIndex((event) => event.collabUpdated && event.activeDelegations?.length === 2);
+	assert.notEqual(handoffIndex, -1);
+	const handoff = progress[handoffIndex];
+	assert.deepEqual(
+		handoff?.activeDelegations?.map((edge) => [
+			edge.kind === "delegation" && edge.requestMessageId,
+			edge.fromMemberId,
+			edge.memberId,
+		]),
+		[
+			[first.id, "product-manager", "engineering-manager"],
+			[nested.id, "engineering-manager", "qa-manager"],
+		],
+	);
+	assert.equal(handoff?.activeDelegations?.[0]?.stageLabel, "等待下游回报");
+	assert.ok(
+		progress
+			.slice(handoffIndex + 1)
+			.some(
+				(event) =>
+					event.collabUpdated &&
+					event.activeDelegations?.length === 1 &&
+					event.activeDelegations[0]?.kind === "delegation" &&
+					event.activeDelegations[0]?.requestMessageId === first.id,
+			),
+	);
 });
 
 test("a changed saved session header is rejected, and the session directory alone never chooses a conversation", async (t) => {

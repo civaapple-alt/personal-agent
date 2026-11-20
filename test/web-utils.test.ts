@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { MatterMessageDto } from "../web/src/api/matters.ts";
 import {
 	createPastedTextAttachment,
 	isSupportedImageDescriptor as isSupportedImageFile,
 	prepareComposerTextFiles as prepareComposerFiles,
 	shouldFoldPastedText,
 } from "../web/src/textAttachments.ts";
+import { buildMatterDelegations, liveDelegationEdges } from "../web/src/utils/matterDelegations.ts";
 import {
 	applyOrgAiRoleOverrides,
 	applyPrimaryContactToMembers,
@@ -18,7 +20,6 @@ import {
 	inferDelegationMood,
 	isKeyNoticeEvent,
 	MEMORY_CATEGORY_LABELS,
-	mapDelegationsToMessages,
 	parseDeliverableSummary,
 	parseMessageFiles,
 	parseMessageImages,
@@ -28,7 +29,7 @@ import {
 	stripMarkdownFormatting,
 } from "../web/src/utils.ts";
 
-test("mapDelegationsToMessages pairs turn delegations for running, completed, and failed outcomes", () => {
+test("delegation boards place historical handoffs and keep only the active turn running", () => {
 	const userMessages = [
 		{
 			id: "u1",
@@ -111,15 +112,22 @@ test("mapDelegationsToMessages pairs turn delegations for running, completed, an
 		},
 	];
 
-	const placedRunning = mapDelegationsToMessages(userMessages, internalCollab, true);
-	assert.equal(placedRunning.byMessageId.get("s1")?.length, 2);
-	assert.equal(placedRunning.byMessageId.get("s1")?.[0]?.status, "completed");
-	assert.equal(placedRunning.byMessageId.get("s1")?.[0]?.answer, "需要 3 人日。");
-	assert.equal(placedRunning.byMessageId.get("s1")?.[1]?.status, "failed");
-	assert.equal(placedRunning.byMessageId.get("u2")?.[0]?.status, "running");
+	const ordered = internalCollab.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+	const placedRunning = buildMatterDelegations(userMessages, ordered, "u2");
+	const firstRound = placedRunning.byTurn.get("u1");
+	assert.deepEqual(
+		firstRound?.assignments.map((item) => item.status),
+		["completed", "failed"],
+	);
+	assert.deepEqual(
+		firstRound?.posts.map((post) => post.kind),
+		["assignment", "assignment", "reply", "failure"],
+	);
+	assert.equal(firstRound?.posts[2]?.message.content, "需要 3 人日。");
+	assert.equal(placedRunning.byTurn.get("u2")?.assignments[0]?.status, "running");
 
-	const placedStopped = mapDelegationsToMessages(userMessages, internalCollab, false);
-	assert.equal(placedStopped.byMessageId.get("u2")?.[0]?.status, "failed");
+	const placedStopped = buildMatterDelegations(userMessages, ordered);
+	assert.equal(placedStopped.byTurn.get("u2")?.assignments[0]?.status, "failed");
 
 	assert.equal(
 		formatNoticeEventLine(
@@ -133,6 +141,100 @@ test("mapDelegationsToMessages pairs turn delegations for running, completed, an
 	assert.equal(inferDelegationMood("已接入任务"), "starting");
 	assert.equal(inferDelegationMood("思考分析"), "thinking");
 	assert.equal(getMemberThemeById([{ id: "pm" } as never, { id: "eng" } as never], "eng").bg, "#4e6df5");
+});
+
+test("anchored handoffs and nested edges survive intervening user discussion and unrelated active turns", () => {
+	const message = (
+		id: string,
+		channel: MatterMessageDto["channel"],
+		senderType: MatterMessageDto["senderType"],
+		at: number,
+		metadata: NonNullable<MatterMessageDto["metadata"]>,
+	): MatterMessageDto => ({
+		id,
+		channel,
+		senderType,
+		metadata,
+		matterId: "matter",
+		senderId: "actor",
+		content: id,
+		createdAt: new Date(at * 1000).toISOString(),
+	});
+	const userMessages = [
+		message("assign", "user", "user", 1, {}),
+		message("human-chat", "user", "user", 2, { mode: "discussion" }),
+		message("reply", "user", "member", 7, { sourceUserMessageId: "assign" }),
+		message("next", "user", "user", 8, {}),
+	];
+	const posts = [
+		message("one", "internal_collab", "member", 3, {
+			sourceUserMessageId: "assign",
+			toMemberId: "engineering",
+			delegationNumber: 1,
+		}),
+		message("two", "internal_collab", "member", 4, {
+			sourceUserMessageId: "assign",
+			toMemberId: "qa",
+			delegationNumber: 2,
+			parentRequestMessageId: "one",
+		}),
+		message("two-reply", "internal_collab", "member", 5, { requestMessageId: "two" }),
+		message("one-reply", "internal_collab", "member", 6, { requestMessageId: "one" }),
+		message("unknown", "internal_collab", "member", 7, { sourceUserMessageId: null, toMemberId: "qa" }),
+		message("pending", "internal_collab", "member", 9, {
+			sourceUserMessageId: "assign",
+			toMemberId: "qa",
+			delegationNumber: 3,
+		}),
+		message("active", "internal_collab", "member", 10, {
+			sourceUserMessageId: "next",
+			toMemberId: "qa",
+			delegationNumber: 1,
+		}),
+	];
+	const projected = buildMatterDelegations(userMessages, posts, "next");
+	assert.deepEqual([...projected.byTurn.keys()], ["assign", "next"]);
+	const first = projected.byTurn.get("assign");
+	assert.deepEqual(
+		first?.posts.map(({ message, assignment }) => [message.id, assignment.number]),
+		[
+			["one", 1],
+			["two", 2],
+			["two-reply", 2],
+			["one-reply", 1],
+			["pending", 3],
+		],
+	);
+	assert.equal(first?.assignments.find(({ id }) => id === "two")?.parentRequestMessageId, "one");
+	assert.equal(first?.assignments.at(-1)?.status, "failed");
+	assert.equal(projected.byTurn.get("next")?.assignments[0]?.status, "running");
+	assert.equal(projected.history.posts[0]?.message.id, "unknown");
+	const graph = liveDelegationEdges([
+		{
+			requestMessageId: "one",
+			fromMemberName: "PM",
+			memberId: "engineering",
+			memberName: "Engineering",
+			stageLabel: "等待下游回报",
+		},
+		{
+			requestMessageId: "two",
+			parentRequestMessageId: "one",
+			fromMemberName: "Engineering",
+			memberId: "qa",
+			memberName: "QA",
+			stageLabel: "检查中",
+		},
+		{ requestMessageId: "three", fromMemberName: "PM", memberId: "qa", memberName: "QA", stageLabel: "测试中" },
+	]);
+	assert.deepEqual(
+		graph.map(({ id, parentId, from, to }) => [id, parentId ?? null, from, to]),
+		[
+			["one", null, "PM", "Engineering"],
+			["two", "one", "Engineering", "QA"],
+			["three", null, "PM", "QA"],
+		],
+	);
 });
 
 test("formatElapsedDuration and parseProgressSnapshot safely handle snapshot metadata", () => {

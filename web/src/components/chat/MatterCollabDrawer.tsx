@@ -1,15 +1,14 @@
-import { type RefObject, useMemo, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
 import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
-import { type DelegationSummaryItem, formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
+import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
 import { InlineExperienceReviewSection } from "../ExperienceReviewPanel.tsx";
-import { DelegationItemCard } from "./DelegationSummaryCard.tsx";
 
 interface MatterCollabDrawerProps {
 	panelRef: RefObject<HTMLDivElement | null>;
 	collabTab: "delegations" | "events" | "experiences";
 	matterDetail: MatterDetailPayload;
 	selectedMemberId: string;
-	delegations: DelegationSummaryItem[];
+	delegationPanel: ReactNode;
 	matterMemories: MemberMemoryDto[];
 	matterParticipantIds: string[];
 	members: TeamMemberDto[];
@@ -36,7 +35,7 @@ export function MatterCollabDrawer({
 	collabTab,
 	matterDetail,
 	selectedMemberId,
-	delegations,
+	delegationPanel,
 	matterMemories,
 	matterParticipantIds,
 	members,
@@ -58,6 +57,7 @@ export function MatterCollabDrawer({
 }: MatterCollabDrawerProps) {
 	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
 	const [showAllEvents, setShowAllEvents] = useState(false);
+	useEffect(() => panelRef.current?.focus({ preventScroll: true }), [panelRef]);
 
 	const filteredNotices = useMemo(() => {
 		const ordered = [...matterDetail.noticeMessages].reverse();
@@ -70,27 +70,30 @@ export function MatterCollabDrawer({
 	);
 
 	return (
-		<div ref={panelRef} role="dialog" aria-label="团队委托与过程事件" className="collab-dock-panel">
+		<div ref={panelRef} role="dialog" tabIndex={-1} aria-label="团队委托与过程事件" className="collab-dock-panel">
 			<div className="collab-dock-inner">
 				<div className="collab-dock-head">
 					<div className="collab-tabs">
 						<button
 							type="button"
 							className={`collab-tab-btn ${collabTab === "delegations" ? "active" : ""}`}
+							aria-pressed={collabTab === "delegations"}
 							onClick={() => onSelectTab("delegations")}
 						>
-							团队内部委托 ({delegations.length})
+							团队委托
 						</button>
 						<button
 							type="button"
 							className={`collab-tab-btn ${collabTab === "events" ? "active" : ""}`}
+							aria-pressed={collabTab === "events"}
 							onClick={() => onSelectTab("events")}
 						>
-							过程与工具事件 ({matterDetail.noticeMessages.length})
+							事项事件 ({matterDetail.noticeMessages.length})
 						</button>
 						<button
 							type="button"
 							className={`collab-tab-btn ${collabTab === "experiences" ? "active" : ""}`}
+							aria-pressed={collabTab === "experiences"}
 							onClick={() => onSelectTab("experiences")}
 						>
 							经验复盘 ({matterMemories.length})
@@ -125,21 +128,7 @@ export function MatterCollabDrawer({
 							onError={onError}
 						/>
 					) : collabTab === "delegations" ? (
-						delegations.length === 0 ? (
-							<p className="muted-hint">当前事项暂无团队内部委托记录。</p>
-						) : (
-							<div className="collab-section">
-								{delegations.map((item) => (
-									<DelegationItemCard
-										key={item.id}
-										item={item}
-										keyPrefix="dock"
-										showTime
-										memberName={memberName}
-									/>
-								))}
-							</div>
-						)
+						delegationPanel
 					) : matterDetail.noticeMessages.length === 0 ? (
 						<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
 					) : (

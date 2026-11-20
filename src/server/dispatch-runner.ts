@@ -122,9 +122,8 @@ export function createDispatchRunner(deps: {
 				const currentMatter = store.getMatter(input.matterId);
 				const leadMember = currentMatter?.leadMemberId ? store.getMember(currentMatter.leadMemberId) : null;
 				const messages = store.listMessages(input.matterId, "user");
-				const sourceMessage = input.existingUserMessageId
-					? store.getMessage(input.existingUserMessageId)
-					: messages.findLast((msg) => msg.senderType === "user");
+				const sourceId = lastActive?.progress.sourceUserMessageId ?? input.existingUserMessageId;
+				const sourceMessage = sourceId ? store.getMessage(sourceId) : null;
 				const resolvedWorkspaceId =
 					sourceMessage?.metadata && "workspaceId" in sourceMessage.metadata
 						? ((sourceMessage.metadata.workspaceId as string | null) ?? null)
@@ -170,7 +169,8 @@ export function createDispatchRunner(deps: {
 						error: message,
 						workspaceId: resolvedWorkspaceId,
 						repoPath: resolvedRepoPath,
-						...(isDiscussion ? { discussionTurn: true, sourceUserMessageId: sourceMessage?.id } : {}),
+						...(isDiscussion ? { discussionTurn: true } : {}),
+						...(sourceMessage ? { sourceUserMessageId: sourceMessage.id } : {}),
 						...(progressSnapshot ? { progressSnapshot } : {}),
 					},
 				});

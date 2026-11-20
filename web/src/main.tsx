@@ -5,6 +5,7 @@ import "./styles/tokens.css";
 import "./styles/primitives.css";
 import "./styles/shell.css";
 import "./styles/chat-stream.css";
+import "./styles/matter-delegation.css";
 import "./styles/chat-cards.css";
 import "./styles/chat-composer.css";
 import "./styles/model-picker.css";

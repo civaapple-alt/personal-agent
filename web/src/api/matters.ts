@@ -150,6 +150,12 @@ export interface ActiveDelegationDto {
 	memberId: string;
 	memberName: string;
 	stageLabel: string;
+	fromMemberId?: string;
+	fromMemberName?: string;
+	requestMessageId?: string;
+	parentRequestMessageId?: string;
+	delegationNumber?: number;
+	kind?: "delegation" | "observer";
 }
 
 export interface ProgressActivityDto {
@@ -167,6 +173,8 @@ export interface MatterProgressDto {
 	activeDelegations?: ActiveDelegationDto[];
 	recentLogs?: ProgressActivityDto[];
 	collabUpdated?: boolean;
+	sourceUserMessageId?: string;
+	speakerMemberId?: string;
 }
 
 export interface ProgressSnapshotDto {

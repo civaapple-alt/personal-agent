@@ -130,7 +130,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "delegate_to_member",
 			label: "咨询团队成员",
 			description:
-				"Ask an existing colleague to perform specialist work and return evidence. Include the objective, relevant decisions, constraints and expected result in task. Internal conversation is kept off the user channel. Do not delegate to yourself or an ancestor.",
+				"Ask an existing colleague to perform specialist work and return evidence. In task, include the objective, relevant decisions, ownership or constraints, and what evidence to return. The answer includes the assignment number for this turn's handoff board. Internal conversation is kept off the user channel. Do not delegate to yourself or an ancestor.",
 			parameters: {
 				type: "object",
 				properties: { memberId: { type: "string" }, task: { type: "string" } },

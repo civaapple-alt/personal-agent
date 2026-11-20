@@ -28,6 +28,7 @@ import { filterTeamMembersForScope } from "./team-health.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
+	type DelegationContext,
 	type DispatchMatterInput,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
@@ -523,7 +524,7 @@ export class TeamOrchestrator {
 		signal: AbortSignal,
 		effectsTarget: ExecutionEffects,
 		onProgress?: (progress: DispatchProgressEvent) => void,
-		options?: { discussionMode?: boolean },
+		options?: DelegationContext,
 	): Promise<DelegateResult> {
 		return delegateBetweenMembers(
 			{

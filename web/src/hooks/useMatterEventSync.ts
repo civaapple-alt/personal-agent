@@ -6,6 +6,7 @@ interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
 	activeTabRef: MutableRefObject<NavTab>;
 	selectedMatterIdRef: MutableRefObject<string | null>;
+	matterStreamRevision: MutableRefObject<{ total: number; byMatter: Map<string, number> }>;
 	setProgressByMatter: React.Dispatch<React.SetStateAction<Record<string, MatterProgressDto>>>;
 	setProgressStartedAt: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 	setStreamingDelta: React.Dispatch<React.SetStateAction<string>>;
@@ -24,6 +25,7 @@ export function useMatterEventSync({
 	authStatus,
 	activeTabRef,
 	selectedMatterIdRef,
+	matterStreamRevision,
 	setProgressByMatter,
 	setProgressStartedAt,
 	setStreamingDelta,
@@ -38,7 +40,12 @@ export function useMatterEventSync({
 }: UseMatterEventSyncParams) {
 	useEffect(() => {
 		if (authStatus !== "authenticated") return;
+		const markStreamUpdate = (matterId: string) => {
+			const revision = matterStreamRevision.current;
+			revision.byMatter.set(matterId, ++revision.total);
+		};
 		const clearMatterProgress = (matterId: string) => {
+			markStreamUpdate(matterId);
 			if (selectedMatterIdRef.current === matterId) {
 				setStreamingDelta("");
 			}
@@ -59,15 +66,22 @@ export function useMatterEventSync({
 		};
 
 		const es = new EventSource("/api/events");
-		es.addEventListener("connected", () => setSseConnected(true));
+		let hasConnected = false;
+		es.addEventListener("connected", () => {
+			setSseConnected(true);
+			if (hasConnected) handleSync();
+			hasConnected = true;
+		});
 		es.addEventListener("text_delta", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; delta: string };
 			if (data.matterId === selectedMatterIdRef.current) {
+				markStreamUpdate(data.matterId);
 				setStreamingDelta((prev) => prev + data.delta);
 			}
 		});
 		es.addEventListener("matter_progress", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as MatterProgressDto;
+			markStreamUpdate(data.matterId);
 			setProgressByMatter((prev) => ({ ...prev, [data.matterId]: data }));
 			setProgressStartedAt((prev) => (prev[data.matterId] ? prev : { ...prev, [data.matterId]: Date.now() }));
 			if (data.stage === "starting" || data.collabUpdated) {
@@ -157,6 +171,7 @@ export function useMatterEventSync({
 		authStatus,
 		activeTabRef,
 		selectedMatterIdRef,
+		matterStreamRevision,
 		setProgressByMatter,
 		setProgressStartedAt,
 		setStreamingDelta,

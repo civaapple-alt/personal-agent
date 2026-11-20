@@ -170,9 +170,19 @@ export async function dispatchMatterTurn(
 		timeoutMs: turnDeadlineMs,
 		deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,
 	};
+	let speakerMemberId: string;
 	const emitDispatchProgress = (progress: DispatchProgressEvent) => {
+		if (
+			progress.stage === "starting" &&
+			run.lastProgress?.stage === "starting" &&
+			run.lastProgress.label === progress.label &&
+			run.lastProgress.speakerMemberId === speakerMemberId
+		)
+			return;
 		const normalized: DispatchProgressEvent = {
 			...progress,
+			sourceUserMessageId: run.userMessageId,
+			speakerMemberId,
 			activeDelegations:
 				progress.activeDelegations ??
 				(run.activeDelegations.size > 0 ? [...run.activeDelegations.values()] : undefined),
@@ -208,6 +218,7 @@ export async function dispatchMatterTurn(
 			? resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
 			: [];
 	const activeSpeaker = mentionedTargets.length > 0 ? mentionedTargets[0]! : assignedMember;
+	speakerMemberId = activeSpeaker.id;
 	try {
 		if (!isDiscussionTurn && !isMidMatterArchitectConsult && matter.leadMemberId !== assignedMember.id) {
 			matter = deps.store.updateMatterLead(matter.id, assignedMember.id);
@@ -248,6 +259,7 @@ export async function dispatchMatterTurn(
 				},
 			});
 		run.userMessageId = message.id;
+		emitDispatchProgress({ stage: "starting", label: `正在接续${activeSpeaker.displayName}的工作` });
 		const formattedFilesBlock =
 			files.length > 0
 				? [
@@ -407,6 +419,7 @@ export async function dispatchMatterTurn(
 		if (isDiscussionTurn && !aborted && !run.cancelled && mentionedTargets.length > 1) {
 			for (const extraSpeaker of mentionedTargets.slice(1)) {
 				if (run.cancelled || run.controller.signal.aborted) break;
+				speakerMemberId = extraSpeaker.id;
 				let extraResult: PromptRunResult;
 				try {
 					extraResult = await deps.executeWithWorker({
@@ -510,6 +523,7 @@ export async function dispatchMatterTurn(
 				content: replyText,
 				metadata: {
 					aborted: true,
+					...(run.userMessageId ? { sourceUserMessageId: run.userMessageId } : {}),
 					...(isDiscussionTurn ? { discussionTurn: true } : {}),
 					cancelReason: run.cancelReason ?? "user",
 					workspaceId: workspace?.id ?? null,

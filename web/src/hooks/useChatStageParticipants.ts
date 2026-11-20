@@ -10,7 +10,7 @@ import type {
 	WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
-import type { DelegationSummaryItem } from "../utils/matterStream.ts";
+import type { DelegationAssignment } from "../utils/matterDelegations.ts";
 
 const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -39,7 +39,7 @@ interface UseChatStageParticipantsOptions {
 	observerMemberIds: string[];
 	observersEnabled: boolean;
 	draftCollaboratorIds: string[];
-	delegations: DelegationSummaryItem[];
+	delegations: DelegationAssignment[];
 }
 
 /** Projects organization, workspace, human collaborator, and AI roster views for ChatStage. */

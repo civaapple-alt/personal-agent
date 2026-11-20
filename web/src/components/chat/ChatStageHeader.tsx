@@ -31,7 +31,6 @@ interface ChatStageHeaderProps {
 	moreMenuOpen: boolean;
 	pendingMatterMemoriesCount: number;
 	matterMemoriesCount: number;
-	delegationsCount: number;
 	deliverablesCount: number;
 	activeChatDeliverableId: string | null;
 	selectedDeliverableId: string | null;
@@ -68,7 +67,6 @@ export function ChatStageHeader({
 	moreMenuOpen,
 	pendingMatterMemoriesCount,
 	matterMemoriesCount,
-	delegationsCount,
 	deliverablesCount,
 	activeChatDeliverableId,
 	selectedDeliverableId,
@@ -201,14 +199,7 @@ export function ChatStageHeader({
 										className={`header-more-item ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
 										onClick={onSelectMoreCollab}
 									>
-										<span className="header-more-label">
-											{delegationsCount > 0 ? "团队委托与事件" : "过程事件"}
-										</span>
-										<span className="header-more-meta">
-											{delegationsCount > 0
-												? `${delegationsCount} / ${matterDetail.noticeMessages.length}`
-												: matterDetail.noticeMessages.length}
-										</span>
+										<span className="header-more-label">团队委托与事件</span>
 									</button>
 									<button
 										type="button"

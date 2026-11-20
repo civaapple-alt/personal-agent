@@ -58,8 +58,7 @@
   以及全局「AI 旁听」开关）；发言区显式切换「团队聊天讨论」与「给 AI 安排事项 / 提请 AI 处理」（由当前事项负
   责人统一承接并按需团队协同，移除底部多余跟进选择框），讨论/提请/派发消息带独立归属徽章，所有者可一键「确
   认并派发 AI」或「忽略提请」。
-- 顶部浮层分栏面板区分「团队内部委托」（Markdown 渲染与长文本折叠）、「过程与工具事件」（倒序、关键/异常筛选及
-  [matterStream.ts](utils/matterStream.ts) `formatNoticeEventLine` 对历史截断工具 JSON 的正则兜底解析）与平铺的「经验复盘」。
+- [团队委托面板](components/chat/MatterDelegationPanel.tsx) 根据 [轮次投影](utils/matterDelegations.ts) 展示派发、回报和转派关系，从消息或运行卡片直达对应轮次，并可定位到原始消息。[关系图](components/chat/DelegationGraph.tsx) 同时用于进行中和历史轮次。「事项事件」保留事项级工具记录与关键事件筛选，截断的历史工具 JSON 由 [matterStream.ts](utils/matterStream.ts) 解析。
 - [ComposerDock](components/chat/ComposerDock.tsx) 在「开始新事项 / 已有事项空闲 / 角色架构师 / 执行中」统一使用同一 `.composer-card` 结构：运行中在卡片顶部显示含阶段徽标、实时耗时、快捷「切到讨论」与「停止执行」的 `.composer-run-banner`；顶部栏统一收口发言模式切换与组织/仓库/新事项操作；工具栏仅保留单一 `+` 按钮用于同时上传图片（最多 6 张，支持缩放与灯箱预览）和 UTF-8 文本/代码文件（最多 6 个、单文件 `<= 512KB`），并支持拖拽与 `Ctrl/Cmd+V` 粘贴截图；粘贴超过 600 字符或 10 行的大段纯文本自动折叠为附件胶囊，发送前后均可经 [ModalDialog](components/ModalDialog.tsx) 弹层查看完整内容（草稿状态支持「放回输入框」展开编辑），输入区随单行紧凑默认与多行自动增高平滑过渡（显示行数与发送快捷键提示）；[MarkdownView](MarkdownView.tsx) 配合 [deliverables.css](styles/deliverables.css) / [chat-stream.css](styles/chat-stream.css) 支持单元格与行内代码自然换行与两列表格首列保底宽度，避免窄列单字竖排挤压。
 
 ## 组织身份、团队记忆与成果阅读
