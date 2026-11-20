@@ -10,7 +10,7 @@
 | 会话、注册和邀请 | [useAuthSession](hooks/useAuthSession.ts)、[OrgInviteModal](components/OrgInviteModal.tsx) |
 | 当前事项有效工作区、组织与成员 | [useMatterScope](hooks/useMatterScope.ts) |
 | 设置及超管页面加载与刷新 | [useWorkbenchPanels](hooks/useWorkbenchPanels.ts) |
-| Hash 路由与浏览器前进后退 | [hashRouter.ts](hashRouter.ts) |
+| Hash 路由、浏览器前进后退和视图切换 | [hashRouter.ts](hashRouter.ts)、[useHashRouteNav](hooks/useHashRouteNav.ts)、[ViewFade](components/ViewTransitions.tsx) |
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
 | 布局与共用样式/格式 | [styles/tokens.css](styles/tokens.css)（`--text-*` 字号阶梯、`--page-pad-*`/`--section-gap`）、[styles/primitives.css](styles/primitives.css)（`.ui-sections-stack`、`.ui-section*`、`.ui-card` 等原语）及 [utils.ts](utils.ts)（聚合导出 [formatters.ts](utils/formatters.ts)、[matterStream.ts](utils/matterStream.ts)、[deliverableSummary.ts](utils/deliverableSummary.ts)、[orgRoster.ts](utils/orgRoster.ts) 与 [starterTasks.ts](utils/starterTasks.ts)） |
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
@@ -22,6 +22,10 @@
 
 样式按页面职责定位到[团队](styles/team.css)、[角色架构师](styles/role-architect.css)、[设置](styles/settings.css)、[账号与超管](styles/account-admin.css)、[对话流](styles/chat-stream.css)和[对话卡片](styles/chat-cards.css)。修改共用选择器时按 [main.tsx](main.tsx) 中的加载顺序检查作用范围。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。
+
+[useHashRouteNav](hooks/useHashRouteNav.ts) 将页签和路由选项一起更新。跨页、成果详情与协作浮层分别使用 [ViewFade](components/ViewTransitions.tsx) 淡入淡出。浏览器前进后退加载 URL 指定的成果，成果库根路由打开默认可见成果。减少动态效果或浏览器缺少 View Transitions 时即时切换。
+
+[ChatStage](components/ChatStage.tsx) 使用 `composerDraft` 和 `initiation` 接收草稿、附件与立项操作。输入区和立项面板定义各自的属性类型，状态仍由上层对应的 hooks 持有。
 
 ## 运行状态与事件同步
 

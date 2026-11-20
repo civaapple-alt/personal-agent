@@ -10,6 +10,7 @@ import {
 } from "../api.ts";
 import { collectMatterParticipantIds, formatClockTime, parseDeliverableSummary } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
+import { ViewFade } from "./ViewTransitions.tsx";
 
 interface DeliverableFamily {
 	key: string;
@@ -556,50 +557,54 @@ export function DeliverablesView({
 
 						<div className="deliverables-detail-col">
 							{effectiveActiveDeliverable ? (
-								<DeliverableCard
-									key={effectiveActiveDeliverable.id}
-									deliverable={effectiveActiveDeliverable}
-									siblingVersions={effectiveSiblingVersions}
-									memberName={memberName(effectiveActiveDeliverable.memberId)}
-									workspaceId={activeMatterMeta?.workspaceId ?? null}
-									workspaceName={workspaceName(activeMatterMeta?.workspaceId ?? null)}
-									organizationName={activeOrgId ? organizationName(activeOrgId) : null}
-									visibility={activeMatterMeta?.visibility ?? "org"}
-									workspaceVisibility={activeMatterMeta?.workspaceVisibility ?? "org"}
-									members={bootstrap?.members ?? []}
-									workspaces={bootstrap?.workspaces ?? []}
-									organizations={bootstrap?.organizations ?? []}
-									memoriesByMember={bootstrap?.memoriesByMember ?? {}}
-									participantIds={collectMatterParticipantIds({
-										matter:
-											bootstrap?.matters.find((m) => m.id === effectiveActiveDeliverable.matterId) ?? null,
-										deliverables: (bootstrap?.deliverables ?? []).filter(
-											(d) => d.matterId === effectiveActiveDeliverable.matterId,
-										),
-									})}
-									resolveMemberName={memberName}
-									resolveWorkspaceName={workspaceName}
-									resolveOrganizationName={organizationName}
-									viewUrl={previewUrlFor(effectiveActiveDeliverable)}
-									isOwner={activeCanManageDeliverable}
-									canInteract={activeCanInteract}
-									canChangeVisibility={activeCanChangeVisibility}
-									onChangeVisibility={(next) =>
-										handleToggleDeliverableVisibility(effectiveActiveDeliverable.matterId, next)
-									}
-									onSubmitFeedback={onSubmitFeedback}
-									onDistillExperiences={onDistillExperiences}
-									onCancelDistill={
-										onCancelDistill ? () => onCancelDistill(effectiveActiveDeliverable.matterId) : undefined
-									}
-									onSelectVersion={(id) => onSelectDeliverable(id)}
-									onRequestRevision={() => onRequestRevision(effectiveActiveDeliverable)}
-									onOpenMatterChat={() => onOpenMatterChat(effectiveActiveDeliverable.matterId)}
-									onOpenTeam={onOpenTeam}
-									onRefresh={onRefresh}
-									onNotice={onNotice}
-									onError={onError}
-								/>
+								<ViewFade key={effectiveActiveDeliverable.id} type="deliverable">
+									<DeliverableCard
+										deliverable={effectiveActiveDeliverable}
+										siblingVersions={effectiveSiblingVersions}
+										memberName={memberName(effectiveActiveDeliverable.memberId)}
+										workspaceId={activeMatterMeta?.workspaceId ?? null}
+										workspaceName={workspaceName(activeMatterMeta?.workspaceId ?? null)}
+										organizationName={activeOrgId ? organizationName(activeOrgId) : null}
+										visibility={activeMatterMeta?.visibility ?? "org"}
+										workspaceVisibility={activeMatterMeta?.workspaceVisibility ?? "org"}
+										members={bootstrap?.members ?? []}
+										workspaces={bootstrap?.workspaces ?? []}
+										organizations={bootstrap?.organizations ?? []}
+										memoriesByMember={bootstrap?.memoriesByMember ?? {}}
+										participantIds={collectMatterParticipantIds({
+											matter:
+												bootstrap?.matters.find((m) => m.id === effectiveActiveDeliverable.matterId) ??
+												null,
+											deliverables: (bootstrap?.deliverables ?? []).filter(
+												(d) => d.matterId === effectiveActiveDeliverable.matterId,
+											),
+										})}
+										resolveMemberName={memberName}
+										resolveWorkspaceName={workspaceName}
+										resolveOrganizationName={organizationName}
+										viewUrl={previewUrlFor(effectiveActiveDeliverable)}
+										isOwner={activeCanManageDeliverable}
+										canInteract={activeCanInteract}
+										canChangeVisibility={activeCanChangeVisibility}
+										onChangeVisibility={(next) =>
+											handleToggleDeliverableVisibility(effectiveActiveDeliverable.matterId, next)
+										}
+										onSubmitFeedback={onSubmitFeedback}
+										onDistillExperiences={onDistillExperiences}
+										onCancelDistill={
+											onCancelDistill
+												? () => onCancelDistill(effectiveActiveDeliverable.matterId)
+												: undefined
+										}
+										onSelectVersion={(id) => onSelectDeliverable(id)}
+										onRequestRevision={() => onRequestRevision(effectiveActiveDeliverable)}
+										onOpenMatterChat={() => onOpenMatterChat(effectiveActiveDeliverable.matterId)}
+										onOpenTeam={onOpenTeam}
+										onRefresh={onRefresh}
+										onNotice={onNotice}
+										onError={onError}
+									/>
+								</ViewFade>
 							) : (
 								<div className="ui-card">
 									<p className="ui-empty-note">

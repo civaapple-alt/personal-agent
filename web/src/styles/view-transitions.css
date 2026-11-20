@@ -1,0 +1,53 @@
+/* React <ViewTransition> animations. Names are referenced from components/ViewTransitions.tsx. */
+:root {
+	--vt-duration-exit: 120ms;
+	--vt-duration-enter: 180ms;
+	--vt-duration-pop-in: 140ms;
+	--vt-duration-pop-out: 100ms;
+}
+
+@keyframes vt-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* Live root: keep the sidebar and chrome rendering and interactive while a view fades. */
+::view-transition {
+	pointer-events: none;
+}
+::view-transition-old(root) {
+	display: none;
+}
+::view-transition-group(root),
+::view-transition-new(root) {
+	animation: none;
+}
+
+/* View switch: the old view fades out, then the new view fades in. */
+::view-transition-old(.vt-fade-out) {
+	animation: var(--vt-duration-exit) ease-in vt-fade reverse both;
+}
+::view-transition-new(.vt-fade-in) {
+	animation: var(--vt-duration-enter) ease-out var(--vt-duration-exit) both vt-fade;
+}
+
+/* Floating panels: nothing exits when they open, so they appear without waiting. */
+::view-transition-new(.vt-pop-in) {
+	animation: var(--vt-duration-pop-in) ease-out both vt-fade;
+}
+::view-transition-old(.vt-pop-out) {
+	animation: var(--vt-duration-pop-out) ease-in vt-fade reverse both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(*),
+	::view-transition-new(*),
+	::view-transition-group(*) {
+		animation-duration: 0s !important;
+		animation-delay: 0s !important;
+	}
+}

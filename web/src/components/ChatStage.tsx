@@ -1,23 +1,17 @@
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
-	CollaborationPresetMode,
 	CollaboratorDto,
-	ComposerFileAttachment,
-	ComposerImageAttachment,
 	DeliverableDto,
 	DistillRsiResult,
 	InnerMatterStep,
 	MatterDetailPayload,
-	MatterInitiationAssessmentDto,
 	MatterProgressDto,
-	MatterVisibility,
 	MemberMemoryDto,
 	OrganizationDto,
 	OrganizationMemberDto,
 	PendingDialogDto,
-	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
 	WorkspaceDto,
@@ -31,6 +25,7 @@ import {
 	mapDelegationsToMessages,
 	mapDeliverablesToMessages,
 } from "../utils/matterStream.ts";
+import { transitionView } from "../viewTransitions.ts";
 import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
 import { ComposerDock } from "./chat/ComposerDock.tsx";
@@ -38,13 +33,54 @@ import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
+import { ViewFade } from "./ViewTransitions.tsx";
+
+type ComposerDraftProps = Pick<
+	ComponentProps<typeof ComposerDock>,
+	| "composerRef"
+	| "composerText"
+	| "pendingImages"
+	| "pendingFiles"
+	| "onComposerTextChange"
+	| "onAddAttachments"
+	| "onAddPastedText"
+	| "onRemoveImage"
+	| "onRemoveFile"
+> & { onExpandPastedFile: (fileId: string) => void };
+
+type MatterInitiationProps = Pick<
+	ComponentProps<typeof MatterInitiationPanel>,
+	| "draftAiMemberIds"
+	| "draftConsultMemberIds"
+	| "draftCollaboratorIds"
+	| "draftVisibility"
+	| "assessment"
+	| "assessing"
+	| "assessmentError"
+	| "modelAssessing"
+	| "modelAssessmentError"
+	| "onUpdateDraftAiMemberIds"
+	| "onUpdateDraftCollaboratorIds"
+	| "onUpdateDraftVisibility"
+	| "onSetScopeMode"
+	| "onToggleObserverPreset"
+	| "onToggleDraftMemberConsult"
+	| "onToggleDraftMemberObserver"
+	| "onApplyPresetMode"
+	| "onApplyRecommendation"
+	| "onRequestModelAssessment"
+	| "onCancelModelAssessment"
+	| "onOpenArchitect"
+	| "onStartArchitectMatter"
+>;
 
 interface ChatStageProps {
+	composerDraft: ComposerDraftProps;
+	initiation: MatterInitiationProps;
 	onOpenDemo?: () => void;
 	demoOpening?: boolean;
 	onDemoStep?: (step: InnerMatterStep) => void;
 	demoStepBusy?: boolean;
-	composerRef: RefObject<HTMLTextAreaElement | null>;
 	currentUser?: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
 	isSuperAdmin?: boolean;
@@ -74,21 +110,12 @@ interface ChatStageProps {
 	progressStartedAt: number | null;
 	streamingDelta: string;
 	submitting: boolean;
-	composerText: string;
-	pendingImages: ComposerImageAttachment[];
-	pendingFiles: ComposerFileAttachment[];
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
 	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
-	onComposerTextChange: (value: string) => void;
-	onAddAttachments: (files: FileList | File[]) => void;
-	onAddPastedText: (text: string) => void;
-	onRemoveImage: (imageId: string) => void;
-	onRemoveFile: (fileId: string) => void;
-	onExpandPastedFile: (fileId: string) => void;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
@@ -96,31 +123,10 @@ interface ChatStageProps {
 	observerMemberIds: string[];
 	observersEnabled: boolean;
 	discussionAiEnabled?: boolean;
-	draftAiMemberIds: string[] | null;
-	draftConsultMemberIds?: string[] | null;
-	draftCollaboratorIds: string[];
-	draftVisibility?: MatterVisibility;
-	initiationAssessment: MatterInitiationAssessmentDto | null;
-	initiationAssessing: boolean;
-	initiationAssessmentError?: string | null;
-	initiationModelAssessing?: boolean;
-	initiationModelAssessmentError?: string | null;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateMatterConsultMembers?: (consultMemberIds: string[] | null) => void;
 	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
-	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
-	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
-	onUpdateDraftVisibility?: (visibility: MatterVisibility) => void;
-	onSetScopeMode?: (scope: "solo" | "team") => void;
-	onToggleObserverPreset?: () => void;
-	onToggleDraftMemberConsult?: (memberId: string, enabled: boolean) => void;
-	onToggleDraftMemberObserver?: (memberId: string, enabled: boolean) => void;
-	onApplyPresetMode: (mode: CollaborationPresetMode, leadId?: string | null) => void;
-	onApplyInitiationRecommendation: () => void;
-	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
-	onCancelModelAssessment?: () => void;
-	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
 	onToggleObserversEnabled: (enabled: boolean) => void;
 	onUpdateMatterObservers: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
@@ -134,7 +140,6 @@ interface ChatStageProps {
 	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
 	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
 	onConsultArchitect?: () => void;
-	onStartArchitectMatter?: (seedText?: string) => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	onSendPrompt: () => void;
 	onAbortMatter: (matterId: string) => void;
@@ -150,11 +155,12 @@ interface ChatStageProps {
 
 /** Coordinates the active matter workspace: header bar, participant/collab popovers, scrollable stream, and composer. */
 export function ChatStage({
+	composerDraft,
+	initiation,
 	onOpenDemo,
 	demoOpening,
 	onDemoStep,
 	demoStepBusy,
-	composerRef,
 	currentUser,
 	accountUser = null,
 	isSuperAdmin = false,
@@ -184,21 +190,12 @@ export function ChatStage({
 	progressStartedAt,
 	streamingDelta,
 	submitting,
-	composerText,
-	pendingImages,
-	pendingFiles,
 	templateByRoleId,
 	memoriesByMember,
 	memberName,
 	workspaceName,
 	organizationName,
 	previewUrlFor,
-	onComposerTextChange,
-	onAddAttachments,
-	onAddPastedText,
-	onRemoveImage,
-	onRemoveFile,
-	onExpandPastedFile,
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
@@ -206,31 +203,10 @@ export function ChatStage({
 	observerMemberIds,
 	observersEnabled,
 	discussionAiEnabled = false,
-	draftAiMemberIds,
-	draftConsultMemberIds = null,
-	draftCollaboratorIds,
-	draftVisibility = "org",
-	initiationAssessment,
-	initiationAssessing,
-	initiationAssessmentError,
-	initiationModelAssessing = false,
-	initiationModelAssessmentError,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateMatterConsultMembers,
 	onToggleDiscussionAiEnabled,
-	onUpdateDraftAiMemberIds,
-	onUpdateDraftCollaboratorIds,
-	onUpdateDraftVisibility,
-	onSetScopeMode,
-	onToggleObserverPreset,
-	onToggleDraftMemberConsult,
-	onToggleDraftMemberObserver,
-	onApplyPresetMode,
-	onApplyInitiationRecommendation,
-	onRequestModelAssessment,
-	onCancelModelAssessment,
-	onOpenArchitect,
 	onToggleObserversEnabled,
 	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
@@ -240,7 +216,6 @@ export function ChatStage({
 	onDismissRoleProposals,
 	onSendQuickPrompt,
 	onConsultArchitect,
-	onStartArchitectMatter,
 	onLaunchWithNewRoles,
 	onSendPrompt,
 	onAbortMatter,
@@ -253,6 +228,8 @@ export function ChatStage({
 	onNotice,
 	onError,
 }: ChatStageProps) {
+	const { onExpandPastedFile, ...dockDraft } = composerDraft;
+	const { composerText, pendingFiles } = dockDraft;
 	const [collabOpen, setCollabOpen] = useState(false);
 	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
 	const [distillingMatter, setDistillingMatter] = useState(false);
@@ -271,11 +248,12 @@ export function ChatStage({
 	const { lightboxImage, setLightboxImage, previewFile, openFilePreview, closeFilePreview } = useAttachmentPreview();
 	const isOwner = canDispatchAi ?? currentUser?.permissionRole !== "collaborator";
 
-	const closeRoster = () => {
-		setRosterOpen(false);
+	const resetRoster = useCallback((open: boolean) => {
+		setRosterOpen(open);
 		setRosterMode("view");
 		setRosterSearch("");
-	};
+	}, []);
+	const closeRoster = () => transitionView("panel", () => resetRoster(false));
 
 	useEffect(() => {
 		if (!collabOpen && !rosterOpen && !moreMenuOpen) return;
@@ -283,12 +261,10 @@ export function ChatStage({
 			const target = event.target as Node | null;
 			if (!target) return;
 			if (collabOpen && !collabPanelRef.current?.contains(target) && !moreMenuWrapRef.current?.contains(target)) {
-				setCollabOpen(false);
+				transitionView("panel", () => setCollabOpen(false));
 			}
 			if (rosterOpen && !rosterPanelRef.current?.contains(target) && !headerHumansBtnRef.current?.contains(target)) {
-				setRosterOpen(false);
-				setRosterMode("view");
-				setRosterSearch("");
+				transitionView("panel", () => resetRoster(false));
 			}
 			if (moreMenuOpen && !moreMenuWrapRef.current?.contains(target)) {
 				setMoreMenuOpen(false);
@@ -296,11 +272,11 @@ export function ChatStage({
 		};
 		const onKeyDown = (event: globalThis.KeyboardEvent) => {
 			if (event.key === "Escape") {
-				setCollabOpen(false);
-				setRosterOpen(false);
 				setMoreMenuOpen(false);
-				setRosterMode("view");
-				setRosterSearch("");
+				transitionView("panel", () => {
+					setCollabOpen(false);
+					resetRoster(false);
+				});
 			}
 		};
 		document.addEventListener("mousedown", onMouseDown);
@@ -309,7 +285,7 @@ export function ChatStage({
 			document.removeEventListener("mousedown", onMouseDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [collabOpen, rosterOpen, moreMenuOpen]);
+	}, [collabOpen, rosterOpen, moreMenuOpen, resetRoster]);
 
 	const matterMemories = useMemo(
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
@@ -420,7 +396,7 @@ export function ChatStage({
 		matterAiMemberIds,
 		observerMemberIds,
 		observersEnabled,
-		draftCollaboratorIds,
+		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		delegations: delegationsPlacement.all,
 	});
 
@@ -455,15 +431,11 @@ export function ChatStage({
 				headerHumansBtnRef={headerHumansBtnRef}
 				moreMenuWrapRef={moreMenuWrapRef}
 				onToggleRoster={() => {
-					setCollabOpen(false);
-					setMoreMenuOpen(false);
-					if (rosterOpen) {
-						closeRoster();
-					} else {
-						setRosterMode("view");
-						setRosterSearch("");
-						setRosterOpen(true);
-					}
+					transitionView("panel", () => {
+						setMoreMenuOpen(false);
+						setCollabOpen(false);
+						resetRoster(!rosterOpen);
+					});
 				}}
 				onToggleMoreMenu={() => {
 					closeRoster();
@@ -472,93 +444,103 @@ export function ChatStage({
 				onSelectMoreCollab={() => {
 					setMoreMenuOpen(false);
 					const willOpen = !(collabOpen && collabTab !== "experiences");
-					if (
-						willOpen &&
-						delegationsPlacement.all.length === 0 &&
-						(matterDetail?.noticeMessages.length ?? 0) > 0
-					) {
-						setCollabTab("events");
-					} else if (willOpen) {
-						setCollabTab("delegations");
-					}
-					setCollabOpen(willOpen);
+					transitionView("panel", () => {
+						if (
+							willOpen &&
+							delegationsPlacement.all.length === 0 &&
+							(matterDetail?.noticeMessages.length ?? 0) > 0
+						) {
+							setCollabTab("events");
+						} else if (willOpen) {
+							setCollabTab("delegations");
+						}
+						setCollabOpen(willOpen);
+					});
 				}}
 				onSelectMoreExperiences={() => {
 					setMoreMenuOpen(false);
 					const willOpen = !(collabOpen && collabTab === "experiences");
-					setCollabTab("experiences");
-					setCollabOpen(willOpen);
+					transitionView("panel", () => {
+						setCollabTab("experiences");
+						setCollabOpen(willOpen);
+					});
 				}}
 				onOpenDeliverables={onOpenDeliverables}
 				onCloseMenus={() => setMoreMenuOpen(false)}
 			/>
 
 			{rosterOpen && (
-				<MatterRosterPopover
-					panelRef={rosterPanelRef}
-					rosterMode={rosterMode}
-					rosterSearch={rosterSearch}
-					isOwner={isOwner && canManageMatter}
-					isTurnRunning={isTurnRunning}
-					selectedMatterId={selectedMatterId}
-					currentUser={currentUser}
-					ownerCollab={ownerCollab}
-					nonOwnerCollaborators={humanPeerCandidates}
-					matterHumanParticipants={matterHumanParticipants}
-					assignedCollabIds={assignedCollabIds}
-					members={scopedMembers}
-					inGroupAiMembers={inGroupAiMembers}
-					nonLeadGroupAiMembers={nonLeadGroupAiMembers}
-					removedAiMembers={removedAiMembers}
-					leadAi={leadAi}
-					observersEnabled={observersEnabled}
-					discussionAiEnabled={discussionAiEnabled}
-					observerAis={observerAis}
-					specialistIds={specialistIds}
-					matterAiMemberIds={matterAiMemberIds}
-					matterConsultMemberIds={matterConsultMemberIds}
-					onSearchChange={setRosterSearch}
-					onModeChange={setRosterMode}
-					onClose={closeRoster}
-					onOpenTeam={onOpenTeam}
-					onNotice={onNotice}
-					onChangeLeadMember={onChangeLeadMember}
-					onUpdateMatterAiMembers={onUpdateMatterAiMembers}
-					onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
-					onToggleDiscussionAiEnabled={onToggleDiscussionAiEnabled}
-					onToggleObserversEnabled={onToggleObserversEnabled}
-					onUpdateMatterObservers={onUpdateMatterObservers}
-					onUpdateMatterCollaborators={onUpdateMatterCollaborators}
-					onConsultArchitect={onConsultArchitect}
-				/>
+				<ViewFade type="panel">
+					<MatterRosterPopover
+						panelRef={rosterPanelRef}
+						rosterMode={rosterMode}
+						rosterSearch={rosterSearch}
+						isOwner={isOwner && canManageMatter}
+						isTurnRunning={isTurnRunning}
+						selectedMatterId={selectedMatterId}
+						currentUser={currentUser}
+						ownerCollab={ownerCollab}
+						nonOwnerCollaborators={humanPeerCandidates}
+						matterHumanParticipants={matterHumanParticipants}
+						assignedCollabIds={assignedCollabIds}
+						members={scopedMembers}
+						inGroupAiMembers={inGroupAiMembers}
+						nonLeadGroupAiMembers={nonLeadGroupAiMembers}
+						removedAiMembers={removedAiMembers}
+						leadAi={leadAi}
+						observersEnabled={observersEnabled}
+						discussionAiEnabled={discussionAiEnabled}
+						observerAis={observerAis}
+						specialistIds={specialistIds}
+						matterAiMemberIds={matterAiMemberIds}
+						matterConsultMemberIds={matterConsultMemberIds}
+						onSearchChange={setRosterSearch}
+						onModeChange={setRosterMode}
+						onClose={closeRoster}
+						onOpenTeam={onOpenTeam}
+						onNotice={onNotice}
+						onChangeLeadMember={onChangeLeadMember}
+						onUpdateMatterAiMembers={onUpdateMatterAiMembers}
+						onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
+						onToggleDiscussionAiEnabled={onToggleDiscussionAiEnabled}
+						onToggleObserversEnabled={onToggleObserversEnabled}
+						onUpdateMatterObservers={onUpdateMatterObservers}
+						onUpdateMatterCollaborators={onUpdateMatterCollaborators}
+						onConsultArchitect={onConsultArchitect}
+					/>
+				</ViewFade>
 			)}
 
 			{collabOpen && matterDetail && (
-				<MatterCollabDrawer
-					panelRef={collabPanelRef}
-					collabTab={collabTab}
-					matterDetail={matterDetail}
-					selectedMemberId={selectedMemberId}
-					delegations={delegationsPlacement.all}
-					matterMemories={matterMemories}
-					matterParticipantIds={matterParticipantIds}
-					members={members}
-					workspaces={workspaces}
-					organizations={organizations}
-					distillingMatter={distillingMatter}
-					distillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
-					memberName={memberName}
-					workspaceName={workspaceName}
-					organizationName={organizationName}
-					onSelectTab={setCollabTab}
-					onClose={() => setCollabOpen(false)}
-					onDistill={() => void handleDistillCurrentMatter()}
-					onCancelDistill={onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined}
-					onOpenTeam={onOpenTeam}
-					onRefresh={onRefresh}
-					onNotice={onNotice}
-					onError={onError}
-				/>
+				<ViewFade type="panel">
+					<MatterCollabDrawer
+						panelRef={collabPanelRef}
+						collabTab={collabTab}
+						matterDetail={matterDetail}
+						selectedMemberId={selectedMemberId}
+						delegations={delegationsPlacement.all}
+						matterMemories={matterMemories}
+						matterParticipantIds={matterParticipantIds}
+						members={members}
+						workspaces={workspaces}
+						organizations={organizations}
+						distillingMatter={distillingMatter}
+						distillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
+						memberName={memberName}
+						workspaceName={workspaceName}
+						organizationName={organizationName}
+						onSelectTab={setCollabTab}
+						onClose={() => transitionView("panel", () => setCollabOpen(false))}
+						onDistill={() => void handleDistillCurrentMatter()}
+						onCancelDistill={
+							onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
+						}
+						onOpenTeam={onOpenTeam}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+					/>
+				</ViewFade>
 			)}
 
 			<MessageFeed
@@ -602,18 +584,20 @@ export function ChatStage({
 				onDismissRoleProposals={onDismissRoleProposals}
 				onSendQuickPrompt={onSendQuickPrompt}
 				onFillComposer={(text) => {
-					onComposerTextChange(text);
-					composerRef.current?.focus();
+					dockDraft.onComposerTextChange(text);
+					dockDraft.composerRef.current?.focus();
 				}}
-				onOpenQuickCreator={() => onOpenArchitect()}
+				onOpenQuickCreator={() => initiation.onOpenArchitect()}
 				onLaunchWithNewRoles={onLaunchWithNewRoles}
 				onAbortMatter={onAbortMatter}
 			/>
 
 			<ComposerDock
+				{...dockDraft}
 				initiationPanel={
 					!selectedMatterId ? (
 						<MatterInitiationPanel
+							{...initiation}
 							isOwner={isOwner}
 							composerMode={composerMode}
 							hasWorkspace={Boolean(selectedWorkspaceId)}
@@ -621,39 +605,16 @@ export function ChatStage({
 							members={scopedMembers}
 							nonOwnerCollaborators={nonOwnerCollaborators}
 							orgMembers={orgMembers}
-							draftVisibility={draftVisibility}
 							templateByRoleId={templateByRoleId}
 							selectedMemberId={selectedMemberId}
-							draftAiMemberIds={draftAiMemberIds}
-							draftConsultMemberIds={draftConsultMemberIds}
 							draftObserverMemberIds={observerMemberIds}
 							discussionAiEnabled={discussionAiEnabled}
-							draftCollaboratorIds={draftCollaboratorIds}
-							assessment={initiationAssessment}
-							assessing={initiationAssessing}
-							assessmentError={initiationAssessmentError}
-							modelAssessing={initiationModelAssessing}
-							modelAssessmentError={initiationModelAssessmentError}
 							onSelectLeadMember={onChangeLeadMember}
-							onSetScopeMode={onSetScopeMode}
-							onToggleObserverPreset={onToggleObserverPreset}
-							onToggleDraftMemberConsult={onToggleDraftMemberConsult}
-							onToggleDraftMemberObserver={onToggleDraftMemberObserver}
-							onApplyPresetMode={(mode) => onApplyPresetMode(mode)}
-							onUpdateDraftAiMemberIds={onUpdateDraftAiMemberIds}
 							onUpdateDraftObserverIds={onUpdateMatterObservers}
-							onUpdateDraftCollaboratorIds={onUpdateDraftCollaboratorIds}
-							onUpdateDraftVisibility={onUpdateDraftVisibility}
-							onApplyRecommendation={onApplyInitiationRecommendation}
-							onRequestModelAssessment={onRequestModelAssessment}
-							onCancelModelAssessment={onCancelModelAssessment}
-							onOpenArchitect={onOpenArchitect}
-							onStartArchitectMatter={onStartArchitectMatter}
 						/>
 					) : undefined
 				}
 				composerDockRef={composerDockRef}
-				composerRef={composerRef}
 				composerMode={composerMode}
 				isOwner={isOwner}
 				discussionAiEnabled={discussionAiEnabled}
@@ -667,9 +628,6 @@ export function ChatStage({
 				isTurnRunning={isTurnRunning}
 				sendBlockedByTurn={sendBlockedByTurn}
 				submitting={submitting}
-				composerText={composerText}
-				pendingImages={pendingImages}
-				pendingFiles={pendingFiles}
 				effectiveOrgId={effectiveOrgId}
 				selectedWorkspaceId={selectedWorkspaceId}
 				selectedMatterId={selectedMatterId}
@@ -682,11 +640,6 @@ export function ChatStage({
 				onSelectOrganization={onSelectOrganization}
 				onSelectWorkspace={onSelectWorkspace}
 				onNewMatter={onNewMatter}
-				onComposerTextChange={onComposerTextChange}
-				onAddAttachments={onAddAttachments}
-				onAddPastedText={onAddPastedText}
-				onRemoveImage={onRemoveImage}
-				onRemoveFile={onRemoveFile}
 				onSendPrompt={onSendPrompt}
 				onAbortMatter={onAbortMatter}
 				onOpenLightbox={setLightboxImage}

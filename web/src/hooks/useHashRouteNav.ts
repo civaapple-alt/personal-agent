@@ -1,5 +1,6 @@
-import { type MutableRefObject, useCallback, useEffect } from "react";
+import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
 import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "../hashRouter.ts";
+import { transitionView } from "../viewTransitions.ts";
 
 interface UseHashRouteNavParams {
 	initialRoute: HashRoute;
@@ -21,29 +22,33 @@ export function useHashRouteNav({
 	setSelectedMemberId,
 	setSettingsSection,
 }: UseHashRouteNavParams) {
-	const navigateRoute = useCallback(
-		(next: HashRoute, options?: { replace?: boolean }) => {
-			setActiveTab(next.tab);
+	const lastTab = useRef(initialRoute.tab);
+	const applyRoute = useCallback(
+		(next: HashRoute) => {
+			const tabChanged = lastTab.current !== next.tab;
+			lastTab.current = next.tab;
 			explicitNewMatterRef.current = Boolean(next.isNewMatter);
-			if (next.tab === "deliverables" && next.deliverableId !== undefined) {
-				setSelectedDeliverableId(next.deliverableId || null);
-			}
-			if (next.tab === "chats") {
-				if (next.isNewMatter) {
-					setSelectedMatterId(null);
-				} else if (next.matterId !== undefined) {
-					setSelectedMemberId("auto");
-					setSelectedMatterId(next.matterId || null);
+			const update = () => {
+				setActiveTab(next.tab);
+				if (next.tab === "deliverables") {
+					setSelectedDeliverableId(next.deliverableId ?? null);
+				} else if (next.tab === "chats") {
+					if (next.isNewMatter) {
+						setSelectedMatterId(null);
+					} else if (next.matterId !== undefined) {
+						setSelectedMemberId("auto");
+						setSelectedMatterId(next.matterId || null);
+					}
+				} else if (next.tab === "settings") {
+					setSettingsSection(next.settingsSection ?? "all");
 				}
-			}
-			if (next.tab === "settings") {
-				setSettingsSection(next.settingsSection ?? "all");
-			}
-			const targetHash = formatHashRoute(next);
-			if (options?.replace) {
-				window.history.replaceState(null, "", targetHash);
-			} else if (window.location.hash !== targetHash) {
-				window.location.hash = targetHash;
+			};
+			if (tabChanged) {
+				transitionView("page", update);
+			} else if (next.tab === "deliverables") {
+				transitionView("deliverable", update);
+			} else {
+				update();
 			}
 		},
 		[
@@ -56,41 +61,29 @@ export function useHashRouteNav({
 		],
 	);
 
+	const navigateRoute = useCallback(
+		(next: HashRoute, options?: { replace?: boolean }) => {
+			const targetHash = formatHashRoute(next);
+			if (options?.replace) {
+				window.history.replaceState(null, "", targetHash);
+			} else if (window.location.hash !== targetHash) {
+				window.history.pushState(null, "", targetHash);
+			}
+			applyRoute(next);
+		},
+		[applyRoute],
+	);
+
 	useEffect(() => {
 		const normalized = formatHashRoute(initialRoute);
-		if (!window.location.hash || window.location.hash !== normalized) {
-			window.history.replaceState(null, "", normalized);
-		}
+		if (window.location.hash !== normalized) window.history.replaceState(null, "", normalized);
 	}, [initialRoute]);
 
 	useEffect(() => {
-		const handleHashChange = () => {
-			const route = parseHashRoute(window.location.hash);
-			setActiveTab(route.tab);
-			explicitNewMatterRef.current = Boolean(route.isNewMatter);
-			if (route.tab === "deliverables" && route.deliverableId) {
-				setSelectedDeliverableId(route.deliverableId);
-			} else if (route.tab === "chats") {
-				if (route.isNewMatter) {
-					setSelectedMatterId(null);
-				} else if (route.matterId) {
-					setSelectedMemberId("auto");
-					setSelectedMatterId(route.matterId);
-				}
-			} else if (route.tab === "settings") {
-				setSettingsSection(route.settingsSection ?? "all");
-			}
-		};
+		const handleHashChange = () => applyRoute(parseHashRoute(window.location.hash));
 		window.addEventListener("hashchange", handleHashChange);
 		return () => window.removeEventListener("hashchange", handleHashChange);
-	}, [
-		explicitNewMatterRef,
-		setActiveTab,
-		setSelectedDeliverableId,
-		setSelectedMatterId,
-		setSelectedMemberId,
-		setSettingsSection,
-	]);
+	}, [applyRoute]);
 
 	return navigateRoute;
 }

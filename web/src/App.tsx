@@ -25,6 +25,7 @@ import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
+import { ViewFade } from "./components/ViewTransitions.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
 import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
 import { useAuthSession } from "./hooks/useAuthSession.ts";
@@ -703,225 +704,243 @@ export function App() {
 					</button>
 				</div>
 				{activeTab === "chats" && (
-					<ChatStage
-						onOpenDemo={bootstrap?.innerDemoAvailable && isOwner ? () => void handleOpenDemo() : undefined}
-						demoOpening={demoOpening}
-						onDemoStep={(step) => void handleDemoStep(step)}
-						demoStepBusy={submitting}
-						composerRef={composerRef}
-						currentUser={currentUser}
-						accountUser={accountUser}
-						isSuperAdmin={isSuperAdmin}
-						canDispatchAi={canDispatchAi}
-						canManageMatter={canManageMatter}
-						collaborators={bootstrap?.collaborators ?? []}
-						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
-						orgEffectiveMemberIds={orgEffectiveMemberIds}
-						composerMode={composerMode}
-						onComposerModeChange={setComposerMode}
-						selectedWorkspace={selectedWorkspace}
-						selectedWorkspaceId={selectedWorkspaceId}
-						selectedOrgId={selectedOrgId}
-						workspaces={bootstrap?.workspaces ?? []}
-						organizations={bootstrap?.organizations ?? []}
-						members={bootstrap?.members ?? []}
-						selectedMemberId={selectedMemberId}
-						headerContact={headerContact}
-						headerTheme={headerTheme}
-						selectedMatterId={selectedMatterId}
-						matterDetail={matterDetail}
-						activeDialogs={activeDialogs}
-						activeChatDeliverable={activeChatDeliverable}
-						deliverablesCount={bootstrap?.deliverables.length ?? 0}
-						selectedDeliverableId={selectedDeliverableId}
-						activeMatterProgress={activeMatterProgress}
-						progressStartedAt={activeProgressStartedAt}
-						streamingDelta={streamingDelta}
-						submitting={submitting}
-						composerText={composerText}
-						pendingImages={composerImages}
-						pendingFiles={composerFiles}
-						templateByRoleId={templateByRoleId}
-						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
-						memberName={memberName}
-						workspaceName={workspaceName}
-						organizationName={organizationName}
-						previewUrlFor={previewUrlFor}
-						onComposerTextChange={setComposerText}
-						onAddAttachments={(files) => void handleAddComposerAttachments(files)}
-						onAddPastedText={handleAddPastedText}
-						onRemoveImage={handleRemoveComposerImage}
-						onRemoveFile={handleRemoveComposerFile}
-						onExpandPastedFile={handleExpandPastedFile}
-						onSelectOrganization={actions.handleSelectOrganization}
-						onSelectWorkspace={actions.handleSelectWorkspace}
-						matterAiMemberIds={matterAiMemberIds}
-						matterConsultMemberIds={matterConsultMemberIds}
-						observerMemberIds={
-							matterDetail ? (matterDetail.matter.observerMemberIds ?? []) : initiation.draftObserverMemberIds
-						}
-						observersEnabled={observersEnabled}
-						discussionAiEnabled={discussionAiEnabled}
-						draftAiMemberIds={draftAiMemberIds}
-						draftConsultMemberIds={initiation.draftConsultMemberIds}
-						draftCollaboratorIds={initiation.draftCollaboratorIds}
-						draftVisibility={draftMatterVisibility}
-						initiationAssessment={initiation.assessment}
-						initiationAssessing={initiation.assessing}
-						initiationAssessmentError={initiation.assessmentError}
-						initiationModelAssessing={initiation.modelAssessing}
-						initiationModelAssessmentError={initiation.modelAssessmentError}
-						onChangeLeadMember={actions.handleChangeLeadMember}
-						onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
-						onUpdateMatterConsultMembers={actions.handleUpdateMatterConsultMembers}
-						onToggleDiscussionAiEnabled={actions.handleToggleDiscussionAiEnabled}
-						onUpdateDraftAiMemberIds={setDraftAiMemberIds}
-						onUpdateDraftCollaboratorIds={initiation.setDraftCollaboratorIds}
-						onUpdateDraftVisibility={setDraftMatterVisibility}
-						onSetScopeMode={initiation.setScopeMode}
-						onToggleObserverPreset={initiation.toggleObserverPreset}
-						onToggleDraftMemberConsult={initiation.toggleDraftMemberConsult}
-						onToggleDraftMemberObserver={initiation.toggleDraftMemberObserver}
-						onApplyPresetMode={(mode, leadId) =>
-							initiation.applyPresetMode(mode, leadId ? { leadId } : undefined)
-						}
-						onApplyInitiationRecommendation={initiation.applyAssessmentRecommendation}
-						onRequestModelAssessment={(opts) => void initiation.requestModelAssessment(opts)}
-						onCancelModelAssessment={initiation.cancelModelAssessment}
-						onOpenArchitect={initiation.openArchitectForGap}
-						onToggleObserversEnabled={actions.handleToggleObserversEnabled}
-						onUpdateMatterObservers={actions.handleUpdateMatterObservers}
-						onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
-						onApproveAiRequest={(matterId, messageId) => void actions.handleApproveAiRequest(matterId, messageId)}
-						onDismissAiRequest={(matterId, messageId) => void actions.handleDismissAiRequest(matterId, messageId)}
-						onApplyRoleProposals={actions.handleApplyRoleProposals}
-						onDismissRoleProposals={actions.handleDismissRoleProposals}
-						onSendQuickPrompt={(prompt, opts) => void actions.handleSendQuickPrompt(prompt, opts)}
-						onConsultArchitect={() => void actions.handleConsultArchitect()}
-						onStartArchitectMatter={startArchitectMatter}
-						onLaunchWithNewRoles={launchNewMatterWithMembers}
-						onSendPrompt={() => void actions.handleSendPrompt()}
-						onAbortMatter={actions.handleAbortMatter}
-						onNewMatter={startNewMatter}
-						onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
-						onOpenTeam={() => navigateRoute({ tab: "team" })}
-						onDistillMatter={(matterId) => runRsiDistill({ matterId })}
-						onCancelDistillMatter={cancelRsiDistill}
-						onRefresh={refreshBootstrap}
-						onNotice={(msg) => setNoticeBanner(msg)}
-						onError={(msg) => setErrorBanner(msg)}
-					/>
+					<ViewFade>
+						<ChatStage
+							composerDraft={{
+								composerRef,
+								composerText,
+								pendingImages: composerImages,
+								pendingFiles: composerFiles,
+								onComposerTextChange: setComposerText,
+								onAddAttachments: (files) => void handleAddComposerAttachments(files),
+								onAddPastedText: handleAddPastedText,
+								onRemoveImage: handleRemoveComposerImage,
+								onRemoveFile: handleRemoveComposerFile,
+								onExpandPastedFile: handleExpandPastedFile,
+							}}
+							initiation={{
+								draftAiMemberIds,
+								draftConsultMemberIds: initiation.draftConsultMemberIds,
+								draftCollaboratorIds: initiation.draftCollaboratorIds,
+								draftVisibility: draftMatterVisibility,
+								assessment: initiation.assessment,
+								assessing: initiation.assessing,
+								assessmentError: initiation.assessmentError,
+								modelAssessing: initiation.modelAssessing,
+								modelAssessmentError: initiation.modelAssessmentError,
+								onUpdateDraftAiMemberIds: setDraftAiMemberIds,
+								onUpdateDraftCollaboratorIds: initiation.setDraftCollaboratorIds,
+								onUpdateDraftVisibility: setDraftMatterVisibility,
+								onSetScopeMode: initiation.setScopeMode,
+								onToggleObserverPreset: initiation.toggleObserverPreset,
+								onToggleDraftMemberConsult: initiation.toggleDraftMemberConsult,
+								onToggleDraftMemberObserver: initiation.toggleDraftMemberObserver,
+								onApplyPresetMode: (mode) => initiation.applyPresetMode(mode),
+								onApplyRecommendation: initiation.applyAssessmentRecommendation,
+								onRequestModelAssessment: (opts) => void initiation.requestModelAssessment(opts),
+								onCancelModelAssessment: initiation.cancelModelAssessment,
+								onOpenArchitect: initiation.openArchitectForGap,
+								onStartArchitectMatter: startArchitectMatter,
+							}}
+							onOpenDemo={bootstrap?.innerDemoAvailable && isOwner ? () => void handleOpenDemo() : undefined}
+							demoOpening={demoOpening}
+							onDemoStep={(step) => void handleDemoStep(step)}
+							demoStepBusy={submitting}
+							currentUser={currentUser}
+							accountUser={accountUser}
+							isSuperAdmin={isSuperAdmin}
+							canDispatchAi={canDispatchAi}
+							canManageMatter={canManageMatter}
+							collaborators={bootstrap?.collaborators ?? []}
+							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+							orgEffectiveMemberIds={orgEffectiveMemberIds}
+							composerMode={composerMode}
+							onComposerModeChange={setComposerMode}
+							selectedWorkspace={selectedWorkspace}
+							selectedWorkspaceId={selectedWorkspaceId}
+							selectedOrgId={selectedOrgId}
+							workspaces={bootstrap?.workspaces ?? []}
+							organizations={bootstrap?.organizations ?? []}
+							members={bootstrap?.members ?? []}
+							selectedMemberId={selectedMemberId}
+							headerContact={headerContact}
+							headerTheme={headerTheme}
+							selectedMatterId={selectedMatterId}
+							matterDetail={matterDetail}
+							activeDialogs={activeDialogs}
+							activeChatDeliverable={activeChatDeliverable}
+							deliverablesCount={bootstrap?.deliverables.length ?? 0}
+							selectedDeliverableId={selectedDeliverableId}
+							activeMatterProgress={activeMatterProgress}
+							progressStartedAt={activeProgressStartedAt}
+							streamingDelta={streamingDelta}
+							submitting={submitting}
+							templateByRoleId={templateByRoleId}
+							memoriesByMember={bootstrap?.memoriesByMember ?? {}}
+							memberName={memberName}
+							workspaceName={workspaceName}
+							organizationName={organizationName}
+							previewUrlFor={previewUrlFor}
+							onSelectOrganization={actions.handleSelectOrganization}
+							onSelectWorkspace={actions.handleSelectWorkspace}
+							matterAiMemberIds={matterAiMemberIds}
+							matterConsultMemberIds={matterConsultMemberIds}
+							observerMemberIds={
+								matterDetail ? (matterDetail.matter.observerMemberIds ?? []) : initiation.draftObserverMemberIds
+							}
+							observersEnabled={observersEnabled}
+							discussionAiEnabled={discussionAiEnabled}
+							onChangeLeadMember={actions.handleChangeLeadMember}
+							onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
+							onUpdateMatterConsultMembers={actions.handleUpdateMatterConsultMembers}
+							onToggleDiscussionAiEnabled={actions.handleToggleDiscussionAiEnabled}
+							onToggleObserversEnabled={actions.handleToggleObserversEnabled}
+							onUpdateMatterObservers={actions.handleUpdateMatterObservers}
+							onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
+							onApproveAiRequest={(matterId, messageId) =>
+								void actions.handleApproveAiRequest(matterId, messageId)
+							}
+							onDismissAiRequest={(matterId, messageId) =>
+								void actions.handleDismissAiRequest(matterId, messageId)
+							}
+							onApplyRoleProposals={actions.handleApplyRoleProposals}
+							onDismissRoleProposals={actions.handleDismissRoleProposals}
+							onSendQuickPrompt={(prompt, opts) => void actions.handleSendQuickPrompt(prompt, opts)}
+							onConsultArchitect={() => void actions.handleConsultArchitect()}
+							onLaunchWithNewRoles={launchNewMatterWithMembers}
+							onSendPrompt={() => void actions.handleSendPrompt()}
+							onAbortMatter={actions.handleAbortMatter}
+							onNewMatter={startNewMatter}
+							onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
+							onOpenTeam={() => navigateRoute({ tab: "team" })}
+							onDistillMatter={(matterId) => runRsiDistill({ matterId })}
+							onCancelDistillMatter={cancelRsiDistill}
+							onRefresh={refreshBootstrap}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
+						/>
+					</ViewFade>
 				)}
 
 				{activeTab === "deliverables" && (
-					<DeliverablesView
-						bootstrap={bootstrap}
-						currentUser={currentUser}
-						accountUser={accountUser}
-						isSuperAdmin={isSuperAdmin}
-						activeDeliverable={activeDeliverable}
-						filteredDeliverables={filteredDeliverables}
-						siblingVersions={siblingVersionsFor(activeDeliverable)}
-						previewUrlFor={previewUrlFor}
-						memberName={memberName}
-						workspaceName={workspaceName}
-						organizationName={organizationName}
-						onSubmitFeedback={actions.handleDeliverableFeedback}
-						onDistillExperiences={handleDistillExperiences}
-						onCancelDistill={cancelRsiDistill}
-						onStopPreview={async (previewId) => {
-							await stopPreview(previewId);
-							await refreshBootstrap();
-						}}
-						onSelectDeliverable={(deliverableId, matterId) => {
-							navigateRoute({ tab: "deliverables", deliverableId });
-							if (matterId) setSelectedMatterId(matterId);
-						}}
-						onRequestRevision={(deliverable) => {
-							navigateRoute({ tab: "chats", matterId: deliverable.matterId });
-							setComposerText(`修改「${deliverable.title}」：`);
-						}}
-						onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
-						onOpenTeam={() => navigateRoute({ tab: "team" })}
-						onRefresh={refreshBootstrap}
-						onNotice={(msg) => setNoticeBanner(msg)}
-						onError={(msg) => setErrorBanner(msg)}
-						onNewTask={startNewMatter}
-					/>
+					<ViewFade>
+						<DeliverablesView
+							bootstrap={bootstrap}
+							currentUser={currentUser}
+							accountUser={accountUser}
+							isSuperAdmin={isSuperAdmin}
+							activeDeliverable={activeDeliverable}
+							filteredDeliverables={filteredDeliverables}
+							siblingVersions={siblingVersionsFor(activeDeliverable)}
+							previewUrlFor={previewUrlFor}
+							memberName={memberName}
+							workspaceName={workspaceName}
+							organizationName={organizationName}
+							onSubmitFeedback={actions.handleDeliverableFeedback}
+							onDistillExperiences={handleDistillExperiences}
+							onCancelDistill={cancelRsiDistill}
+							onStopPreview={async (previewId) => {
+								await stopPreview(previewId);
+								await refreshBootstrap();
+							}}
+							onSelectDeliverable={(deliverableId, matterId) => {
+								navigateRoute({ tab: "deliverables", deliverableId });
+								if (matterId) setSelectedMatterId(matterId);
+							}}
+							onRequestRevision={(deliverable) => {
+								navigateRoute({ tab: "chats", matterId: deliverable.matterId });
+								setComposerText(`修改「${deliverable.title}」：`);
+							}}
+							onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
+							onOpenTeam={() => navigateRoute({ tab: "team" })}
+							onRefresh={refreshBootstrap}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
+							onNewTask={startNewMatter}
+						/>
+					</ViewFade>
 				)}
 
 				{activeTab === "team" && (
-					<TeamView
-						currentUser={currentUser}
-						accountUser={accountUser}
-						isSuperAdmin={isSuperAdmin}
-						collaborators={bootstrap?.collaborators ?? []}
-						members={bootstrap?.members ?? []}
-						workspaces={bootstrap?.workspaces ?? []}
-						organizations={bootstrap?.organizations ?? []}
-						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
-						orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
-						matters={bootstrap?.matters ?? []}
-						selectedOrgId={effectiveOrgIdForScope}
-						defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
-						memoriesByMember={bootstrap?.memoriesByMember ?? {}}
-						templateByRoleId={templateByRoleId}
-						memberName={memberName}
-						workspaceName={workspaceName}
-						organizationName={organizationName}
-						onRefresh={refreshBootstrap}
-						onNotice={(msg) => setNoticeBanner(msg)}
-						onError={(msg) => setErrorBanner(msg)}
-						onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
-						onRestoreOwner={() => void handleLogoutOrRestore()}
-						onAssignTask={(memberId) => {
-							startNewMatter();
-							setSelectedMemberId(memberId);
-							if (isArchitectMemberId(memberId, bootstrap?.members, templateByRoleId)) {
-								setDraftAiMemberIds([memberId]);
-								initiation.setDraftPresetMode("solo");
-							}
-						}}
-						onOpenArchitect={() => initiation.openArchitectForGap()}
-						onOpenArchitectMatter={() => startArchitectMatter()}
-						onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
-						onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
-					/>
+					<ViewFade>
+						<TeamView
+							currentUser={currentUser}
+							accountUser={accountUser}
+							isSuperAdmin={isSuperAdmin}
+							collaborators={bootstrap?.collaborators ?? []}
+							members={bootstrap?.members ?? []}
+							workspaces={bootstrap?.workspaces ?? []}
+							organizations={bootstrap?.organizations ?? []}
+							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+							orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
+							matters={bootstrap?.matters ?? []}
+							selectedOrgId={effectiveOrgIdForScope}
+							defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
+							memoriesByMember={bootstrap?.memoriesByMember ?? {}}
+							templateByRoleId={templateByRoleId}
+							memberName={memberName}
+							workspaceName={workspaceName}
+							organizationName={organizationName}
+							onRefresh={refreshBootstrap}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
+							onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
+							onRestoreOwner={() => void handleLogoutOrRestore()}
+							onAssignTask={(memberId) => {
+								startNewMatter();
+								setSelectedMemberId(memberId);
+								if (isArchitectMemberId(memberId, bootstrap?.members, templateByRoleId)) {
+									setDraftAiMemberIds([memberId]);
+									initiation.setDraftPresetMode("solo");
+								}
+							}}
+							onOpenArchitect={() => initiation.openArchitectForGap()}
+							onOpenArchitectMatter={() => startArchitectMatter()}
+							onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
+							onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
+						/>
+					</ViewFade>
 				)}
 
 				{activeTab === "materials" && (
-					<MaterialsView
-						workspaces={bootstrap?.workspaces ?? []}
-						organizations={bootstrap?.organizations ?? []}
-						orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
-						selectedWorkspaceId={selectedWorkspaceId}
-						allowLocalWorkspacePath={bootstrap?.platformPolicy?.allowLocalWorkspacePath ?? true}
-						isAccountMode={Boolean(accountUser)}
-						onRefresh={refreshBootstrap}
-						onNotice={(msg) => setNoticeBanner(msg)}
-						onError={(msg) => setErrorBanner(msg)}
-						onUseWorkspace={(workspaceId) => {
-							setSelectedWorkspaceId(workspaceId);
-							startNewMatter();
-						}}
-					/>
+					<ViewFade>
+						<MaterialsView
+							workspaces={bootstrap?.workspaces ?? []}
+							organizations={bootstrap?.organizations ?? []}
+							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+							selectedWorkspaceId={selectedWorkspaceId}
+							allowLocalWorkspacePath={bootstrap?.platformPolicy?.allowLocalWorkspacePath ?? true}
+							isAccountMode={Boolean(accountUser)}
+							onRefresh={refreshBootstrap}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
+							onUseWorkspace={(workspaceId) => {
+								setSelectedWorkspaceId(workspaceId);
+								startNewMatter();
+							}}
+						/>
+					</ViewFade>
 				)}
 
 				{activeTab === "settings" && (
-					<SettingsView
-						{...settingsProps}
-						currentUser={currentUser}
-						isSuperAdmin={isSuperAdmin}
-						activeSection={settingsSection}
-						onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
-						onNotice={(msg) => setNoticeBanner(msg)}
-						onError={(msg) => setErrorBanner(msg)}
-						onOpenTeam={() => navigateRoute({ tab: "team" })}
-					/>
+					<ViewFade>
+						<SettingsView
+							{...settingsProps}
+							currentUser={currentUser}
+							isSuperAdmin={isSuperAdmin}
+							activeSection={settingsSection}
+							onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
+							onOpenTeam={() => navigateRoute({ tab: "team" })}
+						/>
+					</ViewFade>
 				)}
 
 				{activeTab === "admin" && isSuperAdmin && (
-					<AdminView {...adminProps} currentUserId={accountUser?.id ?? null} />
+					<ViewFade>
+						<AdminView {...adminProps} currentUserId={accountUser?.id ?? null} />
+					</ViewFade>
 				)}
 			</main>
 
