@@ -39,7 +39,7 @@ export interface ServerRouteContext {
 	broadcast: (eventName: string, payload: unknown, scope?: SseBroadcastScope) => void;
 	revokeTokenSessions: (collaboratorId: string, reason: string) => void;
 	closeAccountSession: (sessionHash: string) => void;
-	runDispatchInBackground: (input: BackgroundDispatchInput) => void;
+	runDispatchInBackground: (input: BackgroundDispatchInput, actor: RequestActor) => void;
 	requireAuth?: boolean;
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;

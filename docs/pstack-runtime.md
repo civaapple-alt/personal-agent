@@ -29,7 +29,7 @@ PA_PSTACK_DIR=/path/to/pstack npm run start:web
 
 ## 方法正文在需要时进入上下文
 
-执行器仍使用 `--no-extensions --no-skills` 隔离隐式发现，再显式提供岗位 Skills、pstack 的模式入口及本项目方法读取扩展。方法工具必须通过实际工具清单握手，否则在业务提示执行前报错。
+执行器显式提供岗位 Skills、pstack 的模式入口及本项目方法读取扩展。个人版的本机资源发现和其他模式的显式装配见[运行配置](configuration.md#cli-启动与能力装配)。方法工具必须通过实际工具清单握手，否则在业务提示执行前报错。
 
 新增的 `load_pstack_skill` 用法：
 

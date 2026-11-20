@@ -143,19 +143,22 @@ function startDiscussionAi(
 					: null;
 	if (skippedReason) return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: skippedReason };
 
-	ctx.runDispatchInBackground({
-		matterId: matter.id,
-		interactionMode: "discussion",
-		existingUserMessageId: message.id,
-		prompt: message.content,
-		images,
-		files,
-		preferredMemberId,
-		workspaceId: matter.workspaceId ?? undefined,
-		orgId: matter.orgId,
-		startedByUserId: actor.user?.id ?? null,
-		author: toDispatchAuthor(actor.collaborator),
-	});
+	ctx.runDispatchInBackground(
+		{
+			matterId: matter.id,
+			interactionMode: "discussion",
+			existingUserMessageId: message.id,
+			prompt: message.content,
+			images,
+			files,
+			preferredMemberId,
+			workspaceId: matter.workspaceId ?? undefined,
+			orgId: matter.orgId,
+			startedByUserId: actor.user?.id ?? null,
+			author: toDispatchAuthor(actor.collaborator),
+		},
+		actor,
+	);
 	return { aiDiscussionTriggered: true };
 }
 
@@ -409,21 +412,24 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			return true;
 		}
 
-		runDispatchInBackground({
-			matterId: matter.id,
-			title,
-			prompt,
-			images: images.length > 0 ? images : undefined,
-			files: files.length > 0 ? files : undefined,
-			preferredMemberId: leadMember.id,
-			workspaceId,
-			orgId: matter.orgId,
-			observerMemberIds: matter.observerMemberIds,
-			deliverableTitle,
-			deliverableType,
-			startedByUserId: actor.user?.id ?? null,
-			author: toDispatchAuthor(actor.collaborator),
-		});
+		runDispatchInBackground(
+			{
+				matterId: matter.id,
+				title,
+				prompt,
+				images: images.length > 0 ? images : undefined,
+				files: files.length > 0 ? files : undefined,
+				preferredMemberId: leadMember.id,
+				workspaceId,
+				orgId: matter.orgId,
+				observerMemberIds: matter.observerMemberIds,
+				deliverableTitle,
+				deliverableType,
+				startedByUserId: actor.user?.id ?? null,
+				author: toDispatchAuthor(actor.collaborator),
+			},
+			actor,
+		);
 
 		sendJson(res, 202, { matter, assignedMember: leadMember });
 		return true;
@@ -551,18 +557,21 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		});
 		broadcast("matter_message", { matterId, message: updatedMsg, matter: currentMatter }, { matterId });
 
-		runDispatchInBackground({
-			matterId: matter.id,
-			prompt: dispatchPrompt,
-			images: images.length > 0 ? images : undefined,
-			files: files.length > 0 ? files : undefined,
-			preferredMemberId,
-			workspaceId,
-			orgId: currentMatter.orgId,
-			observerMemberIds,
-			startedByUserId: actor.user?.id ?? null,
-			author: toDispatchAuthor(actor.collaborator),
-		});
+		runDispatchInBackground(
+			{
+				matterId: matter.id,
+				prompt: dispatchPrompt,
+				images: images.length > 0 ? images : undefined,
+				files: files.length > 0 ? files : undefined,
+				preferredMemberId,
+				workspaceId,
+				orgId: currentMatter.orgId,
+				observerMemberIds,
+				startedByUserId: actor.user?.id ?? null,
+				author: toDispatchAuthor(actor.collaborator),
+			},
+			actor,
+		);
 
 		sendJson(res, 202, { accepted: true, matterId: matter.id, approvedMessageId: messageId });
 		return true;
@@ -721,19 +730,22 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			return true;
 		}
 
-		runDispatchInBackground({
-			matterId: matter.id,
-			prompt,
-			images: images.length > 0 ? images : undefined,
-			files: files.length > 0 ? files : undefined,
-			preferredMemberId,
-			workspaceId,
-			orgId: matter.orgId,
-			observerMemberIds,
-			deliverableTitle,
-			startedByUserId: actor.user?.id ?? null,
-			author: toDispatchAuthor(actor.collaborator),
-		});
+		runDispatchInBackground(
+			{
+				matterId: matter.id,
+				prompt,
+				images: images.length > 0 ? images : undefined,
+				files: files.length > 0 ? files : undefined,
+				preferredMemberId,
+				workspaceId,
+				orgId: matter.orgId,
+				observerMemberIds,
+				deliverableTitle,
+				startedByUserId: actor.user?.id ?? null,
+				author: toDispatchAuthor(actor.collaborator),
+			},
+			actor,
+		);
 
 		sendJson(res, 202, { accepted: true, matterId: matter.id });
 		return true;

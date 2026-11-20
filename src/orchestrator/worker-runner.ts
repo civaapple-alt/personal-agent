@@ -108,12 +108,21 @@ export async function executeWithWorkerPass(
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
+	const template = deps.getTemplateForMember(input.member);
+	const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
+	const inheritsLocalResources =
+		input.run.inheritLocalPiResources &&
+		!isArchitect &&
+		!isDiscussionMode &&
+		sessionMode !== "observer" &&
+		input.workspace?.sourceType !== "cloned";
 	const contextKey = JSON.stringify([
 		"v2",
 		input.workspace?.id ?? null,
 		cwd,
 		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
 		activeOrgId,
+		...(inheritsLocalResources ? ["local-pi"] : []),
 	]);
 	const executionKey = JSON.stringify([input.member.id, contextKey]);
 	if (input.run.contexts.has(executionKey)) throw new Error("Colleague is already working in this conversation");
@@ -128,8 +137,6 @@ export async function executeWithWorkerPass(
 	const controller = new AbortController();
 	const signal = AbortSignal.any([input.signal, controller.signal]);
 	try {
-		const template = deps.getTemplateForMember(input.member);
-		const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
 		const skillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
 		const pstack = deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
 		const methodTools = pstack ? ["load_pstack_skill"] : [];
@@ -280,7 +287,11 @@ export async function executeWithWorkerPass(
 			}
 		}, signal);
 
-		const args = ["--no-extensions", "--no-skills", "--extension", resolveBuiltinExtensionPath("team-extension")];
+		// Use Pi's own resource and project trust rules. Without a workspace, load user resources only.
+		const args = inheritsLocalResources
+			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
+			: ["--no-extensions", "--no-skills"];
+		args.push("--extension", resolveBuiltinExtensionPath("team-extension"));
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
@@ -496,6 +507,7 @@ export async function executeWithWorkerPass(
 				method: "runtime_ready",
 				tools,
 				skills: skillPaths,
+				resourcePolicy: inheritsLocalResources ? "local-pi" : "explicit",
 				...(pstack
 					? {
 							pstack: {

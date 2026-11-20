@@ -9,6 +9,7 @@ import {
 } from "../orchestrator/team-orchestrator.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { CollaboratorRole, DeliverableType } from "../storage/types.ts";
+import type { RequestActor } from "./auth.ts";
 import { HttpRequestError } from "./http.ts";
 
 export interface ActiveRunState {
@@ -47,11 +48,12 @@ export function createDispatchRunner(deps: {
 	store: PersonalAgentStore;
 	orchestrator: TeamOrchestrator;
 	broadcast: (eventName: string, payload: unknown) => void;
+	inheritsLocalPiResources: () => boolean;
 }) {
 	const { store, orchestrator, broadcast } = deps;
 	const activeRuns = new Map<string, ActiveRunState>();
 
-	const runDispatchInBackground = (input: BackgroundDispatchInput): void => {
+	const runDispatchInBackground = (input: BackgroundDispatchInput, actor: RequestActor): void => {
 		// Uploads and body reads can yield after a route's first busy check. Reserve here before emitting events.
 		if (activeRuns.has(input.matterId) || orchestrator.isMatterRunning(input.matterId))
 			throw new HttpRequestError(409, "Matter already has an active turn");
@@ -82,6 +84,7 @@ export function createDispatchRunner(deps: {
 				workspaceId: input.workspaceId,
 				orgId: input.orgId,
 				actorUserId: input.startedByUserId ?? null,
+				inheritLocalPiResources: !isDiscussion && actor.authKind === "loopback" && deps.inheritsLocalPiResources(),
 				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,

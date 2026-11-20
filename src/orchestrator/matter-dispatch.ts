@@ -165,6 +165,7 @@ export async function dispatchMatterTurn(
 		effects: emptyEffects(),
 		userMessageId: "",
 		startedByUserId: effectiveUserId,
+		inheritLocalPiResources: input.inheritLocalPiResources,
 		startedAt,
 		timeoutMs: turnDeadlineMs,
 		deadlineAt: turnDeadlineMs > 0 ? startedAt + turnDeadlineMs : null,

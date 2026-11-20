@@ -37,6 +37,7 @@ export interface ServerRuntimeConfig {
 	innerMatterDir?: string;
 	webDistDir?: string;
 	requireAuth?: boolean;
+	inheritLocalPiResources?: boolean;
 }
 
 export interface PiCliProbeResult {
@@ -497,6 +498,13 @@ export async function buildRuntimeOverview(options: {
 					overridden: config.extensions.length > 0,
 				},
 				{
+					key: "PA_LOCAL_PI_RESOURCES",
+					label: "本机 Pi 资源发现",
+					value: serverConfig?.inheritLocalPiResources ? "本机所有者的业务执行启用" : "仅显式装配",
+					defaultValue: "个人版回环监听时启用",
+					overridden: process.env.PA_LOCAL_PI_RESOURCES?.trim() === "0",
+				},
+				{
 					key: "PA_PSTACK_DIR",
 					label: "pstack 方法包",
 					value: !config.pstackDir
@@ -625,7 +633,15 @@ export async function buildRuntimeOverview(options: {
 				: null,
 			defaultCwd: isOwner ? config.defaultCwd : basename(config.defaultCwd) || ".",
 			pstack: pstackInfo,
-			isolationModes: ISOLATION_MODES,
+			isolationModes: ISOLATION_MODES.map((mode) =>
+				mode.id === "worker" && serverConfig?.inheritLocalPiResources
+					? {
+							...mode,
+							sessionStrategy: "v2 作用域，继承本机配置的执行使用独立会话",
+							extensionsPolicy: "本机业务执行沿用 Pi 已启用的 Skills 与扩展，其他流程显式装配",
+						}
+					: mode,
+			),
 			envFlags: {
 				turnTimeoutMs,
 				promptTimeoutMs,

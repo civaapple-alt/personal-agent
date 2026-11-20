@@ -116,6 +116,7 @@ async function main(): Promise<void> {
 		skillsDir: customSkillsDir,
 		uploadsDir: resolve(dataDir, "uploads"),
 		requireAuth,
+		inheritLocalPiResources: process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0",
 		defaultWorkspacesRoot,
 		dataDir,
 		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),

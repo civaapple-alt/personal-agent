@@ -187,3 +187,57 @@ test("v1 sessions and messages without organization provenance remain archived, 
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM worker_sessions").get()?.n, 2);
 	assert.ok(f.store.listMessages(matter.id).some((msg) => msg.content === "UNKNOWN_ORG_SECRET"));
 });
+
+test("Native resource discovery separates sessions and leaves observer and managed workspace execution isolated", async (t) => {
+	const f = await fixture(t);
+	const local = f.store.upsertWorkspace({ name: "local", repoPath: f.root, orgId: f.a.id });
+	const matter = f.store.createMatter({
+		title: "local resource scope",
+		leadMemberId: "product-manager",
+		workspaceId: local.id,
+	});
+	const input = { matterId: matter.id, prompt: "Inspect the fixture" };
+	await f.orchestrator.dispatchMatter(input);
+	await f.orchestrator.dispatchMatter({ ...input, inheritLocalPiResources: true });
+	await f.orchestrator.dispatchMatter(input);
+	await f.orchestrator.dispatchMatter({ ...input, inheritLocalPiResources: true });
+	assert.equal(f.calls[1]?.options.sessionFile, undefined);
+	assert.equal(f.calls[2]?.options.sessionFile, f.calls[0]?.file);
+	assert.equal(f.calls[3]?.options.sessionFile, f.calls[1]?.file);
+	assert.ok(f.calls[1]?.options.args?.includes("--offline"));
+	assert.ok(!f.calls[1]?.options.args?.includes("--no-approve"));
+
+	await f.orchestrator.dispatchMatter({
+		prompt: "Check the fixture with an observer",
+		workspaceId: local.id,
+		preferredMemberId: "product-manager",
+		observerMemberIds: ["engineering-manager"],
+		inheritLocalPiResources: true,
+	});
+	assert.ok(!f.calls[4]?.options.args?.includes("--no-extensions"));
+	assert.ok(f.calls[5]?.options.args?.includes("--no-extensions"));
+	assert.ok(f.calls[5]?.options.args?.includes("--no-skills"));
+
+	const managed = f.store.upsertWorkspace({
+		name: "managed clone",
+		repoPath: join(f.root, "managed"),
+		orgId: f.a.id,
+		sourceType: "cloned",
+	});
+	await f.orchestrator.dispatchMatter({
+		prompt: "Inspect the managed fixture",
+		workspaceId: managed.id,
+		preferredMemberId: "product-manager",
+		inheritLocalPiResources: true,
+	});
+	assert.ok(f.calls[6]?.options.args?.includes("--no-extensions"));
+	assert.ok(f.calls[6]?.options.args?.includes("--no-skills"));
+
+	await f.orchestrator.dispatchMatter({
+		prompt: "Inspect the unbound fixture",
+		preferredMemberId: "product-manager",
+		inheritLocalPiResources: true,
+	});
+	assert.ok(!f.calls[7]?.options.args?.includes("--no-skills"));
+	assert.ok(f.calls[7]?.options.args?.includes("--no-approve"));
+});

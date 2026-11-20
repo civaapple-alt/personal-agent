@@ -18,6 +18,7 @@
 | `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../src/server/main.ts) → [HTTP 鉴权](../src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
 | `PA_WORKSPACES_ROOT` | `<dataDir>/workspaces` | [服务入口](../src/server/main.ts) → [Git 克隆](../src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
 | `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../src/server/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
+| `PA_LOCAL_PI_RESOURCES` | 个人版回环监听下启用 | [服务入口](../src/server/main.ts) | 设为 `0` 时恢复显式装配。本机所有者在个人版回环监听下启动的业务主责与内部委托可使用 Pi 原生资源发现 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../src/server/main.ts) → [编排核](../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
 | `PA_PSTACK_DIR` | 未设置（可由工作台 `#/settings/extensions` 克隆启用至 `.data/extensions/repo/pstack`） | [服务入口](../src/server/main.ts) → [执行装配](../src/orchestrator/worker-runner.ts) | 完整 pstack 包根目录，包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`；启动未传该变量时回退读取 `platform_settings.pstackDir`，详见 [pstack 内循环](pstack-runtime.md) |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
@@ -67,15 +68,16 @@
 
 ### CLI 启动与能力装配
 
-编排核启动每个成员 worker 时采用隔离策略（见 [团队编排核](../src/orchestrator/team-orchestrator.ts) 与 [运行说明](runtime-collaboration.md)）：
+岗位工作进程使用 `--mode rpc`，显式传入团队扩展、角色声明的 `--skill` 路径、`PA_PI_EXTENSIONS` 指定的扩展和角色的 `--tools` 清单。配置 pstack 时还会装配它的模式入口及方法工具。所选工作区作为 Pi 的当前目录。团队扩展按工作区范围过滤自动发现的上下文文件。
 
-- 固定参数：`--mode rpc --no-extensions --no-skills`，再按顺序显式传入：
-  - 团队扩展（源码或构建后的 `team-extension`）与 `PA_PI_EXTENSIONS`（并通过 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先/宿主 `AGENTS.md`/`CLAUDE.md`，避免 `.data/team-workspaces/` 等子目录工作区继承工作台自身仓库导航；辅助无工具/JSON pass 另附 `--no-context-files`）
-  - 角色声明的 `--skill` 路径，以及限定可用工具清单的 `--tools`
-  - 配置 `PA_PSTACK_DIR` 时增加模式入口、`pstack-extension` 与 `load_pstack_skill`；不隐式增加其他业务或 MCP 工具
-- MCP 开关：当角色 `mcpDependencies` 为空时附加 `--no-mcp`；非空时附加 `--extension builtin:mcp`，并在工具列表中声明对应 `mcp__<server>__*` 前缀。
-- 会话接续：未开启 `noSession` 且存在同上下文记录时，先由 [execution-context.ts](../src/orchestrator/execution-context.ts) 校验 JSONL。
-  - 核查首行 `sessionId` 与真实 `cwd` 通过后传入 `--session <sessionFile>`，绝不使用 `--continue`。
+个人版仅监听回环地址时，本机免密所有者发起的业务主责与内部委托沿用 Pi 的原生资源发现：
+
+- 已登记的本地仓库可使用仓库 `.agents/skills` 和 Pi 认可的 `.pi/` 设置与资源。Pi 读取现有的项目可信记录，设置合并与资源启停由 Pi 处理。
+- 用户级 `~/.agents/skills` 和 Pi 配置目录中已启用的扩展可继续使用。Pi 配置目录也可由 `PI_CODING_AGENT_DIR` 指定。未绑定仓库时只启用用户级资源发现。
+- 团队版、局域网监听、账号或邀请口令访问、托管克隆仓库、讨论和旁听继续通过 `--no-extensions --no-skills` 显式装配。独立决策、架构师和复盘使用各自的窄工具配置。
+- 角色的 `mcpDependencies` 仍决定 MCP 工具的启用及允许名单。启用原生资源发现时，Pi 关闭启动阶段的网络操作。
+
+工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../src/orchestrator/execution-context.ts)
 
 ### 进程与传输超时配置（代码常量 / 可构造参数）
 

@@ -5,7 +5,7 @@ import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
 import { canActorAccessUpload } from "./acl.ts";
-import { requireActiveActor, requireOwner, resolveRequestActor } from "./auth.ts";
+import { isLoopbackAddress, requireActiveActor, requireOwner, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
 import { HttpRequestError, isAllowedMutatingOrigin, sendError, sendJson, serveStaticAsset } from "./http.ts";
@@ -35,6 +35,7 @@ export interface PersonalAgentServerOptions {
 	skillsDir?: string;
 	uploadsDir?: string;
 	requireAuth?: boolean;
+	inheritLocalPiResources?: boolean;
 	innerMatterDir?: string;
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
@@ -66,10 +67,21 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		sse.broadcast(evt.type, evt);
 	});
 
+	const inheritsLocalPiResources = () => {
+		const address = server.address();
+		return (
+			options.inheritLocalPiResources !== false &&
+			!options.requireAuth &&
+			address !== null &&
+			typeof address !== "string" &&
+			isLoopbackAddress(address.address)
+		);
+	};
 	const { activeRuns, runDispatchInBackground } = createDispatchRunner({
 		store,
 		orchestrator,
 		broadcast: sse.broadcast,
+		inheritsLocalPiResources,
 	});
 
 	const routeCtx: ServerRouteContext = {
@@ -91,6 +103,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				innerMatterDir: options.innerMatterDir,
 				webDistDir,
 				requireAuth: Boolean(options.requireAuth),
+				inheritLocalPiResources: inheritsLocalPiResources(),
 			};
 		},
 		rolesDir,

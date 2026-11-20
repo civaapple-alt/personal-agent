@@ -9,12 +9,17 @@ import {
 	loadRoleTemplatesFromDir,
 	openPersonalAgentDatabase,
 	PersonalAgentStore,
+	type PiRpcWorkerOptions,
 	PreviewManager,
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { reportReady } from "./worker-helpers.ts";
 
-async function fixture(t: test.TestContext, hold?: Promise<void>) {
+async function fixture(
+	t: test.TestContext,
+	hold?: Promise<void>,
+	settings?: { requireAuth: boolean; host?: string; inheritLocalPiResources?: boolean; ownerToken?: boolean },
+) {
 	const root = await mkdtemp(join(tmpdir(), "pa-request-lifecycle-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -22,6 +27,7 @@ async function fixture(t: test.TestContext, hold?: Promise<void>) {
 	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
 	let runs = 0;
 	const runStarted = Promise.withResolvers<void>();
+	const workerStarted = Promise.withResolvers<PiRpcWorkerOptions>();
 	const orchestrator = new TeamOrchestrator({
 		store,
 		templates,
@@ -30,6 +36,7 @@ async function fixture(t: test.TestContext, hold?: Promise<void>) {
 		workerFactory: (options) => ({
 			async start() {
 				await reportReady(options);
+				workerStarted.resolve(options);
 			},
 			async stop() {},
 			async getState() {
@@ -63,15 +70,19 @@ async function fixture(t: test.TestContext, hold?: Promise<void>) {
 		dialogBroker: new DialogBroker(),
 		previewManager: new PreviewManager(),
 		uploadsDir: join(root, "uploads"),
-		requireAuth: true,
+		requireAuth: settings?.requireAuth ?? true,
+		inheritLocalPiResources: settings?.inheritLocalPiResources,
 	});
-	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+	await new Promise<void>((done) => server.listen(0, settings?.host ?? "127.0.0.1", done));
 	const address = server.address();
 	assert.ok(address && typeof address === "object");
 	const post = (path: string, body: unknown = {}, method = "POST") =>
 		fetch(`http://127.0.0.1:${address.port}${path}`, {
 			method,
-			headers: { "Content-Type": "application/json", "x-pa-token": owner.token },
+			headers: {
+				"Content-Type": "application/json",
+				...((settings?.ownerToken ?? settings?.requireAuth ?? true) ? { "x-pa-token": owner.token } : {}),
+			},
 			body: JSON.stringify(body),
 		});
 	const matter = store.createMatter({ title: "request", leadMemberId: "product-manager" });
@@ -102,6 +113,7 @@ async function fixture(t: test.TestContext, hold?: Promise<void>) {
 		endpoint,
 		runs: () => runs,
 		runStarted: runStarted.promise,
+		workerStarted: workerStarted.promise,
 	};
 }
 
@@ -198,5 +210,35 @@ test("concurrent image dispatch cannot overwrite the active run or mark it faile
 		assert.equal(f.store.listMessages(f.matter.id, "user").filter((msg) => msg.metadata?.failed).length, 0);
 	} finally {
 		finish.resolve();
+	}
+});
+
+test("Only the local owner on a loopback listener inherits native Pi resources", async (t) => {
+	const scenarios = [
+		{ name: "personal owner", requireAuth: false, inherit: true },
+		{ name: "explicit opt-out", requireAuth: false, inheritLocalPiResources: false, inherit: false },
+		{ name: "LAN listener", requireAuth: false, host: "0.0.0.0", inherit: false },
+		{ name: "legacy owner token", requireAuth: false, ownerToken: true, inherit: false },
+		{ name: "team server", requireAuth: true, inherit: false },
+	];
+	for (const { name, inherit, ...settings } of scenarios) {
+		await t.test(name, async (t) => {
+			const f = await fixture(t, undefined, settings);
+			const workspace = f.store.upsertWorkspace({ name: "local fixture", repoPath: f.root });
+			const response = await f.post("/api/matters", {
+				prompt: "Inspect the fixture",
+				workspaceId: workspace.id,
+				preferredMemberId: "product-manager",
+				inheritLocalPiResources: true,
+			});
+			assert.equal(response.status, 202, await response.text());
+			const worker = await f.workerStarted;
+			assert.equal(worker.args?.includes("--no-extensions"), !inherit);
+			assert.equal(worker.args?.includes("--no-skills"), !inherit);
+			assert.ok(worker.args?.includes("--skill"));
+			assert.ok(worker.args?.includes("--no-mcp"));
+			assert.ok(worker.args?.includes("--tools"));
+			assert.equal(worker.cwd, f.root);
+		});
 	}
 });

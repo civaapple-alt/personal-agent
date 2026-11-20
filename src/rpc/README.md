@@ -18,5 +18,7 @@ RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误�
 文档发布参数为 `sourcePath` 或 `content` 二选一：文件来源只允许 `document`，校验后由宿主读取；桥接拒绝同时传两份正文来源，不自行猜测正文对应哪个文件。文件快照与提交校验属于编排模块。
 声明的 Skill/扩展/MCP 不是装载成功证据，实际工具清单必须通过核查。构建后扩展从 `dist/` 的对应文件加载，保持源代码与编译入口均可用。
 
+常规本机任务由 Pi 发现已启用的用户资源，以及可信工作区的项目资源。宿主通过 HTTP 调用者和监听范围选择资源策略，并让两种策略使用独立的 Pi 会话。 [资源装配策略](../../docs/configuration.md#cli-启动与能力装配)
+
 从仓库根运行 `node --test test/pi-rpc-worker.test.ts test/team-tool-bridge.test.ts`。
 它们使用本地受控进程/扩展，不消耗真实模型；整条生产委托路径还需 [continuity 测试](../../test/README.md)，有限真实 Pi 验证见 [demo](../demo/README.md)。

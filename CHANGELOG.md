@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Reuse Pi’s enabled user resources and trusted repository settings for business turns started by the local owner on a loopback-only personal workbench. Keep inherited-resource sessions separate from explicitly configured sessions.
 - Fade between workbench pages, deliverable details and collaboration panels. Keep navigation immediate when reduced motion is requested or the browser lacks View Transitions.
 - Group the composer draft and new-matter controls in `ChatStage`. Simplify setup and team instructions while retaining the existing guide links.
 - Keep timer ticks inside `ElapsedTimer`. Keep the memoized sidebar independent of streamed text deltas, and skip layout for off-screen matter rows while preserving their focus rings.

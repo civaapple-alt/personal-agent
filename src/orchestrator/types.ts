@@ -167,6 +167,8 @@ export interface DispatchMatterInput {
 	workspaceId?: string;
 	orgId?: string | null;
 	actorUserId?: string | null;
+	/** Host-selected for local personal execution. HTTP request bodies cannot set this. */
+	inheritLocalPiResources?: boolean;
 	aiMemberIds?: string[] | null;
 	consultMemberIds?: string[] | null;
 	observersEnabled?: boolean;
@@ -267,6 +269,7 @@ export interface MatterRun {
 	effects: ExecutionEffects;
 	userMessageId: string;
 	startedByUserId?: string | null;
+	inheritLocalPiResources?: boolean;
 	startedAt: number;
 	lastProgress?: DispatchProgressEvent;
 	timeoutMs: number;

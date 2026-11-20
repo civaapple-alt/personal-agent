@@ -57,9 +57,12 @@ export function extractClientIp(req: IncomingMessage): string {
 	return req.socket?.remoteAddress ?? "";
 }
 
+export function isLoopbackAddress(address: string): boolean {
+	return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
 export function isLoopbackRemote(req: IncomingMessage): boolean {
-	const remote = extractClientIp(req);
-	return remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+	return isLoopbackAddress(extractClientIp(req));
 }
 
 export function parseCookies(req: IncomingMessage): Record<string, string> {
