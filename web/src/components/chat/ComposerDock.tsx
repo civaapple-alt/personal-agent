@@ -4,6 +4,8 @@ import {
 	type KeyboardEvent,
 	type ReactNode,
 	type RefObject,
+	useEffect,
+	useId,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -127,8 +129,16 @@ export function ComposerDock({
 }: ComposerDockProps) {
 	const [dragOverComposer, setDragOverComposer] = useState(false);
 	const [isMultiline, setIsMultiline] = useState(false);
-	const [mentionState, setMentionState] = useState<{ start: number; end: number; query: string } | null>(null);
+	const [mentionState, setMentionState] = useState<{
+		start: number;
+		end: number;
+		query: string;
+		prefix?: string;
+	} | null>(null);
 	const [mentionIdx, setMentionIdx] = useState(0);
+	const mentionListId = useId();
+	const mentionMenuRef = useRef<HTMLDivElement | null>(null);
+	const mentionTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
 
@@ -146,22 +156,27 @@ export function ComposerDock({
 			})
 		: [];
 
-	const syncMentionFromCursor = (text: string, caret: number | null | undefined) => {
-		if (!canUseAiInDiscussion || caret == null) {
-			setMentionState(null);
-			return;
-		}
+	useEffect(() => {
+		if (!showMentionPicker) return;
+		const dismissOutside = (event: PointerEvent) => {
+			const target = event.target;
+			if (
+				target instanceof Node &&
+				target !== composerRef.current &&
+				!mentionMenuRef.current?.contains(target) &&
+				!mentionTriggerRef.current?.contains(target)
+			) {
+				setMentionState(null);
+			}
+		};
+		document.addEventListener("pointerdown", dismissOutside, true);
+		return () => document.removeEventListener("pointerdown", dismissOutside, true);
+	}, [composerRef, showMentionPicker]);
+
+	const findTypedMention = (text: string, caret: number) => {
 		const beforeCaret = text.slice(0, caret);
 		const atIdx = beforeCaret.lastIndexOf("@");
-		if (atIdx < 0) {
-			setMentionState(null);
-			return;
-		}
-		const charBeforeAt = atIdx === 0 ? "" : beforeCaret[atIdx - 1]!;
-		if (charBeforeAt && !/[\s,.:;!?，。：；！？、([【（]/.test(charBeforeAt)) {
-			setMentionState(null);
-			return;
-		}
+		if (atIdx < 0 || (atIdx > 0 && !/[\s,.:;!?，。：；！？、([【（]/.test(beforeCaret[atIdx - 1]!))) return null;
 		const query = beforeCaret.slice(atIdx + 1);
 		const normalizedQuery = query.toLowerCase();
 		const completedMention = mentionMembers.some((member) =>
@@ -170,15 +185,51 @@ export function ComposerDock({
 				return prefix.length > 0 && normalizedQuery.startsWith(prefix) && /\s/.test(query[prefix.length] ?? "");
 			}),
 		);
-		if (/^\s|\n/.test(query) || query.length > 128 || completedMention) {
-			setMentionState(null);
-			return;
-		}
-		setMentionState({ start: atIdx, end: caret, query });
+		return /^\s|\n/.test(query) || query.length > 128 || completedMention
+			? null
+			: { start: atIdx, end: caret, query };
+	};
+
+	const syncMentionFromCursor = (text: string, caret: number) => {
+		setMentionState(canUseAiInDiscussion ? findTypedMention(text, caret) : null);
 		setMentionIdx(0);
 	};
 
+	const handleMentionInput = (text: string, caret: number) => {
+		const typed = canUseAiInDiscussion ? findTypedMention(text, caret) : null;
+		if (typed || !showMentionPicker || mentionState?.prefix === undefined) {
+			setMentionState(typed);
+		} else {
+			// Toolbar search starts at the selection without inserting a placeholder into the draft.
+			const query = text.slice(mentionState.start, caret);
+			const isQueryEdit =
+				caret >= mentionState.start &&
+				text.slice(0, mentionState.start) === composerText.slice(0, mentionState.start) &&
+				text.slice(caret) === composerText.slice(mentionState.end) &&
+				!/^\s|\n/.test(query) &&
+				query.length <= 128;
+			setMentionState(isQueryEdit ? { ...mentionState, end: caret, query } : null);
+		}
+		setMentionIdx(0);
+	};
+
+	const toggleMentionPicker = () => {
+		if (showMentionPicker) {
+			setMentionState(null);
+			return;
+		}
+		const el = composerRef.current;
+		const start = el?.selectionStart ?? composerText.length;
+		const end = el?.selectionEnd ?? start;
+		const typed = start === end ? findTypedMention(composerText, start) : null;
+		const prefix = start > 0 && !/[\s(（[【]/.test(composerText[start - 1]!) ? " " : "";
+		setMentionState(typed ?? { start, end, query: "", prefix });
+		setMentionIdx(0);
+		el?.focus();
+	};
+
 	const insertMentionMember = (member: TeamMemberDto) => {
+		if (!mentionState) return;
 		const el = composerRef.current;
 		const displayName = member.displayName.trim();
 		const duplicateName = mentionMembers.some(
@@ -188,33 +239,14 @@ export function ComposerDock({
 					(alias) => alias.trim().toLowerCase() === displayName.toLowerCase(),
 				),
 		);
-		const mentionText = `@${duplicateName ? member.id : displayName} `;
-		if (mentionState) {
-			const next = composerText.slice(0, mentionState.start) + mentionText + composerText.slice(mentionState.end);
-			const nextCaret = mentionState.start + mentionText.length;
-			onComposerTextChange(next);
-			setMentionState(null);
-			requestAnimationFrame(() => {
-				if (el) {
-					el.focus();
-					el.setSelectionRange(nextCaret, nextCaret);
-				}
-			});
-			return;
-		}
-		const caret = el?.selectionStart ?? composerText.length;
-		const end = el?.selectionEnd ?? caret;
-		const prefixNeedsSpace = caret > 0 && !/[\s(（[【]/.test(composerText[caret - 1]!) ? " " : "";
-		const inserted = `${prefixNeedsSpace}${mentionText}`;
-		const next = composerText.slice(0, caret) + inserted + composerText.slice(end);
-		const nextCaret = caret + inserted.length;
+		const inserted = `${mentionState.prefix ?? ""}@${duplicateName ? member.id : displayName} `;
+		const next = composerText.slice(0, mentionState.start) + inserted + composerText.slice(mentionState.end);
+		const nextCaret = mentionState.start + inserted.length;
 		onComposerTextChange(next);
 		setMentionState(null);
 		requestAnimationFrame(() => {
-			if (el) {
-				el.focus();
-				el.setSelectionRange(nextCaret, nextCaret);
-			}
+			el?.focus();
+			el?.setSelectionRange(nextCaret, nextCaret);
 		});
 	};
 
@@ -618,7 +650,13 @@ export function ComposerDock({
 
 					<div className="composer-input-shell">
 						{showMentionPicker && (
-							<div className="composer-mention-menu" role="listbox" aria-label="选择要 @ 的 AI 角色">
+							<div
+								ref={mentionMenuRef}
+								id={mentionListId}
+								className="composer-mention-menu"
+								role="listbox"
+								aria-label="选择要 @ 的 AI 角色"
+							>
 								{filteredMentionMembers.length === 0 ? (
 									<div className="composer-mention-empty">没有匹配的在组 AI 角色</div>
 								) : (
@@ -668,9 +706,12 @@ export function ComposerDock({
 							value={composerText}
 							onChange={(e) => {
 								onComposerTextChange(e.target.value);
-								syncMentionFromCursor(e.target.value, e.target.selectionStart);
+								handleMentionInput(e.target.value, e.target.selectionStart);
 							}}
-							onClick={(e) => syncMentionFromCursor(e.currentTarget.value, e.currentTarget.selectionStart)}
+							onClick={(e) => {
+								if (showMentionPicker) setMentionState(null);
+								else syncMentionFromCursor(e.currentTarget.value, e.currentTarget.selectionStart);
+							}}
 							onKeyUp={(e) => {
 								if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
 									syncMentionFromCursor(e.currentTarget.value, e.currentTarget.selectionStart);
@@ -698,25 +739,13 @@ export function ComposerDock({
 								{canUseAiInDiscussion && mentionMembers.length > 0 && (
 									<button
 										type="button"
+										ref={mentionTriggerRef}
 										className="composer-at-btn"
 										aria-label="@指定 AI 角色讨论"
+										aria-expanded={showMentionPicker}
+										aria-controls={showMentionPicker ? mentionListId : undefined}
 										title="在讨论中 @指定 AI 角色回答"
-										onClick={() => {
-											const el = composerRef.current;
-											const caret = el?.selectionStart ?? composerText.length;
-											const end = el?.selectionEnd ?? caret;
-											const prefix = caret > 0 && !/[\s(（[【]/.test(composerText[caret - 1]!) ? " @" : "@";
-											const next = composerText.slice(0, caret) + prefix + composerText.slice(end);
-											const nextCaret = caret + prefix.length;
-											onComposerTextChange(next);
-											requestAnimationFrame(() => {
-												if (el) {
-													el.focus();
-													el.setSelectionRange(nextCaret, nextCaret);
-													syncMentionFromCursor(next, nextCaret);
-												}
-											});
-										}}
+										onClick={toggleMentionPicker}
 									>
 										@角色
 									</button>
