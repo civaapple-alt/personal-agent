@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Document prebuilt installation, authenticated team deployment, and contributor setup with the sample-data workbench.
+
 - Organize the [documentation](docs/README.md) around reader tasks. Give first-time users, workbench members, team administrators, and contributors separate entry points.
 
 ## [0.6.2] - 2026-11-20

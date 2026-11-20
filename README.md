@@ -1,73 +1,34 @@
 # Personal Agent
 
-一支按岗位协作、跨项目工作的 AI 团队。你提出目标，主负责人按需请教同事，形成可查看的阶段成果，再根据反馈继续修订。
+Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件需求交给产品经理，让它按需请教研发和测试，形成可审阅的方案，再根据反馈修订。各岗位可在不同项目中连续工作，交付成果会保留版本和修改依据。
 
-产品经理关注需求与范围，研发经理核查技术方案，测试经理检查验收与风险，市场与营销负责人补充用户和市场依据。同一位成员可以参与不同项目，具体工作通过事项关联对应的组织、仓库和资料。
+## 开始使用或参与开发
 
-工作台在本机运行，通过 Pi RPC 执行 AI 任务。查看 [0.6.2 发布说明](docs/releases/v0.6.2.md)或从 [GitHub Release](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.2)下载源码包和预构建包。
+| 你的目标 | 从这里开始 |
+| --- | --- |
+| 在自己的电脑上试用 | 从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.2) 下载 `personal-agent-0.6.2-prebuilt.tar.gz`，按[首次运行教程](docs/tutorials/getting-started.md)启动 |
+| 在服务器上为团队部署 | 按[团队部署指南](docs/guides/team-administration.md)启动带账号认证的服务，配置 HTTPS、工作区和成员权限 |
+| 已收到团队邀请 | 按[使用指南](docs/guides/user-guide.md#加入组织)加入组织，学习安排事项和审阅成果 |
+| 修改源码或贡献文档 | 按[开发指南](docs/guides/development.md)从源码启动，再查[贡献指南](CONTRIBUTING.md)了解如何提交 Pull Request |
+
+启动工作台需要 Node.js 22.19.0 或更新版本。要运行 AI 任务，请在工作台所在的机器上安装 Pi CLI，并用启动服务的系统账号配置模型。默认的本机地址是 `http://127.0.0.1:4310`。
 
 ## 可以怎样使用
 
-例如，你想为一个小团队设计反馈收集工具：
-
-1. 把目标和已有资料交给产品经理，先澄清首版范围。
-2. 让主负责人按需咨询研发、测试，整合不同岗位的判断。
-3. 形成可审阅的 V1 方案，保存文件并登记为正式成果。
-4. 对具体版本给出反馈，修订成 V2，保留 V1 及变化依据。
-
-这个过程已有[内置演示](docs/tutorials/inner-matter-demo.md)。打开演示只准备虚构资料；发送给 AI 后，才实际执行并使用模型额度。四步记录代表流程发生，正文仍需验收。
-
-普通交流不会在每轮结束后自动变成交付物。日常视图聚焦成果和关键沟通，内部委托与过程按需查看，也不要求你为每次过程交流审批。
-
-### 界面示例
-
-以下截图采集自无真实模型请求的本地沙箱工作台（示例用户 `Demo User`、虚拟演示仓库）：
+例如，你想为一个小团队设计反馈收集工具。先交给产品经理澄清首版范围，再请研发和测试检查方案及验收条件。收到 V1 后，你可以指出需要修改的地方，请团队发布 V2，并在成果库对比两个版本。[四步内置演示](docs/tutorials/inner-matter-demo.md)使用虚构资料演练这条流程。
 
 ![Personal Agent 新建事项与多岗位协作工作台首页](docs/assets/workbench-home.png)
 
-![Personal Agent 业务团队成员与多组织管理视图](docs/assets/workbench-team.png)
+![Personal Agent 团队成员与组织管理界面](docs/assets/workbench-team.png)
 
 ## 当前能力和限制
 
-| 领域 | 已有能力 | 当前限制 |
-| --- | --- | --- |
-| 岗位团队 | 四个业务示例岗位；角色架构师辅助设计；角色定义导入导出 | 无公开人才市场，不自动安装角色依赖 |
-| 组织与权限 | `PA_REQUIRE_AUTH=1` 邮箱密码登录注册、超级管理员控制台（`#/admin`）、自建组织与成员/AI 角色配置、按组织主目录克隆 Git 仓库及项目/私密事项 ACL | Pi 执行本身仍运行于本机用户权限，非内核级容器沙箱 |
-| 连续协作 | 按事项、成员、组织和工作区接续 Pi 会话；真实工具委托、定向旁听、停止 | 无持久后台调度；丢失或损坏会话缺少一键恢复入口 |
-| 阶段成果 | 显式发布、版本与反馈；文件来源文档快照校验；文件或服务链接 | 文件一致不代表设计正确；本地预览不等于持久部署 |
-| 经验积累 | 候选经验、核验与替代、范围隔离和版本反馈关联 | 尚未证明长期持续学习或自主质量提升 |
-| 工作方法 | 岗位 Skills；可选完整 pstack 包在 Pi 内循环按需读取 | 方法装载不保证主动采用；自然任务验证仍保留失败结果 |
+- 支持按事项接续会话、咨询其他岗位、安排 AI 在主负责人回复后补充意见，以及发布和修订成果。
+- 团队部署支持账号审核、组织邀请、项目仓库授权和私密事项。Pi 和它调用的工具以服务所在机器的系统账号权限运行。请在接入真实仓库或向团队开放前阅读[安全说明](SECURITY.md)。
+- 支持导入岗位定义、加载 Skills 和核验候选工作经验。当前适合由个人或可信小团队使用并审阅输出。操作系统级执行隔离和持久后台调度仍在规划中。
 
-适合愿意在本机或团队受控服务器上配置 Pi、审阅 AI 产出的个人与小型研发团队试用。若你需要操作系统级容器隔离沙箱或无人值守长期后台运行，当前版本尚不具备这些能力。
+[完整文档索引](docs/README.md) · [0.6.2 发布说明](docs/releases/v0.6.2.md) · [变更日志](CHANGELOG.md)
 
-## 启动工作台
+## 许可证
 
-运行需要 Node.js ≥ 22.19、npm、Git，以及**本地 Pi CLI**。Pi 是当前 AI 执行的必需依赖，须单独安装并配置模型访问，本项目不会自动安装或捆绑 Pi。Pi 的产品说明及 macOS、Linux、Windows 安装入口见 [pi.dev](https://pi.dev/)。
-
-完成 Pi 安装后，在源码目录启动本机工作台。
-
-```bash
-pi --version
-npm ci
-npm run start:web
-```
-
-打开 `http://127.0.0.1:4310`，按[首次运行教程](docs/tutorials/getting-started.md)发送第一条提问。运行资料默认保存在启动目录的 `.data/`。接入真实工作区、局域网或外部工具前，请阅读[安全说明](SECURITY.md)。
-
-## 文档入口
-
-| 你要做什么 | 从这里开始 |
-| --- | --- |
-| 第一次体验 | [安装与首次运行](docs/tutorials/getting-started.md) |
-| 在工作台交办事项和审阅成果 | [使用指南](docs/guides/user-guide.md) |
-| 为团队部署服务、管理账号与仓库权限 | [团队管理指南](docs/guides/team-administration.md) |
-| 准备开发环境、修改和验证代码 | [开发指南](docs/guides/development.md) |
-| 查配置、设计、验证或历史 | [完整文档索引](docs/README.md) |
-
-开发代理从 [AGENTS.md](AGENTS.md) 开始，再读相关目录 README。
-
-## 许可证与发布状态
-
-项目原创代码、岗位定义和文档采用 [MIT](LICENSE)，第三方改编与分发范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。`private: true` 防止误发 npm，不影响 MIT 授权。
-
-完整变更见 [CHANGELOG.md](CHANGELOG.md)。提交问题和补丁前，请阅读[贡献指南](CONTRIBUTING.md)。
+项目原创代码、岗位定义和文档采用 [MIT](LICENSE)。第三方材料的来源与许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

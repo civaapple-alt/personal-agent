@@ -1,15 +1,15 @@
 # Personal Agent 文档
 
-## 首次试用或日常使用
+## 安装与使用
 
 | 你要完成什么 | 阅读入口 |
 | --- | --- |
-| 安装 Pi、启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
+| 从预构建包启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
 | 体验专业协作、阶段交付和反馈修订 | [完成四步内置演示](tutorials/inner-matter-demo.md) |
 | 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
 | 下载或升级到当前版本 | [0.6.2 发布说明](releases/v0.6.2.md) |
 
-## 部署或管理团队
+## 部署与管理团队
 
 | 你负责什么 | 阅读入口 |
 | --- | --- |
@@ -19,9 +19,9 @@
 | 查环境变量、存储路径、Pi 资源发现或超时 | [配置参考](reference/configuration.md) |
 | 安装、更新或停用完整 pstack 方法包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
 
-## 贡献代码、角色或文档
+## 开发与贡献
 
-先读[贡献指南](../CONTRIBUTING.md)，再按任务查找代码和验证入口。
+按[开发指南](guides/development.md)启动工作台并选择检查。提交补丁、报告问题和贡献岗位的流程见[贡献指南](../CONTRIBUTING.md)。
 
 | 你要查什么 | 阅读入口 |
 | --- | --- |
