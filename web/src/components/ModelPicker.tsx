@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { fetchModelDefault, fetchModels, type ModelCatalogDto, type ModelSelection } from "../api/models.ts";
-import { ModalDialog } from "./ModalDialog.tsx";
 import { ModelCatalogChoices } from "./ModelCatalogChoices.tsx";
+import { ModelPopover } from "./ModelPopover.tsx";
 
 interface CatalogState {
 	catalog: ModelCatalogDto | null;
@@ -74,21 +74,39 @@ function modelLabel(model: ModelSelection) {
 	return `${model.provider} / ${model.model}${model.thinkingLevel ? ` · ${model.thinkingLevel}` : ""}`;
 }
 
-export function ModelPicker({
-	value,
-	onChange,
-	inheritLabel,
-	inheritModel,
-	initiallyOpen,
-	disabled,
-}: {
+interface ModelPickerProps {
 	value: ModelSelection | null;
 	onChange: (value: ModelSelection | null) => void;
 	inheritLabel: string;
 	inheritModel?: ModelSelection | null;
-	initiallyOpen?: boolean;
 	disabled?: boolean;
-}) {
+}
+
+function inheritedLabel(label: string, inherited?: ModelSelection | null) {
+	return inherited ? `${label} · ${modelLabel(inherited)}` : label;
+}
+
+export function ModelPicker(props: ModelPickerProps) {
+	const { value, inheritLabel, inheritModel, disabled } = props;
+	const effective = useEffectiveModel(value ?? inheritModel);
+	const label = value ? modelLabel(effective ?? value) : inheritedLabel(inheritLabel, effective ?? inheritModel);
+	return (
+		<div className="model-choices">
+			<span className="identity-field-label">供应商与模型</span>
+			<ModelPopover
+				label={label}
+				panelLabel="供应商与模型"
+				accessibleLabel={`供应商与模型 · ${label}`}
+				buttonClassName="input-field model-choices-trigger"
+				disabled={disabled}
+			>
+				{() => <ModelPickerPanel {...props} />}
+			</ModelPopover>
+		</div>
+	);
+}
+
+function ModelPickerPanel({ value, onChange, inheritLabel, inheritModel, disabled }: ModelPickerProps) {
 	const { catalog, error, reload } = useModelCatalog();
 	const options = catalog?.models ?? [];
 	const selected = value
@@ -99,19 +117,12 @@ export function ModelPicker({
 	const inherited = inheritModel
 		? `${inheritLabel} · ${modelLabel(value ? inheritModel : (effective ?? inheritModel))}`
 		: inheritLabel;
-	const currentLabel = value
-		? selected
-			? `${selected.name} · ${selected.provider}`
-			: `${modelLabel(value)}（当前不可用）`
-		: inherited;
 	return (
 		<div className="model-picker">
 			<ModelCatalogChoices
 				models={options}
 				value={value}
-				currentLabel={currentLabel}
 				inheritLabel={inherited}
-				initiallyOpen={initiallyOpen}
 				disabled={disabled}
 				onChange={onChange}
 			/>
@@ -154,12 +165,14 @@ export function ModelPicker({
 }
 
 export function MatterModelControl({
+	label = "主责模型",
 	value,
 	roleModel,
 	leadKnown,
 	disabled,
 	onSave,
 }: {
+	label?: "主责模型" | "架构师模型";
 	value: ModelSelection | null;
 	roleModel: ModelSelection | null;
 	leadKnown: boolean;
@@ -167,22 +180,14 @@ export function MatterModelControl({
 	onSave: (value: ModelSelection | null) => void | Promise<void>;
 }) {
 	const { catalog, reload } = useModelCatalog();
-	const trigger = useRef<HTMLButtonElement>(null);
-	const [open, setOpen] = useState(false);
 	const [draft, setDraft] = useState<ModelSelection | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const inherited = leadKnown ? (roleModel ?? catalog?.platformDefault ?? catalog?.defaultModel) : undefined;
 	const effective = useEffectiveModel(value ?? inherited);
+	const buttonLabel = `${label} · ${effective ? modelLabel(effective) : "按岗位配置"}`;
 
-	const buttonLabel = `主责模型 · ${effective ? modelLabel(effective) : "按岗位配置"}`;
-
-	const close = () => {
-		setOpen(false);
-		trigger.current?.focus();
-	};
-
-	const save = async () => {
+	const save = async (close: () => void) => {
 		setSaving(true);
 		setError(null);
 		try {
@@ -197,54 +202,46 @@ export function MatterModelControl({
 
 	return (
 		<div className="composer-model-control">
-			<button
-				ref={trigger}
-				type="button"
-				className="btn-pill-outline btn-xs"
-				title={buttonLabel}
-				aria-haspopup="dialog"
+			<ModelPopover
+				label={buttonLabel}
+				panelLabel={label}
+				buttonClassName="btn-pill-outline btn-xs model-choices-trigger"
+				align="end"
 				disabled={disabled}
-				onClick={() => {
+				closeDisabled={saving}
+				onOpen={() => {
 					reload();
 					setDraft(value);
 					setError(null);
-					setOpen(true);
 				}}
 			>
-				{buttonLabel}
-			</button>
-			<ModalDialog
-				open={open}
-				title="事项主责模型"
-				subtitle="从下一轮起用于本事项的主负责人。请教与旁听按各自岗位的配置执行。"
-				size="sm"
-				closeDisabled={saving}
-				onClose={close}
-				footer={
-					<button
-						type="button"
-						className="btn-pill-dark"
-						disabled={saving || disabled}
-						onClick={() => void save()}
-					>
-						{saving ? "保存中…" : "应用"}
-					</button>
-				}
-			>
-				<ModelPicker
-					value={draft}
-					onChange={setDraft}
-					inheritLabel="按岗位配置"
-					inheritModel={inherited}
-					initiallyOpen
-					disabled={saving}
-				/>
-				{error && (
-					<p className="muted-hint" role="alert">
-						{error}
-					</p>
+				{(close) => (
+					<>
+						<ModelPickerPanel
+							value={draft}
+							onChange={setDraft}
+							inheritLabel="按岗位配置"
+							inheritModel={inherited}
+							disabled={saving}
+						/>
+						{error && (
+							<p className="muted-hint" role="alert">
+								{error}
+							</p>
+						)}
+						<div className="model-popover-actions">
+							<button
+								type="button"
+								className="btn-pill-dark btn-xs"
+								disabled={saving || disabled}
+								onClick={() => void save(close)}
+							>
+								{saving ? "保存中…" : "应用"}
+							</button>
+						</div>
+					</>
 				)}
-			</ModalDialog>
+			</ModelPopover>
 		</div>
 	);
 }

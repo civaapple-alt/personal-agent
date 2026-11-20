@@ -397,7 +397,6 @@
 	max-inline-size: min(38ch, 42vw);
 }
 .composer-model-control > button {
-	display: block;
 	max-inline-size: 100%;
 	min-inline-size: 0;
 	height: 32px;

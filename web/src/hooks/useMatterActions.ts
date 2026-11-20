@@ -226,7 +226,7 @@ export function useMatterActions({
 					discussionAiEnabled: isArchitectCreate ? false : draftDiscussionAiEnabled,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 					visibility: draftVisibility,
-					modelSelection: isOwner && !isArchitectCreate ? draftModelSelection : null,
+					modelSelection: isOwner ? draftModelSelection : null,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;

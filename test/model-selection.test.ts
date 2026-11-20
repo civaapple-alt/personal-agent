@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import test from "node:test";
 import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE, ROLE_ARCHITECT_MEMBER_ID } from "../src/roles/role-architect.ts";
 import {
 	loadRoleTemplatesFromDir,
 	parseRoleTemplateMarkdown,
@@ -48,7 +49,7 @@ test("Pi defaults, platform, organization and matter model settings resolve in o
 	const db = openPersonalAgentDatabase(join(root, "state.db"));
 	const store = new PersonalAgentStore(db);
 	const organization = store.ensureDefaultOrganization();
-	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const templates = [...(await loadRoleTemplatesFromDir(resolve("roles"))), BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const executions: Array<{ member: string | undefined; selection: ModelSelection; sessionId: string }> = [];
 	const sessions = new Map<string, ModelSelection>();
 	const orchestrator = new TeamOrchestrator({
@@ -206,6 +207,38 @@ test("Pi defaults, platform, organization and matter model settings resolve in o
 	await waitUntil(() => !orchestrator.isMatterRunning(second.id));
 	assert.deepEqual(second.modelSelection, matterModel);
 	assert.deepEqual(executions[6]?.selection, matterModel);
+
+	const architect = await request("/api/matters", "POST", {
+		orgId: organization.id,
+		preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+		aiMemberIds: [ROLE_ARCHITECT_MEMBER_ID],
+		prompt: "Plan an isolated role",
+		modelSelection: matterModel,
+	});
+	assert.equal(architect.status, 202);
+	const { matter: architectMatter } = (await architect.json()) as { matter: { id: string } };
+	await waitUntil(() => !orchestrator.isMatterRunning(architectMatter.id));
+	assert.equal(executions[7]?.member, ROLE_ARCHITECT_MEMBER_ID);
+	assert.deepEqual(executions[7]?.selection, matterModel);
+	const architectPath = `/api/matters/${architectMatter.id}`;
+	assert.equal((await request(architectPath, "PATCH", { modelSelection: platformModel })).status, 200);
+	assert.equal((await request(`${architectPath}/messages`, "POST", { prompt: "Continue planning" })).status, 202);
+	await waitUntil(() => !orchestrator.isMatterRunning(architectMatter.id));
+	assert.deepEqual(executions[8]?.selection, platformModel);
+	assert.equal(executions[7]?.sessionId, executions[8]?.sessionId);
+
+	assert.equal(
+		(
+			await request(`/api/matters/${second.id}/messages`, "POST", {
+				prompt: "Review the current roles",
+				preferredMemberId: ROLE_ARCHITECT_MEMBER_ID,
+			})
+		).status,
+		202,
+	);
+	await waitUntil(() => !orchestrator.isMatterRunning(second.id));
+	assert.equal(executions[9]?.member, ROLE_ARCHITECT_MEMBER_ID);
+	assert.deepEqual(executions[9]?.selection, piDefault);
 });
 
 async function waitUntil(condition: () => boolean) {

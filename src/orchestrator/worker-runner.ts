@@ -317,7 +317,7 @@ export async function executeWithWorkerPass(
 			orgId: activeOrgId,
 		});
 		const matterModel =
-			sessionMode === "lead" && !isArchitect && (!isDiscussionMode || input.member.id === matter?.leadMemberId)
+			sessionMode === "lead" && (!(isArchitect || isDiscussionMode) || input.member.id === matter?.leadMemberId)
 				? matter?.modelSelection
 				: null;
 		const configuredModel = resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);

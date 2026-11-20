@@ -359,6 +359,7 @@ export function App() {
 
 	const startArchitectMatter = (seedText?: string) => {
 		setDraftModelSelection(null);
+		setComposerMode("dispatch");
 		initiation.resetInitiationState();
 		setSelectedMemberId(ROLE_ARCHITECT_MEMBER_ID);
 		setDraftAiMemberIds([ROLE_ARCHITECT_MEMBER_ID]);
@@ -597,7 +598,9 @@ export function App() {
 			navigateRoute({ tab: "chats", isNewMatter: true });
 		}
 		setSelectedMemberId(nextSelected);
+		if (pickingArchitect || selectedMemberId === ROLE_ARCHITECT_MEMBER_ID) setDraftModelSelection(null);
 		if (pickingArchitect) {
+			setComposerMode("dispatch");
 			setDraftAiMemberIds([nextSelected]);
 			initiation.setDraftPresetMode("solo");
 			setDraftObserversEnabled(false);
@@ -838,11 +841,13 @@ export function App() {
 							modelControl={
 								canDispatchAi &&
 								canManageMatter &&
-								currentLeadId !== ROLE_ARCHITECT_MEMBER_ID &&
-								(composerMode === "dispatch" || discussionAiEnabled) &&
+								(composerMode === "dispatch" ||
+									discussionAiEnabled ||
+									currentLeadId === ROLE_ARCHITECT_MEMBER_ID) &&
 								(!selectedMatterId || currentMatter) ? (
 									<MatterModelControl
 										key={selectedMatterId ?? "new"}
+										label={currentLeadId === ROLE_ARCHITECT_MEMBER_ID ? "架构师模型" : "主责模型"}
 										value={selectedMatterId ? (currentMatter?.modelSelection ?? null) : draftModelSelection}
 										roleModel={orgLeadModel}
 										leadKnown={Boolean(currentLeadId)}

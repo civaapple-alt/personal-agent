@@ -1,5 +1,6 @@
 .model-picker,
-.model-choices {
+.model-choices,
+.model-choices-panel {
 	display: grid;
 	gap: 8px;
 	min-inline-size: 0;
@@ -20,6 +21,11 @@
 	cursor: pointer;
 }
 
+.model-choices-trigger.input-field {
+	min-block-size: 36px;
+	line-height: 1.35;
+}
+
 .model-choices-trigger > span:first-child {
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -37,15 +43,6 @@
 
 .model-choices-trigger[aria-expanded="true"] .model-choices-chevron {
 	transform: translateY(2px) rotate(225deg);
-}
-
-.model-choices-panel {
-	display: grid;
-	gap: 8px;
-	padding: 10px;
-	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
-	background: var(--bg-stage);
 }
 
 .model-choices-filters {
@@ -110,4 +107,24 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
+}
+
+.model-popover {
+	position: fixed;
+	z-index: 100;
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	box-sizing: border-box;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--bg-stage);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	box-shadow: 0 8px 24px rgba(24, 36, 31, 0.17);
+}
+
+.model-popover-actions {
+	display: flex;
+	justify-content: flex-end;
 }
