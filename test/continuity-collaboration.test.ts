@@ -168,11 +168,10 @@ async function fixture(t: test.TestContext, respond: Responder) {
 }
 
 test("team discussion is opt-in, preserves the roster and deliverables, and uses separate Pi sessions", async (t) => {
-	const failingPrompt = "@qa-manager @engineering-manager Confirm the second discussion reply";
+	const failingPrompt = "@engineering-manager @qa-manager Confirm the second discussion reply";
 	const f = await fixture(t, async (worker, prompt) => {
 		const memberId = worker.options.env?.PA_MEMBER_ID;
-		if (memberId === "engineering-manager" && prompt.endsWith(failingPrompt))
-			throw new Error("Discussion worker failed");
+		if (memberId === "qa-manager" && prompt.endsWith(failingPrompt)) throw new Error("Discussion worker failed");
 		return `Reply from ${memberId}`;
 	});
 	const { server } = createPersonalAgentServer({
@@ -313,9 +312,11 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	const replies = f.store
 		.listMessages(first.matter.id, "user")
 		.filter(({ metadata }) => metadata?.sourceUserMessageId === failingDiscussion.message.id);
-	assert.equal(replies[0]?.senderId, "qa-manager");
+	assert.equal(replies[0]?.senderId, "engineering-manager");
 	assert.equal(replies[1]?.metadata?.failed, true);
 	assert.match(replies[1]?.content ?? "", /AI 讨论未完成/);
+	assert.match(JSON.stringify(replies[1]?.metadata?.progressSnapshot), /"leadMemberId":"qa-manager"/);
+	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {

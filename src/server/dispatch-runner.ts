@@ -123,7 +123,8 @@ export function createDispatchRunner(deps: {
 				activeRuns.delete(input.matterId);
 				const message = error instanceof Error ? error.message : String(error);
 				const currentMatter = store.getMatter(input.matterId);
-				const leadMember = currentMatter?.leadMemberId ? store.getMember(currentMatter.leadMemberId) : null;
+				const snapshotMemberId = lastActive?.progress.speakerMemberId ?? currentMatter?.leadMemberId;
+				const snapshotMember = snapshotMemberId ? store.getMember(snapshotMemberId) : null;
 				const messages = store.listMessages(input.matterId, "user");
 				const sourceId = lastActive?.progress.sourceUserMessageId ?? input.existingUserMessageId;
 				const sourceMessage = sourceId ? store.getMessage(sourceId) : null;
@@ -141,7 +142,7 @@ export function createDispatchRunner(deps: {
 							outcome: "failed",
 							progress: lastActive.progress,
 							startedAtMs: lastActive.startedAt,
-							leadMember,
+							leadMember: snapshotMember,
 						})
 					: undefined;
 				store.appendMessage({

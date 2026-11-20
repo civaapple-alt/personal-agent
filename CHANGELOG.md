@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Show the role that was running when a team discussion failed in its progress snapshot.
+
 - Keep the team discussion draft free of stray `@` when toggling the role picker. Close the picker when clicking outside.
 
 - Show pending human decisions in the matter, with an assigned responder, answer history, and continuation. Route AI colleagues’ questions through their delegator and record who approved each role proposal.
