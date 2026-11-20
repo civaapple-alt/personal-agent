@@ -8,6 +8,7 @@ import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, MatterMessage } from "../storage/types.ts";
+import { selectDemoModel } from "./model-selection.ts";
 import {
 	isControlledObserverProposal,
 	OBSERVER_BRIEF,
@@ -61,6 +62,10 @@ export async function runObserverSmoke(input: {
 	await writeFile(join(workspace, "README.md"), seed, { flag: "wx" });
 	const db = openPersonalAgentDatabase(join(input.directory, "proof.db"));
 	const store = new PersonalAgentStore(db);
+	if (!input.workerFactory)
+		store.updatePlatformSettings({
+			defaultModelSelection: await selectDemoModel(workspace, { thinkingLevel: "off" }),
+		});
 	const workers: WorkerRecord[] = [];
 	const outcomes: WorkerOutcome[] = [];
 	const steps: StepOutcome[] = [];
@@ -68,7 +73,7 @@ export async function runObserverSmoke(input: {
 	let order = 0;
 	const orchestrator = new TeamOrchestrator({
 		store,
-		templates: input.templates.map((template) => ({ ...template, thinkingLevel: "off", tools: ["read"] })),
+		templates: input.templates.map((template) => ({ ...template, tools: ["read"] })),
 		defaultCwd: workspace,
 		sessionDir: join(input.directory, "sessions"),
 		workerFactory: (options) => {

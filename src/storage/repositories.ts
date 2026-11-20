@@ -454,6 +454,10 @@ export class PersonalAgentStore {
 	findLegacyUploadMatterId(filename: string) {
 		return this.orgRbac.findLegacyUploadMatterId(filename);
 	}
+	updateMatterModelSelection(...args: Parameters<MatterRepo["updateMatterModelSelection"]>) {
+		return this.matters.updateMatterModelSelection(...args);
+	}
+
 	updateMatterVisibility(matterId: string, visibility: Parameters<MatterRepo["updateMatterVisibility"]>[1]) {
 		return this.matters.updateMatterVisibility(matterId, visibility);
 	}

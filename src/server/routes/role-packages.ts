@@ -13,14 +13,8 @@ import {
 	saveRolePackage,
 	validateNewSkillDrafts,
 } from "../../roles/role-package-store.ts";
-import {
-	formatRoleTemplateBody,
-	parseRoleScope,
-	parseRoleThinkingLevel,
-	validateRoleTemplateId,
-} from "../../roles/template-loader.ts";
+import { formatRoleTemplateBody, parseRoleScope, validateRoleTemplateId } from "../../roles/template-loader.ts";
 import type { NewSkillDraft, RoleScope, RoleTemplate } from "../../roles/types.ts";
-import type { ThinkingLevel } from "../../rpc/types.ts";
 import type { TeamMember } from "../../storage/types.ts";
 import { canActorCreateRoleInScope, canActorManageMember, canManageOrganization } from "../acl.ts";
 import { isSuperAdminActor, type RequestActor } from "../auth.ts";
@@ -212,15 +206,7 @@ function planMemberFromBody(
 		throw new HttpRequestError(400, "Invalid MCP dependency name");
 	const tools = normalizeRoleTools(Array.isArray(body.tools) ? body.tools.map(String) : undefined);
 	const antiJobs = Array.isArray(body.antiJobs) ? body.antiJobs.map(String).filter(Boolean) : [];
-	const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : "kimi-for-coding";
-	const provider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : "kimi-coding";
-	let thinkingLevel: ThinkingLevel;
-	try {
-		thinkingLevel = parseRoleThinkingLevel(body.thinkingLevel ?? "high");
-	} catch (error) {
-		throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
-	}
-	if ([name, title, model, provider, ...keywords, ...skills, ...antiJobs].some((value) => /[\r\n]/.test(value))) {
+	if ([name, title, ...keywords, ...skills, ...antiJobs].some((value) => /[\r\n]/.test(value))) {
 		throw new HttpRequestError(400, "Role metadata fields and array entries must each fit on one line");
 	}
 	let newSkills: NewSkillDraft[] = [];
@@ -276,9 +262,6 @@ function planMemberFromBody(
 		...(scopeTarget.ownerUserId ? { ownerUserId: scopeTarget.ownerUserId } : {}),
 		version: "1.0.0",
 		shareable: scopeTarget.roleScope === "global",
-		defaultProvider: provider,
-		defaultModel: model,
-		thinkingLevel,
 		isPrimaryContact,
 		keywords,
 		tools,

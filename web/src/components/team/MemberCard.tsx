@@ -144,7 +144,7 @@ export function MemberCard({
 						</div>
 						{member.roleTitle &&
 							member.roleTitle.trim().toLowerCase() !== member.displayName.trim().toLowerCase() && (
-								<div className="member-sub" title={`${member.roleTitle} · ${member.model}`}>
+								<div className="member-sub" title={member.roleTitle}>
 									{member.roleTitle}
 								</div>
 							)}
@@ -179,7 +179,6 @@ export function MemberCard({
 					</>
 				)}
 				<span aria-hidden="true">·</span>
-				<span className="member-meta-model">{member.model}</span>
 			</div>
 
 			<div className="member-card-footer">

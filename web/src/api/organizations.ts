@@ -1,5 +1,6 @@
 import type { UserStatus } from "./auth.ts";
 import { requestJson } from "./client.ts";
+import type { ModelSelection } from "./models.ts";
 import type { TeamMemberDto } from "./team.ts";
 
 export type OrgMemberRole = "org_owner" | "org_admin" | "org_member" | "org_viewer";
@@ -40,7 +41,7 @@ export interface OrganizationAiRoleConfigDto {
 	displayNameOverride: string | null;
 	providerOverride?: string | null;
 	modelOverride: string | null;
-	thinkingLevelOverride?: string | null;
+	thinkingLevelOverride?: ModelSelection["thinkingLevel"] | null;
 	gitNameOverride?: string | null;
 	gitEmailOverride?: string | null;
 	updatedAt: string;
@@ -227,6 +228,15 @@ export function setOrgAiPrimaryContact(orgId: string, primaryMemberId: string): 
 	});
 }
 
+export function organizationRoleModel(config?: OrganizationAiRoleConfigDto): ModelSelection | null {
+	if (!config?.providerOverride || !config.modelOverride) return null;
+	return {
+		provider: config.providerOverride,
+		model: config.modelOverride,
+		thinkingLevel: config.thinkingLevelOverride ?? undefined,
+	};
+}
+
 export function updateOrgAiRoles(
 	orgId: string,
 	roles: Array<{
@@ -236,6 +246,7 @@ export function updateOrgAiRoles(
 		displayNameOverride?: string | null;
 		providerOverride?: string | null;
 		modelOverride?: string | null;
+		modelSelection?: ModelSelection | null;
 		thinkingLevelOverride?: string | null;
 		gitNameOverride?: string | null;
 		gitEmailOverride?: string | null;

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { ModelSelection } from "../../api/models.ts";
+import { organizationRoleModel } from "../../api/organizations.ts";
 import {
 	type AccountUserDto,
 	addOrgMember,
@@ -23,6 +25,7 @@ import {
 import { copyTextToClipboard } from "../../clipboard.ts";
 import { formatMemberGitIdentity } from "../../utils.ts";
 import { ModalDialog } from "../ModalDialog.tsx";
+import { ModelPicker, useModelCatalog } from "../ModelPicker.tsx";
 
 interface OrganizationsSectionProps {
 	isOwner: boolean;
@@ -95,6 +98,8 @@ export function OrganizationsSection({
 	const [draftGitByMemberId, setDraftGitByMemberId] = useState<Record<string, { gitName: string; gitEmail: string }>>(
 		{},
 	);
+	const { catalog } = useModelCatalog();
+	const [modelEdits, setModelEdits] = useState<Record<string, ModelSelection | null>>({});
 	const [savingAiRoles, setSavingAiRoles] = useState(false);
 
 	const openCreateOrgForm = () => {
@@ -256,6 +261,7 @@ export function OrganizationsSection({
 		setDraftPrimaryAiId(primaryConfig?.memberId ?? fallbackPrimary);
 		setDraftUseRoleGitIdentity(Boolean(targetOrg?.useRoleGitIdentity));
 		setDraftGitByMemberId(gitDrafts);
+		setModelEdits({});
 		setAiModalOrgId(orgId);
 	};
 
@@ -277,6 +283,7 @@ export function OrganizationsSection({
 					providerOverride: existingCfg?.providerOverride ?? null,
 					modelOverride: existingCfg?.modelOverride ?? null,
 					thinkingLevelOverride: existingCfg?.thinkingLevelOverride ?? null,
+					modelSelection: modelEdits[m.id],
 					gitNameOverride: draftGit?.gitName.trim() || null,
 					gitEmailOverride: draftGit?.gitEmail.trim() || null,
 				};
@@ -753,6 +760,9 @@ export function OrganizationsSection({
 						const enabled = draftEnabledAiIds.includes(m.id);
 						const fallbackGit = formatMemberGitIdentity(m, activeAiModalOrg);
 						const draftGit = draftGitByMemberId[m.id] ?? { gitName: "", gitEmail: "" };
+						const roleConfig = aiModalOrgId
+							? orgAiRolesByOrgId[aiModalOrgId]?.configs.find((config) => config.memberId === m.id)
+							: undefined;
 						return (
 							<div key={m.id} className="org-ai-config-card">
 								<div className="org-ai-config-row-top">
@@ -784,6 +794,21 @@ export function OrganizationsSection({
 										</label>
 									)}
 								</div>
+								{enabled && (
+									<ModelPicker
+										value={
+											Object.hasOwn(modelEdits, m.id)
+												? (modelEdits[m.id] ?? null)
+												: organizationRoleModel(roleConfig)
+										}
+										onChange={(selection) =>
+											setModelEdits((previous) => ({ ...previous, [m.id]: selection }))
+										}
+										inheritLabel="使用全局默认"
+										inheritModel={catalog?.platformDefault ?? catalog?.defaultModel}
+										disabled={savingAiRoles}
+									/>
+								)}
 								{enabled && (
 									<div className="org-ai-git-grid">
 										<label className="identity-field compact">

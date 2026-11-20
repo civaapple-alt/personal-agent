@@ -54,9 +54,6 @@ export interface RoleTemplateDto {
 
 export interface RoleArchitectDraftDto {
 	template: RoleTemplateDto & {
-		defaultProvider: string;
-		defaultModel: string;
-		thinkingLevel: string;
 		isPrimaryContact: boolean;
 		sections: Record<string, string>;
 	};
@@ -187,9 +184,6 @@ export interface CreateMemberPayload {
 	tools?: string[];
 	antiJobs?: string[];
 	sections?: Record<string, string>;
-	model?: string;
-	provider?: string;
-	thinkingLevel?: string;
 	isPrimaryContact?: boolean;
 	gitName?: string;
 	gitEmail?: string;

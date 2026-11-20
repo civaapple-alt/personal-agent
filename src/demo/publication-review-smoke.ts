@@ -7,9 +7,11 @@ import { promisify } from "node:util";
 import { PUBLICATION_REVIEW_GUIDANCE } from "../orchestrator/publication-review.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
+import { selectDemoModel } from "./model-selection.ts";
 import { REVIEW_SCENARIOS, type ReviewScenario } from "./publication-review-case.ts";
 import {
 	assessCollaboration,
@@ -29,6 +31,7 @@ async function run(input: {
 	scenario: ReviewScenario;
 	templates: Templates;
 	configurationHash: string;
+	modelSelection: ModelSelection;
 }) {
 	const { item, scenario, templates } = input;
 	const directory = join(input.root, reviewDirectory(item));
@@ -41,8 +44,14 @@ async function run(input: {
 	await promisify(execFile)("git", ["init", "-b", "main"], { cwd: workspace });
 	const db = openPersonalAgentDatabase(join(directory, "proof.db"));
 	const store = new PersonalAgentStore(db);
+	store.updatePlatformSettings({ defaultModelSelection: input.modelSelection });
 	const traces: ReviewToolTrace[] = [];
-	const workerConfigurations: Array<{ id: string; provider?: string; model?: string; thinkingLevel: "off" }> = [];
+	const workerConfigurations: Array<{
+		id: string;
+		provider?: string;
+		model?: string;
+		thinkingLevel: ModelSelection["thinkingLevel"];
+	}> = [];
 	let sequence = 0;
 	const orchestrator = new TeamOrchestrator({
 		store,
@@ -66,7 +75,7 @@ async function run(input: {
 				id: memberId,
 				provider: options.provider,
 				model: options.model,
-				thinkingLevel: "off",
+				thinkingLevel: input.modelSelection.thinkingLevel,
 			});
 			worker.onEvent((event) => {
 				if (event.type === "tool_execution_start")
@@ -219,18 +228,13 @@ async function main() {
 		return;
 	}
 	const root = await mkdtemp(join(tmpdir(), "personal-agent-publication-review-"));
-	const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
-		...template,
-		thinkingLevel: "off" as const,
-	}));
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const modelSelection = await selectDemoModel(root, { thinkingLevel: "off" });
 	const scenarios = options.scenarioIds.map((id) => REVIEW_SCENARIOS[id]);
-	const configuration = templates.map(({ id, defaultProvider, defaultModel, thinkingLevel }) => ({
-		id,
-		provider: defaultProvider,
-		model: defaultModel,
-		thinkingLevel,
-	}));
-	const configurationHash = reviewHash(JSON.stringify({ templates, guidance: PUBLICATION_REVIEW_GUIDANCE }));
+	const configuration = templates.map(({ id }) => ({ id, ...modelSelection }));
+	const configurationHash = reviewHash(
+		JSON.stringify({ templates, modelSelection, guidance: PUBLICATION_REVIEW_GUIDANCE }),
+	);
 	await writeFile(
 		join(root, "case.json"),
 		JSON.stringify(
@@ -255,7 +259,14 @@ async function main() {
 		`Evaluation evidence: ${root}\nPlanned real lead turns: ${plan.length}; colleague calls depend on scenario and model decisions.`,
 	);
 	for (const item of plan)
-		await run({ root, item, scenario: REVIEW_SCENARIOS[item.scenarioId], templates, configurationHash });
+		await run({
+			root,
+			item,
+			scenario: REVIEW_SCENARIOS[item.scenarioId],
+			templates,
+			modelSelection,
+			configurationHash,
+		});
 	await writeFile(
 		join(root, "review.md"),
 		[

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import type { ModelSelection } from "../api/models.ts";
 import type { AdminOverviewPayload, AdminUserRowDto, PlatformRole, RegistrationMode, UserStatus } from "../api.ts";
+import { ModelPicker, useModelCatalog } from "./ModelPicker.tsx";
 
 interface AdminViewProps {
 	overview: AdminOverviewPayload | null;
@@ -16,6 +18,7 @@ interface AdminViewProps {
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
 		defaultMaxPersonalRoles: number;
+		defaultModelSelection?: ModelSelection | null;
 	}) => Promise<void>;
 	onUpdateUser: (
 		userId: string,
@@ -76,6 +79,9 @@ export function AdminView({
 	const [busyUserId, setBusyUserId] = useState<string | null>(null);
 	const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+	const { catalog, reload: reloadModels } = useModelCatalog();
+	const [modelEdit, setModelEdit] = useState<ModelSelection | null | undefined>(undefined);
+
 	// Platform settings draft state
 	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_review");
 	const [workspacesRoot, setWorkspacesRoot] = useState("");
@@ -94,6 +100,7 @@ export function AdminView({
 	useEffect(() => {
 		if (!overview) return;
 		const s = overview.settings;
+		setModelEdit(undefined);
 		setRegistrationMode(s.registrationMode);
 		setWorkspacesRoot(s.workspacesRoot);
 		setAllowLocalWorkspacePath(s.allowLocalWorkspacePath);
@@ -129,6 +136,7 @@ export function AdminView({
 		try {
 			await onSaveSettings({
 				registrationMode,
+				defaultModelSelection: modelEdit,
 				workspacesRoot: workspacesRoot.trim(),
 				allowLocalWorkspacePath,
 				localWorkspaceAllowlist: allowlistText
@@ -140,7 +148,10 @@ export function AdminView({
 				defaultMaxActiveDispatches: Number(defaultMaxActiveDispatches) || 1,
 				defaultMaxPersonalRoles: Math.max(0, Number(defaultMaxPersonalRoles) || 0),
 			});
-			setActionFeedback("平台安全配置已保存");
+			if (modelEdit !== undefined) reloadModels();
+			setActionFeedback("平台配置已保存");
+		} catch (error) {
+			setActionFeedback(error instanceof Error ? error.message : String(error));
 		} finally {
 			setSavingSettings(false);
 		}
@@ -481,6 +492,20 @@ export function AdminView({
 						{activeTab === "settings" && (
 							<section className="ui-section" aria-label="平台安全边界">
 								<form className="ui-card admin-settings-form" onSubmit={(e) => void handleSaveSettings(e)}>
+									<div>
+										<h3 className="ui-card-title">全局默认模型</h3>
+										<ModelPicker
+											value={
+												modelEdit === undefined
+													? (overview.settings.defaultModelSelection ?? null)
+													: modelEdit
+											}
+											onChange={setModelEdit}
+											inheritLabel="使用 Pi 默认"
+											inheritModel={catalog?.defaultModel}
+											disabled={savingSettings}
+										/>
+									</div>
 									<h2 className="ui-section-title">注册策略与多团队仓库边界</h2>
 									<div className="admin-radio-group">
 										{REGISTRATION_LABELS.map((item) => (
@@ -581,7 +606,7 @@ export function AdminView({
 
 									<div className="actions-row compact">
 										<button type="submit" className="btn-pill-dark" disabled={savingSettings}>
-											{savingSettings ? "保存中…" : "保存平台安全配置"}
+											{savingSettings ? "保存中…" : "保存平台配置"}
 										</button>
 									</div>
 								</form>

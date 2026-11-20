@@ -1,5 +1,6 @@
 import type { AccountUserDto, PlatformRole, RegistrationMode, UserStatus } from "./auth.ts";
 import { requestJson } from "./client.ts";
+import type { ModelSelection } from "./models.ts";
 import type { OrganizationDto, OrganizationMemberDto } from "./organizations.ts";
 
 export interface PlatformSettingsDto {
@@ -12,6 +13,7 @@ export interface PlatformSettingsDto {
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
 	pstackDir?: string | null;
+	defaultModelSelection?: ModelSelection | null;
 	updatedAt: string;
 }
 
@@ -55,6 +57,7 @@ export function updateAdminSettings(
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
 		defaultMaxPersonalRoles: number;
+		defaultModelSelection: ModelSelection | null;
 	}>,
 ): Promise<{ settings: PlatformSettingsDto }> {
 	return requestJson("/api/admin/settings", {

@@ -1,5 +1,5 @@
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
-import type { ThinkingLevel } from "../../rpc/types.ts";
+import { isThinkingLevel } from "../../rpc/model-selection.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
 import type { CollaboratorRole, OrgMemberRole } from "../../storage/types.ts";
 import {
@@ -21,6 +21,7 @@ import {
 	type RouteRequest,
 	type ServerRouteContext,
 } from "./context.ts";
+import { validateModelSelection } from "./model-settings.ts";
 
 function parseOrgMemberRole(raw: unknown): OrgMemberRole | null {
 	if (raw === "org_owner" || raw === "org_admin" || raw === "org_member" || raw === "org_viewer") {
@@ -431,23 +432,44 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				sendError(res, 400, "roles 必须是包含启用状态的角色配置数组");
 				return true;
 			}
-			const parsedRoles = body.roles
-				.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-				.map((item) => ({
-					memberId: typeof item.memberId === "string" ? item.memberId.trim() : "",
-					enabled: Boolean(item.enabled),
-					isPrimaryContact: Boolean(item.isPrimaryContact),
-					displayNameOverride:
-						typeof item.displayNameOverride === "string" ? item.displayNameOverride.trim() || null : null,
-					providerOverride:
-						typeof item.providerOverride === "string" ? item.providerOverride.trim() || null : null,
-					modelOverride: typeof item.modelOverride === "string" ? item.modelOverride.trim() || null : null,
-					thinkingLevelOverride:
-						typeof item.thinkingLevelOverride === "string" ? (item.thinkingLevelOverride as ThinkingLevel) : null,
-					gitNameOverride: typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
-					gitEmailOverride:
-						typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
-				}));
+			const parsedRoles = await Promise.all(
+				body.roles
+					.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+					.map(async (item) => {
+						const selection = Object.hasOwn(item, "modelSelection")
+							? await validateModelSelection(ctx, item.modelSelection)
+							: undefined;
+						return {
+							memberId: typeof item.memberId === "string" ? item.memberId.trim() : "",
+							enabled: Boolean(item.enabled),
+							isPrimaryContact: Boolean(item.isPrimaryContact),
+							displayNameOverride:
+								typeof item.displayNameOverride === "string" ? item.displayNameOverride.trim() || null : null,
+							providerOverride:
+								selection !== undefined
+									? (selection?.provider ?? null)
+									: typeof item.providerOverride === "string"
+										? item.providerOverride.trim() || null
+										: null,
+							modelOverride:
+								selection !== undefined
+									? (selection?.model ?? null)
+									: typeof item.modelOverride === "string"
+										? item.modelOverride.trim() || null
+										: null,
+							thinkingLevelOverride:
+								selection !== undefined
+									? (selection?.thinkingLevel ?? null)
+									: isThinkingLevel(item.thinkingLevelOverride)
+										? item.thinkingLevelOverride
+										: null,
+							gitNameOverride:
+								typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
+							gitEmailOverride:
+								typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
+						};
+					}),
+			);
 			if (new Set(parsedRoles.map((role) => role.memberId)).size !== parsedRoles.length) {
 				sendError(res, 400, "每个角色只能配置一次");
 				return true;

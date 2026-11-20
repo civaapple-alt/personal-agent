@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ThinkingLevel } from "../rpc/types.ts";
 import type { RoleScope, RoleTemplate, RoleTemplateSections } from "./types.ts";
 
 const ROLE_SECTION_HEADINGS = [
@@ -16,20 +15,6 @@ export function formatRoleTemplateBody(sections: RoleTemplateSections): string {
 	return ROLE_SECTION_HEADINGS.filter(([key]) => sections[key].trim())
 		.map(([key, heading]) => `## ${heading}\n${sections[key]}`)
 		.join("\n\n");
-}
-
-export function parseRoleThinkingLevel(value: unknown): ThinkingLevel {
-	if (
-		value === "off" ||
-		value === "minimal" ||
-		value === "low" ||
-		value === "medium" ||
-		value === "high" ||
-		value === "xhigh" ||
-		value === "max"
-	)
-		return value;
-	throw new Error(`Invalid thinkingLevel: ${String(value)}`);
 }
 
 /** Role IDs are filenames as well as stable runtime keys. */
@@ -183,7 +168,6 @@ export function parseRoleTemplateMarkdown(
 	const body = normalized.slice(closingIdx + 5).trim();
 	const meta = parseFrontmatter(frontmatterRaw);
 
-	const thinkingRaw = parseRoleThinkingLevel(requireString(meta, "thinkingLevel", sourcePath));
 	const roleKind = meta.roleKind === "architect" ? "architect" : undefined;
 	const responsibilityKeywords = meta.responsibilityKeywords;
 	const forcedScope = normalizeScopeOverride(explicitScope);
@@ -209,9 +193,6 @@ export function parseRoleTemplateMarkdown(
 		ownerUserId: effectiveScope.ownerUserId,
 		version: requireString(meta, "version", sourcePath),
 		shareable: typeof meta.shareable === "boolean" ? meta.shareable : true,
-		defaultProvider: requireString(meta, "defaultProvider", sourcePath),
-		defaultModel: requireString(meta, "defaultModel", sourcePath),
-		thinkingLevel: thinkingRaw,
 		isPrimaryContact:
 			effectiveScope.roleScope === "global" && typeof meta.isPrimaryContact === "boolean"
 				? meta.isPrimaryContact
@@ -343,9 +324,6 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		...(template.roleScope === "personal" && template.ownerUserId ? [`ownerUserId: ${template.ownerUserId}`] : []),
 		`version: ${template.version}`,
 		`shareable: ${String(template.shareable)}`,
-		`defaultProvider: ${template.defaultProvider}`,
-		`defaultModel: ${template.defaultModel}`,
-		`thinkingLevel: ${template.thinkingLevel}`,
 		`isPrimaryContact: ${String(template.isPrimaryContact)}`,
 		`keywords: ${formatList(template.keywords)}`,
 		...(template.responsibilityKeywords

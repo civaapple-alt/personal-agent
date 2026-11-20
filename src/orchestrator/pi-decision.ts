@@ -1,5 +1,7 @@
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { PromptRunResult, ToolExecutionRecord } from "../rpc/pi-rpc-worker.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
+import { applyWorkerModel } from "./model-selection.ts";
 import type { WorkerFactory } from "./types.ts";
 
 export type PiDecisionErrorKind = "aborted" | "parse_error" | "validation_error" | "worker_error";
@@ -34,8 +36,9 @@ export interface PiDecisionSpec<T> {
 
 export interface RunTypedPiDecisionDeps {
 	cwd: string;
-	provider: string;
-	model: string;
+	provider?: string;
+	model?: string;
+	modelSelection?: ModelSelection | null;
 	workerFactory: WorkerFactory;
 }
 
@@ -83,10 +86,10 @@ export async function runTypedPiDecision<T>(
 	const toolsArg = spec.tools && spec.tools.length > 0 ? spec.tools.join(",") : "";
 	const worker = deps.workerFactory({
 		cwd: deps.cwd,
-		provider: deps.provider,
-		model: deps.model,
+		provider: deps.modelSelection?.provider ?? deps.provider,
+		model: deps.modelSelection?.model ?? deps.model,
 		noSession: true,
-		args: ["--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", toolsArg],
+		args: ["--no-approve", "--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", toolsArg],
 		env: { PA_DECISION_NAME: spec.name },
 	});
 
@@ -99,9 +102,8 @@ export async function runTypedPiDecision<T>(
 	let promptResult: PromptRunResult;
 	try {
 		await worker.start();
-		if (worker.setThinkingLevel) {
-			await worker.setThinkingLevel(spec.thinkingLevel ?? "low");
-		}
+		if (deps.modelSelection) await applyWorkerModel(worker, deps.modelSelection);
+		else if (spec.thinkingLevel) await worker.setThinkingLevel?.(spec.thinkingLevel);
 		options.signal.throwIfAborted();
 		promptResult = await worker.runPromptAndWait(`${spec.systemPrompt}\n\n---\n\n${spec.userPrompt}`, {
 			timeoutMs: options.timeoutMs ?? 60_000,

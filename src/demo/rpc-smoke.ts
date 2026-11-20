@@ -3,8 +3,6 @@ import { PiRpcWorker } from "../index.ts";
 async function main(): Promise<void> {
 	const worker = new PiRpcWorker({
 		cwd: process.cwd(),
-		provider: "kimi-coding",
-		model: "kimi-for-coding",
 		noSession: true,
 		onDialog: async (request) => {
 			console.log(`[dialog:${request.method}] ${request.title}`);
@@ -19,7 +17,7 @@ async function main(): Promise<void> {
 		console.log(`[notice:${notice.method}]`, JSON.stringify(notice));
 	});
 
-	console.log("Starting Pi RPC worker (kimi-coding / kimi-for-coding)...");
+	console.log("Starting Pi RPC worker using the configured Pi default...");
 	await worker.start();
 
 	try {

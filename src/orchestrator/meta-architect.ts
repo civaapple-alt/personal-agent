@@ -18,6 +18,7 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { resolveRoleSkills } from "./execution-context.ts";
 import type { CollaborationPresetMode } from "./matter-initiation.ts";
+import { applyWorkerModel, resolveConfiguredModel } from "./model-selection.ts";
 import { extractJsonObject } from "./pi-decision.ts";
 import {
 	collectTeamHealthEvidence,
@@ -626,12 +627,14 @@ export async function runMetaArchitectChat(
 		.join("\n\n");
 
 	const methodPaths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE, { skillsDir: deps.skillsDir });
+	const selection = resolveConfiguredModel(deps.store, targetOrgId, primary?.id);
 	const worker = deps.workerFactory({
 		cwd,
-		provider: primary?.provider ?? "kimi-coding",
-		model: primary?.model ?? "kimi-for-coding",
+		provider: selection?.provider,
+		model: selection?.model,
 		noSession: true,
 		args: [
+			"--no-approve",
 			"--no-extensions",
 			"--no-skills",
 			"--no-mcp",
@@ -651,6 +654,7 @@ export async function runMetaArchitectChat(
 	let result: PromptRunResult;
 	try {
 		await worker.start();
+		if (selection) await applyWorkerModel(worker, selection);
 		input.signal.throwIfAborted();
 		result = await worker.runPromptAndWait(`${systemPrompt}\n\n---\n\n${prompt}`, {
 			timeoutMs: input.timeoutMs ?? 120_000,

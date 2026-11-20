@@ -5,6 +5,8 @@ import {
 	type RoleDesignBriefInput,
 } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
+import { readPiModelCatalog } from "../rpc/model-catalog.ts";
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
@@ -18,6 +20,7 @@ import {
 	type MatterInitiationAssessment,
 } from "./matter-initiation.ts";
 import { type MetaArchitectChatInput, type MetaArchitectChatResult, runMetaArchitectChat } from "./meta-architect.ts";
+import { type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
 import { buildMemberSystemPrompt } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
@@ -76,6 +79,8 @@ export class TeamOrchestrator {
 	private readonly skillsDir: string | undefined;
 	private readonly noSession: boolean;
 	private readonly workerFactory: WorkerFactory;
+	private readonly readPiModels: ReadPiModels;
+	private readonly piModelProbes = new Map<string, ReturnType<ReadPiModels>>();
 	private dialogHandler: OrchestratorDialogHandler | undefined;
 	private readonly runs = new Map<string, MatterRun>();
 	private readonly distillations = new Map<string, Set<AbortController>>();
@@ -95,8 +100,22 @@ export class TeamOrchestrator {
 		this.skillsDir = options.skillsDir;
 		this.noSession = options.noSession ?? false;
 		this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
+		this.readPiModels =
+			options.readPiModels ??
+			(options.workerFactory
+				? async () => ({ defaultModel: null, models: [] })
+				: (selection) => readPiModelCatalog(this.defaultCwd, selection));
 		this.dialogHandler = options.onDialog;
 		this.syncRoleTemplates(options.templates);
+	}
+
+	getPiModels(selection?: ModelSelection): ReturnType<ReadPiModels> {
+		const key = selection ? JSON.stringify([selection.provider, selection.model]) : "";
+		const pending = this.piModelProbes.get(key);
+		if (pending) return pending;
+		const probe = this.readPiModels(selection).finally(() => this.piModelProbes.delete(key));
+		this.piModelProbes.set(key, probe);
+		return probe;
 	}
 
 	getDefaultCwd(): string {
@@ -144,9 +163,7 @@ export class TeamOrchestrator {
 				displayName: tpl.name,
 				roleTitle: tpl.title,
 				isPrimaryContact: roleScope === "global" && primaryId === tpl.id,
-				provider: tpl.defaultProvider,
-				model: tpl.defaultModel,
-				thinkingLevel: tpl.thinkingLevel,
+
 				keywords: tpl.keywords,
 				roleScope,
 				ownerOrgId: tpl.ownerOrgId ?? null,
@@ -187,9 +204,7 @@ export class TeamOrchestrator {
 			displayName: normalizedTemplate.name,
 			roleTitle: normalizedTemplate.title,
 			isPrimaryContact: isGlobalPrimary,
-			provider: normalizedTemplate.defaultProvider,
-			model: normalizedTemplate.defaultModel,
-			thinkingLevel: normalizedTemplate.thinkingLevel,
+
 			keywords: normalizedTemplate.keywords,
 			roleScope,
 			ownerOrgId: normalizedTemplate.ownerOrgId,
@@ -537,6 +552,7 @@ export class TeamOrchestrator {
 				extensions: this.extensions,
 				pstackDir: this.pstackDir,
 				workerFactory: this.workerFactory,
+				readPiModels: (selection) => this.getPiModels(selection),
 				getDialogHandler: () => this.dialogHandler,
 				getTemplateForMember: (member) => this.getTemplateForMember(member),
 				getTemplatesById: () => this.templatesById,
@@ -648,6 +664,7 @@ export class TeamOrchestrator {
 					defaultCwd: this.defaultCwd,
 					workerFactory: this.workerFactory,
 					members: scopedMembers,
+					selectModel: (memberId) => resolveConfiguredModel(this.store, orgId, memberId),
 					templatesByRoleId: this.templatesById,
 				},
 				{
@@ -680,6 +697,7 @@ export class TeamOrchestrator {
 					skillsDir: this.skillsDir,
 					workerFactory: this.workerFactory,
 					members: scopedMembers,
+					selectModel: (memberId) => resolveConfiguredModel(this.store, input.ownerOrgId, memberId),
 					templatesByRoleId: this.templatesById,
 				},
 				{ ...input, signal },

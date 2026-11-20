@@ -176,9 +176,7 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 				displayName: t.name,
 				roleTitle: t.title,
 				isPrimaryContact: t.isPrimaryContact,
-				provider: t.defaultProvider,
-				model: t.defaultModel,
-				thinkingLevel: t.thinkingLevel,
+
 				keywords: t.keywords,
 			}),
 		),

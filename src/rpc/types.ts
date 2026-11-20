@@ -1,4 +1,5 @@
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 export type PromptDisposition = "started" | "queued" | "handled";
 export type QueuedInputDisposition = "queued" | "handled";
@@ -16,6 +17,7 @@ export interface RpcModel {
 	provider: string;
 	baseUrl?: string;
 	reasoning?: boolean;
+	thinkingLevelMap?: Partial<Record<ThinkingLevel, string | null>>;
 	input?: string[];
 	contextWindow?: number;
 	maxTokens?: number;

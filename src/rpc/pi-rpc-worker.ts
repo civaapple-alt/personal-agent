@@ -400,6 +400,11 @@ export class PiRpcWorker {
 		return this.unwrapData<RpcModel>(response);
 	}
 
+	async getAvailableThinkingLevels(): Promise<ThinkingLevel[]> {
+		const response = await this.sendCommand({ type: "get_available_thinking_levels" });
+		return this.unwrapData<{ levels: ThinkingLevel[] }>(response).levels;
+	}
+
 	async setThinkingLevel(level: ThinkingLevel): Promise<void> {
 		const response = await this.sendCommand({ type: "set_thinking_level", level });
 		this.unwrapData(response);

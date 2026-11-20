@@ -1,4 +1,5 @@
 import type { RoleScope } from "../roles/types.ts";
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
 
 export type MemoryScope = "role_general" | "company_private" | "project_private";
@@ -67,6 +68,7 @@ export interface PlatformSettings {
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
 	pstackDir: string | null;
+	defaultModelSelection: ModelSelection | null;
 	updatedAt: string;
 }
 
@@ -166,6 +168,7 @@ export interface TeamMember {
 	displayName: string;
 	roleTitle: string;
 	isPrimaryContact: boolean;
+	/** Legacy member metadata retained for existing databases and clients. Worker selection is scoped separately. */
 	provider: string;
 	model: string;
 	thinkingLevel: ThinkingLevel;
@@ -244,6 +247,7 @@ export interface Matter {
 	observersEnabled: boolean;
 	observerMemberIds: string[];
 	discussionAiEnabled?: boolean;
+	modelSelection?: ModelSelection | null;
 	collaboratorIds: string[];
 	createdAt: string;
 	updatedAt: string;

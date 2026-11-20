@@ -13,7 +13,8 @@
 
 frontmatter 字段与依赖校验约定：
 
-- `defaultProvider`、`defaultModel`、`thinkingLevel` 是执行配置。`keywords` 用于新事项初始路由和立项评分，业务角色保留原中文岗位名作为路由别名。`responsibilityKeywords` 可为本地立项规则显式指定职责匹配词，省略时沿用正文匹配。
+- 模型配置独立于岗位定义，通过[系统、组织和事项设置](../docs/guides/user-guide.md#调整岗位模型)管理。旧版角色包可以导入，导出时只包含岗位定义。
+- `keywords` 用于新事项初始路由和立项评分，业务角色保留原中文岗位名作为路由别名。`responsibilityKeywords` 可为本地立项规则显式指定职责匹配词，省略时沿用正文匹配。
 - `skills` 对应[实际 Skill 文件](../skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。
 - 声明、导入、序列化成功都不是依赖已安装或工具已执行的证据。
 

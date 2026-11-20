@@ -12,6 +12,7 @@ import {
 } from "../roles/role-architect.ts";
 import { allowedSkillScopesForRole, buildScopedRoleId, validateNewSkillDrafts } from "../roles/role-package-store.ts";
 import type { NewSkillDraft, RoleScope, RoleTemplate } from "../roles/types.ts";
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
@@ -161,6 +162,7 @@ export async function designRoleDraftWithModel(
 		defaultCwd: string;
 		skillsDir?: string;
 		workerFactory: WorkerFactory;
+		selectModel?: (memberId?: string) => ModelSelection | null;
 		members: TeamMember[];
 		templatesByRoleId: Map<string, RoleTemplate>;
 	},
@@ -272,8 +274,7 @@ export async function designRoleDraftWithModel(
 	const { decision } = await runTypedPiDecision(
 		{
 			cwd: deps.defaultCwd,
-			provider: primary?.provider ?? "kimi-coding",
-			model: primary?.model ?? "kimi-for-coding",
+			modelSelection: deps.selectModel?.(primary?.id),
 			workerFactory: deps.workerFactory,
 		},
 		{
@@ -281,7 +282,6 @@ export async function designRoleDraftWithModel(
 			systemPrompt,
 			userPrompt,
 			tools: [],
-			thinkingLevel: "low",
 			validate: (raw) =>
 				validateRoleDesignDecision(raw, {
 					explicit: input,

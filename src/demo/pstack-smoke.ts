@@ -10,6 +10,7 @@ import { preparePstackRuntime, readPstackResource } from "../roles/pstack.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
+import { selectDemoModel } from "./model-selection.ts";
 import { hasPstackReadEvidence } from "./pstack-evidence.ts";
 
 async function snapshot(root: string, relative = ""): Promise<Record<string, string>> {
@@ -71,11 +72,11 @@ async function main() {
 	assert.notEqual(baseline.status, 0, "Synthetic defect must fail before the agent runs");
 	const db = openPersonalAgentDatabase(join(root, "proof.db"));
 	const store = new PersonalAgentStore(db);
+	if (values.provider || values.model)
+		store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, values) });
 	const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 		...template,
 		...(template.id === "product-manager" ? { tools: [] } : {}),
-		...(values.provider ? { defaultProvider: values.provider } : {}),
-		...(values.model ? { defaultModel: values.model } : {}),
 	}));
 	const orchestrator = new TeamOrchestrator({
 		store,

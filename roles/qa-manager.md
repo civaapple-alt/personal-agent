@@ -4,9 +4,6 @@ name: QA Manager
 title: QA Manager
 version: 1.1.1
 shareable: true
-defaultProvider: kimi-coding
-defaultModel: kimi-for-coding
-thinkingLevel: high
 isPrimaryContact: false
 keywords: [测试经理, QA Manager, 测试, 验收, 质量, 风险, 用例, 回归, 缺陷, 验证, bug]
 responsibilityKeywords: [失败或未验证证据]

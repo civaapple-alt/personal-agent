@@ -181,7 +181,7 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 		});
 		assert.equal(forbiddenRes.status, 403);
 
-		// 2) Valid model decision without repo read -> uses --tools "" and low thinking level
+		// 2) Valid model decision without repo read -> uses --tools "" and the Pi thinking default
 		const okRes = await fetch(`${url}/api/matters/assess`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -207,7 +207,7 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 		const okRun = observedRuns[1]!;
 		const toolsFlagIdx = okRun.args.indexOf("--tools");
 		assert.equal(okRun.args[toolsFlagIdx + 1], "");
-		assert.equal(okRun.thinkingLevel, "low");
+		assert.equal(okRun.thinkingLevel, undefined);
 
 		// 3) readRepo: true opens read tools, but no completed reads are fabricated.
 		const readRes = await fetch(`${url}/api/matters/assess`, {

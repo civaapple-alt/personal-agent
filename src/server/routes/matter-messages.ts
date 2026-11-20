@@ -30,8 +30,8 @@ import {
 	type RouteRequest,
 	type ServerRouteContext,
 } from "./context.ts";
-
 import { ensureActorAllowedMembers, ensureOrgEnabledAiRequest } from "./matter-roster.ts";
+import { validateModelSelection } from "./model-settings.ts";
 
 function countActiveDispatchesForUser(ctx: ServerRouteContext, userId: string): number {
 	let count = 0;
@@ -356,6 +356,13 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		) {
 			return true;
 		}
+		if (body.modelSelection != null && !canDispatchAiInOrg(store, actor, orgId)) {
+			sendError(res, 403, "无权为此事项配置模型");
+			return true;
+		}
+		const modelSelection = Object.hasOwn(body, "modelSelection")
+			? await validateModelSelection(ctx, body.modelSelection)
+			: null;
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
@@ -385,6 +392,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			observersEnabled,
 			observerMemberIds,
 			discussionAiEnabled,
+			modelSelection,
 			collaboratorIds: initialCollaboratorIds,
 		});
 		recordStoredUploadsAcl(store, {

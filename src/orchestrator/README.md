@@ -56,3 +56,5 @@
 
 从仓库根运行 `node --test test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts` 验证接续、范围隔离、委托、失败、取消和阶段交付。
 精确边界及兼容历史数据规则见[运行说明](../../docs/reference/runtime-collaboration.md)。
+
+模型选择在[编排层](model-selection.ts)按事项、组织和平台配置解析，再由 Pi 决定缺省值。主负责人在同一个 Pi 会话中切换，内部委托和旁听分别读取自己的组织岗位配置。运行就绪记录包含实际供应商、模型和思考等级。

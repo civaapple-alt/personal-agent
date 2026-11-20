@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import type { ModelSelection } from "../../rpc/model-selection.ts";
 import type {
 	Matter,
 	MatterMessage,
@@ -53,6 +54,7 @@ export class MatterRepo {
 		observersEnabled?: boolean;
 		observerMemberIds?: string[];
 		discussionAiEnabled?: boolean;
+		modelSelection?: ModelSelection | null;
 		collaboratorIds?: string[];
 	}): Matter {
 		const id = input.id ?? `mat_${randomUUID()}`;
@@ -105,11 +107,11 @@ export class MatterRepo {
 				`INSERT INTO matters (
 					id, title, summary, status, lead_member_id, workspace_id, org_id, created_by_user_id, visibility,
 					ai_member_ids_json, consult_member_ids_json, observers_enabled, observer_ids_json, discussion_ai_enabled,
-					collaborator_ids_json, created_at, updated_at
+					collaborator_ids_json, model_selection_json, created_at, updated_at
 				)
 				 VALUES (?, ?, ?, 'open', ?, ?,
 						CASE WHEN ? IS NULL THEN ? ELSE (SELECT org_id FROM workspace_links WHERE id = ?) END,
-						?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -128,10 +130,18 @@ export class MatterRepo {
 				JSON.stringify(observerIds),
 				discussionAiEnabled ? 1 : 0,
 				JSON.stringify(collaboratorIds),
+				input.modelSelection ? JSON.stringify(input.modelSelection) : null,
 				timestamp,
 				timestamp,
 			);
 		return this.getMatter(id)!;
+	}
+
+	updateMatterModelSelection(matterId: string, selection: ModelSelection | null): Matter {
+		this.db
+			.prepare("UPDATE matters SET model_selection_json = ?, updated_at = ? WHERE id = ?")
+			.run(selection ? JSON.stringify(selection) : null, nowIso(), matterId);
+		return this.getMatter(matterId)!;
 	}
 
 	updateMatterVisibility(matterId: string, visibility: MatterVisibility): Matter {

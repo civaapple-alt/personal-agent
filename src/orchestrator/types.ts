@@ -1,6 +1,12 @@
 import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import type { ImageContent, RpcExtensionUIDialogRequest, RpcExtensionUIResponsePayload } from "../rpc/types.ts";
+import type {
+	ImageContent,
+	RpcExtensionUIDialogRequest,
+	RpcExtensionUIResponsePayload,
+	RpcModel,
+	ThinkingLevel,
+} from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	CollaboratorRole,
@@ -15,6 +21,7 @@ import type {
 	WorkspaceLink,
 } from "../storage/types.ts";
 import type { DeliveryDraft } from "./execution-context.ts";
+import type { ReadPiModels } from "./model-selection.ts";
 
 export interface DialogContext {
 	matterId: string;
@@ -98,8 +105,10 @@ export interface RpcWorkerLike {
 	stop(): Promise<void>;
 	abort?(): Promise<void>;
 	suspendIdleTimeout?(): () => void;
-	getState(): Promise<{ sessionId: string; sessionFile?: string }>;
-	setThinkingLevel?(level: TeamMember["thinkingLevel"]): Promise<void>;
+	getState(): Promise<{ sessionId: string; sessionFile?: string; model?: RpcModel; thinkingLevel?: ThinkingLevel }>;
+	setModel?(provider: string, modelId: string): Promise<RpcModel>;
+	getAvailableThinkingLevels?(): Promise<ThinkingLevel[]>;
+	setThinkingLevel?(level: ThinkingLevel): Promise<void>;
 	onEvent?(listener: (event: { type: string; [key: string]: unknown }) => void): () => void;
 	onNotice(listener: (notice: { method: string; [key: string]: unknown }) => void): () => void;
 	setDialogHandler(
@@ -130,6 +139,7 @@ export interface TeamOrchestratorOptions {
 	skillsDir?: string;
 	noSession?: boolean;
 	workerFactory?: WorkerFactory;
+	readPiModels?: ReadPiModels;
 	onDialog?: OrchestratorDialogHandler;
 	/** Operator-approved Pi extensions supplying declared custom/MCP tools. */
 	extensions?: string[];

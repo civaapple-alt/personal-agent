@@ -1,3 +1,4 @@
+import { readStoredModelSelection } from "../../rpc/model-selection.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type {
 	Collaborator,
@@ -304,6 +305,9 @@ export function mapMatterRow(row: Record<string, unknown>): Matter {
 		observersEnabled: Boolean(row.observers_enabled) || observerMemberIds.length > 0,
 		observerMemberIds,
 		discussionAiEnabled: Boolean(row.discussion_ai_enabled),
+		modelSelection: readStoredModelSelection(
+			row.model_selection_json ? JSON.parse(String(row.model_selection_json)) : null,
+		),
 		collaboratorIds: parseUniqueIds(row.collaborator_ids_json),
 		createdAt: String(row.created_at),
 		updatedAt: String(row.updated_at),

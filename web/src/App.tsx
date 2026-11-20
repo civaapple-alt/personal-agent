@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { updateMatterModelSelection } from "./api/matters.ts";
+import type { ModelSelection } from "./api/models.ts";
+import { organizationRoleModel } from "./api/organizations.ts";
 import {
 	type BootstrapPayload,
 	type DeliverableDto,
@@ -20,6 +23,7 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
+import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
@@ -50,6 +54,7 @@ export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [serverRequireAuth, setServerRequireAuth] = useState<boolean | null>(null);
 	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
+	const [draftModelSelection, setDraftModelSelection] = useState<ModelSelection | null>(null);
 	const [draftMatterVisibility, setDraftMatterVisibility] = useState<MatterVisibility>("org");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
 	const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settingsSection ?? "all");
@@ -344,6 +349,7 @@ export function App() {
 	});
 
 	const startNewMatter = () => {
+		setDraftModelSelection(null);
 		initiation.resetInitiationState();
 		setDraftMatterVisibility("org");
 		setSelectedMemberId("auto");
@@ -352,6 +358,7 @@ export function App() {
 	};
 
 	const startArchitectMatter = (seedText?: string) => {
+		setDraftModelSelection(null);
 		initiation.resetInitiationState();
 		setSelectedMemberId(ROLE_ARCHITECT_MEMBER_ID);
 		setDraftAiMemberIds([ROLE_ARCHITECT_MEMBER_ID]);
@@ -366,6 +373,7 @@ export function App() {
 
 	const launchNewMatterWithMembers = (memberIds: string[]) => {
 		if (memberIds.length === 0) return;
+		setDraftModelSelection(null);
 		initiation.resetInitiationState();
 		setSelectedMemberId(memberIds[0]!);
 		setDraftAiMemberIds(memberIds);
@@ -519,6 +527,7 @@ export function App() {
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		draftVisibility: draftMatterVisibility,
 		draftObserversEnabled,
+		draftModelSelection,
 		headerContact,
 		explicitNewMatterRef,
 		memberName,
@@ -541,7 +550,10 @@ export function App() {
 				hasObservers ? "lead_review" : prev === "lead_review" ? "lead_consult" : prev,
 			);
 		},
-		onResetInitiation: initiation.resetInitiationState,
+		onResetInitiation: () => {
+			setDraftModelSelection(null);
+			initiation.resetInitiationState();
+		},
 		setErrorBanner,
 		setNoticeBanner,
 		navigateRoute,
@@ -631,8 +643,23 @@ export function App() {
 			: "Pi 未就绪"
 		: "Pi RPC";
 	const hasRunningMatters = Object.keys(progressByMatter).length > 0;
+	const currentMatter = matterDetail?.matter.id === selectedMatterId ? matterDetail.matter : null;
+	const currentLeadId = selectedMatterId
+		? currentMatter?.leadMemberId
+		: selectedMemberId === "auto"
+			? null
+			: selectedMemberId;
+	const currentModelOrgId = selectedMatterId ? currentMatter?.orgId : draftEffectiveOrgId;
+	const orgLeadModel =
+		currentModelOrgId && currentLeadId
+			? organizationRoleModel(
+					bootstrap?.orgAiRolesByOrgId?.[currentModelOrgId]?.configs.find(
+						(config) => config.enabled && config.memberId === currentLeadId,
+					),
+				)
+			: null;
 
-	return (
+	const workbench = (
 		<div className="bot-shell">
 			{mobileNavOpen && (
 				<button
@@ -808,6 +835,31 @@ export function App() {
 							onSendQuickPrompt={(prompt, opts) => void actions.handleSendQuickPrompt(prompt, opts)}
 							onConsultArchitect={() => void actions.handleConsultArchitect()}
 							onLaunchWithNewRoles={launchNewMatterWithMembers}
+							modelControl={
+								canDispatchAi &&
+								canManageMatter &&
+								currentLeadId !== ROLE_ARCHITECT_MEMBER_ID &&
+								(composerMode === "dispatch" || discussionAiEnabled) &&
+								(!selectedMatterId || currentMatter) ? (
+									<MatterModelControl
+										key={selectedMatterId ?? "new"}
+										value={selectedMatterId ? (currentMatter?.modelSelection ?? null) : draftModelSelection}
+										roleModel={orgLeadModel}
+										leadKnown={Boolean(currentLeadId)}
+										disabled={submitting || Boolean(activeMatterProgress)}
+										onSave={async (selection) => {
+											if (!selectedMatterId) {
+												setDraftModelSelection(selection);
+												return;
+											}
+											const { matter } = await updateMatterModelSelection(selectedMatterId, selection);
+											setMatterDetail((detail) =>
+												detail?.matter.id === matter.id ? { ...detail, matter } : detail,
+											);
+										}}
+									/>
+								) : null
+							}
 							onSendPrompt={() => void actions.handleSendPrompt()}
 							onAbortMatter={actions.handleAbortMatter}
 							onNewMatter={startNewMatter}
@@ -985,4 +1037,5 @@ export function App() {
 			/>
 		</div>
 	);
+	return <ModelCatalogProvider>{workbench}</ModelCatalogProvider>;
 }

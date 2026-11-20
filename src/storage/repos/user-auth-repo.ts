@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { readStoredModelSelection } from "../../rpc/model-selection.ts";
 import type {
 	AuditLogEntry,
 	PlatformRole,
@@ -394,6 +395,7 @@ export class UserAuthRepo {
 			defaultMaxActiveDispatches: 3,
 			defaultMaxPersonalRoles: 5,
 			pstackDir: null,
+			defaultModelSelection: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
 		};
 		if (!row || typeof row.value_json !== "string") return defaults;
@@ -441,6 +443,7 @@ export class UserAuthRepo {
 					typeof parsed.pstackDir === "string" && parsed.pstackDir.trim()
 						? parsed.pstackDir.trim()
 						: defaults.pstackDir,
+				defaultModelSelection: readStoredModelSelection(parsed.defaultModelSelection),
 				updatedAt: String(row.updated_at ?? defaults.updatedAt),
 			};
 		} catch {
@@ -477,6 +480,8 @@ export class UserAuthRepo {
 				patch.defaultMaxPersonalRoles !== undefined
 					? Math.max(0, Math.floor(patch.defaultMaxPersonalRoles))
 					: current.defaultMaxPersonalRoles,
+			defaultModelSelection:
+				patch.defaultModelSelection === undefined ? current.defaultModelSelection : patch.defaultModelSelection,
 			pstackDir:
 				patch.pstackDir === null || patch.pstackDir === ""
 					? null

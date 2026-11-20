@@ -4,9 +4,6 @@ name: Engineering Manager
 title: Engineering Manager
 version: 1.1.1
 shareable: true
-defaultProvider: kimi-coding
-defaultModel: kimi-for-coding
-thinkingLevel: high
 isPrimaryContact: false
 keywords: [研发经理, Engineering Manager, 架构, 代码, 仓库, 实现, 依赖, 技术栈, 接口, 修复, bug, 开发, rpc, sqlite]
 responsibilityKeywords: [可维护的技术结果, 承担设计, 实现与技术验证, 技术设计, 依赖与授权]

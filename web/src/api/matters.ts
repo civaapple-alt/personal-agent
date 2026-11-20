@@ -1,6 +1,7 @@
 import type { InnerMatterGuide } from "../../../src/demo/inner-matter-definition.ts";
 import { requestJson } from "./client.ts";
 import type { DeliverableDto } from "./deliverables.ts";
+import type { ModelSelection } from "./models.ts";
 import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
 
 export type MatterVisibility = "org" | "private";
@@ -22,6 +23,7 @@ export interface MatterDto {
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	discussionAiEnabled?: boolean;
+	modelSelection?: ModelSelection | null;
 	collaboratorIds?: string[];
 	createdAt: string;
 	updatedAt: string;
@@ -239,6 +241,7 @@ export function createMatter(input: {
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	discussionAiEnabled?: boolean;
+	modelSelection?: ModelSelection | null;
 	collaboratorIds?: string[];
 	visibility?: MatterVisibility;
 	title?: string;
@@ -340,6 +343,16 @@ export function updateMatterObservers(matterId: string, observerMemberIds: strin
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ observerMemberIds }),
+	});
+}
+
+export function updateMatterModelSelection(
+	matterId: string,
+	modelSelection: ModelSelection | null,
+): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ modelSelection }),
 	});
 }
 

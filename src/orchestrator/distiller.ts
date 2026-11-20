@@ -3,6 +3,7 @@ import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MemoryCategory, MemoryScope, TeamMember } from "../storage/types.ts";
 import { selectMatterContext } from "./matter-context.ts";
+import { applyWorkerModel, resolveConfiguredModel } from "./model-selection.ts";
 import { parseSnapshotFromMetadata } from "./prompts.ts";
 import {
 	type DistillExperiencesInput,
@@ -260,12 +261,13 @@ export async function performDistillationPass(
 		.filter(Boolean)
 		.join("\n\n");
 
+	const selection = resolveConfiguredModel(deps.store, activeOrgId, member.id);
 	const worker = deps.workerFactory({
 		cwd,
-		provider: member.provider,
-		model: member.model,
+		provider: selection?.provider,
+		model: selection?.model,
 		noSession: true,
-		args: ["--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", ""],
+		args: ["--no-approve", "--no-extensions", "--no-skills", "--no-mcp", "--no-context-files", "--tools", ""],
 	});
 	const onAbortWorker = () => {
 		void worker.abort?.().catch(() => {});
@@ -276,6 +278,7 @@ export async function performDistillationPass(
 	let result: PromptRunResult;
 	try {
 		await worker.start();
+		if (selection) await applyWorkerModel(worker, selection);
 		if (input.signal.aborted) {
 			throw new Error("Experience distillation was aborted");
 		}

@@ -84,3 +84,5 @@
 验证完整启动入口则先 `npm run build`，再 `npm run check:startup`（使用临时数据库且不发模型请求）。不要为验证重启用户现有服务或把模型任务送进业务工作区。
 
 更多执行约束在 [orchestrator](../orchestrator/README.md)，整体服务关系见[当前架构](../../docs/concepts/architecture-and-plan.md)。
+
+- `GET /api/models` 返回服务账号下 Pi 的可用模型、支持的思考等级和启动默认值。平台、组织和事项设置从同一目录校验显式选择。

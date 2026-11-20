@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	AccountUserDto,
@@ -141,6 +142,7 @@ interface ChatStageProps {
 	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => void;
 	onConsultArchitect?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
+	modelControl?: ReactNode;
 	onSendPrompt: () => void;
 	onAbortMatter: (matterId: string) => void;
 	onNewMatter: () => void;
@@ -217,6 +219,7 @@ export function ChatStage({
 	onSendQuickPrompt,
 	onConsultArchitect,
 	onLaunchWithNewRoles,
+	modelControl,
 	onSendPrompt,
 	onAbortMatter,
 	onNewMatter,
@@ -594,6 +597,7 @@ export function ChatStage({
 
 			<ComposerDock
 				{...dockDraft}
+				modelControl={modelControl}
 				initiationPanel={
 					!selectedMatterId ? (
 						<MatterInitiationPanel

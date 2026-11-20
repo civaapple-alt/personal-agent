@@ -6,6 +6,7 @@ import {
 	type RoleWorkspaceScope,
 } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
+import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
@@ -518,6 +519,7 @@ export async function assessMatterInitiationWithModel(
 	deps: {
 		defaultCwd: string;
 		workerFactory: WorkerFactory;
+		selectModel?: (memberId?: string) => ModelSelection | null;
 		members: TeamMember[];
 		templatesByRoleId: Map<string, RoleTemplate>;
 	},
@@ -640,8 +642,7 @@ export async function assessMatterInitiationWithModel(
 	const { decision, toolExecutions } = await runTypedPiDecision(
 		{
 			cwd: input.workspacePath ?? deps.defaultCwd,
-			provider: primary?.provider ?? "kimi-coding",
-			model: primary?.model ?? "kimi-for-coding",
+			modelSelection: deps.selectModel?.(primary?.id),
 			workerFactory: deps.workerFactory,
 		},
 		{
@@ -649,7 +650,6 @@ export async function assessMatterInitiationWithModel(
 			systemPrompt,
 			userPrompt,
 			tools: useRepoRead ? ["read"] : [],
-			thinkingLevel: "low",
 			validate: (raw) =>
 				validateInitiationModelDecision(raw, {
 					members: pool,

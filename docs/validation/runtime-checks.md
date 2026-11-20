@@ -22,7 +22,7 @@ npm run check:startup
 - Phase 4 RSI 闭环：`propose_experience` 暂存与异常丢弃、旁听禁权、`distillExperiences` 只读提炼与去重、按版本关联的验收反馈与改票、`supersedesMemoryId` 自动替代及对应 HTTP/SSE 路由。
 - 测试中的模型响应是受控 fixture，不据此宣称岗位能力或长期成长效果已经得到真实模型验证。
 
-实机脚本另行使用现有 Pi 配置调用模型，默认 `kimi-coding / kimi-for-coding`，不会输出密钥：
+实机脚本使用服务账号的 Pi 配置调用模型，默认选择 Pi 已配置的模型。
 
 ```bash
 npm run demo:team

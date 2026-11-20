@@ -8,6 +8,7 @@ import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
+import { selectDemoModel } from "./model-selection.ts";
 
 const phase = process.argv[2];
 const root = process.argv[3];
@@ -34,9 +35,9 @@ if (!phase || !root) {
 	const db = openPersonalAgentDatabase(join(root, "proof.db"));
 	try {
 		const store = new PersonalAgentStore(db);
+		store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, { thinkingLevel: "off" }) });
 		const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 			...template,
-			thinkingLevel: "off" as const,
 			tools: ["read"],
 		}));
 		const orchestrator = new TeamOrchestrator({

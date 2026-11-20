@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -31,6 +31,18 @@ export function migrateDatabase(db: DatabaseSync): void {
 				}
 				db.exec("PRAGMA user_version = 2");
 			}
+			if (version < 3) {
+				if (
+					!db
+						.prepare("PRAGMA table_info(matters)")
+						.all()
+						.some((column) => column.name === "model_selection_json")
+				) {
+					db.exec("ALTER TABLE matters ADD COLUMN model_selection_json TEXT");
+				}
+				migrateOrgModelOverrides(db);
+				db.exec("PRAGMA user_version = 3");
+			}
 			db.exec("COMMIT");
 		} catch (error) {
 			db.exec("ROLLBACK");
@@ -39,6 +51,23 @@ export function migrateDatabase(db: DatabaseSync): void {
 	} finally {
 		db.exec("PRAGMA foreign_keys = ON");
 	}
+}
+
+// Older organization overrides could specify only one field. Preserve that organization's
+// existing choice as a complete model pair before role-level preferences stop participating.
+function migrateOrgModelOverrides(db: DatabaseSync): void {
+	db.exec(`
+		UPDATE organization_ai_roles AS config
+		SET provider_override = COALESCE(
+			NULLIF(TRIM(config.provider_override), ''),
+			(SELECT NULLIF(TRIM(member.provider), '') FROM team_members AS member WHERE member.id = config.member_id)
+		), model_override = COALESCE(
+			NULLIF(TRIM(config.model_override), ''),
+			(SELECT NULLIF(TRIM(member.model), '') FROM team_members AS member WHERE member.id = config.member_id)
+		)
+		WHERE (config.provider_override IS NOT NULL OR config.model_override IS NOT NULL OR config.thinking_level_override IS NOT NULL)
+			AND (NULLIF(TRIM(config.provider_override), '') IS NULL OR NULLIF(TRIM(config.model_override), '') IS NULL);
+	`);
 }
 
 function migrateLegacyColumns(db: DatabaseSync): void {

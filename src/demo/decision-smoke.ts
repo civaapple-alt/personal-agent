@@ -11,6 +11,7 @@ import {
 	PiDecisionError,
 } from "../index.ts";
 import { defaultWorkerFactory } from "../orchestrator/types.ts";
+import { selectDemoModel } from "./model-selection.ts";
 
 interface DecisionCheckRecord {
 	id: string;
@@ -37,6 +38,7 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db);
+	const modelSelection = await selectDemoModel(options.directory, options);
 	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
 	const templatesMap = new Map(templates.map((t) => [t.id, t]));
 	const seededMembers = templates.map((t) =>
@@ -46,9 +48,6 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 			displayName: t.name,
 			roleTitle: t.title,
 			isPrimaryContact: t.isPrimaryContact,
-			provider: options.provider ?? t.defaultProvider,
-			model: options.model ?? t.defaultModel,
-			thinkingLevel: t.thinkingLevel,
 			keywords: t.keywords,
 		}),
 	);
@@ -64,6 +63,7 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 				{
 					defaultCwd: options.directory,
 					workerFactory: defaultWorkerFactory,
+					selectModel: () => modelSelection,
 					members: seededMembers,
 					templatesByRoleId: templatesMap,
 				},
@@ -113,6 +113,7 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 				{
 					defaultCwd: options.directory,
 					workerFactory: defaultWorkerFactory,
+					selectModel: () => modelSelection,
 					members: seededMembers,
 					templatesByRoleId: negativeTemplates,
 				},
@@ -151,6 +152,7 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 				{
 					defaultCwd: options.directory,
 					workerFactory: defaultWorkerFactory,
+					selectModel: () => modelSelection,
 					members: seededMembers,
 					templatesByRoleId: templatesMap,
 				},
@@ -199,6 +201,7 @@ async function runDecisionSmoke(options: { provider?: string; model?: string; di
 				{
 					defaultCwd: options.directory,
 					workerFactory: defaultWorkerFactory,
+					selectModel: () => modelSelection,
 					members: seededMembers,
 					templatesByRoleId: templatesMap,
 				},

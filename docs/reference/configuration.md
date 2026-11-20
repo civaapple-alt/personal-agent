@@ -72,6 +72,10 @@
 
 ## 3. Pi RPC、工作进程与桥接参数
 
+### 模型选择
+
+供应商与模型 ID 一起选择，思考等级可留空交给 Pi 解析。覆盖顺序为事项主责、组织岗位、平台设置中的 `defaultModelSelection`、服务账号的 Pi 默认。服务从独立的 Pi RPC 会话读取模型目录和有效默认。该查询不发送模型请求，也不加载工作区的项目配置。启用模型的操作见[使用指南](../guides/user-guide.md#调整岗位模型)。
+
 ### CLI 启动与能力装配
 
 岗位工作进程使用 `--mode rpc`，显式传入团队扩展、角色声明的 `--skill` 路径、`PA_PI_EXTENSIONS` 指定的扩展和角色的 `--tools` 清单。配置 pstack 时还会装配它的模式入口及方法工具。所选工作区作为 Pi 的当前目录。团队扩展按工作区范围过滤自动发现的上下文文件。
@@ -113,9 +117,6 @@
 | `name` | 必填 | 字符串 | 团队展示名。内置模板使用英文，如 `Product Manager` |
 | `title` | 必填 | 字符串 | 岗位英文头衔（如 `Product Manager`） |
 | `version` | 必填 | 版本串（如 `1.0.0`） | 模板版本号 |
-| `defaultProvider` | 必填 | 字符串（内置默认 `kimi-coding`） | 默认模型提供商 |
-| `defaultModel` | 必填 | 字符串（内置默认 `kimi-for-coding`） | 默认模型 ID |
-| `thinkingLevel` | 必填 | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | 思考深度；内置四角色默认 `high` |
 | `shareable` | 可选 | 布尔，默认 `true` | 是否允许作为通用岗位定义导出 |
 | `isPrimaryContact` | 可选 | 布尔，默认 `false` | 是否为新安装默认主要联系人（无关键词命中时兜底） |
 | `roleKind` | 可选 | `"architect"` 或省略 | 为 `"architect"` 时标识系统元角色（如内置「角色架构师」），与普通业务团队名录隔离 |

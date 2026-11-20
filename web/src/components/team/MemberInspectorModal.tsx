@@ -193,7 +193,7 @@ export function MemberInspectorModal({
 								</span>
 							</div>
 							<div className="member-sub">
-								{member.roleTitle} · {member.model} · ID：{member.id}
+								{member.roleTitle} · ID：{member.id}
 							</div>
 						</div>
 					</div>

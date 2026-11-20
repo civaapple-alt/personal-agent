@@ -359,9 +359,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 		...(ownerUserId ? { ownerUserId } : {}),
 		version: "1.0.0",
 		shareable: roleScope === "global",
-		defaultProvider: "kimi-coding",
-		defaultModel: "kimi-for-coding",
-		thinkingLevel: "high",
+
 		isPrimaryContact: roleScope === "global" && Boolean(input.isPrimaryContact),
 		keywords,
 		tools,
@@ -486,9 +484,7 @@ export const BUILTIN_ROLE_ARCHITECT_TEMPLATE: RoleTemplate = {
 	roleKind: "architect",
 	version: "1.1.1",
 	shareable: true,
-	defaultProvider: "kimi-coding",
-	defaultModel: "kimi-for-coding",
-	thinkingLevel: "high",
+
 	isPrimaryContact: false,
 	keywords: ["角色架构师", "角色", "建队", "分工", "工作流", "体检", "权限", "精简", "补人", "边界", "architect"],
 	tools: [],

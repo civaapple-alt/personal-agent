@@ -3,14 +3,15 @@ import {
 	canAccessMatter,
 	canAccessOrganization,
 	canAccessWorkspace,
+	canDispatchAiInOrg,
 	canManageOrganization,
 	isGlobalUnscopedActor,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { parseCollaboratorIds, parseObserverMemberIds, type RouteRequest, type ServerRouteContext } from "./context.ts";
-
 import { ensureOrgEnabledAiRequest } from "./matter-roster.ts";
+import { validateModelSelection } from "./model-settings.ts";
 
 /** Update a matter’s workspace, visibility, and roster. */
 export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
@@ -40,6 +41,7 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			return true;
 		}
 		const body = await readJsonBody(req);
+		const hasModelSelectionUpdate = Object.hasOwn(body, "modelSelection");
 		const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
 		const hasOrgUpdate = Object.hasOwn(body, "orgId");
 		const hasLeadUpdate = Object.hasOwn(body, "leadMemberId");
@@ -133,8 +135,25 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			sendError(res, 400, "collaboratorIds must be an array of collaborator IDs");
 			return true;
 		}
-		if ((hasWorkspaceUpdate || hasOrgUpdate || hasLeadUpdate) && orchestrator.isMatterRunning(matterId)) {
-			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, or lead member");
+		const modelSelection = hasModelSelectionUpdate
+			? await validateModelSelection(ctx, body.modelSelection)
+			: undefined;
+		if (hasModelSelectionUpdate) {
+			const current = store.getMatter(matterId);
+			if (current?.orgId !== existing.orgId || current?.createdByUserId !== existing.createdByUserId) {
+				sendError(res, 409, "事项归属已变化，请刷新后再配置模型");
+				return true;
+			}
+			if (!canDispatchAiInOrg(store, actor, existing.orgId) || !current || !canAccessMatter(store, actor, current)) {
+				sendError(res, 403, "无权为此事项配置模型");
+				return true;
+			}
+		}
+		if (
+			(hasModelSelectionUpdate || hasWorkspaceUpdate || hasOrgUpdate || hasLeadUpdate) &&
+			orchestrator.isMatterRunning(matterId)
+		) {
+			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, lead member, or model");
 			return true;
 		}
 		const rosterOrgId = targetWorkspace ? targetWorkspace.orgId : hasOrgUpdate ? nextOrgId : existing.orgId;
@@ -148,6 +167,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			return true;
 		}
 		let updated = existing;
+		if (modelSelection !== undefined) {
+			updated = store.updateMatterModelSelection(matterId, modelSelection);
+			broadcast("matter_updated", { matterId, modelSelection }, { matterId });
+		}
 		if (hasOrgUpdate) {
 			updated = store.updateMatterOrganization(matterId, nextOrgId);
 			broadcast(

@@ -1,5 +1,3 @@
-import type { ThinkingLevel } from "../rpc/types.ts";
-
 export interface RoleTemplateSections {
 	responsibilitiesAndBoundaries: string;
 	skillsAndMethods: string;
@@ -40,9 +38,6 @@ export interface RoleTemplate {
 	ownerUserId?: string | null;
 	version: string;
 	shareable: boolean;
-	defaultProvider: string;
-	defaultModel: string;
-	thinkingLevel: ThinkingLevel;
 	isPrimaryContact: boolean;
 	keywords: string[];
 	responsibilityKeywords?: string[];

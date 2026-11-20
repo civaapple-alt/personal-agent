@@ -9,14 +9,15 @@ import { InnerMatterDemo } from "../server/inner-matter.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { INNER_MATTER_GUIDE } from "./inner-matter-definition.ts";
+import { selectDemoModel } from "./model-selection.ts";
 
 const root = await mkdtemp(join(tmpdir(), "personal-agent-inner-demo-"));
 console.log(`Isolated walkthrough evidence: ${root}`);
 const db = openPersonalAgentDatabase(join(root, "proof.db"));
 const store = new PersonalAgentStore(db);
+store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, { thinkingLevel: "off" }) });
 const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 	...template,
-	thinkingLevel: "off" as const,
 }));
 const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: root, sessionDir: join(root, "sessions") });
 try {

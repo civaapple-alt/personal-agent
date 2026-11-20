@@ -17,6 +17,7 @@ import {
 import { installOrEnablePstackRepo } from "../git-clone.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { validateModelSelection } from "./model-settings.ts";
 
 const authRateLimiter = new SlidingWindowRateLimiter(20, 5 * 60 * 1000);
 const SESSION_MAX_AGE_SEC = 2_592_000;
@@ -440,8 +441,12 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 				.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
 				.map((item) => item.trim());
 		}
+		const defaultModelSelection = Object.hasOwn(body, "defaultModelSelection")
+			? await validateModelSelection(ctx, body.defaultModelSelection)
+			: undefined;
 		const updated = store.updatePlatformSettings(
 			{
+				defaultModelSelection,
 				...(registrationMode ? { registrationMode } : {}),
 				...(workspacesRoot ? { workspacesRoot } : {}),
 				...(typeof body.allowLocalWorkspacePath === "boolean"

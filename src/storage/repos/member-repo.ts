@@ -19,9 +19,9 @@ export class MemberRepo {
 		displayName: string;
 		roleTitle: string;
 		isPrimaryContact: boolean;
-		provider: string;
-		model: string;
-		thinkingLevel: ThinkingLevel;
+		provider?: string;
+		model?: string;
+		thinkingLevel?: ThinkingLevel;
 		keywords: string[];
 		gitName?: string;
 		gitEmail?: string;
@@ -71,9 +71,9 @@ export class MemberRepo {
 					input.displayName,
 					input.roleTitle,
 					isPrimaryContact,
-					input.provider,
-					input.model,
-					input.thinkingLevel,
+					input.provider ?? existing?.provider ?? "",
+					input.model ?? existing?.model ?? "",
+					input.thinkingLevel ?? existing?.thinkingLevel ?? "off",
 					JSON.stringify(input.keywords),
 					gitName,
 					gitEmail,
@@ -102,9 +102,9 @@ export class MemberRepo {
 				input.displayName,
 				input.roleTitle,
 				isPrimaryContact,
-				input.provider,
-				input.model,
-				input.thinkingLevel,
+				input.provider ?? "",
+				input.model ?? "",
+				input.thinkingLevel ?? "off",
 				JSON.stringify(input.keywords),
 				gitName,
 				gitEmail,

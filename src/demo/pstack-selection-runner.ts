@@ -11,6 +11,7 @@ import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import type { ToolExecutionRecord } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
+import { selectDemoModel } from "./model-selection.ts";
 import { hasPstackReadEvidence } from "./pstack-evidence.ts";
 import { earlierIntake, type SelectionId, selectionCases, selectionFiles } from "./pstack-selection-cases.ts";
 import { assessQuality, qualityReviewTemplate, reviewHash, reviewObject } from "./publication-review-quality.ts";
@@ -204,9 +205,8 @@ export async function runSelection(options: {
 	const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 		...template,
 		tools: ["read"],
-		...(options.provider ? { defaultProvider: options.provider } : {}),
-		...(options.model ? { defaultModel: options.model } : {}),
 	}));
+	const modelSelection = await selectDemoModel(options.directory, options);
 	const approvedRoleMethods = (await Promise.all(templates.map((template) => resolveRoleSkills(template)))).flat();
 	const planned = selectionCases.filter((scenario) => options.ids.includes(scenario.id));
 	await writeFile(
@@ -228,6 +228,7 @@ export async function runSelection(options: {
 		const originalHead = git(workspace, ["rev-parse", "HEAD"]);
 		const db = openPersonalAgentDatabase(join(area, "agent.db"));
 		const store = new PersonalAgentStore(db);
+		store.updatePlatformSettings({ defaultModelSelection: modelSelection });
 		const ws = store.upsertWorkspace({ name: "Feedback Desk", repoPath: workspace });
 		const makeOrchestrator = () =>
 			new TeamOrchestrator({

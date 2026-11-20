@@ -17,6 +17,7 @@ import {
 } from "./execution-context.ts";
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
 import { buildArchitectMatterContext } from "./meta-architect.ts";
+import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
 import {
 	buildInterruptionResumeBrief,
 	buildMemberSystemPrompt,
@@ -50,6 +51,7 @@ export interface WorkerRunnerDeps {
 	extensions: string[];
 	pstackDir?: string;
 	workerFactory: WorkerFactory;
+	readPiModels: ReadPiModels;
 	getDialogHandler: () => OrchestratorDialogHandler | undefined;
 	getTemplateForMember: (member: TeamMember) => RoleTemplate | undefined;
 	getTemplatesById?: () => Map<string, RoleTemplate>;
@@ -314,10 +316,26 @@ export async function executeWithWorkerPass(
 		const relevantMemories = deps.store.listRelevantMemories(effectiveMember.id, input.workspace?.id ?? null, {
 			orgId: activeOrgId,
 		});
+		const matterModel =
+			sessionMode === "lead" && !isArchitect && (!isDiscussionMode || input.member.id === matter?.leadMemberId)
+				? matter?.modelSelection
+				: null;
+		const configuredModel = resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);
+		let selection = configuredModel;
+		if (!configuredModel || configuredModel.thinkingLevel === undefined) {
+			const piDefault = (await abortable(deps.readPiModels(configuredModel ?? undefined), signal)).defaultModel;
+			if (
+				!configuredModel ||
+				(piDefault?.provider === configuredModel.provider && piDefault.model === configuredModel.model)
+			) {
+				selection = piDefault;
+			}
+		}
+		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
-			provider: effectiveMember.provider,
-			model: effectiveMember.model,
+			provider: selection?.provider,
+			model: selection?.model,
 			sessionDir: deps.sessionDir,
 			sessionFile,
 			noSession: deps.noSession,
@@ -492,7 +510,7 @@ export async function executeWithWorkerPass(
 		input.onProgress?.({ stage: "starting", label: `正在接续${input.member.displayName}的工作` });
 		await worker.start();
 		signal.throwIfAborted();
-		const state = await worker.getState();
+		const state = await applyWorkerModel(worker, selection);
 		const tools = await bridge.waitReady();
 		const missing = [...requestedTools, ...teamTools, ...methodTools].filter((name) => !tools.includes(name));
 		for (const dependency of mcpDependencies)
@@ -518,11 +536,13 @@ export async function executeWithWorkerPass(
 							},
 						}
 					: {}),
+				model: state.model
+					? { provider: state.model.provider, model: state.model.id, thinkingLevel: state.thinkingLevel }
+					: selection,
 				resumed: Boolean(sessionFile),
 				piSessionId: state.sessionId,
 			}),
 		});
-		if (worker.setThinkingLevel) await worker.setThinkingLevel(input.member.thinkingLevel);
 		const messages = deps.store.listMessages(input.matterId, "user");
 		const excludeIds = new Set(input.excludeMessageIds ?? [input.run.userMessageId]);
 		const afterCursor = previous?.messageCursor

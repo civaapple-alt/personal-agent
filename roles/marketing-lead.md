@@ -4,9 +4,6 @@ name: Marketing & Growth Lead
 title: Marketing & Growth Lead
 version: 1.1.1
 shareable: true
-defaultProvider: kimi-coding
-defaultModel: kimi-for-coding
-thinkingLevel: high
 isPrimaryContact: false
 keywords: [市场与营销负责人, Marketing & Growth Lead, 市场, 营销, 客户, 需求证据, 竞品, 细分, 推广, 试用, 反馈, 价值表达]
 responsibilityKeywords: [购买场景]

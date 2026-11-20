@@ -39,6 +39,7 @@ export interface PreviewableTextAttachment {
 
 interface ComposerDockProps {
 	initiationPanel?: ReactNode;
+	modelControl?: ReactNode;
 	composerDockRef: RefObject<HTMLDivElement | null>;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	composerMode: "discussion" | "dispatch";
@@ -83,6 +84,7 @@ interface ComposerDockProps {
 /** Unified composer card with consistent config bar, running status strip, file/image/pasted-text chips, and multi-line auto-sizing. */
 export function ComposerDock({
 	initiationPanel,
+	modelControl,
 	composerDockRef,
 	composerRef,
 	composerMode,
@@ -752,6 +754,7 @@ export function ComposerDock({
 					</div>
 
 					{initiationPanel}
+					{modelControl}
 				</div>
 			</section>
 		</div>

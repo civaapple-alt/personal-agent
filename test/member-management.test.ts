@@ -89,7 +89,7 @@ test("Batch validation and explicit ID conflicts leave roles and files unchanged
 	assert.equal(
 		(
 			await request("/api/members/batch", {
-				members: [newRole("safe"), { ...newRole("invalid"), thinkingLevel: "invalid" }],
+				members: [newRole("safe"), { ...newRole("invalid"), name: "" }],
 			})
 		).status,
 		400,

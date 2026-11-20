@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import type { ModelSelection } from "../api/models.ts";
 import {
 	type ApplyMatterRoleProposalsPayload,
 	abortMatter,
@@ -86,6 +87,7 @@ interface UseMatterActionsParams {
 	draftCollaboratorIds?: string[];
 	draftVisibility?: MatterVisibility;
 	draftObserversEnabled: boolean;
+	draftModelSelection: ModelSelection | null;
 	headerContact: TeamMemberDto | null;
 	explicitNewMatterRef: MutableRefObject<boolean>;
 	memberName: (id: string) => string;
@@ -133,6 +135,7 @@ export function useMatterActions({
 	draftCollaboratorIds = [],
 	draftVisibility = "org",
 	draftObserversEnabled,
+	draftModelSelection,
 	headerContact,
 	explicitNewMatterRef,
 	memberName,
@@ -223,6 +226,7 @@ export function useMatterActions({
 					discussionAiEnabled: isArchitectCreate ? false : draftDiscussionAiEnabled,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 					visibility: draftVisibility,
+					modelSelection: isOwner && !isArchitectCreate ? draftModelSelection : null,
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
