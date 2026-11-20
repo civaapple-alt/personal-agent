@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-20
+
+See the [0.6.2 release guide](docs/releases/v0.6.2.md) for downloads and upgrade instructions.
+
 - Reuse Pi’s enabled user resources and trusted repository settings for business turns started by the local owner on a loopback-only personal workbench. Keep inherited-resource sessions separate from explicitly configured sessions.
 - Fade between workbench pages, deliverable details and collaboration panels. Keep navigation immediate when reduced motion is requested or the browser lacks View Transitions.
 - Group the composer draft and new-matter controls in `ChatStage`. Simplify setup and team instructions while retaining the existing guide links.

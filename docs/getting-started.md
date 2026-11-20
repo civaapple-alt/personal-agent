@@ -12,12 +12,12 @@ npm --version
 git --version
 ```
 
-项目要求 Node.js 22.19 或更高版本。各平台的验证结果见[发布说明](releases/v0.6.1.md)。
+项目要求 Node.js 22.19 或更高版本。各平台的验证结果见[发布说明](releases/v0.6.2.md)。
 
-从 [0.6.1 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.1)下载源码包或预构建包。也可以克隆该版本的源码。
+从 [0.6.2 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.2)下载源码包或预构建包。也可以克隆该版本的源码。
 
 ```bash
-git clone --branch v0.6.1 https://github.com/civaapple-alt/personal-agent.git
+git clone --branch v0.6.2 https://github.com/civaapple-alt/personal-agent.git
 cd personal-agent
 ```
 
