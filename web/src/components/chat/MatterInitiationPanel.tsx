@@ -16,6 +16,8 @@ interface MatterInitiationPanelProps {
 	members: TeamMemberDto[];
 	nonOwnerCollaborators: CollaboratorDto[];
 	orgMembers?: OrganizationMemberDto[];
+	initiatorId?: string;
+	initiatorName?: string;
 	draftVisibility?: MatterVisibility;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
@@ -85,6 +87,8 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		onStartArchitectMatter,
 		nonOwnerCollaborators,
 		orgMembers = [],
+		initiatorId,
+		initiatorName,
 		draftVisibility = "org",
 		onUpdateDraftVisibility,
 	} = props;
@@ -432,43 +436,48 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								</button>
 							</div>
 						)}
-						{(orgMembers.length > 0 || nonOwnerCollaborators.length > 0) && (
+						{(initiatorName || orgMembers.length > 0 || nonOwnerCollaborators.length > 0) && (
 							<div className="initiation-human-row">
 								<span className="initiation-mini-label">人类成员</span>
-								{orgMembers.map((member) => (
-									<button
-										key={member.userId}
-										type="button"
-										className={`choice-chip ${draftCollaboratorIds.includes(member.userId) ? "active" : ""}`}
-										aria-pressed={draftCollaboratorIds.includes(member.userId)}
-										onClick={() =>
-											onUpdateDraftCollaboratorIds(
-												draftCollaboratorIds.includes(member.userId)
-													? draftCollaboratorIds.filter((id) => id !== member.userId)
-													: [...draftCollaboratorIds, member.userId],
-											)
-										}
-									>
-										{member.displayName ?? member.email ?? member.userId}
-									</button>
-								))}
-								{nonOwnerCollaborators.map((collaborator) => (
-									<button
-										key={collaborator.id}
-										type="button"
-										className={`choice-chip ${draftCollaboratorIds.includes(collaborator.id) ? "active" : ""}`}
-										aria-pressed={draftCollaboratorIds.includes(collaborator.id)}
-										onClick={() =>
-											onUpdateDraftCollaboratorIds(
-												draftCollaboratorIds.includes(collaborator.id)
-													? draftCollaboratorIds.filter((id) => id !== collaborator.id)
-													: [...draftCollaboratorIds, collaborator.id],
-											)
-										}
-									>
-										{collaborator.name}
-									</button>
-								))}
+								{initiatorName && <span className="initiation-initiator">{initiatorName} · 发起人</span>}
+								{orgMembers
+									.filter((member) => member.userId !== initiatorId)
+									.map((member) => (
+										<button
+											key={member.userId}
+											type="button"
+											className={`choice-chip ${draftCollaboratorIds.includes(member.userId) ? "active" : ""}`}
+											aria-pressed={draftCollaboratorIds.includes(member.userId)}
+											onClick={() =>
+												onUpdateDraftCollaboratorIds(
+													draftCollaboratorIds.includes(member.userId)
+														? draftCollaboratorIds.filter((id) => id !== member.userId)
+														: [...draftCollaboratorIds, member.userId],
+												)
+											}
+										>
+											{member.displayName ?? member.email ?? member.userId}
+										</button>
+									))}
+								{nonOwnerCollaborators
+									.filter((collaborator) => collaborator.id !== initiatorId)
+									.map((collaborator) => (
+										<button
+											key={collaborator.id}
+											type="button"
+											className={`choice-chip ${draftCollaboratorIds.includes(collaborator.id) ? "active" : ""}`}
+											aria-pressed={draftCollaboratorIds.includes(collaborator.id)}
+											onClick={() =>
+												onUpdateDraftCollaboratorIds(
+													draftCollaboratorIds.includes(collaborator.id)
+														? draftCollaboratorIds.filter((id) => id !== collaborator.id)
+														: [...draftCollaboratorIds, collaborator.id],
+												)
+											}
+										>
+											{collaborator.name}
+										</button>
+									))}
 							</div>
 						)}
 						<button

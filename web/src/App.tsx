@@ -74,7 +74,7 @@ export function App() {
 	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
 		readStoredSetting("pa.defaultWorkspaceId"),
 	);
-	const [draftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
+	const [defaultDraftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
 	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(false);
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
@@ -344,10 +344,12 @@ export function App() {
 		selectedOrgId: draftEffectiveOrgId ?? "",
 		selectedMemberId,
 		members: initiationScopedMembers,
+		defaultAiMemberIds: defaultDraftAiMemberIds,
 		setSelectedMemberId,
 		setDraftAiMemberIds,
 		setDraftObserversEnabled,
 	});
+	const { draftAiMemberIds } = initiation;
 
 	const startNewMatter = () => {
 		setDraftModelSelection(null);

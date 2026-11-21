@@ -707,6 +707,8 @@ export function ChatStage({
 							members={scopedMembers}
 							nonOwnerCollaborators={nonOwnerCollaborators}
 							orgMembers={orgMembers}
+							initiatorId={accountUser?.id ?? currentUser?.id}
+							initiatorName={accountUser?.displayName ?? currentUser?.name}
 							templateByRoleId={templateByRoleId}
 							selectedMemberId={selectedMemberId}
 							draftObserverMemberIds={observerMemberIds}

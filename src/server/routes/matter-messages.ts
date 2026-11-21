@@ -379,7 +379,9 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			sendError(res, 403, "请先创建或加入一个组织后再创建事项");
 			return true;
 		}
-		const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
+		const requestedCollaboratorIds = (parseCollaboratorIds(body.collaboratorIds, store) ?? []).filter(
+			(id) => id !== actor.user?.id,
+		);
 		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
 		const namesHuman =
 			requestedMode === "conversation" &&

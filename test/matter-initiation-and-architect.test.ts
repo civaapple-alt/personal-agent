@@ -357,6 +357,7 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 		assert.equal(matchedRes.recommendedLeadId, createdMember.member.id);
 
 		// 4) Create human-first matter with pre-selected human collaborator and selective observer
+		const creator = store.ensureLocalBootstrapAdmin();
 		const createdMatter = (await (
 			await fetch(`${url}/api/matters`, {
 				method: "POST",
@@ -367,7 +368,8 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 					preferredMemberId: createdMember.member.id,
 					aiMemberIds: [createdMember.member.id, "qa-manager"],
 					observerMemberIds: ["qa-manager"],
-					collaboratorIds: [col.collaborator.id],
+					collaboratorIds: [creator.id, col.collaborator.id],
+					visibility: "private",
 				}),
 			})
 		).json()) as {
@@ -375,11 +377,13 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 				aiMemberIds: string[] | null;
 				observerMemberIds: string[];
 				collaboratorIds: string[];
+				createdByUserId: string | null;
 			};
 		};
 		assert.deepEqual(createdMatter.matter.aiMemberIds, [createdMember.member.id, "qa-manager"]);
 		assert.deepEqual(createdMatter.matter.observerMemberIds, ["qa-manager"]);
 		assert.deepEqual(createdMatter.matter.collaboratorIds, [col.collaborator.id]);
+		assert.equal(createdMatter.matter.createdByUserId, creator.id);
 
 		// 5) Frontend starter tasks adapt cleanly when no Git repository is bound
 		const nonRepoStarters = buildStarterTasks([], null);

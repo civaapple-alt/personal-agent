@@ -882,6 +882,7 @@
 .initiation-roster-drawer { padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 14px; }
 .initiation-scope-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
 .initiation-mode-pills, .initiation-human-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; border: none; margin: 0; padding: 0; min-inline-size: 0; }
+.initiation-initiator { padding: 4px 8px; font-size: var(--text-xs); color: var(--text-secondary); }
 .initiation-observer-chip.active { border-color: var(--observer-border); background: var(--observer-soft); color: var(--observer-text); }
 .initiation-lead-picker { display: flex; align-items: center; gap: 12px; font-size: var(--text-sm); }
 .initiation-lead-picker select { flex: 1; min-width: 0; }

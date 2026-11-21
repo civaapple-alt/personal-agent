@@ -18,6 +18,7 @@ interface UseMatterInitiationParams {
 	selectedOrgId?: string;
 	selectedMemberId: string;
 	members: TeamMemberDto[];
+	defaultAiMemberIds: string[] | null;
 	setSelectedMemberId: (memberId: string) => void;
 	setDraftAiMemberIds: (ids: string[] | null) => void;
 	setDraftObserversEnabled: (enabled: boolean) => void;
@@ -34,6 +35,7 @@ export function useMatterInitiationState({
 	selectedOrgId = "",
 	selectedMemberId,
 	members,
+	defaultAiMemberIds,
 	setSelectedMemberId,
 	setDraftAiMemberIds,
 	setDraftObserversEnabled,
@@ -57,6 +59,11 @@ export function useMatterInitiationState({
 		businessMembers.some((m) => m.id === selectedMemberId)
 			? selectedMemberId
 			: (businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null);
+	const draftAiMemberIds = useMemo(() => {
+		if (draftConsultMemberIds === null) return defaultAiMemberIds;
+		const selected = new Set(draftConsultMemberIds.concat(draftObserverMemberIds));
+		return businessMembers.filter(({ id }) => id === fallbackLeadId || selected.has(id)).map(({ id }) => id);
+	}, [businessMembers, defaultAiMemberIds, draftConsultMemberIds, draftObserverMemberIds, fallbackLeadId]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Draft changes invalidate the pending recommendation.
 	useEffect(() => {
@@ -87,16 +94,8 @@ export function useMatterInitiationState({
 					? nonLeadIds
 					: nextConsultIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
 			const cleanObs = nextObserverIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
-			const isAllConsult = nonLeadIds.every((id) => cleanConsult.includes(id));
-			const normalizedConsult = isAllConsult && nextConsultIds === null ? null : [...new Set(cleanConsult)];
-			setDraftConsultMemberIds(normalizedConsult);
+			setDraftConsultMemberIds(nextConsultIds === null ? null : [...new Set(cleanConsult)]);
 			setDraftObserverMemberIds([...new Set(cleanObs)]);
-			const union = [...new Set([...(leadId ? [leadId] : []), ...cleanConsult, ...cleanObs])];
-			if (isAllConsult) {
-				setDraftAiMemberIds(null);
-			} else {
-				setDraftAiMemberIds(union.length > 0 ? union : leadId ? [leadId] : null);
-			}
 			if (cleanConsult.length === 0 && cleanObs.length === 0) {
 				setDraftPresetMode("solo");
 			} else if (cleanObs.length > 0) {
@@ -105,7 +104,7 @@ export function useMatterInitiationState({
 				setDraftPresetMode("lead_consult");
 			}
 		},
-		[businessMembers, fallbackLeadId, setDraftAiMemberIds],
+		[businessMembers, fallbackLeadId],
 	);
 
 	const setScopeMode = useCallback(
@@ -140,11 +139,18 @@ export function useMatterInitiationState({
 			const leadId = fallbackLeadId;
 			if (memberId === leadId) return;
 			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
-			const current = draftConsultMemberIds === null ? nonLeadIds : draftConsultMemberIds;
+			const current = draftConsultMemberIds ?? nonLeadIds.filter((id) => defaultAiMemberIds?.includes(id) ?? true);
 			const nextConsult = enabled ? [...new Set([...current, memberId])] : current.filter((id) => id !== memberId);
 			syncDraftRoster(nextConsult, draftObserverMemberIds, leadId);
 		},
-		[businessMembers, draftConsultMemberIds, draftObserverMemberIds, fallbackLeadId, syncDraftRoster],
+		[
+			businessMembers,
+			defaultAiMemberIds,
+			draftConsultMemberIds,
+			draftObserverMemberIds,
+			fallbackLeadId,
+			syncDraftRoster,
+		],
 	);
 
 	const toggleDraftMemberObserver = useCallback(
@@ -187,7 +193,6 @@ export function useMatterInitiationState({
 				setDraftConsultMemberIds([]);
 				setDraftObserverMemberIds([]);
 				setDraftObserversEnabled(false);
-				setDraftAiMemberIds(leadId ? [leadId] : null);
 				setDraftPresetMode("solo");
 				return;
 			}
@@ -223,7 +228,6 @@ export function useMatterInitiationState({
 			draftConsultMemberIds,
 			draftObserverMemberIds,
 			fallbackLeadId,
-			setDraftAiMemberIds,
 			setDraftObserversEnabled,
 			setSelectedMemberId,
 			syncDraftRoster,
@@ -327,6 +331,7 @@ export function useMatterInitiationState({
 	}, [setDraftAiMemberIds, setDraftObserversEnabled]);
 
 	return {
+		draftAiMemberIds,
 		draftPresetMode,
 		draftConsultMemberIds,
 		draftObserverMemberIds,

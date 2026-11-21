@@ -459,6 +459,15 @@ export function useMatterActions({
 		const ensured = leadId && !deduped.includes(leadId) ? [leadId, ...deduped] : deduped;
 		if (ensured.length === 0) return;
 		if (!selectedMatterId) {
+			if (draftConsultMemberIds !== null) {
+				setDraftConsultMemberIds?.(
+					ensured.filter(
+						(id) => id !== leadId && (draftConsultMemberIds.includes(id) || !draftAiMemberIds?.includes(id)),
+					),
+				);
+				setDraftObserverMemberIds?.(draftObserverMemberIds.filter((id) => ensured.includes(id)));
+				return;
+			}
 			const allCount = bootstrap?.members.length ?? 0;
 			setDraftAiMemberIds(ensured.length >= allCount ? null : ensured);
 			return;
