@@ -19,7 +19,7 @@ interface MatterInitiationPanelProps {
 	draftVisibility?: MatterVisibility;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
-	discussionAiEnabled?: boolean;
+	observersEnabled?: boolean;
 	hasWorkspace?: boolean;
 	hasPromptText?: boolean;
 	draftAiMemberIds: string[] | null;
@@ -33,7 +33,7 @@ interface MatterInitiationPanelProps {
 	onSetScopeMode?: (scope: "solo" | "team") => void;
 	onToggleObserverPreset?: () => void;
 	onToggleDraftMemberConsult?: (memberId: string, enabled: boolean) => void;
-	onToggleDraftMemberObserver?: (memberId: string, enabled: boolean) => void;
+	onToggleDraftMemberObserver?: (memberId: string, enabled: boolean, observerIds: string[]) => void;
 	onApplyPresetMode: (mode: CollaborationPresetMode) => void;
 	onUpdateDraftAiMemberIds: (ids: string[] | null) => void;
 	onUpdateDraftObserverIds: (ids: string[]) => void;
@@ -59,7 +59,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		members,
 		templateByRoleId,
 		selectedMemberId,
-		discussionAiEnabled = true,
+		observersEnabled = false,
 		hasWorkspace = false,
 		hasPromptText = false,
 		draftAiMemberIds,
@@ -103,21 +103,26 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			? allowed.filter((id) => id !== leadId && nonLeadIds.includes(id))
 			: draftConsultMemberIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
 	const isSoloScope = consultIds.length === 0;
-	const hasObservers = observers.length > 0;
+	const activeObservers = observersEnabled
+		? draftObserverMemberIds.length > 0
+			? observers
+			: allowed.filter((id) => nonLeadIds.includes(id))
+		: [];
+	const hasObservers = observersEnabled;
 	const consultCount = consultIds.length;
 	const teamSummary =
 		isSoloScope && !hasObservers
 			? "由主责独立处理。"
-			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${observers.length ? `，${observers.length} 位成员旁听把关` : "，不自动旁听"}。`;
+			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${activeObservers.length ? `，${activeObservers.length} 位成员旁听把关` : "，不自动旁听"}。`;
 	const applied =
 		assessment &&
 		(assessment.recommendedMode === "human_first"
-			? !discussionAiEnabled
-			: (observers.length > 0 ? "lead_review" : consultIds.length > 0 ? "lead_consult" : "solo") ===
+			? !observersEnabled
+			: (hasObservers ? "lead_review" : consultIds.length > 0 ? "lead_consult" : "solo") ===
 					assessment.recommendedMode &&
 				selectedMemberId === assessment.recommendedLeadId &&
 				sameIds(allowed, assessment.recommendedAiMemberIds) &&
-				sameIds(observers, assessment.recommendedObserverIds));
+				sameIds(activeObservers, assessment.recommendedObserverIds));
 
 	const setRoleFlag = (memberId: string, kind: "consult" | "observer", enabled: boolean) => {
 		if (memberId === leadId) return;
@@ -126,7 +131,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			return;
 		}
 		if (kind === "observer" && onToggleDraftMemberObserver) {
-			onToggleDraftMemberObserver(memberId, enabled);
+			onToggleDraftMemberObserver(memberId, enabled, observersEnabled ? activeObservers : observers);
 			return;
 		}
 		const nextConsult =
@@ -148,7 +153,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const name = (id: string | null) => business.find((member) => member.id === id)?.displayName ?? "主联系人";
 	const recommendation =
 		assessment?.recommendedMode === "human_first"
-			? "先讨论，再决定是否安排 AI"
+			? "由主责先澄清需求"
 			: `${name(assessment?.recommendedLeadId ?? null)}${assessment?.recommendedMode === "solo" ? "独立处理" : assessment?.recommendedMode === "lead_review" ? "牵头，增加定向旁听" : "牵头，按需请教相关成员"}`;
 	const isModelResult = assessment?.assessmentSource === "model";
 	const confidenceLabel =
@@ -341,7 +346,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								onToggleObserverPreset ? onToggleObserverPreset() : onApplyPresetMode("lead_review")
 							}
 						>
-							{hasObservers ? `✓ 旁听把关 (${observers.length})` : "+ 旁听把关"}
+							{hasObservers ? `AI 旁听 · ${activeObservers.length} 位` : "AI 旁听 · 关闭"}
 						</button>
 					</div>
 					<label className="initiation-lead-picker">
@@ -376,7 +381,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								.filter((member) => member.id !== leadId)
 								.map((member) => {
 									const isConsult = consultIds.includes(member.id);
-									const isObserver = observers.includes(member.id);
+									const isObserver = activeObservers.includes(member.id);
 									return (
 										<div key={member.id} className="initiation-role-row">
 											<span className="initiation-role-name">{member.displayName}</span>

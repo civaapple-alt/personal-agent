@@ -431,6 +431,14 @@ export class TeamOrchestrator {
 		return this.runs.has(matterId) || this.store.hasLiveMatterLease(matterId);
 	}
 
+	/** Stop optional follow-up after the primary reply has been committed. */
+	stopObserverPass(matterId: string): Promise<void> | undefined {
+		const run = this.runs.get(matterId);
+		if (!run?.observerPassController) return;
+		run.observerPassController.abort(new Error("Observer pass interrupted"));
+		return run.settled;
+	}
+
 	async dispatchMatter(input: DispatchMatterInput): Promise<DispatchMatterResult> {
 		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
 		return dispatchMatterTurn(

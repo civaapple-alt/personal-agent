@@ -421,13 +421,6 @@ export function App() {
 		return initiation.draftConsultMemberIds;
 	}, [initiation.draftConsultMemberIds, matterDetail, selectedMatterId]);
 
-	const discussionAiEnabled: boolean = useMemo(() => {
-		if (selectedMatterId && matterDetail) {
-			return matterDetail.matter.discussionAiEnabled ?? false;
-		}
-		return initiation.draftDiscussionAiEnabled;
-	}, [initiation.draftDiscussionAiEnabled, matterDetail, selectedMatterId]);
-
 	const currentUser = bootstrap?.currentUser ?? currentUserOverride ?? null;
 	const accountUser = bootstrap?.accountUser ?? sessionAccountUser ?? null;
 	const isSuperAdmin = accountUser
@@ -517,7 +510,6 @@ export function App() {
 		draftAiMemberIds,
 		draftConsultMemberIds: initiation.draftConsultMemberIds,
 		draftObserverMemberIds: initiation.draftObserverMemberIds,
-		draftDiscussionAiEnabled: initiation.draftDiscussionAiEnabled,
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		draftVisibility: draftMatterVisibility,
 		draftObserversEnabled,
@@ -535,7 +527,6 @@ export function App() {
 		setDraftAiMemberIds,
 		setDraftConsultMemberIds: initiation.setDraftConsultMemberIds,
 		setDraftObserverMemberIds: initiation.setDraftObserverMemberIds,
-		setDraftDiscussionAiEnabled: initiation.setDraftDiscussionAiEnabled,
 		setDraftObserversEnabled,
 		onSyncDraftPresetForObservers: (hasObservers: boolean) => {
 			initiation.setDraftPresetMode((prev) =>
@@ -750,7 +741,7 @@ export function App() {
 								onUpdateDraftCollaboratorIds: initiation.setDraftCollaboratorIds,
 								onUpdateDraftVisibility: setDraftMatterVisibility,
 								onSetScopeMode: initiation.setScopeMode,
-								onToggleObserverPreset: initiation.toggleObserverPreset,
+								onToggleObserverPreset: () => actions.handleToggleObserversEnabled(!draftObserversEnabled),
 								onToggleDraftMemberConsult: initiation.toggleDraftMemberConsult,
 								onToggleDraftMemberObserver: initiation.toggleDraftMemberObserver,
 								onApplyPresetMode: (mode) => initiation.applyPresetMode(mode),
@@ -802,11 +793,10 @@ export function App() {
 								matterDetail ? (matterDetail.matter.observerMemberIds ?? []) : initiation.draftObserverMemberIds
 							}
 							observersEnabled={observersEnabled}
-							discussionAiEnabled={discussionAiEnabled}
 							onChangeLeadMember={actions.handleChangeLeadMember}
 							onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
 							onUpdateMatterConsultMembers={actions.handleUpdateMatterConsultMembers}
-							onToggleDiscussionAiEnabled={actions.handleToggleDiscussionAiEnabled}
+							onToggleObserversEnabled={actions.handleToggleObserversEnabled}
 							onUpdateMatterObservers={actions.handleUpdateMatterObservers}
 							onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
 							onApproveAiRequest={(matterId, messageId) =>

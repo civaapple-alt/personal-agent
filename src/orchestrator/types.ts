@@ -197,6 +197,7 @@ export interface DispatchMatterInput {
 	interactionMode?: "dispatch" | "discussion" | "conversation";
 	keepMatterLead?: boolean;
 	existingUserMessageId?: string;
+	conversationMentionMemberIds?: string[];
 	/** Recheck current server authorization after external routing, before producing a reply or running tools. */
 	validateConversationAccess?: (memberId?: string) => void;
 	decisionResponse?: DecisionResponse;
@@ -301,6 +302,7 @@ export interface MatterRun {
 	settled: Promise<void>;
 	finish(): void;
 	controller: AbortController;
+	observerPassController?: AbortController;
 	cancelled: boolean;
 	cancelReason?: "user" | "shutdown";
 	workers: Set<RpcWorkerLike>;

@@ -66,7 +66,7 @@ export class MatterRepo {
 			storedAiIds = normalizeUniqueIds([
 				...(input.leadMemberId ? [input.leadMemberId] : []),
 				...input.consultMemberIds,
-				...(input.observersEnabled === false ? [] : (input.observerMemberIds ?? [])),
+				...(input.observerMemberIds ?? []),
 			]);
 		}
 		if (storedAiIds === null && input.leadMemberId === ROLE_ARCHITECT_MEMBER_ID) {
@@ -85,14 +85,11 @@ export class MatterRepo {
 		const explicitObserverIds = normalizeUniqueIds(input.observerMemberIds).filter(
 			(memberId) => effectiveAiIds.includes(memberId) && memberId !== (input.leadMemberId ?? null),
 		);
-		const observerIds =
-			input.observersEnabled === false
-				? []
-				: hasExplicitObserverList
-					? explicitObserverIds
-					: input.observersEnabled === true
-						? this.computeAutoObservers(effectiveAiIds, input.leadMemberId ?? null)
-						: [];
+		const observerIds = hasExplicitObserverList
+			? explicitObserverIds
+			: input.observersEnabled === true
+				? this.computeAutoObservers(effectiveAiIds, input.leadMemberId ?? null)
+				: [];
 		const observersEnabled =
 			input.observersEnabled === false
 				? false
@@ -222,7 +219,10 @@ export class MatterRepo {
 		if (!existing) throw new Error(`Matter not found: ${matterId}`);
 		const timestamp = nowIso();
 		const effectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
-		const observerIds = enabled ? this.computeAutoObservers(effectiveAiIds, existing.leadMemberId) : [];
+		const observerIds =
+			enabled && existing.observerMemberIds.length === 0
+				? this.computeAutoObservers(effectiveAiIds, existing.leadMemberId)
+				: existing.observerMemberIds;
 		this.db
 			.prepare("UPDATE matters SET observers_enabled = ?, observer_ids_json = ?, updated_at = ? WHERE id = ?")
 			.run(enabled ? 1 : 0, JSON.stringify(observerIds), timestamp, matterId);
@@ -242,16 +242,17 @@ export class MatterRepo {
 		const nextObserverIds = existing.observerMemberIds.filter(
 			(id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId,
 		);
-		const nextObserversEnabled = nextObserverIds.length > 0;
+		const nextObserversEnabled =
+			existing.observersEnabled && (nextObserverIds.length > 0 || existing.observerMemberIds.length === 0);
 		let nextConsultIds =
 			existing.consultMemberIds == null
 				? null
 				: existing.consultMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== existing.leadMemberId);
 		if (nextConsultIds !== null) {
-			const addedNonObs = effectiveAiIds.filter(
-				(id) => id !== existing.leadMemberId && !prevEffectiveAiIds.includes(id) && !nextObserverIds.includes(id),
+			const addedMembers = effectiveAiIds.filter(
+				(id) => id !== existing.leadMemberId && !prevEffectiveAiIds.includes(id),
 			);
-			nextConsultIds = normalizeUniqueIds([...nextConsultIds, ...addedNonObs]);
+			nextConsultIds = normalizeUniqueIds([...nextConsultIds, ...addedMembers]);
 		}
 		this.db
 			.prepare(
@@ -339,10 +340,7 @@ export class MatterRepo {
 		const prevEffectiveAiIds = this.resolveEffectiveAiIds(existing.aiMemberIds);
 		const prevAllNonLead = this.computeAutoObservers(prevEffectiveAiIds, existing.leadMemberId);
 		const wasAllAutoObserved =
-			existing.consultMemberIds === null &&
-			existing.observersEnabled &&
-			prevAllNonLead.length > 0 &&
-			prevAllNonLead.every((id) => existing.observerMemberIds.includes(id));
+			prevAllNonLead.length > 0 && prevAllNonLead.every((id) => existing.observerMemberIds.includes(id));
 		const nextObserverIds = wasAllAutoObserved
 			? this.computeAutoObservers(effectiveAiIds, memberId)
 			: existing.observerMemberIds.filter((id) => effectiveAiIds.includes(id) && id !== memberId);
@@ -366,7 +364,9 @@ export class MatterRepo {
 				nextAiIds === null ? null : JSON.stringify(nextAiIds),
 				nextConsultIds === null ? null : JSON.stringify(nextConsultIds),
 				JSON.stringify(nextObserverIds),
-				nextObserverIds.length > 0 ? 1 : 0,
+				existing.observersEnabled && (nextObserverIds.length > 0 || existing.observerMemberIds.length === 0)
+					? 1
+					: 0,
 				timestamp,
 				matterId,
 			);

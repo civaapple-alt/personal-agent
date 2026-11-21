@@ -452,7 +452,7 @@ export async function executeWithWorkerPass(
 			conversationReply: isConversationReply,
 			leadMemberId: matter?.leadMemberId ?? null,
 			consultMemberIds: matter?.consultMemberIds ?? null,
-			observerMemberIds: matter?.observerMemberIds ?? [],
+			observerMemberIds: matter?.observersEnabled ? matter.observerMemberIds : [],
 			teamMembers: matterAiMembers,
 		});
 		const architectContext =

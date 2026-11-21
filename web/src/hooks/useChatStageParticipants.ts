@@ -91,7 +91,10 @@ export function useChatStageParticipants({
 	const ownerCollab =
 		orgMembers.length > 0
 			? (() => {
-					const orgOwner = orgMembers.find((om) => om.orgRole === "org_owner") ?? orgMembers[0];
+					const orgOwner =
+						orgMembers.find((om) => om.userId === matterDetail?.matter.createdByUserId) ??
+						orgMembers.find((om) => om.orgRole === "org_owner") ??
+						orgMembers[0];
 					return orgOwner
 						? {
 								id: orgOwner.userId,

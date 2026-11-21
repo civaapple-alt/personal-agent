@@ -822,7 +822,7 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 		assert.deepEqual(narrowed.matter.aiMemberIds, ["engineering-manager", "product-manager"]);
 		assert.deepEqual(narrowed.matter.observerMemberIds, ["product-manager"]);
 
-		// Turn off Matter-wide observer toggle -> clears observerMemberIds.
+		// Turning off the switch preserves the selected observers for re-enabling.
 		const disableObsRes = await fetch(`${baseUrl}/api/matters/${matterId}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
@@ -833,7 +833,7 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 			matter: { observersEnabled: boolean; observerMemberIds: string[] };
 		};
 		assert.equal(disabledObs.matter.observersEnabled, false);
-		assert.deepEqual(disabledObs.matter.observerMemberIds, []);
+		assert.deepEqual(disabledObs.matter.observerMemberIds, ["product-manager"]);
 
 		// Delegating to an AI removed from the Matter is rejected.
 		await assert.rejects(

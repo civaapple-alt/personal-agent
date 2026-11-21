@@ -10,7 +10,7 @@ For example, ask QA to run the login regression and record failures to assign wo
 
 ## Collaboration and observers
 
-The collaboration members panel shows the lead and the other roles in the matter. The lead can consult eligible roles. Open this turn's delegation details to see assignments and reports. Observers can add important findings after eligible lead turns. With proactive replies off, direct requests and mentions may still receive a response.
+The matter lead replies by default. Use `@` to address a teammate or an AI role. When AI observers are enabled, selected AI collaborators can contribute relevant findings after the reply. The lead still responds and delegates according to the matter settings when observers are off. Open the turn’s delegation details to see assignments and reports.
 
 ## Decisions
 

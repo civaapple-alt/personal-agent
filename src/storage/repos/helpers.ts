@@ -302,7 +302,7 @@ export function mapMatterRow(row: Record<string, unknown>): Matter {
 			row.consult_member_ids_json === null || row.consult_member_ids_json === undefined
 				? null
 				: parseUniqueIds(row.consult_member_ids_json),
-		observersEnabled: Boolean(row.observers_enabled) || observerMemberIds.length > 0,
+		observersEnabled: Boolean(row.observers_enabled),
 		observerMemberIds,
 		discussionAiEnabled: Boolean(row.discussion_ai_enabled),
 		modelSelection: readStoredModelSelection(

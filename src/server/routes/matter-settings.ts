@@ -233,20 +233,12 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 				{ matterId },
 			);
 		}
-		if (hasObserversEnabledUpdate) {
-			updated = store.updateMatterObserversEnabled(matterId, Boolean(body.observersEnabled));
-			broadcast(
-				"matter_updated",
-				{
-					matterId,
-					observersEnabled: updated.observersEnabled,
-					observerMemberIds: updated.observerMemberIds,
-				},
-				{ matterId },
-			);
-		}
-		if (observerMemberIds !== undefined) {
-			updated = store.updateMatterObservers(matterId, observerMemberIds);
+		if (hasObserversEnabledUpdate || observerMemberIds !== undefined) {
+			if (observerMemberIds !== undefined) updated = store.updateMatterObservers(matterId, observerMemberIds);
+			if (hasObserversEnabledUpdate) {
+				updated = store.updateMatterObserversEnabled(matterId, Boolean(body.observersEnabled));
+			}
+			if (!updated.observersEnabled) void orchestrator.stopObserverPass(matterId);
 			broadcast(
 				"matter_updated",
 				{

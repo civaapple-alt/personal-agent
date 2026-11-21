@@ -15,7 +15,6 @@ import type {
 	ComposerImageAttachment,
 	MatterProgressDto,
 	OrganizationDto,
-	TeamMemberDto,
 	WorkspaceDto,
 } from "../../api.ts";
 import {
@@ -39,13 +38,20 @@ export interface PreviewableTextAttachment {
 	pendingPastedId?: string;
 }
 
+interface MentionMember {
+	id: string;
+	displayName: string;
+	roleTitle?: string;
+	kind: "ai" | "human";
+}
+
 interface ComposerDockProps {
 	initiationPanel?: ReactNode;
 	modelControl?: ReactNode;
 	composerDockRef: RefObject<HTMLDivElement | null>;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
 	isOwner: boolean;
-	mentionMembers?: TeamMemberDto[];
+	mentionMembers?: MentionMember[];
 	leadMemberId?: string | null;
 	observerMemberIds?: string[];
 	allowUnboundOrg?: boolean;
@@ -145,7 +151,7 @@ export function ComposerDock({
 				if (!q) return true;
 				return (
 					member.displayName.toLowerCase().includes(q) ||
-					member.roleTitle.toLowerCase().includes(q) ||
+					member.roleTitle?.toLowerCase().includes(q) ||
 					member.id.toLowerCase().includes(q)
 				);
 			})
@@ -176,7 +182,7 @@ export function ComposerDock({
 		const normalizedQuery = query.toLowerCase();
 		const completedMention = mentionMembers.some((member) =>
 			[member.displayName, member.roleTitle, member.id].some((alias) => {
-				const prefix = alias.trim().toLowerCase();
+				const prefix = alias?.trim().toLowerCase() ?? "";
 				return prefix.length > 0 && normalizedQuery.startsWith(prefix) && /\s/.test(query[prefix.length] ?? "");
 			}),
 		);
@@ -223,7 +229,7 @@ export function ComposerDock({
 		el?.focus();
 	};
 
-	const insertMentionMember = (member: TeamMemberDto) => {
+	const insertMentionMember = (member: MentionMember) => {
 		if (!mentionState) return;
 		const el = composerRef.current;
 		const displayName = member.displayName.trim();
@@ -231,7 +237,7 @@ export function ComposerDock({
 			(other) =>
 				other.id !== member.id &&
 				[other.displayName, other.roleTitle, other.id].some(
-					(alias) => alias.trim().toLowerCase() === displayName.toLowerCase(),
+					(alias) => alias?.trim().toLowerCase() === displayName.toLowerCase(),
 				),
 		);
 		const inserted = `${mentionState.prefix ?? ""}@${duplicateName ? member.id : displayName} `;
@@ -367,7 +373,7 @@ export function ComposerDock({
 
 	const uploadLimitReached = pendingImages.length >= MAX_COMPOSER_IMAGES && pendingFiles.length >= MAX_COMPOSER_FILES;
 
-	const placeholder = isArchitectMode ? "描述你们的工作流程或角色缺口…" : "说说想法、安排工作，或 @ 角色…";
+	const placeholder = isArchitectMode ? "描述你们的工作流程或角色缺口…" : "说说想法、安排工作，或 @ 成员…";
 
 	return (
 		<div className="composer-dock">
@@ -575,18 +581,20 @@ export function ComposerDock({
 								id={mentionListId}
 								className="composer-mention-menu"
 								role="listbox"
-								aria-label="选择要 @ 的 AI 角色"
+								aria-label="选择要 @ 的成员"
 							>
 								{filteredMentionMembers.length === 0 ? (
-									<div className="composer-mention-empty">没有匹配的在组 AI 角色</div>
+									<div className="composer-mention-empty">没有匹配的成员</div>
 								) : (
 									filteredMentionMembers.map((member, idx) => {
 										const roleTag =
-											member.id === leadMemberId
-												? "主责"
-												: observerMemberIds.includes(member.id)
-													? "回复后检查"
-													: "协作";
+											member.kind === "human"
+												? "同事"
+												: member.id === leadMemberId
+													? "主责"
+													: observerMemberIds.includes(member.id)
+														? "旁听"
+														: "协作";
 										return (
 											<button
 												key={member.id}
@@ -661,13 +669,13 @@ export function ComposerDock({
 										type="button"
 										ref={mentionTriggerRef}
 										className="composer-at-btn"
-										aria-label="@ AI 角色"
+										aria-label="@ 成员"
 										aria-expanded={showMentionPicker}
 										aria-controls={showMentionPicker ? mentionListId : undefined}
 										title="点名 AI 角色"
 										onClick={toggleMentionPicker}
 									>
-										@角色
+										@成员
 									</button>
 								)}
 								<span className="composer-toolbar-hint">

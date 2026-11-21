@@ -17,7 +17,7 @@ import { isSuperAdminActor, requireActiveActor, toDispatchAuthor } from "../auth
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { loadStoredFilesFromRefs, loadStoredImagesFromRefs } from "../uploads.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
-import { checkUserDispatchQuota, hasUserDispatchQuotaAvailable } from "./matter-messages.ts";
+import { checkUserDispatchQuota, hasUserDispatchQuotaAvailable, settleMatterObserverPass } from "./matter-messages.ts";
 import { ensureOrgEnabledAiRequest } from "./matter-roster.ts";
 
 export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
@@ -130,23 +130,13 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 				matter.aiMemberIds !== null &&
 				!matter.aiMemberIds.includes(message.senderId) &&
 				message.senderId !== matter.leadMemberId) ||
-			ctx.activeRuns.has(matterId) ||
-			ctx.orchestrator.isMatterRunning(matterId) ||
 			listCompletedHumanDecisions(messages).has(messageId)
 		) {
 			return false;
 		}
 		if (explicit) {
-			if (
-				!checkUserDispatchQuota(ctx, actor, res) ||
-				!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, message.senderId, [])
-			)
-				return null;
-		} else if (
-			!hasUserDispatchQuotaAvailable(ctx, actor) ||
-			!canTargetMatterAi(store, actor, matter.orgId, message.senderId)
-		)
-			return false;
+			if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, message.senderId, [])) return null;
+		} else if (!canTargetMatterAi(store, actor, matter.orgId, message.senderId)) return false;
 		const questions = decision.requests.map(({ question }) => question).join("\n");
 		const assignment = decision.source ? store.getMessage(decision.source.messageId) : null;
 		const handoff =
@@ -174,6 +164,12 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 		const files = sourceMsg
 			? await loadStoredFilesFromRefs(sourceMsg.metadata?.files, ctx.uploadsDir, ctx.memoryUploads)
 			: [];
+		if (
+			(Array.isArray(sourceMsg?.metadata?.images) && images.length !== sourceMsg.metadata.images.length) ||
+			(Array.isArray(sourceMsg?.metadata?.files) && files.length !== sourceMsg.metadata.files.length)
+		)
+			return false;
+		await settleMatterObserverPass(ctx, matterId);
 		const latestMatter = store.getMatter(matterId);
 		const currentActor = actor.user ? { ...actor, user: store.getUserById(actor.user.id) } : actor;
 		if (
@@ -191,13 +187,14 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 		)
 			return false;
 		if (
-			(Array.isArray(sourceMsg?.metadata?.images) && images.length !== sourceMsg.metadata.images.length) ||
-			(Array.isArray(sourceMsg?.metadata?.files) && files.length !== sourceMsg.metadata.files.length) ||
 			ctx.activeRuns.has(matterId) ||
 			ctx.orchestrator.isMatterRunning(matterId) ||
-			!hasUserDispatchQuotaAvailable(ctx, actor)
+			listCompletedHumanDecisions(store.listMessages(matterId, "user")).has(messageId)
 		)
 			return false;
+		if (explicit) {
+			if (!checkUserDispatchQuota(ctx, currentActor, res)) return null;
+		} else if (!hasUserDispatchQuotaAvailable(ctx, currentActor)) return false;
 
 		ctx.runDispatchInBackground(
 			{

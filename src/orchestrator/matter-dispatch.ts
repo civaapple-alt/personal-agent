@@ -56,7 +56,6 @@ interface MatterDispatchDeps {
 		message: MatterMessage;
 		memberId: string;
 		explicitRecipient: boolean;
-		proactiveReplies: boolean;
 		canReplyWithRoster: boolean;
 		canRouteToArchitect: boolean;
 		candidates: TeamMember[];
@@ -275,7 +274,11 @@ export async function dispatchMatterTurn(
 			: [];
 	const mentionedTargets =
 		isDiscussionTurn && !assignedIsArchitect
-			? resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
+			? input.conversationMentionMemberIds
+				? input.conversationMentionMemberIds.flatMap((id) =>
+						discussionMentionPool.filter((member) => member.id === id),
+					)
+				: resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
 			: [];
 	let activeSpeaker = mentionedTargets[0] ?? assignedMember;
 	speakerMemberId = activeSpeaker.id;
@@ -295,11 +298,12 @@ export async function dispatchMatterTurn(
 				message: existingUserMsg,
 				memberId: activeSpeaker.id,
 				explicitRecipient: hasExplicitRecipient,
-				proactiveReplies: matter.discussionAiEnabled === true,
 				canReplyWithRoster: !hasExplicitRecipient && images.length === 0 && files.length === 0,
 				canRouteToArchitect:
 					deps.isArchitectMember(activeSpeaker) ||
-					(!hasExplicitRecipient && Boolean(deps.store.getMember(ROLE_ARCHITECT_MEMBER_ID))),
+					(!matter.leadMemberId &&
+						!hasExplicitRecipient &&
+						Boolean(deps.store.getMember(ROLE_ARCHITECT_MEMBER_ID))),
 				candidates,
 				signal: run.controller.signal,
 			});
@@ -313,7 +317,7 @@ export async function dispatchMatterTurn(
 				...existingUserMsg.metadata,
 				conversationDecisionSource: decision.source,
 			});
-			if (intent === "silent" || intent === "roster" || intent === "workbench_help") {
+			if (intent === "roster" || intent === "workbench_help") {
 				let directReply: MatterMessage | undefined;
 				if (intent === "roster") {
 					directReply = recordRosterReply(
@@ -383,7 +387,10 @@ export async function dispatchMatterTurn(
 			input.validateConversationAccess?.(activeSpeaker.id);
 			assignedIsArchitect = deps.isArchitectMember(activeSpeaker);
 			if (!matter.leadMemberId && !assignedIsArchitect && intent !== "confirm") {
-				matter = deps.store.updateMatterLead(matter.id, activeSpeaker.id);
+				matter = deps.store.updateMatterLead(
+					matter.id,
+					mentionedTargets.length > 0 ? assignedMember.id : activeSpeaker.id,
+				);
 			}
 			speakerMemberId = activeSpeaker.id;
 			if (!isDiscussionTurn) {
@@ -638,6 +645,7 @@ export async function dispatchMatterTurn(
 			metadata: {
 				disposition: result.disposition,
 				aborted,
+				...(activeSpeaker.id === matter.leadMemberId ? { matterLeadReply: true } : {}),
 				...(isDiscussionTurn ? { discussionTurn: true } : {}),
 				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
@@ -722,43 +730,52 @@ export async function dispatchMatterTurn(
 		if (isDiscussionTurn && !run.cancelled && !aborted && !extraReplyAborted) {
 			run.controller.signal.throwIfAborted();
 		}
+		const observerMatter = deps.requireMatter(matter.id);
 		const observerCandidates =
+			observerMatter.observersEnabled &&
 			!aborted &&
+			!extraReplyAborted &&
 			!run.cancelled &&
 			!assignedIsArchitect &&
 			intent !== "confirm" &&
-			!(isDiscussionTurn && (run.conversationDiscussion || mentionedTargets.length > 0))
+			(isConversation || !isDiscussionTurn || mentionedTargets.length === 0)
 				? deps
-						.resolveMatterAiMembers(updatedMatter, effectiveUserId)
+						.resolveMatterAiMembers(observerMatter, effectiveUserId)
 						.filter(
-							(member) => member.id !== activeSpeaker.id && updatedMatter.observerMemberIds.includes(member.id),
+							(member) =>
+								member.id !== activeSpeaker.id &&
+								member.id !== observerMatter.leadMemberId &&
+								!deps.isArchitectMember(member) &&
+								!mentionedTargets.some(({ id }) => id === member.id) &&
+								observerMatter.observerMemberIds.includes(member.id),
 						)
 				: [];
-		const observerMessages =
-			observerCandidates.length > 0
-				? await runObserversPass(
-						{
-							store: deps.store,
-							defaultCwd: deps.defaultCwd,
-							executeWithWorker: (workerInput) => deps.executeWithWorker(workerInput),
-						},
-						{
-							matter: updatedMatter,
-							assignedMember: activeSpeaker,
-							workspace,
-							userPrompt: input.prompt,
-							userImages: rpcImages.length > 0 ? rpcImages : undefined,
-							userFileSummaries: fileSummaries.length > 0 ? fileSummaries : undefined,
-							leadReply: replyText,
-							leadMessageId: leadMessage.id,
-							observers: observerCandidates,
-							discussionMode: isDiscussionTurn,
-							run,
-							signal: run.controller.signal,
-							onProgress: emitDispatchProgress,
-						},
-					)
-				: [];
+		const observerController = observerCandidates.length > 0 ? new AbortController() : undefined;
+		run.observerPassController = observerController;
+		const observerMessages = observerController
+			? await runObserversPass(
+					{
+						store: deps.store,
+						defaultCwd: deps.defaultCwd,
+						executeWithWorker: (workerInput) => deps.executeWithWorker(workerInput),
+					},
+					{
+						matter: observerMatter,
+						assignedMember: activeSpeaker,
+						workspace,
+						userPrompt: input.prompt,
+						userImages: rpcImages.length > 0 ? rpcImages : undefined,
+						userFileSummaries: fileSummaries.length > 0 ? fileSummaries : undefined,
+						leadReply: replyText,
+						leadMessageId: leadMessage.id,
+						observers: observerCandidates,
+						discussionMode: isDiscussionTurn,
+						run,
+						signal: AbortSignal.any([run.controller.signal, observerController.signal]),
+						onProgress: emitDispatchProgress,
+					},
+				)
+			: [];
 		return {
 			matter: updatedMatter,
 			assignedMember: activeSpeaker,

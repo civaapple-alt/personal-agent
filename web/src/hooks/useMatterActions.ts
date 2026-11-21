@@ -20,9 +20,9 @@ import {
 	updateMatterAiMembers,
 	updateMatterCollaborators,
 	updateMatterConsultMembers,
-	updateMatterDiscussionAiEnabled,
 	updateMatterLead,
 	updateMatterObservers,
+	updateMatterObserversEnabled,
 	updateMatterOrganization,
 	updateMatterVisibility,
 	updateMatterWorkspace,
@@ -84,7 +84,6 @@ interface UseMatterActionsParams {
 	draftAiMemberIds: string[] | null;
 	draftConsultMemberIds?: string[] | null;
 	draftObserverMemberIds?: string[];
-	draftDiscussionAiEnabled?: boolean;
 	draftCollaboratorIds?: string[];
 	draftVisibility?: MatterVisibility;
 	draftObserversEnabled: boolean;
@@ -102,7 +101,6 @@ interface UseMatterActionsParams {
 	setDraftAiMemberIds: (v: string[] | null) => void;
 	setDraftConsultMemberIds?: (v: string[] | null) => void;
 	setDraftObserverMemberIds?: (v: string[]) => void;
-	setDraftDiscussionAiEnabled?: (v: boolean) => void;
 	setDraftObserversEnabled: (v: boolean) => void;
 	onSyncDraftPresetForObservers?: (hasObservers: boolean) => void;
 	onResetInitiation?: () => void;
@@ -130,7 +128,6 @@ export function useMatterActions({
 	draftAiMemberIds,
 	draftConsultMemberIds = null,
 	draftObserverMemberIds = [],
-	draftDiscussionAiEnabled = true,
 	draftCollaboratorIds = [],
 	draftVisibility = "org",
 	draftObserversEnabled,
@@ -148,7 +145,6 @@ export function useMatterActions({
 	setDraftAiMemberIds,
 	setDraftConsultMemberIds,
 	setDraftObserverMemberIds,
-	setDraftDiscussionAiEnabled,
 	setDraftObserversEnabled,
 	onSyncDraftPresetForObservers,
 	onResetInitiation,
@@ -217,17 +213,12 @@ export function useMatterActions({
 					orgId: orgForCreate,
 					aiMemberIds: isArchitectCreate ? [ROLE_ARCHITECT_MEMBER_ID] : draftAiMemberIds,
 					consultMemberIds: isArchitectCreate ? [] : draftConsultMemberIds,
-					observersEnabled: isArchitectCreate
-						? false
-						: draftObserverMemberIds.length > 0
-							? true
-							: draftObserversEnabled,
+					observersEnabled: !isArchitectCreate && draftObserversEnabled,
 					observerMemberIds: isArchitectCreate
 						? []
 						: draftObserverMemberIds.length > 0
 							? draftObserverMemberIds
 							: undefined,
-					discussionAiEnabled: isArchitectCreate ? false : draftDiscussionAiEnabled,
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 					visibility: draftVisibility,
 					modelSelection: isOwner ? draftModelSelection : null,
@@ -530,16 +521,17 @@ export function useMatterActions({
 			});
 	};
 
-	const handleToggleDiscussionAiEnabled = (enabled: boolean) => {
+	const handleToggleObserversEnabled = (enabled: boolean) => {
 		if (!selectedMatterId) {
-			setDraftDiscussionAiEnabled?.(enabled);
-			setNoticeBanner(enabled ? "已允许 AI 主动参与未点名的交流" : "已关闭 AI 主动参与未点名的交流");
+			setDraftObserversEnabled(enabled);
+			onSyncDraftPresetForObservers?.(enabled);
+			setNoticeBanner(enabled ? "已开启 AI 旁听" : "已关闭 AI 旁听");
 			return;
 		}
 		const targetMatterId = selectedMatterId;
-		void updateMatterDiscussionAiEnabled(targetMatterId, enabled)
+		void updateMatterObserversEnabled(targetMatterId, enabled)
 			.then(async () => {
-				setNoticeBanner(enabled ? "已允许 AI 主动参与未点名的交流" : "已关闭 AI 主动参与未点名的交流");
+				setNoticeBanner(enabled ? "已开启 AI 旁听" : "已关闭 AI 旁听");
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
 			})
@@ -602,7 +594,7 @@ export function useMatterActions({
 		handleChangeLeadMember,
 		handleUpdateMatterAiMembers,
 		handleUpdateMatterConsultMembers,
-		handleToggleDiscussionAiEnabled,
+		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
 		handleUpdateMatterVisibility,
 		handleDeliverableFeedback,

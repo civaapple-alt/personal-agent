@@ -4,6 +4,9 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Make the matter lead the default responder in the shared composer. Address people and AI members explicitly with `@`.
+- Limit the AI observer switch to proactive contributions. Preserve the observer list and the lead's delegation settings when toggling it.
+
 - Answer questions about AI tools with the role's observed runtime tools and clarify when Human Question is available.
 - Let users try the decision-card form from workbench help without creating a live decision.
 - Answer workbench questions from the installed guide and current matter records. Give AI roles read-only access to the same guide, pending decisions, published deliverables, and visible participation data.

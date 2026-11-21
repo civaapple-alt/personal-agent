@@ -410,16 +410,6 @@ export function updateMatterConsultMembers(
 	});
 }
 
-export function updateMatterDiscussionAiEnabled(
-	matterId: string,
-	discussionAiEnabled: boolean,
-): Promise<{ matter: MatterDto }> {
-	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
-		method: "PATCH",
-		body: JSON.stringify({ discussionAiEnabled }),
-	});
-}
-
 export function updateMatterObserversEnabled(
 	matterId: string,
 	observersEnabled: boolean,

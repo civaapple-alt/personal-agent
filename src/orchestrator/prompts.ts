@@ -150,14 +150,17 @@ export function formatMessageHistorySpeaker(message: MatterMessage): string {
 	return `${message.senderType}/${message.senderId}`;
 }
 
-/** Resolve explicit `@role` mentions in a discussion prompt against eligible AI members, preserving mention order. */
-export function resolveDiscussionMentionTargets(prompt: string, pool: TeamMember[]): TeamMember[] {
+/** Resolve explicit mentions against the eligible participants, preserving mention order. */
+export function resolveDiscussionMentionTargets<T extends { id: string; displayName: string; roleTitle?: string }>(
+	prompt: string,
+	pool: T[],
+): T[] {
 	if (!prompt.includes("@") || pool.length === 0) return [];
-	const candidates: Array<{ alias: string; aliasLower: string; member: TeamMember }> = [];
+	const candidates: Array<{ alias: string; aliasLower: string; member: T }> = [];
 	const seenAliases = new Set<string>();
 	for (const member of pool) {
 		for (const rawAlias of [member.displayName, member.roleTitle, member.id]) {
-			const alias = rawAlias.trim();
+			const alias = rawAlias?.trim();
 			if (!alias) continue;
 			const key = `${member.id}\0${alias.toLowerCase()}`;
 			if (seenAliases.has(key)) continue;
@@ -167,7 +170,7 @@ export function resolveDiscussionMentionTargets(prompt: string, pool: TeamMember
 	}
 	// Match longest aliases first so multi-word display names beat shorter substrings.
 	candidates.sort((a, b) => b.alias.length - a.alias.length);
-	const hits: Array<{ index: number; member: TeamMember }> = [];
+	const hits: Array<{ index: number; member: T }> = [];
 	const lowerPrompt = prompt.toLowerCase();
 	const isPrefixBoundary = (idx: number): boolean =>
 		idx === 0 || /[\s,.:;!?，。：；！？、([【（]/.test(prompt[idx - 1]!);
@@ -195,7 +198,7 @@ export function resolveDiscussionMentionTargets(prompt: string, pool: TeamMember
 			i += matched.alias.length;
 		}
 	}
-	const ordered: TeamMember[] = [];
+	const ordered: T[] = [];
 	const seenMembers = new Set<string>();
 	for (const hit of hits) {
 		if (seenMembers.has(hit.member.id)) continue;

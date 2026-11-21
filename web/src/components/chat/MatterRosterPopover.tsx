@@ -1,4 +1,4 @@
-import { type RefObject, useState } from "react";
+import { type RefObject, useId, useState } from "react";
 import type { CollaboratorDto, TeamMemberDto } from "../../api.ts";
 import { filterBusinessMembers, isArchitectMember } from "../../architectApi.ts";
 import { copyCollaboratorInviteUrl } from "../../clipboard.ts";
@@ -22,7 +22,7 @@ interface MatterRosterPopoverProps {
 	nonLeadGroupAiMembers: TeamMemberDto[];
 	removedAiMembers: TeamMemberDto[];
 	leadAi: TeamMemberDto | null;
-	discussionAiEnabled?: boolean;
+	observersEnabled?: boolean;
 	observerAis: TeamMemberDto[];
 	matterAiMemberIds: string[];
 	matterConsultMemberIds?: string[] | null;
@@ -34,7 +34,7 @@ interface MatterRosterPopoverProps {
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateMatterConsultMembers?: (consultMemberIds: string[] | null) => void;
-	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
+	onToggleObserversEnabled?: (enabled: boolean) => void;
 	onUpdateMatterObservers?: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 	onConsultArchitect?: () => void;
@@ -58,7 +58,7 @@ export function MatterRosterPopover({
 	nonLeadGroupAiMembers,
 	removedAiMembers,
 	leadAi,
-	discussionAiEnabled = false,
+	observersEnabled = false,
 	observerAis,
 	matterAiMemberIds,
 	matterConsultMemberIds = null,
@@ -70,12 +70,13 @@ export function MatterRosterPopover({
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateMatterConsultMembers,
-	onToggleDiscussionAiEnabled,
+	onToggleObserversEnabled,
 	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
 	onConsultArchitect,
 }: MatterRosterPopoverProps) {
 	const [settingsMemberId, setSettingsMemberId] = useState<string | null>(null);
+	const observerHintId = useId();
 	const selectedMember = nonLeadGroupAiMembers.find(({ id }) => id === settingsMemberId);
 	const query = rosterSearch.trim().toLowerCase();
 	const matchesQuery = (...parts: Array<string | undefined>) =>
@@ -86,7 +87,7 @@ export function MatterRosterPopover({
 	const filteredAiTiles = inGroupAiMembers.filter((ai) => {
 		const isLead = ai.id === leadAi?.id;
 		const isObs = observerAis.some((obs) => obs.id === ai.id);
-		const roleLabel = isLead ? "负责人" : isObs ? "回复后检查" : "成员";
+		const roleLabel = isLead ? "负责人" : isObs ? "旁听" : "成员";
 		return matchesQuery(ai.displayName, ai.roleTitle, roleLabel);
 	});
 	const hasRemovable =
@@ -316,7 +317,7 @@ export function MatterRosterPopover({
 							const isObs = observerAis.some((obs) => obs.id === ai.id);
 							const canRemoveAi = rosterMode === "remove" && isOwner && !isLead;
 							const canConfigure = rosterMode === "view" && isOwner && !isLead;
-							const tagLabel = isLead ? "负责人" : isObs ? "回复后检查" : "成员";
+							const tagLabel = isLead ? "负责人" : isObs ? "旁听" : "成员";
 							const tagClass = isLead ? "lead" : isObs ? "observer" : "";
 							return (
 								<div key={`ai-${ai.id}`} className="wechat-member-tile-wrap">
@@ -424,9 +425,9 @@ export function MatterRosterPopover({
 										/>
 									</label>
 								)}
-								{onUpdateMatterObservers && (
+								{onUpdateMatterObservers && observersEnabled && (
 									<label className="wechat-roster-row">
-										<span>主责回复后主动检查</span>
+										<span>旁听补充</span>
 										<input
 											type="checkbox"
 											checked={observerAis.some(({ id }) => id === selectedMember.id)}
@@ -443,23 +444,29 @@ export function MatterRosterPopover({
 								)}
 							</fieldset>
 						)}
-						{onToggleDiscussionAiEnabled && (
-							<div className="wechat-roster-row">
-								<span>未点名时也让 AI 主动回应</span>
-								{isOwner ? (
-									<button
-										type="button"
-										role="switch"
-										aria-checked={discussionAiEnabled}
-										aria-label="未点名时也让 AI 主动回应"
-										className={`wechat-switch ${discussionAiEnabled ? "on" : ""}`}
-										onClick={() => onToggleDiscussionAiEnabled(!discussionAiEnabled)}
-									>
-										<span className="wechat-switch-thumb" />
-									</button>
-								) : (
-									<span className="wechat-row-val">{discussionAiEnabled ? "已开启" : "已关闭"}</span>
-								)}
+						{onToggleObserversEnabled && (
+							<div>
+								<div className="wechat-roster-row">
+									<span>AI 旁听</span>
+									{isOwner ? (
+										<button
+											type="button"
+											role="switch"
+											aria-checked={observersEnabled}
+											aria-label="AI 旁听"
+											aria-describedby={observerHintId}
+											className={`wechat-switch ${observersEnabled ? "on" : ""}`}
+											onClick={() => onToggleObserversEnabled(!observersEnabled)}
+										>
+											<span className="wechat-switch-thumb" />
+										</button>
+									) : (
+										<span className="wechat-row-val">{observersEnabled ? "已开启" : "已关闭"}</span>
+									)}
+								</div>
+								<p className="wechat-roster-hint" id={observerHintId}>
+									协作 AI 可主动补充，主责照常回应和委托。
+								</p>
 							</div>
 						)}
 						{isOwner ? (

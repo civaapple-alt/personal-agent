@@ -135,8 +135,8 @@ export async function readWorkbenchTopic(
 					? `状态：${status}。负责人：${lead ? plainText(lead.displayName) : "未指定或不可见"}。`
 					: `Status: ${status}. Lead: ${lead ? plainText(lead.displayName) : "unassigned or not visible"}.`,
 				chinese
-					? `仓库：${workspaceName ? plainText(workspaceName) : "未绑定"}。主动回应：${matter.discussionAiEnabled ? "开启" : "关闭"}。`
-					: `Repository: ${workspaceName ? plainText(workspaceName) : "none"}. Proactive replies: ${matter.discussionAiEnabled ? "on" : "off"}.`,
+					? `仓库：${workspaceName ? plainText(workspaceName) : "未绑定"}。AI 旁听：${matter.observersEnabled ? "开启" : "关闭"}。主责默认回应。`
+					: `Repository: ${workspaceName ? plainText(workspaceName) : "none"}. AI observers: ${matter.observersEnabled ? "on" : "off"}. The lead responds by default.`,
 				...roster.slice(0, 40),
 				...(roster.length > 40
 					? [

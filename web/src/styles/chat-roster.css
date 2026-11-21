@@ -190,6 +190,11 @@
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 }
+.wechat-roster-hint {
+	margin: 4px 0 0;
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+}
 .wechat-row-sub {
 	font-size: var(--text-micro);
 	color: var(--text-muted);

@@ -127,11 +127,62 @@ function appendHumanMessage(
 	return { message, refreshedMatter };
 }
 
-function conversationModeForActor(ctx: ServerRouteContext, actor: RequestActor, orgId: string | null, prompt: string) {
-	return !canDispatchAiInOrg(ctx.store, actor, orgId) && looksLikeWorkRequest(prompt) ? "ai_request" : "conversation";
+function conversationModeForActor(
+	ctx: ServerRouteContext,
+	actor: RequestActor,
+	orgId: string | null,
+	prompt: string,
+	humanOnly: boolean,
+) {
+	return !humanOnly && !canDispatchAiInOrg(ctx.store, actor, orgId) && looksLikeWorkRequest(prompt)
+		? "ai_request"
+		: "conversation";
 }
 
-function startAiForMessage(
+function humanMentionCandidates(
+	{ store }: ServerRouteContext,
+	matter: Pick<Matter, "createdByUserId" | "collaboratorIds" | "orgId" | "visibility">,
+) {
+	const orgOwner =
+		matter.orgId && matter.visibility !== "private"
+			? store.listOrgMembers(matter.orgId).find((member) => member.orgRole === "org_owner")?.userId
+			: undefined;
+	const ids = new Set([...matter.collaboratorIds, matter.createdByUserId, orgOwner]);
+	return [...ids].flatMap((id) => {
+		if (!id) return [];
+		const user = store.getUserById(id);
+		if (user) {
+			return user.status === "active" && (!matter.orgId || store.getOrgMembership(matter.orgId, id))
+				? [{ id, displayName: user.displayName, kind: "human" as const }]
+				: [];
+		}
+		const guest = store.getCollaborator(id);
+		return guest && (!guest.orgId || guest.orgId === matter.orgId)
+			? [{ id, displayName: guest.name, kind: "human" as const }]
+			: [];
+	});
+}
+
+function conversationRecipients(ctx: ServerRouteContext, actor: RequestActor, matter: Matter, prompt: string) {
+	if (!prompt.includes("@")) return { aiMemberIds: [], humanOnly: false };
+	const aiMembers = ctx.orchestrator
+		.listConversationAiMembers(matter, actor.user?.id ?? null)
+		.map(({ id, displayName, roleTitle }) => ({ id, displayName, roleTitle, kind: "ai" as const }));
+	const recipients = resolveDiscussionMentionTargets(prompt, [...humanMentionCandidates(ctx, matter), ...aiMembers]);
+	const aiMemberIds = recipients.filter(({ kind }) => kind === "ai").map(({ id }) => id);
+	return { aiMemberIds, humanOnly: recipients.length > 0 && aiMemberIds.length === 0 };
+}
+
+export async function settleMatterObserverPass(ctx: ServerRouteContext, matterId: string): Promise<void> {
+	const previous = ctx.activeRuns.get(matterId);
+	const stoppingObservers = ctx.orchestrator.stopObserverPass(matterId);
+	if (stoppingObservers) {
+		await stoppingObservers;
+		await previous?.settled;
+	}
+}
+
+async function startAiForMessage(
 	ctx: ServerRouteContext,
 	actor: RequestActor,
 	matter: Matter,
@@ -141,10 +192,10 @@ function startAiForMessage(
 	preferredMemberId?: string,
 ) {
 	const isConversation = message.metadata?.mode === "conversation";
+	const recipients = isConversation ? conversationRecipients(ctx, actor, matter, message.content) : undefined;
 	if (isConversation) {
-		const eligible = ctx.orchestrator.listConversationAiMembers(matter, actor.user?.id ?? null);
-		const hasAiMention = resolveDiscussionMentionTargets(message.content, eligible).length > 0;
-		if (!hasAiMention && /^@[^\s@]/u.test(message.content))
+		if (recipients?.humanOnly) return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "human_recipient" };
+		if (!recipients?.aiMemberIds.length && /^@[^\s@]/u.test(message.content))
 			return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "unavailable_recipient" };
 	} else if (!matter.discussionAiEnabled) {
 		return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "disabled" };
@@ -159,6 +210,7 @@ function startAiForMessage(
 		replyWithCurrentMatterRoster(ctx, matter, message)
 	)
 		return { aiDiscussionTriggered: false };
+	if (isConversation) await settleMatterObserverPass(ctx, matter.id);
 	const skippedReason =
 		ctx.orchestrator.isMatterRunning(matter.id) || ctx.activeRuns.has(matter.id)
 			? "matter_busy"
@@ -176,6 +228,7 @@ function startAiForMessage(
 			images,
 			files,
 			preferredMemberId,
+			conversationMentionMemberIds: recipients?.aiMemberIds,
 			workspaceId: matter.workspaceId ?? undefined,
 			orgId: matter.orgId,
 			startedByUserId: actor.user?.id ?? null,
@@ -326,8 +379,24 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			sendError(res, 403, "请先创建或加入一个组织后再创建事项");
 			return true;
 		}
+		const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
+		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
+		const namesHuman =
+			requestedMode === "conversation" &&
+			prompt.includes("@") &&
+			resolveDiscussionMentionTargets(
+				prompt,
+				humanMentionCandidates(ctx, {
+					orgId,
+					visibility,
+					collaboratorIds: requestedCollaboratorIds,
+					createdByUserId: actor.user?.id,
+				}),
+			).length > 0;
 		const mode =
-			requestedMode === "conversation" ? conversationModeForActor(ctx, actor, orgId, prompt) : requestedMode;
+			requestedMode === "conversation"
+				? conversationModeForActor(ctx, actor, orgId, prompt, namesHuman)
+				: requestedMode;
 		if (mode === "dispatch") {
 			if (!canDispatchAiInOrg(store, actor, orgId)) {
 				sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
@@ -372,14 +441,12 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			return true;
 		}
 		const discussionAiEnabled = body.discussionAiEnabled === true;
-		const requestedCollaboratorIds = parseCollaboratorIds(body.collaboratorIds, store) ?? [];
 		const initialCollaboratorIds = [...requestedCollaboratorIds];
 		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
 			if (!initialCollaboratorIds.includes(actor.collaborator.id)) {
 				initialCollaboratorIds.push(actor.collaborator.id);
 			}
 		}
-		const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, [
 				...(aiMemberIds ?? []),
@@ -456,15 +523,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			const discussion =
 				mode === "ai_request"
 					? {}
-					: startAiForMessage(
-							ctx,
-							actor,
-							refreshedMatter,
-							message,
-							images,
-							files,
-							mode === "discussion" ? preferredMemberId : undefined,
-						);
+					: await startAiForMessage(ctx, actor, refreshedMatter, message, images, files, preferredMemberId);
 			sendJson(res, 201, { matter: refreshedMatter, message, mode, assignedMember: leadMember, ...discussion });
 			return true;
 		}
@@ -479,7 +538,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				preferredMemberId: leadMember.id,
 				workspaceId,
 				orgId: matter.orgId,
-				observerMemberIds: matter.observerMemberIds,
 				deliverableTitle,
 				deliverableType,
 				startedByUserId: actor.user?.id ?? null,
@@ -695,20 +753,19 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const mode =
 			matterMsgMatch[2] || body.mode === "conversation"
-				? conversationModeForActor(ctx, actor, matter.orgId, prompt)
+				? conversationModeForActor(
+						ctx,
+						actor,
+						matter.orgId,
+						prompt,
+						conversationRecipients(ctx, actor, matter, prompt).humanOnly,
+					)
 				: body.mode === "discussion" || body.mode === "ai_request"
 					? body.mode
 					: "dispatch";
-		if (mode === "dispatch") {
-			if (!canDispatchAiInOrg(store, actor, matter.orgId)) {
-				sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
-				return true;
-			}
-			if (orchestrator.isMatterRunning(matterId)) {
-				sendError(res, 409, "Matter already has an active turn");
-				return true;
-			}
-			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
+		if (mode === "dispatch" && !canDispatchAiInOrg(store, actor, matter.orgId)) {
+			sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
+			return true;
 		}
 		const parsedImages = parseIncomingImages(body.images);
 		const parsedFiles = parseIncomingFiles(body.files);
@@ -740,6 +797,14 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, observerMemberIds)) {
 			return true;
+		}
+		if (mode === "dispatch") {
+			await settleMatterObserverPass(ctx, matterId);
+			if (orchestrator.isMatterRunning(matterId) || ctx.activeRuns.has(matterId)) {
+				sendError(res, 409, "Matter already has an active turn");
+				return true;
+			}
+			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
@@ -774,7 +839,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			const discussion =
 				mode === "ai_request"
 					? null
-					: startAiForMessage(
+					: await startAiForMessage(
 							ctx,
 							actor,
 							refreshedMatter,

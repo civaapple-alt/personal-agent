@@ -120,11 +120,10 @@ interface ChatStageProps {
 	matterConsultMemberIds?: string[] | null;
 	observerMemberIds: string[];
 	observersEnabled: boolean;
-	discussionAiEnabled?: boolean;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateMatterConsultMembers?: (consultMemberIds: string[] | null) => void;
-	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
+	onToggleObserversEnabled?: (enabled: boolean) => void;
 	onUpdateMatterObservers: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
@@ -195,11 +194,10 @@ export function ChatStage({
 	matterConsultMemberIds = null,
 	observerMemberIds,
 	observersEnabled,
-	discussionAiEnabled = false,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateMatterConsultMembers,
-	onToggleDiscussionAiEnabled,
+	onToggleObserversEnabled,
 	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
 	onApproveAiRequest,
@@ -546,7 +544,7 @@ export function ChatStage({
 						nonLeadGroupAiMembers={nonLeadGroupAiMembers}
 						removedAiMembers={removedAiMembers}
 						leadAi={leadAi}
-						discussionAiEnabled={discussionAiEnabled}
+						observersEnabled={observersEnabled}
 						observerAis={observerAis}
 						matterAiMemberIds={matterAiMemberIds}
 						matterConsultMemberIds={matterConsultMemberIds}
@@ -558,7 +556,7 @@ export function ChatStage({
 						onChangeLeadMember={onChangeLeadMember}
 						onUpdateMatterAiMembers={onUpdateMatterAiMembers}
 						onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
-						onToggleDiscussionAiEnabled={onToggleDiscussionAiEnabled}
+						onToggleObserversEnabled={onToggleObserversEnabled}
 						onUpdateMatterObservers={onUpdateMatterObservers}
 						onUpdateMatterCollaborators={onUpdateMatterCollaborators}
 						onConsultArchitect={onConsultArchitect}
@@ -703,7 +701,7 @@ export function ChatStage({
 						<MatterInitiationPanel
 							{...initiation}
 							isOwner={isOwner}
-							discussionAiEnabled={discussionAiEnabled}
+							observersEnabled={observersEnabled}
 							hasWorkspace={Boolean(selectedWorkspaceId)}
 							hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
 							members={scopedMembers}
@@ -719,9 +717,26 @@ export function ChatStage({
 				}
 				composerDockRef={composerDockRef}
 				isOwner={isOwner}
-				mentionMembers={filterBusinessMembers(inGroupAiMembers, templateByRoleId)}
+				mentionMembers={[
+					...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(({ id, displayName, roleTitle }) => ({
+						id,
+						displayName,
+						roleTitle,
+						kind: "ai" as const,
+					})),
+					...allActiveHumans
+						.filter(
+							(person) =>
+								person.id !== currentUser?.id &&
+								(person.id === matterDetail?.matter.createdByUserId ||
+									assignedCollabIds.includes(person.id) ||
+									(person.id === ownerCollab?.id &&
+										(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
+						)
+						.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
+				]}
 				leadMemberId={leadAi?.id ?? null}
-				observerMemberIds={observerMemberIds}
+				observerMemberIds={observerAis.map(({ id }) => id)}
 				allowUnboundOrg={isSuperAdmin || organizations.length === 0}
 				isArchitectMode={isArchitectMode}
 				isTurnRunning={isTurnRunning}

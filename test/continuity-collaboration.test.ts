@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
 import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
 import type { DecisionClassifier } from "../src/orchestrator/system-one.ts";
@@ -374,7 +375,9 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	const direct = "跑一下登录回归并记录结果";
 	const impersonation = "不要执行，只讨论「删除登录模块」";
 	const softQuestion = "我想看一下 现在「待你决定」的使用方式";
-	const f = await fixture(t, async (worker, prompt) => {
+	const observerStarted = Promise.withResolvers<void>();
+	let observerInterrupted = false;
+	const f = await fixture(t, async (worker, prompt, options) => {
 		if (worker.options.env?.PA_DECISION_NAME) {
 			assert.equal(worker.options.noSession, true);
 			assert.equal(worker.options.args?.at(-1), "");
@@ -385,7 +388,27 @@ test("one conversation entry point saves chat, routes questions and work, and co
 			if (latest.startsWith("和团队同步一下")) return '{"intent":"silent"}';
 			return '{"intent":"reply"}';
 		}
+		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("## Observer participation")) {
+			if (prompt.includes("暂留旁听演示")) {
+				observerStarted.resolve();
+				try {
+					await delay(3_000, undefined, { signal: options.signal });
+				} catch (error) {
+					observerInterrupted = options.signal?.aborted === true;
+					throw error;
+				}
+			}
+			return prompt.includes("补充配色") ? "色板要检查文字和背景对比度。" : "[SILENT]";
+		}
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager" && prompt.endsWith("请教 QA 的验收意见")) {
+			await worker.call("delegate_to_member", { memberId: "qa-manager", task: "核对验收口径" });
+		}
 		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
+	});
+	const colleague = f.store.upsertCollaborator({
+		name: "张宁",
+		roleTitle: "设计同事",
+		permissionRole: "collaborator",
 	});
 	const { server } = createPersonalAgentServer({
 		store: f.store,
@@ -402,9 +425,9 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	});
 	const address = server.address();
 	assert.ok(address && typeof address !== "string");
-	const post = async (path: string, body: object) => {
+	const post = async (path: string, body: object, method = "POST") => {
 		const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
-			method: "POST",
+			method,
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(body),
 		});
@@ -417,14 +440,20 @@ test("one conversation entry point saves chat, routes questions and work, and co
 		prompt: "和团队同步一下，登录流程已经整理好了。",
 		preferredMemberId: "engineering-manager",
 		aiMemberIds: ["engineering-manager", "qa-manager", "product-manager"],
+		consultMemberIds: ["qa-manager"],
+		collaboratorIds: [colleague.id],
+		observersEnabled: false,
 		observerMemberIds: ["product-manager"],
 		discussionAiEnabled: false,
 		workspaceId: f.workspace.id,
 	});
 	assert.equal(first.aiDiscussionTriggered, true);
 	while (f.orchestrator.isMatterRunning(first.matter.id)) await new Promise((wait) => setTimeout(wait, 10));
-	assert.equal(f.workers.length, 1);
-	assert.equal(f.store.listMessages(first.matter.id, "user").length, 1);
+	assert.equal(f.workers.length, 2);
+	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.senderId, "engineering-manager");
+	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.metadata?.matterLeadReply, true);
+	assert.equal(first.matter.observersEnabled, false);
+	assert.deepEqual(first.matter.observerMemberIds, ["product-manager"]);
 	f.workers.length = 0;
 	const messages = `/api/matters/${first.matter.id}/messages`;
 	const send = (prompt: string) => post(`${messages}/conversation`, { prompt });
@@ -442,11 +471,14 @@ test("one conversation entry point saves chat, routes questions and work, and co
 
 	const question = await send("@QA Manager 这条验收标准清楚吗？");
 	assert.equal(question.aiDiscussionTriggered, true);
-	assert.equal((await reply(question.message)).senderId, "qa-manager");
+	const directedReply = await reply(question.message);
+	assert.equal(directedReply.senderId, "qa-manager");
+	assert.equal(directedReply.metadata?.matterLeadReply, undefined);
 	assert.ok(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS);
 	assert.doesNotMatch(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
 	assert.equal(f.workers.length, 2);
 
+	await post(`/api/matters/${first.matter.id}`, { observersEnabled: true }, "PATCH");
 	const execute = await send(`@QA Manager ${direct}`);
 	assert.equal((await reply(execute.message)).senderId, "qa-manager");
 	assert.equal(f.store.getMessage(execute.message.id)?.metadata?.mode, "dispatch");
@@ -454,6 +486,7 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	assert.equal(f.workers[4]?.options.env?.PA_MEMBER_ID, "product-manager");
 	assert.match(f.workers[4]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Observer participation/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+	await post(`/api/matters/${first.matter.id}`, { observersEnabled: false }, "PATCH");
 
 	const uncertain = await send(`@QA Manager ${incomplete}`);
 	const decision = await reply(uncertain.message);
@@ -484,6 +517,86 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	assert.equal((await reply(implicitQuestion.message)).senderId, "engineering-manager");
 	assert.equal(f.workers.length, 11);
 	assert.doesNotMatch(f.workers[10]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+
+	const human = await send("这个配色想请 @张宁 看一下");
+	assert.equal(human.aiDiscussionTriggered, false);
+	assert.equal(human.message.metadata?.mode, "conversation");
+	assert.equal(f.workers.length, 11);
+	const together = await send("@张宁 和 @QA Manager 一起看看");
+	assert.equal((await reply(together.message)).senderId, "qa-manager");
+	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+
+	const delegate = async (observersEnabled: boolean) => {
+		const updated = await post(`/api/matters/${first.matter.id}`, { observersEnabled }, "PATCH");
+		assert.equal(updated.matter.observersEnabled, observersEnabled);
+		assert.deepEqual(updated.matter.consultMemberIds, ["qa-manager"]);
+		assert.deepEqual(updated.matter.observerMemberIds, ["product-manager"]);
+		const before = f.workers.length;
+		const request = await send("需要补充配色和可读性，请教 QA 的验收意见");
+		const mainReply = await reply(request.message);
+		assert.equal(mainReply.senderId, "engineering-manager");
+		const roles = f.workers
+			.slice(before)
+			.map(({ options }) => options.env?.PA_MEMBER_ID)
+			.filter(Boolean);
+		assert.deepEqual(
+			roles,
+			observersEnabled
+				? ["engineering-manager", "qa-manager", "product-manager"]
+				: ["engineering-manager", "qa-manager"],
+		);
+		const replies = f.store
+			.listMessages(first.matter.id, "user")
+			.filter(
+				(message) =>
+					message.senderType === "member" &&
+					(message.metadata?.sourceUserMessageId === request.message.id ||
+						message.metadata?.inReplyToUserMessageId === request.message.id),
+			);
+		assert.deepEqual(
+			replies.map(({ senderId }) => senderId),
+			observersEnabled ? ["engineering-manager", "product-manager"] : ["engineering-manager"],
+		);
+		assert.equal(Boolean(replies[1]?.metadata?.observerIntervention), observersEnabled);
+	};
+	await delegate(true);
+	const directed = await send("@Product Manager 补充配色意见");
+	assert.equal((await reply(directed.message)).senderId, "product-manager");
+	assert.equal(
+		f.store
+			.listMessages(first.matter.id, "user")
+			.filter(
+				(message) =>
+					message.metadata?.inReplyToUserMessageId === directed.message.id &&
+					message.metadata?.observerIntervention,
+			).length,
+		0,
+	);
+	const beforeHuman = f.workers.length;
+	const humanWithObservers = await send("@张宁 补充配色意见");
+	assert.equal(humanWithObservers.aiDiscussionTriggered, false);
+	assert.equal(f.workers.length, beforeHuman);
+	await delegate(false);
+
+	await post(`/api/matters/${first.matter.id}`, { observersEnabled: true }, "PATCH");
+	const parkedTurn = await send("暂留旁听演示");
+	await Promise.race([
+		observerStarted.promise,
+		delay(3_000, undefined, { ref: false }).then(() => {
+			throw new Error("Observer pass did not start");
+		}),
+	]);
+	assert.equal(f.orchestrator.isMatterRunning(first.matter.id), true);
+	const humanDuringObservation = await send("@张宁 这条只请你看一下");
+	assert.equal(humanDuringObservation.aiDiscussionTriggered, false);
+	assert.equal(observerInterrupted, false);
+	const nextTurn = await send("请继续讨论刚才的配色");
+	assert.equal(nextTurn.aiDiscussionTriggered, true);
+	assert.equal((await reply(nextTurn.message)).senderId, "engineering-manager");
+	const parkedLeadReply = await reply(parkedTurn.message);
+	assert.equal(parkedLeadReply.senderId, "engineering-manager");
+	assert.equal(parkedLeadReply.metadata?.aborted, false);
+	assert.equal(observerInterrupted, true);
 });
 
 test("System One drives saved conversations, workbench help, roster data and lead matching with safe fallback", async (t) => {
@@ -609,6 +722,7 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		workspaceId: f.workspace.id,
 		aiMemberIds: ["product-manager", "qa-manager"],
 		observerMemberIds: ["product-manager"],
+		observersEnabled: false,
 		discussionAiEnabled: false,
 	});
 	assert.equal(created.matter.leadMemberId, "qa-manager");
@@ -652,9 +766,12 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	const work = await send(path, { prompt: activeWork });
 	assert.equal(work.message.metadata?.mode, "dispatch");
 	assert.equal(work.message.metadata?.targetMemberId, "qa-manager");
-	const audit = await send(path, { prompt: review });
+	const scopedQuestion = await send(path, { prompt: review });
+	assert.equal(scopedQuestion.reply?.senderId, "qa-manager");
+	assert.equal(scopedQuestion.matter.leadMemberId, "qa-manager");
+	const audit = await send("/api/matters/conversation", { prompt: review, workspaceId: f.workspace.id });
 	assert.equal(audit.reply?.senderId, "role-architect");
-	assert.equal(audit.matter.leadMemberId, "qa-manager");
+	assert.equal(audit.matter.leadMemberId, null);
 	const proposal = audit.reply?.metadata?.roleProposals as {
 		healthFindings?: unknown[];
 		recommendedFormation?: unknown;

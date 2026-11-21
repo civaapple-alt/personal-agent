@@ -286,9 +286,11 @@ export function MessageFeed({
 								(typeof msg.metadata?.workbenchHelpTopic === "string" ||
 									msg.metadata?.humanDecisionHelp === true);
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
+							const isLeadReply = msg.senderType === "member" && msg.metadata?.matterLeadReply === true;
 							const isDiscussionReply =
 								!isUser &&
 								!isSystem &&
+								!isObserverIntervention &&
 								msg.metadata?.discussionTurn === true &&
 								decision?.kind !== "execution_confirmation";
 							const msgMode = isUser && typeof msg.metadata?.mode === "string" ? msg.metadata.mode : "dispatch";
@@ -382,7 +384,10 @@ export function MessageFeed({
 															: memberName(msg.senderId)}{" "}
 												· {formatClockTime(msg.createdAt)}
 											</span>
-											{isDiscussionReply && <span className="discussion-ai-badge">讨论参与</span>}
+											{isLeadReply && <span className="discussion-ai-badge">主责</span>}
+											{!isLeadReply && isDiscussionReply && (
+												<span className="discussion-ai-badge">讨论参与</span>
+											)}
 											{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 										</div>
 									)}

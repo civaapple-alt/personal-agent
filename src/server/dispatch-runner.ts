@@ -15,6 +15,7 @@ import type { RequestActor } from "./auth.ts";
 import { HttpRequestError } from "./http.ts";
 
 export interface ActiveRunState {
+	settled: Promise<void>;
 	progress: DispatchProgressEvent;
 	startedAt: number;
 	accumulatedDelta: string;
@@ -27,6 +28,7 @@ export interface BackgroundDispatchInput {
 	interactionMode?: "dispatch" | "discussion" | "conversation";
 	keepMatterLead?: boolean;
 	existingUserMessageId?: string;
+	conversationMentionMemberIds?: string[];
 	decisionResponse?: DecisionResponse;
 	title?: string;
 	prompt: string;
@@ -82,7 +84,9 @@ export function createDispatchRunner(deps: {
 						throw new HttpRequestError(403, "当前权限不允许继续处理这条 AI 消息");
 				}
 			: undefined;
+		const completion = Promise.withResolvers<void>();
 		const activeEntry: ActiveRunState = {
+			settled: completion.promise,
 			progress: {
 				stage: "starting",
 				sourceUserMessageId: input.existingUserMessageId,
@@ -102,6 +106,7 @@ export function createDispatchRunner(deps: {
 				interactionMode: input.interactionMode,
 				keepMatterLead: input.keepMatterLead,
 				existingUserMessageId: input.existingUserMessageId,
+				conversationMentionMemberIds: input.conversationMentionMemberIds,
 				validateConversationAccess,
 				decisionResponse: input.decisionResponse,
 				title: input.title,
@@ -217,7 +222,8 @@ export function createDispatchRunner(deps: {
 					error: message,
 					...(progressSnapshot ? { progressSnapshot } : {}),
 				});
-			});
+			})
+			.finally(() => completion.resolve());
 	};
 
 	return { activeRuns, runDispatchInBackground };
