@@ -190,7 +190,8 @@ export interface DispatchMatterInput {
 	matterId?: string;
 	title?: string;
 	prompt: string;
-	interactionMode?: "dispatch" | "discussion";
+	interactionMode?: "dispatch" | "discussion" | "conversation";
+	keepMatterLead?: boolean;
 	existingUserMessageId?: string;
 	decisionResponse?: DecisionResponse;
 	images?: PromptImageAttachment[];
@@ -307,6 +308,8 @@ export interface MatterRun {
 	effects: ExecutionEffects;
 	userMessageId: string;
 	startedByUserId?: string | null;
+	conversationDiscussion?: boolean;
+	keepMatterLead?: boolean;
 	inheritLocalPiResources?: boolean;
 	startedAt: number;
 	lastProgress?: DispatchProgressEvent;

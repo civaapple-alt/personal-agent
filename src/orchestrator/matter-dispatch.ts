@@ -7,9 +7,11 @@ import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
+import type { ConversationIntent } from "./conversation-intent.ts";
 import { validateDelivery } from "./execution-context.ts";
 import type { Clarification, HumanDecision } from "./human-decision.ts";
 import { draftDigest } from "./independent-verification.ts";
+import { messageMatchesContext } from "./matter-context.ts";
 import { buildArchitectMessageProposals } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { resolveDiscussionMentionTargets } from "./prompts.ts";
@@ -45,6 +47,14 @@ interface MatterDispatchDeps {
 		options: { actorUserId: string | null },
 	) => TeamMember;
 	executeWithWorker: (input: ExecuteWorkerInput) => Promise<PromptRunResult>;
+	decideConversationIntent: (input: {
+		matterId: string;
+		workspace: ReturnType<PersonalAgentStore["getWorkspace"]>;
+		message: MatterMessage;
+		memberId: string;
+		explicitRecipient: boolean;
+		signal: AbortSignal;
+	}) => Promise<ConversationIntent>;
 }
 
 /** Owns a single turn from acquiring the matter lease through settlement and cleanup. */
@@ -52,7 +62,8 @@ export async function dispatchMatterTurn(
 	deps: MatterDispatchDeps,
 	input: DispatchMatterInput,
 ): Promise<DispatchMatterResult> {
-	const isDiscussionTurn = input.interactionMode === "discussion";
+	const isConversation = input.interactionMode === "conversation";
+	let isDiscussionTurn = input.interactionMode === "discussion" || isConversation;
 	const existing = input.matterId ? deps.requireMatter(input.matterId) : null;
 	if (existing && deps.isMatterRunning(existing.id)) throw new Error("Matter already has an active turn");
 	const workspaceId = input.workspaceId ?? existing?.workspaceId;
@@ -68,12 +79,26 @@ export async function dispatchMatterTurn(
 			existingUserMsg.matterId !== existing?.id ||
 			existingUserMsg.channel !== "user" ||
 			existingUserMsg.senderType !== "user" ||
-			existingUserMsg.metadata?.mode !== "discussion")
+			existingUserMsg.metadata?.mode !== (isConversation ? "conversation" : "discussion") ||
+			(isConversation &&
+				(existingUserMsg.content !== input.prompt ||
+					!messageMatchesContext(existingUserMsg, {
+						orgId: effectiveOrgId,
+						workspaceId: workspace?.id ?? null,
+						repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
+					}))))
 	) {
 		throw new Error("Expected an existing discussion message in the current matter");
 	}
 	const existingDiscussionRoster =
-		isDiscussionTurn && existing ? deps.resolveMatterAiMembers(existing, effectiveUserId) : null;
+		isDiscussionTurn && existing
+			? deps
+					.resolveMatterAiMembers(existing, effectiveUserId)
+					.filter(
+						(member) =>
+							!isConversation || member.roleScope !== "personal" || member.ownerUserId === effectiveUserId,
+					)
+			: null;
 	const existingLead = existing?.leadMemberId ?? undefined;
 	const preferredMemberId =
 		input.preferredMemberId ??
@@ -172,6 +197,8 @@ export async function dispatchMatterTurn(
 		effects: emptyEffects(),
 		userMessageId: "",
 		startedByUserId: effectiveUserId,
+		conversationDiscussion: Boolean(input.keepMatterLead && isDiscussionTurn),
+		keepMatterLead: isConversation || input.keepMatterLead,
 		inheritLocalPiResources: input.inheritLocalPiResources,
 		startedAt,
 		timeoutMs: turnDeadlineMs,
@@ -229,27 +256,78 @@ export async function dispatchMatterTurn(
 					turnDeadlineMs,
 				)
 			: undefined;
-	const assignedIsArchitect = deps.isArchitectMember(assignedMember);
-	const isMidMatterArchitectConsult = Boolean(
-		existing &&
-			assignedIsArchitect &&
-			existing.leadMemberId &&
-			!deps.isArchitectMember(deps.store.getMember(existing.leadMemberId)),
-	);
+	let assignedIsArchitect = deps.isArchitectMember(assignedMember);
 	const discussionMentionPool =
 		isDiscussionTurn && !assignedIsArchitect
 			? (existingDiscussionRoster ?? deps.resolveMatterAiMembers(matter, effectiveUserId)).filter(
-					(m) => !deps.isArchitectMember(m) && (matter.aiMemberIds === null || matter.aiMemberIds.includes(m.id)),
+					(m) =>
+						!deps.isArchitectMember(m) &&
+						(matter.aiMemberIds === null || matter.aiMemberIds.includes(m.id)) &&
+						(!isConversation || m.roleScope !== "personal" || m.ownerUserId === effectiveUserId),
 				)
 			: [];
 	const mentionedTargets =
 		isDiscussionTurn && !assignedIsArchitect
 			? resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
 			: [];
-	const activeSpeaker = mentionedTargets.length > 0 ? mentionedTargets[0]! : assignedMember;
+	let activeSpeaker = mentionedTargets[0] ?? assignedMember;
 	speakerMemberId = activeSpeaker.id;
 	try {
-		if (!isDiscussionTurn && !isMidMatterArchitectConsult && matter.leadMemberId !== assignedMember.id) {
+		let intent: ConversationIntent = "reply";
+		if (isConversation) {
+			if (!existingUserMsg) throw new Error("Conversation routing requires a saved human message");
+			run.userMessageId = existingUserMsg.id;
+			emitDispatchProgress({ stage: "starting", label: "正在理解消息…" });
+			intent = await deps.decideConversationIntent({
+				matterId: matter.id,
+				workspace,
+				message: existingUserMsg,
+				memberId: activeSpeaker.id,
+				explicitRecipient: mentionedTargets.length > 0,
+				signal: run.controller.signal,
+			});
+			run.controller.signal.throwIfAborted();
+			if (intent === "silent") {
+				return {
+					matter,
+					assignedMember: activeSpeaker,
+					workspace,
+					replyText: "",
+					deliverable: null,
+					runResult: { ...emptyAbortedResult(), aborted: false },
+				};
+			}
+			isDiscussionTurn = intent !== "work";
+			run.conversationDiscussion = isDiscussionTurn;
+			if (!isDiscussionTurn && mentionedTargets.length === 0 && isExplicitRoleSetupRequest(input.prompt)) {
+				activeSpeaker = deps.routeMemberForRequest(input.prompt, ROLE_ARCHITECT_MEMBER_ID, null, effectiveOrgId, {
+					actorUserId: effectiveUserId,
+				});
+			}
+			assignedIsArchitect = deps.isArchitectMember(activeSpeaker);
+			speakerMemberId = activeSpeaker.id;
+			if (!isDiscussionTurn) {
+				deps.store.updateMessageMetadata(existingUserMsg.id, {
+					...existingUserMsg.metadata,
+					mode: "dispatch",
+					conversationRouted: true,
+					targetMemberId: activeSpeaker.id,
+				});
+			}
+		}
+		const isMidMatterArchitectConsult = Boolean(
+			existing &&
+				assignedIsArchitect &&
+				existing.leadMemberId &&
+				!deps.isArchitectMember(deps.store.getMember(existing.leadMemberId)),
+		);
+		if (
+			!isDiscussionTurn &&
+			!isConversation &&
+			!input.keepMatterLead &&
+			!isMidMatterArchitectConsult &&
+			matter.leadMemberId !== assignedMember.id
+		) {
 			matter = deps.store.updateMatterLead(matter.id, assignedMember.id);
 		}
 		if (!isDiscussionTurn) deps.store.updateMatterWorkspace(matter.id, workspace?.id ?? null);
@@ -294,7 +372,15 @@ export async function dispatchMatterTurn(
 				},
 			});
 		run.userMessageId = message.id;
-		emitDispatchProgress({ stage: "starting", label: `正在接续${activeSpeaker.displayName}的工作` });
+		emitDispatchProgress({
+			stage: "starting",
+			label:
+				intent === "confirm"
+					? "正在准备确认项"
+					: isConversation
+						? `${activeSpeaker.displayName}${isDiscussionTurn ? "正在回应" : "正在准备执行"}`
+						: `正在接续${activeSpeaker.displayName}的工作`,
+		});
 		const formattedFilesBlock =
 			files.length > 0
 				? [
@@ -312,22 +398,33 @@ export async function dispatchMatterTurn(
 		const effectiveTaskPrompt = formattedFilesBlock ? `${basePromptText}\n\n${formattedFilesBlock}` : basePromptText;
 		let result: PromptRunResult;
 		try {
-			result = await deps.executeWithWorker({
-				matterId: matter.id,
-				member: activeSpeaker,
-				workspace,
-				taskPrompt: effectiveTaskPrompt,
-				images: rpcImages.length > 0 ? rpcImages : undefined,
-				isInternalDelegation: false,
-				discussionMode: isDiscussionTurn,
-				excludeMessageIds: existingUserMsg ? [existingUserMsg.id] : undefined,
-				run,
-				chain: [activeSpeaker.id],
-				signal: run.controller.signal,
-				effectsTarget: run.effects,
-				onTextDelta: assignedIsArchitect ? undefined : input.onTextDelta,
-				onProgress: emitDispatchProgress,
-			});
+			result =
+				intent === "confirm"
+					? {
+							...emptyAbortedResult(),
+							aborted: false,
+							disposition: "started",
+							clarification: {
+								question: "要按这条消息开始执行吗？",
+								options: ["开始执行", "先讨论"],
+							},
+						}
+					: await deps.executeWithWorker({
+							matterId: matter.id,
+							member: activeSpeaker,
+							workspace,
+							taskPrompt: effectiveTaskPrompt,
+							images: rpcImages.length > 0 ? rpcImages : undefined,
+							isInternalDelegation: false,
+							discussionMode: isDiscussionTurn,
+							excludeMessageIds: existingUserMsg ? [existingUserMsg.id] : undefined,
+							run,
+							chain: [activeSpeaker.id],
+							signal: run.controller.signal,
+							effectsTarget: run.effects,
+							onTextDelta: assignedIsArchitect ? undefined : input.onTextDelta,
+							onProgress: emitDispatchProgress,
+						});
 		} catch (error) {
 			if (!run.cancelled) throw error;
 			result = emptyAbortedResult();
@@ -336,7 +433,7 @@ export async function dispatchMatterTurn(
 		if (!aborted) run.controller.signal.throwIfAborted();
 		const rawReply = result.assistantText.trim();
 		const architectParsed =
-			!aborted && assignedIsArchitect
+			!aborted && assignedIsArchitect && !isDiscussionTurn
 				? await buildArchitectMessageProposals(rawReply, deps.store, deps.templatesById, {
 						promptText: input.prompt,
 						isMidMatterConsult: isMidMatterArchitectConsult,
@@ -350,17 +447,21 @@ export async function dispatchMatterTurn(
 		const requests: Clarification[] =
 			architectParsed?.roleProposals?.followUpQuestions?.map((question) => ({ question })) ??
 			(result.clarification ? [result.clarification] : []);
+		const decisionOwnerId = isConversation || input.keepMatterLead ? effectiveUserId : matter.createdByUserId;
 		const decision: HumanDecision | undefined =
-			!aborted && !isDiscussionTurn && requests.length > 0
+			!aborted && (!isDiscussionTurn || intent === "confirm") && requests.length > 0
 				? {
-						kind: assignedIsArchitect ? "role_clarification" : "planning",
+						kind:
+							intent === "confirm"
+								? "execution_confirmation"
+								: assignedIsArchitect
+									? "role_clarification"
+									: "planning",
 						status: "pending",
 						requests: requests.map(({ question, context, options }) => ({ question, context, options })),
 						source: result.clarification?.source,
-						assignedUserId: matter.createdByUserId ?? null,
-						assignedName: matter.createdByUserId
-							? deps.store.getUserById(matter.createdByUserId)?.displayName
-							: undefined,
+						assignedUserId: decisionOwnerId ?? null,
+						assignedName: decisionOwnerId ? deps.store.getUserById(decisionOwnerId)?.displayName : undefined,
 						revision: 1,
 					}
 				: undefined;
@@ -456,7 +557,8 @@ export async function dispatchMatterTurn(
 				disposition: result.disposition,
 				aborted,
 				...(isDiscussionTurn ? { discussionTurn: true } : {}),
-				...(mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
+				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
+				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
 				toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
 				deliverableIds: deliveries.map((delivery) => delivery.id),
 				sourceUserMessageId: run.userMessageId,
@@ -485,7 +587,7 @@ export async function dispatchMatterTurn(
 				);
 		const extraMentionMessages: MatterMessage[] = [];
 		let extraReplyAborted = false;
-		if (isDiscussionTurn && !aborted && !run.cancelled && mentionedTargets.length > 1) {
+		if (isDiscussionTurn && !decision && !aborted && !run.cancelled && mentionedTargets.length > 1) {
 			for (const extraSpeaker of mentionedTargets.slice(1)) {
 				if (run.cancelled || run.controller.signal.aborted) break;
 				speakerMemberId = extraSpeaker.id;
@@ -539,7 +641,11 @@ export async function dispatchMatterTurn(
 			run.controller.signal.throwIfAborted();
 		}
 		const observerCandidates =
-			!aborted && !run.cancelled && !assignedIsArchitect && !(isDiscussionTurn && mentionedTargets.length > 0)
+			!aborted &&
+			!run.cancelled &&
+			!assignedIsArchitect &&
+			intent !== "confirm" &&
+			!(isDiscussionTurn && (run.conversationDiscussion || mentionedTargets.length > 0))
 				? deps
 						.resolveMatterAiMembers(updatedMatter, effectiveUserId)
 						.filter(

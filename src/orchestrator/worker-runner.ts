@@ -98,6 +98,7 @@ export async function executeWithWorkerPass(
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const isDiscussionMode = Boolean(input.discussionMode);
+	const isConversationReply = Boolean(input.run.conversationDiscussion);
 	const isVerifier = sessionMode === "verifier";
 	const canPublish = sessionMode === "lead" && !isDiscussionMode;
 	const matter = deps.store.getMatter(input.matterId);
@@ -138,7 +139,13 @@ export async function executeWithWorkerPass(
 		"v2",
 		input.workspace?.id ?? null,
 		cwd,
-		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
+		isConversationReply
+			? `conversation-${sessionMode}`
+			: isDiscussionMode
+				? `discussion-${sessionMode}`
+				: sessionMode === "lead"
+					? "user"
+					: sessionMode,
 		activeOrgId,
 		...(inheritsLocalResources ? ["local-pi"] : []),
 		// These snapshots persist in Pi history. Reuse them only for the same actor.
@@ -175,12 +182,14 @@ export async function executeWithWorkerPass(
 		const baseTools = isArchitect
 			? []
 			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter((tool) => tool !== "mcp");
-		const requestedTools = isVerifier
-			? baseTools.filter((tool) => tool === "read" || tool === "bash")
-			: sessionMode === "observer"
-				? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
-				: baseTools;
-		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
+		const requestedTools = isConversationReply
+			? baseTools.filter((tool) => ["read", "grep", "find", "ls"].includes(tool))
+			: isVerifier
+				? baseTools.filter((tool) => tool === "read" || tool === "bash")
+				: sessionMode === "observer"
+					? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
+					: baseTools;
+		const mcpDependencies = isArchitect || isVerifier || isConversationReply ? [] : (template?.mcpDependencies ?? []);
 		const ordinaryTeamTools = isArchitect
 			? []
 			: sessionMode === "observer" || isVerifier
@@ -371,7 +380,8 @@ export async function executeWithWorkerPass(
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", resolveBuiltinExtensionPath("team-extension"));
-		if (!isVerifier) for (const extension of deps.extensions) args.push("--extension", extension);
+		if (!isVerifier && !isConversationReply)
+			for (const extension of deps.extensions) args.push("--extension", extension);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
@@ -394,7 +404,8 @@ export async function executeWithWorkerPass(
 			orgId: activeOrgId,
 		});
 		const matterModel =
-			sessionMode === "lead" && (!(isArchitect || isDiscussionMode) || input.member.id === matter?.leadMemberId)
+			sessionMode === "lead" &&
+			(!(isArchitect || isDiscussionMode || input.run.keepMatterLead) || input.member.id === matter?.leadMemberId)
 				? matter?.modelSelection
 				: null;
 		const configuredModel = resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);
@@ -418,6 +429,7 @@ export async function executeWithWorkerPass(
 			repoGitUser,
 			sessionMode,
 			discussionMode: isDiscussionMode,
+			conversationReply: isConversationReply,
 			leadMemberId: matter?.leadMemberId ?? null,
 			consultMemberIds: matter?.consultMemberIds ?? null,
 			observerMemberIds: matter?.observerMemberIds ?? [],

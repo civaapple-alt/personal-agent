@@ -5,9 +5,11 @@ import {
 	listCompletedHumanDecisions,
 	readHumanDecision,
 } from "../../orchestrator/human-decision.ts";
+import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import { canAccessMatter, canDispatchAiInOrg, canManageOrganization, canParticipateInMatter } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor, toDispatchAuthor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
+import { loadStoredFilesFromRefs, loadStoredImagesFromRefs } from "../uploads.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { checkUserDispatchQuota, hasUserDispatchQuotaAvailable } from "./matter-messages.ts";
 import { canTargetMatterAi, ensureOrgEnabledAiRequest } from "./matter-roster.ts";
@@ -112,9 +114,16 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 			: isDecisionManager);
 	const canResume =
 		canParticipate && (canAnswer || isDecisionManager) && canDispatchAiInOrg(store, actor, matter.orgId);
-	const tryResume = (answer: string, answeredBy: DecisionRespondent, explicit = false) => {
+	const tryResume = async (answer: string, answeredBy: DecisionRespondent, explicit = false) => {
+		const needsExecutionConfirmation = decision.kind === "execution_confirmation";
+		const discussionOnly = needsExecutionConfirmation && answer === "先讨论";
+		const keepMatterLead = Boolean(message.metadata?.conversationRouted);
 		if (
 			!canResume ||
+			(keepMatterLead &&
+				matter.aiMemberIds !== null &&
+				!matter.aiMemberIds.includes(message.senderId) &&
+				message.senderId !== matter.leadMemberId) ||
 			ctx.activeRuns.has(matterId) ||
 			ctx.orchestrator.isMatterRunning(matterId) ||
 			listCompletedHumanDecisions(messages).has(messageId)
@@ -138,10 +147,62 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 			decision.source && assignment?.matterId === matterId && assignment.channel === "internal_collab"
 				? `\n来源委托 #${decision.source.assignmentNumber}（${decision.source.memberId}）。若该委托仍需继续，请以确认结果补齐原任务后交回该协作者。\n原委托：${assignment.content.slice(0, 4000)}`
 				: "";
+		const sourceId = message.metadata?.sourceUserMessageId;
+		const sourceMsg = needsExecutionConfirmation && typeof sourceId === "string" ? store.getMessage(sourceId) : null;
+		if (
+			needsExecutionConfirmation &&
+			(!sourceMsg ||
+				sourceMsg.matterId !== matterId ||
+				sourceMsg.senderType !== "user" ||
+				sourceMsg.metadata?.mode !== "conversation" ||
+				!messageMatchesContext(sourceMsg, {
+					orgId: matter.orgId ?? null,
+					workspaceId: matter.workspaceId,
+					repoPath: resolve(boundWorkspace?.repoPath ?? ctx.orchestrator.getDefaultCwd()),
+				}))
+		)
+			return false;
+		const images = sourceMsg
+			? await loadStoredImagesFromRefs(sourceMsg.metadata?.images, ctx.uploadsDir, ctx.memoryUploads)
+			: [];
+		const files = sourceMsg
+			? await loadStoredFilesFromRefs(sourceMsg.metadata?.files, ctx.uploadsDir, ctx.memoryUploads)
+			: [];
+		const latestMatter = store.getMatter(matterId);
+		const currentActor = actor.user ? { ...actor, user: store.getUserById(actor.user.id) } : actor;
+		if (
+			!latestMatter ||
+			latestMatter.orgId !== matter.orgId ||
+			latestMatter.workspaceId !== matter.workspaceId ||
+			(actor.user && !currentActor.user) ||
+			!canParticipateInMatter(store, currentActor, latestMatter) ||
+			!canDispatchAiInOrg(store, currentActor, latestMatter.orgId) ||
+			!canTargetMatterAi(ctx, currentActor, latestMatter.orgId, message.senderId) ||
+			(keepMatterLead &&
+				latestMatter.aiMemberIds !== null &&
+				!latestMatter.aiMemberIds.includes(message.senderId) &&
+				message.senderId !== latestMatter.leadMemberId)
+		)
+			return false;
+		if (
+			(Array.isArray(sourceMsg?.metadata?.images) && images.length !== sourceMsg.metadata.images.length) ||
+			(Array.isArray(sourceMsg?.metadata?.files) && files.length !== sourceMsg.metadata.files.length) ||
+			ctx.activeRuns.has(matterId) ||
+			ctx.orchestrator.isMatterRunning(matterId) ||
+			!hasUserDispatchQuotaAvailable(ctx, actor)
+		)
+			return false;
+
 		ctx.runDispatchInBackground(
 			{
 				matterId,
-				prompt: `对决定「${questions}」的答复（${answeredBy.name}）：\n${answer}${handoff}`,
+				interactionMode: discussionOnly ? "discussion" : undefined,
+				prompt: sourceMsg
+					? `${discussionOnly ? "用户选择先讨论，请给出建议和可行方案。" : "用户已确认开始执行以下原始请求。"}\n${sourceMsg.content}`
+					: `对决定「${questions}」的答复（${answeredBy.name}）：\n${answer}${handoff}`,
+				images,
+				files,
+				keepMatterLead,
 				preferredMemberId: message.senderId,
 				workspaceId: matter.workspaceId ?? undefined,
 				orgId: matter.orgId,
@@ -163,7 +224,7 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 			sendError(res, 409, "请先提交答案");
 			return true;
 		}
-		const resumed = tryResume(decision.answer, decision.answeredBy, true);
+		const resumed = await tryResume(decision.answer, decision.answeredBy, true);
 		if (resumed !== null) sendJson(res, 200, { message, resumed });
 		return true;
 	}
@@ -172,6 +233,10 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 		return true;
 	}
 	const answer = typeof body.answer === "string" ? body.answer.trim() : "";
+	if (decision.kind === "execution_confirmation" && answer !== "开始执行" && answer !== "先讨论") {
+		sendError(res, 400, "请选择「开始执行」或「先讨论」");
+		return true;
+	}
 	if (!answer || answer.length > 4000) {
 		sendError(res, 400, "请输入 1–4000 字的答案");
 		return true;
@@ -197,7 +262,7 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 		detail: { revision: decision.revision },
 	});
 	publishUpdate(updated);
-	const resumed = tryResume(answer, answeredBy);
+	const resumed = await tryResume(answer, answeredBy);
 	if (resumed !== null) sendJson(res, 200, { message: updated, resumed });
 	return true;
 }

@@ -50,6 +50,7 @@ export function HumanDecisionCard({
 		(active.assignedUserId
 			? accountUser?.id === active.assignedUserId
 			: canManage && (accountUser != null || currentUser?.permissionRole === "owner"));
+	const executionConfirmation = active.kind === "execution_confirmation";
 	const options = active.requests.length === 1 ? (active.requests[0]?.options ?? []) : [];
 	const selectedAnswer = selected === null ? answer.trim() : (options[selected] ?? "");
 
@@ -71,9 +72,7 @@ export function HumanDecisionCard({
 	return (
 		<section className="human-decision-card" aria-labelledby={inputId}>
 			<header>
-				<strong id={inputId}>
-					{active.status === "answered" ? "已答复" : current ? "待人类决定" : "历史澄清"}
-				</strong>
+				<strong id={inputId}>{active.status === "answered" ? "已答复" : current ? "待你决定" : "历史澄清"}</strong>
 				<span>
 					{sourceName ? `${sourceName} 提出 · ` : ""}
 					{requestedBy} 提请
@@ -103,7 +102,11 @@ export function HumanDecisionCard({
 					</p>
 					{current && !completed && (
 						<p className="human-decision-note">
-							{isRunning ? "答案已保存，事项正在运行。" : "答案已保存，可以继续执行。"}
+							{isRunning
+								? "答案已保存，事项正在处理。"
+								: executionConfirmation
+									? "答案已保存，可以继续处理。"
+									: "答案已保存，可以继续执行。"}
 						</p>
 					)}
 					{current && !completed && (canAnswer || canManage) && canDispatch && (
@@ -113,7 +116,7 @@ export function HumanDecisionCard({
 							disabled={submitting || isRunning}
 							onClick={() => void submit({ action: "resume", revision: active.revision })}
 						>
-							继续执行
+							{executionConfirmation && active.answer === "先讨论" ? "继续讨论" : "继续执行"}
 						</button>
 					)}
 				</>
@@ -122,7 +125,22 @@ export function HumanDecisionCard({
 					<p className="human-decision-note">
 						{active.assignedName ? `等待 ${active.assignedName} 答复` : "等待事项管理者答复"}
 					</p>
-					{canAnswer && (
+					{canAnswer && executionConfirmation && (
+						<div className="human-decision-actions">
+							{options.map((option) => (
+								<button
+									key={option}
+									type="button"
+									className={option === "开始执行" ? "btn-pill-dark btn-xs" : "btn-inline"}
+									disabled={submitting}
+									onClick={() => void submit({ action: "answer", revision: active.revision, answer: option })}
+								>
+									{option}
+								</button>
+							))}
+						</div>
+					)}
+					{canAnswer && !executionConfirmation && (
 						<form
 							onSubmit={(event) => {
 								event.preventDefault();

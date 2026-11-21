@@ -19,7 +19,6 @@ interface MatterInitiationPanelProps {
 	draftVisibility?: MatterVisibility;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
-	composerMode: "discussion" | "dispatch";
 	discussionAiEnabled?: boolean;
 	hasWorkspace?: boolean;
 	hasPromptText?: boolean;
@@ -62,7 +61,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		members,
 		templateByRoleId,
 		selectedMemberId,
-		composerMode,
 		discussionAiEnabled = true,
 		hasWorkspace = false,
 		hasPromptText = false,
@@ -108,29 +106,24 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		draftConsultMemberIds === null
 			? allowed.filter((id) => id !== leadId && nonLeadIds.includes(id))
 			: draftConsultMemberIds.filter((id) => id !== leadId && nonLeadIds.includes(id));
-	const isDiscussion = composerMode === "discussion";
 	const isSoloScope = consultIds.length === 0;
 	const hasObservers = observers.length > 0;
 	const consultCount = consultIds.length;
 	const teamSummary =
 		isSoloScope && !hasObservers
-			? "仅一位主责，不委托其他成员，也不开启旁听。"
+			? "由主责独立处理。"
 			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${observers.length ? `，${observers.length} 位成员旁听把关` : "，不自动旁听"}。`;
-	const description = isDiscussion
-		? discussionAiEnabled
-			? `团队讨论已开启 AI 探讨（不自动改码交付）· ${teamSummary}`
-			: "当前为纯人类聊天讨论，不调用 AI 模型（可随时切到上方开启 AI 参与）。"
-		: teamSummary;
 	const applied =
 		assessment &&
 		!assessing &&
-		(isDiscussion
-			? assessment.recommendedMode === "human_first"
+		(assessment.recommendedMode === "human_first"
+			? !discussionAiEnabled
 			: (observers.length > 0 ? "lead_review" : consultIds.length > 0 ? "lead_consult" : "solo") ===
 					assessment.recommendedMode &&
 				selectedMemberId === assessment.recommendedLeadId &&
 				sameIds(allowed, assessment.recommendedAiMemberIds) &&
 				sameIds(observers, assessment.recommendedObserverIds));
+
 	const setRoleFlag = (memberId: string, kind: "consult" | "observer", enabled: boolean) => {
 		if (memberId === leadId) return;
 		if (kind === "consult" && onToggleDraftMemberConsult) {
@@ -173,15 +166,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			<div className="initiation-current-row">
 				<div className="initiation-current-copy">
 					<strong>
-						{isDiscussion
-							? discussionAiEnabled
-								? `团队聊天讨论 · ${selectedMemberId === "auto" ? "主责自动匹配" : `${lead?.displayName ?? "主联系人"}主谈`}`
-								: "团队聊天讨论 · 纯人类交流"
-							: selectedMemberId === "auto"
-								? "主责自动匹配"
-								: `${lead?.displayName ?? "主联系人"}负责`}
+						{selectedMemberId === "auto" ? "主责自动匹配" : `${lead?.displayName ?? "主联系人"}负责`}
 					</strong>
-					<span>{description}</span>
+					<span>{teamSummary}</span>
 				</div>
 				<button
 					type="button"
@@ -377,7 +364,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						</select>
 					</label>
 					{business.length > 1 && (
-						<fieldset className="initiation-role-rows" aria-label="成员按需请教与旁听把关配置">
+						<fieldset className="initiation-role-rows" aria-label="成员委托与主动检查设置">
 							{business
 								.filter((member) => member.id !== leadId)
 								.map((member) => {
@@ -391,19 +378,19 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 													<input
 														type="checkbox"
 														checked={isConsult}
-														aria-label={`${member.displayName}按需请教`}
+														aria-label={`允许主责委托 ${member.displayName}`}
 														onChange={(e) => setRoleFlag(member.id, "consult", e.target.checked)}
 													/>
-													<span>按需请教</span>
+													<span>允许委托</span>
 												</label>
 												<label className={`role-flag-pill observer ${isObserver ? "active" : ""}`}>
 													<input
 														type="checkbox"
 														checked={isObserver}
-														aria-label={`${member.displayName}旁听把关`}
+														aria-label={`${member.displayName} 在主责回复后检查`}
 														onChange={(e) => setRoleFlag(member.id, "observer", e.target.checked)}
 													/>
-													<span>旁听把关</span>
+													<span>回复后检查</span>
 												</label>
 											</div>
 										</div>

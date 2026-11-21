@@ -398,3 +398,16 @@
 	color: var(--observer-text);
 	font-weight: 600;
 }
+
+.wechat-member-settings {
+	margin: 0;
+	min-width: 0;
+	padding: 0.35rem 0.6rem;
+	border: 1px solid var(--border);
+	border-radius: 0.65rem;
+}
+
+.wechat-member-settings legend {
+	padding-inline: 0.25rem;
+	font-weight: 600;
+}

@@ -328,6 +328,13 @@
 	align-items: center;
 	gap: 0.6rem;
 }
+.human-decision-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem;
+}
+
+
 .human-decision-card p {
 	margin: 0;
 	overflow-wrap: anywhere;

@@ -44,18 +44,13 @@ interface ComposerDockProps {
 	modelControl?: ReactNode;
 	composerDockRef: RefObject<HTMLDivElement | null>;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
-	composerMode: "discussion" | "dispatch";
 	isOwner: boolean;
-	discussionAiEnabled?: boolean;
-	canToggleDiscussionAi: boolean;
-	onToggleDiscussionAiEnabled?: (enabled: boolean) => void;
 	mentionMembers?: TeamMemberDto[];
 	leadMemberId?: string | null;
 	observerMemberIds?: string[];
 	allowUnboundOrg?: boolean;
 	isArchitectMode?: boolean;
 	isTurnRunning: boolean;
-	sendBlockedByTurn: boolean;
 	submitting: boolean;
 	composerText: string;
 	pendingImages: ComposerImageAttachment[];
@@ -68,7 +63,6 @@ interface ComposerDockProps {
 	organizations: OrganizationDto[];
 	orgFilteredWorkspaces: WorkspaceDto[];
 	onCloseRoster: () => void;
-	onComposerModeChange: (mode: "discussion" | "dispatch") => void;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	onNewMatter: () => void;
@@ -89,18 +83,13 @@ export function ComposerDock({
 	modelControl,
 	composerDockRef,
 	composerRef,
-	composerMode,
 	isOwner,
-	discussionAiEnabled = false,
-	canToggleDiscussionAi,
-	onToggleDiscussionAiEnabled,
 	mentionMembers = [],
 	leadMemberId = null,
 	observerMemberIds = [],
 	allowUnboundOrg = true,
 	isArchitectMode = false,
 	isTurnRunning,
-	sendBlockedByTurn,
 	submitting,
 	composerText,
 	pendingImages,
@@ -113,7 +102,6 @@ export function ComposerDock({
 	organizations,
 	orgFilteredWorkspaces,
 	onCloseRoster,
-	onComposerModeChange,
 	onSelectOrganization,
 	onSelectWorkspace,
 	onNewMatter,
@@ -142,8 +130,8 @@ export function ComposerDock({
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
 
-	const canUseAiInDiscussion = composerMode === "discussion" && !isArchitectMode && discussionAiEnabled && isOwner;
-	const showMentionPicker = Boolean(mentionState && canUseAiInDiscussion && mentionMembers.length > 0);
+	const canMention = !isArchitectMode;
+	const showMentionPicker = Boolean(mentionState && canMention && mentionMembers.length > 0);
 	const filteredMentionMembers = showMentionPicker
 		? mentionMembers.filter((member) => {
 				const q = (mentionState?.query ?? "").trim().toLowerCase();
@@ -191,12 +179,12 @@ export function ComposerDock({
 	};
 
 	const syncMentionFromCursor = (text: string, caret: number) => {
-		setMentionState(canUseAiInDiscussion ? findTypedMention(text, caret) : null);
+		setMentionState(canMention ? findTypedMention(text, caret) : null);
 		setMentionIdx(0);
 	};
 
 	const handleMentionInput = (text: string, caret: number) => {
-		const typed = canUseAiInDiscussion ? findTypedMention(text, caret) : null;
+		const typed = canMention ? findTypedMention(text, caret) : null;
 		if (typed || !showMentionPicker || mentionState?.prefix === undefined) {
 			setMentionState(typed);
 		} else {
@@ -252,8 +240,8 @@ export function ComposerDock({
 
 	const isNewMatter = !selectedMatterId;
 	const hasAttachments = pendingImages.length > 0 || pendingFiles.length > 0;
-	const canSend = !sendBlockedByTurn && !submitting && (composerText.trim().length > 0 || hasAttachments);
-	const lineCount = composerText ? composerText.split(/\r\n|\r|\n/).length : 0;
+	const canSend =
+		!(isArchitectMode && isTurnRunning) && !submitting && (composerText.trim().length > 0 || hasAttachments);
 
 	// Auto-size textarea cleanly across default compact state and multi-line editing without shifting toolbar controls.
 	useLayoutEffect(() => {
@@ -372,29 +360,7 @@ export function ComposerDock({
 
 	const uploadLimitReached = pendingImages.length >= MAX_COMPOSER_IMAGES && pendingFiles.length >= MAX_COMPOSER_FILES;
 
-	const placeholder = isArchitectMode
-		? "描述你们的工作流程或角色缺口（Enter 发送，Shift+Enter 换行）…"
-		: composerMode === "discussion"
-			? discussionAiEnabled && isOwner
-				? "在团队聊天讨论中交流想法（已开启 AI 探讨，可 @角色 点名；切到「给 AI 安排事项」再正式派工）…"
-				: "和团队成员同步想法，支持附带文件或截图（纯人类讨论，不触发 AI）…"
-			: !isOwner
-				? "写下希望 AI 协助处理的内容，提交后由团队所有者确认派发…"
-				: isTurnRunning
-					? "当前 AI 正在执行；可先停止，或切到「团队聊天讨论」继续沟通…"
-					: isNewMatter
-						? "向你的 AI 团队布置任务，支持上传/拖拽文件与图片、自动折叠大段粘贴文本…"
-						: "继续安排工作、提出修改，或拖入文件与截图…";
-
-	const sendLabel = submitting
-		? "发送中…"
-		: isArchitectMode
-			? "发送"
-			: composerMode === "discussion"
-				? "发讨论"
-				: isOwner
-					? "派发 AI"
-					: "提请 AI";
+	const placeholder = isArchitectMode ? "描述你们的工作流程或角色缺口…" : "说说想法、安排工作，或 @ 角色…";
 
 	return (
 		<div className="composer-dock">
@@ -431,15 +397,6 @@ export function ComposerDock({
 								<ElapsedTimer className="composer-run-elapsed" startedAt={progressStartedAt} />
 							</div>
 							<div className="composer-run-actions">
-								{isOwner && sendBlockedByTurn && (
-									<button
-										type="button"
-										className="btn-inline"
-										onClick={() => onComposerModeChange("discussion")}
-									>
-										切到讨论
-									</button>
-								)}
 								{isOwner && (
 									<button
 										type="button"
@@ -454,55 +411,11 @@ export function ComposerDock({
 					)}
 
 					<div className="composer-top-bar">
-						<div className="composer-top-left">
-							{isArchitectMode ? (
+						{isArchitectMode && (
+							<div className="composer-top-left">
 								<span className="composer-architect-badge">角色架构师 · 只读建队规划</span>
-							) : (
-								<div className="composer-mode-wrap">
-									<div className="composer-mode-tabs" role="tablist" aria-label="发言模式切换">
-										<button
-											type="button"
-											role="tab"
-											aria-selected={composerMode === "discussion"}
-											className={`composer-mode-tab discussion ${composerMode === "discussion" ? "active" : ""}`}
-											onClick={() => onComposerModeChange("discussion")}
-										>
-											团队聊天讨论
-										</button>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={composerMode === "dispatch"}
-											className={`composer-mode-tab dispatch ${composerMode === "dispatch" ? "active" : ""}`}
-											onClick={() => onComposerModeChange("dispatch")}
-										>
-											{isOwner ? "给 AI 安排事项" : "提请 AI 处理"}
-										</button>
-									</div>
-									{composerMode === "discussion" && onToggleDiscussionAiEnabled && (
-										<button
-											type="button"
-											className={`composer-discussion-ai-pill ${discussionAiEnabled && isOwner ? "active" : ""}`}
-											aria-pressed={discussionAiEnabled && isOwner}
-											disabled={!canToggleDiscussionAi}
-											title={
-												!isOwner
-													? "当前账号仅支持纯人类讨论或提交 AI 提请，暂不直接触发 AI 讨论"
-													: !canToggleDiscussionAi
-														? "由事项发起人或管理员设置"
-														: discussionAiEnabled
-															? "点击关闭：切为纯人类讨论群，不调用 AI"
-															: "点击开启：发讨论时邀请 AI 成员查证和交流（可 @角色）"
-											}
-											onClick={() => onToggleDiscussionAiEnabled(!discussionAiEnabled)}
-										>
-											<span className="discussion-ai-dot" aria-hidden="true" />
-											{discussionAiEnabled && isOwner ? "AI 参与讨论：开" : "AI 参与讨论：关"}
-										</button>
-									)}
-								</div>
-							)}
-						</div>
+							</div>
+						)}
 
 						<div className="composer-top-right">
 							{!isArchitectMode && (
@@ -665,7 +578,7 @@ export function ComposerDock({
 											member.id === leadMemberId
 												? "主责"
 												: observerMemberIds.includes(member.id)
-													? "旁听"
+													? "回复后检查"
 													: "协作";
 										return (
 											<button
@@ -736,50 +649,34 @@ export function ComposerDock({
 								>
 									+
 								</button>
-								{canUseAiInDiscussion && mentionMembers.length > 0 && (
+								{canMention && mentionMembers.length > 0 && (
 									<button
 										type="button"
 										ref={mentionTriggerRef}
 										className="composer-at-btn"
-										aria-label="@指定 AI 角色讨论"
+										aria-label="@ AI 角色"
 										aria-expanded={showMentionPicker}
 										aria-controls={showMentionPicker ? mentionListId : undefined}
-										title="在讨论中 @指定 AI 角色回答"
+										title="点名 AI 角色"
 										onClick={toggleMentionPicker}
 									>
 										@角色
 									</button>
 								)}
 								<span className="composer-toolbar-hint">
-									{isTurnRunning && sendBlockedByTurn
-										? "当前正在执行，可停止或切到「团队聊天讨论」"
-										: isMultiline
-											? `${lineCount} 行 · ${composerText.length} 字 · Shift+Enter 换行`
-											: composerMode === "discussion"
-												? discussionAiEnabled && isOwner
-													? "探讨中（不改码交付 · 可 @角色），切到「给 AI 安排事项」再正式派工"
-													: "纯人类讨论，不调用 AI · 支持文件与图片"
-												: "支持上传文件/图片，粘贴大段文本自动折叠"}
+									{isMultiline ? "Shift+Enter 换行" : "支持文件和图片"}
 								</span>
 							</div>
 							<div className="composer-toolbar-actions">
 								{modelControl}
 								<button
 									type="button"
-									className={`pill-send-btn pill-send-labeled ${isArchitectMode ? "dispatch" : composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai-request"}`}
-									aria-label={
-										isArchitectMode
-											? "发送给架构师"
-											: composerMode === "discussion"
-												? "发送讨论"
-												: isOwner
-													? "派发 AI"
-													: "提请 AI"
-									}
+									className="pill-send-btn pill-send-labeled dispatch"
+									aria-label={isArchitectMode ? "发送给架构师" : "发送"}
 									disabled={!canSend}
 									onClick={onSendPrompt}
 								>
-									{sendLabel}
+									{submitting ? "发送中…" : "发送"}
 								</button>
 							</div>
 						</div>

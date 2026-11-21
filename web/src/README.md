@@ -40,7 +40,7 @@
 ## 对话、旁听、图片与运行快照
 
 - 团队页的组织主联系人切换只发送目标成员 ID。名册启用状态、模型和署名仍由组织角色设置管理。
-- 「团队聊天讨论」提供独立的 AI 参与开关和在组角色 `@` 菜单。新建及已有事项均可把同一角色同时设为按需请教和旁听把关。「一人处理」保留已选旁听。
+- [ComposerDock](components/chat/ComposerDock.tsx) 使用一个「发送」动作和在组角色 `@` 菜单。服务端判断交流、正式执行或澄清，并在消息流显示相应进度。
 - 新建事项时，[ComposerDock](components/chat/ComposerDock.tsx) 将输入区与 [MatterInitiationPanel](components/chat/MatterInitiationPanel.tsx)、[useMatterInitiationState](hooks/useMatterInitiationState.ts) 收口在居中新建卡片内（隐藏冗余英雄上下文栏），优先明确展示**当前实际参与安排**并将基于 `/api/matters/assess` 本地文字规则的即时预判与用户显式二次确认触发（支持取消及可选只读仓库核查）的 Pi 类型化决策模型建议（带来源/把握度标记与按需展开的「为什么这样建议？」）与细粒度阵型/旁听/人类同事微调折叠在「调整参与方式」抽屉内；已建事项可在 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 内对单个非主责 AI 切换定向旁听。
 - 团队页面与侧边栏均支持直接启动「角色架构师」持久化对话事项（侧边栏独立条呈现在业务成员网格下方，架构师对话沿用同一 [ComposerDock](components/chat/ComposerDock.tsx) 输入卡片并在顶栏显示「角色架构师 · 只读建队规划」，全局名录不绑定具体代码仓库，欢迎页专注按工作流规划角色与示范填充，消息流内嵌 [RoleProposalCard](components/chat/RoleProposalCard.tsx) 与 [architectApi.ts](architectApi.ts)）；「团队协作体检」保留在 [TeamView](components/TeamView.tsx) 通过 [TeamHealthcheckPanel](components/team/TeamHealthcheckPanel.tsx) 弹窗发起，发起前需二次确认并支持随时取消（不占用事项列表或平铺撑破团队网格）；[ModalDialog](components/ModalDialog.tsx) 统一承接「新增邀请同事」「新建/编辑组织身份」「导入/导出角色能力包」「登记项目 Git 工作区」以及「文本/折叠粘贴附件预览」（[CollaboratorsSection](components/team/CollaboratorsSection.tsx)、[OrganizationsSection](components/team/OrganizationsSection.tsx)、[MemberPackageForms](components/team/MemberPackageForms.tsx)、[MaterialsView](components/MaterialsView.tsx)、[AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx)），避免管理页内联展开或大段文本撑乱布局；[MemberInspectorModal](components/team/MemberInspectorModal.tsx) 承接团队卡片完整职责/Skills/Anti-Jobs 边界、Git 署名编辑与三层记忆管理（[MemberCard](components/team/MemberCard.tsx) 正面保持轻量化展示作用范围标签 `平台通用`/`组织共享`/`仅我可用` 与 `···` 菜单，[TeamView](components/TeamView.tsx) 提供动态作用域筛选标签及个人私有配额计数，将成员网格置于首屏并将同事邀请与组织管理默认折叠为轻量摘要条）；AI 复盘提炼经验等慢速 LLM 操作统一具备确认与中止机制；业务事项进行中支持经 [MatterRosterPopover](components/chat/MatterRosterPopover.tsx) 中途请入架构师诊断并一键将新建角色加入当前事项；[RoleArchitectModal](components/team/RoleArchitectModal.tsx)、[MemberPackageForms](components/team/MemberPackageForms.tsx) 与 [RoleProposalCard](components/chat/RoleProposalCard.tsx) 均集成 [NewSkillsDraftSection](components/team/NewSkillsDraftSection.tsx) 与 `buildRoleScopeChoices`：按用户身份限制角色作用范围与允许的 Skill 存储位置，并在最终提交确认后才把勾选项写入磁盘（[RoleArchitectModal](components/team/RoleArchitectModal.tsx) 同时支持二次确认与可取消的 Pi「AI 智能设计草案」与离线「规则快速直出」卡片）；[Sidebar](components/Sidebar.tsx) 与各组织名册过滤始终保留创建者自身的 `personal` 角色；[buildStarterTasks](utils/starterTasks.ts) 保留为单元测试覆盖的纯辅助函数（已移除输入框内的示范需求弹出菜单）。
 - 新建事项欢迎页的“体验内置演示”按需调用准备接口，再打开演示事项。[InnerDemoGuide](components/chat/InnerDemoGuide.tsx) 只填入可修改的提问；[innerDemo.ts](innerDemo.ts) 依据真实消息、委托与版本计算进度。第四步沿正常验收接口保留已有反馈，再填入修订要求，不自动发给模型。
@@ -52,14 +52,9 @@
   - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
   输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。
-- [ChatStage](components/ChatStage.tsx) 顶栏右上角保留「协作成员」入口（展示当前人类协作成员头像/名单与 AI 旁听
-  状态），并将「团队委托与事件」「经验复盘」「成果库」收纳入 `···` 更多菜单；点击「协作成员」展开紧凑型成员
-  网格浮层（搜索、4 列头像网格、`+ 添加`/`− 移出` 管理人类同事与默认全员参与的 AI 角色、设置事项负责人、
-  以及全局「AI 旁听」开关）；发言区显式切换「团队聊天讨论」与「给 AI 安排事项 / 提请 AI 处理」（由当前事项负
-  责人统一承接并按需团队协同，移除底部多余跟进选择框），讨论/提请/派发消息带独立归属徽章，所有者可一键「确
-  认并派发 AI」或「忽略提请」。
+- 「协作成员」面板列出负责人和在组成员。点开 AI 成员可设置「允许主责委托」和「主责回复后主动检查」。「未点名时也让 AI 主动回应」是事项设置。
 - [团队委托面板](components/chat/MatterDelegationPanel.tsx) 根据 [轮次投影](utils/matterDelegations.ts) 展示派发、回报和转派关系，从消息或运行卡片直达对应轮次，并可定位到原始消息。[关系图](components/chat/DelegationGraph.tsx) 同时用于进行中和历史轮次。「事项事件」保留事项级工具记录与关键事件筛选，截断的历史工具 JSON 由 [matterStream.ts](utils/matterStream.ts) 解析。
-- [ComposerDock](components/chat/ComposerDock.tsx) 在「开始新事项 / 已有事项空闲 / 角色架构师 / 执行中」统一使用同一 `.composer-card` 结构：运行中在卡片顶部显示含阶段徽标、实时耗时、快捷「切到讨论」与「停止执行」的 `.composer-run-banner`；顶部栏统一收口发言模式切换与组织/仓库/新事项操作；工具栏仅保留单一 `+` 按钮用于同时上传图片（最多 6 张，支持缩放与灯箱预览）和 UTF-8 文本/代码文件（最多 6 个、单文件 `<= 512KB`），并支持拖拽与 `Ctrl/Cmd+V` 粘贴截图；粘贴超过 600 字符或 10 行的大段纯文本自动折叠为附件胶囊，发送前后均可经 [ModalDialog](components/ModalDialog.tsx) 弹层查看完整内容（草稿状态支持「放回输入框」展开编辑），输入区随单行紧凑默认与多行自动增高平滑过渡（显示行数与发送快捷键提示）；[MarkdownView](MarkdownView.tsx) 配合 [deliverables.css](styles/deliverables.css) / [chat-stream.css](styles/chat-stream.css) 支持单元格与行内代码自然换行与两列表格首列保底宽度，避免窄列单字竖排挤压。
+- [ComposerDock](components/chat/ComposerDock.tsx) 在「开始新事项 / 已有事项空闲 / 角色架构师 / 执行中」统一使用同一 `.composer-card` 结构：运行中在卡片顶部显示含阶段徽标、实时耗时和「停止执行」的 `.composer-run-banner`；顶部栏保留组织、仓库与新事项操作；工具栏仅保留单一 `+` 按钮用于同时上传图片（最多 6 张，支持缩放与灯箱预览）和 UTF-8 文本/代码文件（最多 6 个、单文件 `<= 512KB`），并支持拖拽与 `Ctrl/Cmd+V` 粘贴截图；粘贴超过 600 字符或 10 行的大段纯文本自动折叠为附件胶囊，发送前后均可经 [ModalDialog](components/ModalDialog.tsx) 弹层查看完整内容（草稿状态支持「放回输入框」展开编辑），输入区随单行紧凑默认与多行自动增高平滑过渡（显示行数与发送快捷键提示）；[MarkdownView](MarkdownView.tsx) 配合 [deliverables.css](styles/deliverables.css) / [chat-stream.css](styles/chat-stream.css) 支持单元格与行内代码自然换行与两列表格首列保底宽度，避免窄列单字竖排挤压。
 
 ## 组织身份、团队记忆与成果阅读
 

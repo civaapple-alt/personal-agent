@@ -23,7 +23,8 @@ export interface ActiveRunState {
 
 export interface BackgroundDispatchInput {
 	matterId: string;
-	interactionMode?: "dispatch" | "discussion";
+	interactionMode?: "dispatch" | "discussion" | "conversation";
+	keepMatterLead?: boolean;
 	existingUserMessageId?: string;
 	decisionResponse?: DecisionResponse;
 	title?: string;
@@ -59,11 +60,13 @@ export function createDispatchRunner(deps: {
 		// Uploads and body reads can yield after a route's first busy check. Reserve here before emitting events.
 		if (activeRuns.has(input.matterId) || orchestrator.isMatterRunning(input.matterId))
 			throw new HttpRequestError(409, "Matter already has an active turn");
-		const isDiscussion = input.interactionMode === "discussion";
+		const isConversation = input.interactionMode === "conversation";
+		const isDiscussion = input.interactionMode === "discussion" || isConversation;
 		const activeEntry: ActiveRunState = {
 			progress: {
 				stage: "starting",
-				label: isDiscussion ? "正在接入团队讨论..." : "正在准备执行环境...",
+				sourceUserMessageId: input.existingUserMessageId,
+				label: isConversation ? "正在理解消息…" : isDiscussion ? "正在接入团队讨论..." : "正在准备执行环境...",
 			},
 			startedAt: Date.now(),
 			accumulatedDelta: "",
@@ -77,6 +80,7 @@ export function createDispatchRunner(deps: {
 			.dispatchMatter({
 				matterId: input.matterId,
 				interactionMode: input.interactionMode,
+				keepMatterLead: input.keepMatterLead,
 				existingUserMessageId: input.existingUserMessageId,
 				decisionResponse: input.decisionResponse,
 				title: input.title,
@@ -87,7 +91,10 @@ export function createDispatchRunner(deps: {
 				workspaceId: input.workspaceId,
 				orgId: input.orgId,
 				actorUserId: input.startedByUserId ?? null,
-				inheritLocalPiResources: !isDiscussion && actor.authKind === "loopback" && deps.inheritsLocalPiResources(),
+				inheritLocalPiResources:
+					input.interactionMode !== "discussion" &&
+					actor.authKind === "loopback" &&
+					deps.inheritsLocalPiResources(),
 				observerMemberIds: input.observerMemberIds,
 				deliverableTitle: input.deliverableTitle,
 				deliverableType: input.deliverableType,
@@ -165,9 +172,11 @@ export function createDispatchRunner(deps: {
 					channel: "user",
 					senderType: "system",
 					senderId: "orchestrator",
-					content: isDiscussion
-						? `${partialNote}⚠️ AI 讨论未完成（${message}）。讨论消息已保留。`
-						: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
+					content: isConversation
+						? `${partialNote}⚠️ AI 未能处理这条消息（${message}）。消息已保留。`
+						: isDiscussion
+							? `${partialNote}⚠️ AI 讨论未完成（${message}）。讨论消息已保留。`
+							: `${partialNote}⚠️ 本次执行未完成（${message}）。你可以直接追问继续，或拆分任务范围后重试。`,
 					metadata: {
 						failed: true,
 						error: message,

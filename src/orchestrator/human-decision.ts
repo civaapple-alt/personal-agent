@@ -13,7 +13,7 @@ export interface DecisionSource {
 }
 
 interface DecisionRequest {
-	kind: "planning" | "role_clarification";
+	kind: "planning" | "role_clarification" | "execution_confirmation";
 	requests: Clarification[];
 	assignedUserId: string | null;
 	assignedName?: string;
@@ -53,7 +53,7 @@ export function readHumanDecision(metadata: Record<string, unknown> | null | und
 	if (!value) return null;
 	const { kind, status, revision, assignedUserId, assignedName } = value;
 	if (
-		(kind !== "planning" && kind !== "role_clarification") ||
+		(kind !== "planning" && kind !== "role_clarification" && kind !== "execution_confirmation") ||
 		typeof revision !== "number" ||
 		!Number.isSafeInteger(revision) ||
 		revision < 1 ||
@@ -120,7 +120,13 @@ interface DecisionMessage {
 export function isCurrentHumanDecision(
 	message: DecisionMessage,
 	decision: HumanDecision,
-	matter: { orgId?: string | null; workspaceId: string | null; leadMemberId: string | null; status: string },
+	matter: {
+		orgId?: string | null;
+		workspaceId: string | null;
+		leadMemberId: string | null;
+		status: string;
+		aiMemberIds?: string[] | null;
+	},
 	laterMessages: DecisionMessage[],
 ): boolean {
 	if (
@@ -131,7 +137,22 @@ export function isCurrentHumanDecision(
 		message.metadata?.workspaceId !== matter.workspaceId
 	)
 		return false;
-	if (decision.kind === "planning") return message.senderId === matter.leadMemberId;
+	if (decision.kind === "planning" && !message.metadata?.conversationRouted)
+		return message.senderId === matter.leadMemberId;
+	if (
+		decision.kind !== "role_clarification" &&
+		matter.aiMemberIds &&
+		message.senderId !== matter.leadMemberId &&
+		!matter.aiMemberIds.includes(message.senderId)
+	)
+		return false;
+	if (decision.kind === "execution_confirmation" || decision.kind === "planning")
+		return !laterMessages.some(
+			(item) =>
+				item.senderType === "member" &&
+				item.senderId === message.senderId &&
+				readHumanDecision(item.metadata)?.kind === decision.kind,
+		);
 	return !laterMessages.some(
 		(item) =>
 			item.senderType === "member" &&

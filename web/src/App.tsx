@@ -53,7 +53,6 @@ function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
 export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 	const [serverRequireAuth, setServerRequireAuth] = useState<boolean | null>(null);
-	const [composerMode, setComposerMode] = useState<"discussion" | "dispatch">("dispatch");
 	const [draftModelSelection, setDraftModelSelection] = useState<ModelSelection | null>(null);
 	const [draftMatterVisibility, setDraftMatterVisibility] = useState<MatterVisibility>("org");
 	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
@@ -214,7 +213,6 @@ export function App() {
 		bootstrapAuthKind: bootstrap?.authKind,
 		applyEditionState,
 		refreshBootstrap,
-		setComposerMode,
 		setErrorBanner,
 		setNoticeBanner,
 		onRevoked: resetRevokedWorkspace,
@@ -348,7 +346,6 @@ export function App() {
 		selectedMemberId,
 		members: initiationScopedMembers,
 		setSelectedMemberId,
-		setComposerMode,
 		setDraftAiMemberIds,
 		setDraftObserversEnabled,
 	});
@@ -364,7 +361,6 @@ export function App() {
 
 	const startArchitectMatter = (seedText?: string) => {
 		setDraftModelSelection(null);
-		setComposerMode("dispatch");
 		initiation.resetInitiationState();
 		setSelectedMemberId(ROLE_ARCHITECT_MEMBER_ID);
 		setDraftAiMemberIds([ROLE_ARCHITECT_MEMBER_ID]);
@@ -471,7 +467,6 @@ export function App() {
 			setComposerText("");
 			setComposerImages([]);
 			setComposerFiles([]);
-			setComposerMode("dispatch");
 			await refreshBootstrap();
 			await refreshDetail(matter.id);
 		} catch (error) {
@@ -500,7 +495,6 @@ export function App() {
 			if (selectedMatterIdRef.current !== targetMatterId) return;
 			setComposerImages([]);
 			setComposerFiles([]);
-			setComposerMode("dispatch");
 			setComposerText(prompt);
 			setNoticeBanner(
 				step.id === "revise" ? "V1 反馈已保留，修订要求已填入；发送后开始执行" : "提问已填入，可修改后发送给团队",
@@ -516,7 +510,7 @@ export function App() {
 	const actions = useMatterActions({
 		bootstrap,
 		isOwner,
-		composerMode,
+		currentMatterLeadId: matterDetail?.matter.id === selectedMatterId ? matterDetail?.matter.leadMemberId : null,
 		composerText,
 		composerImages,
 		composerFiles,
@@ -605,7 +599,6 @@ export function App() {
 		setSelectedMemberId(nextSelected);
 		if (pickingArchitect || selectedMemberId === ROLE_ARCHITECT_MEMBER_ID) setDraftModelSelection(null);
 		if (pickingArchitect) {
-			setComposerMode("dispatch");
 			setDraftAiMemberIds([nextSelected]);
 			initiation.setDraftPresetMode("solo");
 			setDraftObserversEnabled(false);
@@ -789,8 +782,6 @@ export function App() {
 							collaborators={bootstrap?.collaborators ?? []}
 							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 							orgEffectiveMemberIds={orgEffectiveMemberIds}
-							composerMode={composerMode}
-							onComposerModeChange={setComposerMode}
 							selectedWorkspace={selectedWorkspace}
 							selectedWorkspaceId={selectedWorkspaceId}
 							selectedOrgId={selectedOrgId}
@@ -829,7 +820,6 @@ export function App() {
 							onUpdateMatterAiMembers={actions.handleUpdateMatterAiMembers}
 							onUpdateMatterConsultMembers={actions.handleUpdateMatterConsultMembers}
 							onToggleDiscussionAiEnabled={actions.handleToggleDiscussionAiEnabled}
-							onToggleObserversEnabled={actions.handleToggleObserversEnabled}
 							onUpdateMatterObservers={actions.handleUpdateMatterObservers}
 							onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
 							onApproveAiRequest={(matterId, messageId) =>
@@ -844,12 +834,7 @@ export function App() {
 							onConsultArchitect={() => void actions.handleConsultArchitect()}
 							onLaunchWithNewRoles={launchNewMatterWithMembers}
 							modelControl={
-								canDispatchAi &&
-								canManageMatter &&
-								(composerMode === "dispatch" ||
-									discussionAiEnabled ||
-									currentLeadId === ROLE_ARCHITECT_MEMBER_ID) &&
-								(!selectedMatterId || currentMatter) ? (
+								canDispatchAi && canManageMatter && (!selectedMatterId || currentMatter) ? (
 									<MatterModelControl
 										key={selectedMatterId ?? "new"}
 										label={currentLeadId === ROLE_ARCHITECT_MEMBER_ID ? "架构师模型" : "主责模型"}
@@ -1031,7 +1016,6 @@ export function App() {
 						);
 						if (initiation.draftPresetMode === "human_first") {
 							initiation.setDraftPresetMode("solo");
-							setComposerMode("dispatch");
 						}
 					}
 				}}

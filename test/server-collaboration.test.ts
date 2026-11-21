@@ -568,7 +568,7 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		const postAiRequestRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: collabCookie },
-			body: JSON.stringify({ mode: "ai_request", prompt: "请 AI 根据刚才讨论整理 API 文档" }),
+			body: JSON.stringify({ mode: "conversation", prompt: "@Product Manager 整理刚才讨论的 API 文档" }),
 		});
 		assert.equal(postAiRequestRes.status, 201);
 		const { message: requestMsg } = (await postAiRequestRes.json()) as {

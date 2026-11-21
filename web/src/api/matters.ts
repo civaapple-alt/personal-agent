@@ -6,7 +6,7 @@ import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./
 
 export type MatterVisibility = "org" | "private";
 
-export type MatterSendMode = "discussion" | "dispatch" | "ai_request";
+export type MatterSendMode = "conversation" | "discussion" | "dispatch" | "ai_request";
 
 export interface MatterDto {
 	id: string;
@@ -276,10 +276,11 @@ export function createMatter(input: {
 }): Promise<{
 	matter: MatterDto;
 	assignedMember: TeamMemberDto;
+	mode?: MatterSendMode;
 	aiDiscussionTriggered?: boolean;
 	aiDiscussionSkippedReason?: string;
 }> {
-	return requestJson("/api/matters", {
+	return requestJson(input.mode === "conversation" ? "/api/matters/conversation" : "/api/matters", {
 		method: "POST",
 		body: JSON.stringify(input),
 	});
@@ -303,7 +304,8 @@ export function postMatterMessage(
 	aiDiscussionTriggered?: boolean;
 	aiDiscussionSkippedReason?: string;
 }> {
-	return requestJson(`/api/matters/${encodeURIComponent(matterId)}/messages`, {
+	const suffix = input.mode === "conversation" ? "/messages/conversation" : "/messages";
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}${suffix}`, {
 		method: "POST",
 		body: JSON.stringify(input),
 	});

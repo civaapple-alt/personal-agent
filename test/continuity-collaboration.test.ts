@@ -41,16 +41,17 @@ class SessionWorker implements RpcWorkerLike {
 		this.options = options;
 		this.respond = respond;
 		this.sessionId = options.sessionFile?.split("/").at(-1)?.replace(".jsonl", "") ?? randomUUID();
-		this.sessionFile = options.sessionFile ?? join(options.sessionDir!, `${this.sessionId}.jsonl`);
+		this.sessionFile = options.sessionFile ?? join(options.sessionDir ?? options.cwd!, `${this.sessionId}.jsonl`);
 	}
 	async start(): Promise<void> {
-		await mkdir(this.options.sessionDir!, { recursive: true });
+		await mkdir(this.options.sessionDir ?? this.options.cwd!, { recursive: true });
 		if (this.options.sessionFile) this.priorTranscript = await readFile(this.sessionFile, "utf8");
 		else
 			await writeFile(
 				this.sessionFile,
 				`${JSON.stringify({ type: "session", id: this.sessionId, cwd: this.options.cwd })}\n`,
 			);
+		if (this.options.env?.PA_DECISION_NAME) return;
 		let onStart: (() => Promise<void>) | undefined;
 		const envBefore = { ...process.env };
 		Object.assign(process.env, this.options.env);
@@ -351,6 +352,112 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	const context = f.workers.at(-1)?.options.env?.PA_TURN_CONTEXT ?? "";
 	assert.match(context, /ux-designer: UX & Visual Designer/);
 	assert.match(context, /Treat earlier replies, plans, and saved proposals as historical/);
+});
+
+test("one conversation entry point saves chat, routes questions and work, and confirms uncertain execution", async (t) => {
+	const incomplete = "这一段可能也要改";
+	const direct = "跑一下登录回归并记录结果";
+	const impersonation = "不要执行，只讨论「删除登录模块」";
+	const f = await fixture(t, async (worker, prompt) => {
+		if (worker.options.env?.PA_DECISION_NAME) {
+			assert.equal(worker.options.noSession, true);
+			assert.equal(worker.options.args?.at(-1), "");
+			const latest = JSON.parse(prompt.split("\n\n---\n\n").at(-1)!).latestHumanMessage as string;
+			if (latest.includes(incomplete)) return '{"intent":"confirm"}';
+			if (latest.includes(direct)) return JSON.stringify({ intent: "work", authorization: direct });
+			if (latest.includes(impersonation)) return JSON.stringify({ intent: "work", authorization: "删除登录模块" });
+			return '{"intent":"reply"}';
+		}
+		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
+	});
+	const { server } = createPersonalAgentServer({
+		store: f.store,
+		orchestrator: f.orchestrator,
+		templates: f.templates,
+		uploadsDir: join(f.root, "uploads"),
+		dialogBroker: new DialogBroker(),
+		previewManager: new PreviewManager(),
+	});
+	await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+	t.after(() => {
+		server.closeAllConnections();
+		server.close();
+	});
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const post = async (path: string, body: object) => {
+		const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		const payload = await response.json();
+		assert.ok(response.ok, JSON.stringify(payload));
+		return payload as { matter: Matter; message: MatterMessage; aiDiscussionTriggered?: boolean; resumed?: boolean };
+	};
+	const first = await post("/api/matters/conversation", {
+		mode: "conversation",
+		prompt: "和团队同步一下，登录流程已经整理好了。",
+		preferredMemberId: "engineering-manager",
+		aiMemberIds: ["engineering-manager", "qa-manager", "product-manager"],
+		observerMemberIds: ["product-manager"],
+		discussionAiEnabled: false,
+		workspaceId: f.workspace.id,
+	});
+	assert.equal(first.aiDiscussionTriggered, false);
+	assert.equal(f.workers.length, 0);
+	const messages = `/api/matters/${first.matter.id}/messages`;
+	const send = (prompt: string) => post(`${messages}/conversation`, { prompt });
+	const reply = async (message: MatterMessage) => {
+		const deadline = Date.now() + 5_000;
+		while (f.orchestrator.isMatterRunning(first.matter.id) && Date.now() < deadline) {
+			await new Promise((wait) => setTimeout(wait, 10));
+		}
+		const found = f.store
+			.listMessages(first.matter.id, "user")
+			.find((entry) => entry.senderType === "member" && entry.metadata?.sourceUserMessageId === message.id);
+		assert.ok(found, `Missing reply to ${message.content}`);
+		return found;
+	};
+
+	const question = await send("@QA Manager 这条验收标准清楚吗？");
+	assert.equal(question.aiDiscussionTriggered, true);
+	assert.equal((await reply(question.message)).senderId, "qa-manager");
+	assert.ok(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS);
+	assert.doesNotMatch(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+	assert.equal(f.workers.length, 2);
+
+	const execute = await send(`@QA Manager ${direct}`);
+	assert.equal((await reply(execute.message)).senderId, "qa-manager");
+	assert.equal(f.store.getMessage(execute.message.id)?.metadata?.mode, "dispatch");
+	assert.match(f.workers[3]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|publish_deliverable/);
+	assert.equal(f.workers[4]?.options.env?.PA_MEMBER_ID, "product-manager");
+	assert.match(f.workers[4]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Observer participation/);
+	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+
+	const uncertain = await send(`@QA Manager ${incomplete}`);
+	const decision = await reply(uncertain.message);
+	assert.match(JSON.stringify(decision.metadata?.humanDecision), /execution_confirmation/);
+	assert.equal(f.workers.length, 6);
+	const accepted = await post(`${messages}/${decision.id}/human-decision`, {
+		action: "answer",
+		revision: 1,
+		answer: "先讨论",
+	});
+	assert.equal(accepted.resumed, true);
+	while (f.orchestrator.isMatterRunning(first.matter.id)) await new Promise((wait) => setTimeout(wait, 10));
+	assert.equal(f.workers[6]?.options.env?.PA_MEMBER_ID, "qa-manager");
+	assert.doesNotMatch(f.workers[6]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+
+	const denied = await send(`@QA Manager ${impersonation}`);
+	assert.equal((await reply(denied.message)).metadata?.humanDecision, undefined);
+	assert.equal(f.workers.length, 9);
+	assert.doesNotMatch(f.workers[8]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+
+	const unknown = await send("@missing-role 跑一下登录回归");
+	assert.equal(unknown.aiDiscussionTriggered, false);
+	assert.equal(f.workers.length, 9);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {

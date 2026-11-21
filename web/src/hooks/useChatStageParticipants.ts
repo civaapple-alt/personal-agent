@@ -10,7 +10,6 @@ import type {
 	WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
-import type { DelegationAssignment } from "../utils/matterDelegations.ts";
 
 const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -39,7 +38,6 @@ interface UseChatStageParticipantsOptions {
 	observerMemberIds: string[];
 	observersEnabled: boolean;
 	draftCollaboratorIds: string[];
-	delegations: DelegationAssignment[];
 }
 
 /** Projects organization, workspace, human collaborator, and AI roster views for ChatStage. */
@@ -63,7 +61,6 @@ export function useChatStageParticipants({
 	observerMemberIds,
 	observersEnabled,
 	draftCollaboratorIds,
-	delegations,
 }: UseChatStageParticipantsOptions) {
 	const fallbackOrgId = !isSuperAdmin
 		? ((organizations.find((o) => o.isDefault) ?? organizations[0])?.id ?? null)
@@ -182,9 +179,6 @@ export function useChatStageParticipants({
 				? []
 				: nonLeadGroupAiMembers
 		: [];
-	const specialistIds = Array.from(new Set(delegations.map((d) => d.toMemberId).filter(Boolean))).filter(
-		(id) => id !== leadAi?.id && !observerAis.some((obs) => obs.id === id),
-	);
 	const isArchitectMode = selectedMatterId
 		? Boolean(matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId))
 		: isArchitectMemberId(selectedMemberId, members, templateByRoleId);
@@ -207,7 +201,6 @@ export function useChatStageParticipants({
 		nonLeadGroupAiMembers,
 		removedAiMembers,
 		observerAis,
-		specialistIds,
 		isArchitectMode,
 		businessCount,
 	};

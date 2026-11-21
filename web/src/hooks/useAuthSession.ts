@@ -13,7 +13,7 @@ import {
 } from "../api/auth.ts";
 import { setAuthRevokedHandler } from "../api/client.ts";
 import { type CollaboratorDto, joinOrganizationByInvite } from "../api/organizations.ts";
-import type { BootstrapPayload, MatterSendMode } from "../api.ts";
+import type { BootstrapPayload } from "../api.ts";
 
 function extractInitialInviteToken(): string {
 	try {
@@ -32,7 +32,6 @@ interface AuthSessionOptions {
 	bootstrapAuthKind: BootstrapPayload["authKind"];
 	applyEditionState: (requireAuth?: boolean) => void;
 	refreshBootstrap: () => Promise<void>;
-	setComposerMode: (mode: Exclude<MatterSendMode, "ai_request">) => void;
 	setErrorBanner: (message: string | null) => void;
 	setNoticeBanner: (message: string | null) => void;
 	onRevoked: () => void;
@@ -46,7 +45,6 @@ export function useAuthSession({
 	bootstrapAuthKind,
 	applyEditionState,
 	refreshBootstrap,
-	setComposerMode,
 	setErrorBanner,
 	setNoticeBanner,
 	onRevoked,
@@ -117,19 +115,10 @@ export function useAuthSession({
 			return false;
 		}
 		setCurrentUserOverride(session.currentUser);
-		if (
-			session.accountUser
-				? !session.accountUser.canDispatchAi
-				: session.currentUser?.permissionRole === "collaborator"
-		) {
-			setComposerMode("discussion");
-		} else {
-			setComposerMode("dispatch");
-		}
 		setAuthStatus("authenticated");
 		await refreshBootstrap();
 		return true;
-	}, [applyEditionState, refreshBootstrap, setComposerMode]);
+	}, [applyEditionState, refreshBootstrap]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -139,9 +128,6 @@ export function useAuthSession({
 					const loginRes = await loginWithInviteToken(initialLegacyInvite);
 					if (cancelled) return;
 					setCurrentUserOverride(loginRes.currentUser);
-					if (loginRes.currentUser.permissionRole === "collaborator") {
-						setComposerMode("discussion");
-					}
 					const cleanHash = window.location.hash.includes("invite=") ? "#chats" : window.location.hash || "#chats";
 					window.history.replaceState(null, "", `${window.location.pathname}${cleanHash}`);
 					setAuthStatus("authenticated");
@@ -192,7 +178,6 @@ export function useAuthSession({
 		initialLegacyInvite,
 		initialOrgInvite,
 		refreshBootstrap,
-		setComposerMode,
 		setErrorBanner,
 		syncSessionAndBootstrap,
 	]);
@@ -323,7 +308,6 @@ export function useAuthSession({
 		try {
 			const res = await loginWithInviteToken(token);
 			setCurrentUserOverride(res.currentUser);
-			setComposerMode(res.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
 			setAuthTokenInput("");
 			setAuthStatus("authenticated");
 			await refreshBootstrap();
@@ -356,7 +340,6 @@ export function useAuthSession({
 			if (effectiveKind === "legacy_token" && session.authenticated && session.currentUser) {
 				setAuthKind(session.authKind ?? "loopback");
 				setCurrentUserOverride(session.currentUser);
-				setComposerMode(session.currentUser.permissionRole === "collaborator" ? "discussion" : "dispatch");
 				await refreshBootstrap();
 				setNoticeBanner(`已结束协同体验，恢复本机所有者「${session.currentUser.name}」`);
 			} else {

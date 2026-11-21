@@ -23,7 +23,6 @@ import {
 	updateMatterDiscussionAiEnabled,
 	updateMatterLead,
 	updateMatterObservers,
-	updateMatterObserversEnabled,
 	updateMatterOrganization,
 	updateMatterVisibility,
 	updateMatterWorkspace,
@@ -50,18 +49,20 @@ export function writeStoredSetting(key: string, value: string): void {
 	}
 }
 
-function discussionNotice(result: {
+function conversationNotice(result: {
 	aiDiscussionTriggered?: boolean;
 	aiDiscussionSkippedReason?: string;
 }): string | null {
-	if (result.aiDiscussionTriggered) return "已发送讨论，AI 成员将参与回复";
+	if (result.aiDiscussionTriggered) return null;
 	switch (result.aiDiscussionSkippedReason) {
 		case "matter_busy":
-			return "已保存讨论。本事项已有 AI 轮次正在运行";
+			return "消息已保存，AI 正在处理上一条消息";
 		case "quota_limit":
-			return "已保存讨论。当前 AI 并发额度已用完";
+			return "消息已保存，当前 AI 并发额度已用完";
+		case "unavailable_recipient":
+			return "消息已保存，点名的角色当前无法在这个事项中参与";
 		case "unauthorized":
-			return "已保存讨论。当前账号无权启动 AI 回复";
+			return "消息已保存，当前账号无权启动 AI 回复";
 		default:
 			return null;
 	}
@@ -70,7 +71,7 @@ function discussionNotice(result: {
 interface UseMatterActionsParams {
 	bootstrap: BootstrapPayload | null;
 	isOwner: boolean;
-	composerMode: "discussion" | "dispatch";
+	currentMatterLeadId?: string | null;
 	composerText: string;
 	composerImages: ComposerImageAttachment[];
 	composerFiles: ComposerFileAttachment[];
@@ -118,7 +119,7 @@ interface UseMatterActionsParams {
 export function useMatterActions({
 	bootstrap,
 	isOwner,
-	composerMode,
+	currentMatterLeadId,
 	composerText,
 	composerImages,
 	composerFiles,
@@ -169,8 +170,15 @@ export function useMatterActions({
 	) => {
 		const text = rawText.trim();
 		if ((!text && imagesPayload.length === 0 && filesPayload.length === 0) || submitting) return false;
+		const inArchitectConversation = selectedMatterId
+			? currentMatterLeadId === ROLE_ARCHITECT_MEMBER_ID
+			: selectedMemberId === ROLE_ARCHITECT_MEMBER_ID;
 		const effectiveMode: MatterSendMode =
-			!options?.forceDispatch && composerMode === "discussion" ? "discussion" : isOwner ? "dispatch" : "ai_request";
+			options?.forceDispatch || inArchitectConversation ? (isOwner ? "dispatch" : "ai_request") : "conversation";
+		if (effectiveMode === "conversation" && !bootstrap?.unifiedConversation) {
+			setErrorBanner("当前服务尚未载入新版对话。重启 Personal Agent 服务后再发送，草稿已保留。");
+			return false;
+		}
 		setSubmitting(true);
 		setErrorBanner(null);
 		setNoticeBanner(null);
@@ -185,10 +193,10 @@ export function useMatterActions({
 					files: filesPayload.length > 0 ? filesPayload : undefined,
 					preferredMemberId: options?.preferredMemberId,
 				});
-				if (effectiveMode === "ai_request") {
+				if ((posted.mode ?? effectiveMode) === "ai_request") {
 					setNoticeBanner("已提交 AI 提请单，待团队所有者一键确认后派发执行");
-				} else if (effectiveMode === "discussion") {
-					setNoticeBanner(discussionNotice(posted));
+				} else if (effectiveMode === "conversation") {
+					setNoticeBanner(conversationNotice(posted));
 				} else if (options?.preferredMemberId === ROLE_ARCHITECT_MEMBER_ID) {
 					setNoticeBanner("已请「角色架构师」结合当前事项诊断分工与权限，生成提案后可勾选应用");
 				}
@@ -233,10 +241,10 @@ export function useMatterActions({
 				setSelectedMemberId("auto");
 				onResetInitiation?.();
 				navigateRoute({ tab: "chats", matterId: created.matter.id });
-				if (effectiveMode === "discussion") {
-					setNoticeBanner(discussionNotice(created) ?? "已创建事项并发送首条团队讨论");
-				} else if (effectiveMode === "ai_request") {
+				if ((created.mode ?? effectiveMode) === "ai_request") {
 					setNoticeBanner("已创建事项并提交 AI 提请，待团队所有者确认后派发");
+				} else if (effectiveMode === "conversation") {
+					setNoticeBanner(conversationNotice(created));
 				} else {
 					setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
 				}
@@ -484,28 +492,6 @@ export function useMatterActions({
 			});
 	};
 
-	const handleToggleObserversEnabled = (enabled: boolean) => {
-		writeStoredSetting("pa.defaultObserversEnabled", enabled ? "true" : "false");
-		if (!selectedMatterId) {
-			setDraftObserversEnabled(enabled);
-			if (!enabled) setDraftObserverMemberIds?.([]);
-			onSyncDraftPresetForObservers?.(enabled);
-			setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
-			return;
-		}
-		const targetMatterId = selectedMatterId;
-		void updateMatterObserversEnabled(targetMatterId, enabled)
-			.then(async () => {
-				setNoticeBanner(enabled ? "已开启 AI 旁听（当前协作 AI 将自动参与旁听）" : "已关闭 AI 旁听");
-				await refreshBootstrap();
-				await refreshDetail(targetMatterId);
-			})
-			.catch((err: unknown) => {
-				setErrorBanner(err instanceof Error ? err.message : String(err));
-				void refreshDetail(targetMatterId).catch(() => {});
-			});
-	};
-
 	const handleUpdateMatterObservers = (observerIds: string[]) => {
 		const deduped = [...new Set(observerIds)];
 		if (!selectedMatterId) {
@@ -555,21 +541,13 @@ export function useMatterActions({
 	const handleToggleDiscussionAiEnabled = (enabled: boolean) => {
 		if (!selectedMatterId) {
 			setDraftDiscussionAiEnabled?.(enabled);
-			setNoticeBanner(
-				enabled
-					? "讨论模式已开启 AI 参与：群聊时 AI 成员可查证和交流（可 @角色）"
-					: "讨论模式已切为纯人类交流：不调用 AI 模型",
-			);
+			setNoticeBanner(enabled ? "已允许 AI 主动参与未点名的交流" : "已关闭 AI 主动参与未点名的交流");
 			return;
 		}
 		const targetMatterId = selectedMatterId;
 		void updateMatterDiscussionAiEnabled(targetMatterId, enabled)
 			.then(async () => {
-				setNoticeBanner(
-					enabled
-						? "已开启 AI 参与本事项团队讨论（切回「给 AI 安排事项」再正式授权执行）"
-						: "已关闭 AI 参与本事项团队讨论（当前为纯人类群聊）",
-				);
+				setNoticeBanner(enabled ? "已允许 AI 主动参与未点名的交流" : "已关闭 AI 主动参与未点名的交流");
 				await refreshBootstrap();
 				await refreshDetail(targetMatterId);
 			})
@@ -633,7 +611,6 @@ export function useMatterActions({
 		handleUpdateMatterAiMembers,
 		handleUpdateMatterConsultMembers,
 		handleToggleDiscussionAiEnabled,
-		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
 		handleUpdateMatterVisibility,
 		handleDeliverableFeedback,

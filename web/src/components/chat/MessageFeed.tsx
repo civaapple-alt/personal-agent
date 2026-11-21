@@ -310,13 +310,16 @@ export function MessageFeed({
 										: undefined;
 							const userImages = isUser ? parseMessageImages(msg.metadata) : [];
 							const userFiles = isUser ? parseMessageFiles(msg.metadata) : [];
-							const bubbleModeClass = isUser
-								? isDiscussion
-									? " discussion"
-									: isAiRequest
-										? " ai-request"
-										: " dispatch"
-								: "";
+							const isConversationMessage =
+								msg.metadata?.mode === "conversation" || msg.metadata?.conversationRouted === true;
+							const bubbleModeClass =
+								isUser && !isConversationMessage
+									? isDiscussion
+										? " discussion"
+										: isAiRequest
+											? " ai-request"
+											: " dispatch"
+									: "";
 
 							return (
 								<div
@@ -327,17 +330,19 @@ export function MessageFeed({
 								>
 									{isUser ? (
 										<div className="stream-sender user-sender">
-											<span
-												className={`msg-mode-badge ${isDiscussion ? "discussion" : isAiRequest ? "ai-request" : "dispatch"}`}
-											>
-												{isDiscussion
-													? "团队讨论"
-													: isAiRequest
-														? "提请 AI"
-														: msg.metadata?.humanDecisionSourceId
-															? "人类答复"
-															: "AI 安排"}
-											</span>
+											{!isConversationMessage && (
+												<span
+													className={`msg-mode-badge ${isDiscussion ? "discussion" : isAiRequest ? "ai-request" : "dispatch"}`}
+												>
+													{isDiscussion
+														? "团队讨论"
+														: isAiRequest
+															? "提请 AI"
+															: msg.metadata?.humanDecisionSourceId
+																? "人类答复"
+																: "AI 安排"}
+												</span>
+											)}
 											<span>
 												{authorName ?? (isDiscussion ? "成员" : "团队所有者")}
 												{authorRole ? ` · ${authorRole}` : ""}

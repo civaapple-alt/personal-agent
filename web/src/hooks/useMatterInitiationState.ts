@@ -19,7 +19,6 @@ interface UseMatterInitiationParams {
 	selectedMemberId: string;
 	members: TeamMemberDto[];
 	setSelectedMemberId: (memberId: string) => void;
-	setComposerMode: (mode: "discussion" | "dispatch") => void;
 	setDraftAiMemberIds: (ids: string[] | null) => void;
 	setDraftObserversEnabled: (enabled: boolean) => void;
 }
@@ -36,7 +35,6 @@ export function useMatterInitiationState({
 	selectedMemberId,
 	members,
 	setSelectedMemberId,
-	setComposerMode,
 	setDraftAiMemberIds,
 	setDraftObserversEnabled,
 }: UseMatterInitiationParams) {
@@ -237,7 +235,6 @@ export function useMatterInitiationState({
 		) => {
 			const leadId = options?.leadId ?? fallbackLeadId;
 			if (mode === "human_first") {
-				setComposerMode("discussion");
 				setDraftDiscussionAiEnabled(false);
 				if (options?.consultIds || options?.aiIds || options?.observerIds) {
 					const obs = (options.observerIds ?? []).filter((id) => id !== leadId);
@@ -248,7 +245,6 @@ export function useMatterInitiationState({
 				}
 				return;
 			}
-			setComposerMode("dispatch");
 			if (mode === "solo") {
 				if (leadId) setSelectedMemberId(leadId);
 				setDraftConsultMemberIds([]);
@@ -288,7 +284,6 @@ export function useMatterInitiationState({
 			draftConsultMemberIds,
 			draftObserverMemberIds,
 			fallbackLeadId,
-			setComposerMode,
 			setDraftAiMemberIds,
 			setDraftObserversEnabled,
 			setSelectedMemberId,
@@ -392,8 +387,7 @@ export function useMatterInitiationState({
 		setAssessment(null);
 		setModelAssessing(false);
 		setModelAssessmentError(null);
-		setComposerMode("dispatch");
-	}, [setComposerMode, setDraftAiMemberIds, setDraftObserversEnabled]);
+	}, [setDraftAiMemberIds, setDraftObserversEnabled]);
 
 	return {
 		draftPresetMode,

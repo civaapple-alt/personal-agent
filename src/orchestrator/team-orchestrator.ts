@@ -10,6 +10,7 @@ import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import { decideConversationIntent } from "./conversation-intent.ts";
 import { delegateBetweenMembers } from "./delegation-runner.ts";
 import { performDistillationPass } from "./distiller.ts";
 import { listWorkspaceTopLevelEntries } from "./execution-context.ts";
@@ -271,6 +272,16 @@ export class TeamOrchestrator {
 		return filtered.length > 0 ? filtered : sharedOrgMembers;
 	}
 
+	listConversationAiMembers(matter: Matter, actorUserId: string | null): TeamMember[] {
+		return this.resolveMatterAiMembers(matter, actorUserId).filter(
+			(member) =>
+				(member.id === matter.leadMemberId ||
+					(!this.isArchitectMember(member) &&
+						(matter.aiMemberIds === null || matter.aiMemberIds.includes(member.id)))) &&
+				(member.roleScope !== "personal" || member.ownerUserId === actorUserId),
+		);
+	}
+
 	/** Members whose participation can be described in a reply shared with the whole matter. */
 	listSharedMatterAiMembers(matter: Matter): TeamMember[] {
 		return this.resolveMatterAiMembers(matter, null).filter(
@@ -431,6 +442,29 @@ export class TeamOrchestrator {
 				resolveMatterAiMembers: (matter, userId) => this.resolveMatterAiMembers(matter, userId),
 				routeMemberForRequest: (prompt, memberId, allowed, orgId, options) =>
 					this.routeMemberForRequest(prompt, memberId, allowed, orgId, options),
+				decideConversationIntent: ({ matterId, workspace, message, memberId, explicitRecipient, signal }) => {
+					const matter = this.requireMatter(matterId);
+					const orgId = workspace ? workspace.orgId : (matter.orgId ?? null);
+					const cwd = workspace?.repoPath ?? this.defaultCwd;
+					const modelSelection = resolveConfiguredModel(
+						this.store,
+						orgId ?? null,
+						memberId,
+						matter.leadMemberId === memberId ? matter.modelSelection : null,
+					);
+					const messages = this.store.listMessages(matterId, "user");
+					const currentIndex = messages.findIndex(({ id }) => id === message.id);
+					return decideConversationIntent({
+						workerFactory: this.workerFactory,
+						cwd,
+						modelSelection,
+						signal,
+						prompt: message.content,
+						history: currentIndex >= 0 ? messages.slice(0, currentIndex) : [],
+						context: { workspaceId: workspace?.id ?? null, repoPath: cwd, orgId: orgId ?? null },
+						explicitRecipient,
+					});
+				},
 				executeWithWorker: (work) => this.executeWithWorker(work),
 			},
 			input,

@@ -313,6 +313,7 @@ export function buildMemberPrompts(input: {
 	isInternalDelegation?: boolean;
 	sessionMode?: "lead" | "internal" | "observer" | "verifier";
 	discussionMode?: boolean;
+	conversationReply?: boolean;
 	leadMemberId?: string | null;
 	consultMemberIds?: string[] | null;
 	observerMemberIds?: string[];
@@ -463,12 +464,20 @@ export function buildMemberPrompts(input: {
 		if (input.discussionMode) {
 			sections.push(
 				[
-					"## Discussion chat mode (团队聊天讨论 · 未授权实施与交付)",
-					"- The latest message was sent in **团队聊天讨论** (team chat discussion) mode; the user has **not** switched to **给 AI 安排事项** (authorized work dispatch) yet.",
+					input.conversationReply
+						? "## Read-only conversation response"
+						: "## Discussion chat mode (团队聊天讨论 · 未授权实施与交付)",
+					input.conversationReply
+						? "- The latest human message calls for a response. Make useful progress by answering or checking facts, and offer a concrete action when appropriate."
+						: "- The latest message was sent in **团队聊天讨论** (team chat discussion) mode; the user has **not** switched to **给 AI 安排事项** (authorized work dispatch) yet.",
 					"- Participate constructively in the team discussion: share your role's perspective, feasibility assessment, risks, open questions, or answers to `@` mentions concisely and clearly.",
 					"- If delegate_to_member is active and a member on the current roster can help, use it for light read-only consultation. If the relevant expertise is unavailable, point out the gap to the user.",
-					"- You retain full access to workspace inspection and command tools (such as `read` and `bash`) when helpful to verify files, Git state, configs, logs, or test/build status before replying.",
-					"- **Authorization boundary:** Because this is a chat discussion and not an authorized work order yet, do NOT modify code, write/overwrite files, commit to Git, or publish formal deliverables. Present your findings/proposal and let the user switch to「给 AI 安排事项」when they are ready to authorize implementation.",
+					input.conversationReply
+						? "- Verify claims with the available read-only tools. If a useful action needs execution authorization, explain it in the reply and wait for a direct human request."
+						: "- You retain full access to workspace inspection and command tools (such as `read` and `bash`) when helpful to verify files, Git state, configs, logs, or test/build status before replying.",
+					input.conversationReply
+						? "- Treat the current message as a request for discussion. Changes, commits, and formal publication require a separately authorized work turn."
+						: "- **Authorization boundary:** Because this is a chat discussion and not an authorized work order yet, do NOT modify code, write/overwrite files, commit to Git, or publish formal deliverables. Present your findings/proposal and let the user switch to「给 AI 安排事项」when they are ready to authorize implementation.",
 				].join("\n"),
 			);
 		} else {
@@ -476,7 +485,7 @@ export function buildMemberPrompts(input: {
 				[
 					"## Collaboration and publication",
 					"Advance the task within your role. When delegate_to_member is active, use the current roster to give each available specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. Keep ownership of edits clear when assignments overlap. For independent review, use the verification argument with a different member, exact target and acceptance criteria. Send requested changes to the author and verify the revised version before publishing. To check a draft document, stage it with publish_deliverable first and then verify it by title. Integrate the evidence into your reply and keep routine coordination internal. If no colleague is available, work within your own role and explain any gaps in expertise.",
-					"Only the lead can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
+					"Only the executing role of this work turn can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
 					"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
 					"Keep routine replies, clarifications, progress, and minor adjustments in the conversation. Base publication on the significance of the work. Publication alone requires no extra approval. Complete the necessary verification in the same turn.",
 					"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
