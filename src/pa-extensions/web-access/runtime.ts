@@ -3,6 +3,7 @@ import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
 import type { PlatformSettings, TeamMember } from "../../storage/types.ts";
+import { readWebAccessEnvFromDotEnv, resolveEnvFilePath } from "../env-credentials.ts";
 import { findInstalledPiWebAccess } from "./package.ts";
 
 export const PI_WEB_SEARCH_TOOLS = ["web_search", "get_search_content"] as const;
@@ -28,11 +29,13 @@ export async function prepareWebAccessForWorker({
 	member,
 	template,
 	sessionMode,
+	envFilePath = resolveEnvFilePath(),
 }: {
 	store: Pick<PersonalAgentStore, "getPlatformSettings">;
 	member: TeamMember;
 	template: RoleTemplate | undefined;
 	sessionMode: WorkerSessionMode;
+	envFilePath?: string;
 }) {
 	if (sessionMode === "observer" || sessionMode === "verifier" || !isWebAccessRole(member, template)) return null;
 	if (!hasWebAccessGrant(member, store.getPlatformSettings().webAccessRoleGrants)) return null;
@@ -41,7 +44,8 @@ export async function prepareWebAccessForWorker({
 	if (!installed) {
 		throw new Error("此岗位已获网页检索权限，但 pi-web-access 安装不可用。请在设置的扩展插件页检查安装。");
 	}
-	return { entry: installed.entry, tools: PI_WEB_SEARCH_TOOLS };
+	const env = await readWebAccessEnvFromDotEnv(envFilePath);
+	return { entry: installed.entry, tools: PI_WEB_SEARCH_TOOLS, env };
 }
 
 /** Keep these Pi extension commands as matter text. Pi handles slash commands before the model. */

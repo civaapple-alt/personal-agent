@@ -270,3 +270,50 @@
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
+.settings-env-card {
+	display: grid;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+.settings-env-head p {
+	margin: 4px 0 0;
+}
+.settings-env-list {
+	display: grid;
+	gap: 10px;
+}
+.settings-env-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px 16px;
+	padding-top: 10px;
+	border-top: 1px dashed var(--border);
+}
+.settings-env-meta {
+	flex: 1 1 260px;
+	min-width: 0;
+}
+.settings-env-meta p {
+	margin: 4px 0 0;
+}
+.settings-env-title-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-xs);
+	color: var(--text-primary);
+}
+.settings-env-form {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1 1 260px;
+	max-width: 420px;
+}
+.settings-env-form .input-field {
+	flex: 1;
+	min-width: 0;
+}

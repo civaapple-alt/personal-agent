@@ -1,4 +1,12 @@
 import { buildRuntimeOverview, probePiCli } from "../../orchestrator/runtime-info.ts";
+import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
+import {
+	isManagedEnvKey,
+	type ManagedEnvKey,
+	readDotEnvMap,
+	resolveEnvFilePath,
+	updateManagedDotEnv,
+} from "../../pa-extensions/env-credentials.ts";
 import { findInstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
 import { isWebAccessRole } from "../../pa-extensions/web-access/runtime.ts";
 import type { RequestActor } from "../auth.ts";
@@ -13,10 +21,49 @@ export async function handleWebAccessRoutes(
 ): Promise<boolean> {
 	const installing = method === "POST" && pathname === "/api/admin/runtime/web-access/install";
 	const configuring = method === "PATCH" && pathname === "/api/admin/runtime/web-access";
-	if (!installing && !configuring) return false;
+	const updatingEnv = method === "PATCH" && pathname === "/api/admin/runtime/env";
+	if (!installing && !configuring && !updatingEnv) return false;
 
 	const { store, orchestrator } = ctx;
-	if (installing) {
+	if (updatingEnv) {
+		const body = await readJsonBody(req);
+		const rawValues = body.values;
+		if (!rawValues || typeof rawValues !== "object" || Array.isArray(rawValues)) {
+			throw new HttpRequestError(400, "请提供要更新的环境变量键值映射");
+		}
+		const updates: Partial<Record<ManagedEnvKey, string | null>> = {};
+		const auditSummary: Record<string, "set" | "cleared"> = {};
+		for (const [key, value] of Object.entries(rawValues as Record<string, unknown>)) {
+			if (!isManagedEnvKey(key)) {
+				throw new HttpRequestError(400, `不允许修改环境变量：${key}`);
+			}
+			if (value !== null && typeof value !== "string") {
+				throw new HttpRequestError(400, `环境变量 ${key} 必须是字符串或 null`);
+			}
+			if (typeof value === "string" && /[\r\n]/.test(value)) {
+				throw new HttpRequestError(400, `环境变量 ${key} 不能包含换行符`);
+			}
+			const trimmed = typeof value === "string" ? value.trim() : "";
+			updates[key] = trimmed || null;
+			auditSummary[key] = trimmed ? "set" : "cleared";
+		}
+		if (Object.keys(updates).length === 0) {
+			throw new HttpRequestError(400, "未提供需要更新的配置项");
+		}
+		const envPath = resolveEnvFilePath(orchestrator.getRuntimeConfig().defaultCwd);
+		await updateManagedDotEnv(envPath, updates);
+		if (Object.hasOwn(updates, "TYPESAFE_API_KEY") && process.env.TYPESAFE_API_KEY === undefined) {
+			const refreshed = await readDotEnvMap(envPath);
+			const key = refreshed.TYPESAFE_API_KEY?.trim();
+			orchestrator.setClassifier(key ? createSystemOneClassifier(key) : undefined);
+		}
+		auditActorAction(ctx, req, actor, {
+			action: "admin.env_credentials_update",
+			targetType: "runtime_env",
+			targetId: ".env",
+			detail: { keys: auditSummary },
+		});
+	} else if (installing) {
 		try {
 			const installed = await ctx.installWebAccess();
 			auditActorAction(ctx, req, actor, {

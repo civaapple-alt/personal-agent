@@ -89,10 +89,20 @@ export interface RuntimeConfigSectionDto {
 	items: RuntimeConfigItemDto[];
 }
 
+export interface ManagedEnvStatusDto {
+	key: "TYPESAFE_API_KEY" | "EXA_API_KEY" | "MOONSHOT_API_KEY";
+	label: string;
+	description: string;
+	scope: "classifier" | "web_access";
+	configured: boolean;
+	source: "process_env" | "dotenv" | "unset";
+}
+
 export interface RuntimeOverviewDto {
 	base: RuntimeBaseInfoDto;
 	extensions: RuntimeExtensionDto[];
 	configSections: RuntimeConfigSectionDto[];
+	envCredentials?: ManagedEnvStatusDto[];
 	summary: {
 		activeCount: number;
 		conditionalCount: number;
@@ -137,4 +147,10 @@ export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDt
 
 export function configureRuntimeWebAccess(roleIds: string[]): Promise<{ overview: RuntimeOverviewDto }> {
 	return requestJson("/api/admin/runtime/web-access", { method: "PATCH", body: JSON.stringify({ roleIds }) });
+}
+
+export function updateRuntimeEnvCredentials(
+	values: Partial<Record<ManagedEnvStatusDto["key"], string | null>>,
+): Promise<{ overview: RuntimeOverviewDto }> {
+	return requestJson("/api/admin/runtime/env", { method: "PATCH", body: JSON.stringify({ values }) });
 }

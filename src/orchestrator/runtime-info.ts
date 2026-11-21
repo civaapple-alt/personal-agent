@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
 import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
+import { listManagedEnvStatus, type ManagedEnvStatus, resolveEnvFilePath } from "../pa-extensions/env-credentials.ts";
 import { HUMAN_QUESTION_TOOL } from "../pa-extensions/human-question/runtime.ts";
 import { findInstalledPstack, preparePstackRuntime } from "../pa-extensions/pstack-methods/package.ts";
 import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
@@ -136,6 +137,7 @@ export interface RuntimeOverviewPayload {
 	base: RuntimeBaseInfo;
 	extensions: RuntimeExtensionItem[];
 	configSections: RuntimeConfigSection[];
+	envCredentials?: ManagedEnvStatus[];
 	summary: {
 		activeCount: number;
 		conditionalCount: number;
@@ -680,6 +682,8 @@ export async function buildRuntimeOverview(options: {
 		},
 	];
 
+	const envCredentials = isOwner ? await listManagedEnvStatus(resolveEnvFilePath(config.defaultCwd)) : undefined;
+
 	return {
 		base: {
 			name: "Pi CLI",
@@ -719,6 +723,7 @@ export async function buildRuntimeOverview(options: {
 		},
 		extensions,
 		configSections,
+		...(envCredentials ? { envCredentials } : {}),
 		summary,
 		checkedAt: new Date().toISOString(),
 	};

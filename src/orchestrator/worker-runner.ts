@@ -209,6 +209,7 @@ export async function executeWithWorkerPass(
 			member: input.member,
 			template,
 			sessionMode,
+			envFilePath: resolve(deps.defaultCwd, ".env"),
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
 		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
@@ -485,6 +486,7 @@ export async function executeWithWorkerPass(
 				}),
 				...pstack?.env,
 				...humanQuestion.env,
+				...webAccess?.env,
 				PA_WEB_SEARCH_ENABLED: String(Boolean(webAccess)),
 				...(useRoleGitIdentity
 					? {

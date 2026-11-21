@@ -82,7 +82,7 @@ export class TeamOrchestrator {
 	private readonly skillsDir: string | undefined;
 	private readonly noSession: boolean;
 	private readonly workerFactory: WorkerFactory;
-	private readonly classifier: DecisionClassifier | undefined;
+	private classifier: DecisionClassifier | undefined;
 	private readonly readPiModels: ReadPiModels;
 	private readonly piModelProbes = new Map<string, ReturnType<ReadPiModels>>();
 	private dialogHandler: OrchestratorDialogHandler | undefined;
@@ -142,6 +142,11 @@ export class TeamOrchestrator {
 	/** Dynamically enable or disable the configured pstack method pack directory. */
 	setPstackDir(pstackDir: string | undefined): void {
 		this.pstackDir = pstackDir?.trim() || undefined;
+	}
+
+	/** Dynamically update or clear the System One decision classifier. */
+	setClassifier(classifier: DecisionClassifier | undefined): void {
+		this.classifier = classifier;
 	}
 
 	setDialogHandler(handler: OrchestratorDialogHandler | undefined): void {

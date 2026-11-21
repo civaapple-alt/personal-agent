@@ -8,6 +8,7 @@ import type {
 	RuntimeOverviewDto,
 } from "../api.ts";
 import type { SettingsSection } from "../hashRouter.ts";
+import { EnvCredentialsSettings } from "./EnvCredentialsSettings.tsx";
 import { PstackSettings } from "./PstackSettings.tsx";
 import { WebAccessSettings } from "./WebAccessSettings.tsx";
 
@@ -405,6 +406,16 @@ export function SettingsView({
 										</div>
 									)}
 								</div>
+
+								{isSuperAdmin && overview?.envCredentials && overview.envCredentials.length > 0 && (
+									<EnvCredentialsSettings
+										items={overview.envCredentials}
+										onOverviewChange={onOverviewChange}
+										onRefresh={onRefresh}
+										onNotice={onNotice}
+										onError={onError}
+									/>
+								)}
 
 								<div className="settings-config-sections">
 									{filteredConfigSections.map((sec) => {
