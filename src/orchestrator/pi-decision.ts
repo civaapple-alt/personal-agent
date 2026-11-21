@@ -103,7 +103,7 @@ export async function runTypedPiDecision<T>(
 	try {
 		await worker.start();
 		if (deps.modelSelection) await applyWorkerModel(worker, deps.modelSelection);
-		else if (spec.thinkingLevel) await worker.setThinkingLevel?.(spec.thinkingLevel);
+		if (spec.thinkingLevel) await worker.setThinkingLevel?.(spec.thinkingLevel);
 		options.signal.throwIfAborted();
 		promptResult = await worker.runPromptAndWait(`${spec.systemPrompt}\n\n---\n\n${spec.userPrompt}`, {
 			timeoutMs: options.timeoutMs ?? 60_000,

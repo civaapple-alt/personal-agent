@@ -1,6 +1,7 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../roles/role-architect.ts";
 import type { RoleScope } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
@@ -147,6 +148,22 @@ export function canActorUseMember(
 		);
 	}
 	return true;
+}
+
+export function canTargetMatterAi(
+	store: PersonalAgentStore,
+	actor: RequestActor,
+	orgId: string | null,
+	memberId: string,
+): boolean {
+	const member = store.getMember(memberId);
+	return Boolean(
+		member &&
+			canActorUseMember(store, actor, member) &&
+			(!orgId ||
+				memberId === ROLE_ARCHITECT_MEMBER_ID ||
+				store.resolveEffectiveOrgMembersForUser(orgId, actor.user?.id).some(({ id }) => id === memberId)),
+	);
 }
 
 export function canActorManageMember(

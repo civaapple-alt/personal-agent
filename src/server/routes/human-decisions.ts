@@ -6,13 +6,19 @@ import {
 	readHumanDecision,
 } from "../../orchestrator/human-decision.ts";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
-import { canAccessMatter, canDispatchAiInOrg, canManageOrganization, canParticipateInMatter } from "../acl.ts";
+import {
+	canAccessMatter,
+	canDispatchAiInOrg,
+	canManageOrganization,
+	canParticipateInMatter,
+	canTargetMatterAi,
+} from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor, toDispatchAuthor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { loadStoredFilesFromRefs, loadStoredImagesFromRefs } from "../uploads.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { checkUserDispatchQuota, hasUserDispatchQuotaAvailable } from "./matter-messages.ts";
-import { canTargetMatterAi, ensureOrgEnabledAiRequest } from "./matter-roster.ts";
+import { ensureOrgEnabledAiRequest } from "./matter-roster.ts";
 
 export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const match = r.pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/human-decision$/);
@@ -138,7 +144,7 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 				return null;
 		} else if (
 			!hasUserDispatchQuotaAvailable(ctx, actor) ||
-			!canTargetMatterAi(ctx, actor, matter.orgId, message.senderId)
+			!canTargetMatterAi(store, actor, matter.orgId, message.senderId)
 		)
 			return false;
 		const questions = decision.requests.map(({ question }) => question).join("\n");
@@ -177,7 +183,7 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 			(actor.user && !currentActor.user) ||
 			!canParticipateInMatter(store, currentActor, latestMatter) ||
 			!canDispatchAiInOrg(store, currentActor, latestMatter.orgId) ||
-			!canTargetMatterAi(ctx, currentActor, latestMatter.orgId, message.senderId) ||
+			!canTargetMatterAi(store, currentActor, latestMatter.orgId, message.senderId) ||
 			(keepMatterLead &&
 				latestMatter.aiMemberIds !== null &&
 				!latestMatter.aiMemberIds.includes(message.senderId) &&

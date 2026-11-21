@@ -233,14 +233,15 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 		const readToolsIdx = readRun.args.indexOf("--tools");
 		assert.equal(readRun.args[readToolsIdx + 1], "read");
 
-		// 4) Malformed JSON or hallucinated memberId fails loudly with 502 instead of silently guessing
+		// 4) Malformed JSON and unknown member IDs fall back to the local recommendation
 		workerReplyMode = "malformed";
 		const badJsonRes = await fetch(`${url}/api/matters/assess`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ prompt: "检查这个问题", mode: "model" }),
 		});
-		assert.equal(badJsonRes.status, 502);
+		assert.equal(badJsonRes.status, 200);
+		assert.equal(((await badJsonRes.json()) as { assessmentSource: string }).assessmentSource, "rules");
 
 		workerReplyMode = "hallucinated_id";
 		const hallucinatedRes = await fetch(`${url}/api/matters/assess`, {
@@ -248,7 +249,8 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ prompt: "检查这个问题", mode: "model" }),
 		});
-		assert.equal(hallucinatedRes.status, 502);
+		assert.equal(hallucinatedRes.status, 200);
+		assert.equal(((await hallucinatedRes.json()) as { assessmentSource: string }).assessmentSource, "rules");
 
 		// 5) Direct AbortSignal cancellation aborts in-flight worker cleanly
 		workerReplyMode = "slow_abort";
@@ -414,7 +416,8 @@ test("AI Role Designer validates installed skills, structured verificationPlan, 
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ oneJob: "检查发版", mode: "model" }),
 		});
-		assert.equal(badRes.status, 502);
+		assert.equal(badRes.status, 200);
+		assert.equal(((await badRes.json()) as { designSource: string }).designSource, "rules");
 	} finally {
 		await orchestrator.shutdown();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

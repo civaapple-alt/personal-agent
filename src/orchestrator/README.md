@@ -11,6 +11,9 @@
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
   筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。
 
+- [conversation-intent.ts](conversation-intent.ts) 通过 [system-one.ts](system-one.ts) 调用 Jev，也可降级到隔离 Pi 决策和本地规则。编排核保留事项占用、授权证据和成员范围校验。[matter-roster-query.ts](matter-roster-query.ts) 直接从当前事项配置生成名单。
+- [initiation-classifier.ts](initiation-classifier.ts) 在用户主动请求参与建议时评估主责、请教和旁听。岗位缺口说明与选中的仓库只读预判由 Pi 决策生成。
+
 按问题找入口：
 
 - [prompts.ts](prompts.ts) 使用英文组装岗位指令、对话回放、旁听和续接提示。回复与成果默认跟随用户请求的语言，并保留标识符、命令、路径和固定输出格式。[meta-architect.ts](meta-architect.ts) 对架构师的 JSON 回复采用相同语言约定，并支持按目标 `roleScope`/`ownerOrgId`/`ownerUserId` 筛选可读成员与推荐可选 `newSkills` 草案。

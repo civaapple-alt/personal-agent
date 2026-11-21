@@ -1,8 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
+import { parseEnv } from "node:util";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { probePiCli } from "../orchestrator/runtime-info.ts";
+import { createSystemOneClassifier } from "../orchestrator/system-one.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
@@ -24,6 +26,19 @@ function listLanIpv4Addresses(): string[] {
 		}
 	}
 	return results;
+}
+
+/** Load only the PA classifier credential. Keep dotenv values out of subprocess environments. */
+async function readDecisionKey(rootDir: string): Promise<string | undefined> {
+	if (process.env.TYPESAFE_API_KEY !== undefined) return process.env.TYPESAFE_API_KEY.trim() || undefined;
+	try {
+		return parseEnv(await readFile(resolve(rootDir, ".env"), "utf8")).TYPESAFE_API_KEY?.trim() || undefined;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+			console.warn("无法读取 .env 的决策模型配置，将使用 Pi 决策。");
+		}
+		return undefined;
+	}
 }
 
 async function main(): Promise<void> {
@@ -58,7 +73,9 @@ async function main(): Promise<void> {
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 
+	const decisionKey = await readDecisionKey(rootDir);
 	const orchestrator = new TeamOrchestrator({
+		classifier: decisionKey ? createSystemOneClassifier(decisionKey) : undefined,
 		store,
 		templates,
 		defaultCwd: rootDir,

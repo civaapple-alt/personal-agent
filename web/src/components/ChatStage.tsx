@@ -60,8 +60,6 @@ type MatterInitiationProps = Pick<
 	| "draftCollaboratorIds"
 	| "draftVisibility"
 	| "assessment"
-	| "assessing"
-	| "assessmentError"
 	| "modelAssessing"
 	| "modelAssessmentError"
 	| "onUpdateDraftAiMemberIds"

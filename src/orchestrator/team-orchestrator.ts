@@ -25,6 +25,7 @@ import { type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts"
 import { buildMemberPrompts } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
+import type { DecisionClassifier } from "./system-one.ts";
 import { filterTeamMembersForScope } from "./team-health.ts";
 import {
 	type DelegateInput,
@@ -81,6 +82,7 @@ export class TeamOrchestrator {
 	private readonly skillsDir: string | undefined;
 	private readonly noSession: boolean;
 	private readonly workerFactory: WorkerFactory;
+	private readonly classifier: DecisionClassifier | undefined;
 	private readonly readPiModels: ReadPiModels;
 	private readonly piModelProbes = new Map<string, ReturnType<ReadPiModels>>();
 	private dialogHandler: OrchestratorDialogHandler | undefined;
@@ -95,6 +97,7 @@ export class TeamOrchestrator {
 
 	constructor(options: TeamOrchestratorOptions) {
 		this.store = options.store;
+		this.classifier = options.classifier;
 		this.extensions = options.extensions ?? [];
 		this.pstackDir = options.pstackDir;
 		this.defaultCwd = options.defaultCwd ?? process.cwd();
@@ -441,9 +444,10 @@ export class TeamOrchestrator {
 				isMatterRunning: (id) => this.isMatterRunning(id),
 				isArchitectMember: (member) => this.isArchitectMember(member),
 				resolveMatterAiMembers: (matter, userId) => this.resolveMatterAiMembers(matter, userId),
+				listSharedMatterAiMembers: (matter) => this.listSharedMatterAiMembers(matter),
 				routeMemberForRequest: (prompt, memberId, allowed, orgId, options) =>
 					this.routeMemberForRequest(prompt, memberId, allowed, orgId, options),
-				decideConversationIntent: ({ matterId, workspace, message, memberId, explicitRecipient, signal }) => {
+				decideConversationIntent: ({ matterId, workspace, message, memberId, ...routing }) => {
 					const matter = this.requireMatter(matterId);
 					const orgId = workspace ? workspace.orgId : (matter.orgId ?? null);
 					const cwd = workspace?.repoPath ?? this.defaultCwd;
@@ -456,14 +460,14 @@ export class TeamOrchestrator {
 					const messages = this.store.listMessages(matterId, "user");
 					const currentIndex = messages.findIndex(({ id }) => id === message.id);
 					return decideConversationIntent({
+						...routing,
+						classifier: this.classifier,
 						workerFactory: this.workerFactory,
 						cwd,
 						modelSelection,
-						signal,
 						prompt: message.content,
 						history: currentIndex >= 0 ? messages.slice(0, currentIndex) : [],
 						context: { workspaceId: workspace?.id ?? null, repoPath: cwd, orgId: orgId ?? null },
-						explicitRecipient,
 					});
 				},
 				executeWithWorker: (work) => this.executeWithWorker(work),
@@ -713,6 +717,7 @@ export class TeamOrchestrator {
 			assessMatterInitiationWithModel(
 				{
 					defaultCwd: this.defaultCwd,
+					classifier: this.classifier,
 					workerFactory: this.workerFactory,
 					members: scopedMembers,
 					selectModel: (memberId) => resolveConfiguredModel(this.store, orgId, memberId),

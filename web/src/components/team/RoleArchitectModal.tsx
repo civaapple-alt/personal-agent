@@ -85,7 +85,6 @@ export function RoleArchitectModal({
 	const [draftNewSkills, setDraftNewSkills] = useState<NewSkillDraftDto[]>([]);
 	const [selectedNewSkillIndices, setSelectedNewSkillIndices] = useState<number[]>([]);
 	const [generating, setGenerating] = useState(false);
-	const [generatingMode, setGeneratingMode] = useState<"rules" | "model" | null>(null);
 	const [confirmAiDesign, setConfirmAiDesign] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const designAbortRef = useRef<AbortController | null>(null);
@@ -106,7 +105,6 @@ export function RoleArchitectModal({
 			designAbortRef.current?.abort();
 			designAbortRef.current = null;
 			setGenerating(false);
-			setGeneratingMode(null);
 			setConfirmAiDesign(false);
 			return;
 		}
@@ -146,13 +144,12 @@ export function RoleArchitectModal({
 		setSelectedBoundaries((prev) => (prev.includes(rule) ? prev.filter((item) => item !== rule) : [...prev, rule]));
 	};
 
-	const handleGenerateDraft = async (mode: "rules" | "model") => {
+	const handleGenerateDraft = async () => {
 		if (!oneJob.trim() || generating) return;
 		designAbortRef.current?.abort();
 		const controller = new AbortController();
 		designAbortRef.current = controller;
 		setGenerating(true);
-		setGeneratingMode(mode);
 		setConfirmAiDesign(false);
 		const extraLines = extraBoundary
 			.split("\n")
@@ -175,7 +172,7 @@ export function RoleArchitectModal({
 						.filter(Boolean),
 					workflowRules: workflowRules.trim() || undefined,
 					isPrimaryContact: activeScopeChoice.roleScope === "global" && isPrimaryContact,
-					mode,
+					mode: "model",
 				},
 				controller.signal,
 			);
@@ -193,9 +190,8 @@ export function RoleArchitectModal({
 		} finally {
 			if (designAbortRef.current === controller) {
 				designAbortRef.current = null;
+				setGenerating(false);
 			}
-			setGenerating(false);
-			setGeneratingMode(null);
 		}
 	};
 
@@ -203,7 +199,6 @@ export function RoleArchitectModal({
 		designAbortRef.current?.abort();
 		designAbortRef.current = null;
 		setGenerating(false);
-		setGeneratingMode(null);
 	};
 
 	const handleConfirmCreate = async () => {
@@ -474,7 +469,7 @@ export function RoleArchitectModal({
 					</div>
 
 					<div className="ui-row-actions">
-						{generating && generatingMode === "model" ? (
+						{generating ? (
 							<>
 								<button type="button" className="btn-pill-dark" disabled>
 									AI 正在设计角色草案…
@@ -484,24 +479,14 @@ export function RoleArchitectModal({
 								</button>
 							</>
 						) : (
-							<>
-								<button
-									type="button"
-									className="btn-pill-dark"
-									disabled={!oneJob.trim() || generating}
-									onClick={() => setConfirmAiDesign(true)}
-								>
-									AI 智能设计草案
-								</button>
-								<button
-									type="button"
-									className="btn-pill-outline"
-									disabled={!oneJob.trim() || generating}
-									onClick={() => void handleGenerateDraft("rules")}
-								>
-									{generating ? "生成中…" : "规则快速直出"}
-								</button>
-							</>
+							<button
+								type="button"
+								className="btn-pill-dark"
+								disabled={!oneJob.trim() || generating}
+								onClick={() => setConfirmAiDesign(true)}
+							>
+								AI 智能设计草案
+							</button>
 						)}
 					</div>
 					{confirmAiDesign && !generating && (
@@ -513,7 +498,7 @@ export function RoleArchitectModal({
 								<button
 									type="button"
 									className="btn-pill-dark btn-xs"
-									onClick={() => void handleGenerateDraft("model")}
+									onClick={() => void handleGenerateDraft()}
 								>
 									确认 AI 设计
 								</button>
@@ -530,7 +515,7 @@ export function RoleArchitectModal({
 								<strong>确认并微调新角色配置</strong>
 								<div className="architect-preview-badges">
 									<span className={`pill ${draft.designSource === "model" ? "live" : ""}`}>
-										{draft.designSource === "model" ? "AI 角色设计" : "本地规则草案"}
+										{draft.designSource === "model" ? "AI 角色设计" : "模型不可用 · 本地草案"}
 									</span>
 									<span className="pill">ID：{draft.template.id}</span>
 									<span className="pill">

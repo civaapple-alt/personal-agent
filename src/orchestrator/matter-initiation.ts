@@ -8,7 +8,9 @@ import {
 import type { RoleTemplate } from "../roles/types.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { TeamMember } from "../storage/types.ts";
-import { runTypedPiDecision } from "./pi-decision.ts";
+import { classifyInitiation } from "./initiation-classifier.ts";
+import { type PiDecisionResult, runTypedPiDecision } from "./pi-decision.ts";
+import type { DecisionClassifier } from "./system-one.ts";
 import { truncateInline, type WorkerFactory } from "./types.ts";
 
 export type CollaborationPresetMode = "solo" | "lead_consult" | "lead_review" | "human_first";
@@ -518,6 +520,7 @@ export function validateInitiationModelDecision(
 export async function assessMatterInitiationWithModel(
 	deps: {
 		defaultCwd: string;
+		classifier?: DecisionClassifier;
 		workerFactory: WorkerFactory;
 		selectModel?: (memberId?: string) => ModelSelection | null;
 		members: TeamMember[];
@@ -639,30 +642,69 @@ export async function assessMatterInitiationWithModel(
 		`## 用户需求草稿\n${truncateInline(prompt, 2000)}${input.hasImages ? "\n（注：附带了图片，当前决策阶段不直接解析图片像素细节）" : ""}`,
 	].join("\n\n");
 
-	const { decision, toolExecutions } = await runTypedPiDecision(
-		{
-			cwd: input.workspacePath ?? deps.defaultCwd,
-			modelSelection: deps.selectModel?.(primary?.id),
-			workerFactory: deps.workerFactory,
-		},
-		{
-			name: "matter_initiation_decision",
-			systemPrompt,
-			userPrompt,
-			tools: useRepoRead ? ["read"] : [],
-			validate: (raw) =>
-				validateInitiationModelDecision(raw, {
-					members: pool,
-					primaryId: primary?.id ?? null,
-					explicitMemberId: explicitBusinessId,
-					hasWorkspace,
-				}),
-		},
-		{
-			timeoutMs: input.timeoutMs ?? 60_000,
-			signal: input.signal,
-		},
-	);
+	const validationContext = {
+		members: pool,
+		primaryId: primary?.id ?? null,
+		explicitMemberId: explicitBusinessId,
+		hasWorkspace,
+	};
+	const cutoff = Date.now() + (input.timeoutMs ?? (useRepoRead ? 60_000 : 10_000));
+	let decision: ValidatedInitiationDecision | null = null;
+	let toolExecutions: PiDecisionResult<ValidatedInitiationDecision>["toolExecutions"] = [];
+	if (deps.classifier && !useRepoRead) {
+		try {
+			const candidate = await classifyInitiation(deps.classifier, {
+				prompt,
+				rosterDescription,
+				pool,
+				explicitLead: explicitBusinessId,
+				hasWorkspace,
+				hasAttachments: Boolean(input.hasImages),
+				signal: input.signal,
+			});
+			if (candidate) decision = validateInitiationModelDecision(candidate, validationContext);
+		} catch {
+			input.signal.throwIfAborted();
+		}
+	}
+	if (!decision) {
+		const timeout = Math.max(1, cutoff - Date.now());
+		const deadline = AbortSignal.any([input.signal, AbortSignal.timeout(timeout)]);
+		try {
+			({ decision, toolExecutions } = await runTypedPiDecision(
+				{
+					cwd: input.workspacePath ?? deps.defaultCwd,
+					modelSelection: deps.selectModel?.(primary?.id),
+					workerFactory: deps.workerFactory,
+				},
+				{
+					name: "matter_initiation_decision",
+					systemPrompt,
+					userPrompt,
+					tools: useRepoRead ? ["read"] : [],
+					validate: (raw) =>
+						validateInitiationModelDecision(raw, {
+							members: pool,
+							primaryId: primary?.id ?? null,
+							explicitMemberId: explicitBusinessId,
+							hasWorkspace,
+						}),
+				},
+				{
+					timeoutMs: timeout,
+					signal: deadline,
+				},
+			));
+		} catch {
+			input.signal.throwIfAborted();
+			return assessMatterInitiation({
+				...input,
+				hasWorkspace,
+				members: deps.members,
+				templatesByRoleId: deps.templatesByRoleId,
+			});
+		}
+	}
 	input.signal.throwIfAborted();
 	// Tool availability is not read evidence. Only retain completed successful reads whose
 	// resolved files are inside the selected workspace (including symlink resolution).
@@ -687,32 +729,20 @@ export async function assessMatterInitiationWithModel(
 		...decision.recommendedConsultIds,
 		...decision.recommendedObserverIds,
 	]);
-	const heuristicScores = pool.map((member) =>
-		scoreMember(
-			member,
-			deps.templatesByRoleId.get(member.templateId) ?? deps.templatesByRoleId.get(member.id),
-			prompt.toLowerCase(),
-			hasWorkspace,
-		),
-	);
-	const candidates: MatterInitiationCandidate[] = heuristicScores
-		.map((c) => ({
-			...c,
-			score:
-				c.memberId === decision.recommendedLeadId
-					? Math.max(c.score, 10)
-					: selectedAiSet.has(c.memberId)
-						? Math.max(c.score, 6)
-						: c.score,
-			matchedSignals:
-				c.memberId === decision.recommendedLeadId
-					? ["AI决策: 主责", ...c.matchedSignals]
-					: decision.recommendedObserverIds.includes(c.memberId)
-						? ["AI决策: 旁听把关", ...c.matchedSignals]
-						: decision.recommendedConsultIds.includes(c.memberId)
-							? ["AI决策: 按需请教", ...c.matchedSignals]
-							: c.matchedSignals,
-		}))
+	const candidates: MatterInitiationCandidate[] = pool
+		.map((member) => {
+			const lead = member.id === decision.recommendedLeadId;
+			const observe = decision.recommendedObserverIds.includes(member.id);
+			const consult = decision.recommendedConsultIds.includes(member.id);
+			return {
+				memberId: member.id,
+				displayName: member.displayName,
+				roleTitle: member.roleTitle,
+				tools: deps.templatesByRoleId.get(member.templateId)?.tools ?? [],
+				score: lead ? 10 : observe || consult ? 6 : 0,
+				matchedSignals: lead ? ["主责"] : observe ? ["旁听把关"] : consult ? ["按需请教"] : [],
+			};
+		})
 		.sort((a, b) => b.score - a.score);
 
 	return {

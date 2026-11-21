@@ -251,7 +251,11 @@ export function parseMetaArchitectResponse(
 	const memberById = new Map(businessExisting.map((m) => [m.id, m]));
 	const validExistingIds = new Set(businessExisting.map((m) => m.id));
 	let recommendedFormation: MetaArchitectFormationSuggestion | undefined;
-	if (!options?.isHealthcheck && rec.recommendedFormation && typeof rec.recommendedFormation === "object") {
+	if (
+		!(options?.isHealthcheck ?? rec.proposalKind === "healthcheck") &&
+		rec.recommendedFormation &&
+		typeof rec.recommendedFormation === "object"
+	) {
 		const fm = rec.recommendedFormation as Record<string, unknown>;
 		const existingIds = Array.isArray(fm.existingMemberIds)
 			? fm.existingMemberIds.map(String).filter((id) => validExistingIds.has(id))
@@ -435,7 +439,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"## Assess team health",
 	"- Put a one-sentence summary in `reply` and give each finding its own item in `healthFindings`. Each item has a short title, a one-sentence detail, and a status of ok or warn.",
 	"- Put any change to tools, antiJobs, or workflowNote in `roleAdjustments` so the owner can confirm it.",
-	"- For a health check without a new workflow proposal, set `recommendedFormation` to null.",
+	"- Set `proposalKind` to `healthcheck` for a team health audit or `planning` for new role/workflow design. In a health check without a new workflow, set `recommendedFormation` to null.",
 	"- Cite host-supplied configuration or case IDs in `evidenceIds`. Treat occurrence counts and candidate experience as leads. If there is no concrete issue, leave `healthFindings` and `roleAdjustments` empty.",
 	"",
 	"## Return valid JSON only",
@@ -523,13 +527,20 @@ export async function buildArchitectMessageProposals(
 	templatesById: Map<string, RoleTemplate>,
 	options?: {
 		promptText?: string;
+		isHealthcheck?: boolean;
 		isMidMatterConsult?: boolean;
 		skillsDir?: string;
 		scopeFilter?: TeamHealthScopeFilter;
 	},
 ): Promise<{ replyText: string; roleProposals?: RoleProposalPayload }> {
 	const existingMembers = filterTeamMembersForScope(store.listMembers(), options?.scopeFilter);
-	const isHealthcheck = /(?:体检|诊断|重叠|收窄|冗余|权限过宽|摩擦)/i.test(options?.promptText ?? "");
+	const proposal = extractJsonObject(rawText);
+	const proposalKind = proposal?.proposalKind;
+	const isHealthcheck =
+		options?.isHealthcheck ??
+		(proposalKind === "healthcheck" || proposalKind === "planning"
+			? proposalKind === "healthcheck"
+			: /(?:体检|诊断|重叠|收窄|冗余|权限过宽|摩擦)/i.test(options?.promptText ?? ""));
 	const parsed = parseMetaArchitectResponse(rawText, existingMembers, {
 		templatesById,
 		isHealthcheck,

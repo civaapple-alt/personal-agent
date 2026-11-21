@@ -7,11 +7,12 @@ import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
-import type { ConversationIntent } from "./conversation-intent.ts";
+import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
 import { validateDelivery } from "./execution-context.ts";
 import type { Clarification, HumanDecision } from "./human-decision.ts";
 import { draftDigest } from "./independent-verification.ts";
 import { messageMatchesContext } from "./matter-context.ts";
+import { recordRosterReply } from "./matter-roster-query.ts";
 import { buildArchitectMessageProposals } from "./meta-architect.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { resolveDiscussionMentionTargets } from "./prompts.ts";
@@ -39,6 +40,7 @@ interface MatterDispatchDeps {
 	isMatterRunning: (matterId: string) => boolean;
 	isArchitectMember: (member: TeamMember | null | undefined) => boolean;
 	resolveMatterAiMembers: (matter: Matter, actorUserId?: string | null) => TeamMember[];
+	listSharedMatterAiMembers: (matter: Matter) => TeamMember[];
 	routeMemberForRequest: (
 		prompt: string,
 		preferredMemberId: string | undefined,
@@ -53,8 +55,12 @@ interface MatterDispatchDeps {
 		message: MatterMessage;
 		memberId: string;
 		explicitRecipient: boolean;
+		proactiveReplies: boolean;
+		canReplyWithRoster: boolean;
+		canRouteToArchitect: boolean;
+		candidates: TeamMember[];
 		signal: AbortSignal;
-	}) => Promise<ConversationIntent>;
+	}) => Promise<ConversationDecision>;
 }
 
 /** Owns a single turn from acquiring the matter lease through settlement and cleanup. */
@@ -107,7 +113,7 @@ export async function dispatchMatterTurn(
 			? existingLead
 			: undefined);
 	const assignedMember = deps.routeMemberForRequest(
-		input.prompt,
+		isConversation ? "" : input.prompt,
 		preferredMemberId,
 		existing ? existing.aiMemberIds : input.aiMemberIds,
 		effectiveOrgId,
@@ -274,42 +280,78 @@ export async function dispatchMatterTurn(
 	speakerMemberId = activeSpeaker.id;
 	try {
 		let intent: ConversationIntent = "reply";
+		let architectHealthcheck: boolean | undefined;
 		if (isConversation) {
 			if (!existingUserMsg) throw new Error("Conversation routing requires a saved human message");
 			run.userMessageId = existingUserMsg.id;
 			emitDispatchProgress({ stage: "starting", label: "正在理解消息…" });
-			intent = await deps.decideConversationIntent({
+			const hasExplicitRecipient =
+				mentionedTargets.length > 0 || Boolean(input.preferredMemberId) || assignedIsArchitect;
+			const candidates = !hasExplicitRecipient && !matter.leadMemberId ? discussionMentionPool : [];
+			const decision = await deps.decideConversationIntent({
 				matterId: matter.id,
 				workspace,
 				message: existingUserMsg,
 				memberId: activeSpeaker.id,
-				explicitRecipient: mentionedTargets.length > 0,
+				explicitRecipient: hasExplicitRecipient,
+				proactiveReplies: matter.discussionAiEnabled === true,
+				canReplyWithRoster: !hasExplicitRecipient && images.length === 0 && files.length === 0,
+				canRouteToArchitect:
+					deps.isArchitectMember(activeSpeaker) ||
+					(!hasExplicitRecipient && Boolean(deps.store.getMember(ROLE_ARCHITECT_MEMBER_ID))),
+				candidates,
 				signal: run.controller.signal,
 			});
 			run.controller.signal.throwIfAborted();
-			if (intent === "silent") {
+			intent = decision.intent;
+			input.validateConversationAccess?.();
+			if (decision.source !== "rules" && decision.target.startsWith("role_architect")) {
+				architectHealthcheck = decision.target === "role_architect_review";
+			}
+			deps.store.updateMessageMetadata(existingUserMsg.id, {
+				...existingUserMsg.metadata,
+				conversationDecisionSource: decision.source,
+			});
+			if (intent === "silent" || intent === "roster") {
+				const rosterMessage =
+					intent === "roster"
+						? recordRosterReply(deps.store, matter, existingUserMsg, deps.listSharedMatterAiMembers(matter))
+						: undefined;
 				return {
 					matter,
 					assignedMember: activeSpeaker,
 					workspace,
-					replyText: "",
+					replyText: rosterMessage?.content ?? "",
+					rosterMessage,
 					deliverable: null,
 					runResult: { ...emptyAbortedResult(), aborted: false },
 				};
 			}
 			isDiscussionTurn = intent !== "work";
 			run.conversationDiscussion = isDiscussionTurn;
-			if (!isDiscussionTurn && mentionedTargets.length === 0 && isExplicitRoleSetupRequest(input.prompt)) {
+			if (
+				!hasExplicitRecipient &&
+				(decision.target === "role_architect" || decision.target === "role_architect_review")
+			) {
 				activeSpeaker = deps.routeMemberForRequest(input.prompt, ROLE_ARCHITECT_MEMBER_ID, null, effectiveOrgId, {
 					actorUserId: effectiveUserId,
 				});
 			}
+			const selected = candidates.find((candidate) => candidate.id === decision.target);
+			if (selected) {
+				activeSpeaker = selected;
+			}
+			input.validateConversationAccess?.(activeSpeaker.id);
 			assignedIsArchitect = deps.isArchitectMember(activeSpeaker);
+			if (!matter.leadMemberId && !assignedIsArchitect && intent !== "confirm") {
+				matter = deps.store.updateMatterLead(matter.id, activeSpeaker.id);
+			}
 			speakerMemberId = activeSpeaker.id;
 			if (!isDiscussionTurn) {
 				deps.store.updateMessageMetadata(existingUserMsg.id, {
 					...existingUserMsg.metadata,
 					mode: "dispatch",
+					conversationDecisionSource: decision.source,
 					conversationRouted: true,
 					targetMemberId: activeSpeaker.id,
 				});
@@ -433,9 +475,10 @@ export async function dispatchMatterTurn(
 		if (!aborted) run.controller.signal.throwIfAborted();
 		const rawReply = result.assistantText.trim();
 		const architectParsed =
-			!aborted && assignedIsArchitect && !isDiscussionTurn
+			!aborted && assignedIsArchitect && intent !== "confirm" && (!isDiscussionTurn || isConversation)
 				? await buildArchitectMessageProposals(rawReply, deps.store, deps.templatesById, {
 						promptText: input.prompt,
+						isHealthcheck: architectHealthcheck,
 						isMidMatterConsult: isMidMatterArchitectConsult,
 						skillsDir: deps.skillsDir,
 						scopeFilter: {
@@ -449,7 +492,7 @@ export async function dispatchMatterTurn(
 			(result.clarification ? [result.clarification] : []);
 		const decisionOwnerId = isConversation || input.keepMatterLead ? effectiveUserId : matter.createdByUserId;
 		const decision: HumanDecision | undefined =
-			!aborted && (!isDiscussionTurn || intent === "confirm") && requests.length > 0
+			!aborted && (!isDiscussionTurn || intent === "confirm" || Boolean(architectParsed)) && requests.length > 0
 				? {
 						kind:
 							intent === "confirm"

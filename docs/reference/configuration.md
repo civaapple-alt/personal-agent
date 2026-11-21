@@ -14,6 +14,7 @@
 
 | 变量名 | 默认值 | 生效位置 | 说明 |
 | --- | --- | --- | --- |
+| `TYPESAFE_API_KEY` | 未设置 | [服务入口](../../src/server/main.ts) | 启用 Jev System One 分类器。优先读取服务环境变量，也可在启动目录的 `.env` 中配置。服务只从该文件读取此凭据。 |
 | `PORT` | `4310` | [服务入口](../../src/server/main.ts) | Web 工作台 HTTP/SSE 监听端口 |
 | `PA_HOST` | `127.0.0.1` | [服务入口](../../src/server/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
 | `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |

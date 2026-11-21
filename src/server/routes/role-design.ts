@@ -184,17 +184,20 @@ export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRe
 				});
 				if (res.destroyed || cancellation.signal.aborted) return true;
 				sendJson(res, 200, draft);
+				return true;
 			} catch (err) {
 				if (res.destroyed || cancellation.signal.aborted) return true;
-				if (err instanceof PiDecisionError) {
-					sendError(res, err.kind === "aborted" ? 499 : 502, err.message);
+				if (err instanceof PiDecisionError && err.kind === "aborted") {
+					sendError(res, 499, err.message);
 					return true;
 				}
-				sendError(res, 502, err instanceof Error ? err.message : String(err));
+				if (!(err instanceof PiDecisionError)) {
+					sendError(res, 502, "角色设计暂不可用");
+					return true;
+				}
 			} finally {
 				cancellation.dispose();
 			}
-			return true;
 		}
 		const draft = buildRoleDesignDraft(designInput);
 		sendJson(res, 200, {

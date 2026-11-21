@@ -4,7 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
-- Route conversational information requests such as “我想看一下” to an AI reply even when proactive replies are off.
+- Use System One for conversation intent, live roster questions, and automatic role routing when `TYPESAFE_API_KEY` is configured. Fall back to isolated Pi decisions and then to local rules.
+- Analyze new-matter participation on request. Generate role drafts with Pi and fall back to local drafts when the model is unavailable.
 
 - Install pi-web-access through Pi and let administrators enable web search for selected AI roles. Use the search provider independently of the role's chat model.
 - Group the host-side web search integration under `src/pa-extensions/web-access/`.

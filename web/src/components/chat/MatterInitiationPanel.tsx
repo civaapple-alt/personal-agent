@@ -27,8 +27,6 @@ interface MatterInitiationPanelProps {
 	draftObserverMemberIds: string[];
 	draftCollaboratorIds: string[];
 	assessment: MatterInitiationAssessmentDto | null;
-	assessing: boolean;
-	assessmentError?: string | null;
 	modelAssessing?: boolean;
 	modelAssessmentError?: string | null;
 	onSelectLeadMember: (memberId: string) => void;
@@ -69,8 +67,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		draftObserverMemberIds,
 		draftCollaboratorIds,
 		assessment,
-		assessing,
-		assessmentError,
 		modelAssessing = false,
 		modelAssessmentError,
 		onSelectLeadMember,
@@ -115,7 +111,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${observers.length ? `，${observers.length} 位成员旁听把关` : "，不自动旁听"}。`;
 	const applied =
 		assessment &&
-		!assessing &&
 		(assessment.recommendedMode === "human_first"
 			? !discussionAiEnabled
 			: (observers.length > 0 ? "lead_review" : consultIds.length > 0 ? "lead_consult" : "solo") ===
@@ -159,7 +154,11 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const confidenceLabel =
 		assessment?.confidence === "high" ? "高把握" : assessment?.confidence === "low" ? "低把握" : "中把握";
 	const showAssessmentBar =
-		assessing || assessment || assessmentError || modelAssessing || modelAssessmentError || confirmModel;
+		assessment ||
+		modelAssessing ||
+		modelAssessmentError ||
+		confirmModel ||
+		(hasPromptText && onRequestModelAssessment);
 
 	return (
 		<section className="initiation-panel" aria-label="新事项参与安排">
@@ -187,114 +186,122 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 				>
 					{modelAssessing ? (
 						<div className="initiation-recommendation-row">
-							<span className="initiation-assess-note">正在通过 Pi 决策模型分析需求与角色边界…</span>
+							<span className="initiation-assess-note">正在分析需求和角色分工…</span>
 							{onCancelModelAssessment && (
 								<button type="button" className="btn-inline" onClick={onCancelModelAssessment}>
 									取消分析
 								</button>
 							)}
 						</div>
-					) : assessing ? (
-						<span className="initiation-assess-note">正在匹配文字建议…</span>
-					) : assessmentError ? (
-						<span className="initiation-assess-note">{assessmentError}</span>
 					) : (
-						assessment && (
-							<>
-								<div className="initiation-recommendation-row">
-									<span className="initiation-recommend-text">
-										{applied ? (
-											"当前安排已采用建议"
-										) : assessment.fitStatus === "gap_detected" ? (
-											isModelResult ? (
-												`AI 决策：岗位覆盖待确认 · ${assessment.gapSuggestion?.missingRoleTitle ?? "建议补齐角色"}`
+						<>
+							{!assessment && hasPromptText && !confirmModel && (
+								<button type="button" className="btn-inline" onClick={() => onRequestModelAssessment?.()}>
+									分析参与方式
+								</button>
+							)}
+							{assessment && (
+								<>
+									<div className="initiation-recommendation-row">
+										<span className="initiation-recommend-text">
+											{applied ? (
+												"当前安排已采用建议"
+											) : assessment.fitStatus === "gap_detected" ? (
+												isModelResult ? (
+													`AI 决策：岗位覆盖待确认 · ${assessment.gapSuggestion?.missingRoleTitle ?? "建议补齐角色"}`
+												) : (
+													"岗位覆盖待确认"
+												)
 											) : (
-												"岗位覆盖待确认"
-											)
-										) : (
-											<>
-												{isModelResult ? `AI 决策建议（${confidenceLabel}）` : "可选建议（本地规则）"}：
-												{recommendation}
-											</>
-										)}
-									</span>
-									<div className="initiation-recommend-actions">
-										{!applied && assessment.fitStatus !== "gap_detected" && (
-											<button type="button" className="btn-inline" onClick={onApplyRecommendation}>
-												使用建议
-											</button>
-										)}
-										{assessment.fitStatus === "gap_detected" && (
-											<button
-												type="button"
-												className="btn-inline"
-												onClick={() =>
-													onStartArchitectMatter
-														? onStartArchitectMatter(
-																`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
-															)
-														: onOpenArchitect(assessment.gapSuggestion)
-												}
-											>
-												请架构师协助
-											</button>
-										)}
-										{onRequestModelAssessment && hasPromptText && !confirmModel && (
-											<button
-												type="button"
-												className="btn-pill-outline btn-xs"
-												onClick={() => {
-													setReadRepoForDecision(hasWorkspace);
-													setConfirmModel(true);
-												}}
-											>
-												{isModelResult ? "重新 AI 决策" : "请 AI 决策阵型"}
-											</button>
-										)}
-									</div>
-								</div>
-								{confirmModel && hasPromptText && (
-									<div className="initiation-model-confirm">
-										<span>将调用 Pi 决策模型评估团队分工与阵型（约数秒）：</span>
-										{hasWorkspace && (
-											<label className="initiation-repo-check">
-												<input
-													type="checkbox"
-													checked={readRepoForDecision}
-													onChange={(e) => setReadRepoForDecision(e.target.checked)}
-												/>
-												<span>只读参考仓库入口文件</span>
-											</label>
-										)}
+												<>
+													{isModelResult ? `AI 决策建议（${confidenceLabel}）` : "可选建议（本地规则）"}：
+													{recommendation}
+												</>
+											)}
+										</span>
 										<div className="initiation-recommend-actions">
-											<button
-												type="button"
-												className="btn-pill-dark btn-xs"
-												onClick={() => {
-													setConfirmModel(false);
-													onRequestModelAssessment?.({ readRepo: readRepoForDecision });
-												}}
-											>
-												确认分析
-											</button>
-											<button type="button" className="btn-inline" onClick={() => setConfirmModel(false)}>
-												取消
-											</button>
+											{!applied && assessment.fitStatus !== "gap_detected" && (
+												<button type="button" className="btn-inline" onClick={onApplyRecommendation}>
+													使用建议
+												</button>
+											)}
+											{assessment.fitStatus === "gap_detected" && (
+												<button
+													type="button"
+													className="btn-inline"
+													onClick={() =>
+														onStartArchitectMatter
+															? onStartArchitectMatter(
+																	`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
+																)
+															: onOpenArchitect(assessment.gapSuggestion)
+													}
+												>
+													请架构师协助
+												</button>
+											)}
+											{onRequestModelAssessment && hasPromptText && !confirmModel && (
+												<button
+													type="button"
+													className="btn-pill-outline btn-xs"
+													onClick={() => {
+														if (hasWorkspace) {
+															setReadRepoForDecision(false);
+															setConfirmModel(true);
+														} else {
+															onRequestModelAssessment();
+														}
+													}}
+												>
+													{isModelResult ? "重新 AI 决策" : "请 AI 决策阵型"}
+												</button>
+											)}
 										</div>
 									</div>
-								)}
-								{modelAssessmentError && <p className="initiation-model-error">{modelAssessmentError}</p>}
-								<details className="initiation-basis">
-									<summary>为什么这样建议？</summary>
-									<p>{assessment.explanation}</p>
-									<p>
-										{isModelResult
-											? `由 Pi 决策模型基于职责与不做边界判断${assessment.usedRepoRead ? `（已读取：${assessment.repoReadPaths?.join("、") ?? "仓库文件"}）` : assessment.repoReadEnabled ? "（已允许读取，但无成功读取仓库文件的记录）" : "（未读取仓库文件）"}。建议不会自动替换当前设置。`
-											: "以上为本地文字规则预判，不调用模型、不读取仓库；建议不会自动替换当前设置，未命中关键词不代表成员无法胜任。"}
-									</p>
-								</details>
-							</>
-						)
+									<details className="initiation-basis">
+										<summary>为什么这样建议？</summary>
+										<p>{assessment.explanation}</p>
+										<p>
+											{isModelResult
+												? `基于职责与协作边界判断${assessment.usedRepoRead ? `（已读取：${assessment.repoReadPaths?.join("、") ?? "仓库文件"}）` : assessment.repoReadEnabled ? "（已允许读取，但无成功读取仓库文件的记录）" : "（未读取仓库文件）"}。建议不会自动替换当前设置。`
+												: "决策模型暂不可用时会给出本地建议。"}
+										</p>
+									</details>
+								</>
+							)}
+
+							{confirmModel && hasPromptText && (
+								<div className="initiation-model-confirm">
+									<span>分析团队分工</span>
+									{hasWorkspace && (
+										<label className="initiation-repo-check">
+											<input
+												type="checkbox"
+												checked={readRepoForDecision}
+												onChange={(e) => setReadRepoForDecision(e.target.checked)}
+											/>
+											<span>只读参考仓库入口文件</span>
+										</label>
+									)}
+									<div className="initiation-recommend-actions">
+										<button
+											type="button"
+											className="btn-pill-dark btn-xs"
+											onClick={() => {
+												setConfirmModel(false);
+												onRequestModelAssessment?.({ readRepo: readRepoForDecision });
+											}}
+										>
+											确认分析
+										</button>
+										<button type="button" className="btn-inline" onClick={() => setConfirmModel(false)}>
+											取消
+										</button>
+									</div>
+								</div>
+							)}
+							{modelAssessmentError && <p className="initiation-model-error">{modelAssessmentError}</p>}
+						</>
 					)}
 				</section>
 			)}

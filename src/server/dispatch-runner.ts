@@ -10,6 +10,7 @@ import {
 } from "../orchestrator/team-orchestrator.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { CollaboratorRole, DeliverableType } from "../storage/types.ts";
+import { canAccessMatter, canDispatchAiInOrg, canParticipateInMatter, canTargetMatterAi } from "./acl.ts";
 import type { RequestActor } from "./auth.ts";
 import { HttpRequestError } from "./http.ts";
 
@@ -62,6 +63,25 @@ export function createDispatchRunner(deps: {
 			throw new HttpRequestError(409, "Matter already has an active turn");
 		const isConversation = input.interactionMode === "conversation";
 		const isDiscussion = input.interactionMode === "discussion" || isConversation;
+		const validateConversationAccess = isConversation
+			? (memberId?: string) => {
+					const matter = store.getMatter(input.matterId);
+					const currentUser =
+						actor.authKind === "session" && actor.sessionTokenHash
+							? store.getSessionAndUserByHash(actor.sessionTokenHash)?.user
+							: actor.user;
+					const currentActor = currentUser ? { ...actor, user: currentUser } : actor;
+					if (
+						(actor.authKind === "session" && !currentUser) ||
+						!matter ||
+						!canAccessMatter(store, currentActor, matter) ||
+						!canParticipateInMatter(store, currentActor, matter) ||
+						!canDispatchAiInOrg(store, currentActor, matter.orgId) ||
+						(memberId && !canTargetMatterAi(store, currentActor, matter.orgId, memberId))
+					)
+						throw new HttpRequestError(403, "当前权限不允许继续处理这条 AI 消息");
+				}
+			: undefined;
 		const activeEntry: ActiveRunState = {
 			progress: {
 				stage: "starting",
@@ -82,6 +102,7 @@ export function createDispatchRunner(deps: {
 				interactionMode: input.interactionMode,
 				keepMatterLead: input.keepMatterLead,
 				existingUserMessageId: input.existingUserMessageId,
+				validateConversationAccess,
 				decisionResponse: input.decisionResponse,
 				title: input.title,
 				prompt: input.prompt,
@@ -117,6 +138,9 @@ export function createDispatchRunner(deps: {
 						matter: result.matter,
 					});
 					return;
+				}
+				if (result.rosterMessage) {
+					broadcast("matter_message", { matterId: result.matter.id, message: result.rosterMessage });
 				}
 				broadcast("matter_settled", {
 					matterId: result.matter.id,

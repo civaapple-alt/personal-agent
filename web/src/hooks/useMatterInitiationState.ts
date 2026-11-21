@@ -44,13 +44,10 @@ export function useMatterInitiationState({
 	const [draftDiscussionAiEnabled, setDraftDiscussionAiEnabled] = useState(false);
 	const [draftCollaboratorIds, setDraftCollaboratorIds] = useState<string[]>([]);
 	const [assessment, setAssessment] = useState<MatterInitiationAssessmentDto | null>(null);
-	const [assessing, setAssessing] = useState(false);
-	const [assessmentError, setAssessmentError] = useState<string | null>(null);
 	const [modelAssessing, setModelAssessing] = useState(false);
 	const [modelAssessmentError, setModelAssessmentError] = useState<string | null>(null);
 	const [architectOpen, setArchitectOpen] = useState(false);
 	const [architectSeed, setArchitectSeed] = useState<RoleGapSuggestionDto | null>(null);
-	const seqRef = useRef(0);
 	const modelSeqRef = useRef(0);
 	const modelControllerRef = useRef<AbortController | null>(null);
 
@@ -62,62 +59,15 @@ export function useMatterInitiationState({
 			? selectedMemberId
 			: (businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Draft changes invalidate the pending recommendation.
 	useEffect(() => {
-		const seq = ++seqRef.current;
-		let active = true;
-		const controller = new AbortController();
+		modelSeqRef.current += 1;
 		modelControllerRef.current?.abort();
 		modelControllerRef.current = null;
 		setModelAssessing(false);
 		setModelAssessmentError(null);
 		setAssessment(null);
-		setAssessmentError(null);
-		if (selectedMatterId) {
-			setAssessment(null);
-			setAssessing(false);
-			return;
-		}
-		const trimmed = (composerText.trim() || composerAttachmentText.trim()).slice(0, 4000);
-		if (trimmed.length < 6) {
-			setAssessment(null);
-			setAssessing(false);
-			return;
-		}
-		setAssessing(true);
-		const timer = window.setTimeout(() => {
-			void assessMatterInitiation(
-				{
-					prompt: trimmed,
-					hasImages: composerImageCount > 0,
-					hasFiles: composerFileCount > 0,
-					workspaceId: selectedWorkspaceId || undefined,
-					orgId: selectedOrgId || undefined,
-					preferredMemberId: selectedMemberId === "auto" ? undefined : selectedMemberId,
-				},
-				controller.signal,
-			)
-				.then((result) => {
-					if (active && seqRef.current === seq) {
-						setAssessment(result);
-					}
-				})
-				.catch(() => {
-					if (active && seqRef.current === seq) {
-						setAssessment(null);
-						setAssessmentError("参与建议暂不可用，仍可按当前安排发送。");
-					}
-				})
-				.finally(() => {
-					if (active && seqRef.current === seq) {
-						setAssessing(false);
-					}
-				});
-		}, 280);
-		return () => {
-			active = false;
-			controller.abort();
-			window.clearTimeout(timer);
-		};
+		return () => modelControllerRef.current?.abort();
 	}, [
 		selectedMatterId,
 		composerText,
@@ -337,7 +287,6 @@ export function useMatterInitiationState({
 				);
 				if (!controller.signal.aborted && modelSeqRef.current === seq) {
 					setAssessment(result);
-					setAssessmentError(null);
 				}
 			} catch (err: unknown) {
 				if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
@@ -345,7 +294,7 @@ export function useMatterInitiationState({
 				}
 				if (modelSeqRef.current === seq) {
 					const message = err instanceof Error ? err.message : String(err);
-					setModelAssessmentError(`AI 决策模型暂不可用（${message}），已保留本地规则建议`);
+					setModelAssessmentError(`暂时无法分析（${message}），仍可按当前安排发送。`);
 				}
 			} finally {
 				if (modelSeqRef.current === seq) {
@@ -396,8 +345,6 @@ export function useMatterInitiationState({
 		draftDiscussionAiEnabled,
 		draftCollaboratorIds,
 		assessment,
-		assessing,
-		assessmentError,
 		modelAssessing,
 		modelAssessmentError,
 		architectOpen,

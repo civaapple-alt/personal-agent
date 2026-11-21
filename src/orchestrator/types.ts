@@ -25,6 +25,7 @@ import type { DeliveryDraft } from "./execution-context.ts";
 import type { Clarification, DecisionResponse, DecisionSource } from "./human-decision.ts";
 import type { DraftVerification } from "./independent-verification.ts";
 import type { ReadPiModels } from "./model-selection.ts";
+import type { DecisionClassifier } from "./system-one.ts";
 import type { StalledMember, TurnMonitor } from "./turn-monitor.ts";
 
 export type WorkerSessionMode = "lead" | "internal" | "observer" | "verifier";
@@ -162,6 +163,7 @@ export interface TeamOrchestratorOptions {
 	skillsDir?: string;
 	noSession?: boolean;
 	workerFactory?: WorkerFactory;
+	classifier?: DecisionClassifier;
 	readPiModels?: ReadPiModels;
 	onDialog?: OrchestratorDialogHandler;
 	/** Operator-approved Pi extensions supplying declared custom/MCP tools. */
@@ -195,6 +197,8 @@ export interface DispatchMatterInput {
 	interactionMode?: "dispatch" | "discussion" | "conversation";
 	keepMatterLead?: boolean;
 	existingUserMessageId?: string;
+	/** Recheck current server authorization after external routing, before producing a reply or running tools. */
+	validateConversationAccess?: (memberId?: string) => void;
 	decisionResponse?: DecisionResponse;
 	images?: PromptImageAttachment[];
 	files?: PromptFileAttachment[];
@@ -229,6 +233,7 @@ export interface DispatchMatterResult {
 	replyText: string;
 	deliverable: Deliverable | null;
 	observerMessages?: MatterMessage[];
+	rosterMessage?: MatterMessage;
 	runResult: PromptRunResult;
 }
 

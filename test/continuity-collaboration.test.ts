@@ -7,12 +7,14 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
 import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
+import type { DecisionClassifier } from "../src/orchestrator/system-one.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../src/orchestrator/team-orchestrator.ts";
 import { resolveBuiltinExtensionPath } from "../src/pa-extensions/builtin-paths.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
 import { createPersonalAgentServer } from "../src/server/app.ts";
@@ -150,7 +152,7 @@ class SessionWorker implements RpcWorkerLike {
 	}
 }
 
-async function fixture(t: test.TestContext, respond: Responder) {
+async function fixture(t: test.TestContext, respond: Responder, classifier?: DecisionClassifier) {
 	const root = await mkdtemp(join(tmpdir(), "pa-continuity-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	const db = openPersonalAgentDatabase(join(root, "data.db"));
@@ -162,6 +164,7 @@ async function fixture(t: test.TestContext, respond: Responder) {
 		store,
 		templates,
 		defaultCwd: root,
+		classifier,
 		sessionDir: join(root, "sessions"),
 		workerFactory: (options: PiRpcWorkerOptions) => {
 			const worker = new SessionWorker(options, respond);
@@ -373,7 +376,7 @@ test("one conversation entry point saves chat, routes questions and work, and co
 			if (latest.includes(incomplete)) return '{"intent":"confirm"}';
 			if (latest.includes(direct)) return JSON.stringify({ intent: "work", authorization: direct });
 			if (latest.includes(impersonation)) return JSON.stringify({ intent: "work", authorization: "删除登录模块" });
-			if (latest === softQuestion) return '{"intent":"silent"}';
+			if (latest.startsWith("和团队同步一下")) return '{"intent":"silent"}';
 			return '{"intent":"reply"}';
 		}
 		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
@@ -412,8 +415,11 @@ test("one conversation entry point saves chat, routes questions and work, and co
 		discussionAiEnabled: false,
 		workspaceId: f.workspace.id,
 	});
-	assert.equal(first.aiDiscussionTriggered, false);
-	assert.equal(f.workers.length, 0);
+	assert.equal(first.aiDiscussionTriggered, true);
+	while (f.orchestrator.isMatterRunning(first.matter.id)) await new Promise((wait) => setTimeout(wait, 10));
+	assert.equal(f.workers.length, 1);
+	assert.equal(f.store.listMessages(first.matter.id, "user").length, 1);
+	f.workers.length = 0;
 	const messages = `/api/matters/${first.matter.id}/messages`;
 	const send = (prompt: string) => post(`${messages}/conversation`, { prompt });
 	const reply = async (message: MatterMessage) => {
@@ -472,6 +478,131 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	assert.equal((await reply(implicitQuestion.message)).senderId, "engineering-manager");
 	assert.equal(f.workers.length, 11);
 	assert.doesNotMatch(f.workers[10]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+});
+
+test("System One drives saved conversations, roster data and lead matching with safe fallback", async (t) => {
+	const lookedUp = "这件事目前有哪些队友呀";
+	const activeWork = "劳烦你现在把登录流程修好";
+	const quoted = "「删除登录模块」";
+	const review = "我们现有岗位之间有没有做了同一件事的";
+	const piFallback = "本事项的处理进度如何";
+	const rulesFallback = "跑一下测试";
+	const classifier: DecisionClassifier = {
+		async evaluate(request) {
+			const state = request.state as { latestHumanMessage: string };
+			const text = state.latestHumanMessage;
+			if (text === piFallback || text === rulesFallback) throw new Error("Classifier unavailable");
+			const intent = text === lookedUp ? "roster" : text === activeWork || text === quoted ? "work" : "reply";
+			// This fixture deliberately reports full certainty for an instruction inside quotes.
+			return {
+				intent: { type: "choice", choice: intent },
+				target: { type: "choice", choice: text === review ? "role_architect_review" : "qa-manager" },
+				authorized: { type: "noul", noul: 0.95 },
+			} as never;
+		},
+	};
+	const f = await fixture(
+		t,
+		async (worker, prompt) => {
+			if (worker.options.env?.PA_DECISION_NAME) {
+				const state = JSON.parse(prompt.split("\n\n---\n\n").at(-1)!) as { latestHumanMessage: string };
+				return state.latestHumanMessage === piFallback ? '{"intent":"reply"}' : "Malformed decision response";
+			}
+			if (worker.options.env?.PA_MEMBER_ID === "role-architect") {
+				return JSON.stringify({
+					reply: "发现角色职责重叠",
+					healthFindings: [{ severity: "warning", title: "职责重叠", description: "两个岗位需要对齐验收职责。" }],
+					recommendedFormation: {
+						mode: "solo",
+						existingMemberIds: ["qa-manager"],
+						rationale: "应保留的不是这条建议",
+					},
+				});
+			}
+			return `Reply from ${worker.options.env?.PA_MEMBER_ID}`;
+		},
+		classifier,
+	);
+	const templates = [...f.templates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
+	const orchestrator = new TeamOrchestrator({ ...f.options, templates });
+	const { server } = createPersonalAgentServer({
+		store: f.store,
+		orchestrator,
+		templates,
+		uploadsDir: join(f.root, "uploads"),
+		dialogBroker: new DialogBroker(),
+		previewManager: new PreviewManager(),
+	});
+	await new Promise<void>((ready) => server.listen(0, "127.0.0.1", ready));
+	t.after(() => {
+		server.closeAllConnections();
+		server.close();
+	});
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const send = async (path: string, body: object) => {
+		const result = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		assert.equal(result.status, 201);
+		const { matter, message } = (await result.json()) as { matter: Matter; message: MatterMessage };
+		const deadline = Date.now() + 3_000;
+		while (orchestrator.isMatterRunning(matter.id) && Date.now() < deadline) {
+			await new Promise((ready) => setTimeout(ready, 10));
+		}
+		assert.equal(orchestrator.isMatterRunning(matter.id), false);
+		return {
+			matter: f.store.getMatter(matter.id)!,
+			message: f.store.getMessage(message.id)!,
+			reply: f.store
+				.listMessages(matter.id, "user")
+				.find((entry) => entry.metadata?.sourceUserMessageId === message.id),
+		};
+	};
+	const created = await send("/api/matters/conversation", {
+		prompt: "可以讲讲这套方案如何验收吗",
+		workspaceId: f.workspace.id,
+		aiMemberIds: ["product-manager", "qa-manager"],
+		observerMemberIds: ["product-manager"],
+		discussionAiEnabled: false,
+	});
+	assert.equal(created.matter.leadMemberId, "qa-manager");
+	assert.deepEqual(created.matter.observerMemberIds, ["product-manager"]);
+	assert.equal(created.message.metadata?.conversationDecisionSource, "system_one");
+	assert.equal(created.reply?.senderId, "qa-manager");
+	assert.equal(f.workers.length, 1);
+	const path = `/api/matters/${created.matter.id}/messages/conversation`;
+	const roster = await send(path, { prompt: lookedUp });
+	assert.equal(roster.reply?.metadata?.matterRosterSnapshot, true);
+	assert.match(roster.reply?.content ?? "", /QA Manager.*负责人/);
+	assert.equal(f.workers.length, 1);
+	const mentioned = await send(path, { prompt: "@Product Manager 可以讲讲现状吗" });
+	assert.equal(mentioned.reply?.senderId, "product-manager");
+	assert.equal(mentioned.matter.leadMemberId, "qa-manager");
+	const work = await send(path, { prompt: activeWork });
+	assert.equal(work.message.metadata?.mode, "dispatch");
+	assert.equal(work.message.metadata?.targetMemberId, "qa-manager");
+	const audit = await send(path, { prompt: review });
+	assert.equal(audit.reply?.senderId, "role-architect");
+	assert.equal(audit.matter.leadMemberId, "qa-manager");
+	const proposal = audit.reply?.metadata?.roleProposals as {
+		healthFindings?: unknown[];
+		recommendedFormation?: unknown;
+	};
+	assert.ok(proposal.healthFindings?.length);
+	assert.equal(proposal.recommendedFormation, undefined);
+	const quotation = await send(path, { prompt: quoted });
+	assert.equal(quotation.message.metadata?.mode, "conversation");
+	assert.match(JSON.stringify(quotation.reply?.metadata?.humanDecision), /execution_confirmation/);
+	const fallback = await send(path, { prompt: piFallback });
+	assert.equal(fallback.message.metadata?.conversationDecisionSource, "pi");
+	assert.equal(fallback.reply?.senderId, "qa-manager");
+	const offline = await send(path, { prompt: rulesFallback });
+	assert.equal(offline.message.metadata?.conversationDecisionSource, "rules");
+	assert.equal(offline.message.metadata?.mode, "conversation");
+	assert.match(JSON.stringify(offline.reply?.metadata?.humanDecision), /execution_confirmation/);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { looksLikeConversationRequest, looksLikeWorkRequest } from "../../orchestrator/conversation-intent.ts";
+import { looksLikeWorkRequest } from "../../orchestrator/conversation-intent.ts";
 import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
 import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
 import { resolveDiscussionMentionTargets } from "../../orchestrator/prompts.ts";
@@ -146,14 +146,13 @@ function startAiForMessage(
 		const hasAiMention = resolveDiscussionMentionTargets(message.content, eligible).length > 0;
 		if (!hasAiMention && /^@[^\s@]/u.test(message.content))
 			return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "unavailable_recipient" };
-		if (!matter.discussionAiEnabled && !hasAiMention && !looksLikeConversationRequest(message.content))
-			return { aiDiscussionTriggered: false };
 	} else if (!matter.discussionAiEnabled) {
 		return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "disabled" };
 	}
 	if (!canDispatchAiInOrg(ctx.store, actor, matter.orgId))
 		return { aiDiscussionTriggered: false, aiDiscussionSkippedReason: "unauthorized" };
 	if (
+		!isConversation &&
 		!preferredMemberId &&
 		images.length === 0 &&
 		files.length === 0 &&
@@ -400,9 +399,15 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
 
-		const leadMember = orchestrator.routeMemberForRequest(prompt, preferredMemberId, aiMemberIds, orgId, {
-			actorUserId: actor.user?.id ?? null,
-		});
+		const leadMember = orchestrator.routeMemberForRequest(
+			mode === "conversation" ? "" : prompt,
+			preferredMemberId,
+			aiMemberIds,
+			orgId,
+			{
+				actorUserId: actor.user?.id ?? null,
+			},
+		);
 		const fallbackTitle = prompt
 			? prompt.slice(0, 60)
 			: files.length > 0
@@ -416,7 +421,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 					: `上传了 ${images.length} 张图片`;
 		const matter = store.createMatter({
 			title: title ?? fallbackTitle,
-			leadMemberId: leadMember.id,
+			leadMemberId: mode === "conversation" && !preferredMemberId ? null : leadMember.id,
 			workspaceId: workspaceId ?? null,
 			orgId,
 			createdByUserId: actor.user?.id ?? null,
@@ -449,7 +454,17 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				files,
 			});
 			const discussion =
-				mode === "ai_request" ? {} : startAiForMessage(ctx, actor, refreshedMatter, message, images, files);
+				mode === "ai_request"
+					? {}
+					: startAiForMessage(
+							ctx,
+							actor,
+							refreshedMatter,
+							message,
+							images,
+							files,
+							mode === "discussion" ? preferredMemberId : undefined,
+						);
 			sendJson(res, 201, { matter: refreshedMatter, message, mode, assignedMember: leadMember, ...discussion });
 			return true;
 		}
@@ -766,7 +781,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 							message,
 							images,
 							files,
-							mode === "discussion" ? (explicitPreferredMemberId ?? undefined) : undefined,
+							explicitPreferredMemberId ?? undefined,
 						);
 			sendJson(res, 201, {
 				accepted: discussion?.aiDiscussionTriggered ?? false,

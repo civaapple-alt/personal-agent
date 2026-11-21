@@ -744,8 +744,6 @@ export function App() {
 								draftCollaboratorIds: initiation.draftCollaboratorIds,
 								draftVisibility: draftMatterVisibility,
 								assessment: initiation.assessment,
-								assessing: initiation.assessing,
-								assessmentError: initiation.assessmentError,
 								modelAssessing: initiation.modelAssessing,
 								modelAssessmentError: initiation.modelAssessmentError,
 								onUpdateDraftAiMemberIds: setDraftAiMemberIds,
