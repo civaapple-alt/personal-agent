@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-22
+
+See the [0.6.4 release guide](docs/releases/v0.6.4.md) for downloads and upgrade instructions.
+
 - Default new matters from `+` to the current organization's primary contact, carry over the active matter's team configuration (organization, repository, lead, model override, delegation/observer roster, visibility, and human collaborators) when clicking `+ 新事项` inside a matter, keep all business roles visible when auto-matching the lead, and display the fallback default model in the model picker when auto-matching.
 - Omit the idle `open` status line from sidebar matter tooltips (showing status only when running, waiting for confirmation, delivered, or archived) and collapse the sidebar role grid to 2 rows with an expandable `+N` tile when there are more than 8 business roles.
 - Compact sidebar matter rows into a single line with status indicator, title, and hover tooltip for organization, repository, and status.

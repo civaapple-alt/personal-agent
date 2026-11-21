@@ -8,7 +8,7 @@
 | 体验专业协作、阶段交付和反馈修订 | [完成四步内置演示](tutorials/inner-matter-demo.md) |
 | 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
 | 查阅随版本发布的工作台功能说明 | [工作台功能速查](guides/agent-workbench.md) · [English](guides/agent-workbench.en.md) |
-| 下载或升级到当前版本 | [0.6.3 发布说明](releases/v0.6.3.md) |
+| 下载或升级到当前版本 | [0.6.4 发布说明](releases/v0.6.4.md) |
 
 ## 部署与管理团队
 
@@ -49,7 +49,7 @@
 
 - [设计思路](concepts/design-principles.md)解释岗位、事项、交付和经验设计。[产品方向](concepts/product-direction.md)记录长期目标。
 - [产品讨论](history/product-discussion.md)、[角色草案](history/team-roles.md)、[团队交互探索](history/team-interaction.md)和[架构演进](history/architecture-history.md)记录当时的判断与验证。
-- [0.6.1](releases/v0.6.1.md)、[0.6.0](releases/v0.6.0.md)和[0.5.0](releases/v0.5.0.md)记录各版的安装、升级与验证范围。[变更日志](../CHANGELOG.md)列出逐版改动。
+- [0.6.3](releases/v0.6.3.md)、[0.6.2](releases/v0.6.2.md)、[0.6.1](releases/v0.6.1.md)、[0.6.0](releases/v0.6.0.md)和[0.5.0](releases/v0.5.0.md)记录各版的安装、升级与验证范围。[变更日志](../CHANGELOG.md)列出逐版改动。
 
 ## 维护文档
 
