@@ -1,9 +1,21 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS, stripMarkdownFormatting } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
+
+type MatterViewMode = "time" | "grouped";
+
+const SIDEBAR_VIEW_STORAGE_KEY = "pa_sidebar_matter_view";
+
+function readInitialViewMode(): MatterViewMode {
+	try {
+		return window.localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY) === "grouped" ? "grouped" : "time";
+	} catch {
+		return "time";
+	}
+}
 
 interface SidebarProps {
 	activeTab: NavTab;
@@ -27,6 +39,7 @@ interface SidebarProps {
 	onNavigate: (route: HashRoute) => void;
 	onToggleMember: (memberId: string) => void;
 	onNewMatter: () => void;
+	onToggleArchiveMatter?: (matterId: string, archived: boolean) => Promise<void> | void;
 	onSwitchOrLogout?: () => void;
 }
 
@@ -53,9 +66,35 @@ export const Sidebar = memo(function Sidebar({
 	onNavigate,
 	onToggleMember,
 	onNewMatter,
+	onToggleArchiveMatter,
 	onSwitchOrLogout,
 }: SidebarProps) {
 	const [searchOpen, setSearchOpen] = useState(false);
+	const [viewMode, setViewMode] = useState<MatterViewMode>(readInitialViewMode);
+	const [showArchived, setShowArchived] = useState(false);
+	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+	const [busyArchiveId, setBusyArchiveId] = useState<string | null>(null);
+	const [footerMenuOpen, setFooterMenuOpen] = useState(false);
+	const footerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!footerMenuOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			if (footerRef.current && !footerRef.current.contains(event.target as Node)) {
+				setFooterMenuOpen(false);
+			}
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setFooterMenuOpen(false);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [footerMenuOpen]);
+
 	const workspaces = bootstrap?.workspaces;
 	const organizations = bootstrap?.organizations;
 	const workspaceById = useMemo(
@@ -63,6 +102,51 @@ export const Sidebar = memo(function Sidebar({
 		[workspaces],
 	);
 	const organizationById = useMemo(() => new Map(organizations?.map((org) => [org.id, org.name])), [organizations]);
+
+	const activeMatters = useMemo(
+		() => filteredMatters.filter((matter) => matter.status !== "archived"),
+		[filteredMatters],
+	);
+	const archivedMatters = useMemo(
+		() => filteredMatters.filter((matter) => matter.status === "archived"),
+		[filteredMatters],
+	);
+	const visibleMatters = showArchived ? archivedMatters : activeMatters;
+
+	const groupedMatters = useMemo(() => {
+		const groups = new Map<
+			string,
+			{
+				key: string;
+				orgLabel: string;
+				workspaceLabel: string;
+				items: MatterDto[];
+			}
+		>();
+		for (const matter of visibleMatters) {
+			const workspace = matter.workspaceId ? workspaceById.get(matter.workspaceId) : undefined;
+			const orgId = matter.orgId === undefined ? workspace?.orgId : matter.orgId;
+			const orgLabel = orgId ? (organizationById.get(orgId) ?? "不可见") : "独立";
+			const workspaceLabel = matter.workspaceId ? (workspace?.name ?? "不可见") : "未绑定仓库";
+			const key = `${orgId ?? "__none__"}::${matter.workspaceId ?? "__none__"}`;
+			const existing = groups.get(key);
+			if (existing) {
+				existing.items.push(matter);
+			} else {
+				groups.set(key, { key, orgLabel, workspaceLabel, items: [matter] });
+			}
+		}
+		return [...groups.values()];
+	}, [visibleMatters, workspaceById, organizationById]);
+
+	const setAndPersistViewMode = (next: MatterViewMode) => {
+		setViewMode(next);
+		try {
+			window.localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, next);
+		} catch {
+			// Ignore storage errors in restricted contexts.
+		}
+	};
 
 	const allMembers = bootstrap?.members ?? [];
 	const allBusinessMembers = filterBusinessMembers(allMembers);
@@ -88,6 +172,127 @@ export const Sidebar = memo(function Sidebar({
 		activeTab === "chats" &&
 		!selectedMatterId &&
 		selectedMemberId === architectMember?.id;
+
+	const runningCount = Object.keys(progressByMatter).length;
+	const userLabel =
+		authKind === "session" && bootstrap?.accountUser
+			? `${bootstrap.accountUser.displayName} · ${bootstrap.accountUser.platformRole === "super_admin" ? "超管" : "成员"}`
+			: authKind === "legacy_token" && currentUser
+				? `${currentUser.name} · 协同访客`
+				: currentUser
+					? `${currentUser.name} · 本机所有者`
+					: "Pi RPC";
+	const accountActionLabel =
+		authKind === "loopback"
+			? "切换账号"
+			: authKind === "legacy_token"
+				? window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+					? "恢复所有者"
+					: "退出"
+				: "退出登录";
+	const hasSecondaryTabActive = activeTab !== "chats";
+
+	const handleArchiveClick = async (matter: MatterDto) => {
+		if (!onToggleArchiveMatter || busyArchiveId) return;
+		setBusyArchiveId(matter.id);
+		try {
+			await onToggleArchiveMatter(matter.id, matter.status !== "archived");
+		} finally {
+			setBusyArchiveId(null);
+		}
+	};
+
+	const renderMatterRow = (matter: MatterDto, hideScopeTags: boolean) => {
+		const prog = progressByMatter[matter.id];
+		const workspace = matter.workspaceId ? workspaceById.get(matter.workspaceId) : undefined;
+		const orgId = matter.orgId === undefined ? workspace?.orgId : matter.orgId;
+		const orgLabel = orgId ? (organizationById.get(orgId) ?? "不可见") : "独立";
+		const workspaceLabel = matter.workspaceId ? (workspace?.name ?? "不可见") : "未绑定";
+		const leadIdx = bootstrap?.members.findIndex((m) => m.id === matter.leadMemberId) ?? 0;
+		const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
+		const isActive = activeTab === "chats" && selectedMatterId === matter.id;
+		const isArchived = matter.status === "archived";
+		const previewLine = stripMarkdownFormatting(
+			prog
+				? prog.label
+				: matter.status === "waiting_user"
+					? "等待你的确认"
+					: matter.summary || STATUS_LABELS[matter.status] || matter.status,
+		);
+
+		return (
+			<div key={matter.id} className={`matter-row ${isActive ? "active" : ""} ${isArchived ? "is-archived" : ""}`}>
+				<button
+					type="button"
+					className="matter-item"
+					onClick={() => onNavigate({ tab: "chats", matterId: matter.id })}
+				>
+					<span className="matter-dot" style={{ background: theme.bg }}>
+						{prog && <span className="matter-dot-pulse" style={{ borderColor: theme.bg }} />}
+					</span>
+					<span className="matter-copy">
+						<span className="matter-title">{matter.title}</span>
+						{!hideScopeTags && (
+							<span className="matter-scope">
+								<span className="matter-scope-org" title={`组织：${orgLabel}`}>
+									组织 · {orgLabel}
+								</span>
+								<span title={`仓库：${workspaceLabel}`}>仓库 · {workspaceLabel}</span>
+							</span>
+						)}
+						<span className="matter-preview">{previewLine}</span>
+					</span>
+				</button>
+				{onToggleArchiveMatter && (
+					<button
+						type="button"
+						className="matter-archive-btn"
+						disabled={busyArchiveId === matter.id || (!isArchived && Boolean(prog))}
+						aria-label={isArchived ? `取消归档：${matter.title}` : `归档事项：${matter.title}`}
+						title={
+							!isArchived && prog ? "运行中的事项请先停止再归档" : isArchived ? "恢复至最近事项" : "归档事项"
+						}
+						onClick={() => void handleArchiveClick(matter)}
+					>
+						{isArchived ? (
+							<svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+								<path
+									d="M3.5 6.5L6.5 3.5L9.5 6.5M6.5 4V10.5C6.5 11.6 7.4 12.5 8.5 12.5H12.5"
+									stroke="currentColor"
+									strokeWidth="1.5"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+							</svg>
+						) : (
+							<svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+								<rect
+									x="2.25"
+									y="2.75"
+									width="11.5"
+									height="2.75"
+									rx="0.9"
+									stroke="currentColor"
+									strokeWidth="1.35"
+								/>
+								<path
+									d="M3.25 5.5V12C3.25 12.7 3.8 13.25 4.5 13.25H11.5C12.2 13.25 12.75 12.7 12.75 12V5.5"
+									stroke="currentColor"
+									strokeWidth="1.35"
+								/>
+								<path d="M6.25 8.5H9.75" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+							</svg>
+						)}
+					</button>
+				)}
+			</div>
+		);
+	};
+
+	const navigateFromMenu = (route: HashRoute) => {
+		setFooterMenuOpen(false);
+		onNavigate(route);
+	};
 
 	return (
 		<aside className={`bot-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
@@ -206,123 +411,197 @@ export const Sidebar = memo(function Sidebar({
 			)}
 
 			<div className="matter-scroll">
-				<div className="sidebar-section-label">
-					<span>最近事项</span>
-					<span>{filteredMatters.length}</span>
+				<div className="sidebar-matters-toolbar">
+					<div className="sidebar-matter-tabs" role="tablist" aria-label="事项范围">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={!showArchived}
+							className={`sidebar-mini-tab ${!showArchived ? "active" : ""}`}
+							onClick={() => setShowArchived(false)}
+						>
+							最近 <span className="sidebar-mini-count">{activeMatters.length}</span>
+						</button>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={showArchived}
+							className={`sidebar-mini-tab ${showArchived ? "active" : ""}`}
+							onClick={() => setShowArchived(true)}
+						>
+							归档 <span className="sidebar-mini-count">{archivedMatters.length}</span>
+						</button>
+					</div>
+					<fieldset className="sidebar-view-switch" aria-label="事项排列方式">
+						<button
+							type="button"
+							className={`sidebar-view-btn ${viewMode === "time" ? "active" : ""}`}
+							aria-pressed={viewMode === "time"}
+							title="按更新时间倒序"
+							onClick={() => setAndPersistViewMode("time")}
+						>
+							时间
+						</button>
+						<button
+							type="button"
+							className={`sidebar-view-btn ${viewMode === "grouped" ? "active" : ""}`}
+							aria-pressed={viewMode === "grouped"}
+							title="按组织和仓库分类"
+							onClick={() => setAndPersistViewMode("grouped")}
+						>
+							分组
+						</button>
+					</fieldset>
 				</div>
-				{filteredMatters.length === 0 ? (
-					<div className="sidebar-empty">暂无事项，可在右侧直接布置任务</div>
-				) : (
-					filteredMatters.map((matter) => {
-						const prog = progressByMatter[matter.id];
-						const workspace = matter.workspaceId ? workspaceById.get(matter.workspaceId) : undefined;
-						const orgId = matter.orgId === undefined ? workspace?.orgId : matter.orgId;
-						const orgLabel = orgId ? (organizationById.get(orgId) ?? "不可见") : "独立";
-						const workspaceLabel = matter.workspaceId ? (workspace?.name ?? "不可见") : "未绑定";
-						const leadIdx = bootstrap?.members.findIndex((m) => m.id === matter.leadMemberId) ?? 0;
-						const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
-						const isActive = activeTab === "chats" && selectedMatterId === matter.id;
-						const previewLine = stripMarkdownFormatting(
-							prog
-								? prog.label
-								: matter.status === "waiting_user"
-									? "等待你的确认"
-									: matter.summary || STATUS_LABELS[matter.status] || matter.status,
-						);
 
+				{visibleMatters.length === 0 ? (
+					<div className="sidebar-empty">{showArchived ? "暂无已归档事项" : "暂无事项，可在右侧直接布置任务"}</div>
+				) : viewMode === "time" ? (
+					visibleMatters.map((matter) => renderMatterRow(matter, false))
+				) : (
+					groupedMatters.map((group) => {
+						const collapsed = Boolean(collapsedGroups[group.key]);
 						return (
-							<button
-								key={matter.id}
-								type="button"
-								className={`matter-item ${isActive ? "active" : ""}`}
-								onClick={() => onNavigate({ tab: "chats", matterId: matter.id })}
-							>
-								<span className="matter-dot" style={{ background: theme.bg }}>
-									{prog && <span className="matter-dot-pulse" style={{ borderColor: theme.bg }} />}
-								</span>
-								<span className="matter-copy">
-									<span className="matter-title">{matter.title}</span>
-									<span className="matter-scope">
-										<span className="matter-scope-org" title={`组织：${orgLabel}`}>
-											组织 · {orgLabel}
-										</span>
-										<span title={`仓库：${workspaceLabel}`}>仓库 · {workspaceLabel}</span>
+							<section key={group.key} className="matter-group">
+								<button
+									type="button"
+									className="matter-group-header"
+									aria-expanded={!collapsed}
+									onClick={() =>
+										setCollapsedGroups((prev) => ({
+											...prev,
+											[group.key]: !prev[group.key],
+										}))
+									}
+								>
+									<span className="matter-group-chevron" aria-hidden="true">
+										{collapsed ? "▸" : "▾"}
 									</span>
-									<span className="matter-preview">{previewLine}</span>
-								</span>
-							</button>
+									<span className="matter-group-labels" title={`${group.orgLabel} / ${group.workspaceLabel}`}>
+										<span className="matter-group-org">{group.orgLabel}</span>
+										<span className="matter-group-sep" aria-hidden="true">
+											/
+										</span>
+										<span className="matter-group-repo">{group.workspaceLabel}</span>
+									</span>
+									<span className="matter-group-count">{group.items.length}</span>
+								</button>
+								{!collapsed && (
+									<div className="matter-group-items">
+										{group.items.map((matter) => renderMatterRow(matter, true))}
+									</div>
+								)}
+							</section>
 						);
 					})
 				)}
 			</div>
 
-			<div className="sidebar-footer">
-				<button
-					type="button"
-					className={`footer-nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
-					onClick={() => onNavigate({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })}
-				>
-					<span>交付成果库</span>
-					<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
-				</button>
-				<button
-					type="button"
-					className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
-					onClick={() => onNavigate({ tab: "team" })}
-				>
-					<span>我的团队</span>
-					<span className="pill">{businessMembers.length}</span>
-				</button>
-				<button
-					type="button"
-					className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
-					onClick={() => onNavigate({ tab: "materials" })}
-				>
-					<span>项目仓库与资料</span>
-					<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
-				</button>
-				<button
-					type="button"
-					className={`footer-nav-btn ${activeTab === "settings" ? "active" : ""}`}
-					onClick={() => onNavigate({ tab: "settings" })}
-				>
-					<span>设置</span>
-					<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
-				</button>
-				{isSuperAdmin && (
-					<button
-						type="button"
-						className={`footer-nav-btn ${activeTab === "admin" ? "active" : ""}`}
-						onClick={() => onNavigate({ tab: "admin" })}
-					>
-						<span>超管控制台</span>
-						<span className="pill">Admin</span>
-					</button>
-				)}
-				<div className="sidebar-status-row">
-					<span className="muted-tiny">
-						{authKind === "session" && bootstrap?.accountUser
-							? `${bootstrap.accountUser.displayName} · ${bootstrap.accountUser.platformRole === "super_admin" ? "超管" : "成员"}`
-							: authKind === "legacy_token" && currentUser
-								? `${currentUser.name} · 协同访客`
-								: currentUser
-									? `${currentUser.name} · 本机所有者`
-									: "Pi RPC"}
-					</span>
-					<div className="sidebar-status-actions">
-						{onSwitchOrLogout && (
-							<button type="button" className="btn-inline btn-xs" onClick={onSwitchOrLogout}>
-								{authKind === "loopback"
-									? "切换账号"
-									: authKind === "legacy_token"
-										? window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-											? "恢复所有者"
-											: "退出"
-										: "退出登录"}
+			<div className="sidebar-footer" ref={footerRef}>
+				{footerMenuOpen && (
+					<div className="sidebar-footer-popover" role="menu" aria-label="工作台菜单">
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
+							onClick={() =>
+								navigateFromMenu({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })
+							}
+						>
+							<span>交付成果库</span>
+							<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
+							onClick={() => navigateFromMenu({ tab: "team" })}
+						>
+							<span>我的团队</span>
+							<span className="pill">{businessMembers.length}</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
+							onClick={() => navigateFromMenu({ tab: "materials" })}
+						>
+							<span>项目仓库与资料</span>
+							<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "settings" ? "active" : ""}`}
+							onClick={() => navigateFromMenu({ tab: "settings" })}
+						>
+							<span>设置</span>
+							<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
+						</button>
+						{isSuperAdmin && (
+							<button
+								type="button"
+								role="menuitem"
+								className={`footer-nav-btn ${activeTab === "admin" ? "active" : ""}`}
+								onClick={() => navigateFromMenu({ tab: "admin" })}
+							>
+								<span>超管控制台</span>
+								<span className="pill">Admin</span>
 							</button>
 						)}
-						<span className={`pill ${sseConnected ? "live" : ""}`}>{sseConnected ? "实时" : "重连"}</span>
+						{onSwitchOrLogout && (
+							<>
+								<div className="sidebar-footer-divider" />
+								<button
+									type="button"
+									role="menuitem"
+									className="footer-nav-btn footer-nav-account"
+									onClick={() => {
+										setFooterMenuOpen(false);
+										onSwitchOrLogout();
+									}}
+								>
+									<span>{accountActionLabel}</span>
+								</button>
+							</>
+						)}
 					</div>
+				)}
+				<div className="sidebar-footer-bar">
+					<span className="sidebar-footer-user" title={userLabel}>
+						{userLabel}
+					</span>
+					<span
+						className={`pill ${sseConnected ? "live" : ""}`}
+						title={
+							!sseConnected
+								? "实时连接断开，正在重连"
+								: runningCount > 0
+									? `实时已连接 · 当前 ${runningCount} 个事项运行中`
+									: "实时已连接"
+						}
+					>
+						{!sseConnected ? "重连" : runningCount > 0 ? `运行 ${runningCount}` : "实时"}
+					</span>
+					<button
+						type="button"
+						className={`sidebar-settings-trigger ${footerMenuOpen || hasSecondaryTabActive ? "active" : ""}`}
+						aria-haspopup="menu"
+						aria-expanded={footerMenuOpen}
+						aria-label="展开工作台与设置菜单"
+						onClick={() => setFooterMenuOpen((open) => !open)}
+					>
+						<svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+							<circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+							<path
+								d="M8 1.9V3.3M8 12.7V14.1M1.9 8H3.3M12.7 8H14.1M3.7 3.7L4.7 4.7M11.3 11.3L12.3 12.3M12.3 3.7L11.3 4.7M4.7 11.3L3.7 12.3"
+								stroke="currentColor"
+								strokeWidth="1.35"
+								strokeLinecap="round"
+							/>
+						</svg>
+						<span>设置</span>
+					</button>
 				</div>
 			</div>
 		</aside>

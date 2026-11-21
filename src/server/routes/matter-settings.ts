@@ -52,6 +52,13 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 		const hasDiscussionAiUpdate = Object.hasOwn(body, "discussionAiEnabled");
 		const hasCollaboratorUpdate = Object.hasOwn(body, "collaboratorIds");
 		const hasVisibilityUpdate = Object.hasOwn(body, "visibility");
+		const hasStatusUpdate = Object.hasOwn(body, "status");
+		const nextStatus =
+			body.status === "archived" || body.status === "open" ? (body.status as "archived" | "open") : undefined;
+		if (hasStatusUpdate && !nextStatus) {
+			sendError(res, 400, 'status must be "archived" or "open"');
+			return true;
+		}
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
 		const targetWorkspace = hasWorkspaceUpdate && workspaceId ? store.getWorkspace(workspaceId) : null;
@@ -156,6 +163,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, lead member, or model");
 			return true;
 		}
+		if (nextStatus === "archived" && orchestrator.isMatterRunning(matterId)) {
+			sendError(res, 409, "请先停止当前正在运行的事项再归档");
+			return true;
+		}
 		const rosterOrgId = targetWorkspace ? targetWorkspace.orgId : hasOrgUpdate ? nextOrgId : existing.orgId;
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, rosterOrgId, nextLeadId, [
@@ -257,6 +268,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			const visibility: MatterVisibility = body.visibility === "private" ? "private" : "org";
 			updated = store.updateMatterVisibility(matterId, visibility);
 			broadcast("matter_updated", { matterId, visibility }, { matterId });
+		}
+		if (nextStatus) {
+			updated = store.updateMatterStatus(matterId, nextStatus);
+			broadcast("matter_updated", { matterId, status: updated.status }, { matterId });
 		}
 		sendJson(res, 200, { matter: updated });
 		return true;

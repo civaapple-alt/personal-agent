@@ -433,3 +433,10 @@ export function updateMatterVisibility(matterId: string, visibility: MatterVisib
 		body: JSON.stringify({ visibility }),
 	});
 }
+
+export function updateMatterStatus(matterId: string, status: "archived" | "open"): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({ status }),
+	});
+}

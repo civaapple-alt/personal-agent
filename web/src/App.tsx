@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { updateMatterModelSelection } from "./api/matters.ts";
+import { updateMatterModelSelection, updateMatterStatus } from "./api/matters.ts";
 import type { ModelSelection } from "./api/models.ts";
 import { organizationRoleModel } from "./api/organizations.ts";
 import {
@@ -600,6 +600,17 @@ export function App() {
 		setMobileNavOpen(false);
 		void handleLogoutOrRestore();
 	});
+	const handleSidebarToggleArchiveMatter = useStableCallback(async (matterId: string, archived: boolean) => {
+		setErrorBanner(null);
+		try {
+			await updateMatterStatus(matterId, archived ? "archived" : "open");
+			await refreshBootstrap();
+			if (selectedMatterId === matterId) await refreshDetail(matterId);
+			setNoticeBanner(archived ? "事项已归档，可在左侧「归档」中查看" : "事项已恢复至最近事项");
+		} catch (err) {
+			setErrorBanner(err instanceof Error ? err.message : String(err));
+		}
+	});
 
 	if (authStatus !== "authenticated") {
 		return <AuthGateView status={authStatus} {...auth.gateProps} />;
@@ -677,6 +688,7 @@ export function App() {
 				onNavigate={handleSidebarNavigate}
 				onToggleMember={handleSidebarToggleMember}
 				onNewMatter={handleSidebarNewMatter}
+				onToggleArchiveMatter={handleSidebarToggleArchiveMatter}
 				onSwitchOrLogout={handleSidebarSwitchOrLogout}
 			/>
 
