@@ -8,7 +8,7 @@
 
 ### 以账号认证模式启动
 
-从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.2) 下载预构建包。按[首次运行教程](../tutorials/getting-started.md#从预构建包启动)解压，然后在包根目录用以下命令启动。示例假定 HTTPS 反向代理与工作台位于同一台服务器上。
+从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.6.3) 下载预构建包。按[首次运行教程](../tutorials/getting-started.md#从预构建包启动)解压，然后在包根目录用以下命令启动。示例假定 HTTPS 反向代理与工作台位于同一台服务器上。
 
 在 macOS 或 Linux 的终端运行以下命令。
 

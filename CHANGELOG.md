@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-21
+
+See the [0.6.3 release guide](docs/releases/v0.6.3.md) for downloads and upgrade instructions.
+
 - Document how to reference another repository and how Pi project trust affects resource loading in RPC mode.
 
 - Restore unsent text and attachments when switching between matters in the workbench.
