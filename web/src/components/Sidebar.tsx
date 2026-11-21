@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
-import { getBotTheme, inferDelegationMood, type RoleMood, STATUS_LABELS, stripMarkdownFormatting } from "../utils.ts";
+import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
 import { BotFaceIcon } from "./BotFaceIcon.tsx";
 
 type MatterViewMode = "time" | "grouped";
@@ -75,6 +75,7 @@ export const Sidebar = memo(function Sidebar({
 	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 	const [busyArchiveId, setBusyArchiveId] = useState<string | null>(null);
 	const [footerMenuOpen, setFooterMenuOpen] = useState(false);
+	const [rosterExpanded, setRosterExpanded] = useState(false);
 	const footerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -217,8 +218,14 @@ export const Sidebar = memo(function Sidebar({
 			? stripMarkdownFormatting(prog.label) || "运行中"
 			: isWaitingUser
 				? "等待你的确认"
-				: STATUS_LABELS[matter.status] || matter.status;
-		const tooltip = `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}\n状态：${statusLabel}`;
+				: matter.status === "delivered"
+					? "已交付"
+					: matter.status === "archived"
+						? "已归档"
+						: null;
+		const tooltip = statusLabel
+			? `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}\n状态：${statusLabel}`
+			: `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}`;
 
 		return (
 			<div key={matter.id} className={`matter-row ${isActive ? "active" : ""} ${isArchived ? "is-archived" : ""}`}>
@@ -360,30 +367,51 @@ export const Sidebar = memo(function Sidebar({
 				</div>
 			)}
 
-			<div className="roster-strip">
-				{businessMembers.map((member) => {
-					const idx = allMembers.findIndex((m) => m.id === member.id);
-					const theme = getBotTheme(idx >= 0 ? idx : 0);
-					const isSelected = activeTab === "chats" && !selectedMatterId && selectedMemberId === member.id;
-					const workingMood = getWorkingMood(member.id);
-					const isWorking = workingMood !== "idle";
-					return (
-						<button
-							key={member.id}
-							type="button"
-							className={`roster-tile ${isSelected ? "active" : ""}`}
-							onClick={() => onToggleMember(member.id)}
-							title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
-						>
-							<span className="roster-avatar-wrap">
-								<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
-								{isWorking && <span className="roster-working-dot" />}
-							</span>
-							<span className="roster-name">{member.displayName}</span>
-						</button>
-					);
-				})}
-			</div>
+			{(() => {
+				const maxCollapsed = 8;
+				const hasOverflow = businessMembers.length > maxCollapsed;
+				const displayedMembers =
+					hasOverflow && !rosterExpanded ? businessMembers.slice(0, maxCollapsed - 1) : businessMembers;
+				const hiddenCount = businessMembers.length - displayedMembers.length;
+				return (
+					<div className={`roster-strip${rosterExpanded ? " is-expanded" : ""}`}>
+						{displayedMembers.map((member) => {
+							const idx = allMembers.findIndex((m) => m.id === member.id);
+							const theme = getBotTheme(idx >= 0 ? idx : 0);
+							const isSelected = activeTab === "chats" && !selectedMatterId && selectedMemberId === member.id;
+							const workingMood = getWorkingMood(member.id);
+							const isWorking = workingMood !== "idle";
+							return (
+								<button
+									key={member.id}
+									type="button"
+									className={`roster-tile ${isSelected ? "active" : ""}`}
+									onClick={() => onToggleMember(member.id)}
+									title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
+								>
+									<span className="roster-avatar-wrap">
+										<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
+										{isWorking && <span className="roster-working-dot" />}
+									</span>
+									<span className="roster-name">{member.displayName}</span>
+								</button>
+							);
+						})}
+						{hasOverflow && (
+							<button
+								type="button"
+								className="roster-tile roster-more-tile"
+								aria-expanded={rosterExpanded}
+								onClick={() => setRosterExpanded((open) => !open)}
+								title={rosterExpanded ? "收起角色列表" : `展开全部 ${businessMembers.length} 个角色`}
+							>
+								<span className="roster-more-circle">{rosterExpanded ? "收起" : `+${hiddenCount}`}</span>
+								<span className="roster-name">{rosterExpanded ? "收起列表" : "更多角色"}</span>
+							</button>
+						)}
+					</div>
+				);
+			})()}
 
 			{architectMember && (
 				<div className="architect-sidebar-wrap">

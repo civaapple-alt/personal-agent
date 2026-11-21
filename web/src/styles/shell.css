@@ -104,6 +104,28 @@
 	border-bottom: 1px solid var(--border);
 	flex-shrink: 0;
 }
+.roster-strip.is-expanded {
+	max-height: 260px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+.roster-more-circle {
+	width: 42px;
+	height: 42px;
+	border-radius: 14px;
+	border: 1px dashed var(--border);
+	background: var(--bg-subtle);
+	color: var(--text-secondary);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.roster-more-tile:hover .roster-more-circle {
+	border-color: var(--accent-border);
+	color: var(--text-primary);
+}
 .roster-tile {
 	border: 1px solid transparent;
 	background: transparent;

@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Omit the idle `open` status line from sidebar matter tooltips (showing status only when running, waiting for confirmation, delivered, or archived) and collapse the sidebar role grid to 2 rows with an expandable `+N` tile when there are more than 8 business roles.
 - Compact sidebar matter rows into a single line with status indicator, title, and hover tooltip for organization, repository, and status.
 - Redesign the left sidebar: support toggling matters between reverse-chronological order and organization/repository grouping, add logical matter archiving/restoring (`PATCH /api/matters/:id` with `status: "archived" | "open"`) plus an Archived tab, and compact the footer to a single status/user/Settings bar that expands the workbench navigation menu in a popover.
 - Preserve text contrast when hovering over a selected human-decision option chip.
