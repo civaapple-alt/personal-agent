@@ -482,7 +482,9 @@ test("one conversation entry point saves chat, routes questions and work, and co
 
 test("System One drives saved conversations, roster data and lead matching with safe fallback", async (t) => {
 	const lookedUp = "这件事目前有哪些队友呀";
-	const activeWork = "劳烦你现在把登录流程修好";
+	const activeWork = "我想看一下日志，顺手把自动重试改成三次";
+	const featureQuestion = "我想看一下 现在 由用户待定 的使用";
+	const featureDemo = "请演示一下「待你决定」现在怎么用";
 	const quoted = "「删除登录模块」";
 	const review = "我们现有岗位之间有没有做了同一件事的";
 	const piFallback = "本事项的处理进度如何";
@@ -492,12 +494,21 @@ test("System One drives saved conversations, roster data and lead matching with 
 			const state = request.state as { latestHumanMessage: string };
 			const text = state.latestHumanMessage;
 			if (text === piFallback || text === rulesFallback) throw new Error("Classifier unavailable");
-			const intent = text === lookedUp ? "roster" : text === activeWork || text === quoted ? "work" : "reply";
+			const isInformationOnly = text === featureQuestion || text === featureDemo;
+			const intent =
+				text === lookedUp
+					? "roster"
+					: text === featureDemo
+						? "confirm"
+						: text === activeWork || text === quoted || text === featureQuestion
+							? "work"
+							: "reply";
 			// This fixture deliberately reports full certainty for an instruction inside quotes.
 			return {
 				intent: { type: "choice", choice: intent },
 				target: { type: "choice", choice: text === review ? "role_architect_review" : "qa-manager" },
-				authorized: { type: "noul", noul: 0.95 },
+				authorized: { type: "noul", noul: isInformationOnly ? 0.55 : 0.95 },
+				informationOnly: { type: "noul", noul: isInformationOnly ? 0.89 : 0.05 },
 			} as never;
 		},
 	};
@@ -581,6 +592,17 @@ test("System One drives saved conversations, roster data and lead matching with 
 	const mentioned = await send(path, { prompt: "@Product Manager 可以讲讲现状吗" });
 	assert.equal(mentioned.reply?.senderId, "product-manager");
 	assert.equal(mentioned.matter.leadMemberId, "qa-manager");
+	for (const prompt of [featureQuestion, featureDemo]) {
+		const response = await send(path, { prompt });
+		assert.equal(response.message.metadata?.conversationDecisionSource, "system_one");
+		assert.equal(response.message.metadata?.mode, "conversation");
+		assert.equal(response.reply?.senderId, "qa-manager");
+		assert.equal(response.reply?.metadata?.humanDecision, undefined);
+		assert.doesNotMatch(
+			f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "",
+			/bash|edit|write|publish_deliverable/,
+		);
+	}
 	const work = await send(path, { prompt: activeWork });
 	assert.equal(work.message.metadata?.mode, "dispatch");
 	assert.equal(work.message.metadata?.targetMemberId, "qa-manager");

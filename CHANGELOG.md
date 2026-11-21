@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Answer informational questions about confirmation flows directly and omit the discussion badge on execution confirmation cards.
+
 - Use System One for conversation intent, live roster questions, and automatic role routing when `TYPESAFE_API_KEY` is configured. Fall back to isolated Pi decisions and then to local rules.
 - Analyze new-matter participation on request. Generate role drafts with Pi and fall back to local drafts when the model is unavailable.
 
