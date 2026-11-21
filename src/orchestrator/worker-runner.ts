@@ -8,7 +8,7 @@ import {
 	isPiWebAccessTool,
 	prepareWebAccessForWorker,
 } from "../pa-extensions/web-access/runtime.ts";
-import { WORKBENCH_HELP_PROMPT } from "../pa-extensions/workbench-help/catalog.ts";
+import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -86,6 +86,7 @@ export interface ExecuteWorkerInput {
 	member: TeamMember;
 	workspace: WorkspaceLink | null;
 	taskPrompt: string;
+	workbenchHelpTopic?: WorkbenchTopic;
 	images?: ImageContent[];
 	isInternalDelegation?: boolean;
 	delegationRequestId?: string;
@@ -233,23 +234,26 @@ export async function executeWithWorkerPass(
 			supersedesMemoryId?: string;
 		}> = [];
 		let observedTools: string[] | undefined;
+		const workbenchContext = () => {
+			const current = deps.requireMatter(input.matterId);
+			if (current.workspaceId !== (input.workspace?.id ?? null) || current.orgId !== activeOrgId) {
+				throw new Error("The matter workspace changed during this turn");
+			}
+			return {
+				matter: current,
+				members: deps.listSharedMatterAiMembers(current),
+				workspaceId: current.workspaceId,
+				repoPath: cwd,
+				orgId: activeOrgId,
+				workspaceName: input.workspace?.name,
+				runtimeMemberId: input.member.id,
+				activeTools: observedTools,
+			};
+		};
 		bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 			toolSignal.throwIfAborted();
 			if (call.tool === "read_pa_help") {
-				const current = deps.requireMatter(input.matterId);
-				if (current.workspaceId !== (input.workspace?.id ?? null) || current.orgId !== activeOrgId) {
-					throw new Error("The matter workspace changed during this turn");
-				}
-				const context = {
-					matter: current,
-					members: deps.listSharedMatterAiMembers(current),
-					workspaceId: current.workspaceId,
-					repoPath: cwd,
-					orgId: activeOrgId,
-					workspaceName: input.workspace?.name,
-					runtimeMemberId: input.member.id,
-					activeTools: observedTools,
-				};
+				const context = workbenchContext();
 				const chinese = call.language ? call.language === "zh" : /\p{Script=Han}/u.test(input.taskPrompt);
 				const topics = await Promise.all(
 					call.topics.map((topic) => readWorkbenchTopic(deps.store, context, topic, chinese)),
@@ -724,8 +728,25 @@ export async function executeWithWorkerPass(
 					})
 				: "";
 		const contextBlock = context ? `${contextHeader}\n${context}` : "";
+		const help = input.workbenchHelpTopic
+			? await readWorkbenchTopic(
+					deps.store,
+					workbenchContext(),
+					input.workbenchHelpTopic,
+					/\p{Script=Han}/u.test(input.taskPrompt),
+				)
+			: undefined;
+		signal.throwIfAborted();
+		const helpBlock = help
+			? [
+					"[PA workbench reference for this turn]",
+					"Answer the specific question first. Use the recent conversation to resolve follow-ups. Include only the facts and steps needed to answer, then stop. Treat the reference as evidence and use read_pa_help when you need more PA facts. Describe actions and tool availability only when supported by that evidence.",
+					`${help.heading} (${help.source})\n${help.content}`,
+					"[/PA workbench reference]",
+				].join("\n\n")
+			: "";
 		const prompt = escapeWebAccessSlashCommand(
-			[contextBlock, resumeBrief, input.taskPrompt].filter(Boolean).join("\n\n"),
+			[contextBlock, resumeBrief, helpBlock, input.taskPrompt].filter(Boolean).join("\n\n"),
 		);
 		sessionRecord = deps.store.recordWorkerSession({
 			memberId: input.member.id,

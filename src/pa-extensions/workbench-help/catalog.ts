@@ -1,10 +1,21 @@
 import { readFile } from "node:fs/promises";
 
 const GUIDES = {
+	pa_and_pi: {
+		heading: "PA 与 Pi",
+		english: "PA and Pi",
+		rubric: "What PA and Pi are, their roles in the current agent workbench, and how they work together.",
+	},
 	matters: {
 		heading: "事项与派发",
 		english: "Matters and dispatch",
-		rubric: "How to start a PA matter, ask questions, mention a role, dispatch work, or stop a turn.",
+		rubric: "How to start a PA matter, ask questions, mention a role, or stop a turn.",
+	},
+	starting_work: {
+		heading: "开始正式执行",
+		english: "Starting a work turn",
+		rubric:
+			"How to enter a formal work turn, give an assignment, or use the Start execution confirmation. Includes 怎么进入正式执行轮.",
 	},
 	collaboration: {
 		heading: "协作与旁听",
@@ -31,7 +42,7 @@ const GUIDES = {
 		heading: "模型、仓库与已开放能力",
 		english: "Models, repositories, and capabilities",
 		rubric:
-			"How to use or configure PA's model picker, repository binding, web search, pstack, or shipped capabilities. Also asks what customization PA currently supports.",
+			"How to configure PA's model picker, repository binding, web search, pstack, or supported customizations.",
 	},
 	experience: {
 		heading: "经验复盘",

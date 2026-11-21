@@ -2,11 +2,21 @@
 
 This guide ships with PA. The [user guide](user-guide.md) covers the full workbench UI.
 
+## PA and Pi
+
+PA (Personal Agent) is the workbench that manages matters, role collaboration, and decisions. Pi runs the role sessions, connects to models, and invokes tools. PA starts and manages those sessions through Pi's RPC interface.
+
 ## Matters and dispatch
 
 Use the composer to ask a question, discuss a proposal, or assign work. Mention a role with `@` to select a recipient for the turn. A clear work request starts a turn when the sender has permission. Set the matter lead in the collaboration members panel.
 
 For example, ask QA to run the login regression and record failures to assign work. Ask which login cases to cover for advice. Use Stop execution to interrupt an active turn.
+
+## Starting a work turn
+
+Send a specific assignment in the same composer, such as “Run the checks we agreed on and record the results.” PA determines how to handle each message. A clear assignment can start work when the sender has dispatch permission. If PA asks whether to start execution, select Start execution to proceed with the original message.
+
+To try Human Question during work, describe a concrete choice for someone to make in the assignment. The lead can use `request_clarification` to show a decision card during the work turn.
 
 ## Collaboration and observers
 

@@ -28,7 +28,6 @@ import {
 	type MatterRun,
 	resolveTurnTimeoutMs,
 } from "./types.ts";
-import { readWorkbenchTopic } from "./workbench-context.ts";
 import type { ExecuteWorkerInput } from "./worker-runner.ts";
 
 interface MatterDispatchDeps {
@@ -284,6 +283,7 @@ export async function dispatchMatterTurn(
 	speakerMemberId = activeSpeaker.id;
 	try {
 		let intent: ConversationIntent = "reply";
+		let workbenchHelpTopic: ConversationDecision["helpTopic"];
 		let architectHealthcheck: boolean | undefined;
 		if (isConversation) {
 			if (!existingUserMsg) throw new Error("Conversation routing requires a saved human message");
@@ -317,62 +317,28 @@ export async function dispatchMatterTurn(
 				...existingUserMsg.metadata,
 				conversationDecisionSource: decision.source,
 			});
-			if (intent === "roster" || intent === "workbench_help") {
-				let directReply: MatterMessage | undefined;
-				if (intent === "roster") {
-					directReply = recordRosterReply(
-						deps.store,
-						matter,
-						existingUserMsg,
-						deps.listSharedMatterAiMembers(matter),
-					);
-				} else if (intent === "workbench_help" && decision.helpTopic) {
-					const workspaceContext = {
-						workspaceId: workspace?.id ?? null,
-						repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
-						orgId: effectiveOrgId,
-					};
-					const help = await readWorkbenchTopic(
-						deps.store,
-						{
-							...workspaceContext,
-							matter,
-							members: deps.listSharedMatterAiMembers(matter),
-							workspaceName: workspace?.name,
-							runtimeMemberId: activeSpeaker.id,
-						},
-						decision.helpTopic,
-						/\p{Script=Han}/u.test(existingUserMsg.content),
-					);
-					run.controller.signal.throwIfAborted();
-					input.validateConversationAccess?.();
-					directReply = deps.store.appendMessage({
-						matterId: matter.id,
-						channel: "user",
-						senderType: "system",
-						senderId: "orchestrator",
-						content: `**${help.heading}**\n\n${help.content}`,
-						metadata: {
-							workbenchHelpTopic: decision.helpTopic,
-							workbenchHelpSource: help.source,
-							sourceUserMessageId: existingUserMsg.id,
-							...workspaceContext,
-						},
-					});
-				}
+			if (intent === "roster") {
+				const directReply = recordRosterReply(
+					deps.store,
+					matter,
+					existingUserMsg,
+					deps.listSharedMatterAiMembers(matter),
+				);
 				return {
 					matter,
 					assignedMember: activeSpeaker,
 					workspace,
-					replyText: directReply?.content ?? "",
+					replyText: directReply.content,
 					directReply,
 					deliverable: null,
 					runResult: { ...emptyAbortedResult(), aborted: false },
 				};
 			}
+			workbenchHelpTopic = decision.helpTopic;
 			isDiscussionTurn = intent !== "work";
 			run.conversationDiscussion = isDiscussionTurn;
 			if (
+				intent !== "workbench_help" &&
 				!hasExplicitRecipient &&
 				(decision.target === "role_architect" || decision.target === "role_architect_review")
 			) {
@@ -381,7 +347,7 @@ export async function dispatchMatterTurn(
 				});
 			}
 			const selected = candidates.find((candidate) => candidate.id === decision.target);
-			if (selected) {
+			if (selected && intent !== "workbench_help") {
 				activeSpeaker = selected;
 			}
 			input.validateConversationAccess?.(activeSpeaker.id);
@@ -502,6 +468,7 @@ export async function dispatchMatterTurn(
 							member: activeSpeaker,
 							workspace,
 							taskPrompt: effectiveTaskPrompt,
+							workbenchHelpTopic,
 							images: rpcImages.length > 0 ? rpcImages : undefined,
 							isInternalDelegation: false,
 							discussionMode: isDiscussionTurn,
@@ -647,6 +614,7 @@ export async function dispatchMatterTurn(
 				aborted,
 				...(activeSpeaker.id === matter.leadMemberId ? { matterLeadReply: true } : {}),
 				...(isDiscussionTurn ? { discussionTurn: true } : {}),
+				...(!aborted && rawReply && workbenchHelpTopic ? { workbenchHelpTopic } : {}),
 				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
 				toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
@@ -738,6 +706,7 @@ export async function dispatchMatterTurn(
 			!run.cancelled &&
 			!assignedIsArchitect &&
 			intent !== "confirm" &&
+			intent !== "workbench_help" &&
 			(isConversation || !isDiscussionTurn || mentionedTargets.length === 0)
 				? deps
 						.resolveMatterAiMembers(observerMatter, effectiveUserId)

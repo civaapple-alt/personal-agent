@@ -505,9 +505,8 @@ export function MessageFeed({
 											<MarkdownView content={msg.content} />
 										)}
 									</div>
-									{isWorkbenchHelp &&
-										(msg.metadata?.workbenchHelpTopic === "decisions" ||
-											msg.metadata?.humanDecisionHelp === true) && <DecisionDemo />}
+									{(msg.metadata?.workbenchHelpTopic === "decisions" ||
+										(isWorkbenchHelp && msg.metadata?.humanDecisionHelp === true)) && <DecisionDemo />}
 									{progressSnapshot && (
 										<ProgressSnapshotCard
 											snapshot={progressSnapshot}

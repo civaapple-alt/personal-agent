@@ -606,16 +606,27 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	const featureDemo = "请演示一下「待你决定」现在怎么用";
 	const interactiveDemo = "给我一个 pa 的 待你决定 的交互演示";
 	const followupDemo = "给我一个 实例 演示 有我待定的使用";
+	const runtimeQuestion = "你应该能使用 的工具和扩展有哪些，包含 human question  和 request_clarification 吗";
+	const howToRun = "怎么进入 正式执行轮";
+	const paAndPi = "你知道 当前 agent workbench 的 pa 和 pi 吗";
+	const runtimeReply = "这轮是讨论。要让主责用 Human Question 发起真实决定，需要进入正式执行。";
+	const howToRunReply = "在这里明确交办一件具体工作。如果出现开始执行卡片，就点开始执行。";
+	const paAndPiReply = "PA 管理事项和成员，Pi 通过 RPC 运行岗位的模型会话与工具。";
+	const helpReplies = new Map([
+		[runtimeQuestion, runtimeReply],
+		[howToRun, howToRunReply],
+		[paAndPi, paAndPiReply],
+	]);
+	const defaultHelpReply = "主责根据问题给出的答复";
 	const helpQuestions = new Map([
 		[featureQuestion, { topic: "decisions", match: /提交答案/ }],
 		[interactiveDemo, { topic: "decisions", match: /提交答案/ }],
 		[followupDemo, { topic: "decisions", match: /找回密码/ }],
 		["怎么安排旁听", { topic: "collaboration", match: /查看交接/ }],
 		["PA 支持自己做插件吗", { topic: "capabilities", match: /维护者开发及发布/ }],
-		[
-			"你应该能使用 的工具和扩展有哪些，包含 human question  和 request_clarification 吗",
-			{ topic: "runtime_tools", match: /最近一次在本工作区启动时的工具.*read_pa_help/ },
-		],
+		[runtimeQuestion, { topic: "runtime_tools", match: /本轮启动时的工具.*read_pa_help/ }],
+		[howToRun, { topic: "starting_work", match: /同一个输入框发一条具体的交办消息/ }],
+		[paAndPi, { topic: "pa_and_pi", match: /Pi 是岗位的执行底座/ }],
 		["怎么看成果版本", { topic: "deliverables", match: /成果库/ }],
 		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],
 	]);
@@ -674,6 +685,19 @@ test("System One drives saved conversations, workbench help, roster data and lea
 						rationale: "应保留的不是这条建议",
 					},
 				});
+			}
+			const help = [...helpQuestions].find(([question]) => prompt.endsWith(question));
+			if (help) {
+				const [question, { match }] = help;
+				const reference = prompt
+					.split("[PA workbench reference for this turn]")[1]
+					?.split("[/PA workbench reference]")[0];
+				assert.match(reference ?? "", match);
+				assert.doesNotMatch(reference ?? "", /other_workspace_tool/);
+				if (question === howToRun) {
+					assert.ok(worker.priorTranscript.includes(runtimeReply));
+				}
+				return helpReplies.get(question) ?? defaultHelpReply;
 			}
 			return `Reply from ${worker.options.env?.PA_MEMBER_ID}`;
 		},
@@ -753,16 +777,18 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		metadata: { workspaceId: "other_workspace", repoPath: join(f.root, "other"), orgId: f.workspace.orgId },
 	});
 	const workerCount = f.workers.length;
-	for (const [prompt, { topic, match }] of helpQuestions) {
+	for (const [prompt, { topic }] of helpQuestions) {
 		const example = await send(path, { prompt });
 		assert.equal(example.message.metadata?.conversationDecisionSource, "system_one");
-		assert.equal(example.reply?.senderType, "system");
+		assert.equal(example.message.metadata?.mode, "conversation");
+		assert.equal(example.reply?.senderType, "member");
+		assert.equal(example.reply?.senderId, "qa-manager");
+		assert.equal(example.reply?.metadata?.matterLeadReply, true);
 		assert.equal(example.reply?.metadata?.workbenchHelpTopic, topic);
 		assert.equal(example.reply?.metadata?.humanDecision, undefined);
-		assert.match(example.reply?.content ?? "", match);
-		assert.doesNotMatch(example.reply?.content ?? "", /other_workspace_tool/);
-		assert.equal(f.workers.length, workerCount);
+		assert.equal(example.reply?.content, helpReplies.get(prompt) ?? defaultHelpReply);
 	}
+	assert.equal(f.workers.length, workerCount + helpQuestions.size);
 	const work = await send(path, { prompt: activeWork });
 	assert.equal(work.message.metadata?.mode, "dispatch");
 	assert.equal(work.message.metadata?.targetMemberId, "qa-manager");

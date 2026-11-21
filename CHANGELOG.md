@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Have the matter lead answer workbench questions using the conversation and the relevant PA reference.
 - Keep the selected AI roster when creating a matter. Include the creator automatically and show them as the initiator.
 - Make the matter lead the default responder in the shared composer. Address people and AI members explicitly with `@`.
 - Limit the AI observer switch to proactive contributions. Preserve the observer list and the lead's delegation settings when toggling it.
