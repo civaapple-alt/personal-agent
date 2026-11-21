@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Document how to reference another repository and how Pi project trust affects resource loading in RPC mode.
+
 - Restore unsent text and attachments when switching between matters in the workbench.
 
 - Show the organization and repository in each recent matter. Open the current matter’s deliverables and version history from the chat header.
