@@ -109,9 +109,9 @@ export async function executeWithWorkerPass(
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const isDiscussionMode = Boolean(input.discussionMode);
-	const isConversationReply = Boolean(input.run.conversationDiscussion);
 	const isVerifier = sessionMode === "verifier";
 	const matter = deps.store.getMatter(input.matterId);
+	const isMatterLead = !matter?.leadMemberId || input.member.id === matter.leadMemberId;
 	const actorUserId = input.run.startedByUserId ?? null;
 	const matterAiMembers = deps
 		.resolveMatterAiMembers(matter)
@@ -133,6 +133,7 @@ export async function executeWithWorkerPass(
 		discussionMode: isDiscussionMode,
 		isArchitect,
 		hasConsultTargets,
+		isMatterLead,
 	});
 	const { canPublish, canDelegate, canProposeExperience } = teamExtension;
 	const humanQuestion = prepareHumanQuestion({
@@ -160,13 +161,7 @@ export async function executeWithWorkerPass(
 		"v2",
 		input.workspace?.id ?? null,
 		cwd,
-		isConversationReply
-			? `conversation-${sessionMode}`
-			: isDiscussionMode
-				? `discussion-${sessionMode}`
-				: sessionMode === "lead"
-					? "user"
-					: sessionMode,
+		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
 		activeOrgId,
 		...(inheritsLocalResources ? ["local-pi"] : []),
 		// These snapshots persist in Pi history. Reuse them only for the same actor.
@@ -204,13 +199,11 @@ export async function executeWithWorkerPass(
 			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter(
 					(tool) => tool !== "mcp" && !isPiWebAccessTool(tool),
 				);
-		const requestedTools = isConversationReply
-			? baseTools.filter((tool) => ["read", "grep", "find", "ls"].includes(tool))
-			: isVerifier
-				? baseTools.filter((tool) => tool === "read" || tool === "bash")
-				: sessionMode === "observer"
-					? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
-					: baseTools;
+		const requestedTools = isVerifier
+			? baseTools.filter((tool) => tool === "read" || tool === "bash")
+			: sessionMode === "observer"
+				? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
+				: baseTools;
 		const webAccess = await prepareWebAccessForWorker({
 			store: deps.store,
 			member: input.member,
@@ -218,7 +211,7 @@ export async function executeWithWorkerPass(
 			sessionMode,
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
-		const mcpDependencies = isArchitect || isVerifier || isConversationReply ? [] : (template?.mcpDependencies ?? []);
+		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
 		const requiredTools = [
 			...requestedTools,
 			...teamExtension.tools,
@@ -408,8 +401,7 @@ export async function executeWithWorkerPass(
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", teamExtension.entry);
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
-		if (!isVerifier && !isConversationReply)
-			for (const extension of deps.extensions) args.push("--extension", extension);
+		if (!isVerifier) for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
@@ -453,7 +445,6 @@ export async function executeWithWorkerPass(
 			repoGitUser,
 			sessionMode,
 			discussionMode: isDiscussionMode,
-			conversationReply: isConversationReply,
 			leadMemberId: matter?.leadMemberId ?? null,
 			consultMemberIds: matter?.consultMemberIds ?? null,
 			observerMemberIds: matter?.observersEnabled ? matter.observerMemberIds : [],

@@ -370,10 +370,9 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	assert.match(context, /Treat earlier replies, plans, and saved proposals as historical/);
 });
 
-test("one conversation entry point saves chat, routes questions and work, and confirms uncertain execution", async (t) => {
-	const incomplete = "这一段可能也要改";
+test("one conversation entry point runs roles directly with their tools, preserves lead ownership, and keeps observers independent", async (t) => {
 	const direct = "跑一下登录回归并记录结果";
-	const impersonation = "不要执行，只讨论「删除登录模块」";
+	const clarify = "这一段需要你先问我方案";
 	const softQuestion = "我想看一下 现在「待你决定」的使用方式";
 	const observerStarted = Promise.withResolvers<void>();
 	let observerInterrupted = false;
@@ -381,12 +380,7 @@ test("one conversation entry point saves chat, routes questions and work, and co
 		if (worker.options.env?.PA_DECISION_NAME) {
 			assert.equal(worker.options.noSession, true);
 			assert.equal(worker.options.args?.at(-1), "");
-			const latest = JSON.parse(prompt.split("\n\n---\n\n").at(-1)!).latestHumanMessage as string;
-			if (latest.includes(incomplete)) return '{"intent":"confirm"}';
-			if (latest.includes(direct)) return JSON.stringify({ intent: "work", authorization: direct });
-			if (latest.includes(impersonation)) return JSON.stringify({ intent: "work", authorization: "删除登录模块" });
-			if (latest.startsWith("和团队同步一下")) return '{"intent":"silent"}';
-			return '{"intent":"reply"}';
+			return '{"intent":"respond"}';
 		}
 		if (worker.options.env?.PA_MEMBER_CONTEXT?.includes("## Observer participation")) {
 			if (prompt.includes("暂留旁听演示")) {
@@ -402,6 +396,13 @@ test("one conversation entry point saves chat, routes questions and work, and co
 		}
 		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager" && prompt.endsWith("请教 QA 的验收意见")) {
 			await worker.call("delegate_to_member", { memberId: "qa-manager", task: "核对验收口径" });
+		}
+		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager" && prompt.includes(clarify)) {
+			await worker.call("request_clarification", {
+				question: "你想先改登录还是先改注册？",
+				options: ["先改登录", "先改注册"],
+			});
+			return "我发了一张问题卡片，选定后我就继续。";
 		}
 		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
 	});
@@ -449,7 +450,11 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	});
 	assert.equal(first.aiDiscussionTriggered, true);
 	while (f.orchestrator.isMatterRunning(first.matter.id)) await new Promise((wait) => setTimeout(wait, 10));
-	assert.equal(f.workers.length, 2);
+	// Explicit preferredMemberId skips the extra classifier worker and runs the lead directly with full tools.
+	assert.equal(f.workers.length, 1);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /publish_deliverable/);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
 	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.senderId, "engineering-manager");
 	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.metadata?.matterLeadReply, true);
 	assert.equal(first.matter.observersEnabled, false);
@@ -474,54 +479,52 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	const directedReply = await reply(question.message);
 	assert.equal(directedReply.senderId, "qa-manager");
 	assert.equal(directedReply.metadata?.matterLeadReply, undefined);
-	assert.ok(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS);
-	assert.doesNotMatch(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
-	assert.equal(f.workers.length, 2);
+	assert.ok(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS);
+	// Mentioned non-lead specialist gets its own role tools + request_clarification, but cannot publish deliverables.
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
+	assert.doesNotMatch(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /publish_deliverable/);
+	assert.equal(f.workers.length, 1);
 
 	await post(`/api/matters/${first.matter.id}`, { observersEnabled: true }, "PATCH");
 	const execute = await send(`@QA Manager ${direct}`);
 	assert.equal((await reply(execute.message)).senderId, "qa-manager");
-	assert.equal(f.store.getMessage(execute.message.id)?.metadata?.mode, "dispatch");
-	assert.match(f.workers[3]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|publish_deliverable/);
-	assert.equal(f.workers[4]?.options.env?.PA_MEMBER_ID, "product-manager");
-	assert.match(f.workers[4]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Observer participation/);
+	assert.match(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
+	assert.equal(f.workers[2]?.options.env?.PA_MEMBER_ID, "product-manager");
+	assert.match(f.workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Observer participation/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
 	await post(`/api/matters/${first.matter.id}`, { observersEnabled: false }, "PATCH");
 
-	const uncertain = await send(`@QA Manager ${incomplete}`);
-	const decision = await reply(uncertain.message);
-	assert.match(JSON.stringify(decision.metadata?.humanDecision), /execution_confirmation/);
-	assert.equal(f.workers.length, 6);
+	// The lead itself can ask a Human Question in normal conversation and resume once answered.
+	const asked = await send(clarify);
+	const decision = await reply(asked.message);
+	assert.equal(decision.senderId, "engineering-manager");
+	assert.match(JSON.stringify(decision.metadata?.humanDecision), /"kind":"planning"/);
 	const accepted = await post(`${messages}/${decision.id}/human-decision`, {
 		action: "answer",
 		revision: 1,
-		answer: "先讨论",
+		answer: "先改登录",
 	});
 	assert.equal(accepted.resumed, true);
 	while (f.orchestrator.isMatterRunning(first.matter.id)) await new Promise((wait) => setTimeout(wait, 10));
-	assert.equal(f.workers[6]?.options.env?.PA_MEMBER_ID, "qa-manager");
-	assert.doesNotMatch(f.workers[6]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
-	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
+	assert.equal(f.workers.at(-1)?.options.env?.PA_MEMBER_ID, "engineering-manager");
+	assert.match(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
 
-	const denied = await send(`@QA Manager ${impersonation}`);
-	assert.equal((await reply(denied.message)).metadata?.humanDecision, undefined);
-	assert.equal(f.workers.length, 9);
-	assert.doesNotMatch(f.workers[8]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
-
+	const beforeUnknown = f.workers.length;
 	const unknown = await send("@missing-role 跑一下登录回归");
 	assert.equal(unknown.aiDiscussionTriggered, false);
-	assert.equal(f.workers.length, 9);
+	assert.equal(f.workers.length, beforeUnknown);
 
 	const implicitQuestion = await send(softQuestion);
 	assert.equal(implicitQuestion.aiDiscussionTriggered, true);
 	assert.equal((await reply(implicitQuestion.message)).senderId, "engineering-manager");
-	assert.equal(f.workers.length, 11);
-	assert.doesNotMatch(f.workers[10]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+	assert.match(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
 
+	const beforeHumanOnly = f.workers.length;
 	const human = await send("这个配色想请 @张宁 看一下");
 	assert.equal(human.aiDiscussionTriggered, false);
 	assert.equal(human.message.metadata?.mode, "conversation");
-	assert.equal(f.workers.length, 11);
+	assert.equal(f.workers.length, beforeHumanOnly);
 	const together = await send("@张宁 和 @QA Manager 一起看看");
 	assert.equal((await reply(together.message)).senderId, "qa-manager");
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
@@ -609,8 +612,8 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	const runtimeQuestion = "你应该能使用 的工具和扩展有哪些，包含 human question  和 request_clarification 吗";
 	const howToRun = "怎么进入 正式执行轮";
 	const paAndPi = "你知道 当前 agent workbench 的 pa 和 pi 吗";
-	const runtimeReply = "这轮是讨论。要让主责用 Human Question 发起真实决定，需要进入正式执行。";
-	const howToRunReply = "在这里明确交办一件具体工作。如果出现开始执行卡片，就点开始执行。";
+	const runtimeReply = "我当前已加载 request_clarification，可直接用 Human Question 提问。";
+	const howToRunReply = "角色直接使用自己配置的工具与能力，按你的消息自行判断回复或执行。";
 	const paAndPiReply = "PA 管理事项和成员，Pi 通过 RPC 运行岗位的模型会话与工具。";
 	const helpReplies = new Map([
 		[runtimeQuestion, runtimeReply],
@@ -624,13 +627,12 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		[followupDemo, { topic: "decisions", match: /找回密码/ }],
 		["怎么安排旁听", { topic: "collaboration", match: /查看交接/ }],
 		["PA 支持自己做插件吗", { topic: "capabilities", match: /维护者开发及发布/ }],
-		[runtimeQuestion, { topic: "runtime_tools", match: /本轮启动时的工具.*read_pa_help/ }],
-		[howToRun, { topic: "starting_work", match: /同一个输入框发一条具体的交办消息/ }],
+		[runtimeQuestion, { topic: "runtime_tools", match: /本轮启动时的工具.*request_clarification/ }],
+		[howToRun, { topic: "starting_work", match: /直接使用自己配置的/ }],
 		[paAndPi, { topic: "pa_and_pi", match: /Pi 是岗位的执行底座/ }],
 		["怎么看成果版本", { topic: "deliverables", match: /成果库/ }],
 		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],
 	]);
-	const quoted = "「删除登录模块」";
 	const review = "我们现有岗位之间有没有做了同一件事的";
 	const piFallback = "本事项的处理进度如何";
 	const rulesFallback = "跑一下测试";
@@ -640,25 +642,10 @@ test("System One drives saved conversations, workbench help, roster data and lea
 			const text = state.latestHumanMessage;
 			if (text === piFallback || text === rulesFallback) throw new Error("Classifier unavailable");
 			const help = helpQuestions.get(text);
-			const isInformationOnly = Boolean(help) || text === featureDemo;
-			const intent =
-				text === lookedUp
-					? "roster"
-					: text === featureDemo
-						? "confirm"
-						: text === activeWork ||
-								text === quoted ||
-								text === featureQuestion ||
-								text === followupDemo ||
-								text === interactiveDemo
-							? "work"
-							: "reply";
-			// This fixture deliberately reports full certainty for an instruction inside quotes.
+			const intent = text === lookedUp ? "roster" : "respond";
 			return {
 				intent: { type: "choice", choice: intent },
 				target: { type: "choice", choice: text === review ? "role_architect_review" : "qa-manager" },
-				authorized: { type: "noul", noul: text === interactiveDemo ? 0.8 : isInformationOnly ? 0.55 : 0.95 },
-				informationOnly: { type: "noul", noul: text === interactiveDemo ? 0.64 : isInformationOnly ? 0.89 : 0.05 },
 				workbenchHelp: {
 					type: "noul",
 					noul: text === interactiveDemo ? 0.55 : text === featureQuestion ? 0.74 : help ? 0.97 : 0.12,
@@ -767,7 +754,8 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	assert.equal(response.message.metadata?.mode, "conversation");
 	assert.equal(response.reply?.senderId, "qa-manager");
 	assert.equal(response.reply?.metadata?.humanDecision, undefined);
-	assert.doesNotMatch(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+	assert.match(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
+	assert.match(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
 	f.store.appendMessage({
 		matterId: created.matter.id,
 		channel: "notice",
@@ -790,8 +778,9 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	}
 	assert.equal(f.workers.length, workerCount + helpQuestions.size);
 	const work = await send(path, { prompt: activeWork });
-	assert.equal(work.message.metadata?.mode, "dispatch");
+	assert.equal(work.message.metadata?.mode, "conversation");
 	assert.equal(work.message.metadata?.targetMemberId, "qa-manager");
+	assert.equal(work.reply?.senderId, "qa-manager");
 	const scopedQuestion = await send(path, { prompt: review });
 	assert.equal(scopedQuestion.reply?.senderId, "qa-manager");
 	assert.equal(scopedQuestion.matter.leadMemberId, "qa-manager");
@@ -804,16 +793,14 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	};
 	assert.ok(proposal.healthFindings?.length);
 	assert.equal(proposal.recommendedFormation, undefined);
-	const quotation = await send(path, { prompt: quoted });
-	assert.equal(quotation.message.metadata?.mode, "conversation");
-	assert.match(JSON.stringify(quotation.reply?.metadata?.humanDecision), /execution_confirmation/);
 	const fallback = await send(path, { prompt: piFallback });
 	assert.equal(fallback.message.metadata?.conversationDecisionSource, "pi");
 	assert.equal(fallback.reply?.senderId, "qa-manager");
 	const offline = await send(path, { prompt: rulesFallback });
 	assert.equal(offline.message.metadata?.conversationDecisionSource, "rules");
 	assert.equal(offline.message.metadata?.mode, "conversation");
-	assert.match(JSON.stringify(offline.reply?.metadata?.humanDecision), /execution_confirmation/);
+	assert.equal(offline.reply?.senderId, "qa-manager");
+	assert.equal(offline.reply?.metadata?.humanDecision, undefined);
 });
 
 test("workbench help reads packaged guides and active matter facts through the shipped extension", async (t) => {

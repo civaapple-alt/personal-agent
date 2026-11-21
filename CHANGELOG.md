@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the discussion-vs-execution split in unified matter conversations: run each AI role directly with its configured tools, skills, and `request_clarification` in a single persistent lead Pi session, let the role decide whether to answer, act, or ask for human clarification, and limit pre-routing to roster lookups, workbench help context, and initial role matching.
 - Streamline execution confirmation and human-decision cards: hide redundant placeholder text bubbles, include a preview of the triggering message on execution confirmations, distinguish confirmation cards from AI clarification cards, and replace radio lists with clickable option chips plus inline reply input.
 - Have the matter lead answer workbench questions using the conversation and the relevant PA reference.
 - Keep the selected AI roster when creating a matter. Include the creator automatically and show them as the initiator.

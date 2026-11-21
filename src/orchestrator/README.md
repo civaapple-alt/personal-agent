@@ -25,7 +25,7 @@
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案，同时按目标作用域校验并输出可选 `newSkills` 草案（`role_local` / 目标库位置，确认前不写盘）；已有缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 
-- 工作台统一发送默认由主责回应。HTTP 层解析点名，只有人类同事被点名时直接保存消息。需要 AI 回应的消息才由 [conversation-intent.ts](conversation-intent.ts) 判断意图。回复使用只读工具，明确交办进入正式执行，待确认时保存决定卡片。点名只作用于本轮。
+- 工作台统一发送默认由主责回应，不再按轮次切分只读讨论与正式执行。HTTP 层解析点名，只有人类同事被点名时直接保存消息；有派发权限时直接按角色配置的工具和单一主责 Pi 会话运行，由角色自行判断回复、查证、执行或调用 `request_clarification`。[conversation-intent.ts](conversation-intent.ts) 仅负责纯名单查询（`roster`）、工作台速查参考注入（`workbench_help`）及无主责时的自动选人。点名只作用于本轮，非主责被点名时仍受宿主禁止调用 `publish_deliverable` 约束。
 - `dispatchMatter`：经 `resolveMatterAiMembers(matter, actorUserId)` 结合当前调用者上下文、组织级有效 AI 名册（含调用者个人私有角色）、事项 `aiMemberIds`、`observersEnabled` 与旁听成员确定可执行名单（`MatterRun.startedByUserId` 记录触发人并用于 [delegation-runner.ts](delegation-runner.ts) 拦截向他人 `personal` 角色的内部委托），
   取得事项占用，保存交流并决定收尾；`assessInitiation`、`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前组织、调用者私有作用域与事项 AI 成员范围约束。
   - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。

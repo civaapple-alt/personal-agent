@@ -8,29 +8,31 @@ PA (Personal Agent) is the workbench that manages matters, role collaboration, a
 
 ## Matters and dispatch
 
-Use the composer to ask a question, discuss a proposal, or assign work. Mention a role with `@` to select a recipient for the turn. A clear work request starts a turn when the sender has permission. Set the matter lead in the collaboration members panel.
+Use the composer to ask a question, discuss a proposal, or assign work without switching between separate discussion and execution modes. Mention a role with `@` to select a recipient for the turn; set the matter lead in the collaboration members panel.
 
-For example, ask QA to run the login regression and record failures to assign work. Ask which login cases to cover for advice. Use Stop execution to interrupt an active turn.
+For example, asking QA to run the login regression or asking which login cases to cover are both handled directly by the role using its own tools and judgment. Use Stop execution to interrupt an active turn.
 
-## Starting a work turn
+## How roles work and execute
 
-Send a specific assignment in the same composer, such as “Run the checks we agreed on and record the results.” PA determines how to handle each message. A clear assignment can start work when the sender has dispatch permission. If PA asks whether to start execution, select Start execution to proceed with the original message.
+Each AI role runs with its configured tools, skills, `read_pa_help`, and Human Question (`request_clarification`) in a single persistent Pi session per matter workspace:
 
-To try Human Question during work, describe a concrete choice for someone to make in the assignment. The lead can use `request_clarification` to show a decision card during the work turn.
+- For questions, advice, or status checks, the role replies directly (using read-only inspection when helpful) without modifying files, committing, or publishing deliverables.
+- When your intent to act is clear, the role executes, delegates, or publishes deliverables within its role boundaries.
+- When scope, trade-offs, or side-effecting authorization need your input, the lead calls `request_clarification` to show a decision card and waits for your answer.
 
 ## Collaboration and observers
 
-The matter lead replies by default. Use `@` to address a teammate or an AI role. When AI observers are enabled, selected AI collaborators can contribute relevant findings after the reply. The lead still responds and delegates according to the matter settings when observers are off. Open the turn’s delegation details to see assignments and reports.
+The matter lead replies by default. Use `@` to address a teammate or an AI role (mentioning only human teammates saves the message without triggering AI). When AI observers are enabled, selected AI collaborators can contribute relevant findings after the reply. The lead still responds and delegates according to the matter settings when observers are off. Open the turn’s delegation details to see assignments and reports.
 
 ## Decisions
 
-Suppose you ask AI to verify sign-in and the test scope is open. A decision card can ask whether to include password recovery.
+Suppose you ask AI to verify sign-in and the test scope is open. The role can call `request_clarification` to ask whether to include password recovery.
 
-1. The assigned respondent selects “Include password recovery” and submits the answer.
+1. The assigned respondent picks “Include password recovery” or enters a custom reply, then submits the answer.
 2. The card shows that it was answered and records who answered and when.
-3. AI can resume with the selected scope when the matter is idle and dispatch is allowed. An authorized member can continue a saved answer if it has not resumed.
+3. AI resumes with the selected scope when the matter is idle and dispatch is allowed. An authorized member can continue a saved answer if it has not resumed.
 
-If a card asks whether to start execution, Start execution dispatches the original request. Discuss first continues in read-only mode. The pending decisions panel links to cards waiting for an answer.
+The pending decisions panel links to cards waiting for an answer.
 
 Ask for a decision card demo and open the trial below the help reply to submit a sample answer.
 
@@ -48,7 +50,7 @@ Use the composer model picker to select the lead's model for the matter. Authori
 
 Web search requires administrator setup and a role grant. The pstack methods package can be configured in platform settings. Check the active tools for the running role before claiming a capability is available. PA capabilities are configured through platform settings, roles, and skills. Pi manages installation of its own extensions. New PA product capabilities require a maintained PA release.
 
-Ask what tools or extensions the role can use to see the tools reported when it started in this workspace. Human Question provides `request_clarification`. During assigned work leads use it to request decisions from people, and collaborators use it to ask their delegator.
+Ask what tools or extensions the role can use to see the tools reported when it started in this workspace. Human Question provides `request_clarification`. Leads use it to request decisions from people, and collaborators use it to ask their delegator.
 
 ## Team experience
 

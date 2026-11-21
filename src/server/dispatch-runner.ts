@@ -64,7 +64,7 @@ export function createDispatchRunner(deps: {
 		if (activeRuns.has(input.matterId) || orchestrator.isMatterRunning(input.matterId))
 			throw new HttpRequestError(409, "Matter already has an active turn");
 		const isConversation = input.interactionMode === "conversation";
-		const isDiscussion = input.interactionMode === "discussion" || isConversation;
+		const isDiscussion = input.interactionMode === "discussion";
 		const validateConversationAccess = isConversation
 			? (memberId?: string) => {
 					const matter = store.getMatter(input.matterId);

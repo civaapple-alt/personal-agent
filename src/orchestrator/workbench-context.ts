@@ -94,8 +94,8 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 					: `Human Question was ${tools.includes("request_clarification") ? "enabled" : "disabled"} at that startup.`
 				: null,
 			chinese
-				? "`human-question` 注册 `request_clarification`。正式执行时，主责用它向人提请决定，协作者用它向直接委托者澄清。讨论和旁听不加载此工具。"
-				: "`human-question` registers `request_clarification`. During assigned work the lead can request a human decision and collaborators can ask their delegator. Discussion and observation turns do not load it.",
+				? "`human-question` 注册 `request_clarification`。主责用它向人提请决定，协作者用它向直接委托者澄清。旁听、验收和角色架构师不加载此工具。"
+				: "`human-question` registers `request_clarification`. Leads can request a human decision and collaborators can ask their delegator. Observers, verifiers, and Role Architect do not load it.",
 		]
 			.filter(Boolean)
 			.join("\n\n"),

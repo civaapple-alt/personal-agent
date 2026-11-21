@@ -12,10 +12,10 @@ const GUIDES = {
 		rubric: "How to start a PA matter, ask questions, mention a role, or stop a turn.",
 	},
 	starting_work: {
-		heading: "开始正式执行",
-		english: "Starting a work turn",
+		heading: "工作方式与执行",
+		english: "How roles work and execute",
 		rubric:
-			"How to enter a formal work turn, give an assignment, or use the Start execution confirmation. Includes 怎么进入正式执行轮.",
+			"How AI roles decide between answering directly, inspecting, executing tasks, or asking for human clarification. Includes 怎么进入正式执行轮 and 讨论与执行的区别.",
 	},
 	collaboration: {
 		heading: "协作与旁听",

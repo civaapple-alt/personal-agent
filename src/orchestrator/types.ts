@@ -317,7 +317,6 @@ export interface MatterRun {
 	effects: ExecutionEffects;
 	userMessageId: string;
 	startedByUserId?: string | null;
-	conversationDiscussion?: boolean;
 	keepMatterLead?: boolean;
 	inheritLocalPiResources?: boolean;
 	startedAt: number;

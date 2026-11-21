@@ -14,17 +14,19 @@ export function prepareTeamExtension({
 	discussionMode,
 	isArchitect,
 	hasConsultTargets,
+	isMatterLead = true,
 }: {
 	sessionMode: WorkerSessionMode;
 	discussionMode: boolean;
 	isArchitect: boolean;
 	hasConsultTargets: boolean;
+	isMatterLead?: boolean;
 }) {
 	const isLead = sessionMode === "lead";
 	const isInternal = sessionMode === "internal";
-	const canPublish = !isArchitect && isLead && !discussionMode;
+	const canPublish = !isArchitect && isLead && isMatterLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
-	const canProposeExperience = canPublish || (!isArchitect && isInternal && !discussionMode);
+	const canProposeExperience = !isArchitect && !discussionMode && (isLead || isInternal);
 	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
 	if (canDelegate) tools.push("delegate_to_member");
 	if (canPublish) tools.push("publish_deliverable");

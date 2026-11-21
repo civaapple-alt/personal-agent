@@ -1,6 +1,6 @@
 # Human Question 的 PA 集成
 
-[runtime.ts](runtime.ts) 为正式执行的主责与内部协作者装配 `request_clarification`。它为每次执行暂存一个问题，并校验引用的委托编号属于当前岗位收到的澄清。 [Pi 提问扩展](../../../pi-extensions/human-question/README.md)
+[runtime.ts](runtime.ts) 为主责与内部协作者装配 `request_clarification`（旁听、独立验收和角色架构师不加载）。它为每次执行暂存一个问题，并校验引用的委托编号属于当前岗位收到的澄清。 [Pi 提问扩展](../../../pi-extensions/human-question/README.md)
 
 | 来源 | 处理方式 |
 | --- | --- |
