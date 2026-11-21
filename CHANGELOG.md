@@ -8,6 +8,7 @@ All notable changes to Personal Agent are documented in this file.
 - Group the host-side web search integration under `src/pa-extensions/web-access/`.
 - Move the host-side pstack and team extension setup into `src/pa-extensions/`.
 - Extract clarification into a standalone Pi question extension and keep durable decisions and delegation handoffs in PA.
+- Document the host-side extension entry points, runtime conditions, and verification commands.
 
 - Keep the Pi-side team and pstack extensions together under `pi-extensions/`. Document how PA loads them and how extensions can depend on each other.
 
