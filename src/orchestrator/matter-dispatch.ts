@@ -9,7 +9,7 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
 import { validateDelivery } from "./execution-context.ts";
-import type { Clarification, HumanDecision } from "./human-decision.ts";
+import { type Clarification, describeHumanDecision, type HumanDecision } from "./human-decision.ts";
 import { draftDigest } from "./independent-verification.ts";
 import { messageMatchesContext } from "./matter-context.ts";
 import { recordRosterReply } from "./matter-roster-query.ts";
@@ -312,17 +312,31 @@ export async function dispatchMatterTurn(
 				...existingUserMsg.metadata,
 				conversationDecisionSource: decision.source,
 			});
-			if (intent === "silent" || intent === "roster") {
-				const rosterMessage =
+			if (intent === "silent" || intent === "roster" || intent === "decision_help") {
+				const directReply =
 					intent === "roster"
 						? recordRosterReply(deps.store, matter, existingUserMsg, deps.listSharedMatterAiMembers(matter))
-						: undefined;
+						: intent === "decision_help"
+							? deps.store.appendMessage({
+									matterId: matter.id,
+									channel: "user",
+									senderType: "system",
+									senderId: "orchestrator",
+									content: describeHumanDecision(existingUserMsg.content),
+									metadata: {
+										humanDecisionHelp: true,
+										sourceUserMessageId: existingUserMsg.id,
+										workspaceId: workspace?.id ?? null,
+										repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
+									},
+								})
+							: undefined;
 				return {
 					matter,
 					assignedMember: activeSpeaker,
 					workspace,
-					replyText: rosterMessage?.content ?? "",
-					rosterMessage,
+					replyText: directReply?.content ?? "",
+					directReply,
 					deliverable: null,
 					runResult: { ...emptyAbortedResult(), aborted: false },
 				};

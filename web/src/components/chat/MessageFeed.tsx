@@ -280,6 +280,7 @@ export function MessageFeed({
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
 							const isRosterSnapshot = isSystem && msg.metadata?.matterRosterSnapshot === true;
+							const isDecisionHelp = isSystem && msg.metadata?.humanDecisionHelp === true;
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
 							const isDiscussionReply =
 								!isUser &&
@@ -368,15 +369,21 @@ export function MessageFeed({
 												<BotFaceIcon bg={speakerTheme.bg} tilt={speakerTheme.tilt} size="xs" mood="idle" />
 											)}
 											<span>
-												{isRosterSnapshot ? "事项名册" : isSystem ? "系统提示" : memberName(msg.senderId)} ·{" "}
-												{formatClockTime(msg.createdAt)}
+												{isRosterSnapshot
+													? "事项名册"
+													: isDecisionHelp
+														? "功能说明"
+														: isSystem
+															? "系统提示"
+															: memberName(msg.senderId)}{" "}
+												· {formatClockTime(msg.createdAt)}
 											</span>
 											{isDiscussionReply && <span className="discussion-ai-badge">讨论参与</span>}
 											{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 										</div>
 									)}
 									<div
-										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
+										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot && !isDecisionHelp ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
 									>
 										{isUser ? (
 											<>

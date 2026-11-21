@@ -139,8 +139,8 @@ export function createDispatchRunner(deps: {
 					});
 					return;
 				}
-				if (result.rosterMessage) {
-					broadcast("matter_message", { matterId: result.matter.id, message: result.rosterMessage });
+				if (result.directReply) {
+					broadcast("matter_message", { matterId: result.matter.id, message: result.directReply });
 				}
 				broadcast("matter_settled", {
 					matterId: result.matter.id,

@@ -233,7 +233,7 @@ export interface DispatchMatterResult {
 	replyText: string;
 	deliverable: Deliverable | null;
 	observerMessages?: MatterMessage[];
-	rosterMessage?: MatterMessage;
+	directReply?: MatterMessage;
 	runResult: PromptRunResult;
 }
 

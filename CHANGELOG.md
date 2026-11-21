@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Answer decision-card walkthrough requests with a workbench example without running a workspace agent.
+
 - Answer informational questions about confirmation flows directly and omit the discussion badge on execution confirmation cards.
 
 - Use System One for conversation intent, live roster questions, and automatic role routing when `TYPESAFE_API_KEY` is configured. Fall back to isolated Pi decisions and then to local rules.
