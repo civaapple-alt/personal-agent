@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,
@@ -12,7 +13,6 @@ import {
 } from "../src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
-import teamExtension, { type PiExtensionApi } from "../src/rpc/team-extension.ts";
 import { createPersonalAgentServer } from "../src/server/app.ts";
 import { DialogBroker } from "../src/server/dialog-broker.ts";
 import { PreviewManager } from "../src/server/preview-manager.ts";

@@ -43,7 +43,7 @@
 | `TeamOrchestrator` | 事项负责人、工作区、运行所有权、委托树、用户回复与成果收尾 |
 | `execution-context.ts` | Skill 路径解析、保存会话的身份验证、交付文件与 URL 验证 |
 | `matter-context.ts` | 基于工作区 ID/路径和明确用户轮次锚点选择复盘/旁听证据及成果 |
-| `team-extension.ts` | 在 Pi 内注册模型工具、装配工具清单、加入当前岗位系统提示 |
+| [team-extension](../../pi-extensions/team-extension/index.ts) | 在 Pi 内注册模型工具、装配工具清单、加入当前岗位系统提示 |
 | `team-tool-bridge.ts` | bearer token、请求解析、大小限制、调用 ID 去重、连接取消与清理 |
 | `PiRpcWorker` | JSONL RPC、确切 session 启动参数、流式事件、settled、模型错误与进程退出 |
 | SQLite store | 会话映射、消息、成果版本、原子批量归档与事项执行占用 |

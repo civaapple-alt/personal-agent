@@ -1,6 +1,6 @@
 # Pi RPC 与团队工具桥接
 
-此目录同时包含宿主侧 transport 和在 Pi 内加载的扩展；不要混淆两端的职责。
+此目录维护宿主侧 Pi RPC 和团队工具桥接。Pi 内运行的扩展位于 `pi-extensions/`。
 
 | 文件 | 改动入口与约束 |
 | --- | --- |
@@ -8,7 +8,7 @@
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [prompt-usage.ts](prompt-usage.ts) | 汇总 Pi 已报告的输入及缓存读写 token，单独保留第一个有效请求的统计 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托、成果和经验提案工具并核查动态装配。按 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先和宿主 `contextFiles`，通过结构化提示词选项追加岗位规则。实时上下文作为隐藏消息追加到 Pi 会话，已在活跃历史中的相同快照会复用。通过 `node:http` 调用桥接。内部模式关闭发布，旁听模式关闭经验提案 |
+| [team-extension](../../pi-extensions/team-extension/index.ts) | PA 在启动岗位时加载此扩展。它在 Pi 中注册委托、成果和经验提案工具，通过当轮桥接调用 PA。它按 `PA_TARGET_WORKSPACE_ROOT` 过滤 `contextFiles`、追加岗位规则和实时上下文，并核查实际工具。内部模式关闭发布，旁听模式关闭经验提案 |
 | [pstack-methods](../../pi-extensions/pstack-methods/README.md) | 显式配置时注册只读 `load_pstack_skill`，从选定的方法包读取正文和哈希 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `request_clarification` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 
@@ -17,7 +17,7 @@ RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误�
 
 工具调用者的事项、成员与工作区由 [编排核](../orchestrator/README.md)绑定，模型参数不能改写身份。
 文档发布参数为 `sourcePath` 或 `content` 二选一：文件来源只允许 `document`，校验后由宿主读取；桥接拒绝同时传两份正文来源，不自行猜测正文对应哪个文件。文件快照与提交校验属于编排模块。
-声明的 Skill/扩展/MCP 不是装载成功证据，实际工具清单必须通过核查。构建后扩展从 `dist/` 的对应文件加载，保持源代码与编译入口均可用。
+岗位启动时通过握手核查实际工具清单。源码启动与预构建包使用相同的 `pi-extensions/` 入口。
 
 常规本机任务由 Pi 发现已启用的用户资源，以及可信工作区的项目资源。宿主通过 HTTP 调用者和监听范围选择资源策略，并让两种策略使用独立的 Pi 会话。 [资源装配策略](../../docs/reference/configuration.md#cli-启动与能力装配)
 

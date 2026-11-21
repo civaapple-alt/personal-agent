@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import teamExtension, { filterContextFilesForTargetWorkspace, type PiExtensionApi } from "../src/rpc/team-extension.ts";
+import teamExtension, {
+	filterContextFilesForTargetWorkspace,
+	type PiExtensionApi,
+} from "../pi-extensions/team-extension/index.ts";
 import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {

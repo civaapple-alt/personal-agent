@@ -122,7 +122,7 @@ flowchart TB
 | [`team-orchestrator.ts`](../../src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../../src/orchestrator/worker-runner.ts)、[delegation-runner](../../src/orchestrator/delegation-runner.ts)、[observer-runner](../../src/orchestrator/observer-runner.ts)、[distiller](../../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
 | [`matter-initiation.ts`](../../src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../../src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
 | [`execution-context.ts`](../../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
-| [`team-extension.ts`](../../src/rpc/team-extension.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
+| [`team-extension.ts`](../../pi-extensions/team-extension/index.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
 | [`team-tool-bridge.ts`](../../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
 | [`pi-rpc-worker.ts`](../../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
 | [`storage/`](../../src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |

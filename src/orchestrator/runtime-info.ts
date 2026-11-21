@@ -11,15 +11,16 @@ import { resolveTurnTimeoutMs } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
 
-export type BuiltinExtensionKind = "team-extension" | "pstack-extension";
+const builtinExtensionPaths = {
+	"team-extension": "pi-extensions/team-extension/index.ts",
+	"pstack-extension": "pi-extensions/pstack-methods/index.ts",
+} as const;
+
+export type BuiltinExtensionKind = keyof typeof builtinExtensionPaths;
 
 /** Resolve the extension entry in the current source or packaged installation. */
 export function resolveBuiltinExtensionPath(kind: BuiltinExtensionKind): string {
-	if (kind === "pstack-extension") {
-		return fileURLToPath(new URL("../../pi-extensions/pstack-methods/index.ts", import.meta.url));
-	}
-	const ext = import.meta.url.endsWith(".js") ? "js" : "ts";
-	return fileURLToPath(new URL(`../rpc/${kind}.${ext}`, import.meta.url));
+	return fileURLToPath(new URL(`../../${builtinExtensionPaths[kind]}`, import.meta.url));
 }
 
 export interface OrchestratorRuntimeConfig {
@@ -346,14 +347,12 @@ export async function buildRuntimeOverview(options: {
 	}
 	const mcpServers = [...mcpServersSet].sort();
 
-	const builtInExtSuffix = import.meta.url.endsWith(".js") ? "dist/rpc" : "src/rpc";
-	const extSuffix = import.meta.url.endsWith(".js") ? "js" : "ts";
 	const teamExtensionItem: RuntimeExtensionItem = {
 		id: "builtin-team-extension",
 		name: "team-extension",
 		sourceKind: "builtin",
 		status: teamFileStatus === "present" ? "active" : "error",
-		entryPath: isOwner ? teamExtPath : `${builtInExtSuffix}/team-extension.${extSuffix}`,
+		entryPath: isOwner ? teamExtPath : builtinExtensionPaths["team-extension"],
 		fileStatus: teamFileStatus,
 		scopeSummary: "常规岗位必装；按主责/内部/旁听收窄工具",
 		description: "经 loopback bridge 回调编排核，提供委托、成果发布与经验提案。",
@@ -380,7 +379,7 @@ export async function buildRuntimeOverview(options: {
 		name: "pstack-methods",
 		sourceKind: "builtin_conditional",
 		status: pstackStatus,
-		entryPath: isOwner ? pstackExtPath : "pi-extensions/pstack-methods/index.ts",
+		entryPath: isOwner ? pstackExtPath : builtinExtensionPaths["pstack-extension"],
 		fileStatus: pstackExtFileStatus,
 		scopeSummary: "配置已有 pstack 方法包后随常规岗位挂载",
 		description: "只读加载外部 pstack 的 mode、playbook 与原则原文。",
