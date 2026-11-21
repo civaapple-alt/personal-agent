@@ -35,6 +35,7 @@ interface AuthSessionOptions {
 	setErrorBanner: (message: string | null) => void;
 	setNoticeBanner: (message: string | null) => void;
 	onRevoked: () => void;
+	onResetDrafts: () => void;
 	onResetAdmin: () => void;
 	onClearBootstrap: () => void;
 	onExitAdmin: () => void;
@@ -48,6 +49,7 @@ export function useAuthSession({
 	setErrorBanner,
 	setNoticeBanner,
 	onRevoked,
+	onResetDrafts,
 	onResetAdmin,
 	onClearBootstrap,
 	onExitAdmin,
@@ -77,6 +79,7 @@ export function useAuthSession({
 			setCurrentUserOverride(null);
 			setSessionAccountUser(null);
 			onRevoked();
+			onResetDrafts();
 			setAuthError(message ?? "当前登录凭证已失效或已被管理员吊销，请重新登录");
 			setAuthStatus("unauthenticated");
 			void fetchAuthSession()
@@ -90,7 +93,7 @@ export function useAuthSession({
 				})
 				.catch(() => {});
 		},
-		[applyEditionState, onRevoked],
+		[applyEditionState, onRevoked, onResetDrafts],
 	);
 
 	useEffect(() => {
@@ -257,6 +260,7 @@ export function useAuthSession({
 				await logoutAuthSession();
 			}
 			onResetAdmin();
+			onResetDrafts();
 			setPendingApproval(false);
 			setSessionAccountUser(null);
 			setCurrentUserOverride(null);
@@ -321,12 +325,14 @@ export function useAuthSession({
 		try {
 			// On localhost免登录模式, clicking "切换账号" opens the login/registration gate without loop-bouncing.
 			if (effectiveKind === "loopback" && !permissionRequired) {
+				onResetDrafts();
 				setAuthError(null);
 				setAuthStatus("unauthenticated");
 				return;
 			}
 			await logoutAuthSession();
 			onResetAdmin();
+			onResetDrafts();
 			setPendingApproval(false);
 			setSessionAccountUser(null);
 			setAuthKind(null);

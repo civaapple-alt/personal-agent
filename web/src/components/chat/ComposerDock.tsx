@@ -130,6 +130,13 @@ export function ComposerDock({
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
 
+	const composerScope = selectedMatterId ?? (isArchitectMode ? "new:architect" : "new:matter");
+	const [mentionScope, setMentionScope] = useState(composerScope);
+	if (mentionScope !== composerScope) {
+		setMentionScope(composerScope);
+		setMentionState(null);
+	}
+
 	const canMention = !isArchitectMode;
 	const showMentionPicker = Boolean(mentionState && canMention && mentionMembers.length > 0);
 	const filteredMentionMembers = showMentionPicker

@@ -27,6 +27,8 @@
 
 [ChatStage](components/ChatStage.tsx) 使用 `composerDraft` 和 `initiation` 接收草稿、附件与立项操作。输入区和立项面板定义各自的属性类型，状态仍由上层对应的 hooks 持有。
 
+输入草稿保存在当前页面内存中，以事项 ID、新事项或新建角色架构师对话为键。附件预处理和发送成功后的清理使用操作发起时的草稿范围。
+
 ## 运行状态与事件同步
 
 - 运行耗时只向下传递开始时间 `progressStartedAt`，不要在 `App` 或 `ChatStage` 重新引入每秒更新的状态。

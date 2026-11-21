@@ -95,9 +95,7 @@ interface UseMatterActionsParams {
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
 	setSubmitting: (v: boolean) => void;
-	setComposerText: (v: string) => void;
-	setComposerImages: (v: ComposerImageAttachment[]) => void;
-	setComposerFiles: (v: ComposerFileAttachment[]) => void;
+	clearSentComposer: () => void;
 	setSelectedMemberId: (v: string) => void;
 	setSelectedWorkspaceId: (v: string) => void;
 	setSelectedOrgId: (v: string) => void;
@@ -143,9 +141,7 @@ export function useMatterActions({
 	workspaceName,
 	organizationName,
 	setSubmitting,
-	setComposerText,
-	setComposerImages,
-	setComposerFiles,
+	clearSentComposer,
 	setSelectedMemberId,
 	setSelectedWorkspaceId,
 	setSelectedOrgId,
@@ -249,11 +245,7 @@ export function useMatterActions({
 					setNoticeBanner(`已派发给「${created.assignedMember.displayName}」，正在后台推进`);
 				}
 			}
-			if (options?.clearComposer) {
-				setComposerText("");
-				setComposerImages([]);
-				setComposerFiles([]);
-			}
+			if (options?.clearComposer) clearSentComposer();
 			await refreshBootstrap();
 			if (targetMatterId) {
 				await refreshDetail(targetMatterId);

@@ -49,6 +49,9 @@ function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
 	document.title = requireAuth ? "Personal Agent · 团队版" : "Personal Agent · 个人版";
 }
 
+const NEW_MATTER_DRAFT = "new:matter";
+const NEW_ARCHITECT_DRAFT = "new:architect";
+
 /** Root application shell coordinating authentication, SSE state sync, hash routing, and workspace tabs. */
 export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
@@ -86,20 +89,23 @@ export function App() {
 	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
+	const composerDraftKey =
+		selectedMatterId ?? (selectedMemberId === ROLE_ARCHITECT_MEMBER_ID ? NEW_ARCHITECT_DRAFT : NEW_MATTER_DRAFT);
 	const {
 		composerText,
 		setComposerText,
+		appendComposerText,
 		composerImages,
-		setComposerImages,
 		composerFiles,
-		setComposerFiles,
+		clearSentComposer,
+		resetComposerDrafts,
 		composerAttachmentText,
 		handleAddComposerAttachments,
 		handleAddPastedText,
 		handleRemoveComposerImage,
 		handleRemoveComposerFile,
 		handleExpandPastedFile,
-	} = useComposerDraft(composerRef, setErrorBanner);
+	} = useComposerDraft(composerDraftKey, composerRef, setErrorBanner);
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
 	const activeTabRef = useRef<NavTab>(activeTab);
 	activeTabRef.current = activeTab;
@@ -172,6 +178,7 @@ export function App() {
 	}, [applyEditionState]);
 
 	const refreshDetail = useCallback(async (matterId: string | null) => {
+		if (matterId !== selectedMatterIdRef.current) return;
 		const request = ++detailRequest.current;
 		if (!matterId) {
 			setMatterDetail(null);
@@ -179,7 +186,7 @@ export function App() {
 		}
 		const revision = matterStreamRevision.current.byMatter.get(matterId);
 		const detail = await fetchMatterDetail(matterId);
-		if (request !== detailRequest.current) return;
+		if (request !== detailRequest.current || matterId !== selectedMatterIdRef.current) return;
 		setMatterDetail(detail);
 		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
 		setSelectedOrgId(detail.matter.orgId ?? "");
@@ -216,6 +223,7 @@ export function App() {
 		setErrorBanner,
 		setNoticeBanner,
 		onRevoked: resetRevokedWorkspace,
+		onResetDrafts: resetComposerDrafts,
 		onResetAdmin: clearAdminOverview,
 		onClearBootstrap: () => setBootstrap(null),
 		onExitAdmin: () => {
@@ -358,7 +366,7 @@ export function App() {
 		initiation.setDraftPresetMode("solo");
 		setDraftObserversEnabled(false);
 		if (seedText !== undefined) {
-			setComposerText(seedText);
+			appendComposerText(seedText, NEW_ARCHITECT_DRAFT);
 		}
 		navigateRoute({ tab: "chats", isNewMatter: true });
 		composerRef.current?.focus();
@@ -455,9 +463,6 @@ export function App() {
 			const { matter } = await openInnerMatterDemo();
 			explicitNewMatterRef.current = false;
 			navigateRoute({ tab: "chats", matterId: matter.id });
-			setComposerText("");
-			setComposerImages([]);
-			setComposerFiles([]);
 			await refreshBootstrap();
 			await refreshDetail(matter.id);
 		} catch (error) {
@@ -484,9 +489,7 @@ export function App() {
 				await refreshBootstrap();
 			}
 			if (selectedMatterIdRef.current !== targetMatterId) return;
-			setComposerImages([]);
-			setComposerFiles([]);
-			setComposerText(prompt);
+			appendComposerText(prompt);
 			setNoticeBanner(
 				step.id === "revise" ? "V1 反馈已保留，修订要求已填入；发送后开始执行" : "提问已填入，可修改后发送给团队",
 			);
@@ -525,9 +528,7 @@ export function App() {
 		workspaceName,
 		organizationName,
 		setSubmitting,
-		setComposerText,
-		setComposerImages,
-		setComposerFiles,
+		clearSentComposer,
 		setSelectedMemberId,
 		setSelectedWorkspaceId,
 		setSelectedOrgId,
@@ -884,7 +885,7 @@ export function App() {
 							}}
 							onRequestRevision={(deliverable) => {
 								navigateRoute({ tab: "chats", matterId: deliverable.matterId });
-								setComposerText(`修改「${deliverable.title}」：`);
+								appendComposerText(`修改「${deliverable.title}」：`, deliverable.matterId);
 							}}
 							onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
