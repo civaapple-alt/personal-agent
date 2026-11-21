@@ -351,11 +351,47 @@ export function App() {
 	});
 	const { draftAiMemberIds } = initiation;
 
+	const resolveDefaultPrimaryLeadId = () => {
+		const business = filterBusinessMembers(initiationScopedMembers, templateByRoleId);
+		return business.find((member) => member.isPrimaryContact)?.id ?? business[0]?.id ?? "auto";
+	};
+
 	const startNewMatter = () => {
 		setDraftModelSelection(null);
 		initiation.resetInitiationState();
 		setDraftMatterVisibility("org");
-		setSelectedMemberId("auto");
+		setSelectedMemberId(resolveDefaultPrimaryLeadId());
+		navigateRoute({ tab: "chats", isNewMatter: true });
+		composerRef.current?.focus();
+	};
+
+	const startNewMatterFromCurrent = () => {
+		const currentMatter =
+			selectedMatterId && matterDetail?.matter.id === selectedMatterId ? matterDetail.matter : null;
+		const currentLeadId = currentMatter?.leadMemberId ?? null;
+		const currentIsArchitect = isArchitectMemberId(currentLeadId, bootstrap?.members ?? [], templateByRoleId);
+		if (!currentMatter || currentIsArchitect) {
+			startNewMatter();
+			return;
+		}
+		initiation.resetInitiationState();
+		setSelectedOrgId(currentMatter.orgId ?? "");
+		setSelectedWorkspaceId(currentMatter.workspaceId ?? "");
+		const inheritedLeadId =
+			currentLeadId && initiationScopedMembers.some((member) => member.id === currentLeadId)
+				? currentLeadId
+				: resolveDefaultPrimaryLeadId();
+		setSelectedMemberId(inheritedLeadId);
+		setDraftModelSelection(currentMatter.modelSelection ?? null);
+		setDraftMatterVisibility(currentMatter.visibility ?? "org");
+		initiation.setDraftCollaboratorIds(currentMatter.collaboratorIds ?? []);
+		setDraftAiMemberIds(currentMatter.aiMemberIds ?? null);
+		initiation.syncDraftRoster(
+			currentMatter.consultMemberIds ?? null,
+			currentMatter.observerMemberIds ?? [],
+			inheritedLeadId === "auto" ? null : inheritedLeadId,
+		);
+		setDraftObserversEnabled(Boolean(currentMatter.observersEnabled));
 		navigateRoute({ tab: "chats", isNewMatter: true });
 		composerRef.current?.focus();
 	};
@@ -848,7 +884,7 @@ export function App() {
 							}
 							onSendPrompt={() => void actions.handleSendPrompt()}
 							onAbortMatter={actions.handleAbortMatter}
-							onNewMatter={startNewMatter}
+							onNewMatter={startNewMatterFromCurrent}
 							onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
 							onDistillMatter={(matterId) => runRsiDistill({ matterId })}

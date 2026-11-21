@@ -95,12 +95,16 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	if (!isOwner || isArchitectMemberId(selectedMemberId, members, templateByRoleId)) return null;
 	const business = filterBusinessMembers(members, templateByRoleId);
 	const allowed = draftAiMemberIds ?? business.map((member) => member.id);
-	const lead =
-		business.find((member) => member.id === selectedMemberId) ??
-		business.find((member) => member.isPrimaryContact && allowed.includes(member.id)) ??
-		business.find((member) => allowed.includes(member.id));
+	const isAutoLead = selectedMemberId === "auto";
+	const lead = isAutoLead
+		? undefined
+		: (business.find((member) => member.id === selectedMemberId) ??
+			business.find((member) => member.isPrimaryContact && allowed.includes(member.id)) ??
+			business.find((member) => allowed.includes(member.id)));
 	const leadId = lead?.id;
-	const nonLeadIds = business.map((member) => member.id).filter((id) => id !== leadId);
+	const nonLeadIds = leadId
+		? business.map((member) => member.id).filter((id) => id !== leadId)
+		: business.map((member) => member.id);
 	const observers = draftObserverMemberIds.filter((id) => nonLeadIds.includes(id) && allowed.includes(id));
 	const consultIds =
 		draftConsultMemberIds === null

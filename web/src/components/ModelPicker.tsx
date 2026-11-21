@@ -183,9 +183,15 @@ export function MatterModelControl({
 	const [draft, setDraft] = useState<ModelSelection | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const inherited = leadKnown ? (roleModel ?? catalog?.platformDefault ?? catalog?.defaultModel) : undefined;
+	const inherited = leadKnown
+		? (roleModel ?? catalog?.platformDefault ?? catalog?.defaultModel)
+		: (catalog?.platformDefault ?? catalog?.defaultModel);
 	const effective = useEffectiveModel(value ?? inherited);
-	const buttonLabel = effective ? `${label} · ${modelLabel(effective)}` : `选择${label}`;
+	const buttonLabel = value
+		? `${label} · ${modelLabel(effective ?? value)}`
+		: effective
+			? `${label} · ${leadKnown ? modelLabel(effective) : `默认 (${modelLabel(effective)})`}`
+			: `选择${label}`;
 
 	const save = async (close: () => void) => {
 		setSaving(true);

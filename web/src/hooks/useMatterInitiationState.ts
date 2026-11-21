@@ -53,17 +53,21 @@ export function useMatterInitiationState({
 	const modelControllerRef = useRef<AbortController | null>(null);
 
 	const businessMembers = useMemo(() => filterBusinessMembers(members), [members]);
-	const fallbackLeadId =
+	const explicitLeadId =
 		selectedMemberId !== "auto" &&
 		!isArchitectMemberId(selectedMemberId, members) &&
 		businessMembers.some((m) => m.id === selectedMemberId)
 			? selectedMemberId
-			: (businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null);
+			: null;
+	const fallbackLeadId =
+		explicitLeadId ?? businessMembers.find((m) => m.isPrimaryContact)?.id ?? businessMembers[0]?.id ?? null;
 	const draftAiMemberIds = useMemo(() => {
 		if (draftConsultMemberIds === null) return defaultAiMemberIds;
 		const selected = new Set(draftConsultMemberIds.concat(draftObserverMemberIds));
-		return businessMembers.filter(({ id }) => id === fallbackLeadId || selected.has(id)).map(({ id }) => id);
-	}, [businessMembers, defaultAiMemberIds, draftConsultMemberIds, draftObserverMemberIds, fallbackLeadId]);
+		return businessMembers
+			.filter(({ id }) => (explicitLeadId ? id === explicitLeadId : false) || selected.has(id))
+			.map(({ id }) => id);
+	}, [businessMembers, defaultAiMemberIds, draftConsultMemberIds, draftObserverMemberIds, explicitLeadId]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Draft changes invalidate the pending recommendation.
 	useEffect(() => {
@@ -86,9 +90,11 @@ export function useMatterInitiationState({
 	]);
 
 	const syncDraftRoster = useCallback(
-		(nextConsultIds: string[] | null, nextObserverIds: string[], explicitLeadId?: string | null) => {
-			const leadId = explicitLeadId ?? fallbackLeadId;
-			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+		(nextConsultIds: string[] | null, nextObserverIds: string[], leadIdOverride?: string | null) => {
+			const leadId = leadIdOverride === undefined ? explicitLeadId : leadIdOverride;
+			const nonLeadIds = leadId
+				? businessMembers.map((m) => m.id).filter((id) => id !== leadId)
+				: businessMembers.map((m) => m.id);
 			const cleanConsult =
 				nextConsultIds === null
 					? nonLeadIds
@@ -104,18 +110,21 @@ export function useMatterInitiationState({
 				setDraftPresetMode("lead_consult");
 			}
 		},
-		[businessMembers, fallbackLeadId],
+		[businessMembers, explicitLeadId],
 	);
 
 	const setScopeMode = useCallback(
 		(scope: "solo" | "team") => {
-			const leadId = fallbackLeadId;
 			if (scope === "solo") {
+				const leadId = fallbackLeadId;
 				if (leadId) setSelectedMemberId(leadId);
 				syncDraftRoster([], draftObserverMemberIds, leadId);
 				return;
 			}
-			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+			const leadId = explicitLeadId;
+			const nonLeadIds = leadId
+				? businessMembers.map((m) => m.id).filter((id) => id !== leadId)
+				: businessMembers.map((m) => m.id);
 			const existingConsult =
 				draftConsultMemberIds === null
 					? nonLeadIds
@@ -128,6 +137,7 @@ export function useMatterInitiationState({
 			businessMembers,
 			draftConsultMemberIds,
 			draftObserverMemberIds,
+			explicitLeadId,
 			fallbackLeadId,
 			setSelectedMemberId,
 			syncDraftRoster,
@@ -136,9 +146,11 @@ export function useMatterInitiationState({
 
 	const toggleDraftMemberConsult = useCallback(
 		(memberId: string, enabled: boolean) => {
-			const leadId = fallbackLeadId;
-			if (memberId === leadId) return;
-			const nonLeadIds = businessMembers.map((m) => m.id).filter((id) => id !== leadId);
+			const leadId = explicitLeadId;
+			if (leadId && memberId === leadId) return;
+			const nonLeadIds = leadId
+				? businessMembers.map((m) => m.id).filter((id) => id !== leadId)
+				: businessMembers.map((m) => m.id);
 			const current = draftConsultMemberIds ?? nonLeadIds.filter((id) => defaultAiMemberIds?.includes(id) ?? true);
 			const nextConsult = enabled ? [...new Set([...current, memberId])] : current.filter((id) => id !== memberId);
 			syncDraftRoster(nextConsult, draftObserverMemberIds, leadId);
@@ -148,22 +160,22 @@ export function useMatterInitiationState({
 			defaultAiMemberIds,
 			draftConsultMemberIds,
 			draftObserverMemberIds,
-			fallbackLeadId,
+			explicitLeadId,
 			syncDraftRoster,
 		],
 	);
 
 	const toggleDraftMemberObserver = useCallback(
 		(memberId: string, enabled: boolean, observerIds: string[]) => {
-			const leadId = fallbackLeadId;
-			if (memberId === leadId) return;
+			const leadId = explicitLeadId;
+			if (leadId && memberId === leadId) return;
 			const nextObs = enabled
 				? [...new Set([...observerIds, memberId])]
 				: observerIds.filter((id) => id !== memberId);
 			setDraftObserversEnabled(nextObs.length > 0);
 			syncDraftRoster(draftConsultMemberIds, nextObs, leadId);
 		},
-		[draftConsultMemberIds, fallbackLeadId, setDraftObserversEnabled, syncDraftRoster],
+		[draftConsultMemberIds, explicitLeadId, setDraftObserversEnabled, syncDraftRoster],
 	);
 
 	const applyPresetMode = useCallback(
