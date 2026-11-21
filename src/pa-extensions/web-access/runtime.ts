@@ -6,8 +6,8 @@ import type { PlatformSettings, TeamMember } from "../../storage/types.ts";
 import { readWebAccessEnvFromDotEnv, resolveEnvFilePath } from "../env-credentials.ts";
 import { findInstalledPiWebAccess } from "./package.ts";
 
-export const PI_WEB_SEARCH_TOOLS = ["web_search", "get_search_content"] as const;
-const WEB_ACCESS_TOOLS = new Set<string>([...PI_WEB_SEARCH_TOOLS, "web_enable", "source_check", "fetch_content"]);
+export const PI_WEB_SEARCH_TOOLS = ["web_search", "get_search_content", "fetch_content"] as const;
+const WEB_ACCESS_TOOLS = new Set<string>([...PI_WEB_SEARCH_TOOLS, "web_enable", "source_check"]);
 
 export function isPiWebAccessTool(name: string): boolean {
 	return WEB_ACCESS_TOOLS.has(name);

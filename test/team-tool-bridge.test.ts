@@ -30,6 +30,9 @@ test("managed web search forces direct results and removes per-call proxy overri
 	const input = { query: "Pi docs", workflow: "summary-review", includeContent: true, proxy: "http://example.test" };
 	onToolCall({ toolName: "web_search", input });
 	assert.deepEqual(input, { query: "Pi docs", workflow: "none", includeContent: false });
+	const fetchInput = { url: "https://example.test/article", proxy: "http://proxy.example.test" };
+	onToolCall({ toolName: "fetch_content", input: fetchInput });
+	assert.deepEqual(fetchInput, { url: "https://example.test/article" });
 });
 
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {

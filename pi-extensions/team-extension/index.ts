@@ -215,10 +215,15 @@ export default function teamExtension(pi: PiExtensionApi): void {
 	}
 	if (env.PA_WEB_SEARCH_ENABLED === "true") {
 		pi.on("tool_call", (event) => {
-			if (event.toolName !== "web_search") return;
-			event.input.workflow = "none";
-			event.input.includeContent = false;
-			delete event.input.proxy;
+			if (event.toolName === "web_search") {
+				event.input.workflow = "none";
+				event.input.includeContent = false;
+				delete event.input.proxy;
+				return;
+			}
+			if (event.toolName === "fetch_content") {
+				delete event.input.proxy;
+			}
 		});
 	}
 	pi.on("session_start", async () => {

@@ -5,7 +5,7 @@ PA 通过 Pi 安装官方 npm 包 `pi-web-access`。安装完成后，平台管�
 | 文件 | 维护职责 |
 | --- | --- |
 | [package.ts](package.ts) | 通过 `pi list --no-approve` 查找服务账号的用户包，解析包清单并校验入口位于实际安装目录内 |
-| [runtime.ts](runtime.ts) | 按岗位 ID 和创建时间匹配授权，为主责、内部委托和讨论回复装配 `web_search` 与 `get_search_content` |
+| [runtime.ts](runtime.ts) | 按岗位 ID 和创建时间匹配授权，为主责与内部协作者装配 `web_search`、`get_search_content` 与 `fetch_content` |
 
 岗位运行器将获授权的工具加入本轮清单，通过启动握手核查实际可用性。Pi 侧将搜索调用设为直接返回结果，并关闭后台抓取全文与按次指定代理。 [岗位运行器](../../orchestrator/worker-runner.ts) [Pi 侧调用限制](../../../pi-extensions/team-extension/index.ts)
 

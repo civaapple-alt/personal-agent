@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Enable `fetch_content` alongside `web_search` and `get_search_content` for roles granted `pi-web-access`, while stripping per-call `proxy` overrides on both `web_search` and `fetch_content`.
 - Inject whitelisted `.env` search credentials (`EXA_API_KEY`, `MOONSHOT_API_KEY`) only into Pi workers granted `pi-web-access`, and add an admin-only `.env 密钥配置` section in Settings (`PATCH /api/admin/runtime/env`) to save/clear `TYPESAFE_API_KEY`, `EXA_API_KEY`, and `MOONSHOT_API_KEY` with hot-reload and no plaintext readback.
 - Clear inherited `PI_OFFLINE`, increase install output buffer, and surface the underlying `pi install` error summary when installing `pi-web-access` or `pstack` from workbench settings.
 
