@@ -5,9 +5,10 @@
 | 工具 | 用途 |
 | --- | --- |
 | `delegate_to_member` | 请其他岗位提供协作结果，或委托独立验收 |
-| `request_clarification` | 主责可请求人类决定，受委托成员的问题先返回委托方 |
 | `publish_deliverable` | 暂存交付成果，在本轮成功收尾后归档 |
 | `propose_experience` | 提交候选经验 |
+
+[human-question](../human-question/README.md) 独立注册 `request_clarification`。两个扩展共用[桥接客户端](../shared/team-bridge-client.ts)。
 
 ## 启动与能力握手
 

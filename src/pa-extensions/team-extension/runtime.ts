@@ -4,7 +4,6 @@ import { resolveBuiltinExtensionPath } from "../builtin-paths.ts";
 
 export const TEAM_EXTENSION_TOOLS = [
 	"delegate_to_member",
-	"request_clarification",
 	"publish_deliverable",
 	"propose_experience",
 ] as const satisfies readonly TeamToolCall["tool"][];
@@ -25,12 +24,10 @@ export function prepareTeamExtension({
 	const canPublish = !isArchitect && isLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canProposeExperience = canPublish || (!isArchitect && isInternal && !discussionMode);
-	const canRequestClarification = !isArchitect && !discussionMode && (isLead || isInternal);
 	const tools: TeamToolCall["tool"][] = [];
 	if (canDelegate) tools.push("delegate_to_member");
 	if (canPublish) tools.push("publish_deliverable");
 	if (canProposeExperience) tools.push("propose_experience");
-	if (canRequestClarification) tools.push("request_clarification");
 
 	return {
 		entry: resolveBuiltinExtensionPath("team-extension"),
@@ -38,7 +35,6 @@ export function prepareTeamExtension({
 		canPublish,
 		canDelegate,
 		canProposeExperience,
-		canRequestClarification,
 		buildEnvironment({
 			bridgeEnv,
 			requiredTools,

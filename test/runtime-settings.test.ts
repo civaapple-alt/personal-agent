@@ -164,12 +164,10 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.ok(teamExt);
 	assert.equal(teamExt.status, "active");
 	assert.equal(teamExt.fileStatus, "present");
-	assert.deepEqual(teamExt.registeredTools, [
-		"delegate_to_member",
-		"request_clarification",
-		"publish_deliverable",
-		"propose_experience",
-	]);
+	assert.deepEqual(teamExt.registeredTools, ["delegate_to_member", "publish_deliverable", "propose_experience"]);
+	const questionExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-human-question");
+	assert.equal(questionExt?.status, "conditional");
+	assert.deepEqual(questionExt.registeredTools, ["request_clarification"]);
 
 	const pstackExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-pstack-extension");
 	assert.ok(pstackExt);
@@ -202,7 +200,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(builtinTelemetry.fileStatus, "builtin");
 
 	assert.equal(ownerPayload.summary.activeCount, 4);
-	assert.equal(ownerPayload.summary.conditionalCount, 1);
+	assert.equal(ownerPayload.summary.conditionalCount, 2);
 	assert.equal(ownerPayload.summary.operatorCount, 3);
 	assert.equal(ownerPayload.summary.errorCount, 1);
 
@@ -293,6 +291,7 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 
 	assert.ok(statSync(resolveBuiltinExtensionPath("team-extension")).isFile());
 	assert.ok(statSync(resolveBuiltinExtensionPath("pstack-extension")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("human-question")).isFile());
 });
 
 test("runtime suggests a valid global pstack for admins with missing or stale configuration", async (t) => {

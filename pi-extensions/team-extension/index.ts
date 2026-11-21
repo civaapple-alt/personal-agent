@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
-import { request as httpRequest } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
+import { createTeamBridgeClient } from "../shared/team-bridge-client.ts";
 
 interface BeforeAgentStartResult {
 	systemPrompt?: string;
@@ -77,66 +77,7 @@ export function filterContextFilesForTargetWorkspace<T extends { path: string }>
 
 export default function teamExtension(pi: PiExtensionApi): void {
 	const env = { ...process.env };
-	async function post(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-		signal?.throwIfAborted();
-		const target = new URL(path, env.PA_TEAM_BRIDGE_URL);
-		const payload = JSON.stringify(body);
-		// Use node:http with timeout disabled instead of fetch() so long-running delegations never hit Undici's 300s headersTimeout.
-		const { status, raw } = await new Promise<{ status: number; raw: string }>((resolve, reject) => {
-			let settled = false;
-			const finishError = (err: unknown) => {
-				if (settled) return;
-				settled = true;
-				signal?.removeEventListener("abort", onAbort);
-				reject(err instanceof Error ? err : new Error(String(err)));
-			};
-			const req = httpRequest(
-				target,
-				{
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${env.PA_TEAM_BRIDGE_TOKEN}`,
-						"Content-Type": "application/json",
-						"Content-Length": String(Buffer.byteLength(payload)),
-					},
-					timeout: 0,
-				},
-				(res) => {
-					const chunks: Buffer[] = [];
-					res.on("data", (chunk: Buffer) => chunks.push(chunk));
-					res.on("end", () => {
-						if (settled) return;
-						settled = true;
-						signal?.removeEventListener("abort", onAbort);
-						resolve({ status: res.statusCode ?? 500, raw: Buffer.concat(chunks).toString("utf8") });
-					});
-					res.on("error", finishError);
-				},
-			);
-			const onAbort = () => {
-				const reason = signal?.reason instanceof Error ? signal.reason : new Error("Tool request aborted");
-				req.destroy(reason);
-				finishError(reason);
-			};
-			if (signal) {
-				if (signal.aborted) {
-					onAbort();
-					return;
-				}
-				signal.addEventListener("abort", onAbort, { once: true });
-			}
-			req.setTimeout(0);
-			req.on("error", finishError);
-			req.end(payload);
-		});
-		const value: unknown = JSON.parse(raw);
-		if (status < 200 || status >= 300) {
-			throw new Error(
-				value && typeof value === "object" && "error" in value ? String(value.error) : "Team bridge failed",
-			);
-		}
-		return value;
-	}
+	const post = createTeamBridgeClient(env);
 
 	for (const tool of [
 		{
@@ -177,27 +118,6 @@ export default function teamExtension(pi: PiExtensionApi): void {
 					},
 				},
 				required: ["memberId", "task"],
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "request_clarification",
-			label: "提请澄清",
-			description:
-				"Use for a consequential question that available context cannot answer. As a specialist, return the question to your delegator along with any independent findings. As the lead, answer internally when you can; otherwise create a durable human decision in the matter. Acknowledge the blocked step and finish the turn; independent work can still proceed. This tool never grants authorization.",
-			parameters: {
-				type: "object",
-				properties: {
-					question: { type: "string", maxLength: 1000 },
-					context: { type: "string", maxLength: 3000, description: "Why this is needed and what it blocks" },
-					options: { type: "array", minItems: 2, maxItems: 4, items: { type: "string", maxLength: 240 } },
-					sourceAssignmentNumber: {
-						type: "integer",
-						minimum: 1,
-						description: "Direct assignment that raised this question, if applicable",
-					},
-				},
-				required: ["question"],
 				additionalProperties: false,
 			},
 		},

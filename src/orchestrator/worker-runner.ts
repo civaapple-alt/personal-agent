@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
 import {
@@ -129,7 +130,14 @@ export async function executeWithWorkerPass(
 		isArchitect,
 		hasConsultTargets,
 	});
-	const { canPublish, canDelegate, canProposeExperience, canRequestClarification } = teamExtension;
+	const { canPublish, canDelegate, canProposeExperience } = teamExtension;
+	const humanQuestion = prepareHumanQuestion({
+		sessionMode,
+		discussionMode: isDiscussionMode,
+		isArchitect,
+		memberId: input.member.id,
+		run: input.run,
+	});
 	const hasPersonalContext =
 		input.member.roleScope === "personal" ||
 		matterAiMembers.some((member) => member.roleScope === "personal") ||
@@ -207,17 +215,13 @@ export async function executeWithWorkerPass(
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
 		const mcpDependencies = isArchitect || isVerifier || isConversationReply ? [] : (template?.mcpDependencies ?? []);
-		const requiredTools = [...requestedTools, ...teamExtension.tools, ...(pstack?.tools ?? [])];
+		const requiredTools = [
+			...requestedTools,
+			...teamExtension.tools,
+			...humanQuestion.tools,
+			...(pstack?.tools ?? []),
+		];
 		const toolPatterns = [...requiredTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)];
-		let clarification: PromptRunResult["clarification"];
-		const stageClarification = (request: NonNullable<PromptRunResult["clarification"]>) => {
-			if (clarification) throw new Error("A clarification is already recorded for this execution");
-			clarification = request;
-			return {
-				status: sessionMode === "internal" ? "return_to_delegator" : "staged_for_human",
-				note: "The answer is unavailable this turn. Leave the dependent step pending and finish independent work.",
-			};
-		};
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
 			category: MemoryCategory;
@@ -272,17 +276,7 @@ export async function executeWithWorkerPass(
 					};
 				}
 				if (call.tool === "request_clarification") {
-					if (!canRequestClarification) throw new Error("This execution cannot request a decision");
-					const { question, context, options, sourceAssignmentNumber } = call;
-					let source: NonNullable<PromptRunResult["clarification"]>["source"];
-					if (sourceAssignmentNumber !== undefined) {
-						const handoff = input.run.completedClarifications?.get(sourceAssignmentNumber);
-						if (!handoff || handoff.toDelegatorId !== input.member.id) {
-							throw new Error("Use the number of a completed assignment to you that returned a clarification");
-						}
-						source = handoff.source;
-					}
-					return stageClarification({ question, context, options, source });
+					return humanQuestion.request(call);
 				}
 				if (call.tool === "propose_experience") {
 					if (!canProposeExperience && !isDiscussionMode) {
@@ -383,6 +377,7 @@ export async function executeWithWorkerPass(
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", teamExtension.entry);
+		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
 		if (!isVerifier && !isConversationReply)
 			for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
@@ -463,6 +458,7 @@ export async function executeWithWorkerPass(
 					turnContext: [turnContext, architectContext?.turnContext],
 				}),
 				...pstack?.env,
+				...humanQuestion.env,
 				PA_WEB_SEARCH_ENABLED: String(Boolean(webAccess)),
 				...(useRoleGitIdentity
 					? {
@@ -574,14 +570,7 @@ export async function executeWithWorkerPass(
 		worker.setDialogHandler(async (request) => {
 			signal.throwIfAborted();
 			if (sessionMode !== "lead" || isDiscussionMode) {
-				if (sessionMode === "internal" && !clarification) {
-					const options = request.method === "select" ? request.options.slice(0, 4) : undefined;
-					stageClarification({
-						question: request.title.trim().slice(0, 1000) || "需要补充委托信息",
-						context: request.method === "confirm" ? request.message?.slice(0, 3000) : undefined,
-						options,
-					});
-				}
+				humanQuestion.captureInternalDialog(request);
 				return { cancelled: true };
 			}
 			const dialogHandler = deps.getDialogHandler();
@@ -765,6 +754,7 @@ export async function executeWithWorkerPass(
 		}
 		if (!result.aborted && !input.run.cancelled)
 			input.onProgress?.({ stage: "finalizing", label: `${input.member.displayName}正在整理结果` });
+		const { clarification } = humanQuestion;
 		return !result.aborted && !input.run.cancelled && clarification ? { ...result, clarification } : result;
 	} finally {
 		controller.abort(new Error("Worker finished"));

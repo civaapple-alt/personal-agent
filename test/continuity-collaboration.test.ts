@@ -5,12 +5,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
 import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../src/orchestrator/team-orchestrator.ts";
+import { resolveBuiltinExtensionPath } from "../src/pa-extensions/builtin-paths.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
 import { createPersonalAgentServer } from "../src/server/app.ts";
@@ -57,10 +59,11 @@ class SessionWorker implements RpcWorkerLike {
 		Object.assign(process.env, this.options.env);
 		process.env.PA_REQUIRED_TOOLS = "[]";
 		try {
+			const registerTool: PiExtensionApi["registerTool"] = (tool) => {
+				this.tools.set(tool.name, tool);
+			};
 			teamExtension({
-				registerTool: (tool) => {
-					this.tools.set(tool.name, tool);
-				},
+				registerTool,
 				on: (event, handler) => {
 					if (event === "session_start") onStart = handler as () => Promise<void>;
 				},
@@ -68,6 +71,9 @@ class SessionWorker implements RpcWorkerLike {
 				getAllTools: () => ["read", "bash", "edit", "write", ...this.tools.keys()].map((name) => ({ name })),
 				setActiveTools: () => {},
 			});
+			if (this.options.args?.includes(resolveBuiltinExtensionPath("human-question"))) {
+				humanQuestionExtension({ registerTool });
+			}
 		} finally {
 			for (const key of Object.keys(this.options.env ?? {})) {
 				if (envBefore[key] === undefined) delete process.env[key];

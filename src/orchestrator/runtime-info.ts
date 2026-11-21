@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
 import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
+import { HUMAN_QUESTION_TOOL } from "../pa-extensions/human-question/runtime.ts";
 import { findInstalledPstack, preparePstackRuntime } from "../pa-extensions/pstack-methods/package.ts";
 import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
 import { TEAM_EXTENSION_TOOLS } from "../pa-extensions/team-extension/runtime.ts";
@@ -282,11 +283,13 @@ export async function buildRuntimeOverview(options: {
 	const probePromise = (options.probePiCli ?? (() => probePiCli()))();
 	const teamExtPath = resolveBuiltinExtensionPath("team-extension");
 	const pstackExtPath = resolveBuiltinExtensionPath("pstack-extension");
+	const humanQuestionPath = resolveBuiltinExtensionPath("human-question");
 
-	const [piProbe, teamFileStatus, pstackExtFileStatus] = await Promise.all([
+	const [piProbe, teamFileStatus, pstackExtFileStatus, humanQuestionFileStatus] = await Promise.all([
 		probePromise,
 		checkFileOrDir(teamExtPath),
 		checkFileOrDir(pstackExtPath),
+		checkFileOrDir(humanQuestionPath),
 	]);
 
 	const pstackEnvSet = Boolean(process.env.PA_PSTACK_DIR?.trim());
@@ -397,6 +400,22 @@ export async function buildRuntimeOverview(options: {
 		error: teamFileStatus === "missing" ? "未找到扩展入口文件" : null,
 	};
 
+	const humanQuestionItem: RuntimeExtensionItem = {
+		id: "builtin-human-question",
+		name: "human-question",
+		sourceKind: "builtin_conditional",
+		status: humanQuestionFileStatus === "present" ? "conditional" : "error",
+		entryPath: isOwner ? humanQuestionPath : builtinExtensionPaths["human-question"],
+		fileStatus: humanQuestionFileStatus,
+		scopeSummary: "正式执行的主责与内部委托",
+		description: "主责提请人工决定，协作者将澄清问题交回直接委托者。",
+		registeredTools: [HUMAN_QUESTION_TOOL],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: humanQuestionFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
 	const pstackStatus: RuntimeExtensionStatus = !config.pstackDir
 		? "inactive"
 		: pstackExtFileStatus === "present" && pstackInfo.available
@@ -483,6 +502,7 @@ export async function buildRuntimeOverview(options: {
 
 	const extensions: RuntimeExtensionItem[] = [
 		teamExtensionItem,
+		humanQuestionItem,
 		pstackExtensionItem,
 		mcpExtensionItem,
 		webAccessExtensionItem,

@@ -14,6 +14,7 @@ import {
 	PreviewManager,
 	type PromptRunResult,
 	type RpcWorkerLike,
+	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { readHumanDecision } from "../src/orchestrator/human-decision.ts";
@@ -93,7 +94,9 @@ test("planning decisions preserve delegation provenance, require the assigned hu
 					async runPromptAndWait(prompt) {
 						const memberId = options.env?.PA_MEMBER_ID;
 						const system = options.env?.PA_MEMBER_CONTEXT ?? "";
+						const questionLoaded = options.args?.includes(resolveBuiltinExtensionPath("human-question"));
 						if (system.includes("## Observer participation")) {
+							assert.equal(questionLoaded, false);
 							await assert.rejects(tool("request_clarification", { question: "Observer cannot ask directly" }));
 							assert.deepEqual(
 								await dialog?.({
@@ -109,6 +112,7 @@ test("planning decisions preserve delegation provenance, require the assigned hu
 							blockedObserver = true;
 							return completed("[SILENT]");
 						}
+						assert.equal(questionLoaded, true);
 						if (memberId === "qa-manager") {
 							if (prompt.includes("Apply the recorded decision")) {
 								reachedSpecialist = true;
