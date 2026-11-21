@@ -9,12 +9,15 @@ export type ConversationIntent = "reply" | "work" | "confirm" | "silent";
 
 const WORK_OPENING =
 	/^(?:(?:请|帮我|麻烦|能否|可以|能不能|先|现在|直接|接着|请你|请帮我)\s*)*(?:执行|开始|继续|完成|落实|请教|咨询|跑|运行|测试|验证|核对|查[一下看]|检查|排查|跟进|整理|收尾|修改|更新|实现|修复|修好|修一下|调整|重构|优化|移除|添加|创建|生成|写|提交|发布|部署|删除|把|将|按(?:这个|刚才|上述|方案)|(?:please\s+|can you\s+|could you\s+)*(?:run|test|check|verify|inspect|fix|implement|change|update|create|add|remove|delete|write|commit|publish|deploy|finish|continue)\b)/iu;
+const INFORMATION_REQUEST_OPENING =
+	/^(?:(?:我\s*)?想\s*(?:看(?:一?下|一?看)|了解|知道|问(?:一?下|一?问))|给我\s*(?:看(?:一?下|一?看)|讲讲)|告诉我)/u;
 
 /** Cheap trigger for messages with no explicit AI recipient. It grants no execution authority. */
 export function looksLikeConversationRequest(text: string): boolean {
 	const firstLine = text.trim().split(/\r?\n/, 1)[0] ?? "";
 	return (
 		looksLikeWorkRequest(firstLine) ||
+		INFORMATION_REQUEST_OPENING.test(firstLine) ||
 		/^(?:请|帮我|麻烦|想请|能否|能不能|可不可以|如何|怎么|为什么|现在.+呢|please\b|can you\b|could you\b)/iu.test(
 			firstLine,
 		) ||
@@ -92,7 +95,11 @@ export async function decideConversationIntent(input: {
 				validate(raw) {
 					if (requestsDiscussionOnly(input.prompt)) return "reply";
 					if (raw.intent === "reply" || raw.intent === "confirm") return raw.intent;
-					if (raw.intent === "silent") return input.explicitRecipient ? "reply" : "silent";
+					if (raw.intent === "silent") {
+						return input.explicitRecipient || INFORMATION_REQUEST_OPENING.test(input.prompt.trimStart())
+							? "reply"
+							: "silent";
+					}
 					if (raw.intent !== "work") return null;
 					const excerpt = typeof raw.authorization === "string" ? raw.authorization.trim() : "";
 					return hasDirectAuthorization(input.prompt, excerpt) ? "work" : "confirm";

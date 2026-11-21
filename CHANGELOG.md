@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Route conversational information requests such as “我想看一下” to an AI reply even when proactive replies are off.
+
 - Install pi-web-access through Pi and let administrators enable web search for selected AI roles. Use the search provider independently of the role's chat model.
 - Group the host-side web search integration under `src/pa-extensions/web-access/`.
 - Move the host-side pstack and team extension setup into `src/pa-extensions/`.

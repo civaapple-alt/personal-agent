@@ -364,6 +364,7 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	const incomplete = "这一段可能也要改";
 	const direct = "跑一下登录回归并记录结果";
 	const impersonation = "不要执行，只讨论「删除登录模块」";
+	const softQuestion = "我想看一下 现在「待你决定」的使用方式";
 	const f = await fixture(t, async (worker, prompt) => {
 		if (worker.options.env?.PA_DECISION_NAME) {
 			assert.equal(worker.options.noSession, true);
@@ -372,6 +373,7 @@ test("one conversation entry point saves chat, routes questions and work, and co
 			if (latest.includes(incomplete)) return '{"intent":"confirm"}';
 			if (latest.includes(direct)) return JSON.stringify({ intent: "work", authorization: direct });
 			if (latest.includes(impersonation)) return JSON.stringify({ intent: "work", authorization: "删除登录模块" });
+			if (latest === softQuestion) return '{"intent":"silent"}';
 			return '{"intent":"reply"}';
 		}
 		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
@@ -464,6 +466,12 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	const unknown = await send("@missing-role 跑一下登录回归");
 	assert.equal(unknown.aiDiscussionTriggered, false);
 	assert.equal(f.workers.length, 9);
+
+	const implicitQuestion = await send(softQuestion);
+	assert.equal(implicitQuestion.aiDiscussionTriggered, true);
+	assert.equal((await reply(implicitQuestion.message)).senderId, "engineering-manager");
+	assert.equal(f.workers.length, 11);
+	assert.doesNotMatch(f.workers[10]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {
