@@ -668,7 +668,8 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		const context = opts.env?.PA_TURN_CONTEXT ?? "";
 		const args = opts.args ?? [];
 		return {
-			start: async () => reportReady(opts, memberId === ROLE_ARCHITECT_MEMBER_ID ? [] : ["read"]),
+			start: async () =>
+				reportReady(opts, memberId === ROLE_ARCHITECT_MEMBER_ID ? ["read_pa_help"] : ["read", "read_pa_help"]),
 			stop: async () => {},
 			onNotice: () => () => {},
 			setDialogHandler: () => {},
@@ -784,7 +785,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		assert.equal(archTurn.observerMessages?.length ?? 0, 0);
 		assert.equal(archTurn.replyText, "已检查现有分工与工具权限，建议收窄产品经理权限。");
 		const archRun = capturedRuns.at(-1)!;
-		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "");
+		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "read_pa_help");
 		assert.ok(archRun.context.includes("## Current business roles"));
 		const archPersistedMsg = store
 			.listMessages(archTurn.matter.id, "user")

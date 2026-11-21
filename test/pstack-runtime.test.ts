@@ -142,11 +142,11 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 				assert.match(options.env!.PA_MEMBER_CONTEXT!, /## pstack methods/);
 				assert.match(options.env!.PA_MEMBER_CONTEXT!, /Only the lead can publish/);
 				const args = options.args!;
-				assert.equal(args[args.indexOf("--tools") + 1], "load_pstack_skill");
+				assert.equal(args[args.indexOf("--tools") + 1], "read_pa_help,load_pstack_skill");
 				assert.ok(args.some((arg) => arg.endsWith(join("pstack-methods", "index.ts"))));
 				assert.equal(options.env!.PA_CAN_PUBLISH, "false");
 				assert.equal(options.env!.PA_CAN_DELEGATE, "false");
-				await reportReady(options, omitMethodTool ? [] : ["load_pstack_skill"]);
+				await reportReady(options, omitMethodTool ? ["read_pa_help"] : ["read_pa_help", "load_pstack_skill"]);
 			},
 			runPromptAndWait: async () => {
 				promptReached = true;
@@ -211,7 +211,11 @@ test("pstack-enabled observers retain narrowed tools and can remain silent witho
 				start: async () => {
 					if (observer) {
 						const args = options.args!;
-						assert.deepEqual(args[args.indexOf("--tools") + 1]!.split(","), ["read", "load_pstack_skill"]);
+						assert.deepEqual(args[args.indexOf("--tools") + 1]!.split(","), [
+							"read",
+							"read_pa_help",
+							"load_pstack_skill",
+						]);
 						assert.equal(options.env!.PA_CAN_DELEGATE, "false");
 						assert.equal(options.env!.PA_CAN_PUBLISH, "false");
 						assert.equal(options.env!.PA_CAN_EXPERIENCE, "false");

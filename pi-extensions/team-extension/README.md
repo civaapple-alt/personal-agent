@@ -4,6 +4,7 @@
 
 | 工具 | 用途 |
 | --- | --- |
+| `read_pa_help` | 查阅指定的工作台帮助主题或本事项工作区的快照 |
 | `delegate_to_member` | 请其他岗位提供协作结果，或委托独立验收 |
 | `publish_deliverable` | 暂存交付成果，在本轮成功收尾后归档 |
 | `propose_experience` | 提交候选经验 |

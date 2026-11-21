@@ -224,7 +224,7 @@ test("Design, create and export preserve dependency selections while missing Ski
 	}
 });
 
-test("Architect receives the complete design method while all team actions are rejected by the host", async () => {
+test("Architect receives the design method and workbench help while publication is rejected by the host", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "pa-architect-boundary-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	try {
@@ -235,7 +235,7 @@ test("Architect receives the complete design method while all team actions are r
 			defaultCwd: directory,
 			noSession: true,
 			workerFactory: (options) => ({
-				start: () => reportReady(options, []),
+				start: () => reportReady(options, ["read_pa_help"]),
 				getState: async () => ({ sessionId: "controlled-architect" }),
 				stop: async () => {},
 				onNotice: () => () => {},
@@ -245,6 +245,10 @@ test("Architect receives the complete design method while all team actions are r
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Give each role one core outcome/);
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Write user-facing prose in the user's language/);
 					assert.match(options.env?.PA_TURN_CONTEXT ?? "", /## Installed Skill catalog/);
+					assert.match(
+						JSON.stringify(await invokeTool(options, "read_pa_help", { topics: ["roles"], language: "zh" })),
+						/角色架构师/,
+					);
 					await assert.rejects(
 						invokeTool(options, "publish_deliverable", {
 							type: "document",

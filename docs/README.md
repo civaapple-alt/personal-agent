@@ -7,6 +7,7 @@
 | 从预构建包启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
 | 体验专业协作、阶段交付和反馈修订 | [完成四步内置演示](tutorials/inner-matter-demo.md) |
 | 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
+| 查阅随版本发布的工作台功能说明 | [工作台功能速查](guides/agent-workbench.md) · [English](guides/agent-workbench.en.md) |
 | 下载或升级到当前版本 | [0.6.3 发布说明](releases/v0.6.3.md) |
 
 ## 部署与管理团队

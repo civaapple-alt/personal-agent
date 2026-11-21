@@ -613,6 +613,7 @@ export class TeamOrchestrator {
 				getTemplatesById: () => this.templatesById,
 				resolveMatterAiMembers: (matter) =>
 					this.resolveMatterAiMembers(matter, this.runs.get(matter?.id ?? "")?.startedByUserId),
+				listSharedMatterAiMembers: (matter) => this.listSharedMatterAiMembers(matter),
 				requireMatter: (matterId) => this.requireMatter(matterId),
 				delegate: (dInput, run, workspace, chain, signal, effectsTarget, onProgress, options) =>
 					this.delegate(dInput, run, workspace, chain, signal, effectsTarget, onProgress, options),

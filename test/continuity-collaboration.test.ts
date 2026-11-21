@@ -14,6 +14,12 @@ import {
 	TeamOrchestrator,
 } from "../src/orchestrator/team-orchestrator.ts";
 import { resolveBuiltinExtensionPath } from "../src/pa-extensions/builtin-paths.ts";
+import {
+	isGuideTopic,
+	isWorkbenchTopic,
+	readWorkbenchGuide,
+	WORKBENCH_TOPICS,
+} from "../src/pa-extensions/workbench-help/catalog.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
@@ -480,12 +486,20 @@ test("one conversation entry point saves chat, routes questions and work, and co
 	assert.doesNotMatch(f.workers[10]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
 });
 
-test("System One drives saved conversations, roster data and lead matching with safe fallback", async (t) => {
+test("System One drives saved conversations, workbench help, roster data and lead matching with safe fallback", async (t) => {
 	const lookedUp = "这件事目前有哪些队友呀";
 	const activeWork = "我想看一下日志，顺手把自动重试改成三次";
 	const featureQuestion = "我想看一下 现在 由用户待定 的使用";
 	const featureDemo = "请演示一下「待你决定」现在怎么用";
 	const followupDemo = "给我一个 实例 演示 有我待定的使用";
+	const helpQuestions = new Map([
+		[featureQuestion, { topic: "decisions", match: /提交答案/ }],
+		[followupDemo, { topic: "decisions", match: /找回密码/ }],
+		["怎么安排旁听", { topic: "collaboration", match: /查看交接/ }],
+		["PA 支持自己做插件吗", { topic: "capabilities", match: /维护者开发及发布/ }],
+		["怎么看成果版本", { topic: "deliverables", match: /成果库/ }],
+		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],
+	]);
 	const quoted = "「删除登录模块」";
 	const review = "我们现有岗位之间有没有做了同一件事的";
 	const piFallback = "本事项的处理进度如何";
@@ -495,7 +509,8 @@ test("System One drives saved conversations, roster data and lead matching with 
 			const state = request.state as { latestHumanMessage: string };
 			const text = state.latestHumanMessage;
 			if (text === piFallback || text === rulesFallback) throw new Error("Classifier unavailable");
-			const isInformationOnly = text === featureQuestion || text === featureDemo || text === followupDemo;
+			const help = helpQuestions.get(text);
+			const isInformationOnly = Boolean(help) || text === featureDemo;
 			const intent =
 				text === lookedUp
 					? "roster"
@@ -510,7 +525,8 @@ test("System One drives saved conversations, roster data and lead matching with 
 				target: { type: "choice", choice: text === review ? "role_architect_review" : "qa-manager" },
 				authorized: { type: "noul", noul: isInformationOnly ? 0.55 : 0.95 },
 				informationOnly: { type: "noul", noul: isInformationOnly ? 0.89 : 0.05 },
-				decisionHelp: { type: "noul", noul: text === followupDemo ? 0.97 : text === featureQuestion ? 0.74 : 0.12 },
+				workbenchHelp: { type: "noul", noul: text === featureQuestion ? 0.74 : help ? 0.97 : 0.12 },
+				workbenchTopic: { type: "choice", choice: help?.topic ?? "none", confidence: 0.95 },
 			} as never;
 		},
 	};
@@ -601,13 +617,13 @@ test("System One drives saved conversations, roster data and lead matching with 
 	assert.equal(response.reply?.metadata?.humanDecision, undefined);
 	assert.doesNotMatch(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
 	const workerCount = f.workers.length;
-	for (const prompt of [featureQuestion, followupDemo]) {
+	for (const [prompt, { topic, match }] of helpQuestions) {
 		const example = await send(path, { prompt });
 		assert.equal(example.message.metadata?.conversationDecisionSource, "system_one");
 		assert.equal(example.reply?.senderType, "system");
-		assert.equal(example.reply?.metadata?.humanDecisionHelp, true);
+		assert.equal(example.reply?.metadata?.workbenchHelpTopic, topic);
 		assert.equal(example.reply?.metadata?.humanDecision, undefined);
-		assert.match(example.reply?.content ?? "", /提交答案/);
+		assert.match(example.reply?.content ?? "", match);
 		assert.equal(f.workers.length, workerCount);
 	}
 	const work = await send(path, { prompt: activeWork });
@@ -632,6 +648,95 @@ test("System One drives saved conversations, roster data and lead matching with 
 	assert.equal(offline.message.metadata?.conversationDecisionSource, "rules");
 	assert.equal(offline.message.metadata?.mode, "conversation");
 	assert.match(JSON.stringify(offline.reply?.metadata?.humanDecision), /execution_confirmation/);
+});
+
+test("workbench help reads packaged guides and active matter facts through the shipped extension", async (t) => {
+	for (const topic of Object.keys(WORKBENCH_TOPICS)) {
+		if (!isWorkbenchTopic(topic) || !isGuideTopic(topic)) continue;
+		assert.ok((await readWorkbenchGuide(topic, true)).content);
+		assert.ok((await readWorkbenchGuide(topic, false)).content);
+	}
+	const f = await fixture(t, async (worker) => {
+		assert.match(worker.options.env?.PA_MEMBER_CONTEXT ?? "", /read_pa_help/);
+		const details = async (topics: string[]) =>
+			JSON.stringify((await worker.call("read_pa_help", { topics, language: "zh" })).details);
+		const guide = await details(["roles", "capabilities", "deliverables"]);
+		assert.match(guide, /角色架构师.*网页检索.*成果库/);
+		const state = await details(["current_matter", "pending_decisions", "published_deliverables"]);
+		assert.match(state, /QA Manager.*持续跟进的审批.*新工作区验收/);
+		assert.doesNotMatch(state, /旧工作区|其他组织|被替代|仅存在于数据库/);
+		await assert.rejects(
+			worker.call("read_pa_help", { topics: ["current_matter"], matterId: "another_matter" }),
+			/PA help accepts only topics and language/,
+		);
+		await assert.rejects(
+			worker.call("read_pa_help", { topics: ["../../SECURITY.md"] }),
+			/Select one to three topics/,
+		);
+		return "已查阅工作台";
+	});
+	const oldWorkspace = f.workspace;
+	const repoPath = join(f.root, "B");
+	await mkdir(repoPath);
+	const workspace = f.store.upsertWorkspace({ name: "B", repoPath });
+	const matter = f.store.createMatter({
+		title: "交付与审批",
+		workspaceId: oldWorkspace.id,
+		leadMemberId: "qa-manager",
+	});
+	const append = (title: string, scope: { workspaceId: string; repoPath: string; orgId: string | null }) => {
+		f.store.appendMessage({
+			matterId: matter.id,
+			channel: "user",
+			senderType: "member",
+			senderId: "qa-manager",
+			content: title,
+			metadata: {
+				...scope,
+				humanDecision: {
+					kind: "execution_confirmation",
+					status: "pending",
+					revision: 1,
+					assignedUserId: null,
+					requests: [{ question: title }],
+				},
+			},
+		});
+	};
+	const publish = (title: string, scope?: { workspaceId: string; repoPath: string; orgId: string | null }) => {
+		const deliverable = f.store.recordDeliverable({
+			matterId: matter.id,
+			memberId: "qa-manager",
+			type: "document",
+			title,
+			contentOrPath: "evidence",
+		});
+		if (scope)
+			f.store.appendMessage({
+				matterId: matter.id,
+				channel: "user",
+				senderType: "member",
+				senderId: "qa-manager",
+				content: title,
+				metadata: { ...scope, deliverableIds: [deliverable.id] },
+			});
+	};
+	const oldScope = { workspaceId: oldWorkspace.id, repoPath: oldWorkspace.repoPath, orgId: oldWorkspace.orgId };
+	append("旧工作区审批", oldScope);
+	publish("旧工作区验收", oldScope);
+	f.store.updateMatterWorkspace(matter.id, workspace.id);
+	const currentScope = { workspaceId: workspace.id, repoPath, orgId: workspace.orgId };
+	append("被替代的审批", currentScope);
+	append("持续跟进的审批", currentScope);
+	append("其他组织审批", { ...currentScope, orgId: "org_elsewhere" });
+	publish("新工作区验收", currentScope);
+	publish("仅存在于数据库");
+	const response = await f.orchestrator.dispatchMatter({
+		matterId: matter.id,
+		prompt: "读一下工作台帮助和当前事项",
+	});
+	assert.equal(response.replyText, "已查阅工作台");
+	assert.equal(f.store.listDeliverables(matter.id).length, 3);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {
@@ -1090,7 +1195,7 @@ test("independent review links to a completed assignment and gates the exact fin
 			assert.match(prompt, /\[Acceptance criteria\]/);
 			assert.match(prompt, /\[Document snapshot\]/);
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]");
-			assert.ok(manifest.every((name: string) => name === "read" || name === "bash"));
+			assert.ok(manifest.every((name: string) => ["read", "bash", "read_pa_help"].includes(name)));
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.equal(worker.tools.has("publish_deliverable"), false);
 			assert.equal(worker.tools.has("propose_experience"), false);

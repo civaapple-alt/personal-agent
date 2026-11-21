@@ -81,6 +81,21 @@ export default function teamExtension(pi: PiExtensionApi): void {
 
 	for (const tool of [
 		{
+			name: "read_pa_help",
+			label: "Read PA help",
+			description:
+				"Read the installed workbench guide or live facts about this matter. Use the topic IDs from the Personal Agent help index. This tool does not operate the workbench.",
+			parameters: {
+				type: "object",
+				properties: {
+					topics: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 },
+					language: { type: "string", enum: ["zh", "en"] },
+				},
+				required: ["topics"],
+				additionalProperties: false,
+			},
+		},
+		{
 			name: "delegate_to_member",
 			label: "咨询团队成员",
 			description:

@@ -280,7 +280,10 @@ export function MessageFeed({
 							const isUser = msg.senderType === "user";
 							const isSystem = msg.senderType === "system";
 							const isRosterSnapshot = isSystem && msg.metadata?.matterRosterSnapshot === true;
-							const isDecisionHelp = isSystem && msg.metadata?.humanDecisionHelp === true;
+							const isWorkbenchHelp =
+								isSystem &&
+								(typeof msg.metadata?.workbenchHelpTopic === "string" ||
+									msg.metadata?.humanDecisionHelp === true);
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
 							const isDiscussionReply =
 								!isUser &&
@@ -371,7 +374,7 @@ export function MessageFeed({
 											<span>
 												{isRosterSnapshot
 													? "事项名册"
-													: isDecisionHelp
+													: isWorkbenchHelp
 														? "功能说明"
 														: isSystem
 															? "系统提示"
@@ -383,7 +386,7 @@ export function MessageFeed({
 										</div>
 									)}
 									<div
-										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot && !isDecisionHelp ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
+										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot && !isWorkbenchHelp ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
 									>
 										{isUser ? (
 											<>

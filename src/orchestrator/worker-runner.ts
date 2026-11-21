@@ -8,6 +8,7 @@ import {
 	isPiWebAccessTool,
 	prepareWebAccessForWorker,
 } from "../pa-extensions/web-access/runtime.ts";
+import { WORKBENCH_HELP_PROMPT } from "../pa-extensions/workbench-help/catalog.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -50,6 +51,7 @@ import {
 	type WorkerFactory,
 	type WorkerSessionMode,
 } from "./types.ts";
+import { readWorkbenchTopic } from "./workbench-context.ts";
 
 export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;
@@ -65,6 +67,7 @@ export interface WorkerRunnerDeps {
 	getTemplateForMember: (member: TeamMember) => RoleTemplate | undefined;
 	getTemplatesById?: () => Map<string, RoleTemplate>;
 	resolveMatterAiMembers: (matter: Matter | null) => TeamMember[];
+	listSharedMatterAiMembers: (matter: Matter) => TeamMember[];
 	requireMatter: (matterId: string) => Matter;
 	delegate: (
 		input: DelegateInput,
@@ -229,8 +232,30 @@ export async function executeWithWorkerPass(
 			rationale: string;
 			supersedesMemoryId?: string;
 		}> = [];
+		let observedTools: string[] | undefined;
 		bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 			toolSignal.throwIfAborted();
+			if (call.tool === "read_pa_help") {
+				const current = deps.requireMatter(input.matterId);
+				if (current.workspaceId !== (input.workspace?.id ?? null) || current.orgId !== activeOrgId) {
+					throw new Error("The matter workspace changed during this turn");
+				}
+				const context = {
+					matter: current,
+					members: deps.listSharedMatterAiMembers(current),
+					workspaceId: current.workspaceId,
+					repoPath: cwd,
+					orgId: activeOrgId,
+					workspaceName: input.workspace?.name,
+					activeTools: observedTools,
+				};
+				const chinese = call.language ? call.language === "zh" : /\p{Script=Han}/u.test(input.taskPrompt);
+				const topics = await Promise.all(
+					call.topics.map((topic) => readWorkbenchTopic(deps.store, context, topic, chinese)),
+				);
+				toolSignal.throwIfAborted();
+				return { topics };
+			}
 			if (isArchitect) throw new Error("Role architect cannot execute team tools");
 			const releaseIdle = worker?.suspendIdleTimeout?.();
 			const resumeMonitor = activity?.wait();
@@ -454,7 +479,12 @@ export async function executeWithWorkerPass(
 					bridgeEnv: bridge.env,
 					requiredTools: toolPatterns,
 					workspaceRoot: input.workspace ? cwd : undefined,
-					memberContext: [systemPrompt, architectContext?.systemPrompt, pstack?.systemPrompt],
+					memberContext: [
+						systemPrompt,
+						WORKBENCH_HELP_PROMPT,
+						architectContext?.systemPrompt,
+						pstack?.systemPrompt,
+					],
 					turnContext: [turnContext, architectContext?.turnContext],
 				}),
 				...pstack?.env,
@@ -596,6 +626,7 @@ export async function executeWithWorkerPass(
 		signal.throwIfAborted();
 		const state = await applyWorkerModel(worker, selection);
 		const tools = await bridge.waitReady();
+		observedTools = tools;
 		const missing = requiredTools.filter((name) => !tools.includes(name));
 		for (const dependency of mcpDependencies)
 			if (!tools.some((name) => name.startsWith(`mcp__${dependency}__`))) missing.push(`MCP:${dependency}`);

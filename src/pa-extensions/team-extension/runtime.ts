@@ -3,6 +3,7 @@ import type { createTeamToolBridge, TeamToolCall } from "../../rpc/team-tool-bri
 import { resolveBuiltinExtensionPath } from "../builtin-paths.ts";
 
 export const TEAM_EXTENSION_TOOLS = [
+	"read_pa_help",
 	"delegate_to_member",
 	"publish_deliverable",
 	"propose_experience",
@@ -24,7 +25,7 @@ export function prepareTeamExtension({
 	const canPublish = !isArchitect && isLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canProposeExperience = canPublish || (!isArchitect && isInternal && !discussionMode);
-	const tools: TeamToolCall["tool"][] = [];
+	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
 	if (canDelegate) tools.push("delegate_to_member");
 	if (canPublish) tools.push("publish_deliverable");
 	if (canProposeExperience) tools.push("propose_experience");

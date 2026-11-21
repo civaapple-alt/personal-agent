@@ -9,7 +9,7 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
 import { validateDelivery } from "./execution-context.ts";
-import { type Clarification, describeHumanDecision, type HumanDecision } from "./human-decision.ts";
+import type { Clarification, HumanDecision } from "./human-decision.ts";
 import { draftDigest } from "./independent-verification.ts";
 import { messageMatchesContext } from "./matter-context.ts";
 import { recordRosterReply } from "./matter-roster-query.ts";
@@ -28,6 +28,7 @@ import {
 	type MatterRun,
 	resolveTurnTimeoutMs,
 } from "./types.ts";
+import { readWorkbenchTopic } from "./workbench-context.ts";
 import type { ExecuteWorkerInput } from "./worker-runner.ts";
 
 interface MatterDispatchDeps {
@@ -312,25 +313,48 @@ export async function dispatchMatterTurn(
 				...existingUserMsg.metadata,
 				conversationDecisionSource: decision.source,
 			});
-			if (intent === "silent" || intent === "roster" || intent === "decision_help") {
-				const directReply =
-					intent === "roster"
-						? recordRosterReply(deps.store, matter, existingUserMsg, deps.listSharedMatterAiMembers(matter))
-						: intent === "decision_help"
-							? deps.store.appendMessage({
-									matterId: matter.id,
-									channel: "user",
-									senderType: "system",
-									senderId: "orchestrator",
-									content: describeHumanDecision(existingUserMsg.content),
-									metadata: {
-										humanDecisionHelp: true,
-										sourceUserMessageId: existingUserMsg.id,
-										workspaceId: workspace?.id ?? null,
-										repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
-									},
-								})
-							: undefined;
+			if (intent === "silent" || intent === "roster" || intent === "workbench_help") {
+				let directReply: MatterMessage | undefined;
+				if (intent === "roster") {
+					directReply = recordRosterReply(
+						deps.store,
+						matter,
+						existingUserMsg,
+						deps.listSharedMatterAiMembers(matter),
+					);
+				} else if (intent === "workbench_help" && decision.helpTopic) {
+					const workspaceContext = {
+						workspaceId: workspace?.id ?? null,
+						repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
+						orgId: effectiveOrgId,
+					};
+					const help = await readWorkbenchTopic(
+						deps.store,
+						{
+							...workspaceContext,
+							matter,
+							members: deps.listSharedMatterAiMembers(matter),
+							workspaceName: workspace?.name,
+						},
+						decision.helpTopic,
+						/\p{Script=Han}/u.test(existingUserMsg.content),
+					);
+					run.controller.signal.throwIfAborted();
+					input.validateConversationAccess?.();
+					directReply = deps.store.appendMessage({
+						matterId: matter.id,
+						channel: "user",
+						senderType: "system",
+						senderId: "orchestrator",
+						content: `**${help.heading}**\n\n${help.content}`,
+						metadata: {
+							workbenchHelpTopic: decision.helpTopic,
+							workbenchHelpSource: help.source,
+							sourceUserMessageId: existingUserMsg.id,
+							...workspaceContext,
+						},
+					});
+				}
 				return {
 					matter,
 					assignedMember: activeSpeaker,

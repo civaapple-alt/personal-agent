@@ -4,7 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
-- Answer decision-card walkthrough requests with a workbench example without running a workspace agent.
+- Answer workbench questions from the installed guide and current matter records. Give AI roles read-only access to the same guide, pending decisions, published deliverables, and visible participation data.
 
 - Answer informational questions about confirmation flows directly and omit the discussion badge on execution confirmation cards.
 

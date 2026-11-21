@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { Clarification } from "../orchestrator/human-decision.ts";
+import { isWorkbenchTopic, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
 import type { MemoryCategory } from "../storage/types.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
+	| { tool: "read_pa_help"; callId: string; topics: WorkbenchTopic[]; language?: "zh" | "en" }
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| ({
@@ -65,6 +67,19 @@ function parseCall(value: unknown): TeamToolCall {
 	const callId = requiredString(value.callId, "callId", 256);
 	const args = value.args;
 	if (!args || typeof args !== "object") throw new Error("Expected tool arguments");
+	if (value.tool === "read_pa_help" && "topics" in args) {
+		if (Object.keys(args).some((key) => key !== "topics" && key !== "language")) {
+			throw new Error("PA help accepts only topics and language");
+		}
+		const topics: unknown = args.topics;
+		const language = "language" in args ? args.language : undefined;
+		if (!Array.isArray(topics) || !topics.length || topics.length > 3 || !topics.every(isWorkbenchTopic)) {
+			throw new Error("Select one to three topics from the PA help index");
+		}
+		if (language !== undefined && language !== "zh" && language !== "en")
+			throw new Error("Unsupported help language");
+		return { tool: value.tool, callId, topics: [...new Set(topics)], language };
+	}
 	if (value.tool === "delegate_to_member" && "memberId" in args && "task" in args) {
 		return {
 			tool: value.tool,
