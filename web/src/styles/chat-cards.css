@@ -314,26 +314,104 @@
 .human-decision-card {
 	width: min(100%, 42rem);
 	display: grid;
-	gap: 0.65rem;
+	gap: 0.6rem;
 	padding: 0.85rem 1rem;
-	margin-top: 0.6rem;
+	margin-top: 0.45rem;
 	border: 1px solid var(--border, #dbe4e0);
 	border-radius: 0.9rem;
 	background: var(--surface, #fff);
+}
+.human-decision-card.is-confirmation {
+	width: min(100%, 34rem);
+	gap: 0.5rem;
+	padding: 0.75rem 0.95rem;
+	background: var(--bg-sidebar, #f8faf9);
+}
+.human-decision-card.is-answered {
+	background: var(--bg-sidebar, #f8faf9);
 }
 .human-decision-card header,
 .human-decision-assignee {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
+	justify-content: space-between;
 	gap: 0.6rem;
+}
+.human-decision-header-main {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+.human-decision-assign-trigger {
+	font-size: var(--text-xs, 0.75rem);
+}
+.human-decision-body {
+	display: grid;
+	gap: 0.3rem;
+}
+.human-decision-context {
+	font-size: 0.84rem;
+	color: var(--text-secondary, #5b6763);
+	line-height: 1.45;
 }
 .human-decision-actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.1rem;
+}
+.decision-answer-form {
+	display: grid;
 	gap: 0.55rem;
 }
-
+.decision-option-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	margin: 0;
+}
+.decision-option-btn {
+	appearance: none;
+	border: 1px solid var(--border, #dbe4e0);
+	background: var(--surface, #fff);
+	color: var(--text-primary, #1f2926);
+	border-radius: var(--radius-pill, 999px);
+	padding: 0.32rem 0.75rem;
+	font-size: 0.84rem;
+	line-height: 1.35;
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		border-color 0.15s ease,
+		color 0.15s ease;
+}
+.decision-option-btn:hover:not(:disabled) {
+	border-color: var(--accent-border, #8fbab1);
+	background: var(--surface-accent-soft, #eef7f5);
+}
+.decision-option-btn.is-selected {
+	border-color: var(--text-primary, #1f2926);
+	background: var(--text-primary, #1f2926);
+	color: #fff;
+}
+.decision-option-btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.decision-input-row {
+	display: flex;
+	align-items: flex-end;
+	gap: 0.5rem;
+}
+.decision-textarea {
+	flex: 1;
+	min-width: 0;
+	resize: vertical;
+	min-height: 2.15rem;
+}
 
 .human-decision-card p {
 	margin: 0;
@@ -342,7 +420,8 @@
 .human-decision-card header span,
 .human-decision-note,
 .human-decision-input {
-	font-size: 0.875rem;
+	font-size: 0.84rem;
+	color: var(--text-secondary, #5b6763);
 }
 .human-decision-question {
 	font-weight: 600;

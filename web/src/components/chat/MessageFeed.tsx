@@ -323,6 +323,8 @@ export function MessageFeed({
 							const userFiles = isUser ? parseMessageFiles(msg.metadata) : [];
 							const isConversationMessage =
 								msg.metadata?.mode === "conversation" || msg.metadata?.conversationRouted === true;
+							const hidePlaceholderDecisionBubble =
+								!isUser && !isSystem && Boolean(decision) && msg.content.trim() === "等待你在卡片里提交决定。";
 							const bubbleModeClass =
 								isUser && !isConversationMessage
 									? isDiscussion
@@ -391,120 +393,124 @@ export function MessageFeed({
 											{isObserverIntervention && <span className="observer-badge">旁听补充</span>}
 										</div>
 									)}
-									<div
-										className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot && !isWorkbenchHelp ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
-									>
-										{isUser ? (
-											<>
-												{userImages.length > 0 && (
-													<div className={`stream-msg-images${userImages.length === 1 ? " single" : ""}`}>
-														{userImages.map((img, idx) =>
-															img.url ? (
-																<button
-																	key={img.url}
-																	type="button"
-																	className="stream-msg-image-btn"
-																	title={img.name ?? "点击查看大图"}
-																	onClick={() =>
-																		onOpenLightbox({
-																			src: img.url!,
-																			alt: img.name ?? `附件图片 ${idx + 1}`,
-																		})
-																	}
-																>
-																	<img
-																		src={img.url}
-																		alt={img.name ?? `附件图片 ${idx + 1}`}
-																		width={112}
-																		height={112}
-																		loading="lazy"
-																	/>
-																</button>
-															) : (
-																<span
-																	key={`${msg.id}-missing-${img.name ?? img.mimeType}`}
-																	className="stream-msg-image-fallback"
-																>
-																	[图片：{img.name ?? `附件 ${idx + 1}`}]
-																</span>
-															),
-														)}
-													</div>
-												)}
-												{userFiles.length > 0 && (
-													<div className="stream-msg-files">
-														{userFiles.map((file, idx) => {
-															const isPasted = file.kind === "pasted_text";
-															return (
-																<button
-																	key={`${msg.id}-file-${file.url ?? file.name}-${idx}`}
-																	type="button"
-																	className={`stream-msg-file-chip${isPasted ? " is-pasted" : ""}`}
-																	title="点击查看附件内容"
-																	onClick={() =>
-																		onPreviewFile({
-																			kind: isPasted ? "pasted_text" : "file",
-																			name: file.name,
-																			url: file.url,
-																			content: file.url ? undefined : file.previewText,
-																			lineCount: file.lineCount,
-																			charCount: file.charCount,
-																			sizeBytes: file.sizeBytes,
-																		})
-																	}
-																>
-																	<span aria-hidden="true">{isPasted ? "¶" : "📄"}</span>
-																	<span className="stream-msg-file-meta">
-																		<strong>
-																			{isPasted
-																				? `粘贴文本${file.lineCount ? ` · ${file.lineCount} 行` : ""}`
-																				: file.name}
-																		</strong>
-																		<small>
-																			{file.sizeBytes !== undefined
-																				? formatByteSize(file.sizeBytes)
-																				: ""}
-																			{file.charCount !== undefined
-																				? `${file.sizeBytes !== undefined ? " · " : ""}${file.charCount} 字`
-																				: ""}
-																			{file.previewText ? ` · ${file.previewText}` : ""}
-																		</small>
+									{!hidePlaceholderDecisionBubble && (
+										<div
+											className={`stream-bubble ${isUser ? "user" : isSystem && !isRosterSnapshot && !isWorkbenchHelp ? "system" : "member"}${bubbleModeClass}${isObserverIntervention ? " observer" : ""}`}
+										>
+											{isUser ? (
+												<>
+													{userImages.length > 0 && (
+														<div
+															className={`stream-msg-images${userImages.length === 1 ? " single" : ""}`}
+														>
+															{userImages.map((img, idx) =>
+																img.url ? (
+																	<button
+																		key={img.url}
+																		type="button"
+																		className="stream-msg-image-btn"
+																		title={img.name ?? "点击查看大图"}
+																		onClick={() =>
+																			onOpenLightbox({
+																				src: img.url!,
+																				alt: img.name ?? `附件图片 ${idx + 1}`,
+																			})
+																		}
+																	>
+																		<img
+																			src={img.url}
+																			alt={img.name ?? `附件图片 ${idx + 1}`}
+																			width={112}
+																			height={112}
+																			loading="lazy"
+																		/>
+																	</button>
+																) : (
+																	<span
+																		key={`${msg.id}-missing-${img.name ?? img.mimeType}`}
+																		className="stream-msg-image-fallback"
+																	>
+																		[图片：{img.name ?? `附件 ${idx + 1}`}]
 																	</span>
-																</button>
-															);
-														})}
-													</div>
-												)}
-												{msg.content && <div className="stream-bubble-text">{msg.content}</div>}
-												{isAiRequest && aiRequestStatus === "pending" && isOwner && matterDetail && (
-													<div className="ai-request-actions">
-														<button
-															type="button"
-															className="btn-pill-dark btn-xs"
-															disabled={isTurnRunning}
-															title={
-																isTurnRunning
-																	? "请等待当前 AI 回合完成后确认派发"
-																	: "确认此提请并立即派发给 AI 执行"
-															}
-															onClick={() => onApproveAiRequest?.(matterDetail.matter.id, msg.id)}
-														>
-															确认并派发 AI
-														</button>
-														<button
-															type="button"
-															className="btn-pill-outline btn-xs"
-															onClick={() => onDismissAiRequest?.(matterDetail.matter.id, msg.id)}
-														>
-															忽略提请
-														</button>
-													</div>
-												)}
-											</>
-										) : (
-											<MarkdownView content={msg.content} />
-										)}
-									</div>
+																),
+															)}
+														</div>
+													)}
+													{userFiles.length > 0 && (
+														<div className="stream-msg-files">
+															{userFiles.map((file, idx) => {
+																const isPasted = file.kind === "pasted_text";
+																return (
+																	<button
+																		key={`${msg.id}-file-${file.url ?? file.name}-${idx}`}
+																		type="button"
+																		className={`stream-msg-file-chip${isPasted ? " is-pasted" : ""}`}
+																		title="点击查看附件内容"
+																		onClick={() =>
+																			onPreviewFile({
+																				kind: isPasted ? "pasted_text" : "file",
+																				name: file.name,
+																				url: file.url,
+																				content: file.url ? undefined : file.previewText,
+																				lineCount: file.lineCount,
+																				charCount: file.charCount,
+																				sizeBytes: file.sizeBytes,
+																			})
+																		}
+																	>
+																		<span aria-hidden="true">{isPasted ? "¶" : "📄"}</span>
+																		<span className="stream-msg-file-meta">
+																			<strong>
+																				{isPasted
+																					? `粘贴文本${file.lineCount ? ` · ${file.lineCount} 行` : ""}`
+																					: file.name}
+																			</strong>
+																			<small>
+																				{file.sizeBytes !== undefined
+																					? formatByteSize(file.sizeBytes)
+																					: ""}
+																				{file.charCount !== undefined
+																					? `${file.sizeBytes !== undefined ? " · " : ""}${file.charCount} 字`
+																					: ""}
+																				{file.previewText ? ` · ${file.previewText}` : ""}
+																			</small>
+																		</span>
+																	</button>
+																);
+															})}
+														</div>
+													)}
+													{msg.content && <div className="stream-bubble-text">{msg.content}</div>}
+													{isAiRequest && aiRequestStatus === "pending" && isOwner && matterDetail && (
+														<div className="ai-request-actions">
+															<button
+																type="button"
+																className="btn-pill-dark btn-xs"
+																disabled={isTurnRunning}
+																title={
+																	isTurnRunning
+																		? "请等待当前 AI 回合完成后确认派发"
+																		: "确认此提请并立即派发给 AI 执行"
+																}
+																onClick={() => onApproveAiRequest?.(matterDetail.matter.id, msg.id)}
+															>
+																确认并派发 AI
+															</button>
+															<button
+																type="button"
+																className="btn-pill-outline btn-xs"
+																onClick={() => onDismissAiRequest?.(matterDetail.matter.id, msg.id)}
+															>
+																忽略提请
+															</button>
+														</div>
+													)}
+												</>
+											) : (
+												<MarkdownView content={msg.content} />
+											)}
+										</div>
+									)}
 									{(msg.metadata?.workbenchHelpTopic === "decisions" ||
 										(isWorkbenchHelp && msg.metadata?.humanDecisionHelp === true)) && <DecisionDemo />}
 									{progressSnapshot && (

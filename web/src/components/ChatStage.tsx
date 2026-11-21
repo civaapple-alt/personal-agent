@@ -446,7 +446,7 @@ export function ChatStage({
 						matterDetail.matter.collaboratorIds?.includes(userId)),
 			)
 		: [];
-	const pendingDecisions = [];
+	const pendingDecisions: Array<{ id: string; label: string; isConfirmation?: boolean }> = [];
 	if (matterDetail && matterDetail.matter.status !== "archived") {
 		const seenRoleProposals = new Set<string>();
 		const messages = matterDetail.userMessages;
@@ -457,7 +457,14 @@ export function ChatStage({
 				decision?.status === "pending" &&
 				isCurrentHumanDecision(message, decision, matterDetail.matter, messages.slice(index + 1))
 			) {
-				pendingDecisions.push({ id: message.id, label: decision.requests[0]?.question ?? "答复澄清" });
+				const isConfirmation = decision.kind === "execution_confirmation";
+				pendingDecisions.push({
+					id: message.id,
+					isConfirmation,
+					label: isConfirmation
+						? (decision.requests[0]?.context ?? "确认开始执行")
+						: (decision.requests[0]?.question ?? "答复澄清"),
+				});
 			}
 		}
 		for (const message of messages.toReversed()) {
@@ -620,7 +627,10 @@ export function ChatStage({
 
 			{pendingDecisions.length > 0 && (
 				<details className="human-decision-jump" key={selectedMatterId}>
-					<summary>待人类决定 · {pendingDecisions.length}</summary>
+					<summary>
+						{pendingDecisions.every((item) => item.isConfirmation) ? "待确认执行" : "待人类决定"} ·{" "}
+						{pendingDecisions.length}
+					</summary>
 					<ul>
 						{pendingDecisions.map(({ id, label }) => (
 							<li key={id}>

@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Streamline execution confirmation and human-decision cards: hide redundant placeholder text bubbles, include a preview of the triggering message on execution confirmations, distinguish confirmation cards from AI clarification cards, and replace radio lists with clickable option chips plus inline reply input.
 - Have the matter lead answer workbench questions using the conversation and the relevant PA reference.
 - Keep the selected AI roster when creating a matter. Include the creator automatically and show them as the initiator.
 - Make the matter lead the default responder in the shared composer. Address people and AI members explicitly with `@`.

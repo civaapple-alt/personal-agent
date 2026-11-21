@@ -450,6 +450,11 @@ export async function dispatchMatterTurn(
 				? input.prompt
 				: `Review the user's attachments (${files.length} files, ${rpcImages.length} images) and reply directly. If the conversation has no requested language, reply in Chinese.`;
 		const effectiveTaskPrompt = formattedFilesBlock ? `${basePromptText}\n\n${formattedFilesBlock}` : basePromptText;
+		const confirmPreview = trimmedPrompt.replace(/\s+/gu, " ");
+		const confirmContext =
+			confirmPreview.length > 0
+				? `原消息：“${confirmPreview.slice(0, 120)}${confirmPreview.length > 120 ? "…" : ""}”`
+				: undefined;
 		let result: PromptRunResult;
 		try {
 			result =
@@ -460,6 +465,7 @@ export async function dispatchMatterTurn(
 							disposition: "started",
 							clarification: {
 								question: "要按这条消息开始执行吗？",
+								...(confirmContext ? { context: confirmContext } : {}),
 								options: ["开始执行", "先讨论"],
 							},
 						}

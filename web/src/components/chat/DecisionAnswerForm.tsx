@@ -12,49 +12,72 @@ export function DecisionAnswerForm({
 	const inputId = useId();
 	const [selected, setSelected] = useState<number | null>(null);
 	const [answer, setAnswer] = useState("");
-	const selectedAnswer = selected === null ? answer.trim() : (options[selected] ?? "");
+	const trimmed = answer.trim();
+	const selectedAnswer = trimmed || (selected === null ? "" : (options[selected] ?? ""));
+
+	function submitCurrent() {
+		if (selectedAnswer && !submitting) onAnswer(selectedAnswer);
+	}
+
 	return (
 		<form
+			className="decision-answer-form"
 			onSubmit={(event) => {
 				event.preventDefault();
-				if (selectedAnswer && !submitting) onAnswer(selectedAnswer);
+				submitCurrent();
 			}}
 		>
 			{options.length > 0 && (
-				<fieldset>
-					<legend>选择答复</legend>
-					{options.map((option, index) => (
-						<label key={option} className="checkbox-label">
-							<input
-								type="radio"
-								name={inputId}
-								checked={selected === index}
-								onChange={() => setSelected(index)}
-							/>
-							{option}
-						</label>
-					))}
-					<label className="checkbox-label">
-						<input type="radio" name={inputId} checked={selected === null} onChange={() => setSelected(null)} />
-						自行填写
-					</label>
+				<fieldset className="decision-option-list" aria-label="选择答复">
+					{options.map((option, index) => {
+						const active = selected === index && !trimmed;
+						return (
+							<button
+								key={option}
+								type="button"
+								className={`decision-option-btn${active ? " is-selected" : ""}`}
+								aria-pressed={active}
+								disabled={submitting}
+								onClick={() => {
+									if (active) {
+										setSelected(null);
+									} else {
+										setSelected(index);
+										setAnswer("");
+									}
+								}}
+							>
+								{option}
+							</button>
+						);
+					})}
 				</fieldset>
 			)}
-			{selected === null && (
-				<label className="human-decision-input">
-					<span>你的答复</span>
-					<textarea
-						className="input-field"
-						rows={2}
-						value={answer}
-						maxLength={4000}
-						onChange={(event) => setAnswer(event.target.value)}
-					/>
-				</label>
-			)}
-			<button type="submit" className="btn-pill-dark btn-xs" disabled={!selectedAnswer || submitting}>
-				提交答案
-			</button>
+			<div className="decision-input-row">
+				<textarea
+					id={inputId}
+					className="input-field decision-textarea"
+					rows={options.length > 0 ? 1 : 2}
+					value={answer}
+					maxLength={4000}
+					aria-label="你的答复"
+					placeholder={options.length > 0 ? "或直接输入其他答复…" : "输入你的答复…"}
+					disabled={submitting}
+					onChange={(event) => {
+						setAnswer(event.target.value);
+						if (event.target.value.trim()) setSelected(null);
+					}}
+					onKeyDown={(event) => {
+						if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+							event.preventDefault();
+							submitCurrent();
+						}
+					}}
+				/>
+				<button type="submit" className="btn-pill-dark btn-xs" disabled={!selectedAnswer || submitting}>
+					{submitting ? "提交中…" : "提交答案"}
+				</button>
+			</div>
 		</form>
 	);
 }
