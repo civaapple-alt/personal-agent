@@ -1,6 +1,6 @@
 # Pi RPC 与团队工具桥接
 
-此目录维护宿主侧 Pi RPC 和团队工具桥接。Pi 内运行的扩展位于 `pi-extensions/`。
+此目录维护宿主侧 Pi RPC 和团队工具桥接。Pi 内运行的扩展和依赖约定见 [Pi 扩展](../../pi-extensions/README.md)。
 
 | 文件 | 改动入口与约束 |
 | --- | --- |
@@ -8,7 +8,7 @@
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [prompt-usage.ts](prompt-usage.ts) | 汇总 Pi 已报告的输入及缓存读写 token，单独保留第一个有效请求的统计 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension](../../pi-extensions/team-extension/index.ts) | PA 在启动岗位时加载此扩展。它在 Pi 中注册委托、成果和经验提案工具，通过当轮桥接调用 PA。它按 `PA_TARGET_WORKSPACE_ROOT` 过滤 `contextFiles`、追加岗位规则和实时上下文，并核查实际工具。内部模式关闭发布，旁听模式关闭经验提案 |
+| [team-extension](../../pi-extensions/team-extension/README.md) | PA 在启动岗位时加载此扩展。它注册团队工具，通过当轮桥接调用 PA，补充岗位上下文并核查实际工具 |
 | [pstack-methods](../../pi-extensions/pstack-methods/README.md) | 显式配置时注册只读 `load_pstack_skill`，从选定的方法包读取正文和哈希 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `request_clarification` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 

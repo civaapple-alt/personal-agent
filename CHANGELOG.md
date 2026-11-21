@@ -4,7 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
-- Keep the Pi-side team and pstack extensions together under `pi-extensions/`.
+- Keep the Pi-side team and pstack extensions together under `pi-extensions/`. Document how PA loads them and how extensions can depend on each other.
 
 - Use Pi to install and update pstack. Enable an existing methods package in workbench settings and expose the read-only adapter as a standalone Pi extension.
 
