@@ -202,7 +202,7 @@ export const Sidebar = memo(function Sidebar({
 		}
 	};
 
-	const renderMatterRow = (matter: MatterDto, hideScopeTags: boolean) => {
+	const renderMatterRow = (matter: MatterDto) => {
 		const prog = progressByMatter[matter.id];
 		const workspace = matter.workspaceId ? workspaceById.get(matter.workspaceId) : undefined;
 		const orgId = matter.orgId === undefined ? workspace?.orgId : matter.orgId;
@@ -212,36 +212,34 @@ export const Sidebar = memo(function Sidebar({
 		const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
 		const isActive = activeTab === "chats" && selectedMatterId === matter.id;
 		const isArchived = matter.status === "archived";
-		const previewLine = stripMarkdownFormatting(
-			prog
-				? prog.label
-				: matter.status === "waiting_user"
-					? "等待你的确认"
-					: matter.summary || STATUS_LABELS[matter.status] || matter.status,
-		);
+		const isWaitingUser = !prog && matter.status === "waiting_user";
+		const statusLabel = prog
+			? stripMarkdownFormatting(prog.label) || "运行中"
+			: isWaitingUser
+				? "等待你的确认"
+				: STATUS_LABELS[matter.status] || matter.status;
+		const tooltip = `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}\n状态：${statusLabel}`;
 
 		return (
 			<div key={matter.id} className={`matter-row ${isActive ? "active" : ""} ${isArchived ? "is-archived" : ""}`}>
 				<button
 					type="button"
 					className="matter-item"
+					title={tooltip}
 					onClick={() => onNavigate({ tab: "chats", matterId: matter.id })}
 				>
-					<span className="matter-dot" style={{ background: theme.bg }}>
+					<span
+						className={`matter-dot${prog ? " is-running" : isWaitingUser ? " is-waiting" : ""}`}
+						style={{ background: theme.bg }}
+					>
 						{prog && <span className="matter-dot-pulse" style={{ borderColor: theme.bg }} />}
 					</span>
-					<span className="matter-copy">
-						<span className="matter-title">{matter.title}</span>
-						{!hideScopeTags && (
-							<span className="matter-scope">
-								<span className="matter-scope-org" title={`组织：${orgLabel}`}>
-									组织 · {orgLabel}
-								</span>
-								<span title={`仓库：${workspaceLabel}`}>仓库 · {workspaceLabel}</span>
-							</span>
-						)}
-						<span className="matter-preview">{previewLine}</span>
-					</span>
+					<span className="matter-title">{matter.title}</span>
+					{prog ? (
+						<span className="matter-state-tag is-running">运行中</span>
+					) : isWaitingUser ? (
+						<span className="matter-state-tag is-waiting">待确认</span>
+					) : null}
 				</button>
 				{onToggleArchiveMatter && (
 					<button
@@ -457,7 +455,7 @@ export const Sidebar = memo(function Sidebar({
 				{visibleMatters.length === 0 ? (
 					<div className="sidebar-empty">{showArchived ? "暂无已归档事项" : "暂无事项，可在右侧直接布置任务"}</div>
 				) : viewMode === "time" ? (
-					visibleMatters.map((matter) => renderMatterRow(matter, false))
+					visibleMatters.map((matter) => renderMatterRow(matter))
 				) : (
 					groupedMatters.map((group) => {
 						const collapsed = Boolean(collapsedGroups[group.key]);
@@ -488,7 +486,7 @@ export const Sidebar = memo(function Sidebar({
 								</button>
 								{!collapsed && (
 									<div className="matter-group-items">
-										{group.items.map((matter) => renderMatterRow(matter, true))}
+										{group.items.map((matter) => renderMatterRow(matter))}
 									</div>
 								)}
 							</section>
