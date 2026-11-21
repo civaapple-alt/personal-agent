@@ -5,6 +5,7 @@ All notable changes to Personal Agent are documented in this file.
 ## [Unreleased]
 
 - Install pi-web-access through Pi and let administrators enable web search for selected AI roles. Use the search provider independently of the role's chat model.
+- Group the host-side web search integration under `src/pa-extensions/web-access/`.
 
 - Keep the Pi-side team and pstack extensions together under `pi-extensions/`. Document how PA loads them and how extensions can depend on each other.
 

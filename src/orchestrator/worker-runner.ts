@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
+import {
+	escapeWebAccessSlashCommand,
+	isPiWebAccessTool,
+	prepareWebAccessForWorker,
+} from "../pa-extensions/web-access/runtime.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -19,7 +24,6 @@ import {
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
 import { buildArchitectMatterContext } from "./meta-architect.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
-import { findInstalledPiWebAccess, isPiWebAccessTool, PI_WEB_SEARCH_TOOLS } from "./pi-packages.ts";
 import {
 	buildInterruptionResumeBrief,
 	buildMemberPrompts,
@@ -193,16 +197,13 @@ export async function executeWithWorkerPass(
 				: sessionMode === "observer"
 					? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
 					: baseTools;
-		const hasWebAccess =
-			!isArchitect &&
-			!isVerifier &&
-			sessionMode !== "observer" &&
-			deps.store.getPlatformSettings().webAccessRoleGrants[input.member.id] === input.member.createdAt;
-		const webAccess = hasWebAccess ? await findInstalledPiWebAccess("pi") : null;
-		if (hasWebAccess && !webAccess) {
-			throw new Error("此岗位已获网页检索权限，但 pi-web-access 安装不可用。请在设置的扩展插件页检查安装。");
-		}
-		if (webAccess) requestedTools.push(...PI_WEB_SEARCH_TOOLS);
+		const webAccess = await prepareWebAccessForWorker({
+			store: deps.store,
+			member: input.member,
+			template,
+			sessionMode,
+		});
+		if (webAccess) requestedTools.push(...webAccess.tools);
 		const mcpDependencies = isArchitect || isVerifier || isConversationReply ? [] : (template?.mcpDependencies ?? []);
 		const ordinaryTeamTools = isArchitect
 			? []
@@ -732,11 +733,9 @@ export async function executeWithWorkerPass(
 					})
 				: "";
 		const contextBlock = context ? `${contextHeader}\n${context}` : "";
-		const prompt = [contextBlock, resumeBrief, input.taskPrompt].filter(Boolean).join("\n\n");
-		// Pi handles extension slash commands before the model. Treat these as ordinary matter text.
-		const matterPrompt = /^\s*\/(?:websearch|curator|search|google-account)(?:\s|$)/.test(prompt)
-			? `User message:\n${prompt}`
-			: prompt;
+		const prompt = escapeWebAccessSlashCommand(
+			[contextBlock, resumeBrief, input.taskPrompt].filter(Boolean).join("\n\n"),
+		);
 		sessionRecord = deps.store.recordWorkerSession({
 			memberId: input.member.id,
 			matterId: input.matterId,
@@ -760,7 +759,7 @@ export async function executeWithWorkerPass(
 			input.run.deadlineAt !== null
 				? Math.max(1, Math.min(input.run.timeoutMs, input.run.deadlineAt - Date.now()))
 				: 0;
-		const result = await worker.runPromptAndWait(matterPrompt, {
+		const result = await worker.runPromptAndWait(prompt, {
 			timeoutMs: remainingTimeoutMs,
 			signal,
 			images: input.images?.length ? input.images : undefined,

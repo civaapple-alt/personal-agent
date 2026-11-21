@@ -4,10 +4,12 @@ import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
-import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
+import { findInstalledPiWebAccess } from "../pa-extensions/web-access/package.ts";
+import { hasWebAccessGrant, isWebAccessRole, PI_WEB_SEARCH_TOOLS } from "../pa-extensions/web-access/runtime.ts";
 import type { RoleTemplate } from "../roles/types.ts";
+import { listPiPackages } from "../rpc/pi-packages.ts";
 import type { TeamMember } from "../storage/types.ts";
-import { findInstalledPiWebAccess, findInstalledPstack, listPiPackages, PI_WEB_SEARCH_TOOLS } from "./pi-packages.ts";
+import { findInstalledPstack } from "./pstack-package.ts";
 import { resolveTurnTimeoutMs } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
@@ -356,11 +358,11 @@ export async function buildRuntimeOverview(options: {
 
 	const templateById = new Map(config.templates.map((tpl) => [tpl.id, tpl]));
 	const webAccessRoles = activeMembers
-		.filter((member) => !isArchitectRoleTemplate(templateById.get(member.templateId) ?? { id: member.id }))
+		.filter((member) => isWebAccessRole(member, templateById.get(member.templateId)))
 		.map((member) => ({
 			id: member.id,
 			name: member.displayName,
-			enabled: config.webAccessRoleGrants?.[member.id] === member.createdAt,
+			enabled: hasWebAccessGrant(member, config.webAccessRoleGrants),
 		}));
 	const webAccessEnabledRoles = webAccessRoles.filter((role) => role.enabled);
 	const webAccessExtensionItem: RuntimeExtensionItem = {

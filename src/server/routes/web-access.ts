@@ -1,6 +1,6 @@
-import { findInstalledPiWebAccess } from "../../orchestrator/pi-packages.ts";
 import { buildRuntimeOverview, probePiCli } from "../../orchestrator/runtime-info.ts";
-import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import { findInstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
+import { isWebAccessRole } from "../../pa-extensions/web-access/runtime.ts";
 import type { RequestActor } from "../auth.ts";
 import { HttpRequestError, readJsonBody, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
@@ -43,7 +43,7 @@ export async function handleWebAccessRoutes(
 		}
 		const grants = ids.map((id) => {
 			const member = store.getMember(id);
-			if (!member || isArchitectRoleTemplate(orchestrator.getTemplateForMember(member) ?? { id })) {
+			if (!member || !isWebAccessRole(member, orchestrator.getTemplateForMember(member))) {
 				throw new HttpRequestError(400, "请选择可参与业务事项的岗位");
 			}
 			return [id, member.createdAt] as const;

@@ -5,6 +5,7 @@
 | 文件 | 改动入口与约束 |
 | --- | --- |
 | [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾；支持 `suspendIdleTimeout()` 在宿主桥接耗时期间暂停空闲看门狗，同一实例拒绝重叠 `runPromptAndWait` 并通过拦截器保持运行期 `setDialogHandler` 动态更新不被覆盖。`sessionFile` 必须是编排核选定的文件 |
+| [pi-packages.ts](pi-packages.ts) | 调用 Pi 的安装与列表命令，解析服务账号的用户包路径 |
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [prompt-usage.ts](prompt-usage.ts) | 汇总 Pi 已报告的输入及缓存读写 token，单独保留第一个有效请求的统计 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |

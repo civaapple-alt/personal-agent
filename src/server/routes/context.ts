@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename } from "node:path";
 import { resolveRepoGitUserIdentity } from "../../orchestrator/execution-context.ts";
-import type { InstalledPiWebAccess } from "../../orchestrator/pi-packages.ts";
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
+import type { InstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
 import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../../storage/repositories.ts";
 import type { MemberMemory, MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
 import { canActorAccessMemory, canActorUseMember, canManageOrganization } from "../acl.ts";

@@ -17,7 +17,7 @@
 - [matter-initiation.ts](matter-initiation.ts) 优先用角色的 `responsibilityKeywords` 作为本地规则的职责信号。内置岗位通过该字段保留旧的中文匹配词，缺省字段的模板仍从原有正向职责正文推导。
 
 - `pstackDir` 为正常岗位执行指定已有方法包。[pstack-guidance.ts](pstack-guidance.ts) 提供按岗位使用方法的提示，[pstack-methods](../../pi-extensions/pstack-methods/README.md) 在 Pi 内读取模式、原则和 playbook。工具需通过握手。独立 JSON 决策和反思沿用各自的隔离配置。 [启用 pstack](../../docs/guides/pstack-runtime.md)
-- `webAccessRoleGrants` 按岗位 ID 和创建时间保存网页检索授权。常规主责、内部成员和讨论回复通过 [pi-packages.ts](pi-packages.ts) 解析已安装的扩展入口，并在能力握手中核查 `web_search` 和 `get_search_content`。 [网页检索设置](../../docs/guides/web-search.md)
+- `webAccessRoleGrants` 按岗位 ID 和创建时间保存网页检索授权。[PA 扩展集成](../pa-extensions/README.md#web-access) 为主责、内部成员和讨论回复解析已安装的扩展入口及工具清单。
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案，同时按目标作用域校验并输出可选 `newSkills` 草案（`role_local` / 目标库位置，确认前不写盘）；已有缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 

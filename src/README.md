@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 负责人、会话范围、内部协作、成果收尾 | [orchestrator](orchestrator/README.md) 和 [单轮派发](orchestrator/matter-dispatch.ts) | 调用 storage 与 rpc，接受 server 派发 |
 | Pi 子进程、协议或模型工具 | [rpc](rpc/README.md) | 向编排核交回事件和工具调用 |
+| PA 扩展的安装、岗位授权和运行装配 | [pa-extensions](pa-extensions/README.md) | 由编排核和管理路由调用 |
 | 数据、记忆筛选、版本或执行占用 | [storage](storage/README.md) | 编排核与 HTTP API 共用同一 store |
 | HTTP/SSE、对话卡片、预览服务 | [server](server/README.md) 和 [业务路由](server/README.md#业务路由) | 对接编排核与 [网页](../web/README.md) |
 | 角色文件解析和序列化 | [roles](roles/README.md) | 读取顶层 [roles 资产](../roles/README.md) |

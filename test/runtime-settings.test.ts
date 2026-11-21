@@ -25,7 +25,7 @@ import {
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../src/index.ts";
-import { findInstalledPiWebAccess } from "../src/orchestrator/pi-packages.ts";
+import { findInstalledPiWebAccess } from "../src/pa-extensions/web-access/package.ts";
 
 function createValidPstackFixture(dir: string): void {
 	mkdirSync(join(dir, "skills", "poteto-mode"), { recursive: true });
