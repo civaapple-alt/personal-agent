@@ -173,6 +173,21 @@
 	flex-direction: column;
 	gap: 6px;
 }
+
+.settings-web-access-roles {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin: 0;
+	padding: 8px 0 4px;
+	border: 0;
+}
+
+.settings-web-access-roles label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
 .settings-pstack-form-row {
 	display: flex;
 	align-items: center;

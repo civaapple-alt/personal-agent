@@ -786,11 +786,11 @@ test("fails clearly for missing sessions, skills or required runtime tools and c
 	await assert.rejects(missingSkill.dispatchMatter({ prompt: "能力" }), /not installed/);
 	const missingTool = new TeamOrchestrator({
 		...f.options,
-		templates: f.templates.map((template) => ({ ...template, tools: ["web_search"] })),
+		templates: f.templates.map((template) => ({ ...template, tools: ["custom_research"] })),
 	});
 	await assert.rejects(
 		missingTool.dispatchMatter({ prompt: "能力" }),
-		/Required capabilities unavailable: web_search/,
+		/Required capabilities unavailable: custom_research/,
 	);
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	let stopped = false;

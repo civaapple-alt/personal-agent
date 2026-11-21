@@ -68,6 +68,7 @@ export interface PlatformSettings {
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
 	pstackDir: string | null;
+	webAccessRoleGrants: Record<string, string>;
 	defaultModelSelection: ModelSelection | null;
 	updatedAt: string;
 }

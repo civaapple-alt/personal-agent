@@ -131,6 +131,7 @@ export class TeamOrchestrator {
 			noSession: this.noSession,
 			extensions: [...this.extensions],
 			pstackDir: this.pstackDir ?? null,
+			webAccessRoleGrants: this.store.getPlatformSettings().webAccessRoleGrants,
 			templates: this.listTemplates(),
 		};
 	}

@@ -18,6 +18,7 @@ import {
 import { HttpRequestError, readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
+import { handleWebAccessRoutes } from "./web-access.ts";
 
 const authRateLimiter = new SlidingWindowRateLimiter(20, 5 * 60 * 1000);
 const SESSION_MAX_AGE_SEC = 2_592_000;
@@ -366,6 +367,7 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 	const { req, res, method, pathname, actor } = r;
 	if (!pathname.startsWith("/api/admin")) return false;
 	if (!requireSuperAdmin(res, actor)) return true;
+	if (await handleWebAccessRoutes(ctx, r, actor)) return true;
 
 	if (method === "GET" && pathname === "/api/admin/overview") {
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);

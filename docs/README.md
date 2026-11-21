@@ -18,6 +18,7 @@
 | 核对本机执行权限、数据流和网络边界 | [安全说明](../SECURITY.md) |
 | 查环境变量、存储路径、Pi 资源发现或超时 | [配置参考](reference/configuration.md) |
 | 安装、更新或停用完整 pstack 方法包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
+| 安装 pi-web-access、授权岗位或使用 Kimi 搜索 | [为 AI 岗位启用网页检索](guides/web-search.md) |
 
 ## 开发与贡献
 

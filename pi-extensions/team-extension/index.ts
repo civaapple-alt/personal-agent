@@ -21,6 +21,7 @@ export interface PiExtensionApi {
 		): Promise<{ content: { type: "text"; text: string }[]; details: unknown }>;
 	}): void;
 	on(event: "session_start", handler: () => Promise<void>): void;
+	on(event: "tool_call", handler: (event: { toolName: string; input: Record<string, unknown> }) => void): void;
 	on(
 		event: "before_agent_start",
 		handler: (
@@ -275,6 +276,14 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				const result = await post("/tool", { tool: tool.name, callId, args }, signal);
 				return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
 			},
+		});
+	}
+	if (env.PA_WEB_SEARCH_ENABLED === "true") {
+		pi.on("tool_call", (event) => {
+			if (event.toolName !== "web_search") return;
+			event.input.workflow = "none";
+			event.input.includeContent = false;
+			delete event.input.proxy;
 		});
 	}
 	pi.on("session_start", async () => {

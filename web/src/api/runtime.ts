@@ -1,7 +1,12 @@
 import type { PlatformSettingsDto } from "./admin.ts";
 import { requestJson } from "./client.ts";
 
-export type RuntimeExtensionSourceKind = "builtin" | "builtin_conditional" | "pi_builtin" | "operator_env";
+export type RuntimeExtensionSourceKind =
+	| "builtin"
+	| "builtin_conditional"
+	| "pi_builtin"
+	| "operator_env"
+	| "pi_package";
 
 export type RuntimeExtensionStatus = "active" | "conditional" | "inactive" | "error";
 
@@ -55,6 +60,10 @@ export interface RuntimeBaseInfoDto {
 		skillCount: number;
 		error: string | null;
 		source?: "env" | "settings" | "none";
+	};
+	webAccess: {
+		installedVersion: string | null;
+		roles: Array<{ id: string; name: string; enabled: boolean }>;
 	};
 	isolationModes: RuntimeIsolationModeDto[];
 	envFlags: {
@@ -120,4 +129,12 @@ export function disableRuntimePstack(): Promise<{
 		method: "POST",
 		body: JSON.stringify({}),
 	});
+}
+
+export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDto }> {
+	return requestJson("/api/admin/runtime/web-access/install", { method: "POST", body: "{}" });
+}
+
+export function configureRuntimeWebAccess(roleIds: string[]): Promise<{ overview: RuntimeOverviewDto }> {
+	return requestJson("/api/admin/runtime/web-access", { method: "PATCH", body: JSON.stringify({ roleIds }) });
 }

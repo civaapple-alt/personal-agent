@@ -9,6 +9,7 @@ import type {
 } from "../api.ts";
 import type { SettingsSection } from "../hashRouter.ts";
 import { PstackSettings } from "./PstackSettings.tsx";
+import { WebAccessSettings } from "./WebAccessSettings.tsx";
 
 interface SettingsViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -28,6 +29,10 @@ interface SettingsViewProps {
 type ExtensionFilter = "all" | "active" | "operator";
 type ConfigSectionFilter = "all" | RuntimeConfigSectionDto["id"];
 
+function isExternalExtension(item: RuntimeExtensionDto): boolean {
+	return item.sourceKind === "operator_env" || item.sourceKind === "pi_package";
+}
+
 const CATEGORY_TABS: Array<{ id: SettingsSection; label: string }> = [
 	{ id: "all", label: "全部" },
 	{ id: "base", label: "Agent 底座" },
@@ -40,6 +45,7 @@ const SOURCE_LABELS: Record<RuntimeExtensionSourceKind, string> = {
 	builtin_conditional: "内置按需",
 	pi_builtin: "Pi 内置",
 	operator_env: "PA_PI_EXTENSIONS",
+	pi_package: "Pi 安装包",
 };
 
 const STATUS_LABELS: Record<RuntimeExtensionStatus, string> = {
@@ -78,7 +84,7 @@ export function SettingsView({
 			return list.filter((item) => item.status === "active" || item.status === "conditional");
 		}
 		if (extFilter === "operator") {
-			return list.filter((item) => item.sourceKind === "operator_env");
+			return list.filter(isExternalExtension);
 		}
 		return list;
 	}, [overview, extFilter]);
@@ -278,7 +284,7 @@ export function SettingsView({
 											className={`choice-chip ${extFilter === "operator" ? "active" : ""}`}
 											onClick={() => setExtFilter("operator")}
 										>
-											外部 ({summary?.operatorCount ?? 0})
+											外部 ({overview?.extensions.filter(isExternalExtension).length ?? 0})
 										</button>
 									</div>
 								</div>
@@ -287,9 +293,7 @@ export function SettingsView({
 									{filteredExtensions.length === 0 ? (
 										<div className="ui-card compact">
 											<p className="ui-empty-note compact">
-												{extFilter === "operator"
-													? "未配置 PA_PI_EXTENSIONS 外部扩展。"
-													: "当前筛选条件下无扩展项。"}
+												{extFilter === "operator" ? "没有可显示的外部扩展。" : "当前筛选条件下无扩展项。"}
 											</p>
 										</div>
 									) : (
@@ -351,16 +355,23 @@ export function SettingsView({
 														onError={onError}
 													/>
 												)}
+												{ext.id === "pi-web-access" && isSuperAdmin && (
+													<WebAccessSettings
+														base={base}
+														onRefresh={onRefresh}
+														onOverviewChange={onOverviewChange}
+														onNotice={onNotice}
+														onError={onError}
+													/>
+												)}
 											</article>
 										))
 									)}
 								</div>
 
 								<p className="muted-hint">
-									扩展以本机用户权限随常规岗位 <code>--extension</code> 挂载；自定义{" "}
-									<code>PA_PI_EXTENSIONS</code> 仍需通过启动参数接入，<code>pstack</code>{" "}
-									方法包支持由超级管理员在上方按仓库名一键克隆至{" "}
-									<code>.data/extensions/repo/&lt;仓库名&gt;</code> 并持久化启用。
+									扩展以服务账户的权限运行。可在上方管理 pstack 和 pi-web-access，其他扩展可通过启动参数{" "}
+									<code>PA_PI_EXTENSIONS</code> 接入。
 								</p>
 							</section>
 						)}

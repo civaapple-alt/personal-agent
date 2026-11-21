@@ -4,9 +4,10 @@ import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
+import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamMember } from "../storage/types.ts";
-import { findInstalledPstack, type listPiPackages } from "./pi-packages.ts";
+import { findInstalledPiWebAccess, findInstalledPstack, listPiPackages, PI_WEB_SEARCH_TOOLS } from "./pi-packages.ts";
 import { resolveTurnTimeoutMs } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
@@ -29,6 +30,7 @@ export interface OrchestratorRuntimeConfig {
 	noSession: boolean;
 	extensions: string[];
 	pstackDir: string | null;
+	webAccessRoleGrants?: Record<string, string>;
 	templates: RoleTemplate[];
 }
 
@@ -52,7 +54,12 @@ export interface PiCliProbeResult {
 	error: string | null;
 }
 
-export type RuntimeExtensionSourceKind = "builtin" | "builtin_conditional" | "pi_builtin" | "operator_env";
+export type RuntimeExtensionSourceKind =
+	| "builtin"
+	| "builtin_conditional"
+	| "pi_builtin"
+	| "operator_env"
+	| "pi_package";
 export type RuntimeExtensionStatus = "active" | "conditional" | "inactive" | "error";
 export type RuntimeExtensionFileStatus = "present" | "missing" | "builtin" | "unknown";
 
@@ -118,6 +125,10 @@ export interface RuntimeBaseInfo {
 		skillCount: number;
 		error: string | null;
 		source?: "env" | "settings" | "none";
+	};
+	webAccess: {
+		installedVersion: string | null;
+		roles: Array<{ id: string; name: string; enabled: boolean }>;
 	};
 	isolationModes: RuntimeIsolationMode[];
 	envFlags: {
@@ -330,11 +341,43 @@ export async function buildRuntimeOverview(options: {
 			};
 		}
 	}
-	if (isOwner && !pstackEnvSet && !pstackInfo.available && piProbe.available) {
-		pstackInfo.installedRoot = await findInstalledPstack(piProbe.executable, options.listPiPackages);
-	}
+	let packageListing: Promise<string> | undefined;
+	const readPackages = (executable: string) => {
+		packageListing ??= (options.listPiPackages ?? listPiPackages)(executable);
+		return packageListing;
+	};
+	const [pstackInstalledRoot, webAccessPackage] = await Promise.all([
+		isOwner && !pstackEnvSet && !pstackInfo.available && piProbe.available
+			? findInstalledPstack(piProbe.executable, readPackages)
+			: null,
+		isOwner && piProbe.available ? findInstalledPiWebAccess(piProbe.executable, readPackages) : null,
+	]);
+	pstackInfo.installedRoot = pstackInstalledRoot;
 
 	const templateById = new Map(config.templates.map((tpl) => [tpl.id, tpl]));
+	const webAccessRoles = activeMembers
+		.filter((member) => !isArchitectRoleTemplate(templateById.get(member.templateId) ?? { id: member.id }))
+		.map((member) => ({
+			id: member.id,
+			name: member.displayName,
+			enabled: config.webAccessRoleGrants?.[member.id] === member.createdAt,
+		}));
+	const webAccessEnabledRoles = webAccessRoles.filter((role) => role.enabled);
+	const webAccessExtensionItem: RuntimeExtensionItem = {
+		id: "pi-web-access",
+		name: "pi-web-access",
+		sourceKind: "pi_package",
+		status: webAccessEnabledRoles.length === 0 ? "inactive" : isOwner && !webAccessPackage ? "error" : "conditional",
+		entryPath: webAccessPackage?.entry ?? null,
+		fileStatus: webAccessPackage ? "present" : "unknown",
+		scopeSummary: "仅授权岗位的讨论、主责和内部委托",
+		description: "搜索公开网页并读取已保存的搜索结果。",
+		registeredTools: [...PI_WEB_SEARCH_TOOLS],
+		hooks: ["session_start 工具握手"],
+		declaredByRoles: webAccessEnabledRoles.map((role) => role.name),
+		mcpServers: [],
+		error: isOwner && webAccessEnabledRoles.length > 0 && !webAccessPackage ? "已授权岗位，但 Pi 安装不可用" : null,
+	};
 	const mcpServersSet = new Set<string>();
 	const mcpDeclaringRoles: string[] = [];
 	for (const member of activeMembers) {
@@ -451,6 +494,7 @@ export async function buildRuntimeOverview(options: {
 		teamExtensionItem,
 		pstackExtensionItem,
 		mcpExtensionItem,
+		webAccessExtensionItem,
 		...operatorExtensionItems,
 	];
 
@@ -644,6 +688,7 @@ export async function buildRuntimeOverview(options: {
 				: null,
 			defaultCwd: isOwner ? config.defaultCwd : basename(config.defaultCwd) || ".",
 			pstack: pstackInfo,
+			webAccess: { installedVersion: webAccessPackage?.version ?? null, roles: webAccessRoles },
 			isolationModes: ISOLATION_MODES.map((mode) =>
 				mode.id === "worker" && serverConfig?.inheritLocalPiResources
 					? {

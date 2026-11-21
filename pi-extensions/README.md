@@ -7,6 +7,8 @@
 | [team-extension](team-extension/README.md) | 将团队工具调用转交 PA，注入岗位与事项上下文，核查工具清单 | PA 启动岗位时显式加载 |
 | [pstack-methods](pstack-methods/README.md) | 从指定的 pstack 方法包读取方法正文 | PA 启用 pstack 后显式加载。终端 Pi 也可以单独加载 |
 
+[pi-web-access](../docs/guides/web-search.md) 由 Pi 从 npm 安装。PA 按岗位装配包入口，团队扩展通过现有握手核查搜索与结果读取工具。
+
 ## 扩展之间的依赖
 
 扩展可以依赖另一个扩展提供的能力。依赖的安装和运行时加载是两个步骤。

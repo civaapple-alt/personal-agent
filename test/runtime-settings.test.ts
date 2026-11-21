@@ -25,6 +25,7 @@ import {
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../src/index.ts";
+import { findInstalledPiWebAccess } from "../src/orchestrator/pi-packages.ts";
 
 function createValidPstackFixture(dir: string): void {
 	mkdirSync(join(dir, "skills", "poteto-mode"), { recursive: true });
@@ -41,6 +42,31 @@ function createValidPstackFixture(dir: string): void {
 		"utf8",
 	);
 }
+
+test("pi-web-access discovery uses the user package manifest and confines its entry to the package", async (t) => {
+	const dir = mkdtempSync(join(tmpdir(), "pa-web-access-package-"));
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+	const root = join(dir, "npm", "pi-web-access");
+	const manifest = join(root, "package.json");
+	mkdirSync(join(root, "dist"), { recursive: true });
+	writeFileSync(join(root, "dist", "index.js"), "export default () => {};");
+	const writeManifest = (entry: string) =>
+		writeFileSync(
+			manifest,
+			JSON.stringify({ name: "pi-web-access", version: "0.48.0", pi: { extensions: [entry] } }),
+		);
+	const printPackage = (scope: "User" | "Project") => async () =>
+		`${scope} packages:\n  npm:pi-web-access@0.48.0\n    ${root}\n`;
+
+	writeManifest("./dist");
+	assert.deepEqual(await findInstalledPiWebAccess("pi", printPackage("User")), {
+		entry: realpathSync(join(root, "dist", "index.js")),
+		version: "0.48.0",
+	});
+	assert.equal(await findInstalledPiWebAccess("pi", printPackage("Project")), null);
+	writeManifest("../../");
+	assert.equal(await findInstalledPiWebAccess("pi", printPackage("User")), null);
+});
 
 test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP dependencies, and collaborator redaction", async (t) => {
 	const tempDir = mkdtempSync(join(tmpdir(), "pa-runtime-settings-"));
@@ -318,10 +344,11 @@ test("runtime suggests a valid global pstack for admins with missing or stale co
 	assert.equal(admin.base.pstack.installedRoot, realpathSync(installed));
 	const collaborator = await overview(false);
 	assert.equal(collaborator.base.pstack.installedRoot, null);
+	assert.equal(listPiPackages.mock.callCount(), 1);
 	const configured = await overview(true, installed);
 	assert.equal(configured.base.pstack.available, true);
 	assert.equal(configured.base.pstack.installedRoot, null);
-	assert.equal(listPiPackages.mock.callCount(), 1);
+	assert.equal(listPiPackages.mock.callCount(), 2);
 	listPiPackages.mock.mockImplementation(async () =>
 		["Project packages:", "  git:github.com/backnotprop/pstack", `    ${installed}`].join("\n"),
 	);

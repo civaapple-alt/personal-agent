@@ -9,6 +9,29 @@ import teamExtension, {
 } from "../pi-extensions/team-extension/index.ts";
 import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
+test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
+	const original = process.env.PA_WEB_SEARCH_ENABLED;
+	process.env.PA_WEB_SEARCH_ENABLED = "true";
+	t.after(() => {
+		if (original === undefined) delete process.env.PA_WEB_SEARCH_ENABLED;
+		else process.env.PA_WEB_SEARCH_ENABLED = original;
+	});
+	let onToolCall: ((event: { toolName: string; input: Record<string, unknown> }) => void) | undefined;
+	teamExtension({
+		registerTool() {},
+		on: (event, handler) => {
+			if (event === "tool_call") onToolCall = handler as typeof onToolCall;
+		},
+		getActiveTools: () => [],
+		getAllTools: () => [],
+		setActiveTools: () => {},
+	});
+	assert.ok(onToolCall);
+	const input = { query: "Pi docs", workflow: "summary-review", includeContent: true, proxy: "http://example.test" };
+	onToolCall({ toolName: "web_search", input });
+	assert.deepEqual(input, { query: "Pi docs", workflow: "none", includeContent: false });
+});
+
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {
 	let calls = 0;
 	const controller = new AbortController();

@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
-import { installPiPstack } from "../orchestrator/pi-packages.ts";
+import { type InstalledPiWebAccess, installPiPstack, installPiWebAccess } from "../orchestrator/pi-packages.ts";
 import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -67,7 +67,22 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 	let roleMutationTail = Promise.resolve();
 	let pstackInstallation: Promise<string> | undefined;
+	let webAccessInstallation: Promise<InstalledPiWebAccess> | undefined;
+	let packageInstallTail = Promise.resolve();
 	const probeRuntimePi = options.probePiCli ?? probePiCli;
+
+	function queuePiInstall<T>(install: (executable: string) => Promise<T>): Promise<T> {
+		const result = packageInstallTail.then(async () => {
+			const pi = await probeRuntimePi();
+			if (!pi.available) throw new HttpRequestError(503, "Pi CLI 不可用，请查看服务启动日志");
+			return install(pi.executable);
+		});
+		packageInstallTail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
 
 	const offDialog = dialogBroker.onEvent((evt) => {
 		sse.broadcast(evt.type, evt);
@@ -97,15 +112,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		dialogBroker,
 		probePiCli: probeRuntimePi,
 		installPstack: () => {
-			pstackInstallation ??= probeRuntimePi()
-				.then((pi) => {
-					if (!pi.available) throw new HttpRequestError(503, "Pi CLI 不可用，请查看服务启动日志");
-					return (options.installPiPstack ?? installPiPstack)(pi.executable);
-				})
-				.finally(() => {
-					pstackInstallation = undefined;
-				});
+			pstackInstallation ??= queuePiInstall(options.installPiPstack ?? installPiPstack).finally(() => {
+				pstackInstallation = undefined;
+			});
 			return pstackInstallation;
+		},
+		installWebAccess: () => {
+			webAccessInstallation ??= queuePiInstall(installPiWebAccess).finally(() => {
+				webAccessInstallation = undefined;
+			});
+			return webAccessInstallation;
 		},
 		getServerRuntimeConfig: () => {
 			const addr = server.address();

@@ -395,6 +395,7 @@ export class UserAuthRepo {
 			defaultMaxActiveDispatches: 3,
 			defaultMaxPersonalRoles: 5,
 			pstackDir: null,
+			webAccessRoleGrants: {},
 			defaultModelSelection: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
 		};
@@ -443,6 +444,11 @@ export class UserAuthRepo {
 					typeof parsed.pstackDir === "string" && parsed.pstackDir.trim()
 						? parsed.pstackDir.trim()
 						: defaults.pstackDir,
+				webAccessRoleGrants: Object.fromEntries(
+					Object.entries(parsed.webAccessRoleGrants ?? {}).filter(
+						([id, createdAt]) => id.length > 0 && typeof createdAt === "string" && createdAt.length > 0,
+					),
+				),
 				defaultModelSelection: readStoredModelSelection(parsed.defaultModelSelection),
 				updatedAt: String(row.updated_at ?? defaults.updatedAt),
 			};
@@ -488,6 +494,7 @@ export class UserAuthRepo {
 					: typeof patch.pstackDir === "string" && patch.pstackDir.trim()
 						? resolve(patch.pstackDir.trim())
 						: current.pstackDir,
+			webAccessRoleGrants: patch.webAccessRoleGrants ?? current.webAccessRoleGrants,
 		};
 		this.db
 			.prepare(
