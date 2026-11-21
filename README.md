@@ -17,7 +17,7 @@ Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件�
 
 例如，你想为一个小团队设计反馈收集工具。先交给产品经理澄清首版范围，再请研发和测试检查方案及验收条件。收到 V1 后，你可以指出需要修改的地方，请团队发布 V2，并在成果库对比两个版本。[四步内置演示](docs/tutorials/inner-matter-demo.md)使用虚构资料演练这条流程。
 
-![Personal Agent 新建事项与多岗位协作工作台首页](docs/assets/workbench-home.png)
+![Personal Agent 新建事项首页，统一输入框支持点名 AI 角色和发送消息](docs/assets/workbench-home.png)
 
 ![Personal Agent 团队成员与组织管理界面](docs/assets/workbench-team.png)
 
