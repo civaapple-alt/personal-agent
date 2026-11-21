@@ -1,5 +1,7 @@
 import { type Questions, type SystemOneRequest, type SystemOneResult, TypeSafeClient } from "@typesafe-ai/sdk";
 
+export { type ChoiceQuestion, choice, noul } from "@typesafe-ai/sdk";
+
 export interface DecisionClassifier {
 	evaluate<const Q extends Questions>(
 		request: SystemOneRequest<Q>,

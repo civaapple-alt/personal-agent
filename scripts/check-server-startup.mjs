@@ -1,4 +1,4 @@
-// Exercise both entry points against disposable databases, without a model request or user data mutation.
+// Exercise the selected entry points with disposable databases and no model requests.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { cp, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
@@ -6,9 +6,17 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+const entries = {
+	"--source": ["src/server/main.ts"],
+	"--prebuilt": ["dist/server/main.js"],
+};
+const [mode, ...extra] = process.argv.slice(2);
+assert.ok(extra.length === 0 && (mode === undefined || Object.hasOwn(entries, mode)), "Use --source or --prebuilt");
+const selectedEntries = mode ? entries[mode] : Object.values(entries).flat();
+
 const directory = await mkdtemp(join(tmpdir(), "personal-agent-startup-"));
 try {
-	for (const { entry, memory } of ["src/server/main.ts", "dist/server/main.js"].flatMap((entry) => [
+	for (const { entry, memory } of selectedEntries.flatMap((entry) => [
 		{ entry, memory: false },
 		{ entry, memory: true },
 	])) {

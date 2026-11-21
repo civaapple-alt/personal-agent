@@ -1,6 +1,5 @@
-import { type ChoiceQuestion, choice } from "@typesafe-ai/sdk";
 import type { TeamMember } from "../storage/types.ts";
-import type { DecisionClassifier } from "./system-one.ts";
+import { type ChoiceQuestion, choice, type DecisionClassifier } from "./system-one.ts";
 
 const PARTICIPATION = {
 	none: "The task can proceed without this member.",

@@ -1,4 +1,3 @@
-import { choice, noul } from "@typesafe-ai/sdk";
 import { isWorkbenchTopic, WORKBENCH_TOPICS, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
 import { isExplicitRoleSetupRequest } from "../roles/role-setup-intent.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
@@ -6,7 +5,7 @@ import type { MatterMessage, TeamMember } from "../storage/types.ts";
 import { messageMatchesContext } from "./matter-context.ts";
 import { looksLikeRosterQuestion } from "./matter-roster-query.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
-import type { DecisionClassifier } from "./system-one.ts";
+import { choice, type DecisionClassifier, noul } from "./system-one.ts";
 import type { WorkerFactory } from "./types.ts";
 
 export type ConversationIntent = "reply" | "work" | "confirm" | "silent" | "roster" | "workbench_help";

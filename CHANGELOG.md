@@ -5,6 +5,7 @@ All notable changes to Personal Agent are documented in this file.
 ## [Unreleased]
 
 - Answer workbench questions from the installed guide and current matter records. Give AI roles read-only access to the same guide, pending decisions, published deliverables, and visible participation data.
+- Include the decision SDK and its license in the prebuilt package so it starts without npm dependencies.
 
 - Answer informational questions about confirmation flows directly and omit the discussion badge on execution confirmation cards.
 

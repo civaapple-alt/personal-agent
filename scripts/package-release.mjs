@@ -125,6 +125,12 @@ async function main(preview) {
 				NODE_ENV: "production",
 			}),
 		);
+		const sourceStartupOutput = await run(
+			process.execPath,
+			["scripts/check-server-startup.mjs", "--source"],
+			snapshot,
+		);
+		console.log(sourceStartupOutput);
 		await unlink(join(snapshot, "node_modules"));
 		await run("tar", ["-czf", join(pending, prebuiltName), "-C", temporary, prefix], root, {
 			...process.env,
@@ -136,8 +142,12 @@ async function main(preview) {
 		const extracted = join(verification, prefix);
 		await assert.rejects(lstat(join(extracted, "node_modules")), { code: "ENOENT" });
 		await assert.rejects(lstat(join(extracted, ".data")), { code: "ENOENT" });
-		const startupOutput = await run(process.execPath, ["scripts/check-server-startup.mjs"], extracted);
-		console.log(startupOutput);
+		const prebuiltStartupOutput = await run(
+			process.execPath,
+			["scripts/check-server-startup.mjs", "--prebuilt"],
+			extracted,
+		);
+		console.log(prebuiltStartupOutput);
 		const files = [];
 		for (const name of [sourceName, prebuiltName])
 			files.push({
@@ -157,7 +167,7 @@ async function main(preview) {
 				extractedStartup: true,
 				includesNodeModules: false,
 				includesUserData: false,
-				startupOutput,
+				startupOutput: [sourceStartupOutput, prebuiltStartupOutput].join("\n"),
 			},
 		};
 		await writeFile(join(pending, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

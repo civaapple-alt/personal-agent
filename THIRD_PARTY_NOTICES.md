@@ -60,6 +60,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Decision SDK
+
+The prebuilt server bundles the MIT-licensed `@typesafe-ai/sdk` from the version pinned in [package-lock.json](package-lock.json). Its license accompanies the compiled module as `dist/orchestrator/typesafe-sdk-LICENSE.txt`.
+
 ## Reference images and external products
 
 These files were saved from Grok Bot's official product materials for local research. No redistribution grant for them has been established in this repository, and they are not covered by Personal Agent's MIT grant:
