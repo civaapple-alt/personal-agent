@@ -27,6 +27,8 @@ import type { DraftVerification } from "./independent-verification.ts";
 import type { ReadPiModels } from "./model-selection.ts";
 import type { StalledMember, TurnMonitor } from "./turn-monitor.ts";
 
+export type WorkerSessionMode = "lead" | "internal" | "observer" | "verifier";
+
 export interface DialogContext {
 	matterId: string;
 	member: TeamMember;

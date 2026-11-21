@@ -2,6 +2,8 @@
 
 此目录存放在 Pi 进程内运行的 PA 扩展。PA 通过 `--extension` 传入入口，再按岗位和运行模式确定模型可以调用的工具。 [运行配置](../docs/reference/configuration.md#cli-启动与能力装配)
 
+安装发现、工具选择和启动环境见 [PA 扩展集成](../src/pa-extensions/README.md)。
+
 | 扩展 | 用途 | 加载方式 |
 | --- | --- | --- |
 | [team-extension](team-extension/README.md) | 将团队工具调用转交 PA，注入岗位与事项上下文，核查工具清单 | PA 启动岗位时显式加载 |

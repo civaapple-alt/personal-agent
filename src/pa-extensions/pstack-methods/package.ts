@@ -1,5 +1,7 @@
-import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
-import { installPiPackage, listPiPackages, listUserPackagePaths } from "../rpc/pi-packages.ts";
+import { preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
+import { installPiPackage, listPiPackages, listUserPackagePaths } from "../../rpc/pi-packages.ts";
+
+export { type PstackRuntime, preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
 
 const PSTACK_PACKAGE = "git:github.com/backnotprop/pstack";
 const PSTACK_SOURCE =

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
+import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
+import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
 import {
 	escapeWebAccessSlashCommand,
 	isPiWebAccessTool,
@@ -31,8 +32,6 @@ import {
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
 } from "./prompts.ts";
-import { buildPstackGuidance } from "./pstack-guidance.ts";
-import { resolveBuiltinExtensionPath } from "./runtime-info.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -48,6 +47,7 @@ import {
 	type RpcWorkerLike,
 	summarizeToolArgs,
 	type WorkerFactory,
+	type WorkerSessionMode,
 } from "./types.ts";
 
 export interface WorkerRunnerDeps {
@@ -85,7 +85,7 @@ export interface ExecuteWorkerInput {
 	images?: ImageContent[];
 	isInternalDelegation?: boolean;
 	delegationRequestId?: string;
-	sessionMode?: "lead" | "internal" | "observer" | "verifier";
+	sessionMode?: WorkerSessionMode;
 	discussionMode?: boolean;
 	excludeMessageIds?: string[];
 	run: MatterRun;
@@ -106,27 +106,30 @@ export async function executeWithWorkerPass(
 	const isDiscussionMode = Boolean(input.discussionMode);
 	const isConversationReply = Boolean(input.run.conversationDiscussion);
 	const isVerifier = sessionMode === "verifier";
-	const canPublish = sessionMode === "lead" && !isDiscussionMode;
 	const matter = deps.store.getMatter(input.matterId);
 	const actorUserId = input.run.startedByUserId ?? null;
 	const matterAiMembers = deps
 		.resolveMatterAiMembers(matter)
 		.filter((member) => member.roleScope !== "personal" || member.ownerUserId === actorUserId);
-	const matterConsultTargets = matterAiMembers.filter(
+	const hasConsultTargets = matterAiMembers.some(
 		(member) =>
 			member.id !== input.member.id &&
 			(matter?.consultMemberIds == null ||
 				member.id === matter.leadMemberId ||
 				matter.consultMemberIds.includes(member.id)),
 	);
-	const isSoloMatter = sessionMode === "lead" && matterConsultTargets.length === 0;
-	const canDelegate = (sessionMode === "lead" || sessionMode === "internal") && !isSoloMatter;
-	const canProposeExperience = canPublish || (sessionMode === "internal" && !isDiscussionMode);
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
 	const template = deps.getTemplateForMember(input.member);
 	const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
+	const teamExtension = prepareTeamExtension({
+		sessionMode,
+		discussionMode: isDiscussionMode,
+		isArchitect,
+		hasConsultTargets,
+	});
+	const { canPublish, canDelegate, canProposeExperience, canRequestClarification } = teamExtension;
 	const hasPersonalContext =
 		input.member.roleScope === "personal" ||
 		matterAiMembers.some((member) => member.roleScope === "personal") ||
@@ -179,8 +182,7 @@ export async function executeWithWorkerPass(
 	const signal = AbortSignal.any([input.signal, controller.signal]);
 	try {
 		const skillPaths = isVerifier ? [] : await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
-		const pstack = !isVerifier && deps.pstackDir ? await preparePstackRuntime(deps.pstackDir) : undefined;
-		const methodTools = pstack ? ["load_pstack_skill"] : [];
+		const pstack = await preparePstackForWorker(deps.pstackDir, sessionMode);
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
@@ -205,22 +207,8 @@ export async function executeWithWorkerPass(
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
 		const mcpDependencies = isArchitect || isVerifier || isConversationReply ? [] : (template?.mcpDependencies ?? []);
-		const ordinaryTeamTools = isArchitect
-			? []
-			: sessionMode === "observer" || isVerifier
-				? []
-				: isDiscussionMode
-					? canDelegate
-						? ["delegate_to_member"]
-						: []
-					: sessionMode === "internal"
-						? ["delegate_to_member", "propose_experience"]
-						: isSoloMatter
-							? ["publish_deliverable", "propose_experience"]
-							: ["delegate_to_member", "publish_deliverable", "propose_experience"];
-		const canRequestClarification =
-			!isArchitect && !isDiscussionMode && (sessionMode === "internal" || sessionMode === "lead");
-		const teamTools = canRequestClarification ? [...ordinaryTeamTools, "request_clarification"] : ordinaryTeamTools;
+		const requiredTools = [...requestedTools, ...teamExtension.tools, ...(pstack?.tools ?? [])];
+		const toolPatterns = [...requiredTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)];
 		let clarification: PromptRunResult["clarification"];
 		const stageClarification = (request: NonNullable<PromptRunResult["clarification"]>) => {
 			if (clarification) throw new Error("A clarification is already recorded for this execution");
@@ -394,20 +382,15 @@ export async function executeWithWorkerPass(
 		const args = inheritsLocalResources
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-skills"];
-		args.push("--extension", resolveBuiltinExtensionPath("team-extension"));
+		args.push("--extension", teamExtension.entry);
 		if (!isVerifier && !isConversationReply)
 			for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
-		if (pstack) args.push("--skill", pstack.modePath, "--extension", resolveBuiltinExtensionPath("pstack-extension"));
-		args.push(
-			"--tools",
-			[...requestedTools, ...teamTools, ...methodTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)].join(
-				",",
-			),
-		);
+		if (pstack) args.push(...pstack.args);
+		args.push("--tools", toolPatterns.join(","));
 
 		const effectiveMember = activeOrgId ? deps.store.resolveMemberForOrg(activeOrgId, input.member) : input.member;
 		const useRoleGitIdentity = Boolean(organization?.useRoleGitIdentity);
@@ -472,10 +455,15 @@ export async function executeWithWorkerPass(
 			noSession: deps.noSession,
 			args,
 			env: {
-				...bridge.env,
-				...(pstack ? { PA_PSTACK_DIR: pstack.root } : {}),
+				...teamExtension.buildEnvironment({
+					bridgeEnv: bridge.env,
+					requiredTools: toolPatterns,
+					workspaceRoot: input.workspace ? cwd : undefined,
+					memberContext: [systemPrompt, architectContext?.systemPrompt, pstack?.systemPrompt],
+					turnContext: [turnContext, architectContext?.turnContext],
+				}),
+				...pstack?.env,
 				PA_WEB_SEARCH_ENABLED: String(Boolean(webAccess)),
-				PA_TARGET_WORKSPACE_ROOT: input.workspace ? cwd : "__none__",
 				...(useRoleGitIdentity
 					? {
 							GIT_AUTHOR_NAME: gitIdentity.gitName,
@@ -488,23 +476,6 @@ export async function executeWithWorkerPass(
 				PA_MEMBER_NAME: effectiveMember.displayName,
 				PA_MEMBER_TITLE: effectiveMember.roleTitle,
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
-				PA_CAN_PUBLISH: String(canPublish && !isArchitect),
-				PA_CAN_DELEGATE: String(canDelegate && !isArchitect),
-				PA_CAN_EXPERIENCE: String(canProposeExperience && !isArchitect),
-				PA_REQUIRED_TOOLS: JSON.stringify([
-					...requestedTools,
-					...teamTools,
-					...methodTools,
-					...mcpDependencies.map((name) => `mcp__${name}__*`),
-				]),
-				PA_MEMBER_CONTEXT: [
-					systemPrompt,
-					architectContext?.systemPrompt,
-					pstack && buildPstackGuidance(pstack, sessionMode),
-				]
-					.filter(Boolean)
-					.join("\n\n"),
-				PA_TURN_CONTEXT: [turnContext, architectContext?.turnContext].filter(Boolean).join("\n\n"),
 			},
 		});
 		input.run.workers.add(worker);
@@ -636,7 +607,7 @@ export async function executeWithWorkerPass(
 		signal.throwIfAborted();
 		const state = await applyWorkerModel(worker, selection);
 		const tools = await bridge.waitReady();
-		const missing = [...requestedTools, ...teamTools, ...methodTools].filter((name) => !tools.includes(name));
+		const missing = requiredTools.filter((name) => !tools.includes(name));
 		for (const dependency of mcpDependencies)
 			if (!tools.some((name) => name.startsWith(`mcp__${dependency}__`))) missing.push(`MCP:${dependency}`);
 		if (missing.length) throw new Error(`Required capabilities unavailable: ${missing.join(", ")}`);
@@ -650,16 +621,7 @@ export async function executeWithWorkerPass(
 				tools,
 				skills: skillPaths,
 				resourcePolicy: inheritsLocalResources ? "local-pi" : "explicit",
-				...(pstack
-					? {
-							pstack: {
-								version: pstack.version,
-								root: pstack.root,
-								modeSha256: pstack.modeSha256,
-								availableSkillCount: pstack.skills.length,
-							},
-						}
-					: {}),
+				...(pstack ? { pstack: pstack.readyDetails } : {}),
 				model: state.model
 					? { provider: state.model.provider, model: state.model.id, thinkingLevel: state.thinkingLevel }
 					: selection,

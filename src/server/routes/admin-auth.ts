@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, resolve } from "node:path";
-import { type PstackRuntime, preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
+import { type PstackRuntime, preparePstackRuntime } from "../../pa-extensions/pstack-methods/package.ts";
 import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
 import {

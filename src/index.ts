@@ -51,7 +51,6 @@ export {
 	type RuntimeExtensionStatus,
 	type RuntimeIsolationMode,
 	type RuntimeOverviewPayload,
-	resolveBuiltinExtensionPath,
 	type ServerRuntimeConfig,
 } from "./orchestrator/runtime-info.ts";
 export {
@@ -73,6 +72,7 @@ export {
 	type TeamOrchestratorOptions,
 	type WorkerFactory,
 } from "./orchestrator/team-orchestrator.ts";
+export { resolveBuiltinExtensionPath } from "./pa-extensions/builtin-paths.ts";
 export {
 	applyRoleTemplatePatch,
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,

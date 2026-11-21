@@ -1,3 +1,4 @@
+import type { WorkerSessionMode } from "../../orchestrator/types.ts";
 import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
@@ -31,7 +32,7 @@ export async function prepareWebAccessForWorker({
 	store: Pick<PersonalAgentStore, "getPlatformSettings">;
 	member: TeamMember;
 	template: RoleTemplate | undefined;
-	sessionMode: "lead" | "internal" | "observer" | "verifier";
+	sessionMode: WorkerSessionMode;
 }) {
 	if (sessionMode === "observer" || sessionMode === "verifier" || !isWebAccessRole(member, template)) return null;
 	if (!hasWebAccessGrant(member, store.getPlatformSettings().webAccessRoleGrants)) return null;

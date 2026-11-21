@@ -2,6 +2,19 @@
 
 此目录维护随 PA 编译的扩展集成代码。宿主调用这些模块做安装发现、授权和运行装配。Pi 进程内运行的入口见 [Pi 扩展](../../pi-extensions/README.md)。
 
+## pstack 方法包
+
+- [package.ts](pstack-methods/package.ts) 通过 Pi 查找或安装方法包，并校验包结构。
+- [runtime.ts](pstack-methods/runtime.ts) 为配置了方法包的岗位提供 `--skill`、`--extension`、`load_pstack_skill` 和岗位提示。独立验收沿用自己的工具清单。
+
+部署与使用见[启用 pstack 方法包](../../docs/guides/pstack-runtime.md)。
+
+## 团队扩展
+
+- [builtin-paths.ts](builtin-paths.ts) 解析内置 Pi 扩展在源码和预构建包中的入口。
+- [runtime.ts](team-extension/runtime.ts) 按运行模式、角色类型和可请教成员生成团队工具清单，并为 Pi 提供桥接地址、工具清单与岗位上下文。
+- [桥接传输](../rpc/team-tool-bridge.ts) 校验、转发和取消工具调用。委托调度、人工确认与成果归档由[编排器](../orchestrator/README.md)负责。
+
 ## Web Access
 
 - [package.ts](web-access/package.ts) 从 Pi 的用户包清单定位官方 npm 包，校验清单中的实际入口，并通过 Pi 安装。通用的 Pi 包命令见 [pi-packages.ts](../rpc/pi-packages.ts)。

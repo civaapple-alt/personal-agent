@@ -1,30 +1,19 @@
 import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
+import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
+import { findInstalledPstack, preparePstackRuntime } from "../pa-extensions/pstack-methods/package.ts";
+import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
+import { TEAM_EXTENSION_TOOLS } from "../pa-extensions/team-extension/runtime.ts";
 import { findInstalledPiWebAccess } from "../pa-extensions/web-access/package.ts";
 import { hasWebAccessGrant, isWebAccessRole, PI_WEB_SEARCH_TOOLS } from "../pa-extensions/web-access/runtime.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { listPiPackages } from "../rpc/pi-packages.ts";
 import type { TeamMember } from "../storage/types.ts";
-import { findInstalledPstack } from "./pstack-package.ts";
 import { resolveTurnTimeoutMs } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
-
-const builtinExtensionPaths = {
-	"team-extension": "pi-extensions/team-extension/index.ts",
-	"pstack-extension": "pi-extensions/pstack-methods/index.ts",
-} as const;
-
-export type BuiltinExtensionKind = keyof typeof builtinExtensionPaths;
-
-/** Resolve the extension entry in the current source or packaged installation. */
-export function resolveBuiltinExtensionPath(kind: BuiltinExtensionKind): string {
-	return fileURLToPath(new URL(`../../${builtinExtensionPaths[kind]}`, import.meta.url));
-}
 
 export interface OrchestratorRuntimeConfig {
 	defaultCwd: string;
@@ -401,7 +390,7 @@ export async function buildRuntimeOverview(options: {
 		fileStatus: teamFileStatus,
 		scopeSummary: "常规岗位必装；按主责/内部/旁听收窄工具",
 		description: "经 loopback bridge 回调编排核，提供委托、成果发布与经验提案。",
-		registeredTools: ["delegate_to_member", "request_clarification", "publish_deliverable", "propose_experience"],
+		registeredTools: [...TEAM_EXTENSION_TOOLS],
 		hooks: ["session_start", "before_agent_start", "extension_ui"],
 		declaredByRoles: [],
 		mcpServers: [],
@@ -428,7 +417,7 @@ export async function buildRuntimeOverview(options: {
 		fileStatus: pstackExtFileStatus,
 		scopeSummary: "配置已有 pstack 方法包后随常规岗位挂载",
 		description: "只读加载外部 pstack 的 mode、playbook 与原则原文。",
-		registeredTools: ["load_pstack_skill"],
+		registeredTools: [PSTACK_TOOL_NAME],
 		hooks: ["poteto-mode --skill"],
 		declaredByRoles: [],
 		mcpServers: [],
