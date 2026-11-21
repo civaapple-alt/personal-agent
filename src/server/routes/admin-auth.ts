@@ -15,7 +15,7 @@ import {
 	SESSION_COOKIE_NAME,
 	SlidingWindowRateLimiter,
 } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
+import { HttpRequestError, readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
@@ -559,6 +559,32 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			detail: { aborted },
 		});
 		sendJson(res, 200, { ok: true, aborted });
+		return true;
+	}
+
+	if (method === "POST" && pathname === "/api/admin/runtime/pstack/install") {
+		let installedRoot: string;
+		try {
+			installedRoot = await ctx.installPstack();
+		} catch (error) {
+			if (error instanceof HttpRequestError) throw error;
+			sendError(res, 502, error instanceof Error ? error.message : String(error));
+			return true;
+		}
+		auditActorAction(ctx, req, actor, {
+			action: "admin.pstack_install",
+			targetType: "runtime_extension",
+			targetId: "pstack",
+			detail: { path: installedRoot },
+		});
+		const overview = await buildRuntimeOverview({
+			config: orchestrator.getRuntimeConfig(),
+			serverConfig: ctx.getServerRuntimeConfig?.(),
+			activeMembers: store.listMembers(),
+			isOwner: true,
+			probePiCli: ctx.probePiCli,
+		});
+		sendJson(res, 200, { installedRoot, overview });
 		return true;
 	}
 

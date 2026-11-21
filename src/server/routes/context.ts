@@ -29,6 +29,7 @@ export interface ServerRouteContext {
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
 	probePiCli?: () => Promise<PiCliProbeResult>;
+	installPstack: () => Promise<string>;
 	getServerRuntimeConfig?: () => ServerRuntimeConfig;
 	rolesDir?: string;
 	skillsDir?: string;

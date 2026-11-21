@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamMember } from "../storage/types.ts";
+import { findInstalledPstack, type listPiPackages } from "./pi-packages.ts";
 import { resolveTurnTimeoutMs } from "./types.ts";
 
 const execFileAsync = promisify(execFile);
@@ -110,6 +111,7 @@ export interface RuntimeBaseInfo {
 		configured: boolean;
 		available: boolean;
 		root: string | null;
+		installedRoot: string | null;
 		version: string | null;
 		modeSha256: string | null;
 		skillCount: number;
@@ -271,6 +273,7 @@ export async function buildRuntimeOverview(options: {
 	activeMembers: TeamMember[];
 	isOwner: boolean;
 	probePiCli?: () => Promise<PiCliProbeResult>;
+	listPiPackages?: typeof listPiPackages;
 }): Promise<RuntimeOverviewPayload> {
 	const { config, serverConfig, activeMembers, isOwner } = options;
 	const probePromise = (options.probePiCli ?? (() => probePiCli()))();
@@ -288,6 +291,7 @@ export async function buildRuntimeOverview(options: {
 		configured: Boolean(config.pstackDir),
 		available: false,
 		root: null,
+		installedRoot: null,
 		version: null,
 		modeSha256: null,
 		skillCount: 0,
@@ -324,6 +328,9 @@ export async function buildRuntimeOverview(options: {
 					: "无法读取已配置的 pstack 方法包",
 			};
 		}
+	}
+	if (isOwner && !pstackEnvSet && !pstackInfo.available && piProbe.available) {
+		pstackInfo.installedRoot = await findInstalledPstack(piProbe.executable, options.listPiPackages);
 	}
 
 	const templateById = new Map(config.templates.map((tpl) => [tpl.id, tpl]));

@@ -269,6 +269,65 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 	assert.ok(statSync(resolveBuiltinExtensionPath("pstack-extension")).isFile());
 });
 
+test("runtime suggests a valid global pstack for admins with missing or stale configuration", async (t) => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-pstack-discovery-"));
+	t.after(() => rmSync(tempDir, { recursive: true, force: true }));
+	const previousEnv = process.env.PA_PSTACK_DIR;
+	delete process.env.PA_PSTACK_DIR;
+	t.after(() => {
+		if (previousEnv === undefined) delete process.env.PA_PSTACK_DIR;
+		else process.env.PA_PSTACK_DIR = previousEnv;
+	});
+	const installed = join(tempDir, "pi user packages", "pstack");
+	createValidPstackFixture(installed);
+	const stale = join(tempDir, "previous-pstack");
+	const config = {
+		defaultCwd: tempDir,
+		sessionDir: null,
+		noSession: true,
+		extensions: [],
+		templates: [],
+		pstackDir: stale,
+	};
+	const probePiCli = async () => ({ available: true, executable: "pi", version: "1.6.0", error: null });
+	const listPiPackages = t.mock.fn(async () =>
+		[
+			"\x1b[1mUser packages:\x1b[22m",
+			"  git:github.com/backnotprop/pstack@missing",
+			`    ${stale}`,
+			"  git:github.com/backnotprop/pstack@v0.15.42 (filtered)",
+			`    ${installed}`,
+			"",
+			"Project packages:",
+			"  git:github.com/backnotprop/pstack",
+			`    ${stale}`,
+		].join("\r\n"),
+	);
+	const overview = (isOwner: boolean, pstackDir: string | null = stale) =>
+		buildRuntimeOverview({
+			config: { ...config, pstackDir },
+			activeMembers: [],
+			isOwner,
+			probePiCli,
+			listPiPackages,
+		});
+
+	const admin = await overview(true);
+	assert.equal(admin.base.pstack.root, stale);
+	assert.equal(admin.base.pstack.available, false);
+	assert.equal(admin.base.pstack.installedRoot, realpathSync(installed));
+	const collaborator = await overview(false);
+	assert.equal(collaborator.base.pstack.installedRoot, null);
+	const configured = await overview(true, installed);
+	assert.equal(configured.base.pstack.available, true);
+	assert.equal(configured.base.pstack.installedRoot, null);
+	assert.equal(listPiPackages.mock.callCount(), 1);
+	listPiPackages.mock.mockImplementation(async () =>
+		["Project packages:", "  git:github.com/backnotprop/pstack", `    ${installed}`].join("\n"),
+	);
+	assert.equal((await overview(true, null)).base.pstack.installedRoot, null);
+});
+
 test("Only an admin can enable an existing pstack package, and PA leaves package files untouched", async (t) => {
 	const tempDir = mkdtempSync(join(tmpdir(), "pa-pstack-config-"));
 	t.after(() => rmSync(tempDir, { recursive: true, force: true }));
@@ -312,6 +371,11 @@ test("Only an admin can enable an existing pstack package, and PA leaves package
 		defaultCwd: tempDir,
 		noSession: true,
 	});
+	let piAvailable = true;
+	const installPiPstack = t.mock.fn(async (executable: string) => {
+		assert.equal(executable, "pi");
+		return canonicalPackageDir;
+	});
 	const { server } = createPersonalAgentServer({
 		store,
 		orchestrator,
@@ -320,7 +384,8 @@ test("Only an admin can enable an existing pstack package, and PA leaves package
 		dialogBroker: new DialogBroker(),
 		requireAuth: true,
 		dataDir,
-		probePiCli: async () => ({ available: true, executable: "pi", version: "1.5.2", error: null }),
+		probePiCli: async () => ({ available: piAvailable, executable: "pi", version: "1.5.2", error: null }),
+		installPiPstack,
 	});
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
 	t.after(() => new Promise<void>((resolveClose) => server.close(() => resolveClose())));
@@ -328,7 +393,7 @@ test("Only an admin can enable an existing pstack package, and PA leaves package
 	assert.ok(addr && typeof addr !== "string");
 	const baseUrl = `http://127.0.0.1:${addr.port}`;
 
-	const post = (operation: "enable" | "disable", body: object, token = adminToken) =>
+	const post = (operation: "install" | "enable" | "disable", body: object, token = adminToken) =>
 		fetch(`${baseUrl}/api/admin/runtime/pstack/${operation}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -337,6 +402,16 @@ test("Only an admin can enable an existing pstack package, and PA leaves package
 
 	assert.equal((await post("enable", { path: packageDir }, memberToken)).status, 403);
 	assert.equal((await post("disable", {}, memberToken)).status, 403);
+	assert.equal((await post("install", {}, memberToken)).status, 403);
+	piAvailable = false;
+	assert.equal((await post("install", {})).status, 503);
+	assert.equal(installPiPstack.mock.callCount(), 0);
+	piAvailable = true;
+	const installRes = await post("install", {});
+	assert.equal(installRes.status, 200);
+	assert.equal(((await installRes.json()) as { installedRoot: string }).installedRoot, canonicalPackageDir);
+	assert.equal(installPiPstack.mock.callCount(), 1);
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, null);
 	assert.equal((await post("enable", { cloneUrl: "https://example.test/pstack.git" })).status, 400);
 	assert.equal((await post("enable", { path: "relative/pstack" })).status, 400);
 	assert.equal((await post("enable", { path: invalidDir })).status, 400);

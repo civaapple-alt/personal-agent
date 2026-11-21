@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
+import { probePiCli } from "../orchestrator/runtime-info.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
@@ -26,6 +27,7 @@ function listLanIpv4Addresses(): string[] {
 }
 
 async function main(): Promise<void> {
+	const piProbe = probePiCli();
 	const rootDir = process.cwd();
 	const dbPath = process.env.PA_DB_PATH ?? resolve(rootDir, ".data/personal-agent.db");
 	const port = Number(process.env.PORT ?? 4310);
@@ -105,6 +107,10 @@ async function main(): Promise<void> {
 		});
 	}
 
+	const pi = await piProbe;
+	if (pi.available) console.log(`Pi CLI ${pi.version} (${pi.executable})`);
+	else console.warn(`Pi CLI startup check failed: ${pi.error}`);
+
 	const { server } = createPersonalAgentServer({
 		store,
 		orchestrator,
@@ -119,6 +125,7 @@ async function main(): Promise<void> {
 		inheritLocalPiResources: process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0",
 		defaultWorkspacesRoot,
 		dataDir,
+		probePiCli: () => piProbe,
 		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
 		runtimeMeta: {
 			host,

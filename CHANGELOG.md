@@ -6,6 +6,10 @@ All notable changes to Personal Agent are documented in this file.
 
 - Use Pi to install and update pstack. Enable an existing methods package in workbench settings and expose the read-only adapter as a standalone Pi extension.
 
+- Detect the service account’s globally installed pstack. Install it through Pi from workbench settings if needed, then enable it for PA.
+
+- Check Pi CLI availability and version at workbench startup.
+
 ## [0.6.3] - 2026-11-21
 
 See the [0.6.3 release guide](docs/releases/v0.6.3.md) for downloads and upgrade instructions.

@@ -1,18 +1,19 @@
 # 启用 pstack 方法包
 
-用 Pi 安装 [backnotprop/pstack](https://github.com/backnotprop/pstack)，再在工作台选用已有的方法包。启用后，岗位可按需读取模式、playbook 和原则。
+在工作台启用 [backnotprop/pstack](https://github.com/backnotprop/pstack) 后，岗位可按需读取模式、playbook 和原则。Pi 负责包的安装和更新。
 
 ## 安装并在工作台启用
 
-1. 在运行 PA 的主机上，用服务账号执行以下命令。运行 `pi list` 时，使用与 PA 相同的 Pi 配置目录。
+1. 打开「设置 → 扩展插件」。团队版使用超级管理员账号，本机免密模式使用本机所有者。
+2. 如果 PA 检测到服务账号已全局安装 pstack，目录会自动填入。缺少方法包时，点击「安装 pstack」，PA 会调用 Pi 安装并填入目录。也可在服务主机手动安装，随后刷新设置。
 
    ```bash
    pi install git:github.com/backnotprop/pstack
-   pi list
    ```
 
-2. 打开「设置 → 扩展插件」。团队版使用超级管理员账号，本机免密模式使用本机所有者。
-3. 在 pstack 卡片粘贴 `pi list` 显示的绝对路径，点击「启用」。方法包根目录须包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`。工作台校验并保存路径，后续启动的岗位按各自的工具配置使用它。
+3. 点击「启用」，让之后启动的岗位使用该方法包。
+
+要使用其他位置的已有方法包，可以填写绝对路径后启用。方法包根目录须包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`。工作台校验并保存路径，后续启动的岗位按各自的工具配置使用它。
 
 ## 用启动配置指定已有目录
 

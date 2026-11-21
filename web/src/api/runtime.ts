@@ -49,6 +49,7 @@ export interface RuntimeBaseInfoDto {
 		configured: boolean;
 		available: boolean;
 		root: string | null;
+		installedRoot: string | null;
 		version: string | null;
 		modeSha256: string | null;
 		skillCount: number;
@@ -95,6 +96,10 @@ export interface RuntimeOverviewDto {
 
 export function fetchRuntimeOverview(): Promise<RuntimeOverviewDto> {
 	return requestJson("/api/runtime");
+}
+
+export function installRuntimePstack(): Promise<{ installedRoot: string; overview: RuntimeOverviewDto }> {
+	return requestJson("/api/admin/runtime/pstack/install", { method: "POST", body: "{}" });
 }
 
 export function enableRuntimePstack(path: string): Promise<{

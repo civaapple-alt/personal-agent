@@ -2,9 +2,16 @@ import { type FormEvent, useState } from "react";
 import {
 	disableRuntimePstack,
 	enableRuntimePstack,
+	installRuntimePstack,
 	type RuntimeBaseInfoDto,
 	type RuntimeOverviewDto,
 } from "../api/runtime.ts";
+
+const actionNotice = {
+	install: "pstack 已安装，点击「启用」后可在 PA 中使用",
+	enable: "已启用 pstack 方法包",
+	disable: "已停用 pstack 方法包",
+};
 
 export function PstackSettings({
 	base,
@@ -23,20 +30,23 @@ export function PstackSettings({
 }) {
 	const { pstack, envFlags } = base;
 	const [input, setInput] = useState<string | null>(null);
-	const [pending, setPending] = useState<"enable" | "disable" | null>(null);
+	const [pending, setPending] = useState<keyof typeof actionNotice | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const path = input ?? pstack.root ?? "";
+	const path = input ?? pstack.installedRoot ?? pstack.root ?? "";
 
-	const changePstack = async (action: "enable" | "disable") => {
+	const changePstack = async (action: keyof typeof actionNotice) => {
 		if (pending) return;
 		setPending(action);
 		setError(null);
 		try {
-			const result = action === "enable" ? await enableRuntimePstack(path.trim()) : await disableRuntimePstack();
+			const installation = action === "install" ? await installRuntimePstack() : null;
+			const result =
+				installation ??
+				(action === "enable" ? await enableRuntimePstack(path.trim()) : await disableRuntimePstack());
 			if (onOverviewChange) onOverviewChange(result.overview);
 			else await onRefresh();
-			setInput(null);
-			onNotice?.(action === "enable" ? "已启用 pstack 方法包" : "已停用 pstack 方法包");
+			setInput(installation?.installedRoot ?? null);
+			onNotice?.(actionNotice[action]);
 		} catch (cause) {
 			const message = cause instanceof Error ? cause.message : String(cause);
 			setError(message);
@@ -94,10 +104,23 @@ export function PstackSettings({
 							)}
 						</div>
 					</form>
-					<p className="muted-hint">
-						在服务主机用 <code>pi install git:github.com/backnotprop/pstack</code> 安装，再用 <code>pi list</code>{" "}
-						查看安装路径。
-					</p>
+					{pstack.installedRoot ? (
+						<p className="muted-hint">已检测到 Pi 全局安装的 pstack，并填入了安装目录。</p>
+					) : !pstack.available && base.available ? (
+						<div className="actions-row compact">
+							<button
+								type="button"
+								className="btn-pill-outline"
+								disabled={pending !== null}
+								onClick={() => void changePstack("install")}
+							>
+								{pending === "install" ? "安装中…" : "安装 pstack"}
+							</button>
+							<span className="muted-hint">
+								也可在服务主机运行 <code>pi install git:github.com/backnotprop/pstack</code>，安装后刷新设置。
+							</span>
+						</div>
+					) : null}
 				</>
 			) : null}
 			{pstack.root && (envFlags.pstackDirEnvConfigured || !canManage) && (

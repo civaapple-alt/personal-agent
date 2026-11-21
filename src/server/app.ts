@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
-import type { PiCliProbeResult, ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
+import { installPiPstack } from "../orchestrator/pi-packages.ts";
+import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
@@ -42,6 +43,7 @@ export interface PersonalAgentServerOptions {
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
+	installPiPstack?: typeof installPiPstack;
 	runtimeMeta?: Pick<ServerRuntimeConfig, "host" | "port" | "dbPath" | "builtinRolesDir">;
 }
 
@@ -64,6 +66,8 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 	let roleMutationTail = Promise.resolve();
+	let pstackInstallation: Promise<string> | undefined;
+	const probeRuntimePi = options.probePiCli ?? probePiCli;
 
 	const offDialog = dialogBroker.onEvent((evt) => {
 		sse.broadcast(evt.type, evt);
@@ -91,7 +95,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		orchestrator,
 		previewManager,
 		dialogBroker,
-		probePiCli: options.probePiCli,
+		probePiCli: probeRuntimePi,
+		installPstack: () => {
+			pstackInstallation ??= probeRuntimePi()
+				.then((pi) => {
+					if (!pi.available) throw new HttpRequestError(503, "Pi CLI 不可用，请查看服务启动日志");
+					return (options.installPiPstack ?? installPiPstack)(pi.executable);
+				})
+				.finally(() => {
+					pstackInstallation = undefined;
+				});
+			return pstackInstallation;
+		},
 		getServerRuntimeConfig: () => {
 			const addr = server.address();
 			const listeningPort = addr && typeof addr !== "string" ? addr.port : undefined;
