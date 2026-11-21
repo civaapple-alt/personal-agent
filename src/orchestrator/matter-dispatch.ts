@@ -335,6 +335,7 @@ export async function dispatchMatterTurn(
 							matter,
 							members: deps.listSharedMatterAiMembers(matter),
 							workspaceName: workspace?.name,
+							runtimeMemberId: activeSpeaker.id,
 						},
 						decision.helpTopic,
 						/\p{Script=Han}/u.test(existingUserMsg.content),

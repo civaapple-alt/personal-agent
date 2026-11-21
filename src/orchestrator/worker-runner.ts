@@ -247,6 +247,7 @@ export async function executeWithWorkerPass(
 					repoPath: cwd,
 					orgId: activeOrgId,
 					workspaceName: input.workspace?.name,
+					runtimeMemberId: input.member.id,
 					activeTools: observedTools,
 				};
 				const chinese = call.language ? call.language === "zh" : /\p{Script=Han}/u.test(input.taskPrompt);
@@ -636,9 +637,17 @@ export async function executeWithWorkerPass(
 			channel: "notice",
 			senderType: "system",
 			senderId: input.member.id,
+			metadata: {
+				workspaceId: input.workspace?.id ?? null,
+				repoPath: cwd,
+				orgId: activeOrgId,
+				sourceUserMessageId: input.run.userMessageId,
+			},
 			content: JSON.stringify({
 				method: "runtime_ready",
 				tools,
+				sessionMode,
+				discussionMode: isDiscussionMode,
 				skills: skillPaths,
 				resourcePolicy: inheritsLocalResources ? "local-pi" : "explicit",
 				...(pstack ? { pstack: pstack.readyDetails } : {}),

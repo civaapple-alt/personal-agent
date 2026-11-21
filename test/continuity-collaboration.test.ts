@@ -491,12 +491,18 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	const activeWork = "我想看一下日志，顺手把自动重试改成三次";
 	const featureQuestion = "我想看一下 现在 由用户待定 的使用";
 	const featureDemo = "请演示一下「待你决定」现在怎么用";
+	const interactiveDemo = "给我一个 pa 的 待你决定 的交互演示";
 	const followupDemo = "给我一个 实例 演示 有我待定的使用";
 	const helpQuestions = new Map([
 		[featureQuestion, { topic: "decisions", match: /提交答案/ }],
+		[interactiveDemo, { topic: "decisions", match: /提交答案/ }],
 		[followupDemo, { topic: "decisions", match: /找回密码/ }],
 		["怎么安排旁听", { topic: "collaboration", match: /查看交接/ }],
 		["PA 支持自己做插件吗", { topic: "capabilities", match: /维护者开发及发布/ }],
+		[
+			"你应该能使用 的工具和扩展有哪些，包含 human question  和 request_clarification 吗",
+			{ topic: "runtime_tools", match: /最近一次在本工作区启动时的工具.*read_pa_help/ },
+		],
 		["怎么看成果版本", { topic: "deliverables", match: /成果库/ }],
 		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],
 	]);
@@ -516,16 +522,24 @@ test("System One drives saved conversations, workbench help, roster data and lea
 					? "roster"
 					: text === featureDemo
 						? "confirm"
-						: text === activeWork || text === quoted || text === featureQuestion || text === followupDemo
+						: text === activeWork ||
+								text === quoted ||
+								text === featureQuestion ||
+								text === followupDemo ||
+								text === interactiveDemo
 							? "work"
 							: "reply";
 			// This fixture deliberately reports full certainty for an instruction inside quotes.
 			return {
 				intent: { type: "choice", choice: intent },
 				target: { type: "choice", choice: text === review ? "role_architect_review" : "qa-manager" },
-				authorized: { type: "noul", noul: isInformationOnly ? 0.55 : 0.95 },
-				informationOnly: { type: "noul", noul: isInformationOnly ? 0.89 : 0.05 },
-				workbenchHelp: { type: "noul", noul: text === featureQuestion ? 0.74 : help ? 0.97 : 0.12 },
+				authorized: { type: "noul", noul: text === interactiveDemo ? 0.8 : isInformationOnly ? 0.55 : 0.95 },
+				informationOnly: { type: "noul", noul: text === interactiveDemo ? 0.64 : isInformationOnly ? 0.89 : 0.05 },
+				workbenchHelp: {
+					type: "noul",
+					noul: text === interactiveDemo ? 0.55 : text === featureQuestion ? 0.74 : help ? 0.97 : 0.12,
+				},
+				decisionPreview: { type: "noul", noul: text === interactiveDemo ? 0.95 : 0.04 },
 				workbenchTopic: { type: "choice", choice: help?.topic ?? "none", confidence: 0.95 },
 			} as never;
 		},
@@ -616,6 +630,14 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	assert.equal(response.reply?.senderId, "qa-manager");
 	assert.equal(response.reply?.metadata?.humanDecision, undefined);
 	assert.doesNotMatch(f.workers.at(-1)?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash|edit|write|publish_deliverable/);
+	f.store.appendMessage({
+		matterId: created.matter.id,
+		channel: "notice",
+		senderType: "system",
+		senderId: "qa-manager",
+		content: JSON.stringify({ method: "runtime_ready", tools: ["other_workspace_tool"] }),
+		metadata: { workspaceId: "other_workspace", repoPath: join(f.root, "other"), orgId: f.workspace.orgId },
+	});
 	const workerCount = f.workers.length;
 	for (const [prompt, { topic, match }] of helpQuestions) {
 		const example = await send(path, { prompt });
@@ -624,6 +646,7 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		assert.equal(example.reply?.metadata?.workbenchHelpTopic, topic);
 		assert.equal(example.reply?.metadata?.humanDecision, undefined);
 		assert.match(example.reply?.content ?? "", match);
+		assert.doesNotMatch(example.reply?.content ?? "", /other_workspace_tool/);
 		assert.equal(f.workers.length, workerCount);
 	}
 	const work = await send(path, { prompt: activeWork });
@@ -665,6 +688,7 @@ test("workbench help reads packaged guides and active matter facts through the s
 		const state = await details(["current_matter", "pending_decisions", "published_deliverables"]);
 		assert.match(state, /QA Manager.*持续跟进的审批.*新工作区验收/);
 		assert.doesNotMatch(state, /旧工作区|其他组织|被替代|仅存在于数据库/);
+		assert.match(await details(["runtime_tools"]), /本轮启动时的工具.*request_clarification/);
 		await assert.rejects(
 			worker.call("read_pa_help", { topics: ["current_matter"], matterId: "another_matter" }),
 			/PA help accepts only topics and language/,

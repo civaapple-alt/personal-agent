@@ -66,7 +66,7 @@ export default function humanQuestionExtension(pi: HumanQuestionExtensionApi): v
 		name,
 		label: "提请澄清",
 		description: inPa
-			? "Use for a consequential question that available context cannot answer. As a specialist, return the question to your delegator along with any independent findings. As the lead, answer internally when you can; otherwise create a durable human decision in the matter. Acknowledge the blocked step and finish the turn; independent work can still proceed. This tool never grants authorization."
+			? "Use when the user explicitly asks for a decision card during assigned work or when a consequential question blocks the work. As a specialist, return the question to your delegator along with any independent findings. As the lead, answer internally when you can; otherwise create a durable human decision in the matter. Include distinct options if the user needs to choose, and finish this turn without assuming an answer. This tool never grants authorization."
 			: "Ask the user a consequential question using the current Pi interface. Provide options for a single choice, or omit them for a written answer.",
 		parameters: {
 			type: "object",

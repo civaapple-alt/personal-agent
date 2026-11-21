@@ -1,6 +1,6 @@
 import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, TeamMember } from "../storage/types.ts";
+import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import { isCurrentHumanDecision, readHumanDecision } from "./human-decision.ts";
 import { selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
 
@@ -8,6 +8,7 @@ export interface WorkbenchContext extends WorkspaceContext {
 	matter: Matter;
 	members: TeamMember[];
 	workspaceName?: string;
+	runtimeMemberId?: string;
 	activeTools?: string[];
 }
 
@@ -25,6 +26,82 @@ function plainText(value: string): string {
 		.replace(/[\\`*_[\]<>]/gu, "\\$&");
 }
 
+function readRuntimeTools(message: MatterMessage): string[] | undefined {
+	if (message.channel !== "notice" || message.senderType !== "system") return;
+	try {
+		const event: unknown = JSON.parse(message.content);
+		if (
+			event &&
+			typeof event === "object" &&
+			"method" in event &&
+			event.method === "runtime_ready" &&
+			"tools" in event &&
+			Array.isArray(event.tools) &&
+			event.tools.every((name): name is string => typeof name === "string")
+		)
+			return event.tools;
+	} catch {
+		// Notices may contain plain text.
+	}
+}
+
+const MANAGED_EXTENSIONS = [
+	["read_pa_help", "team-extension"],
+	["request_clarification", "human-question"],
+	["load_pstack_skill", "pstack-methods"],
+	["web_search", "pi-web-access"],
+] as const;
+
+function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchContext, chinese: boolean) {
+	const { matter, members, runtimeMemberId, activeTools } = context;
+	const member = members.find((item) => item.id === (runtimeMemberId ?? matter.leadMemberId));
+	let tools = activeTools;
+	if (!tools && member) {
+		const { messages } = selectMatterContext({
+			...context,
+			messages: store.listMessages(matter.id),
+			deliverables: [],
+		});
+		for (const message of messages.toReversed()) {
+			if (message.senderId !== member.id) continue;
+			tools = readRuntimeTools(message);
+			if (tools) break;
+		}
+	}
+	const label = member ? plainText(member.displayName) : chinese ? "当前岗位" : "Current role";
+	const extensions = MANAGED_EXTENSIONS.filter(([tool]) => tools?.includes(tool)).map(([, extension]) => extension);
+	const codeList = (items: readonly string[]) =>
+		items.map((item) => `\`${item.replace(/[`\s]/gu, "").slice(0, 280)}\``).join(chinese ? "、" : ", ");
+	return {
+		source: "runtime_tools",
+		heading: chinese ? "岗位工具与扩展" : "Role tools and extensions",
+		content: [
+			tools
+				? chinese
+					? `${label}${activeTools ? "本轮启动时" : "最近一次在本工作区启动时"}的工具：${codeList(tools) || "无"}。`
+					: `${label} had these tools at ${activeTools ? "this turn’s startup" : "its last startup in this workspace"}: ${codeList(tools) || "none"}.`
+				: chinese
+					? `${label}在本工作区还没有可用的启动记录。`
+					: `No startup record is available for ${label} in this workspace.`,
+			extensions.length
+				? chinese
+					? `从清单识别到的 PA 扩展：${codeList(extensions)}。`
+					: `PA-managed extensions identified from the list: ${codeList(extensions)}.`
+				: null,
+			tools
+				? chinese
+					? `这次启动时 Human Question ${tools.includes("request_clarification") ? "已启用" : "未启用"}。`
+					: `Human Question was ${tools.includes("request_clarification") ? "enabled" : "disabled"} at that startup.`
+				: null,
+			chinese
+				? "`human-question` 注册 `request_clarification`。正式执行时，主责用它向人提请决定，协作者用它向直接委托者澄清。讨论和旁听不加载此工具。"
+				: "`human-question` registers `request_clarification`. During assigned work the lead can request a human decision and collaborators can ask their delegator. Discussion and observation turns do not load it.",
+		]
+			.filter(Boolean)
+			.join("\n\n"),
+	};
+}
+
 export async function readWorkbenchTopic(
 	store: PersonalAgentStore,
 	context: WorkbenchContext,
@@ -32,6 +109,7 @@ export async function readWorkbenchTopic(
 	chinese: boolean,
 ) {
 	if (isGuideTopic(topic)) return readWorkbenchGuide(topic, chinese);
+	if (topic === "runtime_tools") return describeRuntimeTools(store, context, chinese);
 
 	const { matter, members, workspaceName, activeTools } = context;
 	if (topic === "current_matter") {

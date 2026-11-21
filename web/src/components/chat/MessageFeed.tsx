@@ -36,6 +36,7 @@ import {
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
+import { DecisionDemo } from "./DecisionDemo.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { HumanDecisionCard } from "./HumanDecisionCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
@@ -499,6 +500,9 @@ export function MessageFeed({
 											<MarkdownView content={msg.content} />
 										)}
 									</div>
+									{isWorkbenchHelp &&
+										(msg.metadata?.workbenchHelpTopic === "decisions" ||
+											msg.metadata?.humanDecisionHelp === true) && <DecisionDemo />}
 									{progressSnapshot && (
 										<ProgressSnapshotCard
 											snapshot={progressSnapshot}

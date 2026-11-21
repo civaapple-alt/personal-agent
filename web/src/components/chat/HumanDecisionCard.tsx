@@ -3,6 +3,7 @@ import { type HumanDecision, readHumanDecision } from "../../../../src/orchestra
 import { actOnHumanDecision, type HumanDecisionAction, type MatterDto } from "../../api/matters.ts";
 import type { AccountUserDto, CollaboratorDto, OrganizationMemberDto } from "../../api.ts";
 import { formatClockTime } from "../../utils.ts";
+import { DecisionAnswerForm } from "./DecisionAnswerForm.tsx";
 
 export function HumanDecisionCard({
 	matter,
@@ -36,8 +37,6 @@ export function HumanDecisionCard({
 	sourceName?: string;
 }) {
 	const inputId = useId();
-	const [selected, setSelected] = useState<number | null>(null);
-	const [answer, setAnswer] = useState("");
 	const [assignee, setAssignee] = useState("");
 	const [changingAssignee, setChangingAssignee] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -52,7 +51,6 @@ export function HumanDecisionCard({
 			: canManage && (accountUser != null || currentUser?.permissionRole === "owner"));
 	const executionConfirmation = active.kind === "execution_confirmation";
 	const options = active.requests.length === 1 ? (active.requests[0]?.options ?? []) : [];
-	const selectedAnswer = selected === null ? answer.trim() : (options[selected] ?? "");
 
 	async function submit(action: HumanDecisionAction) {
 		setSubmitting(true);
@@ -141,54 +139,11 @@ export function HumanDecisionCard({
 						</div>
 					)}
 					{canAnswer && !executionConfirmation && (
-						<form
-							onSubmit={(event) => {
-								event.preventDefault();
-								if (!selectedAnswer || submitting) return;
-								void submit({ action: "answer", revision: active.revision, answer: selectedAnswer });
-							}}
-						>
-							{options.length > 0 && (
-								<fieldset>
-									<legend>选择答复</legend>
-									{options.map((option, index) => (
-										<label key={option} className="checkbox-label">
-											<input
-												type="radio"
-												name={inputId}
-												checked={selected === index}
-												onChange={() => setSelected(index)}
-											/>
-											{option}
-										</label>
-									))}
-									<label className="checkbox-label">
-										<input
-											type="radio"
-											name={inputId}
-											checked={selected === null}
-											onChange={() => setSelected(null)}
-										/>
-										自行填写
-									</label>
-								</fieldset>
-							)}
-							{selected === null && (
-								<label className="human-decision-input">
-									<span>你的答复</span>
-									<textarea
-										className="input-field"
-										rows={2}
-										value={answer}
-										maxLength={4000}
-										onChange={(event) => setAnswer(event.target.value)}
-									/>
-								</label>
-							)}
-							<button type="submit" className="btn-pill-dark btn-xs" disabled={!selectedAnswer || submitting}>
-								提交答案
-							</button>
-						</form>
+						<DecisionAnswerForm
+							options={options}
+							submitting={submitting}
+							onAnswer={(answer) => void submit({ action: "answer", revision: active.revision, answer })}
+						/>
 					)}
 					{canManage &&
 						canParticipate &&

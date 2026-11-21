@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Answer questions about AI tools with the role's observed runtime tools and clarify when Human Question is available.
+- Let users try the decision-card form from workbench help without creating a live decision.
 - Answer workbench questions from the installed guide and current matter records. Give AI roles read-only access to the same guide, pending decisions, published deliverables, and visible participation data.
 - Include the decision SDK and its license in the prebuilt package so it starts without npm dependencies.
 

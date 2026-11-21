@@ -43,13 +43,20 @@ const GUIDES = {
 export const WORKBENCH_TOPICS = {
 	...Object.fromEntries(Object.entries(GUIDES).map(([key, guide]) => [key, guide.rubric])),
 	current_matter: "Current matter status, lead, team participation, or bound repository as it exists now.",
+	runtime_tools:
+		"Which tools or extensions the current AI role can actually use in this matter. Includes '你能用哪些工具', '包含 human question 和 request_clarification 吗', and questions about whether a named tool is available. Choose capabilities only for platform setup or customization.",
 	pending_decisions:
 		"Only for listing the actual decision cards currently pending in this matter, such as '本事项有哪些卡片等我答复'.",
 	published_deliverables:
 		"Only for listing the actual deliverables already published for this matter, such as '本事项已经发布了哪些成果'.",
 } as Record<WorkbenchTopic, string>;
 
-export type WorkbenchTopic = keyof typeof GUIDES | "current_matter" | "pending_decisions" | "published_deliverables";
+export type WorkbenchTopic =
+	| keyof typeof GUIDES
+	| "current_matter"
+	| "runtime_tools"
+	| "pending_decisions"
+	| "published_deliverables";
 
 export function isWorkbenchTopic(topic: unknown): topic is WorkbenchTopic {
 	return typeof topic === "string" && Object.hasOwn(WORKBENCH_TOPICS, topic);
@@ -58,7 +65,7 @@ export function isWorkbenchTopic(topic: unknown): topic is WorkbenchTopic {
 export const WORKBENCH_HELP_PROMPT = [
 	"Personal Agent help: call read_pa_help for questions about the workbench's features or current matter state. Use the business repository for questions about the project itself.",
 	`Guide topics: ${Object.keys(GUIDES).join(", ")}.`,
-	"Live topics: current_matter (roles, repository, and active tools), pending_decisions, published_deliverables.",
+	"Live topics: current_matter (roles and repository), runtime_tools (actual tools and extension availability), pending_decisions, published_deliverables.",
 ].join("\n");
 
 export function isGuideTopic(topic: WorkbenchTopic): topic is keyof typeof GUIDES {

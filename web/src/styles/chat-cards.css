@@ -376,6 +376,13 @@
 .human-decision-card > button {
 	justify-self: start;
 }
+.human-decision-demo > summary {
+	cursor: pointer;
+}
+.human-decision-demo[open] > summary,
+.human-decision-demo > p {
+	margin-bottom: 0.55rem;
+}
 .human-decision-error {
 	color: #b42318;
 }
