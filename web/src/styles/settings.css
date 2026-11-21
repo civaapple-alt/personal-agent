@@ -168,37 +168,6 @@
 	gap: 6px;
 	min-width: 0;
 }
-.settings-pstack-active-row {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	flex-wrap: wrap;
-	min-width: 0;
-}
-.settings-pstack-meta {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
-	flex: 1 1 260px;
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-.settings-pstack-path-line {
-	display: flex;
-	align-items: baseline;
-	gap: 4px;
-	flex-wrap: wrap;
-	color: var(--text-muted);
-	min-width: 0;
-	overflow-wrap: anywhere;
-}
-.settings-pstack-path-label {
-	white-space: nowrap;
-	flex-shrink: 0;
-}
 .settings-pstack-setup {
 	display: flex;
 	flex-direction: column;

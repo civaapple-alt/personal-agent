@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import http from "node:http";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -18,7 +25,6 @@ import {
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../src/index.ts";
-import { DEFAULT_PSTACK_CLONE_URL, resolveDefaultPstackRepoDir } from "../src/server/git-clone.ts";
 
 function createValidPstackFixture(dir: string): void {
 	mkdirSync(join(dir, "skills", "poteto-mode"), { recursive: true });
@@ -263,60 +269,17 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 	assert.ok(statSync(resolveBuiltinExtensionPath("pstack-extension")).isFile());
 });
 
-async function startBarePstackHttpRepo(
-	rootDir: string,
-	name: string,
-	populate: (workDir: string) => void,
-): Promise<{ cloneUrl: string; publish: (change: (dir: string) => void) => void; close: () => Promise<void> }> {
-	const workDir = join(rootDir, `${name}-src`);
-	const bareDir = join(rootDir, `${name}.git`);
-	mkdirSync(workDir, { recursive: true });
-	execFileSync("git", ["init", "-b", "main", workDir], { stdio: "ignore" });
-	execFileSync("git", ["config", "user.name", "Test User"], { cwd: workDir, stdio: "ignore" });
-	execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: workDir, stdio: "ignore" });
-	populate(workDir);
-	execFileSync("git", ["add", "."], { cwd: workDir, stdio: "ignore" });
-	execFileSync("git", ["commit", "-m", "init"], { cwd: workDir, stdio: "ignore" });
-	execFileSync("git", ["clone", "--bare", workDir, bareDir], { stdio: "ignore" });
-	execFileSync("git", ["update-server-info"], { cwd: bareDir, stdio: "ignore" });
-
-	const httpServer = http.createServer((req, res) => {
-		const urlPath = (req.url ?? "/").split("?")[0] ?? "/";
-		const prefix = `/${name}.git/`;
-		const cleanRel = urlPath.startsWith(prefix) ? urlPath.slice(prefix.length) : urlPath.replace(/^\/+/, "");
-		const target = resolve(bareDir, cleanRel);
-		if (!target.startsWith(bareDir) || !existsSync(target) || statSync(target).isDirectory()) {
-			res.writeHead(404);
-			res.end("Not found");
-			return;
-		}
-		res.writeHead(200);
-		res.end(readFileSync(target));
-	});
-	await new Promise<void>((resolveListen) => httpServer.listen(0, "127.0.0.1", () => resolveListen()));
-	const addr = httpServer.address();
-	assert.ok(addr && typeof addr === "object");
-	return {
-		cloneUrl: `http://127.0.0.1:${addr.port}/${name}.git`,
-		publish: (change) => {
-			change(workDir);
-			execFileSync("git", ["add", "-A"], { cwd: workDir, stdio: "ignore" });
-			execFileSync("git", ["commit", "-m", "Update fixture"], { cwd: workDir, stdio: "ignore" });
-			execFileSync("git", ["push", bareDir, "main"], { cwd: workDir, stdio: "ignore" });
-			execFileSync("git", ["update-server-info"], { cwd: bareDir, stdio: "ignore" });
-		},
-		close: () => new Promise<void>((resolveClose) => httpServer.close(() => resolveClose())),
-	};
-}
-
-test("Super admin can clone/enable pstack into .data/extensions/repo/<name>, persist setting, and disable cleanly", async (t) => {
-	const tempDir = mkdtempSync(join(tmpdir(), "pa-pstack-install-"));
+test("Only an admin can enable an existing pstack package, and PA leaves package files untouched", async (t) => {
+	const tempDir = mkdtempSync(join(tmpdir(), "pa-pstack-config-"));
 	t.after(() => rmSync(tempDir, { recursive: true, force: true }));
 
 	const dataDir = join(tempDir, ".data");
-	const repoContainerDir = join(dataDir, "extensions", "repo");
-	mkdirSync(repoContainerDir, { recursive: true });
-	const expectedValidDir = join(repoContainerDir, "valid-pstack");
+	mkdirSync(dataDir);
+	const packageDir = join(tempDir, "pi-agent", "git", "pstack");
+	createValidPstackFixture(packageDir);
+	const canonicalPackageDir = realpathSync(packageDir);
+	const invalidDir = join(tempDir, "invalid-pstack");
+	mkdirSync(invalidDir);
 
 	const prevEnvPstack = process.env.PA_PSTACK_DIR;
 	delete process.env.PA_PSTACK_DIR;
@@ -324,13 +287,6 @@ test("Super admin can clone/enable pstack into .data/extensions/repo/<name>, per
 		if (prevEnvPstack === undefined) delete process.env.PA_PSTACK_DIR;
 		else process.env.PA_PSTACK_DIR = prevEnvPstack;
 	});
-
-	const validRepo = await startBarePstackHttpRepo(tempDir, "valid-pstack", createValidPstackFixture);
-	t.after(() => validRepo.close());
-	const invalidRepo = await startBarePstackHttpRepo(tempDir, "invalid-pstack", (dir) => {
-		writeFileSync(join(dir, "README.md"), "# Not pstack\n", "utf8");
-	});
-	t.after(() => invalidRepo.close());
 
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
 	const db = openPersonalAgentDatabase(join(dataDir, "personal-agent.db"));
@@ -372,140 +328,69 @@ test("Super admin can clone/enable pstack into .data/extensions/repo/<name>, per
 	assert.ok(addr && typeof addr !== "string");
 	const baseUrl = `http://127.0.0.1:${addr.port}`;
 
-	// Default clone URL points to upstream backnotprop/pstack and resolves under .data/extensions/repo/pstack
-	assert.equal(DEFAULT_PSTACK_CLONE_URL, "https://github.com/backnotprop/pstack.git");
-	assert.equal(resolveDefaultPstackRepoDir(dataDir), join(repoContainerDir, "pstack"));
+	const post = (operation: "enable" | "disable", body: object, token = adminToken) =>
+		fetch(`${baseUrl}/api/admin/runtime/pstack/${operation}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: JSON.stringify(body),
+		});
 
-	// Non-admin user is forbidden from enabling/disabling pstack
-	const memberEnableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${memberToken}` },
-		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
-	});
-	assert.equal(memberEnableRes.status, 403);
-
-	// Unsafe file:// URL blocked
-	const unsafeRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-		body: JSON.stringify({ cloneUrl: "file:///tmp/evil-pstack" }),
-	});
-	assert.equal(unsafeRes.status, 400);
-
-	// Cloning an incomplete repo fails cleanly without leaving invalid files under `.data/extensions/repo/<name>`
-	const invalidRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-		body: JSON.stringify({ cloneUrl: invalidRepo.cloneUrl }),
-	});
-	assert.equal(invalidRes.status, 400);
-	assert.equal(existsSync(join(repoContainerDir, "invalid-pstack")), false);
+	assert.equal((await post("enable", { path: packageDir }, memberToken)).status, 403);
+	assert.equal((await post("disable", {}, memberToken)).status, 403);
+	assert.equal((await post("enable", { cloneUrl: "https://example.test/pstack.git" })).status, 400);
+	assert.equal((await post("enable", { path: "relative/pstack" })).status, 400);
+	assert.equal((await post("enable", { path: invalidDir })).status, 400);
 	assert.equal(store.getPlatformSettings().pstackDir, null);
 	assert.equal(orchestrator.getRuntimeConfig().pstackDir, null);
 
-	// Valid repo clones into `.data/extensions/repo/valid-pstack`, verifies, persists settings, and activates immediately
-	const enableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
-	});
-	assert.equal(enableRes.status, 200);
-	const enableJson = (await enableRes.json()) as {
-		source: string;
-		repoPath: string;
+	const manifestPath = join(packageDir, "plugin.json");
+	const initialManifest = readFileSync(manifestPath, "utf8");
+	const enableRes = await post("enable", { path: packageDir });
+	assert.equal(enableRes.status, 200, await enableRes.clone().text());
+	const enabled = (await enableRes.json()) as {
 		settings: { pstackDir: string | null };
 		overview: RuntimeOverviewPayload;
 	};
-	assert.equal(enableJson.source, "cloned");
-	assert.ok(enableJson.repoPath.endsWith("/extensions/repo/valid-pstack"));
-	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
-	assert.ok(existsSync(join(expectedValidDir, "skills", "poteto-mode", "SKILL.md")));
-	assert.equal(enableJson.settings.pstackDir, enableJson.repoPath);
-	assert.equal(enableJson.overview.base.pstack.configured, true);
-	assert.equal(enableJson.overview.base.pstack.available, true);
-	assert.equal(enableJson.overview.base.pstack.version, "0.15.42");
-	assert.equal(enableJson.overview.base.pstack.skillCount, 2);
-	assert.equal(enableJson.overview.extensions.find((ext) => ext.id === "builtin-pstack-extension")?.status, "active");
-	assert.equal(
-		enableJson.overview.configSections.find((s) => s.id === "env")?.items.find((i) => i.key === "PA_PSTACK_DIR")
-			?.overridden,
-		true,
-	);
+	assert.equal(enabled.settings.pstackDir, canonicalPackageDir);
+	assert.equal(enabled.overview.base.pstack.root, canonicalPackageDir);
+	assert.equal(enabled.overview.base.pstack.version, "0.15.42");
+	assert.equal(enabled.overview.base.pstack.skillCount, 2);
+	assert.equal(enabled.overview.extensions.find((ext) => ext.id === "builtin-pstack-extension")?.status, "active");
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, canonicalPackageDir);
+	assert.equal(readFileSync(manifestPath, "utf8"), initialManifest);
 
-	const postPstackUpdate = () =>
-		fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-			body: JSON.stringify({ update: true }),
-		});
-	const activeRevision = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: expectedValidDir, encoding: "utf8" });
-	const originalRevision = activeRevision();
-	validRepo.publish((dir) => rmSync(join(dir, "plugin.json")));
-	const invalidUpdate = await postPstackUpdate();
-	assert.equal(invalidUpdate.status, 502);
-	assert.match(await invalidUpdate.text(), /plugin\.json/);
-	assert.equal(activeRevision(), originalRevision);
-	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
-	assert.equal(orchestrator.getRuntimeConfig().pstackDir, enableJson.repoPath);
+	assert.equal((await post("enable", { path: invalidDir })).status, 400);
+	assert.equal(store.getPlatformSettings().pstackDir, canonicalPackageDir);
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, canonicalPackageDir);
 
-	validRepo.publish((dir) => {
-		writeFileSync(join(dir, "plugin.json"), JSON.stringify({ name: "pstack", version: "0.15.43" }));
-	});
-	const validUpdate = await postPstackUpdate();
-	assert.equal(validUpdate.status, 200, await validUpdate.clone().text());
-	const updateJson = (await validUpdate.json()) as {
-		source: string;
-		repoPath: string;
-		overview: RuntimeOverviewPayload;
-	};
-	assert.equal(updateJson.source, "updated");
-	assert.equal(updateJson.repoPath, enableJson.repoPath);
-	assert.equal(updateJson.overview.base.pstack.version, "0.15.43");
-	assert.notEqual(activeRevision(), originalRevision);
-
-	process.env.PA_PSTACK_DIR = expectedValidDir;
-	assert.equal((await postPstackUpdate()).status, 409);
+	process.env.PA_PSTACK_DIR = packageDir;
+	assert.equal((await post("enable", { path: packageDir })).status, 409);
+	assert.equal((await post("disable", {})).status, 409);
 	delete process.env.PA_PSTACK_DIR;
 
-	// Simulated server restart reads persisted pstackDir from DB without PA_PSTACK_DIR env
-	const reopenedSettings = store.getPlatformSettings();
-	assert.equal(reopenedSettings.pstackDir, enableJson.repoPath);
-	const restartedOrchestrator = new TeamOrchestrator({
-		store,
-		templates,
-		defaultCwd: tempDir,
-		noSession: true,
-		pstackDir: reopenedSettings.pstackDir ?? undefined,
-	});
-	assert.equal(restartedOrchestrator.getRuntimeConfig().pstackDir, enableJson.repoPath);
+	const persisted = openPersonalAgentDatabase(join(dataDir, "personal-agent.db"));
+	t.after(() => persisted.close());
+	assert.equal(new PersonalAgentStore(persisted).getPlatformSettings().pstackDir, canonicalPackageDir);
 
-	// Disable clears persisted pstackDir while preserving local cloned directory for instant re-enable
-	const disableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/disable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-		body: "{}",
-	});
+	// A package update happens outside PA. Runtime diagnostics read the new version at the same path.
+	writeFileSync(manifestPath, JSON.stringify({ name: "pstack", version: "0.15.43" }));
+	const overviewRes = await fetch(`${baseUrl}/api/runtime`, { headers: { Authorization: `Bearer ${adminToken}` } });
+	assert.equal(overviewRes.status, 200);
+	const overview = (await overviewRes.json()) as RuntimeOverviewPayload;
+	assert.equal(overview.base.pstack.version, "0.15.43");
+
+	const disableRes = await post("disable", {});
 	assert.equal(disableRes.status, 200);
-	const disableJson = (await disableRes.json()) as {
+	const disabled = (await disableRes.json()) as {
 		settings: { pstackDir: string | null };
 		overview: RuntimeOverviewPayload;
 	};
-	assert.equal(disableJson.settings.pstackDir, null);
-	assert.equal(disableJson.overview.base.pstack.configured, false);
-	assert.equal(
-		disableJson.overview.extensions.find((ext) => ext.id === "builtin-pstack-extension")?.status,
-		"inactive",
-	);
-	assert.ok(existsSync(join(expectedValidDir, "plugin.json")));
+	assert.equal(disabled.settings.pstackDir, null);
+	assert.equal(disabled.overview.base.pstack.configured, false);
+	assert.equal(orchestrator.getRuntimeConfig().pstackDir, null);
+	assert.equal(JSON.parse(readFileSync(manifestPath, "utf8")).version, "0.15.43");
+	assert.equal(existsSync(join(dataDir, "extensions")), false);
 
-	// Re-enable with same cloneUrl reuses existing `.data/extensions/repo/valid-pstack` without recloning
-	const reenableRes = await fetch(`${baseUrl}/api/admin/runtime/pstack/enable`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-		body: JSON.stringify({ cloneUrl: validRepo.cloneUrl }),
-	});
-	assert.equal(reenableRes.status, 200);
-	const reenableJson = (await reenableRes.json()) as { source: string; repoPath: string };
-	assert.equal(reenableJson.source, "existing");
-	assert.equal(reenableJson.repoPath, enableJson.repoPath);
+	assert.equal((await post("enable", { path: packageDir })).status, 200);
+	assert.equal(store.getPlatformSettings().pstackDir, canonicalPackageDir);
 });

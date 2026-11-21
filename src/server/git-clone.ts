@@ -1,33 +1,12 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	realpathSync,
-	renameSync,
-	rmdirSync,
-	rmSync,
-	statSync,
-} from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { type PstackRuntime, preparePstackRuntime } from "../roles/pstack.ts";
 
 const execFileAsync = promisify(execFile);
 
-export const DEFAULT_PSTACK_CLONE_URL = "https://github.com/backnotprop/pstack.git";
-
 const SCP_SSH_RE = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+:[a-zA-Z0-9._~/@+-]+$/;
-const pstackInstallLocks = new Map<string, Promise<InstallPstackResult>>();
-
-export interface InstallPstackResult {
-	repoPath: string;
-	source: "cloned" | "updated" | "existing";
-	runtime: PstackRuntime;
-}
-
 export function validateCloneUrl(rawUrl: string): string {
 	const trimmed = rawUrl.trim();
 	if (!trimmed) throw new Error("请填写 Git 仓库克隆地址");
@@ -84,45 +63,20 @@ export function resolveOrgWorkspacesDir(workspacesRoot: string, org: { id: strin
 	return resolve(workspacesRoot, folder);
 }
 
-async function runGitCloneCommand(input: {
-	cloneUrl: string;
-	targetDir: string;
-	branch?: string;
-	depth?: number;
-}): Promise<void> {
-	const execClone = async (withDepth: boolean) => {
-		const args = ["clone"];
-		if (withDepth && input.depth && input.depth > 0) {
-			args.push("--depth", String(input.depth));
-		}
-		if (input.branch) {
-			args.push("--branch", input.branch, "--single-branch");
-		}
-		args.push("--", input.cloneUrl, input.targetDir);
-		await execFileAsync("git", args, {
-			timeout: 120_000,
-			maxBuffer: 4 * 1024 * 1024,
-			env: {
-				...process.env,
-				GIT_TERMINAL_PROMPT: "0",
-			},
-		});
-	};
-
-	const useShallow = Boolean(input.depth && input.depth > 0);
-	try {
-		await execClone(useShallow);
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		if (useShallow && /shallow|dumb http/i.test(msg)) {
-			if (existsSync(input.targetDir)) {
-				rmSync(input.targetDir, { recursive: true, force: true });
-			}
-			await execClone(false);
-			return;
-		}
-		throw err;
+async function runGitCloneCommand(input: { cloneUrl: string; targetDir: string; branch?: string }): Promise<void> {
+	const args = ["clone"];
+	if (input.branch) {
+		args.push("--branch", input.branch, "--single-branch");
 	}
+	args.push("--", input.cloneUrl, input.targetDir);
+	await execFileAsync("git", args, {
+		timeout: 120_000,
+		maxBuffer: 4 * 1024 * 1024,
+		env: {
+			...process.env,
+			GIT_TERMINAL_PROMPT: "0",
+		},
+	});
 }
 
 export async function cloneGitWorkspaceIntoOrgRoot(input: {
@@ -160,126 +114,4 @@ export async function cloneGitWorkspaceIntoOrgRoot(input: {
 		const msg = err instanceof Error ? err.message : String(err);
 		throw new Error(`克隆仓库失败：${msg.slice(0, 320)}`);
 	}
-}
-
-export function resolveExtensionsRepoRoot(dataDir: string): string {
-	return resolve(dataDir, "extensions", "repo");
-}
-
-export function resolveDefaultPstackRepoDir(dataDir: string, cloneUrl = DEFAULT_PSTACK_CLONE_URL): string {
-	const folder = deriveSafeRepoFolder("pstack", cloneUrl);
-	return resolve(resolveExtensionsRepoRoot(dataDir), folder);
-}
-
-async function updatePstackRepo(targetDir: string): Promise<PstackRuntime> {
-	const runGit = (args: string[], cwd = targetDir) =>
-		execFileAsync("git", args, {
-			cwd,
-			timeout: 120_000,
-			maxBuffer: 4 * 1024 * 1024,
-			env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-		});
-	const { stdout: changes } = await runGit(["status", "--porcelain", "--untracked-files=all"]);
-	if (changes.trim()) throw new Error("pstack 仓库存在未提交的改动，无法安全更新");
-
-	await runGit(["fetch"]);
-	const { stdout } = await runGit(["rev-parse", "--verify", "@{upstream}^{commit}"]);
-	const candidate = stdout.trim();
-	const stagingDir = mkdtempSync(join(dirname(targetDir), ".repo-check-"));
-	try {
-		await runGit(["clone", "--shared", "--no-checkout", "--", targetDir, stagingDir]);
-		await runGit(["checkout", "--detach", candidate], stagingDir);
-		await preparePstackRuntime(stagingDir);
-		await runGit(["merge", "--ff-only", candidate]);
-		return await preparePstackRuntime(targetDir);
-	} finally {
-		rmSync(stagingDir, { recursive: true, force: true });
-	}
-}
-
-async function performInstallOrEnablePstackRepo(cloneUrl: string, targetDir: string): Promise<InstallPstackResult> {
-	const parentDir = dirname(targetDir);
-
-	if (existsSync(targetDir)) {
-		if (!statSync(targetDir).isDirectory()) {
-			throw new Error(`目标路径已存在且不是目录：${targetDir}`);
-		}
-		const entries = readdirSync(targetDir);
-		if (entries.length > 0) {
-			let existingRuntime: PstackRuntime;
-			try {
-				existingRuntime = await preparePstackRuntime(targetDir);
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				throw new Error(`目录 ${targetDir} 已存在非空内容但不是有效的 pstack 方法包：${msg}`);
-			}
-			return { repoPath: existingRuntime.root, source: "existing", runtime: existingRuntime };
-		}
-	}
-
-	mkdirSync(parentDir, { recursive: true });
-	const stagingDir = join(parentDir, `.repo-tmp-${randomUUID().slice(0, 8)}`);
-	try {
-		try {
-			await runGitCloneCommand({ cloneUrl, targetDir: stagingDir, depth: 1 });
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			throw new Error(`克隆 pstack 仓库失败：${msg.slice(0, 320)}`);
-		}
-		try {
-			await preparePstackRuntime(stagingDir);
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			throw new Error(`已克隆仓库，但缺少完整的 pstack 结构（plugin.json 与 skills/poteto-mode/SKILL.md）：${msg}`);
-		}
-		if (existsSync(targetDir)) {
-			if (readdirSync(targetDir).length > 0) {
-				throw new Error(`目标目录在克隆完成前变为非空：${targetDir}`);
-			}
-			rmdirSync(targetDir);
-		}
-		renameSync(stagingDir, targetDir);
-		const runtime = await preparePstackRuntime(targetDir);
-		return { repoPath: runtime.root, source: "cloned", runtime };
-	} finally {
-		if (existsSync(stagingDir)) {
-			rmSync(stagingDir, { recursive: true, force: true });
-		}
-	}
-}
-
-/** Validate or clone the full pstack pack into `<dataDir>/extensions/repo/<repoName>` and return its verified runtime info. */
-export async function installOrEnablePstackRepo(input: {
-	dataDir: string;
-	cloneUrl?: string;
-	updateRepoPath?: string;
-}): Promise<InstallPstackResult> {
-	const normalizedUrl = validateCloneUrl(input.cloneUrl?.trim() || DEFAULT_PSTACK_CLONE_URL);
-	const managedRoot = resolveExtensionsRepoRoot(input.dataDir);
-	if (!input.updateRepoPath) mkdirSync(managedRoot, { recursive: true });
-	const realRoot = realpathSync(managedRoot);
-	const destination = input.updateRepoPath ?? resolve(realRoot, deriveSafeRepoFolder("pstack", normalizedUrl));
-	const targetDir = existsSync(destination) ? realpathSync(destination) : destination;
-	if (dirname(targetDir) !== realRoot) throw new Error("pstack 仓库必须位于工作台扩展目录下");
-	if (input.updateRepoPath && !existsSync(join(targetDir, ".git"))) {
-		throw new Error("只有由工作台克隆的 pstack 仓库可以同步更新");
-	}
-	const active = pstackInstallLocks.get(targetDir);
-	if (active) return active;
-	const operation: Promise<InstallPstackResult> = input.updateRepoPath
-		? updatePstackRepo(targetDir).then(
-				(runtime) => ({ repoPath: runtime.root, source: "updated", runtime }),
-				(error: unknown) => {
-					const message = error instanceof Error ? error.message : String(error);
-					throw new Error(`同步更新 pstack 仓库失败：${message.slice(0, 320)}`);
-				},
-			)
-		: performInstallOrEnablePstackRepo(normalizedUrl, targetDir);
-	const task = operation.finally(() => {
-		if (pstackInstallLocks.get(targetDir) === task) {
-			pstackInstallLocks.delete(targetDir);
-		}
-	});
-	pstackInstallLocks.set(targetDir, task);
-	return task;
 }

@@ -28,6 +28,7 @@
 			"web/src/**/*.ts",
 			"web/src/**/*.tsx",
 			"scripts/**/*.mjs",
+			"pi-extensions/**/*.{ts,js}",
 			"!**/node_modules/**/*",
 			"!**/dist/**/*",
 			"!**/web/dist/**/*"

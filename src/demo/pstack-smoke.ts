@@ -5,8 +5,8 @@ import { cp, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { preparePstackRuntime, readPstackResource } from "../../pi-extensions/pstack-methods/methods.js";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
-import { preparePstackRuntime, readPstackResource } from "../roles/pstack.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";

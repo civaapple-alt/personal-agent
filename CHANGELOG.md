@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Use Pi to install and update pstack. Enable an existing methods package in workbench settings and expose the read-only adapter as a standalone Pi extension.
+
 ## [0.6.3] - 2026-11-21
 
 See the [0.6.3 release guide](docs/releases/v0.6.3.md) for downloads and upgrade instructions.

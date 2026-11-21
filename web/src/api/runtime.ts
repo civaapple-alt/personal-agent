@@ -54,7 +54,6 @@ export interface RuntimeBaseInfoDto {
 		skillCount: number;
 		error: string | null;
 		source?: "env" | "settings" | "none";
-		defaultCloneUrl?: string;
 	};
 	isolationModes: RuntimeIsolationModeDto[];
 	envFlags: {
@@ -98,15 +97,13 @@ export function fetchRuntimeOverview(): Promise<RuntimeOverviewDto> {
 	return requestJson("/api/runtime");
 }
 
-export function enableRuntimePstack(input?: { cloneUrl?: string; update?: boolean }): Promise<{
-	source: "cloned" | "updated" | "existing";
-	repoPath: string;
+export function enableRuntimePstack(path: string): Promise<{
 	settings: PlatformSettingsDto;
 	overview: RuntimeOverviewDto;
 }> {
 	return requestJson("/api/admin/runtime/pstack/enable", {
 		method: "POST",
-		body: JSON.stringify(input ?? {}),
+		body: JSON.stringify({ path }),
 	});
 }
 

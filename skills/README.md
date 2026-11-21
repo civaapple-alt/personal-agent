@@ -15,7 +15,7 @@
 
 - [角色资产](../roles/README.md)的 `skills` 可用方法名称或角色包内的相对引用 `skills/<name>/SKILL.md`。名称按角色作用域查找，依次回退到平台通用与内置目录。宿主校验实际文件路径位于允许的目录，再用 `--skill` 装载。引用绝对路径、越界或文件缺失时返回错误。见[名称解析](../src/roles/capabilities.ts)与[执行装配](../src/orchestrator/execution-context.ts)。
 
-模型根据可用 Skill 的 `name` 和 `description` 判断是否需要读取正文。内置 Skill 和 [pstack 方法目录](../src/roles/pstack.ts)都沿用这两个发现字段。Role 的 `keywords` 用于[事项派单和立项](../roles/README.md)。
+模型根据可用 Skill 的 `name` 和 `description` 判断是否需要读取正文。内置 Skill 和 [pstack 方法目录](../pi-extensions/pstack-methods/README.md)沿用这两个发现字段。Role 的 `keywords` 用于[事项派单和立项](../roles/README.md)。
 
 内置 Skill 的 `description` 和正文使用英文。描述写明适用的任务情境，正文写明动作和完成标准。用户交流与交付语言由本轮请求决定。编辑时避免重复运行规则或写入公司、项目事实。新增方法须同时检查引用角色和真实依赖。
 

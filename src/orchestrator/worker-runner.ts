@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildPstackGuidance, preparePstackRuntime } from "../roles/pstack.ts";
+import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -26,6 +26,7 @@ import {
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
 } from "./prompts.ts";
+import { buildPstackGuidance } from "./pstack-guidance.ts";
 import { resolveBuiltinExtensionPath } from "./runtime-info.ts";
 import {
 	type DelegateInput,

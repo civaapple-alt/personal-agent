@@ -1,4 +1,4 @@
-import type { readPstackResource } from "../roles/pstack.ts";
+import type { readPstackResource } from "../../pi-extensions/pstack-methods/methods.js";
 import type { ToolExecutionRecord } from "../rpc/pi-rpc-worker.ts";
 
 /** Match full actual source and its hash, whether directly read or bundled as a dependency. */

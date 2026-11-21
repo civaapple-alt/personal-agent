@@ -1,8 +1,21 @@
-import { preparePstackRuntime, readPstackResource } from "../roles/pstack.ts";
-import type { PiExtensionApi } from "./team-extension.ts";
+import { preparePstackRuntime, readPstackResource } from "./methods.js";
+
+interface PstackExtensionApi {
+	registerTool(tool: {
+		name: string;
+		label: string;
+		description: string;
+		parameters: object;
+		execute(
+			callId: string,
+			args: unknown,
+			signal?: AbortSignal,
+		): Promise<{ content: { type: "text"; text: string }[]; details: unknown }>;
+	}): void;
+}
 
 /** A method reader for Pi, including roles without general filesystem tools. */
-export async function registerPstackExtension(pi: PiExtensionApi, directory: string): Promise<void> {
+export async function registerPstackExtension(pi: PstackExtensionApi, directory: string): Promise<void> {
 	const runtime = await preparePstackRuntime(directory);
 	const names = new Set(runtime.skills.map((skill) => skill.name));
 	const loaded = new Set<string>();
@@ -75,8 +88,7 @@ export async function registerPstackExtension(pi: PiExtensionApi, directory: str
 	});
 }
 
-export default async function pstackExtension(pi: PiExtensionApi): Promise<void> {
-	const directory = process.env.PA_PSTACK_DIR;
-	if (!directory) throw new Error("PA_PSTACK_DIR is required by the pstack extension");
-	await registerPstackExtension(pi, directory);
+export default async function pstackExtension(pi: PstackExtensionApi): Promise<void> {
+	const directory = process.env.PA_PSTACK_DIR?.trim();
+	if (directory) await registerPstackExtension(pi, directory);
 }

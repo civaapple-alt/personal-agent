@@ -1,27 +1,37 @@
 # 启用 pstack 方法包
 
-工作台管理员可将完整 pstack 方法包接入 Pi，让岗位按需读取模式、playbook 与原则。方法包来源为 [backnotprop/pstack](https://github.com/backnotprop/pstack)。
+用 Pi 安装 [backnotprop/pstack](https://github.com/backnotprop/pstack)，再在工作台选用已有的方法包。启用后，岗位可按需读取模式、playbook 和原则。
 
-## 使用已有方法包
+## 安装并在工作台启用
 
-确认包根目录包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`，再从源码目录启动。
+1. 在运行 PA 的主机上，用服务账号执行以下命令。运行 `pi list` 时，使用与 PA 相同的 Pi 配置目录。
+
+   ```bash
+   pi install git:github.com/backnotprop/pstack
+   pi list
+   ```
+
+2. 打开「设置 → 扩展插件」。团队版使用超级管理员账号，本机免密模式使用本机所有者。
+3. 在 pstack 卡片粘贴 `pi list` 显示的绝对路径，点击「启用」。方法包根目录须包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`。工作台校验并保存路径，后续启动的岗位按各自的工具配置使用它。
+
+## 用启动配置指定已有目录
+
+如果已有完整方法包，可以在启动时直接传入其目录。
 
 ```bash
 PA_PSTACK_DIR=/path/to/pstack npm run start:web
 ```
 
-如果使用预构建包，在解压目录设置相同变量后执行 `node dist/server/main.js`。`PA_PSTACK_DIR` 优先于工作台保存的设置。
+使用预构建包时，在解压目录设置相同变量后执行 `node dist/server/main.js`。`PA_PSTACK_DIR` 优先于工作台保存的设置。
 
-## 从工作台克隆并管理方法包
+## 更新或停用
 
-1. 启动时省略 `PA_PSTACK_DIR`。以超级管理员身份打开「设置 → 扩展插件」。本机免密试用时以本机所有者身份打开。
-2. 在 pstack 扩展卡片确认 Git 仓库地址，点击「克隆并启用 pstack」。服务将仓库放在数据库同级的 `extensions/repo/`，校验后保存路径。
-3. 在扩展卡片查看启用状态、方法包版本和实际路径。后续启动的 Pi Worker 会使用该包，重启后工作台也会读取保存的路径。
-
-需要升级时，确保克隆目录没有未提交的改动，再点击「同步更新」。服务先校验上游版本，再快进本地分支。校验失败时保留当前版本。点击「停用」可清除启用状态并保留本地仓库目录。
+- 用 `pi update git:github.com/backnotprop/pstack` 更新已安装的包。更新后在工作台刷新运行配置。安装路径改变时，在卡片中启用新路径。
+- 点击「停用」清除 PA 的启用配置。已安装的包仍可在 Pi 中使用。由 `PA_PSTACK_DIR` 启用时，在启动配置中移除该变量后重启。
+- 已由旧版 PA 克隆的方法包可按原路径继续使用。要改由 Pi 管理更新，先用 Pi 安装，再将新安装路径填入工作台。
 
 ## 核对装载状态
 
-在「设置 → 运行配置」查看当前实例的 pstack 状态。若扩展异常，请确认包根目录和必需文件。未启用时，岗位使用自身配置的方法。
+在「设置 → 运行配置」查看配置路径和版本。实际岗位启动时，`runtime_ready` 记录 Pi 装配成功的工具。安装的包可用 `pi list` 核对。 [Pi 包管理](https://docs.pi.dev/latest/packages#install-and-manage-packages) · [方法工具参考](../reference/pstack-tools.md) · [真实任务装载记录](../validation/pstack-checks.md)
 
-维护者可查看 [`runtime_ready` 与方法工具参考](../reference/pstack-tools.md)以及[真实任务装载记录](../validation/pstack-checks.md)。
+要在独立的 Pi 会话使用 PA 提供的方法读取工具，参见 [pstack-methods 扩展包](../../pi-extensions/pstack-methods/README.md)。

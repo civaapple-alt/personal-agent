@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
+import { type PstackRuntime, preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
@@ -14,7 +15,6 @@ import {
 	SESSION_COOKIE_NAME,
 	SlidingWindowRateLimiter,
 } from "../auth.ts";
-import { installOrEnablePstackRepo } from "../git-clone.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
@@ -568,41 +568,29 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const body = await readJsonBody(req);
-		const update = body.update === true;
-		const updateRepoPath = update ? store.getPlatformSettings(ctx.defaultWorkspacesRoot).pstackDir : null;
-		if (update && !updateRepoPath) {
-			sendError(res, 409, "请先启用一个由工作台管理的 pstack 仓库");
+		const path = typeof body.path === "string" ? body.path.trim() : "";
+		if (!isAbsolute(path)) {
+			sendError(res, 400, "请填写服务主机上已有的 pstack 方法包绝对路径，可用 pi list 查看");
 			return true;
 		}
-		const cloneUrl = !update && typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : undefined;
-		const dataDir = ctx.dataDir ?? resolve(process.cwd(), ".data");
-		let installed: Awaited<ReturnType<typeof installOrEnablePstackRepo>>;
+		let runtime: PstackRuntime;
 		try {
-			installed = await installOrEnablePstackRepo({
-				dataDir,
-				cloneUrl,
-				updateRepoPath: updateRepoPath ?? undefined,
-			});
+			runtime = await preparePstackRuntime(path);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			const status = msg.startsWith("克隆 pstack 仓库失败") || msg.startsWith("同步更新 pstack") ? 502 : 400;
-			sendError(res, status, msg);
+			sendError(res, 400, `无法启用 pstack 方法包：${msg}`);
 			return true;
 		}
-		const updatedSettings = store.updatePlatformSettings(
-			{ pstackDir: installed.repoPath },
-			ctx.defaultWorkspacesRoot,
-		);
-		orchestrator.setPstackDir(installed.repoPath);
+		const updatedSettings = store.updatePlatformSettings({ pstackDir: runtime.root }, ctx.defaultWorkspacesRoot);
+		orchestrator.setPstackDir(runtime.root);
 		auditActorAction(ctx, req, actor, {
 			action: "admin.pstack_enable",
 			targetType: "runtime_extension",
 			targetId: "pstack",
 			detail: {
-				repoPath: installed.repoPath,
-				source: installed.source,
-				version: installed.runtime.version,
-				skillCount: installed.runtime.skills.length,
+				path: runtime.root,
+				version: runtime.version,
+				skillCount: runtime.skills.length,
 			},
 		});
 		const overview = await buildRuntimeOverview({
@@ -613,8 +601,6 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			probePiCli: ctx.probePiCli,
 		});
 		sendJson(res, 200, {
-			source: installed.source,
-			repoPath: installed.repoPath,
 			settings: updatedSettings,
 			overview,
 		});

@@ -4,7 +4,7 @@
 
 ## 装配与握手
 
-执行器显式提供岗位 Skills、pstack 的模式入口及本项目方法读取扩展。个人版的本机资源发现和其他模式的显式装配见[运行配置](configuration.md#cli-启动与能力装配)。方法工具必须通过实际工具清单握手，否则在业务提示执行前报错。
+执行器显式提供岗位 Skills、pstack 的模式入口和 [pstack-methods 扩展包](../../pi-extensions/pstack-methods/README.md)。PA 记录选定的方法包路径，Pi 管理包的安装与更新。个人版本机资源发现和其他模式的显式装配见[运行配置](configuration.md#cli-启动与能力装配)。方法工具必须通过实际工具清单握手，否则在业务提示执行前报错。
 
 `runtime_ready` 通知记录外部清单声明的版本和模式正文 SHA256。该哈希只标识实际读取的模式正文。显式配置的包缺少模式、清单或必需方法时，执行会报错。程序还可通过 `TeamOrchestrator` 的 `pstackDir` 参数指定包。
 

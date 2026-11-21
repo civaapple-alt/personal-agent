@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { preparePstackRuntime } from "../roles/pstack.ts";
+import { preparePstackRuntime } from "../../pi-extensions/pstack-methods/methods.js";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { TeamMember } from "../storage/types.ts";
 import { resolveTurnTimeoutMs } from "./types.ts";
@@ -12,8 +12,11 @@ const execFileAsync = promisify(execFile);
 
 export type BuiltinExtensionKind = "team-extension" | "pstack-extension";
 
-/** Resolve source (.ts) or built (.js) extension entry path relative to current runtime module. */
+/** Resolve the extension entry in the current source or packaged installation. */
 export function resolveBuiltinExtensionPath(kind: BuiltinExtensionKind): string {
+	if (kind === "pstack-extension") {
+		return fileURLToPath(new URL("../../pi-extensions/pstack-methods/index.ts", import.meta.url));
+	}
 	const ext = import.meta.url.endsWith(".js") ? "js" : "ts";
 	return fileURLToPath(new URL(`../rpc/${kind}.${ext}`, import.meta.url));
 }
@@ -112,7 +115,6 @@ export interface RuntimeBaseInfo {
 		skillCount: number;
 		error: string | null;
 		source?: "env" | "settings" | "none";
-		defaultCloneUrl?: string;
 	};
 	isolationModes: RuntimeIsolationMode[];
 	envFlags: {
@@ -291,7 +293,6 @@ export async function buildRuntimeOverview(options: {
 		skillCount: 0,
 		error: null,
 		source: pstackEnvSet ? "env" : config.pstackDir ? "settings" : "none",
-		defaultCloneUrl: "https://github.com/backnotprop/pstack.git",
 	};
 
 	if (config.pstackDir) {
@@ -316,7 +317,11 @@ export async function buildRuntimeOverview(options: {
 				version: null,
 				modeSha256: null,
 				skillCount: 0,
-				error: error instanceof Error ? error.message : String(error),
+				error: isOwner
+					? error instanceof Error
+						? error.message
+						: String(error)
+					: "无法读取已配置的 pstack 方法包",
 			};
 		}
 	}
@@ -365,12 +370,12 @@ export async function buildRuntimeOverview(options: {
 
 	const pstackExtensionItem: RuntimeExtensionItem = {
 		id: "builtin-pstack-extension",
-		name: "pstack-extension",
+		name: "pstack-methods",
 		sourceKind: "builtin_conditional",
 		status: pstackStatus,
-		entryPath: isOwner ? pstackExtPath : `${builtInExtSuffix}/pstack-extension.${extSuffix}`,
+		entryPath: isOwner ? pstackExtPath : "pi-extensions/pstack-methods/index.ts",
 		fileStatus: pstackExtFileStatus,
-		scopeSummary: "配置 PA_PSTACK_DIR 后随常规岗位挂载",
+		scopeSummary: "配置已有 pstack 方法包后随常规岗位挂载",
 		description: "只读加载外部 pstack 的 mode、playbook 与原则原文。",
 		registeredTools: ["load_pstack_skill"],
 		hooks: ["poteto-mode --skill"],
