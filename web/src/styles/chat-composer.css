@@ -622,8 +622,12 @@
 	gap: 12px;
 	flex-shrink: 0;
 }
+.collab-dock-head > .btn-inline {
+	flex-shrink: 0;
+}
 .collab-tabs {
 	display: inline-flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
 }
@@ -659,6 +663,55 @@
 .collab-section {
 	display: flex;
 	flex-direction: column;
+	gap: 8px;
+}
+.matter-deliverables-list,
+.matter-deliverable-history ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.matter-deliverable {
+	padding: 10px 0;
+	border-top: 1px solid var(--border);
+	overflow-wrap: anywhere;
+}
+.matter-deliverable-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.matter-deliverable-head > button {
+	flex-shrink: 0;
+}
+.matter-deliverable-copy {
+	min-width: 0;
+	display: grid;
+	gap: 3px;
+	color: var(--text-primary);
+	font-size: var(--text-sm);
+}
+.matter-deliverable-meta {
+	color: var(--text-secondary);
+	font-size: var(--text-xs);
+}
+.matter-deliverable-summary {
+	margin: 6px 0 0;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+.matter-deliverable-history {
+	margin-top: 6px;
+}
+.matter-deliverable-history summary {
+	cursor: pointer;
+}
+.matter-deliverable-history li {
+	display: flex;
+	align-items: baseline;
 	gap: 8px;
 }
 .collab-events-toolbar {

@@ -1,12 +1,17 @@
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
 import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
+import type { DeliverableSeries } from "../../utils/deliverableSeries.ts";
 import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
 import { InlineExperienceReviewSection } from "../ExperienceReviewPanel.tsx";
+import { MatterDeliverablesPanel } from "./MatterDeliverablesPanel.tsx";
+
+export type MatterCollabTab = "delegations" | "events" | "experiences" | "deliverables";
 
 interface MatterCollabDrawerProps {
 	panelRef: RefObject<HTMLDivElement | null>;
-	collabTab: "delegations" | "events" | "experiences";
+	collabTab: MatterCollabTab;
 	matterDetail: MatterDetailPayload;
+	deliverableSeries: DeliverableSeries[];
 	selectedMemberId: string;
 	delegationPanel: ReactNode;
 	matterMemories: MemberMemoryDto[];
@@ -19,7 +24,8 @@ interface MatterCollabDrawerProps {
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
-	onSelectTab: (tab: "delegations" | "events" | "experiences") => void;
+	onSelectTab: (tab: MatterCollabTab) => void;
+	onOpenDeliverable: (id: string) => void;
 	onClose: () => void;
 	onDistill: () => void;
 	onCancelDistill?: () => void;
@@ -29,11 +35,12 @@ interface MatterCollabDrawerProps {
 	onError: (message: string) => void;
 }
 
-/** Top dock panel housing internal delegations, tool/process notice logs, and matter experience distillation. */
+/** Top dock panel housing internal delegations, tool/process notice logs, matter experience distillation, and deliverables. */
 export function MatterCollabDrawer({
 	panelRef,
 	collabTab,
 	matterDetail,
+	deliverableSeries,
 	selectedMemberId,
 	delegationPanel,
 	matterMemories,
@@ -47,6 +54,7 @@ export function MatterCollabDrawer({
 	workspaceName,
 	organizationName,
 	onSelectTab,
+	onOpenDeliverable,
 	onClose,
 	onDistill,
 	onCancelDistill,
@@ -70,7 +78,7 @@ export function MatterCollabDrawer({
 	);
 
 	return (
-		<div ref={panelRef} role="dialog" tabIndex={-1} aria-label="团队委托与过程事件" className="collab-dock-panel">
+		<div ref={panelRef} role="dialog" tabIndex={-1} aria-label="事项协作面板" className="collab-dock-panel">
 			<div className="collab-dock-inner">
 				<div className="collab-dock-head">
 					<div className="collab-tabs">
@@ -97,6 +105,14 @@ export function MatterCollabDrawer({
 							onClick={() => onSelectTab("experiences")}
 						>
 							经验复盘 ({matterMemories.length})
+						</button>
+						<button
+							type="button"
+							className={`collab-tab-btn ${collabTab === "deliverables" ? "active" : ""}`}
+							aria-pressed={collabTab === "deliverables"}
+							onClick={() => onSelectTab("deliverables")}
+						>
+							成果库 ({deliverableSeries.length})
 						</button>
 					</div>
 					<button type="button" className="btn-inline" onClick={onClose}>
@@ -129,6 +145,12 @@ export function MatterCollabDrawer({
 						/>
 					) : collabTab === "delegations" ? (
 						delegationPanel
+					) : collabTab === "deliverables" ? (
+						<MatterDeliverablesPanel
+							series={deliverableSeries}
+							memberName={memberName}
+							onOpenDeliverable={onOpenDeliverable}
+						/>
 					) : matterDetail.noticeMessages.length === 0 ? (
 						<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
 					) : (

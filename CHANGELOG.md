@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Show the organization and repository in each recent matter. Open the current matter’s deliverables and version history from the chat header.
+
 - Use one composer to discuss and assign work. Mention an AI role to direct the current message, let AI respond or execute based on the request, and ask for a decision when authorization is unclear. Move delegation and after-reply checks into member settings.
 
 - Document when AI leads, consulted members, and observers start or resume their Pi sessions.

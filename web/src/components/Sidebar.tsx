@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
@@ -56,6 +56,13 @@ export const Sidebar = memo(function Sidebar({
 	onSwitchOrLogout,
 }: SidebarProps) {
 	const [searchOpen, setSearchOpen] = useState(false);
+	const workspaces = bootstrap?.workspaces;
+	const organizations = bootstrap?.organizations;
+	const workspaceById = useMemo(
+		() => new Map(workspaces?.map((workspace) => [workspace.id, workspace])),
+		[workspaces],
+	);
+	const organizationById = useMemo(() => new Map(organizations?.map((org) => [org.id, org.name])), [organizations]);
 
 	const allMembers = bootstrap?.members ?? [];
 	const allBusinessMembers = filterBusinessMembers(allMembers);
@@ -208,6 +215,10 @@ export const Sidebar = memo(function Sidebar({
 				) : (
 					filteredMatters.map((matter) => {
 						const prog = progressByMatter[matter.id];
+						const workspace = matter.workspaceId ? workspaceById.get(matter.workspaceId) : undefined;
+						const orgId = matter.orgId === undefined ? workspace?.orgId : matter.orgId;
+						const orgLabel = orgId ? (organizationById.get(orgId) ?? "不可见") : "独立";
+						const workspaceLabel = matter.workspaceId ? (workspace?.name ?? "不可见") : "未绑定";
 						const leadIdx = bootstrap?.members.findIndex((m) => m.id === matter.leadMemberId) ?? 0;
 						const theme = getBotTheme(leadIdx >= 0 ? leadIdx : 0);
 						const isActive = activeTab === "chats" && selectedMatterId === matter.id;
@@ -231,6 +242,12 @@ export const Sidebar = memo(function Sidebar({
 								</span>
 								<span className="matter-copy">
 									<span className="matter-title">{matter.title}</span>
+									<span className="matter-scope">
+										<span className="matter-scope-org" title={`组织：${orgLabel}`}>
+											组织 · {orgLabel}
+										</span>
+										<span title={`仓库：${workspaceLabel}`}>仓库 · {workspaceLabel}</span>
+									</span>
 									<span className="matter-preview">{previewLine}</span>
 								</span>
 							</button>

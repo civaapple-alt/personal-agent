@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { DeliverableDto } from "../web/src/api/deliverables.ts";
 import type { MatterMessageDto } from "../web/src/api/matters.ts";
 import {
 	createPastedTextAttachment,
@@ -7,6 +8,7 @@ import {
 	prepareComposerTextFiles as prepareComposerFiles,
 	shouldFoldPastedText,
 } from "../web/src/textAttachments.ts";
+import { groupDeliverableSeries } from "../web/src/utils/deliverableSeries.ts";
 import { buildMatterDelegations, liveDelegationEdges } from "../web/src/utils/matterDelegations.ts";
 import {
 	applyOrgAiRoleOverrides,
@@ -28,6 +30,33 @@ import {
 	resolveEffectivePrimaryContactId,
 	stripMarkdownFormatting,
 } from "../web/src/utils.ts";
+
+test("deliverable series group versions within each matter and list the latest series first", () => {
+	const first: DeliverableDto = {
+		id: "v1",
+		matterId: "m1",
+		memberId: "engineering-manager",
+		type: "document",
+		title: "验收报告",
+		summary: "",
+		contentOrPath: "",
+		serviceUrl: null,
+		version: 1,
+		feedback: null,
+		createdAt: "2026-11-18T02:00:00.000Z",
+	};
+	const second = { ...first, id: "v2", version: 2, createdAt: "2026-11-20T02:00:00.000Z" };
+	const other = { ...first, id: "other", matterId: "m2", createdAt: "2026-11-19T02:00:00.000Z" };
+	const series = groupDeliverableSeries([other, second, first]);
+
+	assert.deepEqual(
+		series.map(({ latest, versions }) => [latest.id, versions.map(({ id }) => id)]),
+		[
+			["v2", ["v1", "v2"]],
+			["other", ["other"]],
+		],
+	);
+});
 
 test("delegation boards place historical handoffs and keep only the active turn running", () => {
 	const userMessages = [

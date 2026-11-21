@@ -267,15 +267,6 @@ export function App() {
 		return bootstrap.deliverables.find((d) => d.id === selectedDeliverableId) ?? bootstrap.deliverables[0] ?? null;
 	}, [bootstrap, selectedDeliverableId]);
 
-	const activeChatDeliverable: DeliverableDto | null = useMemo(() => {
-		if (!matterDetail || matterDetail.deliverables.length === 0) return null;
-		return (
-			matterDetail.deliverables.find((d) => d.id === selectedDeliverableId) ??
-			matterDetail.deliverables[matterDetail.deliverables.length - 1] ??
-			null
-		);
-	}, [matterDetail, selectedDeliverableId]);
-
 	const siblingVersionsFor = useCallback(
 		(deliv: DeliverableDto | null) => {
 			if (!bootstrap || !deliv) return [];
@@ -794,9 +785,6 @@ export function App() {
 							selectedMatterId={selectedMatterId}
 							matterDetail={currentMatter ? matterDetail : null}
 							activeDialogs={activeDialogs}
-							activeChatDeliverable={activeChatDeliverable}
-							deliverablesCount={bootstrap?.deliverables.length ?? 0}
-							selectedDeliverableId={selectedDeliverableId}
 							activeMatterProgress={activeMatterProgress}
 							progressStartedAt={activeProgressStartedAt}
 							streamingDelta={streamingDelta}

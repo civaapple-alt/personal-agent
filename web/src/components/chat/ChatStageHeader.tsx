@@ -9,6 +9,8 @@ import type {
 } from "../../api.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
+import type { MatterCollabTab } from "./MatterCollabDrawer.tsx";
+
 interface ChatStageHeaderProps {
 	selectedOrganization: OrganizationDto | null;
 	selectedWorkspace: WorkspaceDto | null;
@@ -27,21 +29,16 @@ interface ChatStageHeaderProps {
 	observersEnabled: boolean;
 	rosterOpen: boolean;
 	collabOpen: boolean;
-	collabTab: "delegations" | "events" | "experiences";
+	collabTab: MatterCollabTab;
 	moreMenuOpen: boolean;
 	pendingMatterMemoriesCount: number;
 	matterMemoriesCount: number;
 	deliverablesCount: number;
-	activeChatDeliverableId: string | null;
-	selectedDeliverableId: string | null;
 	headerHumansBtnRef: RefObject<HTMLButtonElement | null>;
 	moreMenuWrapRef: RefObject<HTMLDivElement | null>;
 	onToggleRoster: () => void;
 	onToggleMoreMenu: () => void;
-	onSelectMoreCollab: () => void;
-	onSelectMoreExperiences: () => void;
-	onOpenDeliverables: (deliverableId?: string) => void;
-	onCloseMenus: () => void;
+	onSelectMorePanel: (tab: Exclude<MatterCollabTab, "events">) => void;
 }
 
 /** Top header bar of the active chat workspace with context pills, roster trigger, and overflow actions. */
@@ -68,16 +65,11 @@ export function ChatStageHeader({
 	pendingMatterMemoriesCount,
 	matterMemoriesCount,
 	deliverablesCount,
-	activeChatDeliverableId,
-	selectedDeliverableId,
 	headerHumansBtnRef,
 	moreMenuWrapRef,
 	onToggleRoster,
 	onToggleMoreMenu,
-	onSelectMoreCollab,
-	onSelectMoreExperiences,
-	onOpenDeliverables,
-	onCloseMenus,
+	onSelectMorePanel,
 }: ChatStageHeaderProps) {
 	const hasContext = Boolean(isArchitectMode || matterDetail);
 
@@ -168,70 +160,65 @@ export function ChatStageHeader({
 						</span>
 					)}
 				</button>
-				<div ref={moreMenuWrapRef} className="header-more-wrap">
-					<button
-						type="button"
-						aria-label={
-							pendingMatterMemoriesCount > 0
-								? `更多功能（${pendingMatterMemoriesCount} 条待核验经验）`
-								: "更多功能"
-						}
-						aria-haspopup="menu"
-						aria-expanded={moreMenuOpen}
-						className={`btn-pill-outline btn-xs header-more-btn ${moreMenuOpen || collabOpen ? "active" : ""}`}
-						title={
-							pendingMatterMemoriesCount > 0
-								? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与成果库`
-								: "团队委托、经验复盘与成果库"
-						}
-						onClick={onToggleMoreMenu}
-					>
-						<span aria-hidden="true">···</span>
-						{pendingMatterMemoriesCount > 0 && <span className="header-more-dot" aria-hidden="true" />}
-					</button>
-					{moreMenuOpen && (
-						<div role="menu" aria-label="更多功能" className="header-more-menu">
-							{matterDetail && (
-								<>
-									<button
-										type="button"
-										role="menuitem"
-										className={`header-more-item ${collabOpen && collabTab !== "experiences" ? "active" : ""}`}
-										onClick={onSelectMoreCollab}
-									>
-										<span className="header-more-label">团队委托与事件</span>
-									</button>
-									<button
-										type="button"
-										role="menuitem"
-										className={`header-more-item ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
-										onClick={onSelectMoreExperiences}
-									>
-										<span className="header-more-label">经验复盘</span>
-										<span className="header-more-meta">
-											{matterMemoriesCount}
-											{pendingMatterMemoriesCount > 0 && (
-												<span className="header-more-pending">· {pendingMatterMemoriesCount} 待核验</span>
-											)}
-										</span>
-									</button>
-								</>
-							)}
-							<button
-								type="button"
-								role="menuitem"
-								className="header-more-item"
-								onClick={() => {
-									onCloseMenus();
-									onOpenDeliverables(activeChatDeliverableId ?? selectedDeliverableId ?? undefined);
-								}}
-							>
-								<span className="header-more-label">成果库</span>
-								<span className="header-more-meta">{deliverablesCount}</span>
-							</button>
-						</div>
-					)}
-				</div>
+				{matterDetail && (
+					<div ref={moreMenuWrapRef} className="header-more-wrap">
+						<button
+							type="button"
+							aria-label={
+								pendingMatterMemoriesCount > 0
+									? `更多功能（${pendingMatterMemoriesCount} 条待核验经验）`
+									: "更多功能"
+							}
+							aria-haspopup="menu"
+							aria-expanded={moreMenuOpen}
+							className={`btn-pill-outline btn-xs header-more-btn ${moreMenuOpen || collabOpen ? "active" : ""}`}
+							title={
+								pendingMatterMemoriesCount > 0
+									? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与成果库`
+									: "团队委托、经验复盘与成果库"
+							}
+							onClick={onToggleMoreMenu}
+						>
+							<span aria-hidden="true">···</span>
+							{pendingMatterMemoriesCount > 0 && <span className="header-more-dot" aria-hidden="true" />}
+						</button>
+						{moreMenuOpen && (
+							<div role="menu" aria-label="更多功能" className="header-more-menu">
+								<button
+									type="button"
+									role="menuitem"
+									className={`header-more-item ${collabOpen && (collabTab === "delegations" || collabTab === "events") ? "active" : ""}`}
+									onClick={() => onSelectMorePanel("delegations")}
+								>
+									<span className="header-more-label">团队委托与事件</span>
+								</button>
+								<button
+									type="button"
+									role="menuitem"
+									className={`header-more-item ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
+									onClick={() => onSelectMorePanel("experiences")}
+								>
+									<span className="header-more-label">经验复盘</span>
+									<span className="header-more-meta">
+										{matterMemoriesCount}
+										{pendingMatterMemoriesCount > 0 && (
+											<span className="header-more-pending">· {pendingMatterMemoriesCount} 待核验</span>
+										)}
+									</span>
+								</button>
+								<button
+									type="button"
+									role="menuitem"
+									className={`header-more-item ${collabOpen && collabTab === "deliverables" ? "active" : ""}`}
+									onClick={() => onSelectMorePanel("deliverables")}
+								>
+									<span className="header-more-label">成果库</span>
+									<span className="header-more-meta">{deliverablesCount}</span>
+								</button>
+							</div>
+						)}
+					</div>
+				)}
 			</div>
 		</header>
 	);

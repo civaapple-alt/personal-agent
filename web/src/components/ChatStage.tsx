@@ -22,6 +22,7 @@ import type {
 import { filterBusinessMembers } from "../architectApi.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
+import { groupDeliverableSeries } from "../utils/deliverableSeries.ts";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import {
 	collectMatterMemories,
@@ -32,7 +33,7 @@ import { transitionView } from "../viewTransitions.ts";
 import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
 import { ComposerDock } from "./chat/ComposerDock.tsx";
-import { MatterCollabDrawer } from "./chat/MatterCollabDrawer.tsx";
+import { MatterCollabDrawer, type MatterCollabTab } from "./chat/MatterCollabDrawer.tsx";
 import { type DelegationScope, type DelegationView, MatterDelegationPanel } from "./chat/MatterDelegationPanel.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
@@ -105,9 +106,6 @@ interface ChatStageProps {
 	selectedMatterId: string | null;
 	matterDetail: MatterDetailPayload | null;
 	activeDialogs: PendingDialogDto[];
-	activeChatDeliverable: DeliverableDto | null;
-	deliverablesCount: number;
-	selectedDeliverableId: string | null;
 	activeMatterProgress: MatterProgressDto | null;
 	progressStartedAt: number | null;
 	streamingDelta: string;
@@ -183,9 +181,6 @@ export function ChatStage({
 	selectedMatterId,
 	matterDetail,
 	activeDialogs,
-	activeChatDeliverable,
-	deliverablesCount,
-	selectedDeliverableId,
 	activeMatterProgress,
 	progressStartedAt,
 	streamingDelta,
@@ -232,7 +227,7 @@ export function ChatStage({
 	const { composerText, pendingFiles } = dockDraft;
 	const [collabMatterId, setCollabMatterId] = useState<string | null>(null);
 	const collabOpen = collabMatterId !== null && collabMatterId === selectedMatterId;
-	const [collabTab, setCollabTab] = useState<"delegations" | "events" | "experiences">("delegations");
+	const [collabTab, setCollabTab] = useState<MatterCollabTab>("delegations");
 	const [delegationScope, setDelegationScope] = useState<DelegationScope>("latest");
 	const [delegationView, setDelegationView] = useState<DelegationView>("board");
 	const [distillingMatter, setDistillingMatter] = useState(false);
@@ -264,18 +259,36 @@ export function ChatStage({
 		collabTriggerRef.current = null;
 		if (trigger) requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
 	}, []);
-	const openDelegations = (scope: DelegationScope, view: DelegationView = "board") => {
+	const openCollab = (
+		tab: MatterCollabTab,
+		trigger: Element | null,
+		scope: DelegationScope = "latest",
+		view: DelegationView = "board",
+	) => {
 		if (!selectedMatterId) return;
-		if (document.activeElement instanceof HTMLElement && !collabPanelRef.current?.contains(document.activeElement)) {
-			collabTriggerRef.current = document.activeElement;
+		if (trigger instanceof HTMLElement && !collabPanelRef.current?.contains(trigger)) {
+			collabTriggerRef.current = trigger;
 		}
 		transitionView("panel", () => {
-			setDelegationScope(scope);
-			setDelegationView(view);
-			setCollabTab("delegations");
+			if (tab === "delegations") {
+				setDelegationScope(scope);
+				setDelegationView(view);
+			}
+			setCollabTab(tab);
 			setCollabMatterId(selectedMatterId);
 			collabPanelRef.current?.focus({ preventScroll: true });
 		});
+	};
+
+	const openDelegations = (scope: DelegationScope, view: DelegationView = "board") =>
+		openCollab("delegations", document.activeElement, scope, view);
+	const toggleMorePanel = (tab: Exclude<MatterCollabTab, "events">) => {
+		setMoreMenuOpen(false);
+		if (collabOpen && (collabTab === tab || (tab === "delegations" && collabTab === "events"))) {
+			transitionView("panel", closeCollab);
+		} else {
+			openCollab(tab, moreMenuWrapRef.current?.querySelector("button") ?? null);
+		}
 	};
 
 	useEffect(() => {
@@ -322,6 +335,8 @@ export function ChatStage({
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
 		[memoriesByMember, matterDetail],
 	);
+	const matterDeliverables = matterDetail?.deliverables;
+	const deliverableSeries = useMemo(() => groupDeliverableSeries(matterDeliverables ?? []), [matterDeliverables]);
 	const pendingMatterMemoriesCount = useMemo(
 		() => matterMemories.filter((m) => (m.status ?? (m.verified ? "verified" : "candidate")) === "candidate").length,
 		[matterMemories],
@@ -497,9 +512,7 @@ export function ChatStage({
 				moreMenuOpen={moreMenuOpen}
 				pendingMatterMemoriesCount={pendingMatterMemoriesCount}
 				matterMemoriesCount={matterMemories.length}
-				deliverablesCount={deliverablesCount}
-				activeChatDeliverableId={activeChatDeliverable?.id ?? null}
-				selectedDeliverableId={selectedDeliverableId}
+				deliverablesCount={deliverableSeries.length}
 				headerHumansBtnRef={headerHumansBtnRef}
 				moreMenuWrapRef={moreMenuWrapRef}
 				onToggleRoster={() => {
@@ -513,22 +526,7 @@ export function ChatStage({
 					closeRoster();
 					setMoreMenuOpen((open) => !open);
 				}}
-				onSelectMoreCollab={() => {
-					setMoreMenuOpen(false);
-					if (collabOpen && collabTab !== "experiences") transitionView("panel", closeCollab);
-					else openDelegations("latest");
-				}}
-				onSelectMoreExperiences={() => {
-					setMoreMenuOpen(false);
-					const willOpen = !(collabOpen && collabTab === "experiences");
-					transitionView("panel", () => {
-						setCollabTab("experiences");
-						if (willOpen) setCollabMatterId(selectedMatterId);
-						else closeCollab();
-					});
-				}}
-				onOpenDeliverables={onOpenDeliverables}
-				onCloseMenus={() => setMoreMenuOpen(false)}
+				onSelectMorePanel={toggleMorePanel}
 			/>
 
 			{rosterOpen && (
@@ -576,6 +574,8 @@ export function ChatStage({
 						panelRef={collabPanelRef}
 						collabTab={collabTab}
 						matterDetail={matterDetail}
+						deliverableSeries={deliverableSeries}
+						onOpenDeliverable={onOpenDeliverables}
 						selectedMemberId={selectedMemberId}
 						delegationPanel={
 							<MatterDelegationPanel

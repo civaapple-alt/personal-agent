@@ -8,6 +8,7 @@ import {
 	type FeedbackRating,
 	updateMatterVisibility,
 } from "../api.ts";
+import { groupDeliverableSeries } from "../utils/deliverableSeries.ts";
 import { collectMatterParticipantIds, formatClockTime, parseDeliverableSummary } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
 import { ViewFade } from "./ViewTransitions.tsx";
@@ -128,42 +129,23 @@ export function DeliverablesView({
 		return map;
 	}, [bootstrap]);
 
-	// Collapse V1/V2/V3 of the same deliverable (`matterId::title`) into one entry.
-	const allFamilies = useMemo(() => {
-		const map = new Map<string, DeliverableDto[]>();
-		for (const deliv of filteredDeliverables) {
-			const key = `${deliv.matterId}::${deliv.title}`;
-			const existing = map.get(key);
-			if (existing) {
-				existing.push(deliv);
-			} else {
-				map.set(key, [deliv]);
-			}
-		}
-
-		const families: DeliverableFamily[] = [];
-		for (const [key, list] of map.entries()) {
-			const versions = [...list].sort((a, b) => a.version - b.version);
-			const latest = versions[versions.length - 1];
-			if (!latest) continue;
-			const meta = matterMetaMap.get(latest.matterId);
-			families.push({
-				key,
-				title: latest.title,
-				matterId: latest.matterId,
-				orgId: meta?.orgId ?? null,
-				workspaceId: meta?.workspaceId ?? null,
-				visibility: meta?.visibility ?? "org",
-				workspaceVisibility: meta?.workspaceVisibility ?? "org",
-				versions,
-				latest,
-				hasFeedback: versions.some((v) => Boolean(v.feedback || v.feedbackRating)),
-			});
-		}
-
-		families.sort((a, b) => b.latest.createdAt.localeCompare(a.latest.createdAt));
-		return families;
-	}, [filteredDeliverables, matterMetaMap]);
+	const allFamilies = useMemo<DeliverableFamily[]>(
+		() =>
+			groupDeliverableSeries(filteredDeliverables).map((series) => {
+				const meta = matterMetaMap.get(series.latest.matterId);
+				return {
+					...series,
+					title: series.latest.title,
+					matterId: series.latest.matterId,
+					orgId: meta?.orgId ?? null,
+					workspaceId: meta?.workspaceId ?? null,
+					visibility: meta?.visibility ?? "org",
+					workspaceVisibility: meta?.workspaceVisibility ?? "org",
+					hasFeedback: series.versions.some((version) => Boolean(version.feedback || version.feedbackRating)),
+				};
+			}),
+		[filteredDeliverables, matterMetaMap],
+	);
 
 	const orgFilterOptions = useMemo(() => {
 		const counts = new Map<string, number>();

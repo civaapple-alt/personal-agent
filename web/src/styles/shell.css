@@ -449,7 +449,7 @@
 	cursor: pointer;
 	/* Skip layout/paint for off-screen rows in long matter lists. */
 	content-visibility: auto;
-	contain-intrinsic-size: auto 56px;
+	contain-intrinsic-size: auto 73px;
 }
 /* Paint containment would clip the focus ring, so lift it while focused. */
 .matter-item:focus-visible,
@@ -502,6 +502,28 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.matter-scope {
+	display: flex;
+	flex-wrap: wrap;
+	min-width: 0;
+	gap: 4px;
+}
+.matter-scope > span {
+	max-width: 100%;
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--bg-subtle);
+	color: var(--text-secondary);
+	font-size: var(--text-micro);
+	line-height: 1.4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.matter-scope > .matter-scope-org {
+	background: var(--bg-accent-soft);
+	color: var(--accent);
 }
 .matter-preview {
 	font-size: var(--text-xs);
