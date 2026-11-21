@@ -6,8 +6,9 @@
 | --- | --- |
 | [pi-rpc-worker.ts](pi-rpc-worker.ts) | 启动/停止 Pi，关联命令 ID，转发事件、处理对话和等待收尾；支持 `suspendIdleTimeout()` 在宿主桥接耗时期间暂停空闲看门狗，同一实例拒绝重叠 `runPromptAndWait` 并通过拦截器保持运行期 `setDialogHandler` 动态更新不被覆盖。`sessionFile` 必须是编排核选定的文件 |
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
+| [prompt-usage.ts](prompt-usage.ts) | 汇总 Pi 已报告的输入及缓存读写 token，单独保留第一个有效请求的统计 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托、成果和经验提案工具并核查动态装配。按 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先和宿主 `contextFiles`，通过结构化提示词选项追加岗位上下文，保留后续扩展的贡献。通过 `node:http` 调用桥接。内部模式关闭发布，旁听模式关闭经验提案 |
+| [team-extension.ts](team-extension.ts) | 在 Pi 内注册委托、成果和经验提案工具并核查动态装配。按 `PA_TARGET_WORKSPACE_ROOT` 过滤祖先和宿主 `contextFiles`，通过结构化提示词选项追加岗位规则。实时上下文作为隐藏消息追加到 Pi 会话，已在活跃历史中的相同快照会复用。通过 `node:http` 调用桥接。内部模式关闭发布，旁听模式关闭经验提案 |
 | [pstack-extension.ts](pstack-extension.ts) | 显式配置时注册只读 `load_pstack_skill`，从批准的方法包读取实际正文和哈希，提供路径指引与读取清单；不注册业务文件、终端或团队权限 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每执行专属的 loopback HTTP、关闭服务端 300s `requestTimeout`、bearer token、参数校验（`delegate_to_member` / `request_clarification` / `publish_deliverable` / `propose_experience`）、调用 ID 去重和取消。宿主再次拒绝内部成员发布及旁听模式提案 |
 

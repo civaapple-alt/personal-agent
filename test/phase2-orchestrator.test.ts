@@ -428,7 +428,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.equal(defaultWorker.options.env?.GIT_COMMITTER_NAME, undefined);
 		assert.equal(defaultWorker.options.env?.GIT_COMMITTER_EMAIL, undefined);
 		assert.match(
-			defaultWorker.options.env?.PA_MEMBER_CONTEXT ?? "",
+			defaultWorker.options.env?.PA_TURN_CONTEXT ?? "",
 			/Git identity \(repository default\): Real Repo Owner <owner@company\.com>/,
 		);
 		const defaultGitLog = execFileSync("git", ["log", "-1", "--format=%an|%ae|%cn|%ce"], {
@@ -454,7 +454,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.equal(pmWorkerA.options.env?.PA_ORG_ID, "org-acme");
 		assert.equal(pmWorkerA.options.env?.PA_ORG_NAME, "Acme Engineering");
 
-		const ctxA = pmWorkerA.options.env?.PA_MEMBER_CONTEXT ?? "";
+		const ctxA = pmWorkerA.options.env?.PA_TURN_CONTEXT ?? "";
 		assert.match(ctxA, /## Role and organization identity/);
 		assert.match(ctxA, /Acme Engineering/);
 		assert.match(ctxA, /PM Alice <product-manager@acme\.dev>/);
@@ -472,7 +472,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			preferredMemberId: "product-manager",
 			workspaceId: wsB.id,
 		});
-		const ctxB = workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		const ctxB = workers[2]?.options.env?.PA_TURN_CONTEXT ?? "";
 		assert.match(ctxB, /GLOBAL_RULE/);
 		assert.match(ctxB, /ACME_ORG_MEM/);
 		assert.match(ctxB, /REPO_B_MEM/);
@@ -485,7 +485,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			preferredMemberId: "product-manager",
 			workspaceId: wsC.id,
 		});
-		const ctxC = workers[3]?.options.env?.PA_MEMBER_CONTEXT ?? "";
+		const ctxC = workers[3]?.options.env?.PA_TURN_CONTEXT ?? "";
 		assert.equal(workers[3]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
 		assert.equal(workers[3]?.options.env?.GIT_COMMITTER_EMAIL, undefined);
 		assert.match(ctxC, /Git identity \(repository default\): Real Repo Owner <owner@company\.com>/);
@@ -772,7 +772,7 @@ test("default gitName uses English roleTitle/id and preserves explicitly saved U
 		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_NAME, undefined);
 		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
 		assert.equal(workers[0]?.options.env?.PA_ORG_ID, org.id);
-		assert.match(workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /TEST_ORG_ONLY/);
+		assert.match(workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /TEST_ORG_ONLY/);
 
 		store.updateOrganization(org.id, { useRoleGitIdentity: true });
 		await orchestrator.dispatchMatter({
@@ -898,8 +898,8 @@ test("TeamOrchestrator injects target workspace top-level entries, scope rules, 
 		const wsEnv = workers[0]?.options.env;
 		assert.equal(wsEnv?.PA_TARGET_WORKSPACE_ROOT, resolve(targetRepo));
 		assert.match(wsEnv?.PA_MEMBER_CONTEXT ?? "", /Treat "hello-rust"/);
-		assert.match(wsEnv?.PA_MEMBER_CONTEXT ?? "", /Top-level entries: Cargo\.toml, README\.md, src\//);
-		assert.doesNotMatch(wsEnv?.PA_MEMBER_CONTEXT ?? "", /\.git/);
+		assert.match(wsEnv?.PA_TURN_CONTEXT ?? "", /Top-level entries: Cargo\.toml, README\.md, src\//);
+		assert.doesNotMatch(wsEnv?.PA_TURN_CONTEXT ?? "", /\.git/);
 
 		await orchestrator.dispatchMatter({
 			prompt: "一般讨论任务",

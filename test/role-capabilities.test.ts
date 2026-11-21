@@ -244,7 +244,7 @@ test("Architect receives the complete design method while all team actions are r
 					assert.equal(options.env?.PA_CAN_PUBLISH, "false");
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Give each role one core outcome/);
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Write user-facing prose in the user's language/);
-					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /## Installed Skill catalog/);
+					assert.match(options.env?.PA_TURN_CONTEXT ?? "", /## Installed Skill catalog/);
 					await assert.rejects(
 						invokeTool(options, "publish_deliverable", {
 							type: "document",

@@ -114,8 +114,8 @@ test("Solo and selective observer runtime scopes enforce delegate restrictions, 
 					},
 					runPromptAndWait: async () => {
 						if (ctx.includes("## Observer participation")) {
-							const match = ctx.match(/- Member: `([^`]+)`/);
-							if (match?.[1]) observerInvokedFor.push(match[1]);
+							const memberId = options.env?.PA_MEMBER_ID;
+							if (memberId) observerInvokedFor.push(memberId);
 							return {
 								disposition: "started",
 								aborted: false,
@@ -168,7 +168,7 @@ test("Solo and selective observer runtime scopes enforce delegate restrictions, 
 		assert.ok(!promptsBySession[0]!.tools.includes("delegate_to_member"));
 		assert.ok(!promptsBySession[0]!.tools.includes("bash"));
 		assert.ok(!promptsBySession[0]!.tools.includes("edit"));
-		assert.ok(promptsBySession[0]!.prompt.includes("This is a solo matter"));
+		assert.ok(promptsBySession[0]!.prompt.includes("If no colleague is available"));
 		assert.ok(promptsBySession[0]!.prompt.includes("## Anti-Jobs"));
 		assert.ok(promptsBySession[0]!.prompt.includes("绝不直接修改代码"));
 
@@ -665,7 +665,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 
 	const workerFactory = (opts: { args?: string[]; env?: Record<string, string | undefined> }): RpcWorkerLike => {
 		const memberId = opts.env?.PA_MEMBER_ID ?? "";
-		const context = opts.env?.PA_MEMBER_CONTEXT ?? "";
+		const context = opts.env?.PA_TURN_CONTEXT ?? "";
 		const args = opts.args ?? [];
 		return {
 			start: async () => reportReady(opts, memberId === ROLE_ARCHITECT_MEMBER_ID ? [] : ["read"]),

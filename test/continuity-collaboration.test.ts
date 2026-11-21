@@ -348,7 +348,7 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	});
 	assert.equal(assignment.aiDiscussionTriggered, true);
 	await waitForTurn(first.matter.id);
-	const context = f.workers.at(-1)?.options.env?.PA_MEMBER_CONTEXT ?? "";
+	const context = f.workers.at(-1)?.options.env?.PA_TURN_CONTEXT ?? "";
 	assert.match(context, /ux-designer: UX & Visual Designer/);
 	assert.match(context, /Treat earlier replies, plans, and saved proposals as historical/);
 });
@@ -385,12 +385,12 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 	await restarted.dispatchMatter({ matterId: first.matter.id, prompt: "SECOND_PRIVATE_B" });
 	assert.equal(f.workers[2]?.options.sessionFile, undefined);
 	assert.doesNotMatch(f.workers[2]?.prompt ?? "", /FIRST_PRIVATE_A/);
-	assert.doesNotMatch(f.workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "", /PRIVATE_COMPANY_A|UNSCOPED_COMPANY/);
+	assert.doesNotMatch(f.workers[2]?.options.env?.PA_TURN_CONTEXT ?? "", /PRIVATE_COMPANY_A|UNSCOPED_COMPANY/);
 	f.store.updateMatterWorkspace(first.matter.id, f.workspace.id);
 	await restarted.dispatchMatter({ matterId: first.matter.id, prompt: "返回 A" });
 	assert.equal(f.workers[3]?.options.sessionFile, f.workers[0]?.sessionFile);
 	assert.doesNotMatch(f.workers[3]?.prompt ?? "", /SECOND_PRIVATE_B/);
-	assert.match(f.workers[3]?.options.env?.PA_MEMBER_CONTEXT ?? "", /PRIVATE_COMPANY_A/);
+	assert.match(f.workers[3]?.options.env?.PA_TURN_CONTEXT ?? "", /PRIVATE_COMPANY_A/);
 	await restarted.dispatchMatter({
 		prompt: "独立事项",
 		workspaceId: f.workspace.id,
@@ -406,6 +406,80 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 			.all()
 			.every((row) => row.status === "idle"),
 	);
+});
+
+test("resumed turns append current roster, memories, and files without changing role instructions", async (t) => {
+	const f = await fixture(t, async () => "Done");
+	const first = await f.orchestrator.dispatchMatter({
+		prompt: "Plan the next step",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		aiMemberIds: ["product-manager", "engineering-manager"],
+		consultMemberIds: ["engineering-manager"],
+		observersEnabled: false,
+	});
+	assert.match(f.workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /No scoped memories/);
+	assert.doesNotMatch(f.workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /ux-designer|design\.md/);
+
+	const specialist = f.templates.find(({ id }) => id === "qa-manager")!;
+	f.orchestrator.registerRoleTemplate({
+		...specialist,
+		id: "ux-designer",
+		name: "UX & Visual Designer",
+		title: "UX & Visual Designer",
+		isPrimaryContact: false,
+	});
+
+	f.store.updateMatterAiMembers(first.matter.id, ["product-manager", "engineering-manager", "ux-designer"]);
+	f.store.updateMatterConsultMembers(first.matter.id, ["engineering-manager", "ux-designer"]);
+	f.store.addMemory({
+		memberId: "product-manager",
+		workspaceId: f.workspace.id,
+		scope: "project_private",
+		content: "UX_REVIEW_REQUIRED",
+	});
+	await writeFile(join(f.root, "design.md"), "# Design\n");
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Review the updated plan" });
+
+	const resumed = f.workers[1];
+	assert.equal(resumed?.options.sessionFile, f.workers[0]?.sessionFile);
+	assert.equal(resumed?.options.env?.PA_MEMBER_CONTEXT, f.workers[0]?.options.env?.PA_MEMBER_CONTEXT);
+	assert.deepEqual(resumed?.options.args, f.workers[0]?.options.args);
+	const snapshot = resumed?.options.env?.PA_TURN_CONTEXT ?? "";
+	assert.match(snapshot, /ux-designer: UX & Visual Designer.*\[consultable\]/);
+	assert.match(snapshot, /UX_REVIEW_REQUIRED/);
+	assert.match(snapshot, /Top-level entries: .*design\.md/);
+	assert.doesNotMatch(resumed?.options.env?.PA_MEMBER_CONTEXT ?? "", /ux-designer|UX_REVIEW_REQUIRED|design\.md/);
+});
+
+test("resumed workers keep personal role snapshots scoped to the triggering user", async (t) => {
+	const f = await fixture(t, async () => "Done");
+	const owner = f.store.createUser({ email: "owner@example.test", displayName: "Owner", password: "fixture-pass" });
+	const guest = f.store.createUser({ email: "guest@example.test", displayName: "Guest", password: "fixture-pass" });
+	const specialist = f.templates.find(({ id }) => id === "qa-manager")!;
+	const personal = f.orchestrator.registerRoleTemplate({
+		...specialist,
+		id: "owner-private-specialist",
+		roleScope: "personal",
+		ownerUserId: owner.id,
+	});
+	const first = await f.orchestrator.dispatchMatter({
+		prompt: "Owner's turn",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+		aiMemberIds: ["product-manager", "engineering-manager", personal.id],
+		observersEnabled: false,
+		actorUserId: owner.id,
+	});
+	assert.match(f.workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /owner-private-specialist/);
+
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Guest's turn", actorUserId: guest.id });
+	assert.equal(f.workers[1]?.options.sessionFile, undefined);
+	assert.doesNotMatch(f.workers[1]?.options.env?.PA_TURN_CONTEXT ?? "", /owner-private-specialist/);
+
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Owner resumes", actorUserId: owner.id });
+	assert.equal(f.workers[2]?.options.sessionFile, f.workers[0]?.sessionFile);
+	assert.match(f.workers[2]?.options.env?.PA_TURN_CONTEXT ?? "", /owner-private-specialist/);
 });
 
 test("shipped tool delegates to a real colleague execution and returns internal results, with idempotency and cycle boundaries", async (t) => {

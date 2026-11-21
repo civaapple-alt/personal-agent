@@ -4,6 +4,7 @@ import { buildPstackGuidance, preparePstackRuntime } from "../roles/pstack.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
+import { summarizePromptUsage } from "../rpc/prompt-usage.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../rpc/team-tool-bridge.ts";
 import type { ImageContent } from "../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
@@ -20,7 +21,7 @@ import { buildArchitectMatterContext } from "./meta-architect.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
 import {
 	buildInterruptionResumeBrief,
-	buildMemberSystemPrompt,
+	buildMemberPrompts,
 	buildObserverContextDigest,
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
@@ -100,7 +101,10 @@ export async function executeWithWorkerPass(
 	const isVerifier = sessionMode === "verifier";
 	const canPublish = sessionMode === "lead" && !isDiscussionMode;
 	const matter = deps.store.getMatter(input.matterId);
-	const matterAiMembers = deps.resolveMatterAiMembers(matter);
+	const actorUserId = input.run.startedByUserId ?? null;
+	const matterAiMembers = deps
+		.resolveMatterAiMembers(matter)
+		.filter((member) => member.roleScope !== "personal" || member.ownerUserId === actorUserId);
 	const matterConsultTargets = matterAiMembers.filter(
 		(member) =>
 			member.id !== input.member.id &&
@@ -116,6 +120,13 @@ export async function executeWithWorkerPass(
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
 	const template = deps.getTemplateForMember(input.member);
 	const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
+	const hasPersonalContext =
+		input.member.roleScope === "personal" ||
+		matterAiMembers.some((member) => member.roleScope === "personal") ||
+		(isArchitect &&
+			deps.store
+				.listMembers()
+				.some((member) => member.roleScope === "personal" && member.ownerUserId === actorUserId));
 	const inheritsLocalResources =
 		input.run.inheritLocalPiResources &&
 		!isArchitect &&
@@ -130,6 +141,8 @@ export async function executeWithWorkerPass(
 		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
 		activeOrgId,
 		...(inheritsLocalResources ? ["local-pi"] : []),
+		// These snapshots persist in Pi history. Reuse them only for the same actor.
+		...(hasPersonalContext ? ["actor", actorUserId] : []),
 	]);
 	const executionKey = JSON.stringify([input.member.id, contextKey]);
 	if (input.run.contexts.has(executionKey)) throw new Error("Colleague is already working in this conversation");
@@ -395,6 +408,32 @@ export async function executeWithWorkerPass(
 				selection = piDefault;
 			}
 		}
+		const { systemPrompt, turnContext } = buildMemberPrompts({
+			member: effectiveMember,
+			template,
+			memories: relevantMemories,
+			workspace: input.workspace,
+			workspaceTopLevelEntries,
+			organization,
+			repoGitUser,
+			sessionMode,
+			discussionMode: isDiscussionMode,
+			leadMemberId: matter?.leadMemberId ?? null,
+			consultMemberIds: matter?.consultMemberIds ?? null,
+			observerMemberIds: matter?.observerMemberIds ?? [],
+			teamMembers: matterAiMembers,
+		});
+		const architectContext =
+			isArchitect && deps.getTemplatesById
+				? await buildArchitectMatterContext(
+						{ store: deps.store, templatesById: deps.getTemplatesById(), skillsDir: deps.skillsDir },
+						{
+							isMidMatterConsult: Boolean(matter?.leadMemberId && matter.leadMemberId !== input.member.id),
+							orgId: matter?.orgId ?? null,
+							actorUserId,
+						},
+					)
+				: undefined;
 		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
@@ -429,40 +468,14 @@ export async function executeWithWorkerPass(
 					...methodTools,
 					...mcpDependencies.map((name) => `mcp__${name}__*`),
 				]),
-				PA_MEMBER_CONTEXT:
-					buildMemberSystemPrompt({
-						member: effectiveMember,
-						template,
-						memories: relevantMemories,
-						workspace: input.workspace,
-						workspaceTopLevelEntries,
-						organization,
-						repoGitUser,
-						sessionMode,
-						discussionMode: isDiscussionMode,
-						leadMemberId: matter?.leadMemberId ?? null,
-						consultMemberIds: matter?.consultMemberIds ?? null,
-						observerMemberIds: matter?.observerMemberIds ?? [],
-						teamMembers: matterAiMembers,
-						...(isArchitect && deps.getTemplatesById
-							? {
-									extraGuidance: await buildArchitectMatterContext(
-										{
-											store: deps.store,
-											templatesById: deps.getTemplatesById(),
-											skillsDir: deps.skillsDir,
-										},
-										{
-											isMidMatterConsult: Boolean(
-												matter?.leadMemberId && matter.leadMemberId !== input.member.id,
-											),
-											orgId: matter?.orgId ?? null,
-											actorUserId: matter?.createdByUserId ?? null,
-										},
-									),
-								}
-							: {}),
-					}) + (pstack ? `\n\n${buildPstackGuidance(pstack, sessionMode)}` : ""),
+				PA_MEMBER_CONTEXT: [
+					systemPrompt,
+					architectContext?.systemPrompt,
+					pstack && buildPstackGuidance(pstack, sessionMode),
+				]
+					.filter(Boolean)
+					.join("\n\n"),
+				PA_TURN_CONTEXT: [turnContext, architectContext?.turnContext].filter(Boolean).join("\n\n"),
 			},
 		});
 		input.run.workers.add(worker);
@@ -724,6 +737,23 @@ export async function executeWithWorkerPass(
 				input.onTextDelta?.(delta);
 			},
 		});
+		const usage = summarizePromptUsage(result.assistantMessages);
+		if (usage) {
+			deps.store.appendMessage({
+				matterId: input.matterId,
+				channel: "notice",
+				senderType: "system",
+				senderId: input.member.id,
+				content: JSON.stringify({
+					method: "runtime_model_usage",
+					sourceUserMessageId: input.run.userMessageId,
+					sessionMode,
+					discussionMode: isDiscussionMode,
+					resumed: Boolean(sessionFile),
+					...usage,
+				}),
+			});
+		}
 		if (!result.aborted && !input.run.cancelled) {
 			for (const item of stagedExperiences) {
 				const orgId = item.scope === "company_private" ? activeOrgId : null;

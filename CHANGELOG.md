@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Preserve the model request prefix when matter membership, relevant experience, or repository listings change. Append updated context to the existing Pi session and report cached input for the first request with usage and for the worker turn.
+
 - Answer explicit current-members questions in team discussion from the live matter roster. Give the current roster precedence over older plans in agent prompts.
 
 - Label the new-matter model picker as an action and explain which role settings apply when the lead is matched automatically.

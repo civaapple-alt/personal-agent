@@ -239,7 +239,7 @@ test("RSI lifecycle tracks injected vs candidate prompts, acceptance evaluation 
 						};
 					}
 
-					seenPrompts.push(options.env?.PA_MEMBER_CONTEXT ?? "");
+					seenPrompts.push(options.env?.PA_TURN_CONTEXT ?? "");
 					await invokeTool(options, "publish_deliverable", {
 						type: "document",
 						title: "产品需求评审稿",

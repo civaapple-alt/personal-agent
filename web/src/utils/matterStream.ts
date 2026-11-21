@@ -119,7 +119,7 @@ export function isKeyNoticeEvent(rawContent: string): boolean {
 			method?: string;
 			isError?: boolean;
 		};
-		if (parsed.type === "tool_execution_start") return false;
+		if (parsed.type === "tool_execution_start" || parsed.method === "runtime_model_usage") return false;
 		if (parsed.type === "tool_execution_end") return Boolean(parsed.isError);
 		return true;
 	} catch {
@@ -144,6 +144,8 @@ export function formatNoticeEventLine(rawContent: string): string {
 			scope?: string;
 			content?: string;
 			createdCount?: number;
+			firstRequest?: { cacheRead: number; input: number; cacheWrite: number };
+			totals?: { cacheRead: number; input: number; cacheWrite: number };
 		};
 		const detail = parsed.args?.path
 			? ` (${parsed.args.path})`
@@ -160,6 +162,11 @@ export function formatNoticeEventLine(rawContent: string): string {
 		}
 		if (parsed.method === "runtime_ready") {
 			return `工作进程就绪（${parsed.tools?.join(", ") ?? "标准工具"}）`;
+		}
+		if (parsed.method === "runtime_model_usage" && parsed.firstRequest && parsed.totals) {
+			const first = parsed.firstRequest;
+			const total = parsed.totals;
+			return `缓存读入 tokens（首个有效请求 ${first.cacheRead}/${first.input + first.cacheRead + first.cacheWrite}，本轮 ${total.cacheRead}/${total.input + total.cacheRead + total.cacheWrite}）`;
 		}
 		if (parsed.method === "rsi_candidate_proposed") {
 			const snippet = (parsed.content ?? "").slice(0, 48);

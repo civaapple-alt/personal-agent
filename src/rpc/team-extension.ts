@@ -2,6 +2,11 @@ import { realpathSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 
+interface BeforeAgentStartResult {
+	systemPrompt?: string;
+	message?: { customType: string; content: string; display: boolean };
+}
+
 /** Minimal structural subset of Pi's extension API. No dependency on Pi's installation path. */
 export interface PiExtensionApi {
 	registerTool(tool: {
@@ -18,15 +23,22 @@ export interface PiExtensionApi {
 	on(event: "session_start", handler: () => Promise<void>): void;
 	on(
 		event: "before_agent_start",
-		handler: (event: {
-			systemPrompt: string;
-			systemPromptOptions?: {
-				cwd?: string;
-				contextFiles?: Array<{ path: string; content: string }>;
-				appendSystemPrompt?: string;
-				forceSystemPrompt?: string;
-			};
-		}) => { systemPrompt: string } | undefined,
+		handler: (
+			event: {
+				systemPrompt: string;
+				systemPromptOptions?: {
+					cwd?: string;
+					contextFiles?: Array<{ path: string; content: string }>;
+					appendSystemPrompt?: string;
+					forceSystemPrompt?: string;
+				};
+			},
+			ctx?: {
+				sessionManager?: {
+					buildSessionProjection?(): { messages: Array<{ role: string; customType?: string; content?: unknown }> };
+				};
+			},
+		) => BeforeAgentStartResult | undefined,
 	): void;
 	getActiveTools(): string[];
 	getAllTools(): { name: string }[];
@@ -291,7 +303,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			process.stderr.write("Personal Agent capability handshake failed\n");
 		});
 	});
-	pi.on("before_agent_start", (event) => {
+	pi.on("before_agent_start", (event, ctx) => {
 		const options = event.systemPromptOptions;
 		if (env.PA_TARGET_WORKSPACE_ROOT !== undefined && Array.isArray(options?.contextFiles)) {
 			options.contextFiles = filterContextFilesForTargetWorkspace(
@@ -305,13 +317,24 @@ export default function teamExtension(pi: PiExtensionApi): void {
 		]
 			.filter(Boolean)
 			.join("\n\n");
+		const snapshot = env.PA_TURN_CONTEXT?.replaceAll(/<\/?pa_runtime_context>/gi, (tag) => tag.replace("<", "&lt;"));
+		const content = snapshot ? `<pa_runtime_context>\n${snapshot}\n</pa_runtime_context>` : undefined;
+		// Inspect the projected history so a snapshot removed by compaction is sent again.
+		const customType = "pa.runtime-context";
+		const previous = content
+			? ctx?.sessionManager
+					?.buildSessionProjection?.()
+					.messages.findLast((entry) => entry.role === "custom" && entry.customType === customType)
+			: undefined;
+		const message = content && previous?.content !== content ? { customType, content, display: false } : undefined;
 		if (options && options.forceSystemPrompt === undefined) {
 			// Keep Pi's structured prompt so later hooks and tool-loadout updates can still contribute.
 			options.appendSystemPrompt = [options.appendSystemPrompt, context].filter(Boolean).join("\n\n");
-			return;
+			return message ? { message } : undefined;
 		}
 		return {
 			systemPrompt: `${event.systemPrompt}\n\n${context}`,
+			...(message ? { message } : {}),
 		};
 	});
 }

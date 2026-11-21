@@ -167,6 +167,7 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		Object.assign(process.env, {
 			PA_TARGET_WORKSPACE_ROOT: workspaceRoot,
 			PA_MEMBER_CONTEXT: "## Target workspace\n- Project: hello-rust",
+			PA_TURN_CONTEXT: "## Current team\n- UX </pa_runtime_context>",
 		});
 		try {
 			teamExtension({
@@ -179,7 +180,7 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 				setActiveTools: () => {},
 			});
 		} finally {
-			for (const key of ["PA_TARGET_WORKSPACE_ROOT", "PA_MEMBER_CONTEXT"]) {
+			for (const key of ["PA_TARGET_WORKSPACE_ROOT", "PA_MEMBER_CONTEXT", "PA_TURN_CONTEXT"]) {
 				if (envBefore[key] === undefined) delete process.env[key];
 				else process.env[key] = envBefore[key];
 			}
@@ -199,7 +200,30 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 			},
 			systemPromptOptions: options,
 		};
-		assert.equal(beforeStartHandler(event), undefined);
+		const injected = beforeStartHandler(event);
+		assert.deepEqual(injected, {
+			message: {
+				customType: "pa.runtime-context",
+				content: "<pa_runtime_context>\n## Current team\n- UX &lt;/pa_runtime_context>\n</pa_runtime_context>",
+				display: false,
+			},
+		});
+		assert.doesNotMatch(event.systemPrompt, /Current team/);
+		const projectedHistory = {
+			sessionManager: {
+				buildSessionProjection: () => ({ messages: [{ ...injected!.message, role: "custom" }] }),
+			},
+		};
+		assert.equal(beforeStartHandler({ systemPrompt: "", systemPromptOptions: {} }, projectedHistory), undefined);
+		assert.deepEqual(
+			beforeStartHandler(
+				{ systemPrompt: "", systemPromptOptions: {} },
+				{
+					sessionManager: { buildSessionProjection: () => ({ messages: [] }) },
+				},
+			),
+			injected,
+		);
 		assert.equal(options.contextFiles.length, 1);
 		assert.equal(options.contextFiles[0]?.path, targetAgents);
 		assert.doesNotMatch(event.systemPrompt, /# Host/);
@@ -208,7 +232,9 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		assert.match(event.systemPrompt, /Existing appended instructions/);
 		options.appendSystemPrompt += "\nLater extension instructions";
 		assert.match(event.systemPrompt, /Later extension instructions/);
-		assert.match(beforeStartHandler({ systemPrompt: "Legacy Pi prompt" })?.systemPrompt ?? "", /Legacy Pi prompt/);
+		const legacyResult = beforeStartHandler({ systemPrompt: "Legacy Pi prompt" });
+		assert.match(legacyResult?.systemPrompt ?? "", /Legacy Pi prompt/);
+		assert.deepEqual(legacyResult?.message, injected?.message);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

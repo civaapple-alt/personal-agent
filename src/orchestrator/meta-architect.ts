@@ -477,7 +477,7 @@ export async function buildArchitectMatterContext(
 		orgId?: string | null;
 		actorUserId?: string | null;
 	},
-): Promise<string> {
+): Promise<{ systemPrompt: string; turnContext: string }> {
 	const scopeFilter: TeamHealthScopeFilter | undefined =
 		options?.orgId !== undefined || options?.actorUserId !== undefined
 			? { orgId: options?.orgId, actorUserId: options?.actorUserId }
@@ -503,13 +503,17 @@ export async function buildArchitectMatterContext(
 		ownerUserId: options?.actorUserId ?? null,
 	});
 
-	return [
-		ARCHITECT_SYSTEM_INSTRUCTIONS + midMatterHint,
-		`## Role design method\n${await architectMethodText(deps.skillsDir)}`,
-		`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(skillCatalog)}`,
-		`## Current business roles (${businessMembers.length})\n${rosterLines || "No business roles yet."}`,
-		`## Recent team health evidence\n${healthDigest}`,
-	].join("\n\n");
+	return {
+		systemPrompt: [
+			ARCHITECT_SYSTEM_INSTRUCTIONS + midMatterHint,
+			`## Role design method\n${await architectMethodText(deps.skillsDir)}`,
+		].join("\n\n"),
+		turnContext: [
+			`## Installed Skill catalog\nFile presence establishes availability. Verify performance through execution.\n${JSON.stringify(skillCatalog)}`,
+			`## Current business roles (${businessMembers.length})\n${rosterLines || "No business roles yet."}`,
+			`## Recent team health evidence\n${healthDigest}`,
+		].join("\n\n"),
+	};
 }
 
 /** Parses an in-matter Role Architect turn output into clean prose + interactive inline proposal metadata. */

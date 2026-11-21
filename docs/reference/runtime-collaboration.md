@@ -58,18 +58,19 @@
 
 会话查找与启动校验如下：
 
-- 新会话的查找键由事项、成员、组织 ID、工作区 ID、绝对路径和主/内部/旁听会话模式组成（`v2`）。
+- 新会话的查找键由事项、成员、组织 ID、工作区 ID、绝对路径和主责、内部、旁听、讨论或验收的会话模式组成（`v2`）。含个人角色上下文的会话再按触发用户隔离。
 - 后续轮次把保存的 `sessionFile` 传入 `--session`，不使用 `--continue` 或目录内最近文件。
 - 启动前校验 Pi JSONL 首行的 session ID 与真实 `cwd`。
 - 保存文件缺失、损坏或属于另一工作区时直接报错，不悄悄创建空会话。
 
 上下文注入与压缩策略如下：
 
-- 每轮通过 `before_agent_start` 更新当前岗位五个定义段落、显式 `antiJobs` 边界约束、团队名单、工作区约束和适用私有记忆。
-- 系统规则不会反复塞进用户消息。
-- Pi 原生会话树负责模型历史与压缩；这里没有无限拼接完整对话。
+- 系统提示包含岗位定义、工作区范围及执行模式的规则。当前名册、适用经验、目录清单和身份信息变化时，`before_agent_start` 把新快照追加到当前轮次。模型按最新快照判断事项状态。
+- 新旧快照相同时，Pi 扩展复用活跃历史中的快照。Pi 压缩移除该快照后，下轮重新附上当前版本。
+- 角色规则、真实工具清单或工作区说明变更，以及更换模型或 Pi 压缩历史，都可能影响缓存复用。命中与计费取决于供应商。
+- `runtime_model_usage` 执行记录分别提供首个有有效统计的模型请求与该岗位本轮请求的 `input`、`cacheRead`、`cacheWrite`。命中比例为 `cacheRead / (input + cacheRead + cacheWrite)`。记录只覆盖 Pi 回传有效统计的请求。
 - **参与阵型与角色架构师隔离**：
-  - 当事项处于单兵模式（`solo`，仅 1 位 AI 成员参与且无授权内部协同池）时，在 `--tools` 与系统提示中同步禁用 `delegate_to_member` 并注入单兵边界提醒；立项与运行期支持经 `observerMemberIds` 按人切换定向旁听。
+  - 当事项处于单兵模式（`solo`，仅 1 位 AI 成员参与且无授权内部协同池）时，宿主从 `--tools` 移除 `delegate_to_member`，系统提示要求按当前名册和已启用工具推进；立项与运行期支持经 `observerMemberIds` 按人切换定向旁听。
   - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检；对话规划与协作体检均以无工具只读模式隔离执行（`--tools "" --no-skills --no-mcp`），仅生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议，经授权用户勾选确认后才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录；运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色禁止被非本人查看、执行或经 `delegate_to_member` 委托。
 
 增量交接背景策略如下：
@@ -254,7 +255,7 @@
 
 注入追踪与版本反馈：
 
-- `memory_applications` 中的 `applied` 表示宿主在该次执行向系统上下文注入过经验，`applied_count` 统计注入次数，不证明模型采纳或能力改善。
+- `memory_applications` 中的 `applied` 表示该次执行的当前上下文包含这条经验，`applied_count` 统计适用轮次，不证明模型采纳或能力改善。
 - 成功分支的注入 ID 经调用树收集，正式成果发布时写入 `deliverable_memory_applications`；失败分支和发布之后的旁听注入不自动成为该版本的评分对象。
 - 成果反馈仅对上述精确关联回写，`memory_feedback_votes` 在每个 `(memory_id, deliverable_id)` 上保存一票当前评价：
   - 相同评价幂等，正负改票撤销上一票再计新票，`neutral` 撤销该版本的贡献；反馈文本、评级、票与计数事务更新。

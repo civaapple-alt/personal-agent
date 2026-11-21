@@ -21,7 +21,7 @@ import {
 } from "./matter-initiation.ts";
 import { type MetaArchitectChatInput, type MetaArchitectChatResult, runMetaArchitectChat } from "./meta-architect.ts";
 import { type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
-import { buildMemberSystemPrompt } from "./prompts.ts";
+import { buildMemberPrompts } from "./prompts.ts";
 import { designRoleDraftWithModel } from "./role-design-decision.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
 import { filterTeamMembersForScope } from "./team-health.ts";
@@ -400,13 +400,16 @@ export class TeamOrchestrator {
 			? listWorkspaceTopLevelEntries(input.workspace.repoPath)
 			: undefined;
 		const effectiveMember = this.store.resolveMemberForOrg(organization?.id ?? matterForPrompt?.orgId, input.member);
-		return buildMemberSystemPrompt({
+		const { systemPrompt, turnContext } = buildMemberPrompts({
 			...input,
 			member: effectiveMember,
 			workspaceTopLevelEntries,
 			organization,
 			teamMembers: this.resolveMatterAiMembers(matterForPrompt),
 		});
+		return [systemPrompt, turnContext, input.taskPrompt ? `## Current task\n${input.taskPrompt}` : ""]
+			.filter(Boolean)
+			.join("\n\n");
 	}
 
 	isMatterRunning(matterId: string): boolean {

@@ -5,7 +5,7 @@
 - [team-orchestrator.ts](team-orchestrator.ts) 组织事项、角色和处理器，对外提供派发、中止和关闭入口。[matter-dispatch.ts](matter-dispatch.ts) 执行单轮交流，从运行占用、消息入库到成果收尾，并由 [types.ts](types.ts)、[prompts.ts](prompts.ts)、
   [matter-initiation.ts](matter-initiation.ts)、[worker-runner.ts](worker-runner.ts)、[delegation-runner.ts](delegation-runner.ts)、
   [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担立项适配诊断、提示词装配、Worker 执行、内部委托、旁听与复盘。
-  - `assessInitiation`（[matter-initiation.ts](matter-initiation.ts)）提供实时本地文字规则预判，并由 `assessInitiationWithModel` 通过 [pi-decision.ts](pi-decision.ts)（`runTypedPiDecision`，类型化 JSON 契约校验 + 成员名录白名单约束 + 可选 `["read"]` 只读仓库核查 + `AbortSignal` 中止）发起按需 Pi LLM 决策，推荐参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及角色缺口；`role-architect` 元角色可通过正常 `dispatchMatter` 发起持久化对话或被中途请入业务事项（保持零工具 `--tools ""` 并自动注入业务名录与运行体检摘要，结果解析为消息 `metadata.roleProposals` 供用户勾选生效，且不接管普通业务事项的自动路由与自动旁听）；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](worker-runner.ts) 与 [prompts.ts](prompts.ts) 在运行时与提示词同步关闭 `delegate_to_member` 并注入 `antiJobs` 边界约束。
+  - `assessInitiation`（[matter-initiation.ts](matter-initiation.ts)）提供实时本地文字规则预判，并由 `assessInitiationWithModel` 通过 [pi-decision.ts](pi-decision.ts)（`runTypedPiDecision`，类型化 JSON 契约校验 + 成员名录白名单约束 + 可选 `["read"]` 只读仓库核查 + `AbortSignal` 中止）发起按需 Pi LLM 决策，推荐参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及角色缺口；`role-architect` 元角色可通过正常 `dispatchMatter` 发起持久化对话或被中途请入业务事项（保持零工具 `--tools ""` 并自动注入业务名录与运行体检摘要，结果解析为消息 `metadata.roleProposals` 供用户勾选生效，且不接管普通业务事项的自动路由与自动旁听）；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](worker-runner.ts) 与 [prompts.ts](prompts.ts) 在运行时关闭 `delegate_to_member`。岗位的 `antiJobs` 边界保留在系统提示中。
 - [execution-context.ts](execution-context.ts) 负责 Skill 路径（通过 `realpath` 校验所解析 `SKILL.md` 必须落在内建 `skills/` 及该角色作用域允许的 `resolveAllowedSkillRoots` 目录内，阻止跨租户或工作区外路径穿越）、工作区顶层目录摘要 `listWorkspaceTopLevelEntries`（供无 `bash`/`ls` 的角色直接定位目标仓库文件）、保存会话身份与成果文件/URL 校验。`prepareDelivery` 从文档 `sourcePath` 读取正文并记录快照，`validateDelivery` 在成功提交前核对文件内容与路径未变；纯文本 `content` 文档不绑定文件。
 - [team-health.ts](team-health.ts) 收集有 ID 的有限配置与协作案例供架构师体检引用，并支持按用户/组织过滤可见成员与最近案例，解析时过滤不存在的来源。`role-design` 方法全文由宿主提供给无业务工具的架构师；技能目录、能力状态和具体边界见[角色设计](../../docs/reference/role-design.md)。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
@@ -30,9 +30,10 @@
   - `consultMemberIds` 与 `observerMemberIds` 独立。前者为空数组时不允许主责委托，为 `null` 时沿用旧事项全部可用在组成员的行为。
   - 讨论轮次使用独立会话键。未点名时由当前可用的主责或在组角色回复，点名时按提及顺序回复。明确查询当前成员时，服务端按当前事项配置返回共享 AI 名册。每轮模型上下文也以运行时名册为准。讨论保留岗位工具用于查证，宿主关闭成果发布和经验提案。回复保留在事项历史，正式执行会回放同范围内新增的讨论消息。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
-  - `v2` 会话键额外包含有效组织 ID。旧 `v1` 或无范围会话继续保留，但首次升级不自动恢复；新范围建立后可切回续接。详见[迁移说明](../../docs/reference/runtime-collaboration.md#兼容历史数据)。
+  - `v2` 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话。旧 `v1` 或无范围会话继续保留，但首次升级不自动恢复；新范围建立后可切回续接。详见[迁移说明](../../docs/reference/runtime-collaboration.md#兼容历史数据)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
   - 经 `resolveMemberForOrg` 合并组织级 `organization_ai_roles` 覆盖后，结合工作区 `Organization` 与 `resolveRepoGitUserIdentity(cwd)` 读取目标仓库当前有效 `user.name` / `user.email`。
+  - [prompts.ts](prompts.ts) 将岗位规则、工作区约束和运行模式保存在系统提示中。实时名册、适用经验、目录清单和身份信息通过 `PA_TURN_CONTEXT` 追加到 Pi 会话。角色架构师的业务名录、Skill 目录和体检证据也随轮更新。
   - 默认（`organization.useRoleGitIdentity !== true` 或独立无组织仓库）**不注入** `GIT_AUTHOR_*` / `GIT_COMMITTER_*`，保持 `git commit` 使用目标仓库目录自身的 Git 配置；仅当所属组织显式启用 `useRoleGitIdentity` 时，经 `resolveEffectiveGitIdentity` 向 `PiRpcWorker` 注入角色/组织覆盖 `GIT_AUTHOR_*` 与仓库真实用户 `GIT_COMMITTER_*`（未配置真实用户时回退至角色身份），同时注入 `PA_MEMBER_*` / `PA_ORG_*` 环境变量（不改写目标仓库 `.git/config`）。
   - 在 `buildMemberPrompt` 中注入「角色与组织身份」、目标工作区作用域边界与顶层目录清单（并经 `PA_TARGET_WORKSPACE_ROOT` 在扩展内过滤掉宿主/父目录 `AGENTS.md`，同时在隔离辅助 pass `distiller.ts`/`meta-architect.ts`/`pi-decision.ts` 传入 `--no-context-files`），以及分三层组织的「岗位通用 / 组织记忆 / 仓库记忆」清单。
   - 工具事件（`tool_execution_start` / `tool_execution_end`）只写入精简合法 JSON（工具名、截断后关键参数、`isError`）到 `notice` 通道。
