@@ -37,10 +37,29 @@ export async function listUserPackagePaths(
 	return paths;
 }
 
+export function summarizePiCommandError(error: unknown): string {
+	if (!error || typeof error !== "object") return "";
+	const record = error as { stderr?: unknown; stdout?: unknown; message?: unknown };
+	const raw =
+		(typeof record.stderr === "string" && record.stderr.trim()) ||
+		(typeof record.stdout === "string" && record.stdout.trim()) ||
+		(typeof record.message === "string" ? record.message.trim() : "");
+	if (!raw) return "";
+	const clean = stripVTControlCharacters(raw);
+	const lines = clean
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean);
+	return (lines.at(-1) ?? clean).slice(0, 240);
+}
+
 export async function installPiPackage(executable: string, source: string): Promise<void> {
+	const env = { ...process.env };
+	delete env.PI_OFFLINE;
 	await execFileAsync(executable, ["install", source, "--no-approve"], {
 		timeout: 120_000,
-		maxBuffer: 1024 * 1024,
+		maxBuffer: 4 * 1024 * 1024,
 		windowsHide: true,
+		env,
 	});
 }

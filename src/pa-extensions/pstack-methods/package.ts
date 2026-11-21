@@ -1,5 +1,10 @@
 import { preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
-import { installPiPackage, listPiPackages, listUserPackagePaths } from "../../rpc/pi-packages.ts";
+import {
+	installPiPackage,
+	listPiPackages,
+	listUserPackagePaths,
+	summarizePiCommandError,
+} from "../../rpc/pi-packages.ts";
 
 export { type PstackRuntime, preparePstackRuntime } from "../../../pi-extensions/pstack-methods/methods.js";
 
@@ -25,7 +30,11 @@ export async function installPiPstack(executable: string): Promise<string> {
 	try {
 		await installPiPackage(executable, PSTACK_PACKAGE);
 	} catch (cause) {
-		throw new Error(`Pi 安装 pstack 失败。可在服务主机运行 pi install ${PSTACK_PACKAGE} 查看错误。`, { cause });
+		const detail = summarizePiCommandError(cause);
+		throw new Error(
+			`Pi 安装 pstack 失败${detail ? `（${detail}）` : ""}。可在服务主机运行 pi install ${PSTACK_PACKAGE} 查看错误。`,
+			{ cause },
+		);
 	}
 
 	const installed = await findInstalledPstack(executable);

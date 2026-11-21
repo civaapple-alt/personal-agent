@@ -1,6 +1,11 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { installPiPackage, listPiPackages, listUserPackagePaths } from "../../rpc/pi-packages.ts";
+import {
+	installPiPackage,
+	listPiPackages,
+	listUserPackagePaths,
+	summarizePiCommandError,
+} from "../../rpc/pi-packages.ts";
 
 const PI_WEB_ACCESS_SOURCE = "npm:pi-web-access";
 const WEB_ACCESS_SOURCE = /^ {2}npm:pi-web-access(?:@[^\s]+)?(?: \(filtered\))?$/;
@@ -55,9 +60,11 @@ export async function installPiWebAccess(executable: string): Promise<InstalledP
 	try {
 		await installPiPackage(executable, PI_WEB_ACCESS_SOURCE);
 	} catch (cause) {
-		throw new Error(`Pi 安装 pi-web-access 失败。可在服务主机运行 pi install ${PI_WEB_ACCESS_SOURCE} 查看错误。`, {
-			cause,
-		});
+		const detail = summarizePiCommandError(cause);
+		throw new Error(
+			`Pi 安装 pi-web-access 失败${detail ? `（${detail}）` : ""}。可在服务主机运行 pi install ${PI_WEB_ACCESS_SOURCE} 查看错误。`,
+			{ cause },
+		);
 	}
 	const installed = await findInstalledPiWebAccess(executable);
 	if (!installed) throw new Error("Pi 安装完成，但未找到可用的 pi-web-access 扩展入口。请运行 pi list 核对安装。");

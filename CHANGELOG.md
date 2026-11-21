@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Clear inherited `PI_OFFLINE`, increase install output buffer, and surface the underlying `pi install` error summary when installing `pi-web-access` or `pstack` from workbench settings.
+
 ## [0.6.4] - 2026-11-22
 
 See the [0.6.4 release guide](docs/releases/v0.6.4.md) for downloads and upgrade instructions.
