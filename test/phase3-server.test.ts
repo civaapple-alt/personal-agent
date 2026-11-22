@@ -235,6 +235,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 			body: JSON.stringify({ feedback: "obsolete" }),
 		});
 		assert.equal(oldFeedback.status, 404);
+		assert.equal((await fetch(`${baseUrl}/api/deliverables`)).status, 404);
 
 		const prevRes = await fetch(`${baseUrl}/api/previews`, {
 			method: "POST",

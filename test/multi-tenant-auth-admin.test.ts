@@ -909,7 +909,7 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 	}
 });
 
-test("Deliverables API enforces org, restricted workspace, private visibility, org_viewer, and RSI access boundaries", async () => {
+test("Space documents enforce org, restricted workspace, private visibility, org_viewer, and RSI access boundaries", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
@@ -1064,56 +1064,13 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			visibility: "org",
 		});
 
-		const [dAOpen] = store.recordDeliverables([
-			{
-				matterId: mAOpen.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Alpha Open Spec",
-				contentOrPath: "Open spec",
-			},
-		]);
-		const [dAPrivate] = store.recordDeliverables([
-			{
-				matterId: mAPrivate.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Alpha Secret Spec",
-				contentOrPath: "Private spec",
-			},
-		]);
-		const [dARestricted] = store.recordDeliverables([
-			{
-				matterId: mARestricted.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Alpha Restricted Spec",
-				contentOrPath: "Restricted spec",
-			},
-		]);
-		const [dBOpen] = store.recordDeliverables([
-			{
-				matterId: mBOpen.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Beta Open Spec",
-				contentOrPath: "Beta spec",
-			},
-		]);
-		assert.ok(dAOpen && dAPrivate && dARestricted && dBOpen);
-		store.appendMessage({
-			matterId: mAOpen.id,
-			channel: "user",
-			senderType: "member",
-			senderId: "product-manager",
-			content: "Published Alpha Open Spec",
-			metadata: {
-				orgId: orgA.id,
-				workspaceId: wsAOpen.id,
-				repoPath: resolve("/tmp/alpha-open"),
-				deliverableIds: [dAOpen.id],
-			},
-		});
+		store.spaces.ensureAllDefaultSpaces();
+		const makeDoc = (matterId: string, workspaceId: string, title: string, actorId: string) =>
+			store.spaces.createDocument({ spaceId: `spc_ws_${workspaceId}`, matterId, title, content: title, actorId });
+		const dAOpen = await makeDoc(mAOpen.id, wsAOpen.id, "Alpha Open Spec", memberA.id);
+		const dAPrivate = await makeDoc(mAPrivate.id, wsAOpen.id, "Alpha Secret Spec", memberA.id);
+		const dARestricted = await makeDoc(mARestricted.id, wsARestricted.id, "Alpha Restricted Spec", memberA.id);
+		const dBOpen = await makeDoc(mBOpen.id, wsBOpen.id, "Beta Open Spec", ownerB.id);
 
 		const ownerACookie = `pa_session=${store.createSession(ownerA.id).rawToken}`;
 		const memberACookie = `pa_session=${store.createSession(memberA.id).rawToken}`;
@@ -1172,72 +1129,25 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			403,
 		);
 
-		// 1. Multi-org filtering for OwnerA (belongs to both orgA & orgB)
-		const allOwnerA = (await (
-			await fetch(`${base}/api/deliverables`, { headers: { Cookie: ownerACookie } })
-		).json()) as { deliverables: Array<{ id: string }> };
+		// Recent documents and direct reads respect organization, workspace and matter access.
+		const recentIds = async (cookie: string) => {
+			const response = await fetch(`${base}/api/spaces/recent`, { headers: { Cookie: cookie } });
+			assert.equal(response.status, 200);
+			return ((await response.json()) as { documents: Array<{ id: string }> }).documents.map((doc) => doc.id);
+		};
 		assert.deepEqual(
-			allOwnerA.deliverables.map((d) => d.id).sort(),
-			[dAOpen.id, dAPrivate.id, dARestricted.id, dBOpen.id].sort(),
+			(await recentIds(ownerACookie)).sort(),
+			[dAOpen.id, dAPrivate.id, dARestricted.id, dBOpen.id, spacePage.id].sort(),
 		);
-		const onlyOrgA = (await (
-			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgA.id)}`, {
-				headers: { Cookie: ownerACookie },
-			})
-		).json()) as { deliverables: Array<{ id: string }> };
-		assert.deepEqual(
-			onlyOrgA.deliverables.map((d) => d.id).sort(),
-			[dAOpen.id, dAPrivate.id, dARestricted.id].sort(),
-		);
-		const onlyOrgB = (await (
-			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgB.id)}`, {
-				headers: { Cookie: ownerACookie },
-			})
-		).json()) as { deliverables: Array<{ id: string }> };
-		assert.deepEqual(
-			onlyOrgB.deliverables.map((d) => d.id),
-			[dBOpen.id],
-		);
-		const onlyPrivateA = (await (
-			await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgA.id)}&visibility=private`, {
-				headers: { Cookie: ownerACookie },
-			})
-		).json()) as { deliverables: Array<{ id: string }> };
-		assert.deepEqual(
-			onlyPrivateA.deliverables.map((d) => d.id),
-			[dAPrivate.id],
-		);
+		assert.deepEqual((await recentIds(peerACookie)).sort(), [dAOpen.id, spacePage.id].sort());
+		for (const doc of [dAPrivate, dARestricted, dBOpen]) {
+			assert.equal(
+				(await fetch(`${base}/api/spaces/documents/${doc.id}`, { headers: { Cookie: peerACookie } })).status,
+				403,
+			);
+		}
 
-		// 2. PeerA (org_member not on private matter or restricted workspace) cannot see or fetch them, nor query orgB
-		const peerList = (await (
-			await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerACookie } })
-		).json()) as { deliverables: Array<{ id: string }> };
-		assert.deepEqual(
-			peerList.deliverables.map((d) => d.id),
-			[dAOpen.id],
-		);
-		assert.equal(
-			(await fetch(`${base}/api/deliverables/${dAPrivate.id}`, { headers: { Cookie: peerACookie } })).status,
-			403,
-		);
-		assert.equal(
-			(await fetch(`${base}/api/deliverables/${dARestricted.id}`, { headers: { Cookie: peerACookie } })).status,
-			403,
-		);
-		assert.equal(
-			(await fetch(`${base}/api/deliverables/${dBOpen.id}`, { headers: { Cookie: peerACookie } })).status,
-			403,
-		);
-		assert.equal(
-			(
-				await fetch(`${base}/api/deliverables?orgId=${encodeURIComponent(orgB.id)}`, {
-					headers: { Cookie: peerACookie },
-				})
-			).status,
-			403,
-		);
-
-		// 3. Creator MemberA tightens dAOpen from org -> private; PeerA immediately loses visibility
+		// 3. Creator MemberA tightens the matter from org -> private; PeerA immediately loses visibility
 		const tightenRes = await fetch(`${base}/api/matters/${mAOpen.id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Cookie: memberACookie },
@@ -1252,14 +1162,11 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			await fetch(`${base}/api/spaces/${spaceId}/documents`, { headers: { Cookie: peerACookie } })
 		).json()) as { documents: Array<{ id: string }> };
 		assert.ok(!peerSpace.documents.some((page) => page.id === spacePage.id));
+		assert.ok(!(await recentIds(peerACookie)).includes(dAOpen.id));
 		assert.equal(
-			(await fetch(`${base}/api/deliverables/${dAOpen.id}`, { headers: { Cookie: peerACookie } })).status,
+			(await fetch(`${base}/api/spaces/documents/${dAOpen.id}`, { headers: { Cookie: peerACookie } })).status,
 			403,
 		);
-		const peerListAfterTighten = (await (
-			await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerACookie } })
-		).json()) as { deliverables: Array<{ id: string }> };
-		assert.equal(peerListAfterTighten.deliverables.length, 0);
 
 		// Re-open mAOpen to org for viewer/feedback/distill tests
 		assert.equal(
@@ -1350,7 +1257,7 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 	}
 });
 
-test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots an isolated auth server", async () => {
+test("Team sandbox script seeds multi-org RBAC & Space document scenarios and boots an isolated auth server", async () => {
 	const sandboxDir = mkdtempSync(join(tmpdir(), "pa-team-sandbox-test-"));
 	try {
 		const sandboxScript = resolve(process.cwd(), "scripts/start-team-sandbox.mjs");
@@ -1359,7 +1266,7 @@ test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots
 		});
 		const seededSummary = JSON.parse(seedStdout);
 		assert.equal(seededSummary.seeded, true);
-		assert.equal(seededSummary.deliverableCount, 6);
+		assert.equal(seededSummary.documentCount, 4);
 		assert.deepEqual(seededSummary.organizations, ["Alpha Studio", "Beta Labs"]);
 		assert.ok(seededSummary.inviteToken?.startsWith("orginv_"));
 
@@ -1369,7 +1276,7 @@ test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots
 		});
 		const secondSummary = JSON.parse(secondStdout);
 		assert.equal(secondSummary.seeded, false);
-		assert.equal(secondSummary.deliverableCount, 6);
+		assert.equal(secondSummary.documentCount, 4);
 
 		// Reserve an ephemeral loopback port cleanly before spawning the sandbox server
 		const probe = createServer();
@@ -1436,32 +1343,26 @@ test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots
 			const viewerCookie = await signIn("viewer@alpha.local");
 			const adminCookie = await signIn("admin@sandbox.local");
 
-			const ownerDelivs = (await (
-				await fetch(`${base}/api/deliverables`, { headers: { Cookie: ownerCookie } })
-			).json()) as { deliverables: Array<{ id: string; title: string; version: number; orgId: string | null }> };
-			assert.equal(ownerDelivs.deliverables.length, 6);
-
-			const ownerBoot = (await (
-				await fetch(`${base}/api/bootstrap`, { headers: { Cookie: ownerCookie } })
-			).json()) as { organizations: Array<{ id: string; slug: string }> };
-			const betaOrg = ownerBoot.organizations.find((o) => o.slug === "beta-labs");
-			assert.ok(betaOrg);
-			const ownerBetaOnly = (await (
-				await fetch(`${base}/api/deliverables?orgId=${betaOrg.id}`, { headers: { Cookie: ownerCookie } })
-			).json()) as { deliverables: Array<{ title: string }> };
-			assert.equal(ownerBetaOnly.deliverables.length, 2);
-			assert.ok(ownerBetaOnly.deliverables.every((d) => d.title === "Beta 开放平台接口规范"));
-
-			const peerDelivs = (await (
-				await fetch(`${base}/api/deliverables`, { headers: { Cookie: peerCookie } })
-			).json()) as { deliverables: Array<{ title: string }> };
-			assert.equal(peerDelivs.deliverables.length, 2);
-			assert.ok(peerDelivs.deliverables.every((d) => d.title === "Q4 发布计划与架构方案"));
-
-			const viewerDelivs = (await (
-				await fetch(`${base}/api/deliverables`, { headers: { Cookie: viewerCookie } })
-			).json()) as { deliverables: Array<{ id: string; title: string }> };
-			assert.equal(viewerDelivs.deliverables.length, 2);
+			const recentDocuments = async (cookie: string) => {
+				const response = await fetch(`${base}/api/spaces/recent`, { headers: { Cookie: cookie } });
+				assert.equal(response.status, 200);
+				return ((await response.json()) as { documents: Array<{ id: string; title: string; revision: number }> })
+					.documents;
+			};
+			const ownerDocs = await recentDocuments(ownerCookie);
+			assert.equal(ownerDocs.length, 4);
+			assert.equal(ownerDocs.find((doc) => doc.title === "Q4 发布计划与架构方案")?.revision, 2);
+			assert.equal(ownerDocs.find((doc) => doc.title === "Beta 开放平台接口规范")?.revision, 2);
+			const peerDocs = await recentDocuments(peerCookie);
+			assert.deepEqual(
+				peerDocs.map((doc) => doc.title),
+				["Q4 发布计划与架构方案"],
+			);
+			const viewerDocs = await recentDocuments(viewerCookie);
+			assert.deepEqual(
+				viewerDocs.map((doc) => doc.title),
+				["Q4 发布计划与架构方案"],
+			);
 			const adminOverview = (await (
 				await fetch(`${base}/api/admin/overview`, { headers: { Cookie: adminCookie } })
 			).json()) as { users: Array<{ email: string; status: string }> };

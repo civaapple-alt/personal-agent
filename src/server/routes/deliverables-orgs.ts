@@ -1,9 +1,7 @@
 import type { WorkspaceVisibility } from "../../storage/types.ts";
 import {
-	canAccessDeliverable,
 	canAccessMatter,
 	canAccessOrganization,
-	canAccessWorkspace,
 	canManageOrganization,
 	isGlobalUnscopedActor,
 	requireOrgAdmin,
@@ -25,81 +23,10 @@ function parseUserIdList(raw: unknown): string[] {
 	return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((s) => s.trim());
 }
 
-/** Handle deliverables, self-serve organizations, cloned/local workspaces, and preview services. */
+/** Handle self-serve organizations, cloned/local workspaces, and preview services. */
 export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, previewManager, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
-
-	if (method === "GET" && pathname === "/api/deliverables") {
-		if (!requireActiveActor(res, actor)) return true;
-		const url = new URL(req.url ?? pathname, "http://127.0.0.1");
-		const orgFilter = url.searchParams.get("orgId")?.trim() ?? "";
-		const workspaceFilter = url.searchParams.get("workspaceId")?.trim() ?? "";
-		const visibilityFilter = url.searchParams.get("visibility")?.trim() ?? "";
-
-		if (orgFilter && orgFilter !== "__none__") {
-			if (!store.getOrganization(orgFilter)) {
-				sendError(res, 404, `Organization not found: ${orgFilter}`);
-				return true;
-			}
-			if (!canAccessOrganization(store, actor, orgFilter)) {
-				sendError(res, 403, "无权访问该组织的交付成果");
-				return true;
-			}
-		}
-		if (workspaceFilter && workspaceFilter !== "__none__") {
-			const targetWs = store.getWorkspace(workspaceFilter);
-			if (!targetWs) {
-				sendError(res, 404, `Workspace not found: ${workspaceFilter}`);
-				return true;
-			}
-			if (!canAccessWorkspace(store, actor, targetWs)) {
-				sendError(res, 403, "无权访问该项目仓库的交付成果");
-				return true;
-			}
-		}
-		if (visibilityFilter && visibilityFilter !== "org" && visibilityFilter !== "private") {
-			sendError(res, 400, "visibility filter must be org or private");
-			return true;
-		}
-
-		const mattersById = new Map(store.listMatters().map((m) => [m.id, m]));
-		const workspacesById = new Map(store.listWorkspaces().map((w) => [w.id, w]));
-		const deliverables = store.listDeliverables().filter((deliv) => {
-			if (!canAccessDeliverable(store, actor, deliv)) return false;
-			const matter = mattersById.get(deliv.matterId) ?? null;
-			const ws = matter?.workspaceId ? (workspacesById.get(matter.workspaceId) ?? null) : null;
-			const effectiveOrgId = matter?.orgId ?? ws?.orgId ?? null;
-			if (orgFilter === "__none__" && effectiveOrgId !== null) return false;
-			if (orgFilter && orgFilter !== "__none__" && effectiveOrgId !== orgFilter) return false;
-			if (workspaceFilter === "__none__" && (matter?.workspaceId ?? null) !== null) return false;
-			if (workspaceFilter && workspaceFilter !== "__none__" && (matter?.workspaceId ?? null) !== workspaceFilter) {
-				return false;
-			}
-			const effectiveVis = matter?.visibility ?? "org";
-			if (visibilityFilter && effectiveVis !== visibilityFilter) return false;
-			return true;
-		});
-		sendJson(res, 200, { deliverables });
-		return true;
-	}
-
-	const deliverableDetailMatch = pathname.match(/^\/api\/deliverables\/([^/]+)$/);
-	if (method === "GET" && deliverableDetailMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const deliverableId = decodeURIComponent(deliverableDetailMatch[1]!);
-		const existing = store.getDeliverable(deliverableId);
-		if (!existing) {
-			sendError(res, 404, `Deliverable not found: ${deliverableId}`);
-			return true;
-		}
-		if (!canAccessDeliverable(store, actor, existing)) {
-			sendError(res, 403, "无权访问该交付成果");
-			return true;
-		}
-		sendJson(res, 200, { deliverable: existing });
-		return true;
-	}
 
 	if (method === "GET" && pathname === "/api/organizations") {
 		if (!requireActiveActor(res, actor)) return true;

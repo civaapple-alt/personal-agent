@@ -1,4 +1,4 @@
-// Isolated Team Edition sandbox starter with multi-org RBAC, restricted repos, and versioned deliverables.
+// Isolated Team Edition sandbox starter with multi-org RBAC, restricted repos, and versioned Space documents.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -59,7 +59,7 @@ function printUsage() {
 	console.log(`Usage: npm run start:team:sandbox -- [options]
 
 Starts an isolated Team Edition workbench (PA_REQUIRE_AUTH=1) in a temporary directory
-pre-seeded with organizations, RBAC roles, open/restricted repos, multi-version deliverables,
+pre-seeded with organizations, RBAC roles, open/restricted repos, versioned Space documents,
 review feedback, candidate/verified memories, and sample chat history (never touches .data/).
 
 Options:
@@ -94,7 +94,7 @@ function summarizeExistingSandbox(store, sandboxRoot, dbPath, workspacesRoot, pa
 		password,
 		inviteToken: null,
 		organizations: [alphaOrg?.name, betaOrg?.name].filter(Boolean),
-		deliverableCount: store.listDeliverables().length,
+		documentCount: store.spaces.listDocuments({}).length,
 		accounts: users.map((u) => ({
 			email: u.email,
 			displayName: u.displayName,
@@ -125,7 +125,11 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 	new TeamOrchestrator({ store, templates, noSession: true, defaultCwd: ROOT_DIR });
 
 	try {
-		if (store.hasPasswordedAdmin() && store.listOrganizations().length > 1 && store.listDeliverables().length > 0) {
+		if (
+			store.hasPasswordedAdmin() &&
+			store.listOrganizations().length > 1 &&
+			store.spaces.listDocuments({}).length > 0
+		) {
 			return summarizeExistingSandbox(store, sandboxRoot, dbPath, workspacesRoot, password);
 		}
 
@@ -281,24 +285,12 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			senderName: ownerAlpha.displayName,
 			content: "请结合 Alpha Platform 当前结构产出 Q4 发布计划与灰度回滚方案。",
 		});
-		const [delAlphaV1] = store.recordDeliverables([
-			{
-				matterId: mAlphaShared.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Q4 发布计划与架构方案",
-				summary:
-					"重点：V1 完成里程碑范围与团队分工对齐\n- 依据：核对 Alpha Platform 模块清单\n- 过程：产品经理牵头协同研发评估周期",
-				contentOrPath:
-					"# Q4 发布计划（V1 初稿）\n\n- 里程碑 1：完成多租户组织隔离与成果库筛选。\n- 里程碑 2：补充灰度监控指标与回滚手册。",
-			},
-		]);
 		store.spaces.ensureAllDefaultSpaces();
 		const alphaDocumentV1 = await store.spaces.createDocument({
 			spaceId: `spc_ws_${wsAlphaOpen.id}`,
 			matterId: mAlphaShared.id,
-			title: delAlphaV1.title,
-			content: delAlphaV1.contentOrPath,
+			title: "Q4 发布计划与架构方案",
+			content: "# Q4 发布计划（V1 初稿）\n\n- 完成多组织隔离。\n- 补充灰度监控指标与回滚手册。",
 			actorId: ownerAlpha.id,
 			actorName: ownerAlpha.displayName,
 		});
@@ -328,22 +320,10 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			memberId: "product-manager",
 			note: "修订 V2 发布方案时自动注入组织发布约束",
 		});
-		const [delAlphaV2] = store.recordDeliverables([
-			{
-				matterId: mAlphaShared.id,
-				memberId: "product-manager",
-				type: "document",
-				title: "Q4 发布计划与架构方案",
-				summary:
-					"重点：补充 5% → 25% → 100% 灰度梯度、告警阈值与回滚开关（V2）\n- 依据：Alpha Platform 配置与 V1 验收反馈\n- 依据：工程与 QA 联合回滚演练基线\n- 过程：基于 V1 反馈完成多岗位核验修订",
-				contentOrPath:
-					"# Q4 发布计划与架构方案（V2 定稿）\n\n## 1. 灰度放量梯度\n1. 5% 内部验证（30 分钟）\n2. 25% 受控放量（2 小时）\n3. 100% 全量发布\n\n## 2. 回滚条件与开关\n- 错误率 > 0.5% 或 P99 > 600ms 时立即切回稳定版。",
-			},
-		]);
 		const alphaDocumentV2 = await store.spaces.updateDocument(alphaDocumentV1.id, {
 			revision: alphaDocumentV1.revision,
-			title: delAlphaV2.title,
-			content: delAlphaV2.contentOrPath,
+			title: "Q4 发布计划与架构方案",
+			content: "# Q4 发布计划（V2）\n\n按 5% → 25% → 100% 灰度放量，错误率超阈值时回滚。",
 			actorId: ownerAlpha.id,
 			actorName: ownerAlpha.displayName,
 		});
@@ -359,7 +339,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			senderId: "product-manager",
 			senderName: "Product Manager",
 			content: "已依据 V1 反馈发布《Q4 发布计划与架构方案》V2，补充灰度比例与回滚阈值。",
-			metadata: { deliverableIds: [delAlphaV2.id] },
+			metadata: { spaceDocuments: [alphaDocumentV2] },
 		});
 		store.addMemory({
 			memberId: "qa-manager",
@@ -383,18 +363,14 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			visibility: "private",
 			collaboratorIds: [memberAlpha.id],
 		});
-		const [delAlphaPrivate] = store.recordDeliverables([
-			{
-				matterId: mAlphaPrivate.id,
-				memberId: "engineering-manager",
-				type: "document",
-				title: "高风险灰度应急预案",
-				summary:
-					"重点：核心网关降级开关与跨区容灾联系人路径（私密范围）\n- 依据：核心网关熔断压测记录\n- 过程：Engineering Manager 单独整理并限定可见成员",
-				contentOrPath:
-					"# 高风险灰度应急预案（私密范围）\n\n仅发起人、指定成员与 Alpha Studio 管理员可见。\n\n- 一级告警：关闭非核心推荐接口。\n- 二级告警：切换只读降级模式。",
-			},
-		]);
+		const alphaPrivateDoc = await store.spaces.createDocument({
+			spaceId: `spc_usr_${ownerAlpha.id}`,
+			matterId: mAlphaPrivate.id,
+			title: "高风险灰度应急预案",
+			content: "# 高风险灰度应急预案\n\n一级告警关闭非核心接口，二级告警切换只读模式。",
+			actorId: ownerAlpha.id,
+			actorName: ownerAlpha.displayName,
+		});
 		store.appendMessage({
 			matterId: mAlphaPrivate.id,
 			channel: "user",
@@ -402,7 +378,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			senderId: "engineering-manager",
 			senderName: "Engineering Manager",
 			content: "已归档私密交付成果《高风险灰度应急预案》。",
-			metadata: { deliverableIds: [delAlphaPrivate.id] },
+			metadata: { spaceDocuments: [alphaPrivateDoc] },
 		});
 
 		const mAlphaSecret = store.createMatter({
@@ -414,18 +390,14 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			createdByUserId: ownerAlpha.id,
 			visibility: "org",
 		});
-		store.recordDeliverables([
-			{
-				matterId: mAlphaSecret.id,
-				memberId: "engineering-manager",
-				type: "document",
-				title: "核心密钥轮换与审计清单",
-				summary:
-					"重点：90 天自动轮换窗口与最小权限收敛校验项（受限仓库）\n- 依据：Alpha Secret 安全基线\n- 过程：限 Alpha 所有者、管理员与授权成员可见",
-				contentOrPath:
-					"# 核心密钥轮换与审计清单\n\n- 轮换周期：每 90 天双密钥平滑切换。\n- 权限核查：确认未授权成员无法读取受限仓库与对应成果。",
-			},
-		]);
+		await store.spaces.createDocument({
+			spaceId: `spc_ws_${wsAlphaSecret.id}`,
+			matterId: mAlphaSecret.id,
+			title: "核心密钥轮换与审计清单",
+			content: "# 核心密钥轮换与审计清单\n\n每 90 天双密钥平滑切换，核查仓库访问权限。",
+			actorId: ownerAlpha.id,
+			actorName: ownerAlpha.displayName,
+		});
 		store.addMemory({
 			memberId: "engineering-manager",
 			scope: "project_private",
@@ -447,28 +419,21 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			createdByUserId: ownerBeta.id,
 			visibility: "org",
 		});
-		const [delBetaV1] = store.recordDeliverables([
-			{
-				matterId: mBetaShared.id,
-				memberId: "engineering-manager",
-				type: "document",
-				title: "Beta 开放平台接口规范",
-				summary: "重点：V1 统一认证 Header 与基础错误码定义\n- 依据：Beta App 网关接口清单",
-				contentOrPath: "# Beta 开放平台接口规范（V1）\n\n定义 `Authorization: Bearer <token>` 与统一错误信封。",
-			},
-		]);
-		const [delBetaV2] = store.recordDeliverables([
-			{
-				matterId: mBetaShared.id,
-				memberId: "engineering-manager",
-				type: "document",
-				title: "Beta 开放平台接口规范",
-				summary:
-					"重点：补充限流响应头 `Retry-After` 与 Webhook 指数退避重试规范（V2）\n- 依据：Beta App API 网关协议草案",
-				contentOrPath:
-					"# Beta 开放平台接口规范（V2）\n\n- 限流返回 HTTP 429 并附带 `Retry-After`。\n- Webhook 失败后按 1m / 5m / 30m 指数退避重试。",
-			},
-		]);
+		const betaDocumentV1 = await store.spaces.createDocument({
+			spaceId: `spc_ws_${wsBetaOpen.id}`,
+			matterId: mBetaShared.id,
+			title: "Beta 开放平台接口规范",
+			content: "# Beta 开放平台接口规范（V1）\n\n定义认证 Header 与统一错误信封。",
+			actorId: ownerBeta.id,
+			actorName: ownerBeta.displayName,
+		});
+		const betaDocumentV2 = await store.spaces.updateDocument(betaDocumentV1.id, {
+			revision: betaDocumentV1.revision,
+			title: betaDocumentV1.title,
+			content: "# Beta 开放平台接口规范（V2）\n\n限流返回 HTTP 429 与 Retry-After，Webhook 按指数退避重试。",
+			actorId: ownerBeta.id,
+			actorName: ownerBeta.displayName,
+		});
 		store.appendMessage({
 			matterId: mBetaShared.id,
 			channel: "user",
@@ -476,9 +441,8 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			senderId: "engineering-manager",
 			senderName: "Engineering Manager",
 			content: "已发布《Beta 开放平台接口规范》V2。",
-			metadata: { deliverableIds: [delBetaV2.id] },
+			metadata: { spaceDocuments: [betaDocumentV2] },
 		});
-		void delBetaV1;
 
 		const { rawToken: inviteToken } = store.createOrgInvite({
 			orgId: alphaOrg.id,
@@ -495,7 +459,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			password,
 			inviteToken,
 			organizations: [alphaOrg.name, betaOrg.name],
-			deliverableCount: store.listDeliverables().length,
+			documentCount: store.spaces.listDocuments({}).length,
 			accounts: [
 				{ email: "admin@sandbox.local", role: "super_admin", note: "平台超级管理员（#/admin 有 1 条待审核用户）" },
 				{
@@ -542,7 +506,7 @@ function printSandboxBanner({ baseUrl, summary, cleanupOnExit }) {
 		summary.inviteToken ? `  组织邀请链接 : ${baseUrl}/?invite=${summary.inviteToken}` : null,
 		`  沙盒目录     : ${summary.sandboxRoot} (${cleanupOnExit ? "退出自动清理" : "已保留"})`,
 		`  统一登录密码 : ${summary.password}`,
-		`  已预置成果数 : ${summary.deliverableCount} 条（覆盖 Alpha Studio / Beta Labs、V1→V2、共享/私密/受限、评价与候选经验）`,
+		`  已预置资料数 : ${summary.documentCount} 条（覆盖 Alpha Studio / Beta Labs、Git 版本、共享/私密/受限、评价与候选经验）`,
 		"",
 		"  可直接登录的预设账号:",
 		...summary.accounts.map(

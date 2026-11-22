@@ -13,7 +13,7 @@ npm ci
 npm run start:team:sandbox
 ```
 
-打开 `http://127.0.0.1:4399/#/deliverables`，用 `owner@alpha.local` 和默认测试密码 `Sandbox123!` 登录。成果库应显示合成的多版本成果。按 `Ctrl+C` 停止服务。这个流程启动临时团队数据，查看页面与切换账号无需安装 Pi 或配置模型。
+打开 `http://127.0.0.1:4399/#/deliverables`，用 `owner@alpha.local` 和默认测试密码 `Sandbox123!` 登录。资料空间应显示合成文档及 Git 版本。按 `Ctrl+C` 停止服务。这个流程启动临时团队数据，查看页面与切换账号无需安装 Pi 或配置模型。
 
 要查看一个从空白状态开始的个人工作台，请在全新检出目录运行 `npm run start:web`，打开 `http://127.0.0.1:4310`。这个命令会使用检出目录的 `.data/`。开发账号权限、迁移和写入行为时请使用隔离数据。
 

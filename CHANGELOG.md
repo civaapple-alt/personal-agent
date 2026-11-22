@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the legacy deliverables listing API and seed the isolated team sandbox with versioned Space documents.
+
 - Remove legacy deliverables from matter and bootstrap responses and render only saved Space documents in the workbench.
 
 - Remove the legacy deliverable reference from memory records and experience review; memories link to their source matter.
