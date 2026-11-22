@@ -335,24 +335,27 @@ export async function executeWithWorkerPass(
 			}
 			if (call.tool === "save_space_page") {
 				if (!canSaveSpace) throw new Error("Only the matter lead can save space pages");
-				const draft = await prepareDelivery(
-					{
-						tool: "save_space_page",
-						callId: call.callId,
-						title: call.title,
-						summary: call.summary ?? "",
-						changeNote: call.changeNote ?? "本轮形成的空间资料",
-						...(call.sourcePath !== undefined
-							? { type: "document" as const, sourcePath: call.sourcePath }
-							: { type: call.type, content: call.content }),
-					},
-					cwd,
-				);
+				const hasMainBody = call.sourcePath !== undefined || call.content !== undefined;
+				const draft = hasMainBody
+					? await prepareDelivery(
+							{
+								tool: "save_space_page",
+								callId: call.callId,
+								title: call.title,
+								summary: call.summary ?? "",
+								changeNote: call.changeNote ?? "本轮形成的空间资料",
+								...(call.sourcePath !== undefined
+									? { type: "document" as const, sourcePath: call.sourcePath }
+									: { type: call.type, content: call.content! }),
+							},
+							cwd,
+						)
+					: null;
 				toolSignal.throwIfAborted();
 				const currentMatter = deps.requireMatter(input.matterId);
 				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
 				const linkedFilePath =
-					draft.type === "document" && draft.source.kind === "workspace_file"
+					draft && draft.type === "document" && draft.source.kind === "workspace_file"
 						? relative(cwd, draft.source.realPath).replace(/\\/g, "/")
 						: null;
 				const linkedOrgId = linkedFilePath ? activeOrgId : null;
@@ -362,17 +365,30 @@ export async function executeWithWorkerPass(
 							(entry) => entry.memberId === input.member.id && entry.title === call.title,
 						)
 					: undefined;
+				const batchFiles: Array<{ subPath: string; content: string }> = [
+					...(call.files ?? []).map((f) => ({ subPath: f.path, content: f.content })),
+				];
+				if (call.subPath && draft) {
+					batchFiles.push({ subPath: call.subPath, content: draft.content });
+				}
 				if (!call.pageId && !staged) {
-					const wantsFolder = call.entryKind === "folder" || Boolean(call.subPath);
+					const wantsFolder = call.entryKind === "folder" || batchFiles.length > 0;
+					const readmeFromBatch = batchFiles.find((f) => f.subPath === "README.md");
 					const initialContent =
-						call.subPath && call.subPath !== "README.md" ? `# ${call.title}\n` : draft.content;
-					let doc = await deps.store.spaces.createDocument({
+						!call.subPath && draft
+							? draft.content
+							: readmeFromBatch
+								? readmeFromBatch.content
+								: `# ${call.title}\n`;
+					const extraFiles = batchFiles.filter((f) => f.subPath !== "README.md");
+					const doc = await deps.store.spaces.createDocument({
 						spaceId: targetSpace.id,
 						matterId: input.matterId,
 						title: call.title,
 						docType: call.docType,
 						entryKind: wantsFolder ? "folder" : "file",
 						content: initialContent,
+						extraFiles,
 						linkedOrgId,
 						linkedWorkspaceId,
 						linkedFilePath,
@@ -380,16 +396,6 @@ export async function executeWithWorkerPass(
 						actorName: input.member.displayName,
 						commitMessage: call.changeNote || `Create ${call.title}`,
 					});
-					if (call.subPath && call.subPath !== "README.md") {
-						const written = await deps.store.spaces.writeDocumentFile(doc.id, {
-							subPath: call.subPath,
-							content: draft.content,
-							actorId: input.member.id,
-							actorName: input.member.displayName,
-							commitMessage: call.changeNote || `Add ${call.subPath} to ${call.title}`,
-						});
-						if (written) doc = written.document;
-					}
 					effects.savedDocuments.push({
 						id: doc.id,
 						spaceId: doc.spaceId,
@@ -416,13 +422,16 @@ export async function executeWithWorkerPass(
 				const previous = deps.store.spaces.getDocumentMeta(targetDocId);
 				if (!previous || previous.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
 				let doc: Awaited<ReturnType<typeof deps.store.spaces.updateDocument>>;
-				if (call.subPath) {
-					const written = await deps.store.spaces.writeDocumentFile(previous.id, {
-						subPath: call.subPath,
-						content: draft.content,
+				if (batchFiles.length > 0) {
+					const allToWrite = [
+						...(!call.subPath && draft ? [{ subPath: "README.md", content: draft.content }] : []),
+						...batchFiles,
+					];
+					const written = await deps.store.spaces.writeDocumentFiles(previous.id, {
+						files: allToWrite,
 						actorId: input.member.id,
 						actorName: input.member.displayName,
-						commitMessage: call.changeNote || `Update ${call.subPath} in ${call.title}`,
+						commitMessage: call.changeNote || `Update files in ${call.title}`,
 					});
 					doc = written?.document ?? null;
 				} else {
@@ -430,7 +439,7 @@ export async function executeWithWorkerPass(
 						revision: call.revision ?? staged?.revision ?? previous.revision,
 						title: call.title,
 						docType: call.docType,
-						content: draft.content,
+						content: draft?.content ?? "",
 						...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
 						actorId: input.member.id,
 						actorName: input.member.displayName,

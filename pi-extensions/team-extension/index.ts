@@ -99,7 +99,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "save_space_page",
 			label: "保存空间资料",
 			description:
-				"Save a plan, spec, decision, rule/SOP, or note to this matter's space. Set docType accurately: plan, spec, decision, rule, or note (default). Use entryKind='folder' (or pass subPath such as 'option-a.md', 'demo/index.html', or '.gitignore') to store multi-file bundles, reference materials, or static demo sites inside a dedicated folder entry. Provide title and either content or sourcePath.",
+				"Save a plan, spec, decision, rule/SOP, or note to this matter's space. Set docType accurately: plan, spec, decision, rule, or note (default). For multi-file bundles, reference materials, or static demo sites with nested subdirectories (e.g. 'refs/option-a.md', 'demo/index.html', 'demo/assets/app.js', '.gitignore'), set entryKind='folder' and pass files=[{ path, content }, ...] (optionally alongside content for README.md) or pass a single subPath. Provide title and at least one of content, sourcePath, or files.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -107,6 +107,20 @@ export default function teamExtension(pi: PiExtensionApi): void {
 					docType: { type: "string", enum: ["plan", "spec", "decision", "rule", "note"] },
 					entryKind: { type: "string", enum: ["file", "folder"] },
 					subPath: { type: "string" },
+					files: {
+						type: "array",
+						minItems: 1,
+						maxItems: 50,
+						items: {
+							type: "object",
+							properties: {
+								path: { type: "string" },
+								content: { type: "string" },
+							},
+							required: ["path", "content"],
+							additionalProperties: false,
+						},
+					},
 					title: { type: "string" },
 					content: { type: "string" },
 					sourcePath: { type: "string" },
@@ -116,10 +130,6 @@ export default function teamExtension(pi: PiExtensionApi): void {
 					revision: { type: "integer", minimum: 1 },
 				},
 				required: ["title"],
-				oneOf: [
-					{ required: ["content"], not: { required: ["sourcePath"] } },
-					{ required: ["sourcePath"], not: { required: ["content"] } },
-				],
 				additionalProperties: false,
 			},
 		},

@@ -25,11 +25,71 @@ interface DraftSubFile {
 	content: string;
 }
 
+interface TreeDirNode {
+	kind: "dir";
+	name: string;
+	fullPath: string;
+	children: TreeNode[];
+}
+
+interface TreeFileNode {
+	kind: "file";
+	name: string;
+	fullPath: string;
+	sizeBytes: number;
+}
+
+type TreeNode = TreeDirNode | TreeFileNode;
+
 function createDraftRow(path = "", content = ""): DraftSubFile {
 	return { id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, path, content };
 }
 
-/** Left-right collapsible directory tree + preview/editor + batch multi-file uploader for folder-kind Space entries. */
+function buildFileTree(files: SpaceDocumentFileDto[]): TreeNode[] {
+	const root: TreeDirNode = { kind: "dir", name: "", fullPath: "", children: [] };
+	for (const file of files) {
+		const parts = file.path.split("/").filter(Boolean);
+		if (parts.length === 0) continue;
+		let current = root;
+		for (let i = 0; i < parts.length - 1; i++) {
+			const seg = parts[i]!;
+			const dirPath = parts.slice(0, i + 1).join("/");
+			let nextDir = current.children.find((node): node is TreeDirNode => node.kind === "dir" && node.name === seg);
+			if (!nextDir) {
+				nextDir = { kind: "dir", name: seg, fullPath: dirPath, children: [] };
+				current.children.push(nextDir);
+			}
+			current = nextDir;
+		}
+		const fileName = parts[parts.length - 1]!;
+		// Keep .gitkeep only to materialize empty subdirectories; hide it as a clickable file node.
+		if (fileName !== ".gitkeep") {
+			current.children.push({
+				kind: "file",
+				name: fileName,
+				fullPath: file.path,
+				sizeBytes: file.sizeBytes,
+			});
+		}
+	}
+
+	const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
+		nodes.sort((a, b) => {
+			if (a.kind === "file" && a.fullPath === "README.md") return -1;
+			if (b.kind === "file" && b.fullPath === "README.md") return 1;
+			if (a.kind !== b.kind) return a.kind === "dir" ? -1 : 1;
+			return a.name.localeCompare(b.name);
+		});
+		for (const node of nodes) {
+			if (node.kind === "dir") sortNodes(node.children);
+		}
+		return nodes;
+	};
+
+	return sortNodes(root.children);
+}
+
+/** Left-right collapsible recursive directory tree + preview/editor + batch multi-file & subdirectory creation. */
 export function SpaceFolderFilesPanel({
 	docId,
 	readmeContent,
@@ -39,12 +99,15 @@ export function SpaceFolderFilesPanel({
 	onChanged,
 }: SpaceFolderFilesPanelProps) {
 	const [treeOpen, setTreeOpen] = useState(true);
+	const [collapsedDirs, setCollapsedDirs] = useState<Record<string, boolean>>({});
 	const [activePath, setActivePath] = useState<string>("README.md");
 	const [subContent, setSubContent] = useState<string>("");
 	const [loadingFile, setLoadingFile] = useState(false);
 	const [editingSubFile, setEditingSubFile] = useState(false);
 	const [draftContent, setDraftContent] = useState("");
 	const [addingFiles, setAddingFiles] = useState(false);
+	const [addingDir, setAddingDir] = useState(false);
+	const [newDirPath, setNewDirPath] = useState("");
 	const [draftRows, setDraftRows] = useState<DraftSubFile[]>([createDraftRow()]);
 	const [batchCommitMsg, setBatchCommitMsg] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -53,36 +116,28 @@ export function SpaceFolderFilesPanel({
 	useEffect(() => {
 		void docId;
 		setActivePath("README.md");
+		setCollapsedDirs({});
 		setEditingSubFile(false);
 		setAddingFiles(false);
+		setAddingDir(false);
+		setNewDirPath("");
 		setDraftRows([createDraftRow()]);
 		setBatchCommitMsg("");
 		setError("");
 	}, [docId]);
 
-	// Group files by parent directory for a clean hierarchical left tree
-	const groupedTree = useMemo(() => {
-		const groups = new Map<string, Array<{ file: SpaceDocumentFileDto; name: string }>>();
-		for (const file of files) {
-			const slashIdx = file.path.lastIndexOf("/");
-			const dir = slashIdx > 0 ? file.path.slice(0, slashIdx) : "";
-			const name = slashIdx > 0 ? file.path.slice(slashIdx + 1) : file.path;
-			const list = groups.get(dir) ?? [];
-			list.push({ file, name });
-			groups.set(dir, list);
-		}
-		return Array.from(groups.entries()).sort(([a], [b]) => {
-			if (a === "") return -1;
-			if (b === "") return 1;
-			return a.localeCompare(b);
-		});
-	}, [files]);
+	const treeNodes = useMemo(() => buildFileTree(files), [files]);
+	const visibleFileCount = useMemo(
+		() => files.filter((f) => !f.path.endsWith("/.gitkeep") && f.path !== ".gitkeep").length,
+		[files],
+	);
 
 	const loadSubFile = useCallback(
 		async (path: string) => {
 			setActivePath(path);
 			setEditingSubFile(false);
 			setAddingFiles(false);
+			setAddingDir(false);
 			setError("");
 			if (path === "README.md") return;
 			setLoadingFile(true);
@@ -107,6 +162,31 @@ export function SpaceFolderFilesPanel({
 			await writeSpaceDocumentFile(docId, { path: activePath, content: draftContent });
 			if (activePath !== "README.md") setSubContent(draftContent);
 			setEditingSubFile(false);
+			await onChanged();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const handleCreateSubDir = async (event: React.FormEvent) => {
+		event.preventDefault();
+		const cleaned = newDirPath
+			.replace(/\\/g, "/")
+			.trim()
+			.replace(/^\/+|\/+$/g, "");
+		if (!cleaned || busy) return;
+		setBusy(true);
+		setError("");
+		try {
+			await writeSpaceDocumentFile(docId, {
+				path: `${cleaned}/.gitkeep`,
+				content: "",
+				commitMessage: `Create directory ${cleaned}/`,
+			});
+			setAddingDir(false);
+			setNewDirPath("");
 			await onChanged();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -155,6 +235,76 @@ export function SpaceFolderFilesPanel({
 		}
 	};
 
+	const openAddFileInDir = (dirPath: string) => {
+		setAddingDir(false);
+		setEditingSubFile(false);
+		setAddingFiles(true);
+		setDraftRows([createDraftRow(`${dirPath}/`)]);
+		setError("");
+	};
+
+	const renderTreeNodes = (nodes: TreeNode[], depth = 0) =>
+		nodes.map((node) => {
+			if (node.kind === "dir") {
+				const isCollapsed = Boolean(collapsedDirs[node.fullPath]);
+				return (
+					<div key={`dir:${node.fullPath}`} className="space-folder-tree-branch">
+						<div className="space-folder-tree-dir-row" style={{ paddingLeft: `${depth * 14 + 4}px` }}>
+							<button
+								type="button"
+								className="space-folder-tree-dir-btn"
+								aria-expanded={!isCollapsed}
+								onClick={() =>
+									setCollapsedDirs((prev) => ({
+										...prev,
+										[node.fullPath]: !prev[node.fullPath],
+									}))
+								}
+							>
+								<span className="space-folder-chevron" aria-hidden="true">
+									{isCollapsed ? "▸" : "▾"}
+								</span>
+								<span className="space-folder-tree-name">📁 {node.name}/</span>
+							</button>
+							{canWrite && (
+								<button
+									type="button"
+									className="space-folder-dir-add"
+									title={`在 ${node.fullPath}/ 下新建文件`}
+									aria-label={`在 ${node.fullPath}/ 下新建文件`}
+									onClick={() => openAddFileInDir(node.fullPath)}
+								>
+									+
+								</button>
+							)}
+						</div>
+						{!isCollapsed &&
+							(node.children.length > 0 ? (
+								renderTreeNodes(node.children, depth + 1)
+							) : (
+								<div className="space-folder-tree-empty" style={{ paddingLeft: `${(depth + 1) * 14 + 12}px` }}>
+									（空目录）
+								</div>
+							))}
+					</div>
+				);
+			}
+			const isSelected = activePath === node.fullPath && !addingFiles && !addingDir;
+			return (
+				<button
+					key={`file:${node.fullPath}`}
+					type="button"
+					className={`space-folder-tree-item ${isSelected ? "active" : ""}`}
+					style={{ paddingLeft: `${depth * 14 + 10}px` }}
+					title={`${node.fullPath} (${formatByteSize(node.sizeBytes)})`}
+					onClick={() => void loadSubFile(node.fullPath)}
+				>
+					<span className="space-folder-tree-name">{node.name}</span>
+					<span className="space-folder-tree-size">{formatByteSize(node.sizeBytes)}</span>
+				</button>
+			);
+		});
+
 	const isMarkdown = activePath.toLowerCase().endsWith(".md");
 	const displayedContent = activePath === "README.md" ? readmeContent : subContent;
 
@@ -168,9 +318,11 @@ export function SpaceFolderFilesPanel({
 						aria-expanded={treeOpen}
 						onClick={() => setTreeOpen((v) => !v)}
 					>
-						{treeOpen ? `收起目录 (${files.length})` : `展开目录 (${files.length})`}
+						{treeOpen ? `收起目录 (${visibleFileCount})` : `展开目录 (${visibleFileCount})`}
 					</button>
-					<code className="space-folder-active-path">{addingFiles ? "批量添加子文件" : activePath}</code>
+					<code className="space-folder-active-path">
+						{addingDir ? "新建子目录" : addingFiles ? "批量添加子文件" : activePath}
+					</code>
 				</div>
 				<div className="space-folder-bar-actions">
 					{previewEntryPath && (
@@ -184,17 +336,32 @@ export function SpaceFolderFilesPanel({
 						</a>
 					)}
 					{canWrite && (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => {
-								setAddingFiles((v) => !v);
-								setEditingSubFile(false);
-								setError("");
-							}}
-						>
-							{addingFiles ? "取消添加" : "+ 添加子文件"}
-						</button>
+						<>
+							<button
+								type="button"
+								className="btn-pill-outline btn-xs"
+								onClick={() => {
+									setAddingDir((v) => !v);
+									setAddingFiles(false);
+									setEditingSubFile(false);
+									setError("");
+								}}
+							>
+								{addingDir ? "取消建目录" : "+ 新建子目录"}
+							</button>
+							<button
+								type="button"
+								className="btn-pill-outline btn-xs"
+								onClick={() => {
+									setAddingFiles((v) => !v);
+									setAddingDir(false);
+									setEditingSubFile(false);
+									setError("");
+								}}
+							>
+								{addingFiles ? "取消添加" : "+ 添加子文件"}
+							</button>
+						</>
 					)}
 				</div>
 			</div>
@@ -208,54 +375,76 @@ export function SpaceFolderFilesPanel({
 			<div className={`space-folder-split ${treeOpen ? "" : "is-collapsed"}`}>
 				{treeOpen && (
 					<aside className="space-folder-tree" aria-label="目录文件树">
-						{groupedTree.map(([dir, items]) => (
-							<div key={dir || "__root__"} className="space-folder-tree-group">
-								{dir && <div className="space-folder-tree-dir">📁 {dir}/</div>}
-								{items.map(({ file, name }) => {
-									const isSelected = activePath === file.path && !addingFiles;
-									return (
-										<button
-											key={file.path}
-											type="button"
-											className={`space-folder-tree-item ${dir ? "is-nested" : ""} ${isSelected ? "active" : ""}`}
-											title={`${file.path} (${formatByteSize(file.sizeBytes)})`}
-											onClick={() => void loadSubFile(file.path)}
-										>
-											<span className="space-folder-tree-name">{name}</span>
-											<span className="space-folder-tree-size">{formatByteSize(file.sizeBytes)}</span>
-										</button>
-									);
-								})}
-							</div>
-						))}
+						{renderTreeNodes(treeNodes)}
 					</aside>
 				)}
 
 				<div className="space-folder-viewer">
-					{addingFiles ? (
+					{addingDir ? (
+						<form className="space-editor-form space-subfile-form" onSubmit={(e) => void handleCreateSubDir(e)}>
+							<label>
+								子目录相对路径（支持多级目录）
+								<input
+									className="input-field"
+									placeholder="如 demo/assets 或 refs/benchmarks"
+									value={newDirPath}
+									onChange={(e) => setNewDirPath(e.target.value)}
+									required
+								/>
+							</label>
+							<div className="space-folder-presets">
+								<span className="muted-tiny">常用目录：</span>
+								{["refs", "demo", "demo/assets", "docs/api"].map((preset) => (
+									<button
+										key={preset}
+										type="button"
+										className="btn-inline"
+										onClick={() => setNewDirPath(preset)}
+									>
+										{preset}/
+									</button>
+								))}
+							</div>
+							<div className="space-page-actions">
+								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+									{busy ? "创建中…" : "创建子目录"}
+								</button>
+								<button
+									type="button"
+									className="btn-secondary btn-xs"
+									disabled={busy}
+									onClick={() => setAddingDir(false)}
+								>
+									取消
+								</button>
+							</div>
+						</form>
+					) : addingFiles ? (
 						<form
 							className="space-editor-form space-subfile-form"
 							onSubmit={(e) => void handleCreateBatchFiles(e)}
 						>
 							<div className="space-folder-presets">
-								<span className="muted-tiny">快捷追加：</span>
-								{["notes.md", "option-a.md", "demo/index.html", ".gitignore"].map((preset) => (
-									<button
-										key={preset}
-										type="button"
-										className="btn-inline"
-										onClick={() =>
-											setDraftRows((prev) => {
-												if (prev.length === 1 && !prev[0]!.path.trim() && !prev[0]!.content) {
-													return [{ ...prev[0]!, path: preset }];
-												}
-												return [...prev, createDraftRow(preset)];
-											})
-										}
-									>
-										+ {preset}
-									</button>
-								))}
+								<span className="muted-tiny">快捷追加（路径含 / 自动建多级子目录）：</span>
+								{["notes.md", "refs/option-a.md", "demo/index.html", "demo/assets/app.js", ".gitignore"].map(
+									(preset) => (
+										<button
+											key={preset}
+											type="button"
+											className="btn-inline"
+											onClick={() =>
+												setDraftRows((prev) => {
+													if (prev.length === 1 && !prev[0]!.path.trim() && !prev[0]!.content) {
+														return [{ ...prev[0]!, path: preset }];
+													}
+													return [...prev, createDraftRow(preset)];
+												})
+											}
+										>
+											+ {preset}
+										</button>
+									),
+								)}
 							</div>
 
 							{draftRows.map((row, index) => (
@@ -263,7 +452,7 @@ export function SpaceFolderFilesPanel({
 									<div className="space-extra-file-head">
 										<input
 											className="input-field"
-											placeholder={`文件 ${index + 1} 相对路径，如 option-a.md 或 demo/index.html`}
+											placeholder={`文件 ${index + 1} 相对路径，如 refs/option-a.md 或 demo/assets/app.js`}
 											value={row.path}
 											onChange={(e) =>
 												setDraftRows((prev) =>
@@ -286,7 +475,7 @@ export function SpaceFolderFilesPanel({
 									</div>
 									<textarea
 										className="input-field space-extra-file-editor"
-										placeholder="输入文件内容（Markdown / HTML / 配置 / 文本）"
+										placeholder="输入文件内容（Markdown / HTML / JS / CSS / 配置）"
 										value={row.content}
 										onChange={(e) =>
 											setDraftRows((prev) =>

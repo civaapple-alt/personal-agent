@@ -17,12 +17,17 @@ export type TeamToolCall =
 			docType?: SpaceDocumentType;
 			entryKind?: SpaceEntryKind;
 			subPath?: string;
+			files?: Array<{ path: string; content: string }>;
 			pageId?: string;
 			revision?: number;
 			type: "document" | "artifact" | "prototype_image" | "service_url";
 			summary?: string;
 			changeNote?: string;
-	  } & ({ content: string; sourcePath?: never } | { sourcePath: string; content?: never }))
+	  } & (
+			| { content: string; sourcePath?: never }
+			| { sourcePath: string; content?: never }
+			| { content?: undefined; sourcePath?: undefined; files: Array<{ path: string; content: string }> }
+	  ))
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| {
@@ -80,6 +85,24 @@ function parseOptionalEntryKind(value: unknown): SpaceEntryKind | undefined {
 	throw new Error("Unsupported space entryKind (expected file or folder)");
 }
 
+function parseOptionalFiles(value: unknown): Array<{ path: string; content: string }> | undefined {
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value) || value.length === 0 || value.length > 50) {
+		throw new Error("files must be an array of 1 to 50 { path, content } entries");
+	}
+	return value.map((item, idx) => {
+		if (!item || typeof item !== "object" || !("path" in item) || !("content" in item)) {
+			throw new Error(`files[${idx}] must include path and content`);
+		}
+		const path = requiredString((item as { path: unknown }).path, `files[${idx}].path`, 512);
+		const rawContent = (item as { content: unknown }).content;
+		if (typeof rawContent !== "string" || rawContent.length > 64_000) {
+			throw new Error(`files[${idx}].content must be a string (max 64000 characters)`);
+		}
+		return { path, content: rawContent };
+	});
+}
+
 function parseCall(value: unknown): TeamToolCall {
 	if (!value || typeof value !== "object") throw new Error("Expected a tool request");
 	if (!("tool" in value) || !("callId" in value) || !("args" in value)) throw new Error("Invalid tool request");
@@ -105,32 +128,40 @@ function parseCall(value: unknown): TeamToolCall {
 			(revision !== undefined && (!Number.isSafeInteger(revision) || Number(revision) < 1))
 		)
 			throw new Error("Provide pageId and revision together");
-		if ("content" in args === "sourcePath" in args) throw new Error("Provide exactly one of content or sourcePath");
+		const hasContent = "content" in args && args.content !== undefined;
+		const hasSourcePath = "sourcePath" in args && args.sourcePath !== undefined;
+		const files = "files" in args ? parseOptionalFiles(args.files) : undefined;
+		if (hasContent && hasSourcePath) throw new Error("Provide at most one of content or sourcePath");
+		if (!hasContent && !hasSourcePath && !files) {
+			throw new Error("Provide content, sourcePath, or files");
+		}
 		const type = "type" in args ? args.type : "document";
 		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url")
 			throw new Error("Unsupported space item type");
 		const docType = "docType" in args ? parseOptionalDocType(args.docType) : undefined;
 		const entryKind = "entryKind" in args ? parseOptionalEntryKind(args.entryKind) : undefined;
 		const subPath = "subPath" in args ? requiredString(args.subPath, "subPath", 512) : undefined;
-		if (type !== "document" && "sourcePath" in args)
-			throw new Error("sourcePath is only supported for document items");
-		const source =
-			"sourcePath" in args
-				? { sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) }
-				: { content: requiredString("content" in args ? args.content : undefined, "content", 64_000) };
-		return {
-			tool: value.tool,
+		if (type !== "document" && hasSourcePath) throw new Error("sourcePath is only supported for document items");
+		const base = {
+			tool: "save_space_page" as const,
 			callId,
 			title: requiredString(args.title, "title", 200),
-			type,
+			type: type as "document" | "artifact" | "prototype_image" | "service_url",
 			...(docType ? { docType } : {}),
 			...(entryKind ? { entryKind } : {}),
 			...(subPath ? { subPath } : {}),
+			...(files ? { files } : {}),
 			...("summary" in args ? { summary: requiredString(args.summary, "summary", 1000) } : {}),
 			...("changeNote" in args ? { changeNote: requiredString(args.changeNote, "changeNote", 2000) } : {}),
-			...source,
 			...(pageId ? { pageId, revision: Number(revision) } : {}),
 		};
+		if (hasSourcePath) {
+			return { ...base, sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) };
+		}
+		if (hasContent) {
+			return { ...base, content: requiredString(args.content, "content", 64_000) };
+		}
+		return { ...base, files: files! };
 	}
 	if (value.tool === "read_pa_help" && "topics" in args) {
 		if (Object.keys(args).some((key) => key !== "topics" && key !== "language")) {
