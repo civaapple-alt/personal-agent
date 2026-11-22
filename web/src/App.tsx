@@ -24,6 +24,7 @@ import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
+import { OrganizationsView } from "./components/OrganizationsView.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
@@ -661,20 +662,22 @@ export function App() {
 		activeTab === "deliverables"
 			? "资料空间"
 			: activeTab === "team"
-				? "我的团队"
-				: activeTab === "materials"
-					? "工作区"
-					: activeTab === "admin"
-						? "超级管理员控制台"
-						: activeTab === "settings"
-							? settingsSection === "base"
-								? "设置 · Agent 底座"
-								: settingsSection === "extensions"
-									? "设置 · 扩展插件"
-									: settingsSection === "config"
-										? "设置 · 运行配置"
-										: "设置"
-							: matterDetail?.matter.title || "新事项对话";
+				? "AI 团队"
+				: activeTab === "organizations"
+					? "组织"
+					: activeTab === "materials"
+						? "工作区"
+						: activeTab === "admin"
+							? "超级管理员控制台"
+							: activeTab === "settings"
+								? settingsSection === "base"
+									? "设置 · Agent 底座"
+									: settingsSection === "extensions"
+										? "设置 · 扩展插件"
+										: settingsSection === "config"
+											? "设置 · 运行配置"
+											: "设置"
+								: matterDetail?.matter.title || "新事项对话";
 	const runtimeBadge = runtimeOverview
 		? runtimeOverview.base.available && runtimeOverview.base.version
 			? `Pi ${runtimeOverview.base.version}`
@@ -957,11 +960,9 @@ export function App() {
 							currentUser={currentUser}
 							accountUser={accountUser}
 							isSuperAdmin={isSuperAdmin}
-							collaborators={bootstrap?.collaborators ?? []}
 							members={bootstrap?.members ?? []}
 							workspaces={bootstrap?.workspaces ?? []}
 							organizations={bootstrap?.organizations ?? []}
-							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 							orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
 							matters={bootstrap?.matters ?? []}
 							selectedOrgId={effectiveOrgIdForScope}
@@ -974,8 +975,6 @@ export function App() {
 							onRefresh={refreshBootstrap}
 							onNotice={(msg) => setNoticeBanner(msg)}
 							onError={(msg) => setErrorBanner(msg)}
-							onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
-							onRestoreOwner={() => void handleLogoutOrRestore()}
 							onAssignTask={(memberId) => {
 								startNewMatter();
 								setSelectedMemberId(memberId);
@@ -988,6 +987,32 @@ export function App() {
 							onOpenArchitectMatter={() => startArchitectMatter()}
 							onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
 							onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
+							onOpenOrganizations={() => navigateRoute({ tab: "organizations" })}
+						/>
+					</ViewFade>
+				)}
+
+				{activeTab === "organizations" && (
+					<ViewFade>
+						<OrganizationsView
+							currentUser={currentUser}
+							accountUser={accountUser}
+							isSuperAdmin={isSuperAdmin}
+							collaborators={bootstrap?.collaborators ?? []}
+							organizations={bootstrap?.organizations ?? []}
+							workspaces={bootstrap?.workspaces ?? []}
+							members={bootstrap?.members ?? []}
+							templateByRoleId={templateByRoleId}
+							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+							orgAiRolesByOrgId={bootstrap?.orgAiRolesByOrgId ?? {}}
+							selectedOrgId={effectiveOrgIdForScope}
+							onOpenSpace={(spaceId) => navigateRoute({ tab: "deliverables", spacePageId: spaceId })}
+							onOpenWorkspaces={() => navigateRoute({ tab: "materials" })}
+							onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
+							onRestoreOwner={() => void handleLogoutOrRestore()}
+							onRefresh={refreshBootstrap}
+							onNotice={(msg) => setNoticeBanner(msg)}
+							onError={(msg) => setErrorBanner(msg)}
 						/>
 					</ViewFade>
 				)}

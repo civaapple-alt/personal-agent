@@ -8,7 +8,6 @@ import {
 	type MemberMemoryDto,
 	type OrganizationAiRoleConfigDto,
 	type OrganizationDto,
-	type OrganizationMemberDto,
 	type RoleTemplateDto,
 	setOrgAiPrimaryContact,
 	setPrimaryMember,
@@ -17,22 +16,18 @@ import {
 } from "../api.ts";
 import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
 import { applyOrgAiRoleOverrides, resolveEffectivePrimaryContactId } from "../utils.ts";
-import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 import { MemberCard } from "./team/MemberCard.tsx";
 import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "./team/MemberPackageForms.tsx";
-import { OrganizationsSection } from "./team/OrganizationsSection.tsx";
 import { TeamHealthcheckPanel } from "./team/TeamHealthcheckPanel.tsx";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
 	isSuperAdmin?: boolean;
-	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	workspaces: WorkspaceDto[];
 	organizations?: OrganizationDto[];
-	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
 	orgAiRolesByOrgId?: Record<
 		string,
 		{ configured: boolean; configs: OrganizationAiRoleConfigDto[]; effectiveMemberIds: string[] }
@@ -48,25 +43,22 @@ interface TeamViewProps {
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
-	onPreviewAsCollaborator?: (token: string) => void;
-	onRestoreOwner?: () => void;
 	onAssignTask: (memberId: string) => void;
 	onOpenArchitect?: () => void;
 	onOpenArchitectMatter?: () => void;
 	onOpenMatter?: (matterId: string) => void;
 	onOpenDeliverable?: (deliverableId: string) => void;
+	onOpenOrganizations?: () => void;
 }
 
-/** Coordinates the team page: organizations, human org members/AI roles, global AI cards, and legacy collaborators. */
+/** Focused AI team workbench: role directory, experience curation, role packages, and team healthcheck. */
 export function TeamView({
 	currentUser,
 	accountUser = null,
 	isSuperAdmin = false,
-	collaborators = [],
 	members,
 	workspaces,
 	organizations = [],
-	orgMembersByOrgId = {},
 	orgAiRolesByOrgId = {},
 	matters = [],
 	selectedOrgId = null,
@@ -79,13 +71,12 @@ export function TeamView({
 	onRefresh,
 	onNotice,
 	onError,
-	onPreviewAsCollaborator,
-	onRestoreOwner,
 	onAssignTask,
 	onOpenArchitect,
 	onOpenArchitectMatter,
 	onOpenMatter,
 	onOpenDeliverable,
+	onOpenOrganizations,
 }: TeamViewProps) {
 	const isOwner = isSuperAdmin || (!accountUser && currentUser?.permissionRole !== "collaborator");
 	const roleScopeChoices = useMemo(
@@ -110,7 +101,6 @@ export function TeamView({
 	} | null>(null);
 	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
 	const [inspectState, setInspectState] = useState<{ memberId: string; tab: "identity" | "memories" } | null>(null);
-	const [customPrimaryScope, setCustomPrimaryScope] = useState<string | null>(null);
 	const [savingPrimary, setSavingPrimary] = useState(false);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
 	const visibleBusinessMembers = useMemo(() => {
@@ -175,15 +165,7 @@ export function TeamView({
 		const fallbackOrg = organizations.find((org) => org.isDefault) ?? organizations[0];
 		return fallbackOrg ? fallbackOrg.id : "__global__";
 	}, [selectedOrgId, activeOrg, organizations, canManageOrgPrimary]);
-	const activePrimaryScope = useMemo(() => {
-		if (
-			customPrimaryScope &&
-			(customPrimaryScope === "__global__" || organizations.some((org) => org.id === customPrimaryScope))
-		) {
-			return customPrimaryScope;
-		}
-		return defaultPrimaryScope;
-	}, [customPrimaryScope, defaultPrimaryScope, organizations]);
+	const activePrimaryScope = defaultPrimaryScope;
 	const primaryTargetOrg = useMemo(
 		() =>
 			activePrimaryScope === "__global__"
@@ -257,8 +239,8 @@ export function TeamView({
 			<div className="subpage-inner wide">
 				<div className="pane-header-row">
 					<div className="pane-header">
-						<h1>我的团队</h1>
-						<p>查看岗位分工与经验沉淀，支持按需创建角色或导入导出能力包</p>
+						<h1>AI 团队</h1>
+						<p>专注 AI 岗位分工、经验核验与能力包管理；组织成员与主联系人配置请前往「组织」页。</p>
 					</div>
 					{canCreateAnyRole && (
 						<div className="actions-row compact">
@@ -352,57 +334,13 @@ export function TeamView({
 										团队协作体检
 									</button>
 								)}
-							</div>
-						</div>
-						{eligiblePrimaryMembers.length > 0 && (
-							<div className="team-primary-bar">
-								<div className="team-primary-bar-label">
-									<span className="pill live">主联系人</span>
-									{organizations.length > 1 || (organizations.length === 1 && isOwner) ? (
-										<select
-											aria-label="主联系人所属组织范围"
-											className="select-sm"
-											value={activePrimaryScope}
-											onChange={(e) => setCustomPrimaryScope(e.target.value)}
-										>
-											{organizations.map((org) => (
-												<option key={org.id} value={org.id}>
-													组织：{org.name}
-												</option>
-											))}
-											{isOwner && <option value="__global__">平台全局默认</option>}
-										</select>
-									) : primaryTargetOrg ? (
-										<span className="muted-tiny">当前组织：{primaryTargetOrg.name}</span>
-									) : null}
-								</div>
-								{canSwitchPrimary ? (
-									<div className="team-primary-bar-control">
-										<select
-											aria-label="切换主联系人"
-											className="select-sm team-primary-select"
-											value={effectivePrimaryId ?? ""}
-											disabled={savingPrimary}
-											onChange={(e) => void handleSetPrimary(e.target.value)}
-										>
-											{eligiblePrimaryMembers.map((m) => (
-												<option key={m.id} value={m.id}>
-													{m.displayName}（{m.roleTitle}）
-												</option>
-											))}
-										</select>
-										<span className="muted-tiny">新事项或未点名对话默认由主联系人首接响应</span>
-									</div>
-								) : (
-									<div className="team-primary-bar-control">
-										<span className="pill">
-											{effectivePrimaryId ? memberName(effectivePrimaryId) : "未指定"}
-										</span>
-										<span className="muted-tiny">仅组织所有者 / 管理员可切换主联系人</span>
-									</div>
+								{onOpenOrganizations && (
+									<button type="button" className="btn-inline" onClick={onOpenOrganizations}>
+										组织与主联系人 →
+									</button>
 								)}
 							</div>
-						)}
+						</div>
 						<div className="team-grid">
 							{cardDisplayMembers.map((member, idx) => (
 								<MemberCard
@@ -437,34 +375,6 @@ export function TeamView({
 							))}
 						</div>
 					</section>
-
-					<OrganizationsSection
-						isOwner={isOwner}
-						isSuperAdmin={isSuperAdmin}
-						accountUser={accountUser}
-						organizations={organizations}
-						workspaces={workspaces}
-						businessMembers={businessMembers}
-						orgMembersByOrgId={orgMembersByOrgId}
-						orgAiRolesByOrgId={orgAiRolesByOrgId}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-					/>
-
-					{(isSuperAdmin || !accountUser) && (
-						<CollaboratorsSection
-							isOwner={isOwner}
-							currentUser={currentUser}
-							collaborators={collaborators}
-							organizations={organizations}
-							onRefresh={onRefresh}
-							onNotice={onNotice}
-							onError={onError}
-							onPreviewAsCollaborator={onPreviewAsCollaborator}
-							onRestoreOwner={onRestoreOwner}
-						/>
-					)}
 				</div>
 			</div>
 

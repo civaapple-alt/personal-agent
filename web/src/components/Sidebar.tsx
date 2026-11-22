@@ -540,20 +540,29 @@ export const Sidebar = memo(function Sidebar({
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
-							onClick={() => navigateFromMenu({ tab: "team" })}
-						>
-							<span>我的团队</span>
-							<span className="pill">{businessMembers.length}</span>
-						</button>
-						<button
-							type="button"
-							role="menuitem"
 							className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
 							onClick={() => navigateFromMenu({ tab: "materials" })}
 						>
 							<span>工作区</span>
 							<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "organizations" ? "active" : ""}`}
+							onClick={() => navigateFromMenu({ tab: "organizations" })}
+						>
+							<span>组织</span>
+							<span className="pill">{bootstrap?.organizations?.length ?? 0}</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
+							onClick={() => navigateFromMenu({ tab: "team" })}
+						>
+							<span>AI 团队</span>
+							<span className="pill">{businessMembers.length}</span>
 						</button>
 						<button
 							type="button"

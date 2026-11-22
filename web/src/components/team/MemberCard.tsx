@@ -150,14 +150,6 @@ export function MemberCard({
 							)}
 					</div>
 				</div>
-				{(candidateCount > 0 || verifiedCount > 0) && (
-					<div className="member-memory-badges">
-						{candidateCount > 0 && (
-							<span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>
-						)}
-						{verifiedCount > 0 && <span className="pill">{verifiedCount} 经验</span>}
-					</div>
-				)}
 			</div>
 
 			{cleanResponsibility && (
@@ -178,6 +170,8 @@ export function MemberCard({
 						<span>{antiJobsCount} 条边界</span>
 					</>
 				)}
+				{candidateCount > 0 && <span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>}
+				{verifiedCount > 0 && <span className="pill">{verifiedCount} 经验</span>}
 				<span aria-hidden="true">·</span>
 			</div>
 
