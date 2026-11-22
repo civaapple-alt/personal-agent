@@ -19,12 +19,14 @@ export function WebAccessSettings({
 	onNotice?: (message: string) => void;
 	onError?: (message: string) => void;
 }) {
-	const { installedVersion, roles } = base.webAccess;
+	const { installedVersion, roles, provider: savedProvider = "auto", effectiveProvider = null } = base.webAccess;
 	const [draft, setDraft] = useState<string[] | null>(null);
+	const [providerDraft, setProviderDraft] = useState<"auto" | "deepseek" | "exa" | "kimi" | null>(null);
 	const [pending, setPending] = useState<"install" | "save" | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const selected = new Set(draft ?? roles.filter((role) => role.enabled).map((role) => role.id));
-	const changed = roles.some((role) => selected.has(role.id) !== role.enabled);
+	const activeProvider = providerDraft ?? savedProvider;
+	const changed = roles.some((role) => selected.has(role.id) !== role.enabled) || activeProvider !== savedProvider;
 	const canSave = changed && (Boolean(installedVersion) || selected.size === 0);
 
 	async function update(action: "install" | "save") {
@@ -34,11 +36,15 @@ export function WebAccessSettings({
 			const { overview } =
 				action === "install"
 					? await installRuntimeWebAccess()
-					: await configureRuntimeWebAccess(roles.filter((role) => selected.has(role.id)).map((role) => role.id));
+					: await configureRuntimeWebAccess(
+							roles.filter((role) => selected.has(role.id)).map((role) => role.id),
+							activeProvider,
+						);
 			if (onOverviewChange) onOverviewChange(overview);
 			else await onRefresh();
 			setDraft(null);
-			onNotice?.(action === "install" ? "pi-web-access 已安装，可以为岗位启用" : "网页检索权限已保存");
+			setProviderDraft(null);
+			onNotice?.(action === "install" ? "pi-web-access 已安装，可以为岗位启用" : "网页检索配置已保存");
 		} catch (cause) {
 			const message = cause instanceof Error ? cause.message : String(cause);
 			setError(message);
@@ -75,6 +81,23 @@ export function WebAccessSettings({
 						if (canSave && !pending) void update("save");
 					}}
 				>
+					<label className="auth-field-label">
+						<span>默认搜索供应商（web_search）</span>
+						<select
+							className="input-field"
+							disabled={pending !== null}
+							value={activeProvider}
+							onChange={(event) => setProviderDraft(event.target.value as "auto" | "deepseek" | "exa" | "kimi")}
+						>
+							<option value="auto">
+								自动选择（按 Exa → DeepSeek → Kimi 优先级
+								{effectiveProvider ? `，当前命中：${effectiveProvider}` : "，当前交由 Pi 默认"}）
+							</option>
+							<option value="deepseek">DeepSeek Search（需配置 DEEPSEEK_API_KEY）</option>
+							<option value="exa">Exa Search（需配置 EXA_API_KEY）</option>
+							<option value="kimi">Moonshot / Kimi（需配置 MOONSHOT_API_KEY 或 Pi /login kimi-coding）</option>
+						</select>
+					</label>
 					<fieldset className="settings-web-access-roles" disabled={pending !== null}>
 						<legend>允许网页检索的 AI 岗位</legend>
 						{roles.map((role) => (

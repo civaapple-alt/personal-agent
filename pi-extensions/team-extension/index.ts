@@ -237,6 +237,9 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				event.input.workflow = "none";
 				event.input.includeContent = false;
 				delete event.input.proxy;
+				if (!event.input.provider && env.PA_WEB_SEARCH_PROVIDER) {
+					event.input.provider = env.PA_WEB_SEARCH_PROVIDER;
+				}
 				return;
 			}
 			if (event.toolName === "fetch_content") {

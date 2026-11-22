@@ -397,6 +397,7 @@ export class UserAuthRepo {
 			defaultMaxPersonalRoles: 5,
 			pstackDir: null,
 			webAccessRoleGrants: {},
+			webSearchProvider: "auto",
 			defaultModelSelection: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
 		};
@@ -452,6 +453,12 @@ export class UserAuthRepo {
 						([id, createdAt]) => id.length > 0 && typeof createdAt === "string" && createdAt.length > 0,
 					),
 				),
+				webSearchProvider:
+					parsed.webSearchProvider === "deepseek" ||
+					parsed.webSearchProvider === "exa" ||
+					parsed.webSearchProvider === "kimi"
+						? parsed.webSearchProvider
+						: "auto",
 				defaultModelSelection: readStoredModelSelection(parsed.defaultModelSelection),
 				updatedAt: String(row.updated_at ?? defaults.updatedAt),
 			};
@@ -499,6 +506,7 @@ export class UserAuthRepo {
 						? resolve(patch.pstackDir.trim())
 						: current.pstackDir,
 			webAccessRoleGrants: patch.webAccessRoleGrants ?? current.webAccessRoleGrants,
+			webSearchProvider: patch.webSearchProvider ?? current.webSearchProvider,
 		};
 		this.db
 			.prepare(

@@ -3,13 +3,25 @@ import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
 import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
-import { listManagedEnvStatus, type ManagedEnvStatus, resolveEnvFilePath } from "../pa-extensions/env-credentials.ts";
+import {
+	listManagedEnvStatus,
+	type ManagedEnvStatus,
+	readWebAccessEnvFromDotEnv,
+	resolveEnvFilePath,
+} from "../pa-extensions/env-credentials.ts";
 import { HUMAN_QUESTION_TOOL } from "../pa-extensions/human-question/runtime.ts";
 import { findInstalledPstack, preparePstackRuntime } from "../pa-extensions/pstack-methods/package.ts";
 import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
 import { TEAM_EXTENSION_TOOLS } from "../pa-extensions/team-extension/runtime.ts";
 import { findInstalledPiWebAccess } from "../pa-extensions/web-access/package.ts";
-import { hasWebAccessGrant, isWebAccessRole, PI_WEB_SEARCH_TOOLS } from "../pa-extensions/web-access/runtime.ts";
+import {
+	hasWebAccessGrant,
+	isWebAccessRole,
+	PI_WEB_SEARCH_TOOLS,
+	type ResolvedWebSearchProvider,
+	resolveEffectiveWebSearchProvider,
+	type WebSearchProviderPreference,
+} from "../pa-extensions/web-access/runtime.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { listPiPackages } from "../rpc/pi-packages.ts";
 import type { TeamMember } from "../storage/types.ts";
@@ -24,6 +36,7 @@ export interface OrchestratorRuntimeConfig {
 	extensions: string[];
 	pstackDir: string | null;
 	webAccessRoleGrants?: Record<string, string>;
+	webSearchProvider?: WebSearchProviderPreference;
 	templates: RoleTemplate[];
 }
 
@@ -122,6 +135,8 @@ export interface RuntimeBaseInfo {
 	webAccess: {
 		installedVersion: string | null;
 		roles: Array<{ id: string; name: string; enabled: boolean }>;
+		provider: WebSearchProviderPreference;
+		effectiveProvider: ResolvedWebSearchProvider | null;
 	};
 	isolationModes: RuntimeIsolationMode[];
 	envFlags: {
@@ -682,7 +697,11 @@ export async function buildRuntimeOverview(options: {
 		},
 	];
 
-	const envCredentials = isOwner ? await listManagedEnvStatus(resolveEnvFilePath(config.defaultCwd)) : undefined;
+	const envFilePath = resolveEnvFilePath(config.defaultCwd);
+	const envCredentials = isOwner ? await listManagedEnvStatus(envFilePath) : undefined;
+	const dotEnvWebAccess = await readWebAccessEnvFromDotEnv(envFilePath);
+	const webSearchProvider: WebSearchProviderPreference = config.webSearchProvider ?? "auto";
+	const effectiveWebSearchProvider = resolveEffectiveWebSearchProvider(webSearchProvider, dotEnvWebAccess) ?? null;
 
 	return {
 		base: {
@@ -703,7 +722,12 @@ export async function buildRuntimeOverview(options: {
 				: null,
 			defaultCwd: isOwner ? config.defaultCwd : basename(config.defaultCwd) || ".",
 			pstack: pstackInfo,
-			webAccess: { installedVersion: webAccessPackage?.version ?? null, roles: webAccessRoles },
+			webAccess: {
+				installedVersion: webAccessPackage?.version ?? null,
+				roles: webAccessRoles,
+				provider: webSearchProvider,
+				effectiveProvider: effectiveWebSearchProvider,
+			},
 			isolationModes: ISOLATION_MODES.map((mode) =>
 				mode.id === "worker" && serverConfig?.inheritLocalPiResources
 					? {

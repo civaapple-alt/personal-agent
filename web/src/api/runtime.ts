@@ -64,6 +64,8 @@ export interface RuntimeBaseInfoDto {
 	webAccess: {
 		installedVersion: string | null;
 		roles: Array<{ id: string; name: string; enabled: boolean }>;
+		provider?: "auto" | "deepseek" | "exa" | "kimi";
+		effectiveProvider?: "deepseek" | "exa" | "kimi" | null;
 	};
 	isolationModes: RuntimeIsolationModeDto[];
 	envFlags: {
@@ -90,7 +92,7 @@ export interface RuntimeConfigSectionDto {
 }
 
 export interface ManagedEnvStatusDto {
-	key: "TYPESAFE_API_KEY" | "EXA_API_KEY" | "MOONSHOT_API_KEY";
+	key: "TYPESAFE_API_KEY" | "EXA_API_KEY" | "DEEPSEEK_API_KEY" | "MOONSHOT_API_KEY";
 	label: string;
 	description: string;
 	scope: "classifier" | "web_access";
@@ -145,8 +147,14 @@ export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDt
 	return requestJson("/api/admin/runtime/web-access/install", { method: "POST", body: "{}" });
 }
 
-export function configureRuntimeWebAccess(roleIds: string[]): Promise<{ overview: RuntimeOverviewDto }> {
-	return requestJson("/api/admin/runtime/web-access", { method: "PATCH", body: JSON.stringify({ roleIds }) });
+export function configureRuntimeWebAccess(
+	roleIds: string[],
+	provider?: "auto" | "deepseek" | "exa" | "kimi",
+): Promise<{ overview: RuntimeOverviewDto }> {
+	return requestJson("/api/admin/runtime/web-access", {
+		method: "PATCH",
+		body: JSON.stringify({ roleIds, ...(provider !== undefined ? { provider } : {}) }),
+	});
 }
 
 export function updateRuntimeEnvCredentials(

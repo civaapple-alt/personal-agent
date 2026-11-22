@@ -13,6 +13,19 @@ pi install npm:pi-web-access
 pi list
 ```
 
+## 检索密钥与默认供应商顺序
+
+PA 在「设置 → `.env 密钥配置`」（或项目根目录 `.env`，参考 [.env.example](../../.env.example)）支持管理以下 3 个网页检索密钥，且仅注入已获 `pi-web-access` 授权的岗位进程：
+
+| 优先级（`auto` 模式） | 环境变量 | 对应供应商 | 说明 |
+| --- | --- | --- | --- |
+| `#1` | `EXA_API_KEY` | `exa` | Exa 公开网页搜索 |
+| `#2` | `DEEPSEEK_API_KEY` | `deepseek` | DeepSeek Search API（`https://api.deepseek.com/v1/tools/search`） |
+| `#3` | `MOONSHOT_API_KEY` | `kimi` | Moonshot / Kimi 搜索 |
+
+- **默认顺序**：未显式指定时（`webSearchProvider = "auto"`），PA 按 **`Exa → DeepSeek → Kimi`** 顺序自动选用第一个已配置密钥的供应商，并通过 `PA_WEB_SEARCH_PROVIDER` 注入 `web_search` 默认参数；若 3 个环境变量都未配置，则交由 `pi-web-access` 自身的 `~/.pi/agent/web-search.json` 或 `/login kimi-coding` 决定。
+- **手动指定**：超级管理员可在「设置 → 扩展插件 → `pi-web-access`」的「默认搜索供应商」下拉框中显式固定为 `DeepSeek Search`、`Exa Search` 或 `Moonshot / Kimi`，保存后下次运行生效。
+
 ## 使用已有的 Kimi Code 登录
 
 在 Pi 中通过 `/login kimi-coding` 完成登录。将以下字段合并到服务账号的 `~/.pi/agent/web-search.json`。如通过 `PI_CODING_AGENT_DIR` 指定了配置目录，在该目录中使用同名文件。

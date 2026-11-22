@@ -12,13 +12,20 @@ export const MANAGED_ENV_SPECS = [
 	{
 		key: "EXA_API_KEY",
 		label: "Exa 网页检索密钥",
-		description: "仅注入已获 pi-web-access 授权的岗位进程，用于公开网页搜索。",
+		description: "仅注入已获 pi-web-access 授权的岗位进程，用于公开网页搜索（自动优先级 #1）。",
+		scope: "web_access",
+	},
+	{
+		key: "DEEPSEEK_API_KEY",
+		label: "DeepSeek 网页检索密钥",
+		description:
+			"仅注入已获 pi-web-access 授权的岗位进程，用于 DeepSeek Search API（api.deepseek.com/v1/tools/search，自动优先级 #2）。",
 		scope: "web_access",
 	},
 	{
 		key: "MOONSHOT_API_KEY",
 		label: "Moonshot / Kimi 网页检索密钥",
-		description: "仅注入已获 pi-web-access 授权的岗位进程，用于 Moonshot / Kimi 搜索。",
+		description: "仅注入已获 pi-web-access 授权的岗位进程，用于 Moonshot / Kimi 搜索（自动优先级 #3）。",
 		scope: "web_access",
 	},
 ] as const;

@@ -8,7 +8,7 @@ import {
 	updateManagedDotEnv,
 } from "../../pa-extensions/env-credentials.ts";
 import { findInstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
-import { isWebAccessRole } from "../../pa-extensions/web-access/runtime.ts";
+import { isWebAccessRole, isWebSearchProviderPreference } from "../../pa-extensions/web-access/runtime.ts";
 import type { RequestActor } from "../auth.ts";
 import { HttpRequestError, readJsonBody, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
@@ -78,9 +78,12 @@ export async function handleWebAccessRoutes(
 			throw new HttpRequestError(502, error instanceof Error ? error.message : String(error));
 		}
 	} else {
-		const { roleIds } = await readJsonBody(req);
+		const { roleIds, provider } = await readJsonBody(req);
 		if (!Array.isArray(roleIds) || !roleIds.every((id): id is string => typeof id === "string")) {
 			throw new HttpRequestError(400, "请提供允许使用网页检索的岗位列表");
+		}
+		if (provider !== undefined && !isWebSearchProviderPreference(provider)) {
+			throw new HttpRequestError(400, "不支持的网页检索默认供应商（可选 auto / deepseek / exa / kimi）");
 		}
 		const ids = [...new Set(roleIds)];
 		if (ids.length > 0) {
@@ -96,12 +99,18 @@ export async function handleWebAccessRoutes(
 			}
 			return [id, member.createdAt] as const;
 		});
-		store.updatePlatformSettings({ webAccessRoleGrants: Object.fromEntries(grants) }, ctx.defaultWorkspacesRoot);
+		store.updatePlatformSettings(
+			{
+				webAccessRoleGrants: Object.fromEntries(grants),
+				...(provider !== undefined ? { webSearchProvider: provider } : {}),
+			},
+			ctx.defaultWorkspacesRoot,
+		);
 		auditActorAction(ctx, req, actor, {
 			action: "admin.web_access_configure",
 			targetType: "runtime_extension",
 			targetId: "pi-web-access",
-			detail: { roleIds: ids },
+			detail: { roleIds: ids, ...(provider !== undefined ? { provider } : {}) },
 		});
 	}
 

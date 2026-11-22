@@ -7,6 +7,7 @@ import teamExtension, {
 	filterContextFilesForTargetWorkspace,
 	type PiExtensionApi,
 } from "../pi-extensions/team-extension/index.ts";
+import { resolveEffectiveWebSearchProvider } from "../src/pa-extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
@@ -33,6 +34,51 @@ test("managed web search forces direct results and removes per-call proxy overri
 	const fetchInput = { url: "https://example.test/article", proxy: "http://proxy.example.test" };
 	onToolCall({ toolName: "fetch_content", input: fetchInput });
 	assert.deepEqual(fetchInput, { url: "https://example.test/article" });
+});
+
+test("web search provider resolution follows Exa -> DeepSeek -> Kimi auto priority and honors explicit override", (t) => {
+	assert.equal(resolveEffectiveWebSearchProvider("auto", {}, {}), undefined);
+	assert.equal(resolveEffectiveWebSearchProvider("auto", { MOONSHOT_API_KEY: "k" }, {}), "kimi");
+	assert.equal(
+		resolveEffectiveWebSearchProvider("auto", { MOONSHOT_API_KEY: "k", DEEPSEEK_API_KEY: "d" }, {}),
+		"deepseek",
+	);
+	assert.equal(
+		resolveEffectiveWebSearchProvider("auto", { MOONSHOT_API_KEY: "k", DEEPSEEK_API_KEY: "d", EXA_API_KEY: "e" }, {}),
+		"exa",
+	);
+	assert.equal(
+		resolveEffectiveWebSearchProvider("deepseek", { EXA_API_KEY: "e", DEEPSEEK_API_KEY: "d" }, {}),
+		"deepseek",
+	);
+
+	const origEnabled = process.env.PA_WEB_SEARCH_ENABLED;
+	const origProvider = process.env.PA_WEB_SEARCH_PROVIDER;
+	process.env.PA_WEB_SEARCH_ENABLED = "true";
+	process.env.PA_WEB_SEARCH_PROVIDER = "deepseek";
+	t.after(() => {
+		if (origEnabled === undefined) delete process.env.PA_WEB_SEARCH_ENABLED;
+		else process.env.PA_WEB_SEARCH_ENABLED = origEnabled;
+		if (origProvider === undefined) delete process.env.PA_WEB_SEARCH_PROVIDER;
+		else process.env.PA_WEB_SEARCH_PROVIDER = origProvider;
+	});
+	let onToolCall: ((event: { toolName: string; input: Record<string, unknown> }) => void) | undefined;
+	teamExtension({
+		registerTool() {},
+		on: (event, handler) => {
+			if (event === "tool_call") onToolCall = handler as typeof onToolCall;
+		},
+		getActiveTools: () => [],
+		getAllTools: () => [],
+		setActiveTools: () => {},
+	});
+	assert.ok(onToolCall);
+	const defaultInput: Record<string, unknown> = { query: "DeepSeek Search" };
+	onToolCall({ toolName: "web_search", input: defaultInput });
+	assert.equal(defaultInput.provider, "deepseek");
+	const explicitInput: Record<string, unknown> = { query: "DeepSeek Search", provider: "exa" };
+	onToolCall({ toolName: "web_search", input: explicitInput });
+	assert.equal(explicitInput.provider, "exa");
 });
 
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {

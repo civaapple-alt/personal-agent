@@ -70,6 +70,7 @@ export interface PlatformSettings {
 	defaultMaxPersonalRoles: number;
 	pstackDir: string | null;
 	webAccessRoleGrants: Record<string, string>;
+	webSearchProvider: "auto" | "deepseek" | "exa" | "kimi";
 	defaultModelSelection: ModelSelection | null;
 	updatedAt: string;
 }
