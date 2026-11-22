@@ -284,16 +284,23 @@ export async function handleWebAccessRoutes(
 				throw new HttpRequestError(409, "请先安装 pi-web-access");
 			}
 		}
-		const grants = ids.map((id) => {
+		const allowedSet = new Set(ids);
+		for (const id of ids) {
 			const member = store.getMember(id);
 			if (!member || !isWebAccessRole(member, orchestrator.getTemplateForMember(member))) {
 				throw new HttpRequestError(400, "请选择可参与业务事项的岗位");
 			}
-			return [id, member.createdAt] as const;
-		});
+		}
+		const deniedEntries = store
+			.listMembers()
+			.filter(
+				(member) =>
+					isWebAccessRole(member, orchestrator.getTemplateForMember(member)) && !allowedSet.has(member.id),
+			)
+			.map((member) => [member.id, member.createdAt] as const);
 		store.updatePlatformSettings(
 			{
-				webAccessRoleGrants: Object.fromEntries(grants),
+				webAccessDeniedRoles: Object.fromEntries(deniedEntries),
 				...(provider !== undefined ? { webSearchProvider: provider } : {}),
 			},
 			ctx.defaultWorkspacesRoot,

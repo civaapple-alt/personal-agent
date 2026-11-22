@@ -47,11 +47,12 @@ export function isWebAccessRole(member: TeamMember, template?: RoleTemplate): bo
 	return !isArchitectRoleTemplate(template ?? { id: member.id });
 }
 
+/** All business roles are allowed web access by default (including newly created roles) unless explicitly denied. */
 export function hasWebAccessGrant(
 	member: TeamMember,
-	grants: PlatformSettings["webAccessRoleGrants"] | undefined,
+	deniedRoles: PlatformSettings["webAccessDeniedRoles"] | undefined,
 ): boolean {
-	return grants?.[member.id] === member.createdAt;
+	return deniedRoles?.[member.id] !== member.createdAt;
 }
 
 export async function prepareWebAccessForWorker({
@@ -68,14 +69,14 @@ export async function prepareWebAccessForWorker({
 	envFilePath?: string;
 }) {
 	if (sessionMode === "observer" || sessionMode === "verifier" || !isWebAccessRole(member, template)) return null;
-	if (!hasWebAccessGrant(member, store.getPlatformSettings().webAccessRoleGrants)) return null;
+	const settings = store.getPlatformSettings();
+	if (!hasWebAccessGrant(member, settings.webAccessDeniedRoles)) return null;
 
 	const installed = await findInstalledPiWebAccess("pi");
 	if (!installed) {
-		throw new Error("此岗位已获网页检索权限，但 pi-web-access 安装不可用。请在设置的扩展插件页检查安装。");
+		return null;
 	}
 	const env = await readWebAccessEnvFromDotEnv(envFilePath);
-	const settings = store.getPlatformSettings();
 	const effectiveProvider = resolveEffectiveWebSearchProvider(settings.webSearchProvider, env);
 	if (effectiveProvider) {
 		env.PA_WEB_SEARCH_PROVIDER = effectiveProvider;

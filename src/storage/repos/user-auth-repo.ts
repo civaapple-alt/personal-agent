@@ -397,6 +397,7 @@ export class UserAuthRepo {
 			defaultMaxPersonalRoles: 5,
 			pstackDir: null,
 			webAccessRoleGrants: {},
+			webAccessDeniedRoles: {},
 			webSearchProvider: "auto",
 			defaultModelSelection: null,
 			updatedAt: row?.updated_at ? String(row.updated_at) : nowIso(),
@@ -453,6 +454,11 @@ export class UserAuthRepo {
 						([id, createdAt]) => id.length > 0 && typeof createdAt === "string" && createdAt.length > 0,
 					),
 				),
+				webAccessDeniedRoles: Object.fromEntries(
+					Object.entries(parsed.webAccessDeniedRoles ?? {}).filter(
+						([id, createdAt]) => id.length > 0 && typeof createdAt === "string" && createdAt.length > 0,
+					),
+				),
 				webSearchProvider:
 					parsed.webSearchProvider === "deepseek" ||
 					parsed.webSearchProvider === "exa" ||
@@ -506,6 +512,7 @@ export class UserAuthRepo {
 						? resolve(patch.pstackDir.trim())
 						: current.pstackDir,
 			webAccessRoleGrants: patch.webAccessRoleGrants ?? current.webAccessRoleGrants,
+			webAccessDeniedRoles: patch.webAccessDeniedRoles ?? current.webAccessDeniedRoles,
 			webSearchProvider: patch.webSearchProvider ?? current.webSearchProvider,
 		};
 		this.db

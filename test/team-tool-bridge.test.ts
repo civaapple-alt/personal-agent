@@ -7,7 +7,7 @@ import teamExtension, {
 	filterContextFilesForTargetWorkspace,
 	type PiExtensionApi,
 } from "../pi-extensions/team-extension/index.ts";
-import { resolveEffectiveWebSearchProvider } from "../src/pa-extensions/web-access/runtime.ts";
+import { hasWebAccessGrant, resolveEffectiveWebSearchProvider } from "../src/pa-extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
@@ -79,6 +79,14 @@ test("web search provider resolution follows Exa -> DeepSeek -> Kimi auto priori
 	const explicitInput: Record<string, unknown> = { query: "DeepSeek Search", provider: "exa" };
 	onToolCall({ toolName: "web_search", input: explicitInput });
 	assert.equal(explicitInput.provider, "exa");
+
+	const roleA = { id: "pm", createdAt: "2026-01-01T00:00:00Z" } as Parameters<typeof hasWebAccessGrant>[0];
+	const roleNew = { id: "researcher-new", createdAt: "2026-11-22T00:00:00Z" } as Parameters<
+		typeof hasWebAccessGrant
+	>[0];
+	assert.equal(hasWebAccessGrant(roleA, {}), true);
+	assert.equal(hasWebAccessGrant(roleNew, { pm: roleA.createdAt }), true);
+	assert.equal(hasWebAccessGrant(roleA, { pm: roleA.createdAt }), false);
 });
 
 test("bridge rejects unauthenticated requests, validates arguments, and deduplicates transport retries", async () => {

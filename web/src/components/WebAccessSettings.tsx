@@ -88,7 +88,10 @@ export function WebAccessSettings({
 	return (
 		<div className="settings-pstack-panel">
 			{installedVersion ? (
-				<p className="muted-hint">Pi 已安装 v{installedVersion}。勾选岗位并保存后，下次运行生效。</p>
+				<p className="muted-hint">
+					Pi 已安装 v{installedVersion}。默认允许全部 AI
+					岗位（含新建角色）使用网页检索，可取消勾选以单独禁用，保存后下次运行生效。
+				</p>
 			) : (
 				<div className="actions-row compact">
 					<button

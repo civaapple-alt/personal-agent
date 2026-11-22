@@ -36,6 +36,7 @@ export interface OrchestratorRuntimeConfig {
 	extensions: string[];
 	pstackDir: string | null;
 	webAccessRoleGrants?: Record<string, string>;
+	webAccessDeniedRoles?: Record<string, string>;
 	webSearchProvider?: WebSearchProviderPreference;
 	systemOneEnabled?: boolean;
 	templates: RoleTemplate[];
@@ -375,7 +376,7 @@ export async function buildRuntimeOverview(options: {
 		.map((member) => ({
 			id: member.id,
 			name: member.displayName,
-			enabled: hasWebAccessGrant(member, config.webAccessRoleGrants),
+			enabled: Boolean(webAccessPackage) && hasWebAccessGrant(member, config.webAccessDeniedRoles),
 		}));
 	const webAccessEnabledRoles = webAccessRoles.filter((role) => role.enabled);
 	const webAccessExtensionItem: RuntimeExtensionItem = {
