@@ -23,6 +23,7 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
+import { ModalDialog } from "./components/ModalDialog.tsx";
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrganizationsView } from "./components/OrganizationsView.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
@@ -642,17 +643,41 @@ export function App() {
 		setMobileNavOpen(false);
 		void handleLogoutOrRestore();
 	});
-	const handleSidebarToggleArchiveMatter = useStableCallback(async (matterId: string, archived: boolean) => {
+	const [pendingArchiveConfirm, setPendingArchiveConfirm] = useState<{
+		matterId: string;
+		title: string;
+		archived: boolean;
+	} | null>(null);
+	const [archivingMatter, setArchivingMatter] = useState(false);
+
+	const handleSidebarToggleArchiveMatter = useStableCallback((matterId: string, archived: boolean) => {
+		const target =
+			bootstrap?.matters.find((m) => m.id === matterId) ??
+			(matterDetail?.matter.id === matterId ? matterDetail.matter : null);
+		setPendingArchiveConfirm({
+			matterId,
+			title: target?.title ?? matterId,
+			archived,
+		});
+	});
+
+	const handleConfirmArchiveMatter = async () => {
+		if (!pendingArchiveConfirm || archivingMatter) return;
+		const { matterId, archived } = pendingArchiveConfirm;
+		setArchivingMatter(true);
 		setErrorBanner(null);
 		try {
 			await updateMatterStatus(matterId, archived ? "archived" : "open");
+			setPendingArchiveConfirm(null);
 			await refreshBootstrap();
 			if (selectedMatterId === matterId) await refreshDetail(matterId);
-			setNoticeBanner(archived ? "事项已归档，可在左侧「归档」中查看" : "事项已恢复至最近事项");
+			setNoticeBanner(archived ? "事项已归档，可在左侧「已归档」中查看" : "事项已恢复至最近事项");
 		} catch (err) {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
+		} finally {
+			setArchivingMatter(false);
 		}
-	});
+	};
 
 	if (authStatus !== "authenticated") {
 		return <AuthGateView status={authStatus} {...auth.gateProps} />;
@@ -905,6 +930,7 @@ export function App() {
 								)
 							}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
+							onToggleArchiveMatter={handleSidebarToggleArchiveMatter}
 							onDistillMatter={(matterId) => runRsiDistill({ matterId })}
 							onCancelDistillMatter={cancelRsiDistill}
 							onRefresh={refreshBootstrap}
@@ -1101,6 +1127,47 @@ export function App() {
 				accountUser={accountUser}
 				currentUser={currentUser}
 			/>
+
+			<ModalDialog
+				open={Boolean(pendingArchiveConfirm)}
+				title={pendingArchiveConfirm?.archived ? "确认归档事项" : "确认恢复事项"}
+				subtitle={
+					pendingArchiveConfirm?.archived
+						? "归档不会删除历史对话或空间文档，仅将事项置为只读状态。"
+						: "恢复后该事项将回到左侧最近事项列表，并可继续对话。"
+				}
+				size="sm"
+				closeDisabled={archivingMatter}
+				onClose={() => !archivingMatter && setPendingArchiveConfirm(null)}
+				footer={
+					<>
+						<button
+							type="button"
+							className="btn-pill-outline"
+							disabled={archivingMatter}
+							onClick={() => setPendingArchiveConfirm(null)}
+						>
+							取消
+						</button>
+						<button
+							type="button"
+							className="btn-pill-dark"
+							disabled={archivingMatter}
+							onClick={() => void handleConfirmArchiveMatter()}
+						>
+							{archivingMatter ? "处理中…" : pendingArchiveConfirm?.archived ? "确认归档" : "确认恢复"}
+						</button>
+					</>
+				}
+			>
+				{pendingArchiveConfirm && (
+					<p className="muted-hint">
+						{pendingArchiveConfirm.archived
+							? `确定要归档「${pendingArchiveConfirm.title}」吗？归档后将不能继续发送消息，可随时恢复。`
+							: `确定要恢复「${pendingArchiveConfirm.title}」为活跃事项吗？`}
+					</p>
+				)}
+			</ModalDialog>
 		</div>
 	);
 	return <ModelCatalogProvider>{workbench}</ModelCatalogProvider>;

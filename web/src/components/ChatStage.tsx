@@ -130,6 +130,7 @@ interface ChatStageProps {
 	onToggleObserversEnabled?: (enabled: boolean) => void;
 	onUpdateMatterObservers: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
+	onToggleArchiveMatter?: (matterId: string, archived: boolean) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
 	onApplyRoleProposals?: (
@@ -204,6 +205,7 @@ export function ChatStage({
 	onToggleObserversEnabled,
 	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
+	onToggleArchiveMatter,
 	onApproveAiRequest,
 	onDismissAiRequest,
 	onApplyRoleProposals,
@@ -724,11 +726,11 @@ export function ChatStage({
 					onPreviewFile={openFilePreview}
 					onOpenDeliverables={onOpenDeliverables}
 					onOpenSideDoc={sideDocs.openDoc}
-					onApproveAiRequest={onApproveAiRequest}
-					onDismissAiRequest={onDismissAiRequest}
-					onApplyRoleProposals={onApplyRoleProposals}
-					onDismissRoleProposals={onDismissRoleProposals}
-					onSendQuickPrompt={onSendQuickPrompt}
+					onApproveAiRequest={matterDetail?.matter.status === "archived" ? undefined : onApproveAiRequest}
+					onDismissAiRequest={matterDetail?.matter.status === "archived" ? undefined : onDismissAiRequest}
+					onApplyRoleProposals={matterDetail?.matter.status === "archived" ? undefined : onApplyRoleProposals}
+					onDismissRoleProposals={matterDetail?.matter.status === "archived" ? undefined : onDismissRoleProposals}
+					onSendQuickPrompt={matterDetail?.matter.status === "archived" ? undefined : onSendQuickPrompt}
 					onFillComposer={(text) => {
 						dockDraft.onComposerTextChange(text);
 						dockDraft.composerRef.current?.focus();
@@ -738,86 +740,111 @@ export function ChatStage({
 					onAbortMatter={onAbortMatter}
 				/>
 
-				{activeFloatingClarification && matterDetail && (
-					<FloatingClarificationDock
-						key={`${activeFloatingClarification.messageId}:${activeFloatingClarification.decision.revision}`}
-						matter={matterDetail.matter}
-						messageId={activeFloatingClarification.messageId}
-						decision={activeFloatingClarification.decision}
-						requestedBy={activeFloatingClarification.requestedBy}
-						isRunning={isTurnRunning}
-						onAnswered={() => void onRefresh()}
-					/>
-				)}
-
-				<ComposerDock
-					{...dockDraft}
-					modelControl={modelControl}
-					initiationPanel={
-						!selectedMatterId ? (
-							<MatterInitiationPanel
-								{...initiation}
-								isOwner={isOwner}
-								observersEnabled={observersEnabled}
-								hasWorkspace={Boolean(selectedWorkspaceId)}
-								hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
-								members={scopedMembers}
-								nonOwnerCollaborators={nonOwnerCollaborators}
-								orgMembers={orgMembers}
-								initiatorId={accountUser?.id ?? currentUser?.id}
-								initiatorName={accountUser?.displayName ?? currentUser?.name}
-								templateByRoleId={templateByRoleId}
-								selectedMemberId={selectedMemberId}
-								draftObserverMemberIds={observerMemberIds}
-								onSelectLeadMember={onChangeLeadMember}
-								onUpdateDraftObserverIds={onUpdateMatterObservers}
+				{matterDetail?.matter.status === "archived" ? (
+					<div className="archived-matter-bar">
+						<div className="archived-matter-bar-copy">
+							<span className="pill">已归档</span>
+							<span>该事项已归档，当前为只读状态，不能继续发送消息。</span>
+						</div>
+						<div className="archived-matter-bar-actions">
+							{onToggleArchiveMatter && (
+								<button
+									type="button"
+									className="btn-pill-dark btn-xs"
+									onClick={() => onToggleArchiveMatter(matterDetail.matter.id, false)}
+								>
+									恢复事项
+								</button>
+							)}
+							<button type="button" className="btn-pill-outline btn-xs" onClick={onNewMatter}>
+								+ 新建事项
+							</button>
+						</div>
+					</div>
+				) : (
+					<>
+						{activeFloatingClarification && matterDetail && (
+							<FloatingClarificationDock
+								key={`${activeFloatingClarification.messageId}:${activeFloatingClarification.decision.revision}`}
+								matter={matterDetail.matter}
+								messageId={activeFloatingClarification.messageId}
+								decision={activeFloatingClarification.decision}
+								requestedBy={activeFloatingClarification.requestedBy}
+								isRunning={isTurnRunning}
+								onAnswered={() => void onRefresh()}
 							/>
-						) : undefined
-					}
-					composerDockRef={composerDockRef}
-					isOwner={isOwner}
-					mentionMembers={[
-						...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(
-							({ id, displayName, roleTitle }) => ({
-								id,
-								displayName,
-								roleTitle,
-								kind: "ai" as const,
-							}),
-						),
-						...allActiveHumans
-							.filter(
-								(person) =>
-									person.id !== currentUser?.id &&
-									(person.id === matterDetail?.matter.createdByUserId ||
-										assignedCollabIds.includes(person.id) ||
-										(person.id === ownerCollab?.id &&
-											(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
-							)
-							.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
-					]}
-					leadMemberId={leadAi?.id ?? null}
-					observerMemberIds={observerAis.map(({ id }) => id)}
-					allowUnboundOrg={isSuperAdmin || organizations.length === 0}
-					isArchitectMode={isArchitectMode}
-					isTurnRunning={isTurnRunning}
-					submitting={submitting}
-					effectiveOrgId={effectiveOrgId}
-					selectedWorkspaceId={selectedWorkspaceId}
-					selectedMatterId={selectedMatterId}
-					activeMatterProgress={activeMatterProgress}
-					progressStartedAt={progressStartedAt}
-					organizations={organizations}
-					orgFilteredWorkspaces={orgFilteredWorkspaces}
-					onCloseRoster={closeRoster}
-					onSelectOrganization={onSelectOrganization}
-					onSelectWorkspace={onSelectWorkspace}
-					onNewMatter={onNewMatter}
-					onSendPrompt={onSendPrompt}
-					onAbortMatter={onAbortMatter}
-					onOpenLightbox={setLightboxImage}
-					onPreviewFile={openFilePreview}
-				/>
+						)}
+
+						<ComposerDock
+							{...dockDraft}
+							modelControl={modelControl}
+							initiationPanel={
+								!selectedMatterId ? (
+									<MatterInitiationPanel
+										{...initiation}
+										isOwner={isOwner}
+										observersEnabled={observersEnabled}
+										hasWorkspace={Boolean(selectedWorkspaceId)}
+										hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
+										members={scopedMembers}
+										nonOwnerCollaborators={nonOwnerCollaborators}
+										orgMembers={orgMembers}
+										initiatorId={accountUser?.id ?? currentUser?.id}
+										initiatorName={accountUser?.displayName ?? currentUser?.name}
+										templateByRoleId={templateByRoleId}
+										selectedMemberId={selectedMemberId}
+										draftObserverMemberIds={observerMemberIds}
+										onSelectLeadMember={onChangeLeadMember}
+										onUpdateDraftObserverIds={onUpdateMatterObservers}
+									/>
+								) : undefined
+							}
+							composerDockRef={composerDockRef}
+							isOwner={isOwner}
+							mentionMembers={[
+								...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(
+									({ id, displayName, roleTitle }) => ({
+										id,
+										displayName,
+										roleTitle,
+										kind: "ai" as const,
+									}),
+								),
+								...allActiveHumans
+									.filter(
+										(person) =>
+											person.id !== currentUser?.id &&
+											(person.id === matterDetail?.matter.createdByUserId ||
+												assignedCollabIds.includes(person.id) ||
+												(person.id === ownerCollab?.id &&
+													(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
+									)
+									.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
+							]}
+							leadMemberId={leadAi?.id ?? null}
+							observerMemberIds={observerAis.map(({ id }) => id)}
+							allowUnboundOrg={isSuperAdmin || organizations.length === 0}
+							isArchitectMode={isArchitectMode}
+							isTurnRunning={isTurnRunning}
+							submitting={submitting}
+							effectiveOrgId={effectiveOrgId}
+							selectedWorkspaceId={selectedWorkspaceId}
+							selectedMatterId={selectedMatterId}
+							activeMatterProgress={activeMatterProgress}
+							progressStartedAt={progressStartedAt}
+							organizations={organizations}
+							orgFilteredWorkspaces={orgFilteredWorkspaces}
+							onCloseRoster={closeRoster}
+							onSelectOrganization={onSelectOrganization}
+							onSelectWorkspace={onSelectWorkspace}
+							onNewMatter={onNewMatter}
+							onSendPrompt={onSendPrompt}
+							onAbortMatter={onAbortMatter}
+							onOpenLightbox={setLightboxImage}
+							onPreviewFile={openFilePreview}
+						/>
+					</>
+				)}
 
 				<AttachmentPreviewModals
 					lightboxImage={lightboxImage}

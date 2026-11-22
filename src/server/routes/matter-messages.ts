@@ -751,6 +751,10 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			sendError(res, 403, "只读成员（org_viewer）不能在该事项内发言或触发操作");
 			return true;
 		}
+		if (matter.status === "archived") {
+			sendError(res, 409, "该事项已归档，请先恢复为活跃事项后再继续对话");
+			return true;
+		}
 		const body = await readJsonBody(req);
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const mode =
