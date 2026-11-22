@@ -50,7 +50,6 @@ export interface MemoryApplicationDto {
 	memoryId: string;
 	matterId: string;
 	memberId: string;
-	deliverableId: string | null;
 	documentId: string | null;
 	commitHash: string | null;
 	actorId: string | null;

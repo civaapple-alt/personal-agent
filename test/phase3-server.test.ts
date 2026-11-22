@@ -227,6 +227,12 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 			body: JSON.stringify({ commitHash: document.headCommit, feedback: "按钮文案清晰" }),
 		});
 		assert.equal(fbRes.status, 200);
+		const oldFeedback = await fetch(`${baseUrl}/api/deliverables/obsolete/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ feedback: "obsolete" }),
+		});
+		assert.equal(oldFeedback.status, 404);
 
 		const prevRes = await fetch(`${baseUrl}/api/previews`, {
 			method: "POST",

@@ -56,9 +56,8 @@ export class PersonalAgentStore {
 			db,
 			memberRepo: this.members,
 			workspaceRepo: this.workspaces,
-			getDeliverable: (id) => this.deliverables.getDeliverable(id),
 		});
-		this.deliverables = new DeliverableRepo(db, this.memories);
+		this.deliverables = new DeliverableRepo(db);
 		this.turnOutcomes = new TurnOutcomeRepo(db, this.memories);
 		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
 		this.sessions = new SessionRepo(db);
@@ -135,12 +134,6 @@ export class PersonalAgentStore {
 	}
 	evaluateMemory(input: Parameters<MemoryRepo["evaluateMemory"]>[0]) {
 		return this.memories.evaluateMemory(input);
-	}
-	clearDeliverableMemoryFeedback(deliverableId: string) {
-		return this.memories.clearDeliverableMemoryFeedback(deliverableId);
-	}
-	evaluateMatterMemories(input: Parameters<MemoryRepo["evaluateMatterMemories"]>[0]) {
-		return this.memories.evaluateMatterMemories(input);
 	}
 	listMemoryApplications(memoryId: string, limit?: number) {
 		return this.memories.listMemoryApplications(memoryId, limit);
@@ -282,30 +275,12 @@ export class PersonalAgentStore {
 	recordTurnOutcome(input: Parameters<TurnOutcomeRepo["recordTurnOutcome"]>[0]) {
 		return this.turnOutcomes.recordTurnOutcome(input);
 	}
-	linkDeliverableApplications(deliverableId: string, applicationIds: string[]) {
-		return this.deliverables.linkDeliverableApplications(deliverableId, applicationIds);
-	}
 	getDeliverable(id: string) {
 		return this.deliverables.getDeliverable(id);
 	}
 	listDeliverables(matterId?: string) {
 		return this.deliverables.listDeliverables(matterId);
 	}
-	recordDeliverableFeedback(
-		deliverableId: string,
-		feedback: string,
-		rating?: Parameters<DeliverableRepo["recordDeliverableFeedback"]>[2],
-	) {
-		return this.deliverables.recordDeliverableFeedback(deliverableId, feedback, rating);
-	}
-	addDeliverableFeedback(
-		deliverableId: string,
-		feedback: string,
-		rating?: Parameters<DeliverableRepo["addDeliverableFeedback"]>[2],
-	) {
-		return this.deliverables.addDeliverableFeedback(deliverableId, feedback, rating);
-	}
-
 	// ---- Worker Sessions & Leases ----
 	recordWorkerSession(input: Parameters<SessionRepo["recordWorkerSession"]>[0]) {
 		return this.sessions.recordWorkerSession(input);

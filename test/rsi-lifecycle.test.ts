@@ -481,16 +481,19 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 			memberId: "qa-manager",
 		});
 
-		const deliverable = store.recordDeliverable({
+		store.spaces.ensureAllDefaultSpaces();
+		const document = await store.spaces.createDocument({
+			spaceId: `spc_ws_${ws.id}`,
 			matterId: matter.id,
-			memberId: "product-manager",
-			type: "document",
 			title: "M1 收口报告",
-			summary: "已完成压测与回归",
-			contentOrPath: "# M1 收口报告\n- 10/10 回归通过",
+			content: "# M1 收口报告\n- 10/10 回归通过",
+			actorId: "owner",
 		});
-
-		store.linkDeliverableApplications(deliverable.id, [...engApplications, ...qaApplications]);
+		store.recordTurnOutcome({
+			candidates: [],
+			applicationIds: [...engApplications, ...qaApplications],
+			spaceDocuments: [{ id: document.id, headCommit: document.headCommit }],
+		});
 
 		// Simulate multi-role conversation trajectory: user correction, internal delegations, error notice
 		store.appendMessage({
@@ -557,17 +560,18 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 			senderType: "member",
 			senderId: "product-manager",
 			content: "阶段成果",
-			metadata: { workspaceId: ws.id, repoPath: ws.repoPath, deliverableIds: [deliverable.id] },
+			metadata: { workspaceId: ws.id, repoPath: ws.repoPath, spaceDocuments: [{ id: document.id }] },
 		});
 
-		// Cross-member acceptance scoring when omitting memberId
-		const evaluated = store.evaluateMatterMemories({
-			matterId: matter.id,
-			deliverableId: deliverable.id,
-			outcome: "feedback_positive",
-			note: "止损收口做得好",
+		// A document review scores memories applied by both participating roles.
+		await store.spaces.saveDocumentFeedback({
+			documentId: document.id,
+			commitHash: document.headCommit,
+			actorId: "owner",
+			actorName: "Owner",
+			rating: "positive",
+			feedback: "止损收口做得好",
 		});
-		assert.equal(evaluated.length, 2);
 		assert.equal(store.getMemory(engRule.id)?.positiveCount, 1);
 		assert.equal(store.getMemory(qaRule.id)?.positiveCount, 1);
 

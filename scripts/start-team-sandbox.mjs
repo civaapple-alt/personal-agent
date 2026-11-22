@@ -120,7 +120,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 	]);
 
 	const db = openPersonalAgentDatabase(dbPath);
-	const store = new PersonalAgentStore(db);
+	const store = new PersonalAgentStore(db, { spacesDir: join(sandboxRoot, "spaces") });
 	const templates = [...(await loadRoleTemplatesFromDir(resolve(ROOT_DIR, "roles"))), BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	new TeamOrchestrator({ store, templates, noSession: true, defaultCwd: ROOT_DIR });
 
@@ -293,7 +293,23 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 					"# Q4 发布计划（V1 初稿）\n\n- 里程碑 1：完成多租户组织隔离与成果库筛选。\n- 里程碑 2：补充灰度监控指标与回滚手册。",
 			},
 		]);
-		store.recordDeliverableFeedback(delAlphaV1.id, "V1 结构完整，请补充具体放量梯度与回滚演练清单。", "positive");
+		store.spaces.ensureAllDefaultSpaces();
+		const alphaDocumentV1 = await store.spaces.createDocument({
+			spaceId: `spc_ws_${wsAlphaOpen.id}`,
+			matterId: mAlphaShared.id,
+			title: delAlphaV1.title,
+			content: delAlphaV1.contentOrPath,
+			actorId: ownerAlpha.id,
+			actorName: ownerAlpha.displayName,
+		});
+		await store.spaces.saveDocumentFeedback({
+			documentId: alphaDocumentV1.id,
+			commitHash: alphaDocumentV1.headCommit,
+			actorId: ownerAlpha.id,
+			actorName: ownerAlpha.displayName,
+			feedback: "V1 结构完整，请补充具体放量梯度与回滚演练清单。",
+			rating: "positive",
+		});
 
 		const verifiedOrgMem = store.addMemory({
 			memberId: "product-manager",
@@ -325,7 +341,18 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 					"# Q4 发布计划与架构方案（V2 定稿）\n\n## 1. 灰度放量梯度\n1. 5% 内部验证（30 分钟）\n2. 25% 受控放量（2 小时）\n3. 100% 全量发布\n\n## 2. 回滚条件与开关\n- 错误率 > 0.5% 或 P99 > 600ms 时立即切回稳定版。",
 			},
 		]);
-		store.linkDeliverableApplications(delAlphaV2.id, appIds);
+		const alphaDocumentV2 = await store.spaces.updateDocument(alphaDocumentV1.id, {
+			revision: alphaDocumentV1.revision,
+			title: delAlphaV2.title,
+			content: delAlphaV2.contentOrPath,
+			actorId: ownerAlpha.id,
+			actorName: ownerAlpha.displayName,
+		});
+		store.recordTurnOutcome({
+			candidates: [],
+			applicationIds: appIds,
+			spaceDocuments: [{ id: alphaDocumentV2.id, headCommit: alphaDocumentV2.headCommit }],
+		});
 		store.appendMessage({
 			matterId: mAlphaShared.id,
 			channel: "user",

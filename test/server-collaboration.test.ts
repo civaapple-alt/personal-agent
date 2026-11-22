@@ -618,31 +618,13 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		assert.match(capturedPrompts[0] ?? "", /\[Team discussion\] 李四 \(后端研发\): 大家先讨论一下接口协议字段名/);
 		assert.match(capturedPrompts[0] ?? "", /Owner 已确认同事 李四 的 AI 提请并安排执行/);
 
-		// Collaborator can rate deliverable without autoDistill, but autoDistill: true returns 403
-		const deliv = store.recordDeliverable({
-			matterId: matter.id,
-			memberId: "product-manager",
-			type: "document",
-			title: "接口设计方案",
-			summary: "Draft",
-			contentOrPath: "# API",
-		});
-		const forbiddenDistill = await fetch(`${baseUrl}/api/deliverables/${deliv.id}/feedback`, {
+		// A collaborator cannot trigger administrator-only experience distillation.
+		const forbiddenDistill = await fetch(`${baseUrl}/api/rsi/distill`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: collabCookie },
-			body: JSON.stringify({ feedback: "需要补充错误码", rating: "neutral", autoDistill: true }),
+			body: JSON.stringify({ matterId: matter.id }),
 		});
 		assert.equal(forbiddenDistill.status, 403);
-
-		const allowedFeedback = await fetch(`${baseUrl}/api/deliverables/${deliv.id}/feedback`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Cookie: collabCookie },
-			body: JSON.stringify({ feedback: "字段定义清晰", rating: "positive" }),
-		});
-		assert.equal(allowedFeedback.status, 200);
-		const fbJson = (await allowedFeedback.json()) as { feedback: string; rating: string };
-		assert.equal(fbJson.rating, "positive");
-		assert.equal(fbJson.feedback, "[李四 (后端研发)]: 字段定义清晰");
 
 		// Dismiss flow + token regeneration
 		const secondReqRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {

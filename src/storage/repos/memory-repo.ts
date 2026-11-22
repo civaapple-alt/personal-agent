@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type {
-	Deliverable,
-	FeedbackRating,
 	MemberMemory,
 	MemoryApplicationOutcome,
 	MemoryApplicationRecord,
@@ -33,7 +31,6 @@ export interface MemoryRepoDeps {
 	db: DatabaseSync;
 	memberRepo: MemberRepo;
 	workspaceRepo: WorkspaceRepo;
-	getDeliverable: (id: string) => Deliverable | null;
 }
 
 /** Manages role memories, replacement provenance, injection counts, and feedback votes. */
@@ -41,13 +38,11 @@ export class MemoryRepo {
 	private readonly db: DatabaseSync;
 	private readonly memberRepo: MemberRepo;
 	private readonly workspaceRepo: WorkspaceRepo;
-	private readonly getDeliverable: (id: string) => Deliverable | null;
 
 	constructor(deps: MemoryRepoDeps) {
 		this.db = deps.db;
 		this.memberRepo = deps.memberRepo;
 		this.workspaceRepo = deps.workspaceRepo;
-		this.getDeliverable = deps.getDeliverable;
 	}
 
 	addMemory(input: AddMemoryInput): MemberMemory {
@@ -342,7 +337,6 @@ export class MemoryRepo {
 		memoryIds: string[];
 		matterId: string;
 		memberId: string;
-		deliverableId?: string | null;
 		note?: string;
 	}): string[] {
 		const uniqueIds = normalizeUniqueIds(input.memoryIds);
@@ -350,8 +344,8 @@ export class MemoryRepo {
 		const timestamp = nowIso();
 		const applicationIds: string[] = [];
 		const insert = this.db.prepare(
-			`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, deliverable_id, outcome, note, created_at)
-			 VALUES (?, ?, ?, ?, ?, 'applied', ?, ?)`,
+			`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, outcome, note, created_at)
+			 VALUES (?, ?, ?, ?, 'applied', ?, ?)`,
 		);
 		const updateCount = this.db.prepare(
 			`UPDATE member_memories
@@ -363,15 +357,7 @@ export class MemoryRepo {
 			for (const memoryId of uniqueIds) {
 				const applicationId = `mapp_${randomUUID()}`;
 				applicationIds.push(applicationId);
-				insert.run(
-					applicationId,
-					memoryId,
-					input.matterId,
-					input.memberId,
-					input.deliverableId ?? null,
-					input.note ?? "",
-					timestamp,
-				);
+				insert.run(applicationId, memoryId, input.matterId, input.memberId, input.note ?? "", timestamp);
 				updateCount.run(timestamp, timestamp, memoryId);
 			}
 			this.db.exec("COMMIT");
@@ -387,38 +373,24 @@ export class MemoryRepo {
 		outcome: Exclude<MemoryApplicationOutcome, "applied">;
 		matterId?: string | null;
 		memberId?: string | null;
-		deliverableId?: string | null;
 		note?: string;
 	}): MemberMemory {
 		const existing = this.getMemory(input.memoryId);
 		if (!existing) throw new Error(`Memory not found: ${input.memoryId}`);
-		if (
-			input.deliverableId &&
-			input.matterId &&
-			(input.outcome === "feedback_positive" || input.outcome === "feedback_negative")
-		) {
-			return this.setMemoryFeedback({
-				...input,
-				deliverableId: input.deliverableId,
-				matterId: input.matterId,
-				rating: input.outcome === "feedback_positive" ? "positive" : "negative",
-			});
-		}
 		const timestamp = nowIso();
 		const isPositive = input.outcome === "feedback_positive" || input.outcome === "turn_succeeded";
 		const isNegative = input.outcome === "feedback_negative" || input.outcome === "turn_failed";
 		if (input.matterId) {
 			this.db
 				.prepare(
-					`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, deliverable_id, outcome, note, created_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+					`INSERT INTO memory_applications (id, memory_id, matter_id, member_id, outcome, note, created_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				)
 				.run(
 					`mapp_${randomUUID()}`,
 					input.memoryId,
 					input.matterId,
 					input.memberId ?? existing.memberId,
-					input.deliverableId ?? null,
 					input.outcome,
 					input.note ?? "",
 					timestamp,
@@ -436,113 +408,6 @@ export class MemoryRepo {
 		return this.getMemory(input.memoryId)!;
 	}
 
-	private setMemoryFeedback(input: {
-		memoryId: string;
-		matterId: string;
-		deliverableId: string;
-		rating: FeedbackRating;
-		memberId?: string | null;
-		note?: string;
-	}): MemberMemory {
-		const memory = this.getMemory(input.memoryId);
-		if (!memory) throw new Error("Memory not found");
-		const linked = this.db
-			.prepare(`SELECT 1 FROM deliverable_memory_applications link JOIN memory_applications a ON a.id = link.application_id
-			WHERE link.deliverable_id = ? AND a.memory_id = ? AND a.matter_id = ? LIMIT 1`)
-			.get(input.deliverableId, input.memoryId, input.matterId);
-		if (!linked) throw new Error("Memory was not injected for this deliverable");
-		const old = this.db
-			.prepare("SELECT rating FROM memory_feedback_votes WHERE deliverable_id = ? AND memory_id = ?")
-			.get(input.deliverableId, input.memoryId);
-		if (old?.rating === input.rating) return memory;
-		const timestamp = nowIso();
-		const ownsTransaction = !this.db.isTransaction;
-		if (ownsTransaction) this.db.exec("BEGIN IMMEDIATE");
-		try {
-			this.db
-				.prepare(
-					"UPDATE member_memories SET positive_count = positive_count + ?, negative_count = negative_count + ?, updated_at = ? WHERE id = ?",
-				)
-				.run(
-					Number(input.rating === "positive") - Number(old?.rating === "positive"),
-					Number(input.rating === "negative") - Number(old?.rating === "negative"),
-					timestamp,
-					input.memoryId,
-				);
-			this.db
-				.prepare(`INSERT INTO memory_feedback_votes (deliverable_id, memory_id, rating) VALUES (?, ?, ?)
-				ON CONFLICT(deliverable_id, memory_id) DO UPDATE SET rating = excluded.rating`)
-				.run(input.deliverableId, input.memoryId, input.rating);
-			if (input.rating !== "neutral")
-				this.db
-					.prepare(
-						`INSERT INTO memory_applications (id,memory_id,matter_id,member_id,deliverable_id,outcome,note,created_at) VALUES (?,?,?,?,?,?,?,?)`,
-					)
-					.run(
-						`mapp_${randomUUID()}`,
-						input.memoryId,
-						input.matterId,
-						input.memberId ?? memory.memberId,
-						input.deliverableId,
-						`feedback_${input.rating}`,
-						input.note ?? "",
-						timestamp,
-					);
-			if (ownsTransaction) this.db.exec("COMMIT");
-		} catch (error) {
-			if (ownsTransaction) this.db.exec("ROLLBACK");
-			throw error;
-		}
-		return this.getMemory(input.memoryId)!;
-	}
-
-	clearDeliverableMemoryFeedback(deliverableId: string): MemberMemory[] {
-		const delivery = this.getDeliverable(deliverableId);
-		if (!delivery) throw new Error("Deliverable not found");
-		const rows = this.db
-			.prepare("SELECT memory_id FROM memory_feedback_votes WHERE deliverable_id = ?")
-			.all(deliverableId);
-		return rows.map((row) =>
-			this.setMemoryFeedback({
-				memoryId: String(row.memory_id),
-				matterId: delivery.matterId,
-				deliverableId,
-				rating: "neutral",
-			}),
-		);
-	}
-
-	evaluateMatterMemories(input: {
-		matterId: string;
-		memberId?: string | null;
-		deliverableId?: string | null;
-		outcome: Exclude<MemoryApplicationOutcome, "applied">;
-		note?: string;
-	}): MemberMemory[] {
-		if (!input.deliverableId) throw new Error("Feedback evaluation requires a specific deliverable");
-		const rows = this.db
-			.prepare(`SELECT DISTINCT a.memory_id FROM deliverable_memory_applications link
-			JOIN memory_applications a ON a.id = link.application_id
-			WHERE link.deliverable_id = ? AND a.matter_id = ? AND (? IS NULL OR a.member_id = ?)`)
-			.all(input.deliverableId, input.matterId, input.memberId ?? null, input.memberId ?? null) as Array<{
-			memory_id: string;
-		}>;
-		const updated: MemberMemory[] = [];
-		for (const row of rows) {
-			updated.push(
-				this.evaluateMemory({
-					memoryId: String(row.memory_id),
-					outcome: input.outcome,
-					matterId: input.matterId,
-					memberId: input.memberId,
-					deliverableId: input.deliverableId,
-					note: input.note,
-				}),
-			);
-		}
-		return updated;
-	}
-
 	listMemoryApplications(memoryId: string, limit = 20): MemoryApplicationRecord[] {
 		const rows = this.db
 			.prepare(
@@ -557,7 +422,6 @@ export class MemoryRepo {
 			memoryId: String(row.memory_id),
 			matterId: String(row.matter_id),
 			memberId: String(row.member_id),
-			deliverableId: row.deliverable_id ? String(row.deliverable_id) : null,
 			documentId: row.document_id ? String(row.document_id) : null,
 			commitHash: row.commit_hash ? String(row.commit_hash) : null,
 			actorId: row.actor_id ? String(row.actor_id) : null,

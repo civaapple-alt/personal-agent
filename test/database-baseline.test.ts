@@ -19,6 +19,13 @@ test("a fresh database can be reopened with its data and complete schema", () =>
 				.some((column) => column.name === "model_selection_json"),
 		);
 		assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
+		const tables = db
+			.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+			.all()
+			.map((row) => row.name);
+		assert.ok(tables.includes("space_document_memory_votes"));
+		assert.ok(!tables.includes("deliverable_memory_applications"));
+		assert.ok(!tables.includes("memory_feedback_votes"));
 		db.close();
 		const reopened = openPersonalAgentDatabase(path);
 		assert.equal(

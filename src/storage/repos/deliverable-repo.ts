@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { Deliverable, DeliverableType, FeedbackRating, MemberMemory } from "../types.ts";
+import type { Deliverable, DeliverableType } from "../types.ts";
 import { mapDeliverableRow, nowIso } from "./helpers.ts";
-import type { MemoryRepo } from "./memory-repo.ts";
 
 export interface RecordDeliverableInput {
 	matterId: string;
@@ -17,11 +16,9 @@ export interface RecordDeliverableInput {
 /** Manages versioned deliverables, turn outcome commits, and deliverable-level memory feedback. */
 export class DeliverableRepo {
 	private readonly db: DatabaseSync;
-	private readonly memoryRepo: MemoryRepo;
 
-	constructor(db: DatabaseSync, memoryRepo: MemoryRepo) {
+	constructor(db: DatabaseSync) {
 		this.db = db;
-		this.memoryRepo = memoryRepo;
 	}
 
 	/**
@@ -84,15 +81,6 @@ export class DeliverableRepo {
 		}
 	}
 
-	linkDeliverableApplications(deliverableId: string, applicationIds: string[]): void {
-		const delivery = this.getDeliverable(deliverableId);
-		if (!delivery) throw new Error("Deliverable not found");
-		const insert =
-			this.db.prepare(`INSERT OR IGNORE INTO deliverable_memory_applications (deliverable_id, application_id)
-			SELECT ?, id FROM memory_applications WHERE id = ? AND matter_id = ? AND outcome = 'applied'`);
-		for (const id of applicationIds) insert.run(deliverableId, id, delivery.matterId);
-	}
-
 	getDeliverable(id: string): Deliverable | null {
 		const row = this.db.prepare("SELECT * FROM deliverables WHERE id = ?").get(id) as
 			| Record<string, unknown>
@@ -110,44 +98,5 @@ export class DeliverableRepo {
 		) as Record<string, unknown>[];
 
 		return rows.map((row) => mapDeliverableRow(row));
-	}
-
-	recordDeliverableFeedback(
-		deliverableId: string,
-		feedback: string,
-		rating?: FeedbackRating,
-	): { deliverable: Deliverable; evaluatedMemories: MemberMemory[] } {
-		this.db.exec("BEGIN IMMEDIATE");
-		try {
-			const deliverable = this.addDeliverableFeedback(deliverableId, feedback, rating);
-			if (!deliverable) throw new Error("Deliverable not found");
-			const evaluatedMemories =
-				rating === "neutral"
-					? this.memoryRepo.clearDeliverableMemoryFeedback(deliverableId)
-					: rating
-						? this.memoryRepo.evaluateMatterMemories({
-								matterId: deliverable.matterId,
-								deliverableId,
-								outcome: rating === "positive" ? "feedback_positive" : "feedback_negative",
-								note: feedback,
-							})
-						: [];
-			this.db.exec("COMMIT");
-			return { deliverable, evaluatedMemories };
-		} catch (error) {
-			this.db.exec("ROLLBACK");
-			throw error;
-		}
-	}
-
-	addDeliverableFeedback(deliverableId: string, feedback: string, rating?: FeedbackRating | null): Deliverable | null {
-		if (rating !== undefined) {
-			this.db
-				.prepare("UPDATE deliverables SET feedback = ?, feedback_rating = ? WHERE id = ?")
-				.run(feedback, rating, deliverableId);
-		} else {
-			this.db.prepare("UPDATE deliverables SET feedback = ? WHERE id = ?").run(feedback, deliverableId);
-		}
-		return this.getDeliverable(deliverableId);
 	}
 }

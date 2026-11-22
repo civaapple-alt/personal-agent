@@ -70,9 +70,8 @@
   - 提请只允许从 `pending` 原子转为 `approved` 或 `dismissed`；重复处理/非提请返回 409。批准先校验来源组织与仓库、AI 成员和附件，失败保持待处理；附件缺失返回 410。
   - 图片上传完成后由 `dispatch-runner` 统一检查运行占用，冲突返回 409，不能覆盖原运行进度。运行中的仓库也不能经 PATCH 或同路径 upsert 改归属组织。
 - Phase 4 RSI 接口：
-  - `POST /api/deliverables/:id/feedback` 支持可选 `rating`、`autoDistill` 与 `scopeMode`，先校验成果/事项访问权及反馈权限（`org_viewer` 与未授权 `legacy_token` 返回 403；`autoDistill` 须具备复盘管理权），反馈与计数原子保存并仅评价该版本关联的经验（`neutral` 撤回当前票）。
-  - 可选自动复盘失败时仍返回已保存反馈与 `distillationError`。
-  - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止，校验 `canDistillMatter` 与可选 `deliverableId` 对所属 `matterId` 的一致性）、`POST /api/rsi/distill/abort` 支持只读多角色经验提炼与取消；组织 `org_owner`/`org_admin` 可为本组织可见成果与事项触发复盘。
+  - `POST /api/spaces/documents/:id/feedback` 按文档提交和评价人记录反馈，只评价该提交关联的经验；`neutral` 撤回该评价人的计数。
+  - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止）及 `POST /api/rsi/distill/abort` 支持事项经验提炼与取消；组织 `org_owner`/`org_admin` 可为本组织可见事项触发复盘。
   - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期；`org_owner`/`org_admin` 可管理所属组织的 `company_private`、`project_private` 及组织内 `org` 角色经验，全局平台角色 `role_general` 仍限超级管理员管理，`org_member`/`org_viewer`/`legacy_token` 禁止写改记忆。
   - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
 - 运行态恢复与快照：

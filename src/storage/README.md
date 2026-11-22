@@ -32,8 +32,8 @@
   - 经验生命周期与替代关系由 `addMemory`、`updateMemory` 共同校验，核验替代候选后将旧经验标为 `superseded`：
     - 替代双方须同成员、同范围、同组织、同工作区且无环。旧经验只能接受一个替代项。核验候选与标记旧经验在同一事务完成，只有通过核验的替代项才能注入岗位执行。
 - 经验应用与版本反馈记录：
-  - `memory_applications` 记录实际注入，不能证明模型采用；`deliverable_memory_applications` 关联成果版本与本轮应用，验收只评价这些经验，历史未关联版本不猜测补记。
-  - `memory_feedback_votes` 对每个版本、经验只保存一个当前评价，改评按差值回写，`neutral` 撤回该票；独立手动评价仍累加。
+  - `memory_applications` 记录实际注入，不能证明模型采用；`space_document_memory_applications` 将本轮应用关联到文档的 Git 提交。
+  - `space_document_memory_votes` 按文档提交、评价人和经验保存当前评价，改评按差值回写，`neutral` 撤回该票；独立手动评价仍累加。
 - `matters.ai_member_ids_json`（`NULL` 表示默认全部 AI 角色参与，数组表示当前保留的 AI 成员）、`matters.observers_enabled`
   （事项全局 AI 旁听开关）与 `matters.observer_ids_json` 协同维护事项内 AI 参与范围、负责人切换及旁听名单。关闭开关时保留旁听名单，主责的委托名单单独保存。
   由事项仓储维护。删除角色时同步从参与、请教与旁听名单移除它，删掉最后一个已配置旁听者时关闭该事项的旁听。

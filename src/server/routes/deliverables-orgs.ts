@@ -1,28 +1,18 @@
-import type { FeedbackRating, WorkspaceVisibility } from "../../storage/types.ts";
+import type { WorkspaceVisibility } from "../../storage/types.ts";
 import {
 	canAccessDeliverable,
 	canAccessMatter,
 	canAccessOrganization,
-	canAccessSpace,
 	canAccessWorkspace,
-	canActorAccessMemory,
-	canActorUseMember,
 	canManageOrganization,
-	canParticipateInMatter,
 	isGlobalUnscopedActor,
 	requireOrgAdmin,
 	validateLocalWorkspaceBindingPath,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor, requireOwner, requireSuperAdmin } from "../auth.ts";
 import { cloneGitWorkspaceIntoOrgRoot, resolveOrgWorkspacesDir } from "../git-clone.ts";
-import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
-import {
-	auditActorAction,
-	broadcastMemoryUpdates,
-	formatWorkspaceForActor,
-	type RouteRequest,
-	type ServerRouteContext,
-} from "./context.ts";
+import { readJsonBody, sendError, sendJson } from "../http.ts";
+import { auditActorAction, formatWorkspaceForActor, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
 function workspaceHasActiveTurn(ctx: ServerRouteContext, workspaceId: string): boolean {
 	return ctx.store
@@ -35,9 +25,9 @@ function parseUserIdList(raw: unknown): string[] {
 	return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((s) => s.trim());
 }
 
-/** Handle deliverables feedback, self-serve organizations, cloned/local workspaces, and preview services. */
+/** Handle deliverables, self-serve organizations, cloned/local workspaces, and preview services. */
 export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, previewManager, broadcast } = ctx;
+	const { store, previewManager, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
 
 	if (method === "GET" && pathname === "/api/deliverables") {
@@ -108,101 +98,6 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			return true;
 		}
 		sendJson(res, 200, { deliverable: existing });
-		return true;
-	}
-
-	const feedbackMatch = pathname.match(/^\/api\/deliverables\/([^/]+)\/feedback$/);
-	if (method === "POST" && feedbackMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const deliverableId = decodeURIComponent(feedbackMatch[1]!);
-		const existing = store.getDeliverable(deliverableId);
-		if (!existing) {
-			sendError(res, 404, `Deliverable not found: ${deliverableId}`);
-			return true;
-		}
-		const parentMatter = store.getMatter(existing.matterId);
-		if (
-			parentMatter
-				? !canParticipateInMatter(store, actor, parentMatter)
-				: !(isGlobalUnscopedActor(actor) || isSuperAdminActor(actor))
-		) {
-			sendError(res, 403, "无权评价该事项成果");
-			return true;
-		}
-		const body = await readJsonBody(req);
-		const canAutoDistill =
-			isGlobalUnscopedActor(actor) ||
-			isSuperAdminActor(actor) ||
-			canManageOrganization(store, actor, parentMatter?.orgId);
-		if (body.autoDistill === true && !canAutoDistill) {
-			sendError(res, 403, "仅组织管理员或系统管理员可在评价后触发自动经验提炼");
-			return true;
-		}
-		const rawFeedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
-		const isPrivileged = isSuperAdminActor(actor) || canManageOrganization(store, actor, parentMatter?.orgId);
-		const feedback =
-			rawFeedback && !isPrivileged
-				? `[${actor.collaborator.name} (${actor.collaborator.roleTitle})]: ${rawFeedback}`
-				: rawFeedback;
-		const rawRating = body.rating;
-		const rating: FeedbackRating | undefined =
-			rawRating === "positive" || rawRating === "negative" || rawRating === "neutral" ? rawRating : undefined;
-		if (!feedback && !rating) {
-			sendError(res, 400, "feedback or rating is required");
-			return true;
-		}
-		const { deliverable: updatedDeliverable, evaluatedMemories } = store.recordDeliverableFeedback(
-			deliverableId,
-			feedback || existing.feedback || "",
-			rating,
-		);
-		const evaluatedMemoryIds = evaluatedMemories
-			.filter((memory) => canActorAccessMemory(store, actor, memory))
-			.map((memory) => memory.id);
-		broadcastMemoryUpdates(broadcast, evaluatedMemories);
-		let distilledMemories: unknown[] = [];
-		let distillationError: string | undefined;
-		if (body.autoDistill === true) {
-			const cancellation = responseCancellation(res);
-			try {
-				const distilled = await orchestrator.distillExperiences({
-					matterId: existing.matterId,
-					feedback,
-					rating: rating ?? null,
-					scopeMode: body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined,
-					signal: cancellation.signal,
-					canReviewMember: (member) => canActorUseMember(store, actor, member),
-					canReadSpace: (spaceId) => canAccessSpace(store, actor, store.spaces.getSpace(spaceId)),
-				});
-				distilledMemories = distilled.createdMemories.filter((memory) =>
-					canActorAccessMemory(store, actor, memory),
-				);
-				broadcastMemoryUpdates(broadcast, distilled.createdMemories);
-			} catch (error) {
-				distillationError = error instanceof Error ? error.message : String(error);
-			} finally {
-				cancellation.dispose();
-			}
-		}
-		broadcast(
-			"deliverable_updated",
-			{
-				deliverableId,
-				matterId: existing.matterId,
-				feedback: updatedDeliverable?.feedback ?? feedback,
-				rating: updatedDeliverable?.feedbackRating ?? null,
-			},
-			{ matterId: existing.matterId },
-		);
-		sendJson(res, 200, {
-			ok: true,
-			deliverableId,
-			feedback: updatedDeliverable?.feedback ?? feedback,
-			rating: updatedDeliverable?.feedbackRating ?? null,
-			evaluatedMemoryIds,
-			distilledMemories,
-			distillationError,
-		});
 		return true;
 	}
 

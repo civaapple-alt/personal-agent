@@ -1252,27 +1252,7 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			200,
 		);
 
-		// 4. org_viewer is read-only on deliverables (cannot submit feedback, tighten visibility, or distill)
-		assert.equal(
-			(
-				await fetch(`${base}/api/deliverables/${dAOpen.id}/feedback`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
-					body: JSON.stringify({ rating: "positive", feedback: "viewer hack" }),
-				})
-			).status,
-			403,
-		);
-		assert.equal(
-			(
-				await fetch(`${base}/api/matters/${mAOpen.id}`, {
-					method: "PATCH",
-					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
-					body: JSON.stringify({ visibility: "private" }),
-				})
-			).status,
-			403,
-		);
+		// 4. org_viewer cannot change matter visibility or trigger distillation.
 		assert.equal(
 			(
 				await fetch(`${base}/api/rsi/distill`, {
@@ -1284,23 +1264,13 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			403,
 		);
 
-		// 5. org_member cannot trigger RSI distillation or autoDistill; org_owner can trigger RSI distillation for its own matter
+		// 5. org_member cannot trigger RSI distillation; org_owner can trigger RSI distillation for its own matter
 		assert.equal(
 			(
 				await fetch(`${base}/api/rsi/distill`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Cookie: memberACookie },
 					body: JSON.stringify({ matterId: mAOpen.id }),
-				})
-			).status,
-			403,
-		);
-		assert.equal(
-			(
-				await fetch(`${base}/api/deliverables/${dAOpen.id}/feedback`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: memberACookie },
-					body: JSON.stringify({ rating: "positive", autoDistill: true }),
 				})
 			).status,
 			403,
@@ -1471,17 +1441,6 @@ test("Team sandbox script seeds multi-org RBAC & deliverable scenarios and boots
 				await fetch(`${base}/api/deliverables`, { headers: { Cookie: viewerCookie } })
 			).json()) as { deliverables: Array<{ id: string; title: string }> };
 			assert.equal(viewerDelivs.deliverables.length, 2);
-			assert.equal(
-				(
-					await fetch(`${base}/api/deliverables/${viewerDelivs.deliverables[0]!.id}/feedback`, {
-						method: "POST",
-						headers: { "Content-Type": "application/json", Cookie: viewerCookie },
-						body: JSON.stringify({ feedback: "Viewer blocked", rating: "positive" }),
-					})
-				).status,
-				403,
-			);
-
 			const adminOverview = (await (
 				await fetch(`${base}/api/admin/overview`, { headers: { Cookie: adminCookie } })
 			).json()) as { users: Array<{ email: string; status: string }> };

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the legacy deliverable feedback endpoint; Space document feedback records ratings against Git commits.
+
 - Reflect on the current matter and accessible Space documents instead of selecting a legacy deliverable version.
 
 - Start the 0.7.0 fresh-data baseline: initialize a complete schema without historical migrations, reject existing databases without modifying them, and remove DB-backed Space pages and flat Space/upload storage fallback.

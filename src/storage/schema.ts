@@ -28,12 +28,6 @@ CREATE TABLE collaborators (
 	updated_at TEXT NOT NULL
 );
 
-CREATE TABLE deliverable_memory_applications (
-	deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
-	application_id TEXT NOT NULL REFERENCES memory_applications(id) ON DELETE CASCADE,
-	PRIMARY KEY (deliverable_id, application_id)
-);
-
 CREATE TABLE deliverables (
 	id TEXT PRIMARY KEY,
 	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
@@ -115,20 +109,12 @@ CREATE TABLE memory_applications (
 	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
 	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
 	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
-	deliverable_id TEXT REFERENCES deliverables(id) ON DELETE SET NULL,
 	document_id TEXT REFERENCES space_documents(id) ON DELETE SET NULL,
 	commit_hash TEXT,
 	actor_id TEXT,
 	outcome TEXT NOT NULL DEFAULT 'applied',
 	note TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL
-);
-
-CREATE TABLE memory_feedback_votes (
-	deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
-	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
-	rating TEXT NOT NULL,
-	PRIMARY KEY (deliverable_id, memory_id)
 );
 
 CREATE TABLE organization_ai_roles (
