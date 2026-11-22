@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -199,6 +199,17 @@ export function migrateDatabase(db: DatabaseSync): void {
 					CREATE INDEX IF NOT EXISTS idx_space_documents_type ON space_documents(space_id, doc_type, updated_at DESC);
 					PRAGMA user_version = 10;
 				`);
+			}
+			if (version < 11) {
+				if (
+					!db
+						.prepare("PRAGMA table_info(space_documents)")
+						.all()
+						.some((column) => column.name === "entry_kind")
+				) {
+					db.exec("ALTER TABLE space_documents ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'file'");
+				}
+				db.exec("PRAGMA user_version = 11;");
 			}
 			db.exec("COMMIT");
 		} catch (error) {

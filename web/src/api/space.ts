@@ -3,6 +3,12 @@ import { requestJson } from "./client.ts";
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
 export type SpaceDocumentType = "plan" | "spec" | "decision" | "rule" | "note";
+export type SpaceEntryKind = "file" | "folder";
+
+export interface SpaceDocumentFileDto {
+	path: string;
+	sizeBytes: number;
+}
 
 export const SPACE_DOC_TYPE_OPTIONS: Array<{ value: SpaceDocumentType; label: string; hint: string }> = [
 	{ value: "plan", label: "方案", hint: "实现计划、架构方案、落地路线图" },
@@ -41,6 +47,7 @@ export interface SpaceDocumentMetaDto {
 	filePath: string;
 	title: string;
 	docType: SpaceDocumentType;
+	entryKind: SpaceEntryKind;
 	linkedOrgId: string | null;
 	linkedWorkspaceId: string | null;
 	linkedFilePath: string | null;
@@ -109,6 +116,7 @@ export function createSpaceDocument(
 	input: {
 		title: string;
 		docType?: SpaceDocumentType;
+		entryKind?: SpaceEntryKind;
 		content: string;
 		matterId?: string | null;
 		linkedOrgId?: string | null;
@@ -124,9 +132,62 @@ export function createSpaceDocument(
 }
 
 export function getSpaceDocument(docId: string) {
-	return requestJson<{ document: SpaceDocumentDto; canWrite: boolean }>(
-		`/api/spaces/documents/${encodeURIComponent(docId)}`,
+	return requestJson<{
+		document: SpaceDocumentDto;
+		canWrite: boolean;
+		files?: SpaceDocumentFileDto[];
+		previewEntryPath?: string | null;
+	}>(`/api/spaces/documents/${encodeURIComponent(docId)}`);
+}
+
+export function promoteSpaceDocumentToFolder(docId: string) {
+	return requestJson<{
+		document: SpaceDocumentDto;
+		files: SpaceDocumentFileDto[];
+		previewEntryPath: string | null;
+	}>(`/api/spaces/documents/${encodeURIComponent(docId)}/promote`, {
+		method: "POST",
+	});
+}
+
+export function readSpaceDocumentFile(docId: string, subPath: string) {
+	return requestJson<{ path: string; content: string }>(
+		`/api/spaces/documents/${encodeURIComponent(docId)}/files?path=${encodeURIComponent(subPath)}`,
 	);
+}
+
+export function writeSpaceDocumentFile(
+	docId: string,
+	input: { path: string; content: string; commitMessage?: string },
+) {
+	return requestJson<{
+		document: SpaceDocumentDto;
+		subPath: string;
+		files: SpaceDocumentFileDto[];
+		previewEntryPath: string | null;
+	}>(`/api/spaces/documents/${encodeURIComponent(docId)}/files`, {
+		method: "PUT",
+		body: JSON.stringify(input),
+	});
+}
+
+export function deleteSpaceDocumentFile(docId: string, subPath: string) {
+	return requestJson<{
+		document: SpaceDocumentDto;
+		files: SpaceDocumentFileDto[];
+		previewEntryPath: string | null;
+	}>(`/api/spaces/documents/${encodeURIComponent(docId)}/files?path=${encodeURIComponent(subPath)}`, {
+		method: "DELETE",
+	});
+}
+
+export function spaceDocumentPreviewUrl(docId: string, entryPath: string): string {
+	const encodedSegments = entryPath
+		.split("/")
+		.filter(Boolean)
+		.map((seg) => encodeURIComponent(seg))
+		.join("/");
+	return `/api/spaces/documents/${encodeURIComponent(docId)}/preview/${encodedSegments}`;
 }
 
 export function updateSpaceDocument(

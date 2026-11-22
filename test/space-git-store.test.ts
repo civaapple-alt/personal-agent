@@ -338,3 +338,93 @@ test("SpaceRepo stores documents in docType Git subdirectories, supports type fi
 		await rm(spacesDir, { recursive: true, force: true });
 	}
 });
+
+test("SpaceRepo supports folder entries with entry-level .gitignore, sub-files, preview detection, and single-file promotion", async () => {
+	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-folder-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	try {
+		const store = new PersonalAgentStore(db, { spacesDir });
+		const org = store.ensureDefaultOrganization();
+		const admin = store.ensureLocalBootstrapAdmin("Alice");
+		store.spaces.ensureAllDefaultSpaces();
+		const orgSpace = orgSpaceId(org.id);
+
+		// 1. Create folder entry directly under decisions/
+		const bundle = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "选型决策资料包",
+			docType: "decision",
+			entryKind: "folder",
+			content: "# 选型结论\n\n选择方案 A。\n",
+			actorId: admin.id,
+			actorName: "Alice",
+		});
+		assert.equal(bundle.entryKind, "folder");
+		assert.ok(bundle.filePath.startsWith("decisions/"));
+		assert.ok(!bundle.filePath.endsWith(".md"));
+
+		const initialFiles = await store.spaces.listDocumentFiles(bundle.id);
+		assert.ok(initialFiles);
+		assert.deepEqual(
+			initialFiles.files.map((f) => f.path),
+			["README.md", ".gitignore"],
+		);
+		assert.equal(initialFiles.previewEntryPath, null);
+
+		// 2. Write reference doc + static demo site + an ignored log file
+		await store.spaces.writeDocumentFile(bundle.id, {
+			subPath: "option-a.md",
+			content: "# 备选方案 A\n详细调研数据\n",
+			actorId: admin.id,
+		});
+		const withDemo = await store.spaces.writeDocumentFile(bundle.id, {
+			subPath: "demo/index.html",
+			content: "<!doctype html><html><body><h1>Demo</h1></body></html>",
+			actorId: admin.id,
+		});
+		assert.ok(withDemo);
+		assert.equal(withDemo.previewEntryPath, "demo/index.html");
+		assert.equal(await store.spaces.readDocumentFile(bundle.id, "option-a.md"), "# 备选方案 A\n详细调研数据\n");
+		const rawHtml = await store.spaces.readDocumentFileRaw(bundle.id, "demo/index.html");
+		assert.ok(rawHtml?.toString("utf8").includes("<h1>Demo</h1>"));
+
+		// Verify entry-level .gitignore filters *.log files from git ls-files
+		const repoDir = store.spaces.git.resolveRepoDir(orgSpace);
+		writeFileSync(join(repoDir, bundle.filePath, "debug.log"), "should be ignored", "utf8");
+		const listedAfterLog = await store.spaces.listDocumentFiles(bundle.id);
+		assert.ok(listedAfterLog);
+		assert.ok(!listedAfterLog.files.some((f) => f.path === "debug.log"));
+
+		// 3. Delete non-README sub-file works; deleting README.md is rejected
+		await store.spaces.deleteDocumentFile(bundle.id, { subPath: "option-a.md", actorId: admin.id });
+		assert.equal(await store.spaces.readDocumentFile(bundle.id, "option-a.md"), null);
+		await assert.rejects(
+			() => store.spaces.deleteDocumentFile(bundle.id, { subPath: "README.md", actorId: admin.id }),
+			/README\.md/,
+		);
+
+		// Directory-level commit log captures all folder entry commits
+		const commits = await store.spaces.listDocumentCommits(bundle.id);
+		assert.ok(commits.length >= 4);
+
+		// 4. Promote an existing single-file document into a folder entry
+		const single = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "初始方案",
+			docType: "plan",
+			content: "# 初始方案正文\n",
+			actorId: admin.id,
+		});
+		assert.equal(single.entryKind, "file");
+		const promoted = await store.spaces.promoteDocumentToFolder(single.id, { actorId: admin.id });
+		assert.ok(promoted);
+		assert.equal(promoted.entryKind, "folder");
+		assert.equal(promoted.content, "# 初始方案正文\n");
+		const promotedFiles = await store.spaces.listDocumentFiles(single.id);
+		assert.ok(promotedFiles?.files.some((f) => f.path === "README.md"));
+		assert.ok(promotedFiles?.files.some((f) => f.path === ".gitignore"));
+	} finally {
+		db.close();
+		await rm(spacesDir, { recursive: true, force: true });
+	}
+});

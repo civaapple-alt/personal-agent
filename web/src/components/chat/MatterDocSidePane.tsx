@@ -5,6 +5,7 @@ import {
 	listSpaceDocumentCommits,
 	SPACE_DOC_TYPE_OPTIONS,
 	type SpaceDocumentDto,
+	type SpaceDocumentFileDto,
 	type SpaceDocumentType,
 	type SpaceGitCommitDetailDto,
 	type SpaceGitCommitDto,
@@ -13,6 +14,7 @@ import {
 } from "../../api/space.ts";
 import type { WorkspaceDto } from "../../api.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import { SpaceFolderFilesPanel } from "../SpaceFolderFilesPanel.tsx";
 
 interface MatterDocSidePaneProps {
 	openDocIds: string[];
@@ -43,6 +45,8 @@ export function MatterDocSidePane({
 	onOpenFullSpace,
 }: MatterDocSidePaneProps) {
 	const [doc, setDoc] = useState<SpaceDocumentDto | null>(null);
+	const [docFiles, setDocFiles] = useState<SpaceDocumentFileDto[]>([]);
+	const [previewEntryPath, setPreviewEntryPath] = useState<string | null>(null);
 	const [canWrite, setCanWrite] = useState(false);
 	const [commits, setCommits] = useState<SpaceGitCommitDto[]>([]);
 	const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
@@ -66,6 +70,8 @@ export function MatterDocSidePane({
 		try {
 			const [docRes, commitsRes] = await Promise.all([getSpaceDocument(docId), listSpaceDocumentCommits(docId)]);
 			setDoc(docRes.document);
+			setDocFiles(docRes.files ?? []);
+			setPreviewEntryPath(docRes.previewEntryPath ?? null);
 			setCanWrite(docRes.canWrite);
 			setCommits(commitsRes.commits);
 			if (expandLatestDiff && commitsRes.commits[0]) {
@@ -400,9 +406,20 @@ export function MatterDocSidePane({
 						)}
 
 						{viewMode === "content" ? (
-							<div className="matter-doc-pane-markdown">
-								<MarkdownView content={doc.content || "（空白）"} />
-							</div>
+							doc.entryKind === "folder" ? (
+								<SpaceFolderFilesPanel
+									docId={doc.id}
+									readmeContent={doc.content}
+									files={docFiles}
+									previewEntryPath={previewEntryPath}
+									canWrite={canWrite}
+									onChanged={() => loadDoc(activeDocId, false)}
+								/>
+							) : (
+								<div className="matter-doc-pane-markdown">
+									<MarkdownView content={doc.content || "（空白）"} />
+								</div>
+							)
 						) : (
 							<div className="matter-doc-pane-diff-view">
 								<ul className="space-commit-list">

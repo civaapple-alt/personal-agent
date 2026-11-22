@@ -8,11 +8,14 @@ import {
 	listSpaceDocumentCommits,
 	listSpaceDocuments,
 	listSpaces,
+	promoteSpaceDocumentToFolder,
 	SPACE_DOC_TYPE_OPTIONS,
 	type SpaceDocumentDto,
+	type SpaceDocumentFileDto,
 	type SpaceDocumentMetaDto,
 	type SpaceDocumentType,
 	type SpaceDto,
+	type SpaceEntryKind,
 	type SpaceGitCommitDetailDto,
 	type SpaceGitCommitDto,
 	type SpaceKind,
@@ -22,6 +25,7 @@ import {
 } from "../api/space.ts";
 import type { BootstrapPayload } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
+import { SpaceFolderFilesPanel } from "./SpaceFolderFilesPanel.tsx";
 
 const RECENT_SPACE_ID = "__recent__";
 
@@ -48,6 +52,8 @@ export function SpacePages({
 	const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
 	const [documents, setDocuments] = useState<SpaceDocumentMetaDto[]>([]);
 	const [selectedDoc, setSelectedDoc] = useState<SpaceDocumentDto | null>(null);
+	const [docFiles, setDocFiles] = useState<SpaceDocumentFileDto[]>([]);
+	const [docPreviewPath, setDocPreviewPath] = useState<string | null>(null);
 	const [docCanWrite, setDocCanWrite] = useState(false);
 	const [commits, setCommits] = useState<SpaceGitCommitDto[]>([]);
 	const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
@@ -63,6 +69,7 @@ export function SpacePages({
 
 	const [title, setTitle] = useState("");
 	const [docType, setDocType] = useState<SpaceDocumentType>("note");
+	const [entryKind, setEntryKind] = useState<SpaceEntryKind>("file");
 	const [docTypeFilter, setDocTypeFilter] = useState<"all" | SpaceDocumentType>("all");
 	const [content, setContent] = useState("");
 	const [linkedWorkspaceId, setLinkedWorkspaceId] = useState("");
@@ -111,6 +118,8 @@ export function SpacePages({
 		setCommitDetail(null);
 		const [docRes, commitsRes] = await Promise.all([getSpaceDocument(docId), listSpaceDocumentCommits(docId)]);
 		setSelectedDoc(docRes.document);
+		setDocFiles(docRes.files ?? []);
+		setDocPreviewPath(docRes.previewEntryPath ?? null);
 		setDocCanWrite(docRes.canWrite);
 		setCommits(commitsRes.commits);
 	}, []);
@@ -142,6 +151,8 @@ export function SpacePages({
 						if (cancelled) return;
 						setSelectedSpaceId(docRes.document.spaceId);
 						setSelectedDoc(docRes.document);
+						setDocFiles(docRes.files ?? []);
+						setDocPreviewPath(docRes.previewEntryPath ?? null);
 						setDocCanWrite(docRes.canWrite);
 						const commitsRes = await listSpaceDocumentCommits(pageId);
 						if (!cancelled) setCommits(commitsRes.commits);
@@ -260,6 +271,7 @@ export function SpacePages({
 		setSelectedDoc(null);
 		setTitle("");
 		setDocType(docTypeFilter === "all" ? "note" : docTypeFilter);
+		setEntryKind("file");
 		setContent("");
 		setLinkedWorkspaceId(selectedSpace?.workspaceId ?? "");
 		setLinkedFilePath("");
@@ -267,6 +279,21 @@ export function SpacePages({
 		setMatterId("");
 		setEditing(true);
 		setError("");
+	};
+
+	const handlePromoteToFolder = async () => {
+		if (!selectedDoc || !selectedSpaceId || busy) return;
+		setBusy(true);
+		setError("");
+		try {
+			await promoteSpaceDocumentToFolder(selectedDoc.id);
+			await loadSpaceContents(selectedSpaceId);
+			await openDocument(selectedDoc.id);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusy(false);
+		}
 	};
 
 	const handleSaveDocument = async (event: React.FormEvent) => {
@@ -294,6 +321,7 @@ export function SpacePages({
 				const { document } = await createSpaceDocument(selectedSpaceId, {
 					title,
 					docType,
+					entryKind,
 					content,
 					matterId: matterId || null,
 					linkedOrgId: linkedFilePath.trim() ? resolvedLinkedOrgId : null,
@@ -539,6 +567,11 @@ export function SpacePages({
 										<span className={`space-doc-type-pill is-${doc.docType}`}>
 											{spaceDocTypeLabel(doc.docType)}
 										</span>
+										{doc.entryKind === "folder" && (
+											<span className="space-folder-badge" title="目录条目（支持多文件与 .gitignore）">
+												📁
+											</span>
+										)}
 										<strong>{doc.title}</strong>
 									</div>
 									<span>
@@ -603,6 +636,19 @@ export function SpacePages({
 										))}
 									</select>
 								</label>
+								{!selectedDoc && (
+									<label style={{ flex: 1 }}>
+										条目形态
+										<select
+											className="input-field"
+											value={entryKind}
+											onChange={(e) => setEntryKind(e.target.value as SpaceEntryKind)}
+										>
+											<option value="file">单文件 Markdown</option>
+											<option value="folder">目录条目（多文件 / 演示站点 / .gitignore）</option>
+										</select>
+									</label>
+								)}
 							</div>
 							<label>
 								正文（Markdown）
@@ -695,21 +741,34 @@ export function SpacePages({
 									</div>
 								</div>
 								{docCanWrite && (
-									<button
-										type="button"
-										className="btn-secondary"
-										onClick={() => {
-											setTitle(selectedDoc.title);
-											setDocType(selectedDoc.docType);
-											setContent(selectedDoc.content);
-											setLinkedWorkspaceId(selectedDoc.linkedWorkspaceId ?? "");
-											setLinkedFilePath(selectedDoc.linkedFilePath ?? "");
-											setCommitMessage("");
-											setEditing(true);
-										}}
-									>
-										编辑
-									</button>
+									<div className="space-page-actions">
+										{selectedDoc.entryKind === "file" && (
+											<button
+												type="button"
+												className="btn-pill-outline btn-xs"
+												disabled={busy}
+												title="转为目录条目，便于追加参考文件、.gitignore 或演示站点"
+												onClick={() => void handlePromoteToFolder()}
+											>
+												转为目录条目
+											</button>
+										)}
+										<button
+											type="button"
+											className="btn-secondary"
+											onClick={() => {
+												setTitle(selectedDoc.title);
+												setDocType(selectedDoc.docType);
+												setContent(selectedDoc.content);
+												setLinkedWorkspaceId(selectedDoc.linkedWorkspaceId ?? "");
+												setLinkedFilePath(selectedDoc.linkedFilePath ?? "");
+												setCommitMessage("");
+												setEditing(true);
+											}}
+										>
+											{selectedDoc.entryKind === "folder" ? "编辑主说明" : "编辑"}
+										</button>
+									</div>
 								)}
 							</div>
 
@@ -725,9 +784,23 @@ export function SpacePages({
 								</div>
 							)}
 
-							<div className="space-page-content">
-								<MarkdownView content={selectedDoc.content || "（空白）"} />
-							</div>
+							{selectedDoc.entryKind === "folder" ? (
+								<SpaceFolderFilesPanel
+									docId={selectedDoc.id}
+									readmeContent={selectedDoc.content}
+									files={docFiles}
+									previewEntryPath={docPreviewPath}
+									canWrite={docCanWrite}
+									onChanged={async () => {
+										if (selectedSpaceId) await loadSpaceContents(selectedSpaceId);
+										await openDocument(selectedDoc.id);
+									}}
+								/>
+							) : (
+								<div className="space-page-content">
+									<MarkdownView content={selectedDoc.content || "（空白）"} />
+								</div>
+							)}
 
 							<details className="space-commits-panel" open={commits.length > 1}>
 								<summary>Git 提交历史（{commits.length}）</summary>

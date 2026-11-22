@@ -312,6 +312,25 @@ export async function executeWithWorkerPass(
 				}
 				const doc = await deps.store.spaces.getDocument(call.pageId);
 				if (!doc || doc.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
+				if (doc.entryKind === "folder") {
+					const listed = await deps.store.spaces.listDocumentFiles(doc.id);
+					if (call.subPath) {
+						const fileContent = await deps.store.spaces.readDocumentFile(doc.id, call.subPath);
+						if (fileContent === null) throw new Error(`Sub-file not found in folder entry: ${call.subPath}`);
+						return {
+							page: doc,
+							subPath: call.subPath,
+							fileContent,
+							files: listed?.files ?? [],
+							previewEntryPath: listed?.previewEntryPath ?? null,
+						};
+					}
+					return {
+						page: doc,
+						files: listed?.files ?? [],
+						previewEntryPath: listed?.previewEntryPath ?? null,
+					};
+				}
 				return { page: doc };
 			}
 			if (call.tool === "save_space_page") {
@@ -344,12 +363,16 @@ export async function executeWithWorkerPass(
 						)
 					: undefined;
 				if (!call.pageId && !staged) {
-					const doc = await deps.store.spaces.createDocument({
+					const wantsFolder = call.entryKind === "folder" || Boolean(call.subPath);
+					const initialContent =
+						call.subPath && call.subPath !== "README.md" ? `# ${call.title}\n` : draft.content;
+					let doc = await deps.store.spaces.createDocument({
 						spaceId: targetSpace.id,
 						matterId: input.matterId,
 						title: call.title,
 						docType: call.docType,
-						content: draft.content,
+						entryKind: wantsFolder ? "folder" : "file",
+						content: initialContent,
 						linkedOrgId,
 						linkedWorkspaceId,
 						linkedFilePath,
@@ -357,6 +380,16 @@ export async function executeWithWorkerPass(
 						actorName: input.member.displayName,
 						commitMessage: call.changeNote || `Create ${call.title}`,
 					});
+					if (call.subPath && call.subPath !== "README.md") {
+						const written = await deps.store.spaces.writeDocumentFile(doc.id, {
+							subPath: call.subPath,
+							content: draft.content,
+							actorId: input.member.id,
+							actorName: input.member.displayName,
+							commitMessage: call.changeNote || `Add ${call.subPath} to ${call.title}`,
+						});
+						if (written) doc = written.document;
+					}
 					effects.savedDocuments.push({
 						id: doc.id,
 						spaceId: doc.spaceId,
@@ -373,21 +406,37 @@ export async function executeWithWorkerPass(
 						toolName: "save_space_page",
 						collabUpdated: true,
 					});
-					return { page: doc };
+					const listed = doc.entryKind === "folder" ? await deps.store.spaces.listDocumentFiles(doc.id) : null;
+					return {
+						page: doc,
+						...(listed ? { files: listed.files, previewEntryPath: listed.previewEntryPath } : {}),
+					};
 				}
 				const targetDocId = call.pageId ?? staged!.id;
 				const previous = deps.store.spaces.getDocumentMeta(targetDocId);
 				if (!previous || previous.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
-				const doc = await deps.store.spaces.updateDocument(previous.id, {
-					revision: call.revision ?? staged?.revision ?? previous.revision,
-					title: call.title,
-					docType: call.docType,
-					content: draft.content,
-					...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
-					actorId: input.member.id,
-					actorName: input.member.displayName,
-					commitMessage: call.changeNote || `Update ${call.title}`,
-				});
+				let doc: Awaited<ReturnType<typeof deps.store.spaces.updateDocument>>;
+				if (call.subPath) {
+					const written = await deps.store.spaces.writeDocumentFile(previous.id, {
+						subPath: call.subPath,
+						content: draft.content,
+						actorId: input.member.id,
+						actorName: input.member.displayName,
+						commitMessage: call.changeNote || `Update ${call.subPath} in ${call.title}`,
+					});
+					doc = written?.document ?? null;
+				} else {
+					doc = await deps.store.spaces.updateDocument(previous.id, {
+						revision: call.revision ?? staged?.revision ?? previous.revision,
+						title: call.title,
+						docType: call.docType,
+						content: draft.content,
+						...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
+						actorId: input.member.id,
+						actorName: input.member.displayName,
+						commitMessage: call.changeNote || `Update ${call.title}`,
+					});
+				}
 				if (!doc) throw new Error("Space page changed. Read its latest revision before saving.");
 				const existingIdx = effects.savedDocuments.findIndex((entry) => entry.id === doc.id);
 				const savedEntry = {

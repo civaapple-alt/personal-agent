@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, renameSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, statSync } from "node:fs";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -253,16 +253,240 @@ export class SpaceGitStore {
 		}
 	}
 
+	async readRawFile(spaceId: string, filePath: string): Promise<Buffer | null> {
+		const safePath = normalizeSafeRepoFilePath(filePath);
+		const repoDir = this.resolveRepoDir(spaceId);
+		const fullPath = resolve(repoDir, safePath);
+		const rel = relative(repoDir, fullPath);
+		if (!rel || rel.startsWith("..") || isAbsolute(rel)) return null;
+		try {
+			return await readFile(fullPath);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+			throw error;
+		}
+	}
+
+	async listDirectoryFiles(spaceId: string, dirPath: string): Promise<Array<{ path: string; sizeBytes: number }>> {
+		const safeDir = normalizeSafeRepoFilePath(dirPath);
+		const repoDir = this.resolveRepoDir(spaceId);
+		const fullDir = resolve(repoDir, safeDir);
+		if (!existsSync(fullDir) || !existsSync(join(repoDir, ".git"))) return [];
+		try {
+			const { stdout } = await this.runGit(repoDir, [
+				"ls-files",
+				"-z",
+				"--cached",
+				"--others",
+				"--exclude-standard",
+				"--",
+				safeDir,
+			]);
+			const prefix = `${safeDir}/`;
+			const entries: Array<{ path: string; sizeBytes: number }> = [];
+			for (const raw of stdout.split("\0")) {
+				const repoRel = raw.trim();
+				if (!repoRel || !repoRel.startsWith(prefix)) continue;
+				const subPath = repoRel.slice(prefix.length);
+				if (!subPath) continue;
+				try {
+					const st = await stat(resolve(repoDir, repoRel));
+					if (st.isFile()) {
+						entries.push({ path: subPath, sizeBytes: st.size });
+					}
+				} catch {
+					// File removed on disk
+				}
+			}
+			entries.sort((a, b) => {
+				if (a.path === "README.md") return -1;
+				if (b.path === "README.md") return 1;
+				return a.path.localeCompare(b.path);
+			});
+			return entries;
+		} catch {
+			return [];
+		}
+	}
+
+	async writeFolderFiles(input: {
+		spaceId: string;
+		dirPath: string;
+		files: Array<{ subPath: string; content: string }>;
+		authorName: string;
+		authorEmail: string;
+		commitMessage: string;
+		expectedCommit?: string | null;
+		allowEmpty?: boolean;
+	}): Promise<{ commitHash: string; committedAt: string }> {
+		const safeDir = normalizeSafeRepoFilePath(input.dirPath);
+		return this.enqueue(input.spaceId, async () => {
+			const repoDir = await this.ensureRepoUnlocked(input.spaceId);
+			if (input.expectedCommit !== undefined) {
+				const currentCommit = await this.getLatestFileCommitUnlocked(repoDir, safeDir);
+				if (currentCommit !== input.expectedCommit) {
+					throw new SpaceConflictError("资料已被修改，请重新加载后再保存", currentCommit);
+				}
+			}
+			for (const file of input.files) {
+				const safeSub = normalizeSafeRepoFilePath(file.subPath);
+				const fullPath = resolve(repoDir, safeDir, safeSub);
+				const rel = relative(resolve(repoDir, safeDir), fullPath);
+				if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+					throw new Error(`Sub-file path escapes entry directory: ${file.subPath}`);
+				}
+				await mkdir(dirname(fullPath), { recursive: true });
+				await writeFile(fullPath, file.content, "utf8");
+			}
+			// Respect entry-level .gitignore automatically by staging the directory path.
+			await this.runGit(repoDir, ["add", "-A", "--", safeDir]);
+
+			const status = await this.runGit(repoDir, ["status", "--porcelain", "--", safeDir]);
+			const hasChanges = Boolean(status.stdout.trim());
+			const currentCommit = await this.getLatestFileCommitUnlocked(repoDir, safeDir);
+
+			if (!hasChanges && currentCommit && !input.allowEmpty) {
+				const committedAt = (
+					await this.runGit(repoDir, ["show", "-s", "--format=%cI", currentCommit])
+				).stdout.trim();
+				return { commitHash: currentCommit, committedAt: committedAt || new Date().toISOString() };
+			}
+
+			const authorName = sanitizeGitIdentity(input.authorName, "Personal Agent");
+			const authorEmail = sanitizeGitIdentity(input.authorEmail, "agent@personal-agent.local");
+			const message = input.commitMessage.replace(/\r/g, "").trim() || `Update ${safeDir}`;
+			await this.runGit(repoDir, [
+				"-c",
+				`user.name=${authorName}`,
+				"-c",
+				`user.email=${authorEmail}`,
+				"commit",
+				...(hasChanges ? [] : ["--allow-empty"]),
+				"-m",
+				message,
+				...(hasChanges ? ["--", safeDir] : []),
+			]);
+			const headInfo = await this.runGit(repoDir, ["log", "-n", "1", "--format=%H%x1f%cI"]);
+			const [commitHash = "", committedAt = ""] = headInfo.stdout.trim().split("\x1f");
+			return { commitHash, committedAt: committedAt || new Date().toISOString() };
+		});
+	}
+
+	async deleteFolderFile(input: {
+		spaceId: string;
+		dirPath: string;
+		subPath: string;
+		authorName: string;
+		authorEmail: string;
+		commitMessage: string;
+	}): Promise<{ commitHash: string; committedAt: string }> {
+		const safeDir = normalizeSafeRepoFilePath(input.dirPath);
+		const safeSub = normalizeSafeRepoFilePath(input.subPath);
+		return this.enqueue(input.spaceId, async () => {
+			const repoDir = await this.ensureRepoUnlocked(input.spaceId);
+			const fullPath = resolve(repoDir, safeDir, safeSub);
+			const rel = relative(resolve(repoDir, safeDir), fullPath);
+			if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+				throw new Error(`Sub-file path escapes entry directory: ${input.subPath}`);
+			}
+			await rm(fullPath, { force: true });
+			await this.runGit(repoDir, ["add", "-A", "--", safeDir]);
+			const status = await this.runGit(repoDir, ["status", "--porcelain", "--", safeDir]);
+			const hasChanges = Boolean(status.stdout.trim());
+			const currentCommit = await this.getLatestFileCommitUnlocked(repoDir, safeDir);
+			if (!hasChanges && currentCommit) {
+				const committedAt = (
+					await this.runGit(repoDir, ["show", "-s", "--format=%cI", currentCommit])
+				).stdout.trim();
+				return { commitHash: currentCommit, committedAt: committedAt || new Date().toISOString() };
+			}
+			const authorName = sanitizeGitIdentity(input.authorName, "Personal Agent");
+			const authorEmail = sanitizeGitIdentity(input.authorEmail, "agent@personal-agent.local");
+			const message = input.commitMessage.replace(/\r/g, "").trim() || `Delete ${safeSub}`;
+			await this.runGit(repoDir, [
+				"-c",
+				`user.name=${authorName}`,
+				"-c",
+				`user.email=${authorEmail}`,
+				"commit",
+				...(hasChanges ? [] : ["--allow-empty"]),
+				"-m",
+				message,
+				...(hasChanges ? ["--", safeDir] : []),
+			]);
+			const headInfo = await this.runGit(repoDir, ["log", "-n", "1", "--format=%H%x1f%cI"]);
+			const [commitHash = "", committedAt = ""] = headInfo.stdout.trim().split("\x1f");
+			return { commitHash, committedAt: committedAt || new Date().toISOString() };
+		});
+	}
+
+	async promoteFileToFolder(input: {
+		spaceId: string;
+		oldFilePath: string;
+		dirPath: string;
+		defaultGitignore: string;
+		authorName: string;
+		authorEmail: string;
+		commitMessage: string;
+	}): Promise<{ commitHash: string; committedAt: string }> {
+		const safeOld = normalizeSafeRepoFilePath(input.oldFilePath);
+		const safeDir = normalizeSafeRepoFilePath(input.dirPath);
+		return this.enqueue(input.spaceId, async () => {
+			const repoDir = await this.ensureRepoUnlocked(input.spaceId);
+			const oldFull = resolve(repoDir, safeOld);
+			let existingContent = "";
+			try {
+				existingContent = await readFile(oldFull, "utf8");
+			} catch {
+				existingContent = "";
+			}
+			const targetDirFull = resolve(repoDir, safeDir);
+			await mkdir(targetDirFull, { recursive: true });
+			await writeFile(resolve(targetDirFull, "README.md"), existingContent, "utf8");
+			await writeFile(resolve(targetDirFull, ".gitignore"), input.defaultGitignore, "utf8");
+			await rm(oldFull, { force: true });
+			await this.runGit(repoDir, ["add", "-A", "--", safeOld, safeDir]);
+
+			const authorName = sanitizeGitIdentity(input.authorName, "Personal Agent");
+			const authorEmail = sanitizeGitIdentity(input.authorEmail, "agent@personal-agent.local");
+			const message = input.commitMessage.replace(/\r/g, "").trim() || `Convert ${safeOld} to folder entry`;
+			await this.runGit(repoDir, [
+				"-c",
+				`user.name=${authorName}`,
+				"-c",
+				`user.email=${authorEmail}`,
+				"commit",
+				"-m",
+				message,
+				"--",
+				safeOld,
+				safeDir,
+			]);
+			const headInfo = await this.runGit(repoDir, ["log", "-n", "1", "--format=%H%x1f%cI"]);
+			const [commitHash = "", committedAt = ""] = headInfo.stdout.trim().split("\x1f");
+			return { commitHash, committedAt: committedAt || new Date().toISOString() };
+		});
+	}
+
 	async listCommits(spaceId: string, filePath?: string, limit = 50): Promise<SpaceGitCommit[]> {
 		const repoDir = this.resolveRepoDir(spaceId);
 		if (!existsSync(join(repoDir, ".git"))) return [];
 		const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+		const safePath = filePath ? normalizeSafeRepoFilePath(filePath) : undefined;
+		let isDirectory = false;
+		if (safePath) {
+			try {
+				isDirectory = statSync(resolve(repoDir, safePath)).isDirectory();
+			} catch {
+				isDirectory = false;
+			}
+		}
 		const args = [
 			"log",
 			`-n`,
 			String(safeLimit),
 			"--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s%x1e",
-			...(filePath ? ["--follow", "--", normalizeSafeRepoFilePath(filePath)] : []),
+			...(safePath ? (isDirectory ? ["--", safePath] : ["--follow", "--", safePath]) : []),
 		];
 		try {
 			const { stdout } = await this.runGit(repoDir, args);

@@ -12,8 +12,22 @@ import { DEFAULT_LOCAL_ADMIN_USER_ID, DEFAULT_ORGANIZATION_ID, nowIso } from "./
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
 export type SpaceDocumentType = "plan" | "spec" | "decision" | "rule" | "note";
+export type SpaceEntryKind = "file" | "folder";
+
+export interface SpaceDocumentFile {
+	path: string;
+	sizeBytes: number;
+}
 
 export const SPACE_DOCUMENT_TYPES: readonly SpaceDocumentType[] = ["plan", "spec", "decision", "rule", "note"];
+
+export const DEFAULT_FOLDER_ENTRY_GITIGNORE = `# Entry-level ignore rules
+.DS_Store
+node_modules/
+*.log
+.env
+.env.*
+`;
 
 const SPACE_DOC_TYPE_DIRS: Record<SpaceDocumentType, string> = {
 	plan: "plans",
@@ -22,6 +36,20 @@ const SPACE_DOC_TYPE_DIRS: Record<SpaceDocumentType, string> = {
 	rule: "rules",
 	note: "notes",
 };
+
+export function normalizeSpaceEntryKind(value: unknown, fallback: SpaceEntryKind = "file"): SpaceEntryKind {
+	if (value === "folder") return "folder";
+	if (value === "file") return "file";
+	return fallback;
+}
+
+export function detectPreviewEntryPath(files: SpaceDocumentFile[]): string | null {
+	const paths = new Set(files.map((f) => f.path));
+	if (paths.has("index.html")) return "index.html";
+	if (paths.has("demo/index.html")) return "demo/index.html";
+	const anyHtml = files.find((f) => f.path.toLowerCase().endsWith(".html"));
+	return anyHtml ? anyHtml.path : null;
+}
 
 export function normalizeSpaceDocumentType(value: unknown, fallback: SpaceDocumentType = "note"): SpaceDocumentType {
 	if (typeof value !== "string") return fallback;
@@ -55,6 +83,7 @@ export interface SpaceDocument {
 	filePath: string;
 	title: string;
 	docType: SpaceDocumentType;
+	entryKind: SpaceEntryKind;
 	linkedOrgId: string | null;
 	linkedWorkspaceId: string | null;
 	linkedFilePath: string | null;
@@ -94,6 +123,7 @@ interface DocumentRow {
 	file_path: string;
 	title: string;
 	doc_type?: string | null;
+	entry_kind?: string | null;
 	linked_org_id: string | null;
 	linked_workspace_id: string | null;
 	linked_file_path: string | null;
@@ -131,6 +161,7 @@ function mapDocumentMeta(row: DocumentRow): SpaceDocumentMeta {
 		filePath: row.file_path,
 		title: row.title,
 		docType: normalizeSpaceDocumentType(row.doc_type),
+		entryKind: normalizeSpaceEntryKind(row.entry_kind),
 		linkedOrgId: row.linked_org_id ?? null,
 		linkedWorkspaceId: row.linked_workspace_id ?? null,
 		linkedFilePath: row.linked_file_path ?? null,
@@ -159,8 +190,16 @@ export function memberSpaceId(memberId: string): string {
 	return `spc_mem_${memberId}`;
 }
 
-function defaultDocFilePath(docId: string, docType: SpaceDocumentType = "note"): string {
-	return normalizeSafeRepoFilePath(`${SPACE_DOC_TYPE_DIRS[docType]}/${docId}.md`);
+function defaultDocFilePath(
+	docId: string,
+	docType: SpaceDocumentType = "note",
+	entryKind: SpaceEntryKind = "file",
+): string {
+	return normalizeSafeRepoFilePath(
+		entryKind === "folder"
+			? `${SPACE_DOC_TYPE_DIRS[docType]}/${docId}`
+			: `${SPACE_DOC_TYPE_DIRS[docType]}/${docId}.md`,
+	);
 }
 
 function defaultAuthorEmail(actorId: string): string {
@@ -501,8 +540,35 @@ export class SpaceRepo {
 	async getDocument(docId: string): Promise<SpaceDocument | null> {
 		const meta = this.getDocumentMeta(docId);
 		if (!meta) return null;
-		const content = (await this.git.readDocument(meta.spaceId, meta.filePath)) ?? "";
+		const entryFile = meta.entryKind === "folder" ? `${meta.filePath}/README.md` : meta.filePath;
+		const content = (await this.git.readDocument(meta.spaceId, entryFile)) ?? "";
 		return { ...meta, content };
+	}
+
+	async listDocumentFiles(
+		docId: string,
+	): Promise<{ files: SpaceDocumentFile[]; previewEntryPath: string | null } | null> {
+		const meta = this.getDocumentMeta(docId);
+		if (!meta) return null;
+		if (meta.entryKind !== "folder") {
+			return { files: [], previewEntryPath: null };
+		}
+		const files = await this.git.listDirectoryFiles(meta.spaceId, meta.filePath);
+		return { files, previewEntryPath: detectPreviewEntryPath(files) };
+	}
+
+	async readDocumentFile(docId: string, subPath: string): Promise<string | null> {
+		const meta = this.getDocumentMeta(docId);
+		if (!meta || meta.entryKind !== "folder") return null;
+		const safeSub = normalizeSafeRepoFilePath(subPath);
+		return this.git.readDocument(meta.spaceId, `${meta.filePath}/${safeSub}`);
+	}
+
+	async readDocumentFileRaw(docId: string, subPath: string): Promise<Buffer | null> {
+		const meta = this.getDocumentMeta(docId);
+		if (!meta || meta.entryKind !== "folder") return null;
+		const safeSub = normalizeSafeRepoFilePath(subPath);
+		return this.git.readRawFile(meta.spaceId, `${meta.filePath}/${safeSub}`);
 	}
 
 	async createDocument(input: {
@@ -510,6 +576,7 @@ export class SpaceRepo {
 		matterId?: string | null;
 		title: string;
 		docType?: SpaceDocumentType;
+		entryKind?: SpaceEntryKind;
 		content: string;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
@@ -524,25 +591,42 @@ export class SpaceRepo {
 		if (!space) throw new Error(`Space not found: ${input.spaceId}`);
 		const id = `doc_${randomUUID()}`;
 		const docType = normalizeSpaceDocumentType(input.docType);
-		const filePath = input.filePath ? normalizeSafeRepoFilePath(input.filePath) : defaultDocFilePath(id, docType);
+		const entryKind = normalizeSpaceEntryKind(input.entryKind);
+		const filePath = input.filePath
+			? normalizeSafeRepoFilePath(input.filePath)
+			: defaultDocFilePath(id, docType, entryKind);
 		const title = input.title.trim();
 		const linkedOrgId = input.linkedOrgId?.trim() || null;
 		const linkedWorkspaceId = input.linkedWorkspaceId?.trim() || null;
 		const linkedFilePath = input.linkedFilePath?.trim() || null;
 		const now = nowIso();
-		const { commitHash } = await this.git.writeDocument({
-			spaceId: space.id,
-			filePath,
-			content: input.content,
-			authorName: input.actorName || input.actorId,
-			authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
-			commitMessage: input.commitMessage || `Create ${title}`,
-			allowEmpty: true,
-		});
+		const { commitHash } =
+			entryKind === "folder"
+				? await this.git.writeFolderFiles({
+						spaceId: space.id,
+						dirPath: filePath,
+						files: [
+							{ subPath: "README.md", content: input.content },
+							{ subPath: ".gitignore", content: DEFAULT_FOLDER_ENTRY_GITIGNORE },
+						],
+						authorName: input.actorName || input.actorId,
+						authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+						commitMessage: input.commitMessage || `Create ${title}`,
+						allowEmpty: true,
+					})
+				: await this.git.writeDocument({
+						spaceId: space.id,
+						filePath,
+						content: input.content,
+						authorName: input.actorName || input.actorId,
+						authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+						commitMessage: input.commitMessage || `Create ${title}`,
+						allowEmpty: true,
+					});
 		this.db
 			.prepare(
-				`INSERT INTO space_documents (id, space_id, matter_id, file_path, title, doc_type, linked_org_id, linked_workspace_id, linked_file_path, head_commit, revision, created_by, updated_by, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+				`INSERT INTO space_documents (id, space_id, matter_id, file_path, title, doc_type, entry_kind, linked_org_id, linked_workspace_id, linked_file_path, head_commit, revision, created_by, updated_by, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -551,6 +635,7 @@ export class SpaceRepo {
 				filePath,
 				title,
 				docType,
+				entryKind,
 				linkedOrgId,
 				linkedWorkspaceId,
 				linkedFilePath,
@@ -568,6 +653,7 @@ export class SpaceRepo {
 			filePath,
 			title,
 			docType,
+			entryKind,
 			linkedOrgId,
 			linkedWorkspaceId,
 			linkedFilePath,
@@ -614,23 +700,36 @@ export class SpaceRepo {
 		const linkedFilePath =
 			input.linkedFilePath !== undefined ? input.linkedFilePath?.trim() || null : current.linkedFilePath;
 		const now = nowIso();
+		const metaChanged =
+			title !== current.title ||
+			docType !== current.docType ||
+			linkedOrgId !== current.linkedOrgId ||
+			linkedWorkspaceId !== current.linkedWorkspaceId ||
+			linkedFilePath !== current.linkedFilePath;
 		let commitHash: string;
 		try {
-			const committed = await this.git.writeDocument({
-				spaceId: current.spaceId,
-				filePath: current.filePath,
-				content: input.content,
-				authorName: input.actorName || input.actorId,
-				authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
-				commitMessage: input.commitMessage || `Update ${title}`,
-				expectedCommit: current.headCommit || null,
-				allowEmpty:
-					title !== current.title ||
-					docType !== current.docType ||
-					linkedOrgId !== current.linkedOrgId ||
-					linkedWorkspaceId !== current.linkedWorkspaceId ||
-					linkedFilePath !== current.linkedFilePath,
-			});
+			const committed =
+				current.entryKind === "folder"
+					? await this.git.writeFolderFiles({
+							spaceId: current.spaceId,
+							dirPath: current.filePath,
+							files: [{ subPath: "README.md", content: input.content }],
+							authorName: input.actorName || input.actorId,
+							authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+							commitMessage: input.commitMessage || `Update ${title}`,
+							expectedCommit: current.headCommit || null,
+							allowEmpty: metaChanged,
+						})
+					: await this.git.writeDocument({
+							spaceId: current.spaceId,
+							filePath: current.filePath,
+							content: input.content,
+							authorName: input.actorName || input.actorId,
+							authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+							commitMessage: input.commitMessage || `Update ${title}`,
+							expectedCommit: current.headCommit || null,
+							allowEmpty: metaChanged,
+						});
 			commitHash = committed.commitHash;
 		} catch (error) {
 			if (error instanceof SpaceConflictError) return null;
@@ -670,6 +769,144 @@ export class SpaceRepo {
 			revision: nextRevision,
 			updatedBy: input.actorId,
 			updatedAt: now,
+		};
+	}
+
+	async promoteDocumentToFolder(
+		docId: string,
+		input: { actorId: string; actorName?: string; actorEmail?: string; commitMessage?: string },
+	): Promise<SpaceDocument | null> {
+		const current = this.getDocumentMeta(docId);
+		if (!current) return null;
+		if (current.entryKind === "folder") {
+			return this.getDocument(docId);
+		}
+		const targetDir = defaultDocFilePath(current.id, current.docType, "folder");
+		const now = nowIso();
+		const { commitHash } = await this.git.promoteFileToFolder({
+			spaceId: current.spaceId,
+			oldFilePath: current.filePath,
+			dirPath: targetDir,
+			defaultGitignore: DEFAULT_FOLDER_ENTRY_GITIGNORE,
+			authorName: input.actorName || input.actorId,
+			authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+			commitMessage: input.commitMessage || `Convert ${current.title} to folder entry`,
+		});
+		const nextRevision = current.revision + 1;
+		this.db
+			.prepare(
+				`UPDATE space_documents
+				 SET file_path = ?, entry_kind = 'folder', head_commit = ?, revision = ?, updated_by = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(targetDir, commitHash, nextRevision, input.actorId, now, docId);
+		this.db.prepare("UPDATE spaces SET updated_at = ? WHERE id = ?").run(now, current.spaceId);
+		return this.getDocument(docId);
+	}
+
+	async writeDocumentFile(
+		docId: string,
+		input: {
+			subPath: string;
+			content: string;
+			actorId: string;
+			actorName?: string;
+			actorEmail?: string;
+			commitMessage?: string;
+		},
+	): Promise<{
+		document: SpaceDocument;
+		subPath: string;
+		files: SpaceDocumentFile[];
+		previewEntryPath: string | null;
+	} | null> {
+		let current = this.getDocumentMeta(docId);
+		if (!current) return null;
+		if (current.entryKind !== "folder") {
+			await this.promoteDocumentToFolder(docId, {
+				actorId: input.actorId,
+				actorName: input.actorName,
+				actorEmail: input.actorEmail,
+			});
+			current = this.getDocumentMeta(docId);
+			if (!current || current.entryKind !== "folder") return null;
+		}
+		const safeSub = normalizeSafeRepoFilePath(input.subPath);
+		const now = nowIso();
+		const { commitHash } = await this.git.writeFolderFiles({
+			spaceId: current.spaceId,
+			dirPath: current.filePath,
+			files: [{ subPath: safeSub, content: input.content }],
+			authorName: input.actorName || input.actorId,
+			authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+			commitMessage: input.commitMessage || `Update ${safeSub} in ${current.title}`,
+			allowEmpty: true,
+		});
+		const nextRevision = current.revision + 1;
+		this.db
+			.prepare(
+				`UPDATE space_documents
+				 SET head_commit = ?, revision = ?, updated_by = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(commitHash, nextRevision, input.actorId, now, docId);
+		this.db.prepare("UPDATE spaces SET updated_at = ? WHERE id = ?").run(now, current.spaceId);
+		const doc = await this.getDocument(docId);
+		if (!doc) return null;
+		const listed = await this.listDocumentFiles(docId);
+		return {
+			document: doc,
+			subPath: safeSub,
+			files: listed?.files ?? [],
+			previewEntryPath: listed?.previewEntryPath ?? null,
+		};
+	}
+
+	async deleteDocumentFile(
+		docId: string,
+		input: {
+			subPath: string;
+			actorId: string;
+			actorName?: string;
+			actorEmail?: string;
+			commitMessage?: string;
+		},
+	): Promise<{
+		document: SpaceDocument;
+		files: SpaceDocumentFile[];
+		previewEntryPath: string | null;
+	} | null> {
+		const current = this.getDocumentMeta(docId);
+		if (!current || current.entryKind !== "folder") return null;
+		const safeSub = normalizeSafeRepoFilePath(input.subPath);
+		if (safeSub === "README.md") {
+			throw new Error("不能删除目录条目的主入口文件 README.md");
+		}
+		const now = nowIso();
+		const { commitHash } = await this.git.deleteFolderFile({
+			spaceId: current.spaceId,
+			dirPath: current.filePath,
+			subPath: safeSub,
+			authorName: input.actorName || input.actorId,
+			authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
+			commitMessage: input.commitMessage || `Delete ${safeSub} from ${current.title}`,
+		});
+		const nextRevision = current.revision + 1;
+		this.db
+			.prepare(
+				`UPDATE space_documents
+				 SET head_commit = ?, revision = ?, updated_by = ?, updated_at = ?
+				 WHERE id = ?`,
+			)
+			.run(commitHash, nextRevision, input.actorId, now, docId);
+		this.db.prepare("UPDATE spaces SET updated_at = ? WHERE id = ?").run(now, current.spaceId);
+		const doc = await this.getDocument(docId);
+		if (!doc) return null;
+		const listed = await this.listDocumentFiles(docId);
+		return {
+			document: doc,
+			files: listed?.files ?? [],
+			previewEntryPath: listed?.previewEntryPath ?? null,
 		};
 	}
 

@@ -16,7 +16,7 @@
 
 - **默认空间路由**：私密事项 → 发起人的 `user` 个人空间；非私密且绑定仓库的事项 → 该仓库的 `workspace` 空间；非私密未绑定仓库的事项 → 该组织的 `org` 空间。
 - **过程资料写入 Git**：用户手动新建/编辑、或主责岗位调用 `save_space_page` 写入的文档，均直接提交到目标空间的 Git 仓库并生成标准 commit 与 unified diff；编辑时校验基线修订号/提交号，冲突返回 `409` 并保留草稿。
-- **五类协作语义类型（`docType`）与子目录存储**：空间文档不按办公媒介切分，而是按协作语义分为 `plan`（方案）、`spec`（规格）、`decision`（决策）、`rule`（规范）与 `note`（资料，默认）。新建文档在对应空间的 Git 仓库内自动落入 `plans/`、`specs/`、`decisions/`、`rules/`、`notes/` 子目录（旧 `pages/` 文档原位兼容，修改类型时不强行搬迁文件以保持单文件 `git log` 连续）；前端提供空间内按类型筛选与跨空间「最近修改」视图，对话卡片仅对 `plan` 类型的最新一轮结果展示「确认并推进」。
+- **五类协作语义类型（`docType`）与单文件/目录条目（`entryKind`）**：空间文档按协作语义分为 `plan`（方案）、`spec`（规格）、`decision`（决策）、`rule`（规范）与 `note`（资料，默认），每个条目支持 **单文件（`file`）** 与 **目录条目（`folder`）** 两种形态。新建单文件落入 `<typeDir>/<docId>.md`；目录条目落入 `<typeDir>/<docId>/`（默认包含入口 `README.md` 与条目级 `.gitignore`，可存放多个参考子文档或静态演示站点 `demo/index.html` 并经受控路由 `/api/spaces/documents/:docId/preview/*` 预览；单文件也可一键转为目录条目）。AI 工具 `save_space_page` / `read_space` 支持可选 `subPath` 读写子文件，前端提供空间内类型筛选与跨空间「最近修改」视图，对话卡片仅对 `plan` 类型的最新一轮结果展示「确认并推进」。
 - **关联仓库文件或链接**：`space_documents` 通过可选的 `(linked_org_id, linked_workspace_id, linked_file_path)` 字段记录文档对应的组织、仓库与相对路径（或外部链接）。业务代码仓本身的 `write` / `edit` 变更留在业务仓 Git 与事项事件中，空间不额外维护引用表，也不把业务仓正文双写进空间仓库。
 
 ## 经验复盘与后续路线
