@@ -49,6 +49,7 @@ export function SpacePages({
 
 	const [editing, setEditing] = useState(false);
 	const [creatingSpace, setCreatingSpace] = useState(false);
+	const [expandedEmptyGroups, setExpandedEmptyGroups] = useState<Record<string, boolean>>({});
 	const [newSpaceName, setNewSpaceName] = useState("");
 	const [newSpaceDesc, setNewSpaceDesc] = useState("");
 	const [newSpaceVisibility, setNewSpaceVisibility] = useState<SpaceVisibility>("org");
@@ -373,12 +374,19 @@ export function SpacePages({
 
 					<div className="space-nav-groups">
 						{SPACE_KIND_SECTIONS.map(({ kind, label }) => {
-							const group = spaces.filter((s) => s.kind === kind);
+							const group = spaces
+								.filter((s) => s.kind === kind)
+								.sort((a, b) => b.documentCount - a.documentCount || b.updatedAt.localeCompare(a.updatedAt));
 							if (group.length === 0) return null;
+							const nonEmpty = group.filter((s) => s.documentCount > 0 || s.id === selectedSpaceId);
+							const empty = group.filter((s) => s.documentCount === 0 && s.id !== selectedSpaceId);
+							const shouldFoldEmpty = spaces.length > 8 && empty.length > 0 && !expandedEmptyGroups[kind];
+							const shown = shouldFoldEmpty ? (nonEmpty.length > 0 ? nonEmpty : empty.slice(0, 2)) : group;
+							const hiddenCount = group.length - shown.length;
 							return (
 								<div key={kind} className="space-nav-group">
 									<div className="space-nav-group-label">{label}</div>
-									{group.map((space) => (
+									{shown.map((space) => (
 										<button
 											type="button"
 											key={space.id}
@@ -396,6 +404,24 @@ export function SpacePages({
 											</span>
 										</button>
 									))}
+									{hiddenCount > 0 && (
+										<button
+											type="button"
+											className="space-nav-more"
+											onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: true }))}
+										>
+											展开其余 {hiddenCount} 个空空间
+										</button>
+									)}
+									{!shouldFoldEmpty && spaces.length > 8 && empty.length > 0 && expandedEmptyGroups[kind] && (
+										<button
+											type="button"
+											className="space-nav-more"
+											onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: false }))}
+										>
+											收起空空间
+										</button>
+									)}
 								</div>
 							);
 						})}

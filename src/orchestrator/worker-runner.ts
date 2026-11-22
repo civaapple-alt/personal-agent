@@ -260,11 +260,30 @@ export async function executeWithWorkerPass(
 					throw new Error("This worker cannot access space pages");
 				const currentMatter = deps.requireMatter(input.matterId);
 				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
-				if (!call.pageId)
+				if (!call.pageId) {
+					const availableSpaces = deps.store.spaces
+						.listSpaces()
+						.filter((space) => {
+							if (space.id === targetSpace.id) return true;
+							if (space.kind === "org") return space.orgId === activeOrgId;
+							if (space.kind === "workspace") return space.workspaceId === currentMatter.workspaceId;
+							if (space.kind === "member") return space.memberId === input.member.id;
+							if (space.kind === "custom" && space.visibility === "org") return space.orgId === activeOrgId;
+							return false;
+						})
+						.map((space) => ({
+							id: space.id,
+							name: space.name,
+							kind: space.kind,
+							documentCount: space.documentCount,
+							isDefaultForMatter: space.id === targetSpace.id,
+						}));
 					return {
 						space: { id: targetSpace.id, name: targetSpace.name, kind: targetSpace.kind },
+						availableSpaces,
 						pages: deps.store.spaces.listDocuments({ spaceId: targetSpace.id }),
 					};
+				}
 				const doc = await deps.store.spaces.getDocument(call.pageId);
 				if (!doc || doc.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
 				return { page: doc };

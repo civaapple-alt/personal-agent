@@ -754,6 +754,18 @@
 	color: var(--text-muted);
 	flex-shrink: 0;
 }
+.space-nav-more {
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--text-micro);
+	text-align: left;
+	padding: 4px 10px;
+	cursor: pointer;
+}
+.space-nav-more:hover {
+	color: var(--text-primary);
+}
 .space-docs-col {
 	border-right: 1px solid var(--border);
 	padding-right: 16px;

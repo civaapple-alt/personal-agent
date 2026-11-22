@@ -515,7 +515,7 @@ export function ChatStage({
 				moreMenuOpen={moreMenuOpen}
 				pendingMatterMemoriesCount={pendingMatterMemoriesCount}
 				matterMemoriesCount={matterMemories.length}
-				deliverablesCount={deliverableSeries.length}
+				deliverablesCount={matterDetail?.spaceDocuments?.length ?? 0}
 				headerHumansBtnRef={headerHumansBtnRef}
 				moreMenuWrapRef={moreMenuWrapRef}
 				onToggleRoster={() => {

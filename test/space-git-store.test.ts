@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { canAccessSpace, canWriteSpace } from "../src/server/acl.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { memberSpaceId, orgSpaceId, userSpaceId, workspaceSpaceId } from "../src/storage/repos/space-repo.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
@@ -161,6 +162,34 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.equal(migratedDoc.spaceId, wsSpace.id);
 		assert.equal(migratedDoc.content, "来自旧表的正文");
 		assert.equal(await store.spaces.migrateLegacySpacePages(), 0);
+
+		// Personal user spaces and private custom spaces are strictly isolated to their owner (even from super_admin)
+		const bob = store.createUser({
+			email: "bob@example.com",
+			password: "password123",
+			displayName: "Bob",
+			status: "active",
+		});
+		store.spaces.ensureAllDefaultSpaces();
+		const bobSpace = store.spaces.getSpace(userSpaceId(bob.id));
+		const adminSpace = store.spaces.getSpace(userSpaceId(admin.id));
+		const superAdminActor = {
+			authKind: "session" as const,
+			viaToken: false,
+			user: { ...admin, platformRole: "super_admin" as const, status: "active" as const },
+			collaborator: store.ensureOwnerCollaborator("Alice"),
+		};
+		const bobActor = {
+			authKind: "session" as const,
+			viaToken: false,
+			user: bob,
+			collaborator: store.ensureOwnerCollaborator("Bob"),
+		};
+		assert.equal(canAccessSpace(store, superAdminActor, adminSpace), true);
+		assert.equal(canAccessSpace(store, superAdminActor, bobSpace), false);
+		assert.equal(canWriteSpace(store, superAdminActor, bobSpace), false);
+		assert.equal(canAccessSpace(store, bobActor, bobSpace), true);
+		assert.equal(canWriteSpace(store, bobActor, bobSpace), true);
 	} finally {
 		db.close();
 		await rm(spacesDir, { recursive: true, force: true });

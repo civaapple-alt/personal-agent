@@ -436,6 +436,21 @@ export function canAccessSpace(
 ): boolean {
 	if (!actor || !space) return false;
 	if (actor.user && actor.user.status !== "active") return false;
+
+	// User personal spaces and private custom spaces are strictly scoped to their owner (even for super_admin).
+	if (space.kind === "user") {
+		if (actor.user) return space.ownerUserId === actor.user.id;
+		if (actor.authKind === "loopback") return space.ownerUserId === "usr_local_owner";
+		return false;
+	}
+	if (space.kind === "custom" && space.visibility === "private") {
+		if (actor.user) return space.ownerUserId === actor.user.id || space.createdBy === actor.user.id;
+		if (actor.authKind === "loopback") {
+			return space.ownerUserId === "usr_local_owner" || space.createdBy === "usr_local_owner";
+		}
+		return false;
+	}
+
 	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
 
 	if (space.kind === "org") {
@@ -445,21 +460,10 @@ export function canAccessSpace(
 		const workspace = space.workspaceId ? store.getWorkspace(space.workspaceId) : null;
 		return canAccessWorkspace(store, actor, workspace);
 	}
-	if (space.kind === "user") {
-		if (actor.user && space.ownerUserId === actor.user.id) return true;
-		return false;
-	}
 	if (space.kind === "member") {
 		const member = space.memberId ? store.getMember(space.memberId) : null;
 		if (!member) return false;
 		return canActorUseMember(store, actor, member);
-	}
-	// custom space
-	if (space.visibility === "private") {
-		if (actor.user && (space.ownerUserId === actor.user.id || space.createdBy === actor.user.id)) {
-			return true;
-		}
-		return false;
 	}
 	return space.orgId ? canAccessOrganization(store, actor, space.orgId) : true;
 }
@@ -471,11 +475,22 @@ export function canWriteSpace(
 ): boolean {
 	if (!actor || !space) return false;
 	if (!canAccessSpace(store, actor, space)) return false;
-	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
 
 	if (space.kind === "user") {
-		return Boolean(actor.user && space.ownerUserId === actor.user.id);
+		if (actor.user) return space.ownerUserId === actor.user.id;
+		if (actor.authKind === "loopback") return space.ownerUserId === "usr_local_owner";
+		return false;
 	}
+	if (space.kind === "custom" && space.visibility === "private") {
+		if (actor.user) return space.ownerUserId === actor.user.id || space.createdBy === actor.user.id;
+		if (actor.authKind === "loopback") {
+			return space.ownerUserId === "usr_local_owner" || space.createdBy === "usr_local_owner";
+		}
+		return false;
+	}
+
+	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
+
 	if (space.kind === "org") {
 		return getActorOrgRole(store, actor, space.orgId) !== "org_viewer";
 	}
@@ -493,10 +508,6 @@ export function canWriteSpace(
 			return getActorOrgRole(store, actor, member.ownerOrgId) !== "org_viewer";
 		}
 		return !isViewerInAllOrgsOrTarget(store, actor);
-	}
-	// custom space
-	if (space.visibility === "private") {
-		return Boolean(actor.user && (space.ownerUserId === actor.user.id || space.createdBy === actor.user.id));
 	}
 	return space.orgId
 		? getActorOrgRole(store, actor, space.orgId) !== "org_viewer"
