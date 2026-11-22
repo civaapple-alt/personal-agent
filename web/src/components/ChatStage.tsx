@@ -20,8 +20,10 @@ import type {
 	WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers } from "../architectApi.ts";
+import { useActiveClarification } from "../hooks/useActiveClarification.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
+import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
 import { groupDeliverableSeries } from "../utils/deliverableSeries.ts";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import {
@@ -234,53 +236,15 @@ export function ChatStage({
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-	const [openSideDocIds, setOpenSideDocIds] = useState<string[]>([]);
-	const [activeSideDocId, setActiveSideDocId] = useState<string | null>(null);
-	const [sideDocAutoDiff, setSideDocAutoDiff] = useState(false);
-
-	useEffect(() => {
-		void selectedMatterId;
-		setOpenSideDocIds([]);
-		setActiveSideDocId(null);
-		setSideDocAutoDiff(false);
-	}, [selectedMatterId]);
-
-	const openSideDoc = (docId: string, options?: { showDiff?: boolean }) => {
-		setOpenSideDocIds((prev) => (prev.includes(docId) ? prev : [...prev, docId]));
-		setActiveSideDocId(docId);
-		setSideDocAutoDiff(Boolean(options?.showDiff));
+	const handleSideDocOpened = useCallback(() => {
 		setCollabMatterId(null);
 		collabTriggerRef.current = null;
-	};
-
-	const closeSideDoc = (docId: string) => {
-		setOpenSideDocIds((prev) => {
-			const next = prev.filter((id) => id !== docId);
-			setActiveSideDocId((current) => (current === docId ? (next[next.length - 1] ?? null) : current));
-			return next;
-		});
-	};
-
-	const closeSidePane = () => {
-		setOpenSideDocIds([]);
-		setActiveSideDocId(null);
-		setSideDocAutoDiff(false);
-	};
-
-	const docTitlesById = useMemo(() => {
-		const map = new Map<string, string>();
-		for (const doc of matterDetail?.spaceDocuments ?? []) {
-			map.set(doc.id, doc.title);
-		}
-		for (const msg of matterDetail?.userMessages ?? []) {
-			if (Array.isArray(msg.metadata?.spaceDocuments)) {
-				for (const item of msg.metadata.spaceDocuments as Array<{ id?: string; title?: string }>) {
-					if (item.id && item.title) map.set(item.id, item.title);
-				}
-			}
-		}
-		return map;
-	}, [matterDetail]);
+	}, []);
+	const sideDocs = useMatterSideDocs({
+		selectedMatterId,
+		matterDetail,
+		onOpened: handleSideDocOpened,
+	});
 
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
@@ -538,34 +502,19 @@ export function ChatStage({
 		}
 	}
 
-	const activeFloatingClarification = useMemo(() => {
-		if (!matterDetail) return null;
-		const orgRole = organizations.find((o) => o.id === matterDetail.matter.orgId)?.orgRole;
-		const canParticipate = isSuperAdmin || orgRole !== "org_viewer";
-		if (!canParticipate) return null;
-		for (let i = matterDetail.userMessages.length - 1; i >= 0; i -= 1) {
-			const msg = matterDetail.userMessages[i]!;
-			const decision = readHumanDecision(msg.metadata);
-			if (!decision || decision.status !== "pending") continue;
-			if (!isCurrentHumanDecision(msg, decision, matterDetail.matter, matterDetail.userMessages.slice(i + 1))) {
-				continue;
-			}
-			const canAnswer = decision.assignedUserId
-				? accountUser?.id === decision.assignedUserId
-				: canManageMatter && (accountUser != null || currentUser?.permissionRole === "owner");
-			if (!canAnswer) continue;
-			return {
-				messageId: msg.id,
-				decision,
-				requestedBy: memberName(msg.senderId),
-			};
-		}
-		return null;
-	}, [matterDetail, organizations, isSuperAdmin, accountUser, canManageMatter, currentUser, memberName]);
+	const activeFloatingClarification = useActiveClarification({
+		matterDetail,
+		organizations,
+		isSuperAdmin,
+		accountUser,
+		canManageMatter,
+		currentUser,
+		memberName,
+	});
 
 	return (
 		<div
-			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${activeSideDocId ? " has-doc-pane" : ""}`}
+			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${sideDocs.activeDocId ? " has-doc-pane" : ""}`}
 		>
 			<div className="chat-stage-main">
 				<ChatStageHeader
@@ -659,7 +608,7 @@ export function ChatStage({
 							deliverableSeries={deliverableSeries}
 							onOpenDeliverable={(targetId) => {
 								if (targetId && (targetId.startsWith("doc_") || targetId.startsWith("page_"))) {
-									openSideDoc(targetId);
+									sideDocs.openDoc(targetId);
 								} else {
 									onOpenDeliverables(targetId);
 								}
@@ -774,7 +723,7 @@ export function ChatStage({
 					onOpenLightbox={setLightboxImage}
 					onPreviewFile={openFilePreview}
 					onOpenDeliverables={onOpenDeliverables}
-					onOpenSideDoc={openSideDoc}
+					onOpenSideDoc={sideDocs.openDoc}
 					onApproveAiRequest={onApproveAiRequest}
 					onDismissAiRequest={onDismissAiRequest}
 					onApplyRoleProposals={onApplyRoleProposals}
@@ -879,20 +828,17 @@ export function ChatStage({
 					onNotice={onNotice}
 				/>
 			</div>
-			{activeSideDocId && (
+			{sideDocs.activeDocId && (
 				<MatterDocSidePane
-					openDocIds={openSideDocIds}
-					activeDocId={activeSideDocId}
-					autoExpandDiff={sideDocAutoDiff}
-					docTitlesById={docTitlesById}
+					openDocIds={sideDocs.openDocIds}
+					activeDocId={sideDocs.activeDocId}
+					autoExpandDiff={sideDocs.autoDiff}
+					docTitlesById={sideDocs.docTitlesById}
 					workspaces={workspaces}
 					memberName={memberName}
-					onSelectDoc={(docId) => {
-						setActiveSideDocId(docId);
-						setSideDocAutoDiff(false);
-					}}
-					onCloseDoc={closeSideDoc}
-					onClosePane={closeSidePane}
+					onSelectDoc={sideDocs.selectDoc}
+					onCloseDoc={sideDocs.closeDoc}
+					onClosePane={sideDocs.closePane}
 					onOpenFullSpace={(docId) => onOpenDeliverables(docId)}
 				/>
 			)}

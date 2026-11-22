@@ -43,6 +43,7 @@ import { HumanDecisionCard } from "./HumanDecisionCard.tsx";
 import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
 import type { DelegationScope, DelegationView } from "./MatterDelegationPanel.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
+import { type ChatSpaceDocumentItem, SpaceDocumentCard } from "./SpaceDocumentCard.tsx";
 
 interface MessageFeedProps {
 	onOpenDemo?: () => void;
@@ -656,67 +657,27 @@ export function MessageFeed({
 										/>
 									)}
 									{Array.isArray(msg.metadata?.spaceDocuments) &&
-										(
-											msg.metadata.spaceDocuments as Array<{
-												id: string;
-												spaceId: string;
-												title: string;
-												revision: number;
-												headCommit?: string;
-												summary?: string;
-											}>
-										).map((doc) => {
+										(msg.metadata.spaceDocuments as ChatSpaceDocumentItem[]).map((doc) => {
 											const isLatestMessage =
 												Boolean(matterDetail) && messageIndex === matterDetail!.userMessages.length - 1;
 											const canProceed =
 												isLatestMessage && !isTurnRunning && isOwner && Boolean(onSendQuickPrompt);
-											const openDoc = (showDiff = false) => {
-												if (onOpenSideDoc) onOpenSideDoc(doc.id, { showDiff });
-												else onOpenDeliverables(doc.id);
-											};
 											return (
-												<div key={doc.id} className="space-doc-card">
-													<button
-														type="button"
-														className="space-doc-card-main"
-														onClick={() => openDoc(false)}
-													>
-														<div className="space-doc-card-head">
-															<span className="space-doc-card-icon" aria-hidden="true">
-																📄
-															</span>
-															<strong className="space-doc-card-title">{doc.title}</strong>
-															<span className="space-doc-card-rev">
-																rev {doc.revision}
-																{doc.headCommit ? ` · ${doc.headCommit.slice(0, 7)}` : ""}
-															</span>
-														</div>
-														{doc.summary && <p className="space-doc-card-summary">{doc.summary}</p>}
-													</button>
-													<div className="space-doc-card-actions">
-														{canProceed && (
-															<button
-																type="button"
-																className="btn-pill-dark btn-xs space-doc-proceed-btn"
-																onClick={() =>
-																	void onSendQuickPrompt?.(
-																		`确认「${doc.title}」(rev ${doc.revision})，请按此方案继续推进。`,
-																	)
-																}
-															>
-																确认并推进
-															</button>
-														)}
-														{doc.revision > 1 && (
-															<button type="button" className="btn-inline" onClick={() => openDoc(true)}>
-																查看变更
-															</button>
-														)}
-														<button type="button" className="btn-inline" onClick={() => openDoc(false)}>
-															在右侧打开
-														</button>
-													</div>
-												</div>
+												<SpaceDocumentCard
+													key={doc.id}
+													doc={doc}
+													canProceed={canProceed}
+													onOpen={(showDiff) =>
+														onOpenSideDoc
+															? onOpenSideDoc(doc.id, { showDiff })
+															: onOpenDeliverables(doc.id)
+													}
+													onProceed={() =>
+														void onSendQuickPrompt?.(
+															`确认「${doc.title}」(rev ${doc.revision})，请按此方案继续推进。`,
+														)
+													}
+												/>
 											);
 										})}
 									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
