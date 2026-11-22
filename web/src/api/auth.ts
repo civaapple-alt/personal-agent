@@ -88,13 +88,6 @@ export function loginWithEmail(input: { email: string; password: string; inviteT
 	});
 }
 
-export function loginWithInviteToken(token: string): Promise<{ ok: boolean; currentUser: CollaboratorDto }> {
-	return requestJson("/api/auth/login", {
-		method: "POST",
-		body: JSON.stringify({ token }),
-	});
-}
-
 export function changeAccountPassword(input: {
 	currentPassword: string;
 	newPassword: string;

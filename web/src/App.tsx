@@ -934,7 +934,6 @@ export function App() {
 							currentUser={currentUser}
 							accountUser={accountUser}
 							isSuperAdmin={isSuperAdmin}
-							collaborators={bootstrap?.collaborators ?? []}
 							organizations={bootstrap?.organizations ?? []}
 							workspaces={bootstrap?.workspaces ?? []}
 							members={bootstrap?.members ?? []}
@@ -944,8 +943,6 @@ export function App() {
 							selectedOrgId={effectiveOrgIdForScope}
 							onOpenSpace={(spaceId) => navigateRoute({ tab: "deliverables", spacePageId: spaceId })}
 							onOpenWorkspaces={() => navigateRoute({ tab: "materials" })}
-							onPreviewAsCollaborator={(token) => void auth.handleInviteLogin(token)}
-							onRestoreOwner={() => void handleLogoutOrRestore()}
 							onRefresh={refreshBootstrap}
 							onNotice={(msg) => setNoticeBanner(msg)}
 							onError={(msg) => setErrorBanner(msg)}

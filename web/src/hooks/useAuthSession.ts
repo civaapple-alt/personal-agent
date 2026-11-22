@@ -4,7 +4,6 @@ import {
 	fetchAuthSession,
 	fetchOrgInvitePreview,
 	loginWithEmail,
-	loginWithInviteToken,
 	logoutAuthSession,
 	type OrgInvitePreviewDto,
 	type RegistrationMode,
@@ -56,8 +55,6 @@ export function useAuthSession({
 }: AuthSessionOptions) {
 	const initialInviteToken = useMemo(() => extractInitialInviteToken(), []);
 	const initialOrgInvite = initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
-	const initialLegacyInvite =
-		initialInviteToken && !initialInviteToken.startsWith("orginv_") ? initialInviteToken : "";
 	const [authStatus, setAuthStatus] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 	const [permissionRequired, setPermissionRequired] = useState(true);
 	const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
@@ -69,8 +66,7 @@ export function useAuthSession({
 	const [invitePreview, setInvitePreview] = useState<OrgInvitePreviewDto | null>(null);
 	const [showInviteSwitchModal, setShowInviteSwitchModal] = useState(false);
 	const [inviteActionBusy, setInviteActionBusy] = useState(false);
-	const [authPreferredTab, setAuthPreferredTab] = useState<"login" | "register" | "legacy_token" | null>(null);
-	const [authTokenInput, setAuthTokenInput] = useState(initialLegacyInvite);
+	const [authPreferredTab, setAuthPreferredTab] = useState<"login" | "register" | null>(null);
 	const [authError, setAuthError] = useState<string | null>(null);
 	const [currentUserOverride, setCurrentUserOverride] = useState<CollaboratorDto | null>(null);
 
@@ -126,34 +122,6 @@ export function useAuthSession({
 	useEffect(() => {
 		let cancelled = false;
 		const initSession = async () => {
-			if (initialLegacyInvite) {
-				try {
-					const loginRes = await loginWithInviteToken(initialLegacyInvite);
-					if (cancelled) return;
-					setCurrentUserOverride(loginRes.currentUser);
-					const cleanHash = window.location.hash.includes("invite=") ? "#chats" : window.location.hash || "#chats";
-					window.history.replaceState(null, "", `${window.location.pathname}${cleanHash}`);
-					setAuthStatus("authenticated");
-					await refreshBootstrap();
-					return;
-				} catch (err: unknown) {
-					if (cancelled) return;
-					setAuthError(err instanceof Error ? err.message : "邀请链接无效或已失效，请重新向所有者获取");
-					setAuthStatus("unauthenticated");
-					void fetchAuthSession()
-						.then((s) => {
-							if (!cancelled) {
-								applyEditionState(s.requireAuth);
-								setPermissionRequired(s.permissionRequired);
-								setNeedsAdminSetup(Boolean(s.needsAdminSetup));
-								setPendingApproval(Boolean(s.pendingApproval));
-								setRegistrationMode(s.registrationMode ?? "open_review");
-							}
-						})
-						.catch(() => {});
-					return;
-				}
-			}
 			try {
 				if (initialOrgInvite) {
 					void fetchOrgInvitePreview(initialOrgInvite)
@@ -176,14 +144,7 @@ export function useAuthSession({
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		applyEditionState,
-		initialLegacyInvite,
-		initialOrgInvite,
-		refreshBootstrap,
-		setErrorBanner,
-		syncSessionAndBootstrap,
-	]);
+	}, [initialOrgInvite, setErrorBanner, syncSessionAndBootstrap]);
 
 	const handleSetupAdmin = async (input: { email: string; password: string; displayName: string }) => {
 		setAuthError(null);
@@ -305,21 +266,6 @@ export function useAuthSession({
 		}
 	};
 
-	const handleInviteLogin = async (tokenValue: string) => {
-		const token = tokenValue.trim();
-		if (!token) return;
-		setAuthError(null);
-		try {
-			const res = await loginWithInviteToken(token);
-			setCurrentUserOverride(res.currentUser);
-			setAuthTokenInput("");
-			setAuthStatus("authenticated");
-			await refreshBootstrap();
-		} catch (err: unknown) {
-			setAuthError(err instanceof Error ? err.message : "邀请口令无效");
-		}
-	};
-
 	const handleLogoutOrRestore = async () => {
 		const effectiveKind = bootstrapAuthKind ?? authKind;
 		try {
@@ -342,17 +288,9 @@ export function useAuthSession({
 			setPermissionRequired(session.permissionRequired);
 			setNeedsAdminSetup(Boolean(session.needsAdminSetup));
 			setRegistrationMode(session.registrationMode ?? "open_review");
-			// If exiting a legacy LAN guest preview on localhost, seamlessly restore the host owner view.
-			if (effectiveKind === "legacy_token" && session.authenticated && session.currentUser) {
-				setAuthKind(session.authKind ?? "loopback");
-				setCurrentUserOverride(session.currentUser);
-				await refreshBootstrap();
-				setNoticeBanner(`已结束协同体验，恢复本机所有者「${session.currentUser.name}」`);
-			} else {
-				setCurrentUserOverride(null);
-				onClearBootstrap();
-				setAuthStatus("unauthenticated");
-			}
+			setCurrentUserOverride(null);
+			onClearBootstrap();
+			setAuthStatus("unauthenticated");
 		} catch (err: unknown) {
 			setErrorBanner(err instanceof Error ? err.message : String(err));
 		}
@@ -380,7 +318,6 @@ export function useAuthSession({
 		setPermissionRequired,
 		applyRevokedSession,
 		handleLogoutOrRestore,
-		handleInviteLogin,
 		gateProps: {
 			permissionRequired,
 			needsAdminSetup,
@@ -388,12 +325,9 @@ export function useAuthSession({
 			registrationMode,
 			accountUser: sessionAccountUser,
 			authError,
-			authTokenInput,
 			orgInviteToken: activeOrgInviteToken,
 			invitePreview,
 			preferredTab: authPreferredTab,
-			onTokenInputChange: setAuthTokenInput,
-			onSubmitInvite: (token: string) => void handleInviteLogin(token),
 			onSetupAdmin: handleSetupAdmin,
 			onLoginEmail: handleLoginEmail,
 			onRegisterEmail: handleRegisterEmail,

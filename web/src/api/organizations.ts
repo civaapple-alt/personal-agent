@@ -265,39 +265,3 @@ export function updateOrgAiRoles(
 		}),
 	});
 }
-
-export function createCollaborator(input: {
-	id?: string;
-	name: string;
-	roleTitle?: string;
-	permissionRole?: CollaboratorRole;
-	orgId?: string | null;
-}): Promise<{ collaborator: CollaboratorDto }> {
-	return requestJson("/api/collaborators", {
-		method: "POST",
-		body: JSON.stringify(input),
-	});
-}
-
-export function updateCollaborator(
-	id: string,
-	input: { name?: string; roleTitle?: string; permissionRole?: CollaboratorRole; orgId?: string | null },
-): Promise<{ collaborator: CollaboratorDto }> {
-	return requestJson(`/api/collaborators/${encodeURIComponent(id)}`, {
-		method: "PATCH",
-		body: JSON.stringify(input),
-	});
-}
-
-export function regenerateCollaboratorToken(id: string): Promise<{ collaborator: CollaboratorDto }> {
-	return requestJson(`/api/collaborators/${encodeURIComponent(id)}/regenerate-token`, {
-		method: "POST",
-		body: "{}",
-	});
-}
-
-export function deleteCollaborator(id: string): Promise<{ ok: boolean }> {
-	return requestJson(`/api/collaborators/${encodeURIComponent(id)}`, {
-		method: "DELETE",
-	});
-}

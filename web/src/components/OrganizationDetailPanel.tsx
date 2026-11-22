@@ -4,7 +4,6 @@ import { organizationRoleModel } from "../api/organizations.ts";
 import {
 	type AccountUserDto,
 	addOrgMember,
-	type CollaboratorDto,
 	createOrgInvite,
 	fetchOrgInvites,
 	type OrganizationAiRoleConfigDto,
@@ -23,7 +22,6 @@ import {
 import { copyTextToClipboard } from "../clipboard.ts";
 import { formatMemberGitIdentity } from "../utils.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
-import { CollaboratorsSection } from "./team/CollaboratorsSection.tsx";
 
 export const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -34,7 +32,6 @@ export const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 
 interface OrganizationDetailPanelProps {
 	organization: OrganizationDto;
-	organizations: OrganizationDto[];
 	workspaces: WorkspaceDto[];
 	businessMembers: TeamMemberDto[];
 	orgMembers: OrganizationMemberDto[];
@@ -42,13 +39,9 @@ interface OrganizationDetailPanelProps {
 	isOwner: boolean;
 	isSuperAdmin: boolean;
 	accountUser: AccountUserDto | null;
-	currentUser: CollaboratorDto | null;
-	collaborators: CollaboratorDto[];
 	onEditOrg: (org: OrganizationDto) => void;
 	onOpenSpace?: (spaceId: string) => void;
 	onOpenWorkspaces?: () => void;
-	onPreviewAsCollaborator?: (token: string) => void;
-	onRestoreOwner?: () => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -57,7 +50,6 @@ interface OrganizationDetailPanelProps {
 /** Inline detail panel for a single organization: human members & invites, AI role activation & primary contact, and linked workspaces. */
 export function OrganizationDetailPanel({
 	organization,
-	organizations,
 	workspaces,
 	businessMembers,
 	orgMembers,
@@ -65,13 +57,9 @@ export function OrganizationDetailPanel({
 	isOwner,
 	isSuperAdmin,
 	accountUser,
-	currentUser,
-	collaborators,
 	onEditOrg,
 	onOpenSpace,
 	onOpenWorkspaces,
-	onPreviewAsCollaborator,
-	onRestoreOwner,
 	onRefresh,
 	onNotice,
 	onError,
@@ -521,20 +509,6 @@ export function OrganizationDetailPanel({
 								</div>
 							</div>
 						</section>
-					)}
-
-					{(isSuperAdmin || !accountUser) && (
-						<CollaboratorsSection
-							isOwner={isOwner}
-							currentUser={currentUser}
-							collaborators={collaborators}
-							organizations={organizations}
-							onRefresh={onRefresh}
-							onNotice={onNotice}
-							onError={onError}
-							onPreviewAsCollaborator={onPreviewAsCollaborator}
-							onRestoreOwner={onRestoreOwner}
-						/>
 					)}
 				</div>
 			)}

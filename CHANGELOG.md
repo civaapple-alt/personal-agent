@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove legacy LAN-token sign-in and collaborator invitation controls from the workbench; organization invitations use registered accounts.
+
 - Use explicit turn references for delegation boards and remove obsolete role-heading and starter-task compatibility paths.
 
 - Drop the legacy deliverables table and repository; team health and review demos now use Git-backed Space documents and feedback.

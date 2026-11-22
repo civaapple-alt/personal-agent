@@ -9,12 +9,9 @@ export interface AuthGateViewProps {
 	registrationMode: RegistrationMode;
 	accountUser: AccountUserDto | null;
 	authError: string | null;
-	authTokenInput: string;
 	orgInviteToken: string;
 	invitePreview?: OrgInvitePreviewDto | null;
-	preferredTab?: "login" | "register" | "legacy_token" | null;
-	onTokenInputChange: (value: string) => void;
-	onSubmitInvite: (token: string) => void | Promise<void>;
+	preferredTab?: "login" | "register" | null;
 	onSetupAdmin: (input: { email: string; password: string; displayName: string }) => Promise<void>;
 	onLoginEmail: (input: { email: string; password: string; inviteToken?: string }) => Promise<void>;
 	onRegisterEmail: (input: {
@@ -28,7 +25,7 @@ export interface AuthGateViewProps {
 	onRestoreOwner: () => void;
 }
 
-type AuthTab = "login" | "register" | "legacy_token";
+type AuthTab = "login" | "register";
 
 const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -37,7 +34,7 @@ const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_viewer: "只读访客",
 };
 
-/** Fullscreen gate shown for account setup, login/registration, admin review wait, or LAN invite token auth. */
+/** Fullscreen gate shown for account setup, login/registration, admin review wait, or organization invitations. */
 export function AuthGateView({
 	status,
 	permissionRequired,
@@ -46,12 +43,9 @@ export function AuthGateView({
 	registrationMode,
 	accountUser,
 	authError,
-	authTokenInput,
 	orgInviteToken,
 	invitePreview = null,
 	preferredTab = null,
-	onTokenInputChange,
-	onSubmitInvite,
 	onSetupAdmin,
 	onLoginEmail,
 	onRegisterEmail,
@@ -61,7 +55,6 @@ export function AuthGateView({
 }: AuthGateViewProps) {
 	const [activeTab, setActiveTab] = useState<AuthTab>(() => {
 		if (preferredTab) return preferredTab;
-		if (authTokenInput.startsWith("inv_")) return "legacy_token";
 		if (orgInviteToken) return "register";
 		return "login";
 	});
@@ -213,15 +206,13 @@ export function AuthGateView({
 					<div>
 						<h1>Personal Agent 团队工作台</h1>
 						<p className="muted-hint">
-							{activeTab === "legacy_token"
-								? "使用内网协同口令（inv_xxx）加入宿主共享事项。"
-								: activeTab === "register"
-									? registrationMode === "open_review"
-										? "使用邮箱密码注册，注册后需超级管理员审核开通并分配配额。"
-										: registrationMode === "invite_only"
-											? "当前为仅邀请注册模式，请填写邮箱密码与组织邀请码。"
-											: "使用邮箱和密码快速注册账号，可创建自己的组织与 AI 团队。"
-									: "使用已注册的邮箱和密码登录，管理组织、仓库与 AI 事项。"}
+							{activeTab === "register"
+								? registrationMode === "open_review"
+									? "使用邮箱密码注册，注册后需超级管理员审核开通并分配配额。"
+									: registrationMode === "invite_only"
+										? "当前为仅邀请注册模式，请填写邮箱密码与组织邀请码。"
+										: "使用邮箱和密码快速注册账号，可创建自己的组织与 AI 团队。"
+								: "使用已注册的邮箱和密码登录，管理组织、仓库与 AI 事项。"}
 						</p>
 					</div>
 				</div>
@@ -245,18 +236,9 @@ export function AuthGateView({
 					>
 						注册账号
 					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "legacy_token"}
-						className={activeTab === "legacy_token" ? "auth-tab active" : "auth-tab"}
-						onClick={() => setActiveTab("legacy_token")}
-					>
-						内网口令
-					</button>
 				</div>
 
-				{inviteInput && activeTab !== "legacy_token" && (
+				{inviteInput && (
 					<output className="notice-banner" aria-live="polite">
 						{invitePreview
 							? invitePreview.valid
@@ -394,30 +376,6 @@ export function AuthGateView({
 							}
 						>
 							{submitting ? "正在提交…" : "创建账号"}
-						</button>
-					</form>
-				)}
-
-				{activeTab === "legacy_token" && (
-					<form
-						className="auth-gate-form"
-						onSubmit={(e) => {
-							e.preventDefault();
-							void onSubmitInvite(authTokenInput);
-						}}
-					>
-						<input
-							className="input-field"
-							name="legacy-token"
-							aria-label="内网协同口令"
-							autoComplete="off"
-							spellCheck={false}
-							value={authTokenInput}
-							onChange={(e) => onTokenInputChange(e.target.value)}
-							placeholder="粘贴内网协同口令（如 inv_xxx）…"
-						/>
-						<button type="submit" className="btn-pill-dark" disabled={!authTokenInput.trim()}>
-							使用协同口令进入
 						</button>
 					</form>
 				)}

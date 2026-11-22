@@ -573,7 +573,6 @@ export function ChatStage({
 							onModeChange={setRosterMode}
 							onClose={closeRoster}
 							onOpenTeam={onOpenTeam}
-							onNotice={onNotice}
 							onChangeLeadMember={onChangeLeadMember}
 							onUpdateMatterAiMembers={onUpdateMatterAiMembers}
 							onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}

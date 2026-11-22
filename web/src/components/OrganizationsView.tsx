@@ -20,7 +20,6 @@ interface OrganizationsViewProps {
 	currentUser?: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
 	isSuperAdmin?: boolean;
-	collaborators?: CollaboratorDto[];
 	organizations: OrganizationDto[];
 	workspaces: WorkspaceDto[];
 	members: TeamMemberDto[];
@@ -33,8 +32,6 @@ interface OrganizationsViewProps {
 	selectedOrgId?: string | null;
 	onOpenSpace?: (spaceId: string) => void;
 	onOpenWorkspaces?: () => void;
-	onPreviewAsCollaborator?: (token: string) => void;
-	onRestoreOwner?: () => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -45,7 +42,6 @@ export function OrganizationsView({
 	currentUser = null,
 	accountUser = null,
 	isSuperAdmin = false,
-	collaborators = [],
 	organizations,
 	workspaces,
 	members,
@@ -55,8 +51,6 @@ export function OrganizationsView({
 	selectedOrgId = null,
 	onOpenSpace,
 	onOpenWorkspaces,
-	onPreviewAsCollaborator,
-	onRestoreOwner,
 	onRefresh,
 	onNotice,
 	onError,
@@ -230,7 +224,6 @@ export function OrganizationsView({
 						{activeOrg ? (
 							<OrganizationDetailPanel
 								organization={activeOrg}
-								organizations={organizations}
 								workspaces={workspaces}
 								businessMembers={businessMembers}
 								orgMembers={orgMembersByOrgId[activeOrg.id] ?? []}
@@ -238,13 +231,9 @@ export function OrganizationsView({
 								isOwner={isOwner}
 								isSuperAdmin={isSuperAdmin}
 								accountUser={accountUser}
-								currentUser={currentUser}
-								collaborators={collaborators}
 								onEditOrg={openEditOrgForm}
 								onOpenSpace={onOpenSpace}
 								onOpenWorkspaces={onOpenWorkspaces}
-								onPreviewAsCollaborator={onPreviewAsCollaborator}
-								onRestoreOwner={onRestoreOwner}
 								onRefresh={onRefresh}
 								onNotice={onNotice}
 								onError={onError}

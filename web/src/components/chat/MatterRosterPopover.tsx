@@ -1,7 +1,6 @@
 import { type RefObject, useId, useState } from "react";
 import type { CollaboratorDto, TeamMemberDto } from "../../api.ts";
 import { filterBusinessMembers, isArchitectMember } from "../../architectApi.ts";
-import { copyCollaboratorInviteUrl } from "../../clipboard.ts";
 import { getMemberThemeById } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
@@ -30,7 +29,6 @@ interface MatterRosterPopoverProps {
 	onModeChange: (mode: "view" | "add" | "remove") => void;
 	onClose: () => void;
 	onOpenTeam: () => void;
-	onNotice: (message: string) => void;
 	onChangeLeadMember: (memberId: string) => void;
 	onUpdateMatterAiMembers: (aiMemberIds: string[]) => void;
 	onUpdateMatterConsultMembers?: (consultMemberIds: string[] | null) => void;
@@ -66,7 +64,6 @@ export function MatterRosterPopover({
 	onModeChange,
 	onClose,
 	onOpenTeam,
-	onNotice,
 	onChangeLeadMember,
 	onUpdateMatterAiMembers,
 	onUpdateMatterConsultMembers,
@@ -200,15 +197,6 @@ export function MatterRosterPopover({
 													</span>
 												</div>
 											)}
-											{col.token && (
-												<button
-													type="button"
-													className="wechat-copy-link"
-													onClick={() => void copyCollaboratorInviteUrl(col, onNotice)}
-												>
-													复制链接
-												</button>
-											)}
 										</div>
 									);
 								})
@@ -285,7 +273,7 @@ export function MatterRosterPopover({
 								<button
 									key={`human-${col.id}`}
 									type="button"
-									className={`wechat-member-tile ${canRemoveHuman || (isOwner && col.token) ? "interactive" : ""}`}
+									className={`wechat-member-tile ${canRemoveHuman ? "interactive" : ""}`}
 									title={
 										canRemoveHuman
 											? `移出 ${col.name}`
@@ -296,8 +284,6 @@ export function MatterRosterPopover({
 									onClick={() => {
 										if (canRemoveHuman && onUpdateMatterCollaborators) {
 											onUpdateMatterCollaborators(assignedCollabIds.filter((id) => id !== col.id));
-										} else if (isOwner && col.token) {
-											void copyCollaboratorInviteUrl(col, onNotice);
 										}
 									}}
 								>
