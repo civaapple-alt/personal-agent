@@ -40,7 +40,7 @@ export function delegationTaskText(content: string): string {
 	return content.replace(/^@[^:\n：]+[:：]\s*/, "");
 }
 
-/** Project the stored handoffs into conversation rounds. Older records use only available timing evidence. */
+/** Project stored handoffs into conversation rounds using explicit turn references. */
 export function buildMatterDelegations(
 	userMessages: MatterMessageDto[],
 	internalMessages: MatterMessageDto[],
@@ -48,32 +48,9 @@ export function buildMatterDelegations(
 ): MatterDelegations {
 	const turns = userMessages.filter((message) => message.senderType === "user");
 	const turnsById = new Map(turns.map((message) => [message.id, message]));
-	const lastReplyByTurn = new Map<string, string>();
-	for (const message of userMessages) {
-		const sourceId = message.metadata?.sourceUserMessageId;
-		if (message.senderType !== "user" && typeof sourceId === "string") {
-			lastReplyByTurn.set(sourceId, message.createdAt);
-		}
-	}
-	const legacyTurns = turns.filter(
-		(turn) =>
-			turn.metadata?.mode !== "ai_request" && (turn.metadata?.mode !== "discussion" || lastReplyByTurn.has(turn.id)),
-	);
-	const legacyWindows = legacyTurns.flatMap((turn) => {
-		const end = lastReplyByTurn.get(turn.id);
-		return end ? [{ turn, end }] : [];
-	});
 	const locateTurn = (message: MatterMessageDto) => {
 		const source = message.metadata?.sourceUserMessageId;
-		if (typeof source === "string") return turnsById.has(source) ? source : undefined;
-		if (source === null) return undefined;
-		const matching = legacyWindows.filter(
-			({ turn, end }) => turn.createdAt <= message.createdAt && message.createdAt <= end,
-		);
-		if (matching.length > 0) return matching.length === 1 ? matching[0]?.turn.id : undefined;
-		const turn = legacyTurns.findLast((candidate) => candidate.createdAt <= message.createdAt);
-		// A known terminal reply before this event rules out the nearest older round.
-		return turn && !lastReplyByTurn.has(turn.id) ? turn.id : undefined;
+		return typeof source === "string" && turnsById.has(source) ? source : undefined;
 	};
 
 	const byTurn = new Map<string, DelegationBoard>();

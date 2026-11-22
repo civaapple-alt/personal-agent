@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Use explicit turn references for delegation boards and remove obsolete role-heading and starter-task compatibility paths.
+
 - Drop the legacy deliverables table and repository; team health and review demos now use Git-backed Space documents and feedback.
 
 - Remove the legacy deliverables listing API and seed the isolated team sandbox with versioned Space documents.

@@ -10,7 +10,7 @@ frontmatter 是本项目支持的简单字段/数组格式，不是完整 YAML �
 确认新 Skill 时按目标作用域检查名称。批量请求在创建任何角色前检查所有文件目标。同名文件返回 HTTP 409，用户可以改名或选用已有 Skill。
 `id` 同时作为文件名，只接受最长 128 字符的小写字母、数字和连接短横线，不接受 `readme`。解析与 HTTP 新建使用相同的 ID 校验。既有非法 ID 不自动改名或重写历史关联。
 
-目录加载只把角色 Markdown 作为资产，排除 `README.md` 文档。解析器接受五个英文标题及其旧版中文别名。创建和调整通过 `formatRoleTemplateBody` 写英文标题。导入后直接导出会保留原 Markdown 正文。
+目录加载只把角色 Markdown 作为资产，排除 `README.md` 文档。解析器使用五个英文标题。创建和调整通过 `formatRoleTemplateBody` 写英文标题。导入后直接导出会保留原 Markdown 正文。
 
 导出不会自动附带私有数据库记录，但也不能自动识别用户写入正文中的秘密。`skills`、`tools`、`mcpDependencies` 由 [执行装配](../orchestrator/README.md)落实，解析成功不代表能力可用。
 

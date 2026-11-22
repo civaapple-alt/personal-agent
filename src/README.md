@@ -8,7 +8,7 @@ src/
 ├── orchestrator/     # 事项派发、会话范围、跨岗位委托、旁听评审、人类澄清与经验复盘
 ├── rpc/              # Pi CLI 子进程管理、JSONL 协议分帧、工具桥接与包安装
 ├── pa-extensions/    # 宿主侧扩展装配（team-extension、pstack-methods、web-access、.env 密钥治理）
-├── storage/          # SQLite 数据库/迁移/领域仓储与独立 Git 资料空间引擎（SpaceGitStore）
+├── storage/          # SQLite 数据库/领域仓储与独立 Git 资料空间引擎（SpaceGitStore）
 ├── server/           # 同源 HTTP/SSE 服务、多租户鉴权、ACL、业务路由与预览管理
 ├── roles/            # 角色 Markdown 与 Skill 包解析、能力报告与角色架构师规则
 └── demo/             # 调用真实模型的冒烟与对照验证脚本（与离线 test/ 区分）
@@ -29,4 +29,4 @@ src/
 先在拥有行为的模块修改，再沿调用关系核对契约；例如委托策略在编排核，网络参数校验在 bridge，JSONL 分帧在 RPC。不要通过修改本机 Pi 上游绕过本项目的问题。
 
 - 离线覆盖按 [test 导航](../test/README.md)选择；跨模块改动按根 [开发约定](../AGENTS.md)运行检查和构建。
-- 整体关系见[当前架构](../docs/concepts/architecture-and-plan.md)，精确协议和迁移细节再查[运行说明](../docs/reference/runtime-collaboration.md)。
+- 整体关系见[当前架构](../docs/concepts/architecture-and-plan.md)，精确协议和数据边界再查[运行说明](../docs/reference/runtime-collaboration.md)。

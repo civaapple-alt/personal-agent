@@ -124,15 +124,8 @@ test("loads 4 shareable role templates alongside README and serializes without p
 	assert.match(roundTripped, /id: product-manager/);
 	assert.match(roundTripped, /## Responsibilities and Boundaries/);
 	assert.equal(pm.name, "Product Manager");
-	const legacy = roundTripped
-		.replace("## Responsibilities and Boundaries", "## 职责与边界")
-		.replace("## Skills and Methods", "## 技能与工作方法")
-		.replace("## Tools and Environment", "## 工具与环境依赖")
-		.replace("## Collaboration and Communication", "## 协作和沟通约定")
-		.replace("## Delivery and Verification", "## 交付与验证方式");
-	const parsedLegacy = parseRoleTemplateMarkdown(legacy);
-	assert.deepEqual(parsedLegacy.sections, pm.sections);
-	assert.equal(serializeRoleTemplateMarkdown(parsedLegacy), legacy);
+	const parsed = parseRoleTemplateMarkdown(roundTripped);
+	assert.deepEqual(parsed.sections, pm.sections);
 });
 
 test("isolates project-private memories across workspaces while preserving shared role/company memories", async () => {

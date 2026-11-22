@@ -150,7 +150,7 @@ flowchart TB
 | 事项路由 | 1,133 | [matters.ts](../../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../src/server/routes/matter-messages.ts) 743 行 |
 | 对话流样式 | 1,014 | [chat-stream.css](../../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../web/src/styles/chat-cards.css) 269 行 |
 
-行数用于定位阅读和修改成本。[ChatStage.tsx](../../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../web/src/utils/formatters.ts)、[matterStream.ts](../../web/src/utils/matterStream.ts)、[orgRoster.ts](../../web/src/utils/orgRoster.ts)、[starterTasks.ts](../../web/src/utils/starterTasks.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../web/src/utils/formatters.ts)、[matterStream.ts](../../web/src/utils/matterStream.ts)、[orgRoster.ts](../../web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 
@@ -309,23 +309,11 @@ sequenceDiagram
 
 ### 成果与独立服务
 
-成果类型、版本系列与阅读视图：
-
-- `document` 保存正式正文，文件类成果必须是当前工作区内的实际文件，`service_url` 仅接受 HTTP(S) 链接。
-- `changeNote` 保存进成果摘要，主成员回复元数据关联成果 ID 与来源用户消息；相同事项与标题形成版本系列。
-- 网页成果库按「简练、有重点、有过程」展开单版内容：
-  - 顶部单行元信息与版本切换，前置「本版重点」，中间汇总协作岗位/依据/版本演进并支持展开时间线或跳转原对话。
-  - 正文去除内嵌双层滚动盒以支持流畅阅读，底部操作收口且验收面板按需展开。
-- 是否达到阶段成果由主成员依据任务和反馈判断，不按回复长短、对话轮数判断，也不要求用户逐次手动批准归档。
-
-状态标记与导出兼容：
-
-- `delivered` 表示本轮正式成果已归档，不代表用户已验收；普通交流、取消或失败保持 `open`。
-- API 显式提供 `deliverableTitle` 的文档导出兼容入口仍存在，网页已移除“修改”前缀自动导出逻辑。详见[成果归档](../reference/runtime-collaboration.md#成果归档)。
+资料空间以 Git 保存文档和修订历史。主责可通过 `save_space_page` 保存资料，事项对话和资料空间支持打开正文、查看差异和按提交评价。业务仓库内的文件修改仍保留在业务仓库中。
 
 预览进程边界：
 
-- 预览 API 可让 `PreviewManager` 启动并停止本地命令，或登记外部链接，可关联交付 ID；空间保存不自动创建服务或部署。
+- 预览 API 可让 `PreviewManager` 启动并停止本地命令，或登记外部链接，可关联事项 ID；空间保存不自动创建服务或部署。
 - 链接语法有效、已登记或本地端口可连接，都不等于页面可用或业务通过验收；预览运行索引不会随宿主重启恢复。
 
 ## 6. 已实现基础与下一阶段计划

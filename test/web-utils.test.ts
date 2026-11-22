@@ -66,7 +66,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "member" as const,
 			senderId: "product-manager",
 			content: "@研发经理: 评估工作量",
-			metadata: { toMemberId: "engineering-manager" },
+			metadata: { sourceUserMessageId: "u1", toMemberId: "engineering-manager" },
 			createdAt: "2026-11-15T01:00:30.000Z",
 		},
 		{
@@ -86,7 +86,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "member" as const,
 			senderId: "product-manager",
 			content: "@测试经理: 核对验收标准",
-			metadata: { toMemberId: "qa-manager" },
+			metadata: { sourceUserMessageId: "u1", toMemberId: "qa-manager" },
 			createdAt: "2026-11-15T01:00:35.000Z",
 		},
 		{
@@ -106,7 +106,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "member" as const,
 			senderId: "product-manager",
 			content: "@研发经理: 二次复核",
-			metadata: { toMemberId: "engineering-manager" },
+			metadata: { sourceUserMessageId: "u2", toMemberId: "engineering-manager" },
 			createdAt: "2026-11-15T01:06:10.000Z",
 		},
 	];
@@ -179,7 +179,7 @@ test("anchored handoffs and nested edges survive intervening user discussion and
 		}),
 		message("two-reply", "internal_collab", "member", 5, { requestMessageId: "two" }),
 		message("one-reply", "internal_collab", "member", 6, { requestMessageId: "one" }),
-		message("unknown", "internal_collab", "member", 7, { sourceUserMessageId: null, toMemberId: "qa" }),
+		message("unknown", "internal_collab", "member", 7, { toMemberId: "qa" }),
 		message("pending", "internal_collab", "member", 9, {
 			sourceUserMessageId: "assign",
 			toMemberId: "qa",

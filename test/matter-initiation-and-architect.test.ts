@@ -24,7 +24,7 @@ import {
 	TeamOrchestrator,
 } from "../src/index.ts";
 import { isExplicitRoleSetupRequest } from "../src/roles/role-setup-intent.ts";
-import { buildStarterTasks, formatRoleToolTierLabel } from "../web/src/utils.ts";
+import { formatRoleToolTierLabel } from "../web/src/utils.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 test("only direct role setup wording is eligible for automatic architectural routing", () => {
@@ -384,15 +384,6 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 		assert.deepEqual(createdMatter.matter.observerMemberIds, ["qa-manager"]);
 		assert.deepEqual(createdMatter.matter.collaboratorIds, [col.collaborator.id]);
 		assert.equal(createdMatter.matter.createdByUserId, creator.id);
-
-		// 5) Frontend starter tasks adapt cleanly when no Git repository is bound
-		const nonRepoStarters = buildStarterTasks([], null);
-		assert.ok(
-			nonRepoStarters.some(
-				(task) => task.collaborationPreset === "human_first" && task.suggestedMode === "discussion",
-			),
-		);
-		assert.ok(nonRepoStarters.some((task) => task.collaborationPreset === "solo"));
 	} finally {
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();

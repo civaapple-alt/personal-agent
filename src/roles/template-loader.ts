@@ -4,12 +4,12 @@ import { join } from "node:path";
 import type { RoleScope, RoleTemplate, RoleTemplateSections } from "./types.ts";
 
 const ROLE_SECTION_HEADINGS = [
-	["responsibilitiesAndBoundaries", "Responsibilities and Boundaries", "职责与边界"],
-	["skillsAndMethods", "Skills and Methods", "技能与工作方法"],
-	["toolsAndEnvironment", "Tools and Environment", "工具与环境依赖"],
-	["collaborationConventions", "Collaboration and Communication", "协作和沟通约定"],
-	["deliveryAndVerification", "Delivery and Verification", "交付与验证方式"],
-] as const satisfies ReadonlyArray<readonly [keyof RoleTemplateSections, string, string]>;
+	["responsibilitiesAndBoundaries", "Responsibilities and Boundaries"],
+	["skillsAndMethods", "Skills and Methods"],
+	["toolsAndEnvironment", "Tools and Environment"],
+	["collaborationConventions", "Collaboration and Communication"],
+	["deliveryAndVerification", "Delivery and Verification"],
+] as const satisfies ReadonlyArray<readonly [keyof RoleTemplateSections, string]>;
 
 export function formatRoleTemplateBody(sections: RoleTemplateSections): string {
 	return ROLE_SECTION_HEADINGS.filter(([key]) => sections[key].trim())
@@ -123,8 +123,8 @@ function extractSections(body: string): RoleTemplateSections {
 		collaborationConventions: "",
 		deliveryAndVerification: "",
 	};
-	for (const [key, heading, legacyHeading] of ROLE_SECTION_HEADINGS) {
-		sections[key] = sectionMap.get(heading.toLowerCase()) ?? sectionMap.get(legacyHeading) ?? "";
+	for (const [key, heading] of ROLE_SECTION_HEADINGS) {
+		sections[key] = sectionMap.get(heading.toLowerCase()) ?? "";
 	}
 	return sections;
 }

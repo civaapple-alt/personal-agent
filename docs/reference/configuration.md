@@ -182,7 +182,7 @@
 
 ### 正文结构要求
 
-正文使用以下五个标准二级标题。解析器也接受旧版中文标题。每轮通过 `before_agent_start` 注入最新角色上下文。
+正文使用以下五个标准英文二级标题。每轮通过 `before_agent_start` 注入最新角色上下文。
 
 - `## Responsibilities and Boundaries`
 - `## Skills and Methods`

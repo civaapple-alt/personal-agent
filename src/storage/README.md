@@ -23,7 +23,7 @@
   - 工作区归属变更检查事项、工作区经验、执行会话、带工作区标记的消息与授权名单。有任一引用时保留原归属。工作区配置、可见性和成员名单在同一事务提交。
   - 若旧库中的事项或消息明确记录了与当前工作区不同的组织，工作区范围的私有经验保留在库中，暂时停止展示和注入。
   - 同时保存成员私有 `git_name`、`git_email`、`identity_summary`。
-  - 迁移只回填空的 Git 名称和邮箱。名称优先用英文显示名或岗位名，其次用成员 ID。已有署名在迁移和模板同步时保留。由 `resolveEffectiveGitIdentity(member, organization)` 计算最终 Git Author 署名。
+  - 成员 Git 名称优先用英文显示名或岗位名，其次用成员 ID。由 `resolveEffectiveGitIdentity(member, organization)` 计算最终 Git Author 署名。
 - 三层记忆查询与替代边界：
   - `listRelevantMemories` 按 `verified` 优先于 `candidate`、排除 `rejected` 与 `superseded` 的顺序注入：
     - `role_general`：跨组织跨仓库通用。
