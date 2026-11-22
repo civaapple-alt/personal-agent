@@ -874,6 +874,7 @@ export function App() {
 										roleModel={orgLeadModel}
 										leadKnown={Boolean(currentLeadId)}
 										disabled={submitting || Boolean(activeMatterProgress)}
+										immediate={!selectedMatterId}
 										onSave={async (selection) => {
 											if (!selectedMatterId) {
 												setDraftModelSelection(selection);

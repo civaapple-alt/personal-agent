@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Apply model and thinking-level choices immediately when composing a new matter, so the selected model appears in the composer and is included when the matter is created.
 - Remove the `publish_deliverable` runtime tool. Saved space pages and successfully written or edited workspace text documents become interaction results at turn completion, with revision-to-feedback links and legacy result history preserved.
 - Upgrade the workbench's deliverables library to a Space for editable matter pages and existing published deliverables. People and matter leads can save working plans and other in-progress material, review page revisions, and detect concurrent edits. Matter permissions continue to govern access; existing deliverable versions and feedback remain available.
 - Enable `fetch_content` alongside `web_search` and `get_search_content` for roles granted `pi-web-access`, while stripping per-call `proxy` overrides on both `web_search` and `fetch_content`.

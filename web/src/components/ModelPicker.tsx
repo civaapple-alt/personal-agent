@@ -170,6 +170,7 @@ export function MatterModelControl({
 	roleModel,
 	leadKnown,
 	disabled,
+	immediate = false,
 	onSave,
 }: {
 	label?: "主责模型" | "架构师模型";
@@ -177,6 +178,7 @@ export function MatterModelControl({
 	roleModel: ModelSelection | null;
 	leadKnown: boolean;
 	disabled: boolean;
+	immediate?: boolean;
 	onSave: (value: ModelSelection | null) => void | Promise<void>;
 }) {
 	const { catalog, reload } = useModelCatalog();
@@ -224,8 +226,8 @@ export function MatterModelControl({
 				{(close) => (
 					<>
 						<ModelPickerPanel
-							value={draft}
-							onChange={setDraft}
+							value={immediate ? value : draft}
+							onChange={immediate ? (selection) => void onSave(selection) : setDraft}
 							inheritLabel={leadKnown ? "按岗位配置" : "按自动匹配的岗位配置"}
 							inheritModel={inherited}
 							disabled={saving}
@@ -235,16 +237,18 @@ export function MatterModelControl({
 								{error}
 							</p>
 						)}
-						<div className="model-popover-actions">
-							<button
-								type="button"
-								className="btn-pill-dark btn-xs"
-								disabled={saving || disabled}
-								onClick={() => void save(close)}
-							>
-								{saving ? "保存中…" : "应用"}
-							</button>
-						</div>
+						{!immediate && (
+							<div className="model-popover-actions">
+								<button
+									type="button"
+									className="btn-pill-dark btn-xs"
+									disabled={saving || disabled}
+									onClick={() => void save(close)}
+								>
+									{saving ? "保存中…" : "应用"}
+								</button>
+							</div>
+						)}
 					</>
 				)}
 			</ModelPopover>
