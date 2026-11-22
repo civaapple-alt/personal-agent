@@ -68,7 +68,7 @@ const publication = { type: "document", title: "设计说明", changeNote: "根�
 test("sourcePath publication archives exact file text and retains earlier version snapshots", async (t) => {
 	let version = 1;
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: `v${version}.md` });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: `v${version}.md` });
 	});
 	const firstText = "\uFEFF\n# 文档一\r\n正文含中文与 emoji ✅。\r\n\n";
 	await writeFile(join(f.workspace, "v1.md"), firstText);
@@ -94,11 +94,11 @@ test("document sources reject ambiguity, missing/outside/non-text files and non-
 			[{ sourcePath: "empty.md" }, /nonempty/],
 			[{ sourcePath: "invalid.md" }, /UTF-8/],
 			[{ sourcePath: "large.md" }, /large|size|bytes/],
-			[{ type: "artifact", sourcePath: "valid.md", content: "valid.md" }, /document/],
+			[{ type: "artifact", sourcePath: "valid.md" }, /document/],
 		] as const) {
-			await assert.rejects(invokeTool(options, "publish_deliverable", { ...publication, ...args }), expected);
+			await assert.rejects(invokeTool(options, "save_space_page", { ...publication, ...args }), expected);
 		}
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "valid.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "valid.md" });
 	});
 	await writeFile(join(f.workspace, "valid.md"), "# 正式文档\n");
 	await writeFile(join(f.root, "outside.md"), "外部私有文件");
@@ -112,7 +112,7 @@ test("document sources reject ambiguity, missing/outside/non-text files and non-
 
 test("changing a document after staging rejects the turn atomically instead of archiving stale text", async (t) => {
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "final.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await invokeTool(options, "propose_experience", {
 			scope: "role_general",
 			content: "发布应复用最终文档来源。",
@@ -121,7 +121,7 @@ test("changing a document after staging rejects the turn atomically instead of a
 		await writeFile(join(f.workspace, "final.md"), "# 后改的正文\n");
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 已登记快照\n");
-	await assert.rejects(f.dispatch(), /changed.*publish.*again/i);
+	await assert.rejects(f.dispatch(), /changed.*save.*latest/i);
 	assert.equal(f.store.listDeliverables().length, 0);
 	assert.equal(f.store.listMemberMemories("product-manager").length, 0);
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
@@ -129,9 +129,9 @@ test("changing a document after staging rejects the turn atomically instead of a
 
 test("republishing a revised same-title document replaces its staged draft without adding extra versions", async (t) => {
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "final.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await writeFile(join(f.workspace, "final.md"), "# 修订后的最终稿\n");
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "final.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 初稿\n");
 	const result = await f.dispatch();
@@ -142,20 +142,20 @@ test("republishing a revised same-title document replaces its staged draft witho
 
 test("a source symlink cannot be redirected between staging and final commit", async (t) => {
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "alias.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "alias.md" });
 		await rm(join(f.workspace, "alias.md"));
 		await symlink(join(f.workspace, "other.md"), join(f.workspace, "alias.md"));
 	});
 	await writeFile(join(f.workspace, "first.md"), "# 相同正文\n");
 	await writeFile(join(f.workspace, "other.md"), "# 相同正文\n");
 	await symlink(join(f.workspace, "first.md"), join(f.workspace, "alias.md"));
-	await assert.rejects(f.dispatch(), /changed.*publish.*again/i);
+	await assert.rejects(f.dispatch(), /changed.*save.*latest/i);
 	assert.equal(f.store.listDeliverables().length, 0);
 });
 
 test("a source deleted after staging cannot leave an archived document or an execution lease", async (t) => {
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", { ...publication, sourcePath: "final.md" });
+		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await rm(join(f.workspace, "final.md"));
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 最终稿\n");

@@ -105,7 +105,7 @@ if (!phase || !root) {
 				matterId,
 				timeoutMs: 120_000,
 				prompt:
-					"请回忆刚才本事项的口令，以及研发同事从文件读取的技术证据标识。请不要读取文件，不调用同事，也不要猜测。把记得的这两个标识、之前的存储选择和仅设计不编码的限制整合为简短便笺设计测试稿，用 publish_deliverable 登记 document，标题固定为「隔离协作测试记录」。请在 changeNote 中说明这是为验证本次重启接续而明确要求发布的设计测试版本。这是测试记录，不能视为产品确认。最后简短答复。",
+					"请回忆刚才本事项的口令，以及研发同事从文件读取的技术证据标识。请不要读取文件，不调用同事，也不要猜测。把记得的这两个标识、之前的存储选择和仅设计不编码的限制整合为简短便笺设计测试稿，用 save_space_page 登记 document，标题固定为「隔离协作测试记录」。请在 changeNote 中说明这是为验证本次重启接续而明确要求发布的设计测试版本。这是测试记录，不能视为产品确认。最后简短答复。",
 			});
 			const delivery = result.deliverable;
 			assert.ok(delivery);
@@ -117,7 +117,7 @@ if (!phase || !root) {
 			assert.equal(delivery.version, 1);
 			assert.match(delivery.summary, /交付依据/);
 			assert.ok(
-				result.runResult.toolExecutions.some((tool) => tool.toolName === "publish_deliverable" && !tool.isError),
+				result.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError),
 			);
 			const sessions = db
 				.prepare(

@@ -233,9 +233,12 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	assert.match(spawnedWorkers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Use the language of the user's request/);
 	assert.match(spawnedWorkers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Turn confirmed goals into working/);
 	assert.deepEqual(seenStatusesDuringDialog, ["waiting_user"]);
-	assert.equal(engResult.matter.status, "delivered");
+	assert.equal(engResult.matter.status, "open");
 	assert.ok(engResult.deliverable);
 	assert.equal(engResult.deliverable.version, 1);
+	const exportedPage = store.spacePages.list(engResult.matter.id).find((page) => page.title === "架构评估报告");
+	assert.ok(exportedPage);
+	assert.equal(store.spacePages.listRevisions(exportedPage.id)[0]?.resultId, engResult.deliverable.id);
 
 	// 2. Internal delegation from PM to QA stays in internal_collab channel, not user channel
 	const collab = await orchestrator.delegateToMember({
@@ -670,7 +673,7 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 		assert.equal(relevant.length, 1);
 		assert.equal(relevant[0]?.orgId, null);
 		assert.equal(relevant[0]?.workspaceId, "ws-1");
-		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 4);
+		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 6);
 		assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 		const fresh = openPersonalAgentDatabase();
 		try {

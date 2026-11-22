@@ -53,6 +53,8 @@ npm run demo:rsi
   - 当前通过内部工具装配和宿主双重约束，只有主成员能向用户发布；回归同时验证隐藏工具与伪造 transport 请求都不能绕过。
   - 空闲超时回归先做进程握手，并分别验证持续事件可延长窗口、无活动仍会超时，避免把 Node 启动调度时间算作模型空闲。
 
+以下实机记录使用当时的 `publish_deliverable` 工具。当前运行时已移除该工具，复跑入口以现行脚本为准。
+
 ### 本轮 RSI 最小实机验证
 
 - 在独立临时工作区运行 `npm run demo:rsi`，实际模型调用 `propose_experience` 与 `publish_deliverable`，候选仅在主执行成功后保存。

@@ -12,6 +12,7 @@ export interface RecordDeliverableInput {
 	summary?: string;
 	contentOrPath: string;
 	serviceUrl?: string | null;
+	spacePage?: { id: string; revision: number };
 }
 
 /** Manages versioned deliverables, turn outcome commits, and deliverable-level memory feedback. */
@@ -83,7 +84,17 @@ export class DeliverableRepo {
 	}): { deliverables: Deliverable[]; memories: MemberMemory[]; skippedDuplicates: number } {
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
-			const deliverables = input.deliverables.map((entry) => this.recordDeliverable(entry));
+			const deliverables = input.deliverables.map((entry) => {
+				const deliverable = this.recordDeliverable(entry);
+				if (entry.spacePage) {
+					this.db
+						.prepare(
+							"INSERT INTO space_page_result_links (page_id, revision, deliverable_id) VALUES (?, ?, ?) ON CONFLICT(page_id, revision) DO UPDATE SET deliverable_id = excluded.deliverable_id",
+						)
+						.run(entry.spacePage.id, entry.spacePage.revision, deliverable.id);
+				}
+				return deliverable;
+			});
 			for (const delivery of deliverables) this.linkDeliverableApplications(delivery.id, input.applicationIds);
 			const memories: MemberMemory[] = [];
 			let skippedDuplicates = 0;

@@ -27,7 +27,7 @@
 | `PA_PSTACK_DIR` | 未设置（可由工作台 `#/settings/extensions` 克隆启用至 `.data/extensions/repo/pstack`） | [服务入口](../../src/server/main.ts) → [执行装配](../../src/orchestrator/worker-runner.ts) | 完整 pstack 包根目录，包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`；启动未传该变量时回退读取 `platform_settings.pstackDir`，详见 [pstack 内循环](../guides/pstack-runtime.md) |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
 | `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) / [编排核](../../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
-| `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / `publish_deliverable` / 对话框等待期间自动暂停 |
+| `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / 对话框等待期间自动暂停 |
 | `NODE_ENV` | 未设置 | [前端构建脚本](../../scripts/build-web.mjs) | 设为 `production` 时，`npm run build:web` 启用 esbuild 代码压缩 |
 
 > **说明**：模型厂商凭证（如 `kimi-coding` 等 provider 的认证配置）不保存在本仓库变量中，直接复用本机 Pi CLI 环境配置；请勿将密钥写入代码或 `roles/*.md`。
@@ -37,7 +37,7 @@
 以下变量由编排核或预览管理器在拉起子进程时自动注入，用于工具桥接鉴权与端口隔离：
 
 - **Pi 子进程注入**（见[编排核](../../src/orchestrator/team-orchestrator.ts)与[工具桥接](../../src/rpc/team-tool-bridge.ts) / [团队扩展](../../pi-extensions/team-extension/index.ts)）：
-  - `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_PUBLISH`
+  - `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_SAVE_SPACE`
   - `PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
 - **本地预览子进程注入**（[PreviewManager](../../src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
 
@@ -109,7 +109,7 @@
 | `executable` | `"pi"` | `PiRpcWorkerOptions` | Pi CLI 可执行文件路径或命令名 |
 | `commandTimeoutMs` | `30000`（30s） | `PiRpcWorkerOptions` | 单条 RPC 控制命令（如 `get_state`、`prompt`、`abort`）等待响应超时 |
 | `shutdownGraceMs` | `2000`（2s） | `PiRpcWorkerOptions` | `stop()` 优雅关闭等待时长，超时后发送 `SIGTERM` / `SIGKILL` |
-| `idleTimeoutMs` | `900000`（15 分钟，可由 `PA_IDLE_TIMEOUT_MS` 覆写） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗（有正的 `timeoutMs` 时不超过 `timeoutMs`，设为 `0` 关闭）；在宿主执行 `delegate_to_member` / `publish_deliverable` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
+| `idleTimeoutMs` | `900000`（15 分钟，可由 `PA_IDLE_TIMEOUT_MS` 覆写） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗（有正的 `timeoutMs` 时不超过 `timeoutMs`，设为 `0` 关闭）；在宿主执行 `delegate_to_member` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
 | 动态工具等待上限 | `10000`（10s） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) | `session_start` 后轮询 `pi.getAllTools()` 等待异步扩展或 MCP 注册完成的最长时间 |
 | 桥接 `/ready` 握手超时 | `30000`（30s） | [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts) | 宿主等待子扩展回报实际激活工具清单的最长时间 |
 | 桥接 HTTP 传输超时 | `0`（禁用） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) / [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |
@@ -175,7 +175,7 @@
 - **配置入口**：
   - 可通过 `POST /api/matters`、`POST /api/matters/:id/messages` 或 `PATCH /api/matters/:id` 设置或调整旁听成员数组。
   - 与切换工作区（运行中返回 HTTP 409）不同，**旁听成员可在执行进行中实时调整**，不中断主负责人。
-- **权限隔离**：旁听成员运行在独立 `observer` 会话模式下，工具列表自动剔除 `edit`、`write`、`publish_deliverable` 与 `delegate_to_member`（双端禁权，只读审视）。
+- **权限隔离**：旁听成员运行在独立 `observer` 会话模式下，工具列表自动剔除 `edit`、`write`、`save_space_page` 与 `delegate_to_member`（双端禁权，只读审视）。
 - **静默识别**：默认哨兵 `[SILENT]`；同时兼容 `[PASS]`、`[NOOP]`、`暂无异议`、`无需补充`、`无需发言`（均不写入用户频道）。
 - **旁听提示与摘要窗口**：
   - 当前轮输入：用户发言最多截取 `2000` 字符，主负责人回复最多截取 `6000` 字符。

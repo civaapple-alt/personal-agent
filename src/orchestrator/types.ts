@@ -283,7 +283,13 @@ export interface DistillExperiencesResult {
 export type ExperienceDraft = Parameters<PersonalAgentStore["addMemory"]>[0];
 
 export interface ExecutionEffects {
-	deliveries: Array<{ memberId: string; cwd: string; draft: DeliveryDraft }>;
+	deliveries: Array<{
+		memberId: string;
+		cwd: string;
+		draft: DeliveryDraft;
+		spacePage?: { id: string; revision: number };
+		autoSource?: { workspaceKey: string; sourcePath: string };
+	}>;
 	experiences: ExperienceDraft[];
 	applicationIds: string[];
 }
@@ -293,7 +299,17 @@ export function emptyEffects(): ExecutionEffects {
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
-	target.deliveries.push(...source.deliveries);
+	for (const entry of source.deliveries) {
+		const index = entry.autoSource
+			? target.deliveries.findIndex(
+					(existing) =>
+						existing.autoSource?.workspaceKey === entry.autoSource?.workspaceKey &&
+						existing.autoSource?.sourcePath === entry.autoSource?.sourcePath,
+				)
+			: -1;
+		if (index < 0) target.deliveries.push(entry);
+		else target.deliveries[index] = entry;
+	}
 	target.experiences.push(...source.experiences);
 	target.applicationIds.push(...source.applicationIds);
 }
@@ -346,7 +362,7 @@ const TOOL_LABELS: Record<string, string> = {
 	edit: "修改文件",
 	write: "写入文件",
 	delegate_to_member: "委托团队成员",
-	publish_deliverable: "提交成果",
+	save_space_page: "保存资料",
 	propose_experience: "提炼候选经验",
 	load_pstack_skill: "读取 pstack 方法",
 };

@@ -13,9 +13,13 @@ test("review evidence requires completed successful lead consultations before a 
 		isError: false,
 		...input,
 	});
-	const publish = trace({ toolName: "publish_deliverable", started: 5, ended: 6 });
+	const publish = trace({ toolName: "save_space_page", started: 5, ended: 6 });
 	publish.args = { title: "设计方案" };
 	assert.deepEqual(specialistsBeforePublication([trace({}), publish], "设计方案"), ["engineering-manager"]);
+	assert.deepEqual(
+		specialistsBeforePublication([trace({}), { ...publish, toolName: "publish_deliverable" }], "设计方案"),
+		["engineering-manager"],
+	);
 	assert.deepEqual(
 		specialistsBeforePublication(
 			[

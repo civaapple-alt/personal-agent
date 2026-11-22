@@ -61,7 +61,7 @@ async function run(input: {
 		workerFactory: (options) => {
 			const memberId = options.env?.PA_MEMBER_ID ?? "unknown";
 			const memberContext = options.env?.PA_MEMBER_CONTEXT ?? "";
-			if (options.env?.PA_CAN_PUBLISH === "true" && memberContext.split(PUBLICATION_REVIEW_GUIDANCE).length !== 2)
+			if (options.env?.PA_CAN_SAVE_SPACE === "true" && memberContext.split(PUBLICATION_REVIEW_GUIDANCE).length !== 2)
 				throw new Error("Expected exactly one review-guidance block for a controlled comparison");
 			const worker = new PiRpcWorker({
 				...options,
@@ -148,7 +148,7 @@ async function run(input: {
 			const args = trace.args;
 			return (
 				trace.memberId === "product-manager" &&
-				trace.toolName === "publish_deliverable" &&
+				trace.toolName === "save_space_page" &&
 				trace.isError === false &&
 				args !== null &&
 				typeof args === "object" &&

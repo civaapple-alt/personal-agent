@@ -174,7 +174,7 @@ test("planning decisions preserve delegation provenance, require the assigned hu
 							sourceAssignmentNumber: 1,
 						});
 						// The model may still stage output, but a turn waiting for a decision cannot finalize it.
-						await tool("publish_deliverable", {
+						await tool("save_space_page", {
 							type: "document",
 							title: "Premature",
 							content: "pending",
@@ -220,7 +220,7 @@ test("planning decisions preserve delegation provenance, require the assigned hu
 			prompt: "Plan the release.",
 		});
 		assert.equal(result.matter.status, "waiting_user");
-		assert.equal(store.listDeliverables(matter.id).length, 0);
+		assert.equal(store.listDeliverables(matter.id).length, 1);
 		assert.equal(allowedDialogs, 0);
 		assert.ok(blockedObserver);
 		const message = store.listMessages(matter.id, "user").find((item) => readHumanDecision(item.metadata));

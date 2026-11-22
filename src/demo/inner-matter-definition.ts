@@ -39,7 +39,7 @@ export const INNER_MATTER_GUIDE: InnerMatterGuide = {
 			label: "阶段交付",
 			description: "整合讨论与同事意见，形成可审阅的 V1。",
 			prompt:
-				"需求讨论和专业咨询已完成。请形成首个可审阅版本：包含目标用户、V1 范围与不做项、用户流程、最小技术方案、可检查的验收条件以及采用同事建议的依据。保存到 deliverables/feedback-box-v1.md，并实际调用 publish_deliverable，以 document 类型、准确标题‘反馈收集盒 · 产品方案’和 sourcePath='deliverables/feedback-box-v1.md' 发布，由宿主读取文件正文，不再传 content，changeNote 说明从讨论形成首版的依据。这是明确的阶段交付，不编码、不提交 Git。",
+				"需求讨论和专业咨询已完成。请形成首个可审阅版本：包含目标用户、V1 范围与不做项、用户流程、最小技术方案、可检查的验收条件以及采用同事建议的依据。保存到 deliverables/feedback-box-v1.md，并实际调用 save_space_page，以 document 类型、准确标题‘反馈收集盒 · 产品方案’和 sourcePath='deliverables/feedback-box-v1.md' 发布，由宿主读取文件正文，不再传 content，changeNote 说明从讨论形成首版的依据。这是明确的阶段交付，不编码、不提交 Git。",
 		},
 		{
 			id: "revise",
@@ -48,7 +48,7 @@ export const INNER_MATTER_GUIDE: InnerMatterGuide = {
 			feedback:
 				"以下是虚构使用情境的演示反馈，不代表应用已经实现或经过真实试用：V1 的基本方向认可。假设同一建议来自多个渠道时会重复处理，V2 请增加手动合并重复反馈，并将处理状态细化为待处理、处理中、已完成；说明合并后如何保留来源，以及 V1 旧状态如何迁移。仍不做账号权限与自动分类。",
 			prompt:
-				"请读取本事项已记录的 V1 验收反馈，结合下面的意见实际咨询研发经理与测试经理，检查合并规则、状态转换与回归风险，再修订方案。保存到 deliverables/feedback-box-v2.md，并实际调用 publish_deliverable，以 document 类型、同一准确标题‘反馈收集盒 · 产品方案’和 sourcePath='deliverables/feedback-box-v2.md' 发布，由宿主读取文件正文，不再传 content，changeNote 逐项说明相对 V1 的变化及反馈依据。保留 V1 文件，不编码、不提交 Git。",
+				"请读取本事项已记录的 V1 验收反馈，结合下面的意见实际咨询研发经理与测试经理，检查合并规则、状态转换与回归风险，再修订方案。保存到 deliverables/feedback-box-v2.md，并实际调用 save_space_page，以 document 类型、同一准确标题‘反馈收集盒 · 产品方案’和 sourcePath='deliverables/feedback-box-v2.md' 发布，由宿主读取文件正文，不再传 content，changeNote 逐项说明相对 V1 的变化及反馈依据。保留 V1 文件，不编码、不提交 Git。",
 		},
 	],
 };

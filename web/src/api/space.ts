@@ -19,6 +19,7 @@ export interface SpacePageRevision {
 	content: string;
 	updatedBy: string;
 	createdAt: string;
+	resultId: string | null;
 }
 
 export function listSpacePages() {

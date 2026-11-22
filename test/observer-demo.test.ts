@@ -62,7 +62,7 @@ async function runFixture(t: test.TestContext, fault: "none" | "empty" | "failed
 				async runPromptAndWait(prompt): Promise<PromptRunResult> {
 					let reply: string;
 					const tools: PromptRunResult["toolExecutions"] = [];
-					if (options.env?.PA_CAN_PUBLISH === "true") {
+					if (options.env?.PA_CAN_SAVE_SPACE === "true") {
 						leadCount++;
 						if (leadCount === 1) reply = OBSERVER_BRIEF;
 						else if (leadCount === 2) reply = OBSERVER_PROPOSAL;
@@ -77,8 +77,8 @@ async function runFixture(t: test.TestContext, fault: "none" | "empty" | "failed
 								content: plan,
 								changeNote: "采纳旁听补充的设计阶段方案",
 							};
-							await invokeTool(options, "publish_deliverable", args);
-							tools.push({ toolCallId: randomUUID(), toolName: "publish_deliverable", args, isError: false });
+							await invokeTool(options, "save_space_page", args);
+							tools.push({ toolCallId: randomUUID(), toolName: "save_space_page", args, isError: false });
 							reply = plan;
 						} else reply = leadCount === 4 ? "5人小组由负责人手动录入反馈。" : "已确认，无新增需求。";
 					} else {
@@ -90,13 +90,13 @@ async function runFixture(t: test.TestContext, fault: "none" | "empty" | "failed
 								"late observer receives prior brief, not only the latest proposal",
 							);
 							await assert.rejects(
-								invokeTool(options, "publish_deliverable", {
+								invokeTool(options, "save_space_page", {
 									type: "document",
 									title: "forbidden",
 									content: "旁听不能发布",
 									changeNote: "权限反例",
 								}),
-								/only the lead/,
+								/Only the matter lead/,
 							);
 							await assert.rejects(
 								invokeTool(options, "delegate_to_member", {

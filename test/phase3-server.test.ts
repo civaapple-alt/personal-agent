@@ -206,7 +206,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 				deliverables: Array<{ id: string; contentOrPath: string }>;
 				noticeMessages: unknown[];
 			};
-			if (detail.matter.status === "delivered" && detail.deliverables[0]) {
+			if (detail.deliverables[0]) {
 				assert.equal(detail.deliverables[0].contentOrPath, "交付原型已准备就绪");
 				assert.equal(detail.noticeMessages.length, 2);
 				deliverableId = detail.deliverables[0].id;

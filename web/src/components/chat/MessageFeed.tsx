@@ -204,7 +204,7 @@ export function MessageFeed({
 				<span className="deliverable-pill-info">
 					<span className="deliverable-pill-check">✓</span>
 					<span>
-						已归档至成果库 · <strong>V{deliv.version}</strong>
+						已记录至资料空间 · <strong>V{deliv.version}</strong>
 					</span>
 				</span>
 				<span className="deliverable-pill-actions">
@@ -214,7 +214,7 @@ export function MessageFeed({
 						</a>
 					)}
 					<button type="button" className="btn-inline" onClick={() => onOpenDeliverables(deliv.id)}>
-						在成果库查看
+						在资料空间查看
 					</button>
 				</span>
 			</div>

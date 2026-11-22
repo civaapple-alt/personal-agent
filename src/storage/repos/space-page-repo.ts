@@ -21,6 +21,7 @@ export interface SpacePageRevision {
 	content: string;
 	updatedBy: string;
 	createdAt: string;
+	resultId: string | null;
 }
 
 interface PageRow {
@@ -71,7 +72,10 @@ export class SpacePageRepo {
 	listRevisions(pageId: string): SpacePageRevision[] {
 		const rows = this.db
 			.prepare(
-				"SELECT page_id, revision, title, content, updated_by, created_at FROM space_page_revisions WHERE page_id = ? ORDER BY revision DESC",
+				`SELECT revisions.page_id, revisions.revision, revisions.title, revisions.content, revisions.updated_by, revisions.created_at, links.deliverable_id
+				 FROM space_page_revisions AS revisions
+				 LEFT JOIN space_page_result_links AS links ON links.page_id = revisions.page_id AND links.revision = revisions.revision
+				 WHERE revisions.page_id = ? ORDER BY revisions.revision DESC`,
 			)
 			.all(pageId) as Array<{
 			page_id: string;
@@ -80,6 +84,7 @@ export class SpacePageRepo {
 			content: string;
 			updated_by: string;
 			created_at: string;
+			deliverable_id: string | null;
 		}>;
 		return rows.map((row) => ({
 			pageId: row.page_id,
@@ -88,7 +93,88 @@ export class SpacePageRepo {
 			content: row.content,
 			updatedBy: row.updated_by,
 			createdAt: row.created_at,
+			resultId: row.deliverable_id,
 		}));
+	}
+
+	advanceWorkspaceSource(input: {
+		matterId: string;
+		workspaceKey: string;
+		sourcePath: string;
+		pageId: string;
+		previousRevision: number;
+		revision: number;
+	}): void {
+		this.db
+			.prepare(
+				"UPDATE space_page_sources SET revision = ? WHERE matter_id = ? AND workspace_key = ? AND source_path = ? AND page_id = ? AND revision = ?",
+			)
+			.run(
+				input.revision,
+				input.matterId,
+				input.workspaceKey,
+				input.sourcePath,
+				input.pageId,
+				input.previousRevision,
+			);
+	}
+
+	/** Save an observed workspace document without overwriting a separately edited page. */
+	saveWorkspaceDocument(input: {
+		matterId: string;
+		workspaceKey: string;
+		sourcePath: string;
+		title: string;
+		content: string;
+		actorId: string;
+	}): SpacePage {
+		const now = nowIso();
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			const source = this.db
+				.prepare(
+					"SELECT page_id, revision FROM space_page_sources WHERE matter_id = ? AND workspace_key = ? AND source_path = ?",
+				)
+				.get(input.matterId, input.workspaceKey, input.sourcePath) as
+				| { page_id: string; revision: number }
+				| undefined;
+			const existing = source ? this.get(source.page_id) : null;
+			if (
+				existing &&
+				existing.revision === source?.revision &&
+				existing.content === input.content &&
+				existing.title === input.title
+			) {
+				this.db.exec("COMMIT");
+				return existing;
+			}
+			const id = existing && existing.revision === source?.revision ? existing.id : `page_${randomUUID()}`;
+			const revision = existing && existing.id === id ? existing.revision + 1 : 1;
+			if (revision === 1) {
+				this.db
+					.prepare("INSERT INTO space_pages VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)")
+					.run(id, input.matterId, input.title, input.content, input.actorId, input.actorId, now, now);
+			} else {
+				this.db
+					.prepare(
+						"UPDATE space_pages SET title = ?, content = ?, revision = ?, updated_by = ?, updated_at = ? WHERE id = ?",
+					)
+					.run(input.title, input.content, revision, input.actorId, now, id);
+			}
+			this.db
+				.prepare("INSERT INTO space_page_revisions VALUES (?, ?, ?, ?, ?, ?)")
+				.run(id, revision, input.title, input.content, input.actorId, now);
+			this.db
+				.prepare(
+					"INSERT INTO space_page_sources VALUES (?, ?, ?, ?, ?) ON CONFLICT(matter_id, workspace_key, source_path) DO UPDATE SET page_id = excluded.page_id, revision = excluded.revision",
+				)
+				.run(input.matterId, input.workspaceKey, input.sourcePath, id, revision);
+			this.db.exec("COMMIT");
+			return this.get(id)!;
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
 	}
 
 	create(input: { matterId: string; title: string; content: string; actorId: string }): SpacePage {

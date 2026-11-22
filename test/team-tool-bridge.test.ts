@@ -70,10 +70,10 @@ test("capability handshake waits for asynchronously registered MCP tools and exp
 	const bridge = await createTeamToolBridge(async () => null, controller.signal);
 	const envBefore = { ...process.env };
 	let onStart: (() => Promise<void>) | undefined;
-	let available = ["read", "unrelated_tool", "delegate_to_member", "publish_deliverable"];
+	let available = ["read", "unrelated_tool", "delegate_to_member", "save_space_page"];
 	let active: string[] = [];
 	Object.assign(process.env, bridge.env, {
-		PA_REQUIRED_TOOLS: JSON.stringify(["read", "delegate_to_member", "publish_deliverable", "mcp__local__*"]),
+		PA_REQUIRED_TOOLS: JSON.stringify(["read", "delegate_to_member", "save_space_page", "mcp__local__*"]),
 	});
 	try {
 		const api: PiExtensionApi = {
@@ -100,7 +100,7 @@ test("capability handshake waits for asynchronously registered MCP tools and exp
 		assert.deepEqual(await bridge.waitReady(), [
 			"read",
 			"delegate_to_member",
-			"publish_deliverable",
+			"save_space_page",
 			"mcp__local__lookup",
 		]);
 	} finally {

@@ -61,9 +61,7 @@ try {
 		if (step.id === "deliver" || step.id === "revise") {
 			assert.equal(turn.deliverable?.title, INNER_MATTER_GUIDE.deliverableTitle);
 			assert.equal(turn.deliverable?.version, step.id === "deliver" ? 1 : 2);
-			assert.ok(
-				turn.runResult.toolExecutions.some((tool) => tool.toolName === "publish_deliverable" && !tool.isError),
-			);
+			assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError));
 			const content = await readFile(
 				join(workspace, `deliverables/feedback-box-v${turn.deliverable!.version}.md`),
 				"utf8",
@@ -72,7 +70,7 @@ try {
 			assert.ok(
 				turn.runResult.toolExecutions.some(
 					(tool) =>
-						tool.toolName === "publish_deliverable" &&
+						tool.toolName === "save_space_page" &&
 						!tool.isError &&
 						tool.args !== null &&
 						typeof tool.args === "object" &&

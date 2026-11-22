@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
@@ -135,7 +135,7 @@ export async function executeWithWorkerPass(
 		hasConsultTargets,
 		isMatterLead,
 	});
-	const { canPublish, canDelegate, canProposeExperience } = teamExtension;
+	const { canSaveSpace, canDelegate, canProposeExperience } = teamExtension;
 	const humanQuestion = prepareHumanQuestion({
 		sessionMode,
 		discussionMode: isDiscussionMode,
@@ -268,13 +268,49 @@ export async function executeWithWorkerPass(
 				return { page };
 			}
 			if (call.tool === "save_space_page") {
-				if (!canPublish) throw new Error("Only the matter lead can save space pages");
-				if (!call.pageId) {
-					const page = deps.store.spacePages.create({
-						matterId: input.matterId,
+				if (!canSaveSpace) throw new Error("Only the matter lead can save space pages");
+				const draft = await prepareDelivery(
+					{
+						tool: "save_space_page",
+						callId: call.callId,
 						title: call.title,
-						content: call.content,
-						actorId: input.member.id,
+						summary: call.summary ?? "",
+						changeNote: call.changeNote ?? "本轮形成的空间资料",
+						...(call.sourcePath !== undefined
+							? { type: "document" as const, sourcePath: call.sourcePath }
+							: { type: call.type, content: call.content }),
+					},
+					cwd,
+				);
+				toolSignal.throwIfAborted();
+				const staged = !call.pageId
+					? deliveries.find(
+							(entry) =>
+								entry.memberId === input.member.id && entry.draft.title === call.title && entry.spacePage,
+						)
+					: undefined;
+				if (!call.pageId && !staged) {
+					const page =
+						draft.type === "document" && draft.source.kind === "workspace_file"
+							? deps.store.spacePages.saveWorkspaceDocument({
+									matterId: input.matterId,
+									workspaceKey: input.workspace?.id ?? cwd,
+									sourcePath: draft.source.realPath,
+									title: call.title,
+									content: draft.content,
+									actorId: input.member.id,
+								})
+							: deps.store.spacePages.create({
+									matterId: input.matterId,
+									title: call.title,
+									content: draft.content,
+									actorId: input.member.id,
+								});
+					deliveries.push({
+						memberId: input.member.id,
+						cwd,
+						draft,
+						spacePage: { id: page.id, revision: page.revision },
 					});
 					input.onProgress?.({
 						stage: "tool",
@@ -284,16 +320,35 @@ export async function executeWithWorkerPass(
 					});
 					return { page };
 				}
-				const previous = deps.store.spacePages.get(call.pageId);
+				const previous = deps.store.spacePages.get(call.pageId ?? staged!.spacePage!.id);
 				if (!previous || previous.matterId !== input.matterId)
 					throw new Error("Space page not found in this matter");
 				const page = deps.store.spacePages.update(previous.id, {
-					revision: call.revision!,
+					revision: call.revision ?? staged!.spacePage!.revision,
 					title: call.title,
-					content: call.content,
+					content: draft.content,
 					actorId: input.member.id,
 				});
 				if (!page) throw new Error("Space page changed. Read its latest revision before saving.");
+				if (draft.type === "document" && draft.source.kind === "workspace_file") {
+					deps.store.spacePages.advanceWorkspaceSource({
+						matterId: input.matterId,
+						workspaceKey: input.workspace?.id ?? cwd,
+						sourcePath: draft.source.realPath,
+						pageId: page.id,
+						previousRevision: previous.revision,
+						revision: page.revision,
+					});
+				}
+				const previousDraft = deliveries.findIndex((entry) => entry.spacePage?.id === page.id);
+				const entry = {
+					memberId: input.member.id,
+					cwd,
+					draft,
+					spacePage: { id: page.id, revision: page.revision },
+				};
+				if (previousDraft < 0) deliveries.push(entry);
+				else deliveries[previousDraft] = entry;
 				input.onProgress?.({
 					stage: "tool",
 					label: `${input.member.displayName}更新了资料`,
@@ -313,7 +368,7 @@ export async function executeWithWorkerPass(
 								: "This member cannot delegate secondary tasks",
 						);
 					}
-					if (call.verification && !canPublish) {
+					if (call.verification && !canSaveSpace) {
 						throw new Error("Only the lead of an authorized work turn can request independent verification");
 					}
 					const result = await deps.delegate(
@@ -403,39 +458,6 @@ export async function executeWithWorkerPass(
 					}
 					return { staged: true, status: "candidate", scope: call.scope, note: "本轮完成后记为待验证经验" };
 				}
-				if (!canPublish)
-					throw new Error(
-						isDiscussionMode
-							? "Chat discussion mode does not publish formal deliverables; switch to「给 AI 安排事项」to publish"
-							: "Internal specialists return results to the lead; only the lead publishes user deliverables",
-					);
-				const draft = await prepareDelivery(call, cwd);
-				toolSignal.throwIfAborted();
-				const previousDocument = deliveries.findIndex(
-					(entry) =>
-						entry.memberId === input.member.id &&
-						entry.draft.type === "document" &&
-						draft.type === "document" &&
-						entry.draft.title === draft.title,
-				);
-				if (previousDocument >= 0) deliveries[previousDocument] = { memberId: input.member.id, cwd, draft };
-				else if (
-					!deliveries.some(
-						(entry) =>
-							entry.memberId === input.member.id &&
-							entry.draft.title === draft.title &&
-							entry.draft.content === draft.content,
-					)
-				)
-					deliveries.push({ memberId: input.member.id, cwd, draft });
-				return {
-					staged: true,
-					title: draft.title,
-					...(draft.type === "document" && draft.source.kind === "workspace_file"
-						? { sourcePath: draft.source.path, contentSha256: draft.source.sha256 }
-						: {}),
-					note: "本轮成功结束后归档；如修改来源文件，须重新发布最终文件以更新草稿快照",
-				};
 			} finally {
 				releaseIdle?.();
 				resumeMonitor?.();
@@ -837,6 +859,67 @@ export async function executeWithWorkerPass(
 			});
 		}
 		if (!result.aborted && !input.run.cancelled) {
+			if (!isArchitect && !isVerifier && sessionMode !== "observer" && input.workspace) {
+				for (const execution of result.toolExecutions) {
+					if (
+						(execution.toolName !== "write" && execution.toolName !== "edit") ||
+						execution.isError ||
+						execution.result === undefined
+					)
+						continue;
+					if (
+						!execution.args ||
+						typeof execution.args !== "object" ||
+						!("path" in execution.args) ||
+						typeof execution.args.path !== "string"
+					)
+						continue;
+					const sourcePath = execution.args.path;
+					if (!/\.(?:md|markdown|txt)$/i.test(sourcePath)) continue;
+					const title = relative(cwd, resolve(cwd, sourcePath)).slice(0, 200);
+					try {
+						const draft = await prepareDelivery(
+							{
+								tool: "save_space_page",
+								callId: execution.toolCallId,
+								title,
+								type: "document",
+								summary: "",
+								changeNote: "本轮修改的工作区文档",
+								sourcePath,
+							},
+							cwd,
+						);
+						if (draft.type !== "document" || draft.source.kind !== "workspace_file") continue;
+						const sourceKey = draft.source.realPath;
+						const existingIndex = deliveries.findIndex(
+							(entry) =>
+								entry.draft.type === "document" &&
+								entry.draft.source.kind === "workspace_file" &&
+								entry.draft.source.realPath === sourceKey,
+						);
+						const entry = {
+							memberId: input.member.id,
+							cwd,
+							draft: existingIndex < 0 ? draft : { ...draft, title: deliveries[existingIndex]!.draft.title },
+							autoSource: { workspaceKey: input.workspace.id, sourcePath: sourceKey },
+						};
+						if (existingIndex < 0) deliveries.push(entry);
+						else {
+							const previous = deliveries[existingIndex]!;
+							if (
+								previous.autoSource ||
+								(previous.draft.type === "document" &&
+									previous.draft.source.kind === "workspace_file" &&
+									previous.draft.source.sha256 !== draft.source.sha256)
+							)
+								deliveries[existingIndex] = entry;
+						}
+					} catch {
+						// A removed, unreadable or out-of-workspace file cannot become a space document.
+					}
+				}
+			}
 			for (const item of stagedExperiences) {
 				const orgId = item.scope === "company_private" ? activeOrgId : null;
 				const workspaceId = item.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);

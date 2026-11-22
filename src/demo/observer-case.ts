@@ -37,7 +37,7 @@ export const OBSERVER_STEPS = [
 		id: "revise",
 		label: "负责人结合旁听意见形成阶段方案",
 		matter: "risk",
-		prompt: `请结合测试经理上一轮的实际旁听补充和已明确的约束，修订删除处理方案。给出范围、可恢复规则、原始来源留存、可检查的验收条件和尚未实现的边界，全文控制在500字内。通过 publish_deliverable 以 document 类型、准确标题‘${OBSERVER_DELIVERY_TITLE}’和 content 登记一个明确要求的阶段V1；当前没有落盘文件。最后把同一简短全文作为主回复供同事审视。不编码、不部署、不额外委托或提炼经验。`,
+		prompt: `请结合测试经理上一轮的实际旁听补充和已明确的约束，修订删除处理方案。给出范围、可恢复规则、原始来源留存、可检查的验收条件和尚未实现的边界，全文控制在500字内。通过 save_space_page 以 document 类型、准确标题‘${OBSERVER_DELIVERY_TITLE}’和 content 登记一个明确要求的阶段V1；当前没有落盘文件。最后把同一简短全文作为主回复供同事审视。不编码、不部署、不额外委托或提炼经验。`,
 	},
 	{
 		id: "quiet",

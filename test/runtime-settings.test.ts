@@ -169,7 +169,6 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 		"read_space",
 		"save_space_page",
 		"delegate_to_member",
-		"publish_deliverable",
 		"propose_experience",
 	]);
 	const questionExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-human-question");

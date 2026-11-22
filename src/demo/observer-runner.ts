@@ -28,7 +28,7 @@ interface WorkerRecord {
 	mode: "lead" | "internal" | "observer";
 	started: number;
 	tools: string[];
-	canPublish: boolean;
+	canSaveSpace: boolean;
 	canDelegate: boolean;
 	canExperience: boolean;
 	resumedSessionFile?: string;
@@ -84,14 +84,14 @@ export async function runObserverSmoke(input: {
 				stepId: currentStep,
 				memberId: options.env?.PA_MEMBER_ID ?? "unknown",
 				mode:
-					options.env?.PA_CAN_PUBLISH === "true"
+					options.env?.PA_CAN_SAVE_SPACE === "true"
 						? "lead"
 						: options.env?.PA_CAN_DELEGATE === "true"
 							? "internal"
 							: "observer",
 				started: ++order,
 				tools: toolsIndex < 0 ? [] : (options.args?.[toolsIndex + 1]?.split(",") ?? []),
-				canPublish: options.env?.PA_CAN_PUBLISH === "true",
+				canSaveSpace: options.env?.PA_CAN_SAVE_SPACE === "true",
 				canDelegate: options.env?.PA_CAN_DELEGATE === "true",
 				canExperience: options.env?.PA_CAN_EXPERIENCE === "true",
 				resumedSessionFile: options.sessionFile,
@@ -235,7 +235,7 @@ export async function runObserverSmoke(input: {
 						worker.tools.length === 2 &&
 						worker.tools.includes("read") &&
 						worker.tools.includes("read_pa_help") &&
-						!worker.canPublish &&
+						!worker.canSaveSpace &&
 						!worker.canDelegate &&
 						!worker.canExperience,
 				) &&

@@ -17,7 +17,7 @@ Put the conclusion, important changes, and verification evidence where a reader 
 
 ## Structure a formal deliverable
 
-For `publish_deliverable`, use the requested deliverable language.
+For space documents, use the requested language.
 
 - Write `changeNote` and `summary` in one to three short sentences. State this version's conclusion, the key change, and the evidence. Aim for about 120 characters in Chinese. Keep long action lists, parameter tables, and path lists in the document body.
 - Structure the Markdown body in this order.

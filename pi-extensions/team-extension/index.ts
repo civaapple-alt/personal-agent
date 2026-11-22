@@ -91,16 +91,24 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "save_space_page",
 			label: "保存空间资料",
 			description:
-				"Save a plan, work in progress, or result to this matter's space when useful or requested. Saving is immediate and survives later turn failure. Create with title and content, or update an existing page with pageId and its current revision. Read the page first and handle revision conflicts without overwriting others' work.",
+				"Save a plan, work in progress, or result to this matter's space. Provide title and either content or sourcePath for an existing workspace text file. Saving is immediate. On a successful turn the saved document is available as an interaction result. To update a page use pageId and its current revision. Read the page first and resolve conflicts without overwriting others' work.",
 			parameters: {
 				type: "object",
 				properties: {
+					type: { type: "string", enum: ["document", "artifact", "prototype_image", "service_url"] },
 					title: { type: "string" },
 					content: { type: "string" },
+					sourcePath: { type: "string" },
+					summary: { type: "string" },
+					changeNote: { type: "string" },
 					pageId: { type: "string" },
 					revision: { type: "integer", minimum: 1 },
 				},
-				required: ["title", "content"],
+				required: ["title"],
+				oneOf: [
+					{ required: ["content"], not: { required: ["sourcePath"] } },
+					{ required: ["sourcePath"], not: { required: ["content"] } },
+				],
 				additionalProperties: false,
 			},
 		},
@@ -161,41 +169,6 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			},
 		},
 		{
-			name: "publish_deliverable",
-			label: "登记成果",
-			description:
-				"Publish a reviewable milestone, an explicitly requested version, or a substantial change for the user. Keep changeNote to 1-3 concise sentences with key changes and evidence. For a document saved in the workspace, use sourcePath ONLY: the host reads its exact UTF-8 text, snapshots it, and rejects changes before turn completion unless you publish again. Do not regenerate that document in content. For a document without a saved file, use content ONLY for full Markdown text. Never supply both. artifact/prototype_image: existing workspace file path in content; service_url: http(s) URL in content. Use a stable title for versioning; re-publishing a same-title document within this turn replaces its draft. Ordinary conversation and progress stay in chat; specialists return to the lead. Staged results are finalized only when this user turn succeeds.",
-			parameters: {
-				type: "object",
-				properties: {
-					type: { type: "string", enum: ["document", "artifact", "prototype_image", "service_url"] },
-					title: { type: "string" },
-					content: { type: "string" },
-					sourcePath: {
-						type: "string",
-						description:
-							"Document only: final UTF-8 file inside the workspace, at most 1 MiB. Supply sourcePath instead of content.",
-					},
-					summary: { type: "string" },
-					changeNote: {
-						type: "string",
-						description:
-							"Concise 1-3 sentence summary of this version's conclusion, key changes, and verification/process basis (shown at top of deliverable card).",
-					},
-				},
-				required: ["type", "title", "changeNote"],
-				oneOf: [
-					{
-						properties: { type: { const: "document" } },
-						required: ["sourcePath"],
-						not: { required: ["content"] },
-					},
-					{ required: ["content"], not: { required: ["sourcePath"] } },
-				],
-				additionalProperties: false,
-			},
-		},
-		{
 			name: "propose_experience",
 			label: "提炼候选经验",
 			description:
@@ -227,8 +200,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 		},
 	]) {
 		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
-		if (tool.name === "publish_deliverable" && env.PA_CAN_PUBLISH === "false") continue;
-		if (tool.name === "save_space_page" && env.PA_CAN_PUBLISH === "false") continue;
+		if (tool.name === "save_space_page" && env.PA_CAN_SAVE_SPACE === "false") continue;
 		if (tool.name === "propose_experience" && env.PA_CAN_EXPERIENCE === "false") continue;
 		pi.registerTool({
 			...tool,

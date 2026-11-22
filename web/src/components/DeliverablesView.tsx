@@ -99,6 +99,7 @@ export function DeliverablesView(props: DeliverablesViewProps) {
 						bootstrap={props.bootstrap}
 						pageId={props.spaceRoute.pageId}
 						onOpenMatter={props.onOpenMatterChat}
+						onOpenResult={props.onSelectDeliverable}
 					/>
 				) : (
 					<DeliverablesArchive {...props} />
@@ -640,8 +641,8 @@ function DeliverablesArchive({
 								<div className="ui-card">
 									<p className="ui-empty-note">
 										{visibleFamilies.length === 0
-											? "当前筛选条件下暂无交付成果详情。"
-											: "请在左侧选择一条交付成果查看详情。"}
+											? "当前筛选条件下暂无资料详情。"
+											: "请在左侧选择一条资料查看详情。"}
 									</p>
 								</div>
 							)}

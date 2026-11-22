@@ -41,6 +41,7 @@ class SessionWorker implements RpcWorkerLike {
 	readonly tools = new Map<string, Tool>();
 	readonly sessionId: string;
 	readonly sessionFile: string;
+	toolExecutions: PromptRunResult["toolExecutions"] = [];
 	priorTranscript = "";
 	stopped = false;
 	prompt = "";
@@ -151,7 +152,7 @@ class SessionWorker implements RpcWorkerLike {
 			aborted: false,
 			assistantText: text,
 			assistantMessages: [],
-			toolExecutions: [],
+			toolExecutions: this.toolExecutions,
 			notices: [],
 			dialogs: [],
 			events: [],
@@ -183,6 +184,74 @@ async function fixture(t: test.TestContext, respond: Responder, classifier?: Dec
 	const workspace = store.upsertWorkspace({ name: "A", repoPath: root });
 	return { root, db, store, templates, workers, options, orchestrator, workspace };
 }
+
+test("successful workspace document writes become space pages and interaction results", async (t) => {
+	let version = 0;
+	const f = await fixture(t, async (worker) => {
+		assert.equal(worker.tools.has("publish_deliverable"), false);
+		await assert.rejects(
+			invokeTool(worker.options, "publish_deliverable", {
+				type: "document",
+				title: "old",
+				content: "old",
+				changeNote: "old",
+			}),
+			/Unsupported tool/,
+		);
+		version++;
+		await writeFile(join(f.root, "plan.md"), `# Plan ${version}`);
+		await writeFile(join(f.root, "code.ts"), "export const code = true;");
+		worker.toolExecutions = [
+			{
+				toolCallId: "doc",
+				toolName: version === 1 ? "write" : "edit",
+				args: { path: "plan.md" },
+				result: { content: [] },
+				isError: false,
+			},
+			{ toolCallId: "code", toolName: "write", args: { path: "code.ts" }, result: { content: [] }, isError: false },
+			{
+				toolCallId: "failed",
+				toolName: "write",
+				args: { path: "missing.md" },
+				result: { error: "failed" },
+				isError: true,
+			},
+			{ toolCallId: "unfinished", toolName: "write", args: { path: "unsettled.md" }, isError: false },
+		];
+		return "Work complete";
+	});
+	const first = await f.orchestrator.dispatchMatter({ prompt: "Prepare the plan", workspaceId: f.workspace.id });
+	assert.equal(first.deliverable?.contentOrPath, "# Plan 1");
+	const pages = f.store.spacePages.list(first.matter.id);
+	assert.equal(pages.length, 1);
+	assert.equal(pages[0]?.content, "# Plan 1");
+	assert.equal(f.store.spacePages.listRevisions(pages[0]!.id)[0]?.resultId, first.deliverable?.id);
+	const second = await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Revise the plan" });
+	assert.equal(second.deliverable?.version, 2);
+	assert.equal(f.store.spacePages.list(first.matter.id).length, 1);
+	assert.deepEqual(
+		f.store.spacePages.listRevisions(pages[0]!.id).map((revision) => revision.content),
+		["# Plan 2", "# Plan 1"],
+	);
+	assert.equal(f.store.spacePages.listRevisions(pages[0]!.id)[0]?.resultId, second.deliverable?.id);
+	const humanEdit = f.store.spacePages.update(pages[0]!.id, {
+		revision: 2,
+		title: "plan.md",
+		content: "Human changes",
+		actorId: "user",
+	});
+	assert.ok(humanEdit);
+	const third = await f.orchestrator.dispatchMatter({
+		matterId: first.matter.id,
+		prompt: "Update the workspace plan",
+	});
+	assert.equal(third.deliverable?.contentOrPath, "# Plan 3");
+	assert.equal(f.store.spacePages.get(pages[0]!.id)?.content, "Human changes");
+	assert.ok(
+		f.store.spacePages.list(first.matter.id).some((page) => page.id !== pages[0]!.id && page.content === "# Plan 3"),
+	);
+});
 
 test("space pages retain draft revisions, reject stale edits, and stay inside the active matter", async (t) => {
 	let createdId = "";
@@ -217,6 +286,51 @@ test("space pages retain draft revisions, reject stale edits, and stay inside th
 	assert.deepEqual(
 		f.store.spacePages.listRevisions(createdId).map((revision) => revision.content),
 		["Revised plan", "First draft"],
+	);
+});
+
+test("a human edit during a turn preserves the saved revision and links its interaction result", async (t) => {
+	let pageId = "";
+	const f = await fixture(t, async (worker) => {
+		const saved = await worker.call("save_space_page", { title: "Shared plan", content: "Role draft" });
+		pageId = (saved.details as { result: { page: { id: string } } }).result.page.id;
+		assert.ok(
+			f.store.spacePages.update(pageId, {
+				revision: 1,
+				title: "Shared plan",
+				content: "Human update",
+				actorId: "human",
+			}),
+		);
+		return "Draft saved";
+	});
+	const result = await f.orchestrator.dispatchMatter({ prompt: "Prepare plan", workspaceId: f.workspace.id });
+	assert.equal(f.store.spacePages.get(pageId)?.content, "Human update");
+	assert.equal(result.deliverable?.contentOrPath, "Role draft");
+	assert.equal(
+		f.store.spacePages.listRevisions(pageId).find((revision) => revision.revision === 1)?.resultId,
+		result.deliverable?.id,
+	);
+});
+
+test("a later observed file edit updates the saved document without another save call", async (t) => {
+	const f = await fixture(t, async (worker) => {
+		await writeFile(join(f.root, "plan.md"), "Draft");
+		await worker.call("save_space_page", { title: "Shared plan", sourcePath: "plan.md" });
+		await writeFile(join(f.root, "plan.md"), "Updated draft");
+		worker.toolExecutions = [
+			{ toolCallId: "edit", toolName: "edit", args: { path: "plan.md" }, result: { content: [] }, isError: false },
+		];
+		return "Updated";
+	});
+	const result = await f.orchestrator.dispatchMatter({ prompt: "Update the plan", workspaceId: f.workspace.id });
+	assert.equal(result.deliverable?.contentOrPath, "Updated draft");
+	const pages = f.store.spacePages.list(result.matter.id);
+	assert.equal(pages.length, 1);
+	assert.equal(pages[0]?.title, "Shared plan");
+	assert.deepEqual(
+		f.store.spacePages.listRevisions(pages[0]!.id).map((revision) => revision.content),
+		["Updated draft", "Draft"],
 	);
 });
 
@@ -305,7 +419,7 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 		["qa-manager", "engineering-manager"],
 	);
 	assert.equal(
-		discussionWorkers.every((worker) => !worker.tools.has("publish_deliverable")),
+		discussionWorkers.every((worker) => !worker.tools.has("save_space_page")),
 		true,
 	);
 	assert.equal(
@@ -317,7 +431,7 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	assert.ok(engineeringArgs[engineeringArgs.indexOf("--tools") + 1]?.split(",").includes("bash"));
 	assert.match(discussionWorkers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Discussion chat mode/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
-	assert.equal(f.store.getMatter(first.matter.id)?.status, "delivered");
+	assert.equal(f.store.getMatter(first.matter.id)?.status, "open");
 	assert.equal(f.store.listDeliverables(first.matter.id).length, 1);
 	const messages = f.store.listMessages(first.matter.id, "user");
 	assert.equal(messages.filter(({ content }) => content === on.message.content).length, 1);
@@ -489,7 +603,7 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	// Explicit preferredMemberId skips the extra classifier worker and runs the lead directly with full tools.
 	assert.equal(f.workers.length, 1);
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
-	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /publish_deliverable/);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /save_space_page/);
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
 	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.senderId, "engineering-manager");
 	assert.equal(f.store.listMessages(first.matter.id, "user").at(-1)?.metadata?.matterLeadReply, true);
@@ -519,7 +633,7 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	// Mentioned non-lead specialist gets its own role tools + request_clarification, but cannot publish deliverables.
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
-	assert.doesNotMatch(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /publish_deliverable/);
+	assert.doesNotMatch(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /save_space_page/);
 	assert.equal(f.workers.length, 1);
 
 	await post(`/api/matters/${first.matter.id}`, { observersEnabled: true }, "PATCH");
@@ -1103,7 +1217,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 	let shouldFail = false;
 	const f = await fixture(t, async (worker) => {
 		await assert.rejects(
-			worker.call("publish_deliverable", {
+			worker.call("save_space_page", {
 				type: "artifact",
 				changeNote: "经验证的阶段文件",
 				title: "missing",
@@ -1112,7 +1226,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 			/ENOENT/,
 		);
 		await assert.rejects(
-			worker.call("publish_deliverable", {
+			worker.call("save_space_page", {
 				type: "artifact",
 				changeNote: "经验证的阶段文件",
 				title: "outside",
@@ -1121,7 +1235,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 			/workspace/,
 		);
 		await assert.rejects(
-			worker.call("publish_deliverable", {
+			worker.call("save_space_page", {
 				type: "service_url",
 				changeNote: "正式预览链接",
 				title: "bad",
@@ -1130,7 +1244,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 			/http/,
 		);
 		await worker.call(
-			"publish_deliverable",
+			"save_space_page",
 			{
 				type: "document",
 				changeNote: "完成本轮设计与验证，形成阶段版本",
@@ -1139,7 +1253,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 			},
 			"document",
 		);
-		await worker.call("publish_deliverable", {
+		await worker.call("save_space_page", {
 			type: "artifact",
 			changeNote: "经验证的阶段文件",
 			title: "示例文件",
@@ -1153,7 +1267,7 @@ test("archives explicit verified deliverables and versions them, rejects missing
 	await writeFile(join(f.root, "..", `${f.root.split("/").at(-1)}-outside.txt`), "outside");
 	t.after(() => rm(join(f.root, "..", `${f.root.split("/").at(-1)}-outside.txt`), { force: true }));
 	const first = await f.orchestrator.dispatchMatter({ prompt: "交付正式设计", workspaceId: f.workspace.id });
-	assert.equal(first.matter.status, "delivered");
+	assert.equal(first.matter.status, "open");
 	assert.equal(f.store.listDeliverables(first.matter.id).length, 2);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "再次交付" });
 	assert.equal(f.store.listDeliverables(first.matter.id).length, 4);
@@ -1284,10 +1398,10 @@ test("internal specialists cannot publish user deliverables and the lead receive
 	const f = await fixture(t, async (worker) => {
 		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			const draft = { type: "document", changeNote: "内部讨论不应归档", title: "不完整草稿", content: "尚未验证" };
-			assert.equal(worker.tools.has("publish_deliverable"), false);
-			await assert.rejects(worker.call("publish_deliverable", draft), /Missing shipped extension tool/);
+			assert.equal(worker.tools.has("save_space_page"), false);
+			await assert.rejects(worker.call("save_space_page", draft), /Missing shipped extension tool/);
 			// Even a forged transport request must be rejected by the host, beyond model tool filtering.
-			await assert.rejects(invokeTool(worker.options, "publish_deliverable", draft), /only the lead publishes/);
+			await assert.rejects(invokeTool(worker.options, "save_space_page", draft), /Only the matter lead/);
 			throw new Error("colleague provider failure");
 		}
 		await assert.rejects(
@@ -1387,7 +1501,7 @@ test("independent review links to a completed assignment and gates the exact fin
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]");
 			assert.ok(manifest.every((name: string) => ["read", "bash", "read_pa_help"].includes(name)));
 			assert.equal(worker.tools.has("delegate_to_member"), false);
-			assert.equal(worker.tools.has("publish_deliverable"), false);
+			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("propose_experience"), false);
 			const revised = prompt.includes("Reviewed content with checks");
 			return JSON.stringify({
@@ -1398,7 +1512,7 @@ test("independent review links to a completed assignment and gates the exact fin
 		}
 		await worker.call("delegate_to_member", { memberId: "engineering-manager", task: "Write the report" });
 		const stage = (content: string) =>
-			worker.call("publish_deliverable", {
+			worker.call("save_space_page", {
 				type: "document",
 				title,
 				content,
@@ -1593,7 +1707,7 @@ test("legacy sessions without proven organization scope remain archived while a 
 test("multiple process conversations stay in chat; explicit substantial milestone publishes one version with its change basis", async (t) => {
 	const f = await fixture(t, async (worker, prompt) => {
 		if (prompt.includes("发布阶段设计版本")) {
-			await worker.call("publish_deliverable", {
+			await worker.call("save_space_page", {
 				type: "document",
 				title: "便笺设计",
 				content: "已整合单人、本地文本范围，定义保存与恢复的验收条件。",
@@ -1710,9 +1824,9 @@ test("proactive observer chimes in with independent user bubble while silent obs
 		const ctx = worker.options.env?.PA_MEMBER_CONTEXT ?? "";
 		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			emPromptCount += 1;
-			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
+			assert.equal(worker.options.env?.PA_CAN_SAVE_SPACE, "false");
 			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
-			assert.equal(worker.tools.has("publish_deliverable"), false);
+			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.match(ctx, /## Observer participation/);
 			assert.match(prompt, /方案将直接同步拉取全库 10 万条记录/);
@@ -1720,7 +1834,7 @@ test("proactive observer chimes in with independent user bubble while silent obs
 		}
 		if (worker.options.env?.PA_MEMBER_ID === "qa-manager") {
 			qaPromptCount += 1;
-			assert.equal(worker.options.env?.PA_CAN_PUBLISH, "false");
+			assert.equal(worker.options.env?.PA_CAN_SAVE_SPACE, "false");
 			return "[SILENT]";
 		}
 		pmPromptCount += 1;

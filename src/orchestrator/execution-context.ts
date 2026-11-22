@@ -5,7 +5,6 @@ import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { resolveAllowedSkillRoots, resolveRoleSkillPath, type SkillResolutionOptions } from "../roles/capabilities.ts";
 import type { RoleTemplate } from "../roles/types.ts";
-import type { TeamToolCall } from "../rpc/team-tool-bridge.ts";
 import type { WorkerSessionRecord } from "../storage/types.ts";
 
 function isInsideRootDir(rootDir: string, realTarget: string): boolean {
@@ -64,7 +63,16 @@ export async function validateSavedSession(session: WorkerSessionRecord, cwd: st
 	return session.sessionFile;
 }
 
-type PublicationCall = Extract<TeamToolCall, { tool: "publish_deliverable" }>;
+type PublicationCall = {
+	tool: "save_space_page";
+	callId: string;
+	title: string;
+	summary: string;
+	changeNote: string;
+} & (
+	| { type: "document"; sourcePath: string; content?: never }
+	| { type: "document" | "artifact" | "prototype_image" | "service_url"; content: string; sourcePath?: never }
+);
 type PublicationMetadata = Pick<PublicationCall, "tool" | "callId" | "title" | "summary" | "changeNote">;
 export type DeliveryDraft = PublicationMetadata &
 	(
@@ -129,7 +137,7 @@ export async function validateDelivery(draft: DeliveryDraft, cwd: string): Promi
 			const current = await readWorkspaceDocument(draft.source.path, cwd);
 			if (current.realPath !== draft.source.realPath || current.sha256 !== draft.source.sha256)
 				throw new Error(
-					"Document source changed after staging; publish the final file again before completing the turn",
+					"Document source changed after saving; save the latest file to space before completing the turn",
 				);
 		}
 		return draft;

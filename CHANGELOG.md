@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the `publish_deliverable` runtime tool. Saved space pages and successfully written or edited workspace text documents become interaction results at turn completion, with revision-to-feedback links and legacy result history preserved.
 - Upgrade the workbench's deliverables library to a Space for editable matter pages and existing published deliverables. People and matter leads can save working plans and other in-progress material, review page revisions, and detect concurrent edits. Matter permissions continue to govern access; existing deliverable versions and feedback remain available.
 - Enable `fetch_content` alongside `web_search` and `get_search_content` for roles granted `pi-web-access`, while stripping per-call `proxy` overrides on both `web_search` and `fetch_content`.
 - Inject whitelisted `.env` search credentials (`EXA_API_KEY`, `MOONSHOT_API_KEY`) only into Pi workers granted `pi-web-access`, and add an admin-only `.env 密钥配置` section in Settings (`PATCH /api/admin/runtime/env`) to save/clear `TYPESAFE_API_KEY`, `EXA_API_KEY`, and `MOONSHOT_API_KEY` with hot-reload and no plaintext readback.

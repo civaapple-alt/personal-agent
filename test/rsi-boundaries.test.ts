@@ -170,7 +170,7 @@ test("RSI only reflects current workspace evidence and rejects candidate owners 
 
 test("a successful colleague proposal is still discarded if the lead fails afterward", async (t) => {
 	const f = await fixture(t, async (options) => {
-		if (options.env?.PA_CAN_PUBLISH === "false") {
+		if (options.env?.PA_CAN_SAVE_SPACE === "false") {
 			await invokeTool(options, "propose_experience", {
 				scope: "role_general",
 				content: "child draft",
@@ -191,7 +191,7 @@ test("a successful colleague proposal is still discarded if the lead fails after
 test("feedback scores only memories injected for that version, with one current vote per deliverable", async (t) => {
 	let first = true;
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", {
+		await invokeTool(options, "save_space_page", {
 			type: "document",
 			title: "design",
 			content: first ? "V1" : "V2",
@@ -345,7 +345,7 @@ test("a workspace change during reflection invalidates its result and factory fa
 
 test("neutral feedback retracts a version vote while manual evaluations remain independent", async (t) => {
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "publish_deliverable", {
+		await invokeTool(options, "save_space_page", {
 			type: "document",
 			title: "version",
 			content: "document",

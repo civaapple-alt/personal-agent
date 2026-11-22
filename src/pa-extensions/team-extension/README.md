@@ -7,7 +7,6 @@ PA 启动岗位时加载 `team-extension`。[runtime.ts](runtime.ts) 根据岗�
 | `read_space` | 主责或内部协作者，读取当前事项资料 |
 | `save_space_page` | 当前事项的主责，立即保存资料或按修订号更新 |
 | `delegate_to_member` | 有可请教成员的主责，或内部协作者 |
-| `publish_deliverable` | 正式执行的主责 |
 | `propose_experience` | 正式执行的主责或内部协作者 |
 
 角色架构师、旁听和独立验收使用各自的工具清单。人工提问由 Human Question 装配。 [工具选择](runtime.ts) [Human Question](../human-question/README.md)

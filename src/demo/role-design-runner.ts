@@ -71,7 +71,7 @@ export async function runRoleDesignDemo(input: {
 		memberId: string;
 		tools: string[];
 		skills: string[];
-		canPublish: boolean;
+		canSaveSpace: boolean;
 		canDelegate: boolean;
 		contextSha256: string;
 		skillSnapshots: Array<{ path: string; sha256: string }>;
@@ -88,7 +88,7 @@ export async function runRoleDesignDemo(input: {
 				memberId: options.env?.PA_MEMBER_ID ?? "unknown",
 				tools: args[args.indexOf("--tools") + 1]?.split(",").filter(Boolean) ?? [],
 				skills: args.flatMap((arg, index) => (arg === "--skill" ? [args[index + 1] ?? ""] : [])),
-				canPublish: options.env?.PA_CAN_PUBLISH === "true",
+				canSaveSpace: options.env?.PA_CAN_SAVE_SPACE === "true",
 				canDelegate: options.env?.PA_CAN_DELEGATE === "true",
 				contextSha256: reviewHash(options.env?.PA_MEMBER_CONTEXT ?? ""),
 				skillSnapshots: args.flatMap((arg, index) =>
@@ -244,7 +244,7 @@ export async function runRoleDesignDemo(input: {
 				? verificationSpecified &&
 					workers.length === 2 &&
 					workers[0]?.tools.length === 0 &&
-					!workers[0]?.canPublish &&
+					!workers[0]?.canSaveSpace &&
 					workers[1]?.tools.every((tool) => !["write", "edit", "bash", "delegate_to_member"].includes(tool)) &&
 					Boolean(
 						createdTemplate?.skills.every((name) =>

@@ -259,6 +259,23 @@ CREATE TABLE IF NOT EXISTS space_page_revisions (
 	PRIMARY KEY (page_id, revision)
 );
 
+CREATE TABLE IF NOT EXISTS space_page_sources (
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	workspace_key TEXT NOT NULL,
+	source_path TEXT NOT NULL,
+	page_id TEXT NOT NULL REFERENCES space_pages(id) ON DELETE CASCADE,
+	revision INTEGER NOT NULL,
+	PRIMARY KEY (matter_id, workspace_key, source_path)
+);
+
+CREATE TABLE IF NOT EXISTS space_page_result_links (
+	page_id TEXT NOT NULL,
+	revision INTEGER NOT NULL,
+	deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+	PRIMARY KEY (page_id, revision),
+	FOREIGN KEY (page_id, revision) REFERENCES space_page_revisions(page_id, revision) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS memory_applications (
 	id TEXT PRIMARY KEY,
 	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,

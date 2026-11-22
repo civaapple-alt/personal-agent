@@ -13,7 +13,7 @@ export function specialistsBeforePublication(traces: ReviewToolTrace[], title: s
 	const published = traces.findLast(
 		(trace) =>
 			trace.memberId === "product-manager" &&
-			trace.toolName === "publish_deliverable" &&
+			(trace.toolName === "save_space_page" || trace.toolName === "publish_deliverable") &&
 			trace.ended !== undefined &&
 			trace.isError === false &&
 			trace.args !== null &&

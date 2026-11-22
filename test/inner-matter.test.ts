@@ -70,7 +70,7 @@ async function fixture(t: test.TestContext) {
 			},
 			setDialogHandler() {},
 			async runPromptAndWait(prompt) {
-				if (options.env?.PA_CAN_PUBLISH === "false") return result("专业建议与验收风险");
+				if (options.env?.PA_CAN_SAVE_SPACE === "false") return result("专业建议与验收风险");
 				if (prompt.includes("actual-collaboration") || prompt.includes("actual-revision")) {
 					for (const memberId of INNER_MATTER_GUIDE.collaborationMemberIds)
 						await invokeTool(options, "delegate_to_member", { memberId, task: "核查设计" });
@@ -79,7 +79,7 @@ async function fixture(t: test.TestContext) {
 					const version = prompt.includes("actual-revision") ? 2 : 1;
 					const content = `# 产品方案 V${version}\n范围、专业建议与验收依据`;
 					await writeFile(join(directory, "deliverables", `feedback-box-v${version}.md`), content);
-					await invokeTool(options, "publish_deliverable", {
+					await invokeTool(options, "save_space_page", {
 						title: INNER_MATTER_GUIDE.deliverableTitle,
 						type: "document",
 						content,

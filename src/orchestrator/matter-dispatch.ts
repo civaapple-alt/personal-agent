@@ -513,8 +513,12 @@ export async function dispatchMatterTurn(
 			run.effects.deliveries.push({
 				memberId: assignedMember.id,
 				cwd: workspace?.repoPath ?? deps.defaultCwd,
+				autoSource: {
+					workspaceKey: workspace?.id ?? "__no_workspace__",
+					sourcePath: `api-export:${input.deliverableTitle}`,
+				},
 				draft: {
-					tool: "publish_deliverable",
+					tool: "save_space_page",
 					callId: "explicit-export",
 					changeNote: "API 调用方明确指定文档交付标题",
 					type: "document",
@@ -529,7 +533,7 @@ export async function dispatchMatterTurn(
 		if (!aborted && !isDiscussionTurn) {
 			// Recheck all paths before writing any index entry. Failed/cancelled turns publish nothing.
 			const validated = await Promise.all(
-				(decision ? [] : run.effects.deliveries).map(async (entry) => ({
+				run.effects.deliveries.map(async (entry) => ({
 					...entry,
 					draft: await validateDelivery(entry.draft, entry.cwd),
 				})),
@@ -543,16 +547,38 @@ export async function dispatchMatterTurn(
 					throw new Error(`Independent verification has not passed for the final draft: ${draft.title}`);
 				}
 			}
+			for (const entry of validated) {
+				if (!entry.spacePage) continue;
+				const revision = deps.store.spacePages
+					.listRevisions(entry.spacePage.id)
+					.find((item) => item.revision === entry.spacePage!.revision);
+				if (!revision || revision.content !== entry.draft.content) {
+					throw new Error("The saved space page revision is unavailable or changed.");
+				}
+			}
+			for (const entry of validated) {
+				if (!entry.autoSource) continue;
+				const page = deps.store.spacePages.saveWorkspaceDocument({
+					matterId: matter.id,
+					workspaceKey: entry.autoSource.workspaceKey,
+					sourcePath: entry.autoSource.sourcePath,
+					title: entry.draft.title,
+					content: entry.draft.content,
+					actorId: entry.memberId,
+				});
+				entry.spacePage = { id: page.id, revision: page.revision };
+			}
 			run.controller.signal.throwIfAborted();
 			const outcome = deps.store.recordTurnOutcome({
-				deliverables: validated.map(({ memberId, draft }) => ({
+				deliverables: validated.map(({ memberId, draft, spacePage }) => ({
 					matterId: matter.id,
 					memberId,
 					type: draft.type,
 					title: draft.title,
 					contentOrPath: draft.content,
-					summary: [draft.summary, `交付依据：${draft.changeNote}`].filter(Boolean).join("\n"),
+					summary: [draft.summary, `过程依据：${draft.changeNote}`].filter(Boolean).join("\n"),
 					serviceUrl: draft.type === "service_url" ? draft.content : null,
+					spacePage,
 				})),
 				candidates: run.effects.experiences,
 				applicationIds: run.effects.applicationIds,
@@ -612,11 +638,7 @@ export async function dispatchMatterTurn(
 		});
 		const updatedMatter = isDiscussionTurn
 			? deps.requireMatter(matter.id)
-			: deps.store.updateMatterStatus(
-					matter.id,
-					decision ? "waiting_user" : deliveries.length ? "delivered" : "open",
-					replyText.slice(0, 200),
-				);
+			: deps.store.updateMatterStatus(matter.id, decision ? "waiting_user" : "open", replyText.slice(0, 200));
 		const extraMentionMessages: MatterMessage[] = [];
 		let extraReplyAborted = false;
 		if (usesExistingRoster && !decision && !aborted && !run.cancelled && mentionedTargets.length > 1) {

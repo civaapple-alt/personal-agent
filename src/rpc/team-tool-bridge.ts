@@ -9,19 +9,18 @@ import type { VerificationRequest } from "./team-verification.ts";
 export type TeamToolCall =
 	| { tool: "read_pa_help"; callId: string; topics: WorkbenchTopic[]; language?: "zh" | "en" }
 	| { tool: "read_space"; callId: string; pageId?: string }
-	| { tool: "save_space_page"; callId: string; title: string; content: string; pageId?: string; revision?: number }
-	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
-	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| ({
-			tool: "publish_deliverable";
+			tool: "save_space_page";
 			callId: string;
 			title: string;
-			summary: string;
-			changeNote: string;
-	  } & (
-			| { type: "document"; sourcePath: string; content?: never }
-			| { type: "document" | "artifact" | "prototype_image" | "service_url"; content: string; sourcePath?: never }
-	  ))
+			pageId?: string;
+			revision?: number;
+			type: "document" | "artifact" | "prototype_image" | "service_url";
+			summary?: string;
+			changeNote?: string;
+	  } & ({ content: string; sourcePath?: never } | { sourcePath: string; content?: never }))
+	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
+	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| {
 			tool: "propose_experience";
 			callId: string;
@@ -76,7 +75,7 @@ function parseCall(value: unknown): TeamToolCall {
 			...("pageId" in args ? { pageId: requiredString(args.pageId, "pageId", 256) } : {}),
 		};
 	}
-	if (value.tool === "save_space_page" && "title" in args && "content" in args) {
+	if (value.tool === "save_space_page" && "title" in args) {
 		const pageId = "pageId" in args ? requiredString(args.pageId, "pageId", 256) : undefined;
 		const revision = "revision" in args ? args.revision : undefined;
 		if (
@@ -84,11 +83,24 @@ function parseCall(value: unknown): TeamToolCall {
 			(revision !== undefined && (!Number.isSafeInteger(revision) || Number(revision) < 1))
 		)
 			throw new Error("Provide pageId and revision together");
+		if ("content" in args === "sourcePath" in args) throw new Error("Provide exactly one of content or sourcePath");
+		const type = "type" in args ? args.type : "document";
+		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url")
+			throw new Error("Unsupported space item type");
+		if (type !== "document" && "sourcePath" in args)
+			throw new Error("sourcePath is only supported for document items");
+		const source =
+			"sourcePath" in args
+				? { sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) }
+				: { content: requiredString("content" in args ? args.content : undefined, "content", 64_000) };
 		return {
 			tool: value.tool,
 			callId,
 			title: requiredString(args.title, "title", 200),
-			content: requiredString(args.content, "content", 64_000),
+			type,
+			...("summary" in args ? { summary: requiredString(args.summary, "summary", 1000) } : {}),
+			...("changeNote" in args ? { changeNote: requiredString(args.changeNote, "changeNote", 2000) } : {}),
+			...source,
 			...(pageId ? { pageId, revision: Number(revision) } : {}),
 		};
 	}
@@ -138,32 +150,6 @@ function parseCall(value: unknown): TeamToolCall {
 			options: choices,
 			sourceAssignmentNumber,
 		};
-	}
-	if (value.tool === "publish_deliverable" && "type" in args && "title" in args) {
-		const changeNote =
-			"changeNote" in args
-				? requiredString(args.changeNote, "changeNote", 2000)
-				: requiredString(undefined, "changeNote");
-		const type = args.type;
-		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url") {
-			throw new Error("Unsupported deliverable type");
-		}
-		const metadata: Pick<
-			Extract<TeamToolCall, { tool: "publish_deliverable" }>,
-			"tool" | "callId" | "title" | "changeNote" | "summary"
-		> = {
-			tool: value.tool,
-			callId,
-			title: requiredString(args.title, "title", 200),
-			changeNote,
-			summary: "summary" in args && typeof args.summary === "string" ? args.summary.slice(0, 1000) : "",
-		};
-		if ("sourcePath" in args) {
-			if (type !== "document") throw new Error("sourcePath is only supported for document deliverables");
-			if ("content" in args) throw new Error("Provide exactly one of sourcePath or content, not both");
-			return { ...metadata, type, sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) };
-		}
-		return { ...metadata, type, content: requiredString("content" in args ? args.content : undefined, "content") };
 	}
 	if (value.tool === "propose_experience" && "scope" in args && "content" in args && "rationale" in args) {
 		const scope = args.scope;

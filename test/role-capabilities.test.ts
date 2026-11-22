@@ -241,7 +241,7 @@ test("Architect receives the design method and workbench help while publication 
 				onNotice: () => () => {},
 				setDialogHandler: () => {},
 				runPromptAndWait: async () => {
-					assert.equal(options.env?.PA_CAN_PUBLISH, "false");
+					assert.equal(options.env?.PA_CAN_SAVE_SPACE, "false");
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Give each role one core outcome/);
 					assert.match(options.env?.PA_MEMBER_CONTEXT ?? "", /Write user-facing prose in the user's language/);
 					assert.match(options.env?.PA_TURN_CONTEXT ?? "", /## Installed Skill catalog/);
@@ -250,7 +250,7 @@ test("Architect receives the design method and workbench help while publication 
 						/角色架构师/,
 					);
 					await assert.rejects(
-						invokeTool(options, "publish_deliverable", {
+						invokeTool(options, "save_space_page", {
 							type: "document",
 							title: "越权",
 							content: "不应发布",

@@ -25,7 +25,7 @@
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案，同时按目标作用域校验并输出可选 `newSkills` 草案（`role_local` / 目标库位置，确认前不写盘）；已有缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 
-- 工作台统一发送默认由主责回应，不再按轮次切分只读讨论与正式执行。HTTP 层解析点名，只有人类同事被点名时直接保存消息；有派发权限时直接按角色配置的工具和单一主责 Pi 会话运行，由角色自行判断回复、查证、执行或调用 `request_clarification`。[conversation-intent.ts](conversation-intent.ts) 仅负责纯名单查询（`roster`）、工作台速查参考注入（`workbench_help`）及无主责时的自动选人。点名只作用于本轮，非主责被点名时仍受宿主禁止调用 `publish_deliverable` 约束。
+- 工作台统一发送默认由主责回应。HTTP 层解析点名，只有人类同事被点名时直接保存消息；有派发权限时按角色配置的工具和单一主责 Pi 会话运行。前置路由处理名单查询、工作台速查和无主责时的自动选人。点名只作用于本轮，空间工具的写入由当前事项主责执行。
 - `dispatchMatter`：经 `resolveMatterAiMembers(matter, actorUserId)` 结合当前调用者上下文、组织级有效 AI 名册（含调用者个人私有角色）、事项 `aiMemberIds`、`observersEnabled` 与旁听成员确定可执行名单（`MatterRun.startedByUserId` 记录触发人并用于 [delegation-runner.ts](delegation-runner.ts) 拦截向他人 `personal` 角色的内部委托），
   取得事项占用，保存交流并决定收尾；`assessInitiation`、`routeMemberForRequest`、`buildMemberPrompt` 与 `delegate` 均受当前组织、调用者私有作用域与事项 AI 成员范围约束。
   - 支持可选 `author`（人类发送者 ID/姓名/角色/权限），自动记录非所有者同事到 `matter.collaboratorIds`。
@@ -55,11 +55,10 @@
   - 中止与失败路径通过 `buildProgressSnapshot` 保留停滞阶段、耗时、`activeDelegations` 与最近步骤摘要。讨论中点名多位成员时，失败快照记录报错时正在执行的角色。同一事项工作区续跑时为主负责人注入一次「上次中断状态简报」。
   - `abortDistillation(matterId)` 会立即中止进行中的 `distillExperiences` Worker 并丢弃未完成候选。
 
-- 内部委托成员与旁听成员均只做本职专业判断，工具装配与宿主校验均禁止其调用 `publish_deliverable`（旁听成员同时禁用 `delegate_to_member`）。
-- 只有主成员在形成可审阅阶段成果、明确版本或实质变化时，才通过 `publish_deliverable` 结合 [technical-writing](../../skills/technical-writing/SKILL.md) 归档正式成果：
-  - 输出精简的 1–3 句 `changeNote` 与「核心结论 → 正文内容 → 交付过程与验证依据」结构。
-  - 过程回复与澄清只留对话，草稿须整轮成功后才归档；工具权限和最终写入都要保持这些规则，不能只在角色提示词里约定。
-  - 已落盘文档使用 `sourcePath`，宿主直接读取正文；不同时传 `content`。来源变化后须重新登记最终文件，同轮同标题文档替换草稿，跨轮保留版本。文件快照一致性不代表正文语义正确。
+- 内部委托成员与旁听成员不能通过 `save_space_page` 直接修改事项资料。旁听成员同时禁用 `delegate_to_member`。
+- 主成员可通过 `save_space_page` 保存计划、过程和结果。成功回合关联空间资料和反馈记录；岗位通过 `write` / `edit` 修改的工作区 Markdown 和文本文件在回合结束时收录：
+  - 页面即时保存，成功回合关联成果与反馈。自动收录要求文件写入工具已成功完成；普通回复按对话保存。
+  - 已落盘文档使用 `sourcePath`，宿主直接读取正文；不同时传 `content`。本轮后续成功的文件编辑会更新快照，提交前再次校验来源。文件快照一致性不代表正文语义正确。
   - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../docs/validation/publication-review.md)检查。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。

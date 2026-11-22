@@ -14,10 +14,12 @@ export function SpacePages({
 	bootstrap,
 	pageId,
 	onOpenMatter,
+	onOpenResult,
 }: {
 	bootstrap: BootstrapPayload | null;
 	pageId?: string;
 	onOpenMatter: (id: string) => void;
+	onOpenResult: (id: string) => void;
 }) {
 	const [pages, setPages] = useState<SpacePage[]>([]);
 	const [selected, setSelected] = useState<SpacePage | null>(null);
@@ -63,10 +65,28 @@ export function SpacePages({
 
 	useEffect(() => {
 		const events = new EventSource("/api/events");
+		let cancelled = false;
 		const sync = () => {
 			void listSpacePages()
-				.then(({ pages }) => setPages(pages))
-				.catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+				.then(async ({ pages }) => {
+					if (cancelled) return;
+					setPages(pages);
+					if (!selected?.id) return;
+					const latest = pages.find((page) => page.id === selected.id);
+					if (!latest) {
+						setSelected(null);
+						setEditing(false);
+						setContent("");
+						setRevisions([]);
+						return;
+					}
+					if (!editing) setSelected(latest);
+					const result = await listSpacePageRevisions(latest.id);
+					if (!cancelled) setRevisions(result.revisions);
+				})
+				.catch((reason: unknown) => {
+					if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+				});
 		};
 		events.addEventListener("space_page_updated", sync);
 		events.addEventListener("matter_settled", sync);
@@ -74,8 +94,11 @@ export function SpacePages({
 			const progress = JSON.parse((event as MessageEvent).data) as { toolName?: string };
 			if (progress.toolName === "save_space_page") sync();
 		});
-		return () => events.close();
-	}, []);
+		return () => {
+			cancelled = true;
+			events.close();
+		};
+	}, [selected?.id, editing]);
 
 	async function selectPage(page: SpacePage) {
 		setSelected(page);
@@ -275,6 +298,15 @@ export function SpacePages({
 										</summary>
 										<strong>{revision.title}</strong>
 										<MarkdownView content={revision.content || "（空白）"} />
+										{revision.resultId && (
+											<button
+												type="button"
+												className="btn-inline"
+												onClick={() => onOpenResult(revision.resultId!)}
+											>
+												查看本轮反馈
+											</button>
+										)}
 									</details>
 								))}
 							</details>

@@ -155,7 +155,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 						{ratingLabel ? (
 							<span className={`rsi-badge rsi-rating-${props.deliverable.feedbackRating}`}>{ratingLabel}</span>
 						) : (
-							<span className="deliverable-status-pill">✓ 已交付</span>
+							<span className="deliverable-status-pill">已记录</span>
 						)}
 						{props.organizationName && <span className="pill org-pill">组织：{props.organizationName}</span>}
 						{props.workspaceName && <span className="pill">仓库：{props.workspaceName}</span>}
@@ -299,7 +299,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							aria-expanded={feedbackOpen}
 							onClick={() => setFeedbackOpen((prev) => !prev)}
 						>
-							{feedbackOpen ? "收起验收" : ratingLabel ? "修改验收" : "记录验收"}
+							{feedbackOpen ? "收起反馈" : ratingLabel ? "修改反馈" : "记录反馈"}
 						</button>
 					</>
 				)}
@@ -331,7 +331,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					</select>
 				)}
 				{props.canInteract === false && (
-					<span className="muted-hint compact">只读成员（org_viewer）仅可查看交付成果</span>
+					<span className="muted-hint compact">只读成员（org_viewer）可以查看资料</span>
 				)}
 				{distilling && props.onCancelDistill && (
 					<button type="button" className="btn-stop-pill" onClick={props.onCancelDistill}>
@@ -345,7 +345,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 					{ratingLabel && (
 						<span className={`rsi-badge rsi-rating-${props.deliverable.feedbackRating}`}>{ratingLabel}</span>
 					)}
-					<span className="feedback-summary-text">验收记录：{props.deliverable.feedback}</span>
+					<span className="feedback-summary-text">反馈记录：{props.deliverable.feedback}</span>
 				</div>
 			)}
 
@@ -380,7 +380,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 			{feedbackOpen && props.canInteract !== false && (
 				<div className="feedback-panel">
 					<div className="feedback-rating-row">
-						<span className="feedback-rating-label">验收结论：</span>
+						<span className="feedback-rating-label">反馈：</span>
 						{(["positive", "neutral", "negative"] as const).map((rating) => (
 							<button
 								key={rating}
@@ -410,7 +410,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							placeholder={
 								props.deliverable.feedback
 									? `补充或更新反馈：${props.deliverable.feedback}`
-									: "记录这条交付的验收反馈…"
+									: "记录这份资料的反馈…"
 							}
 						/>
 						<button
@@ -419,7 +419,7 @@ export function DeliverableCard(props: DeliverableCardProps) {
 							disabled={submittingFeedback || (!feedbackText.trim() && !selectedRating)}
 							onClick={handleFeedbackSubmit}
 						>
-							{submittingFeedback ? "保存中…" : "保存验收"}
+							{submittingFeedback ? "保存中…" : "保存反馈"}
 						</button>
 					</div>
 				</div>

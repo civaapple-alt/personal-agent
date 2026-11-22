@@ -38,8 +38,7 @@ export function draftDigest(draft: DeliveryDraft) {
 
 function findDraft(deliveries: ExecutionEffects["deliveries"], title: string) {
 	const entry = deliveries.find(({ draft }) => draft.title === title && draft.type === "document");
-	if (!entry)
-		throw new Error("Stage the exact document title with publish_deliverable before requesting verification");
+	if (!entry) throw new Error("Save the document with save_space_page before requesting verification by title");
 	return entry;
 }
 

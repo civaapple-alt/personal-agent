@@ -176,7 +176,7 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 					};
 				}
 
-				await invokeTool(options, "publish_deliverable", {
+				await invokeTool(options, "save_space_page", {
 					type: "document",
 					title: "服务重构方案",
 					summary: "包含启动验证命令",

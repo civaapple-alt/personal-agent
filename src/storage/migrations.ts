@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 6;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -67,6 +67,31 @@ export function migrateDatabase(db: DatabaseSync): void {
 					);
 					CREATE INDEX IF NOT EXISTS idx_space_pages_matter ON space_pages(matter_id, updated_at DESC);
 					PRAGMA user_version = 4;
+				`);
+			}
+			if (version < 5) {
+				db.exec(`
+					CREATE TABLE IF NOT EXISTS space_page_sources (
+						matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+						workspace_key TEXT NOT NULL,
+						source_path TEXT NOT NULL,
+						page_id TEXT NOT NULL REFERENCES space_pages(id) ON DELETE CASCADE,
+						revision INTEGER NOT NULL,
+						PRIMARY KEY (matter_id, workspace_key, source_path)
+					);
+					PRAGMA user_version = 5;
+				`);
+			}
+			if (version < 6) {
+				db.exec(`
+					CREATE TABLE IF NOT EXISTS space_page_result_links (
+						page_id TEXT NOT NULL,
+						revision INTEGER NOT NULL,
+						deliverable_id TEXT NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+						PRIMARY KEY (page_id, revision),
+						FOREIGN KEY (page_id, revision) REFERENCES space_page_revisions(page_id, revision) ON DELETE CASCADE
+					);
+					PRAGMA user_version = 6;
 				`);
 			}
 			db.exec("COMMIT");

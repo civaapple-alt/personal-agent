@@ -7,7 +7,6 @@ export const TEAM_EXTENSION_TOOLS = [
 	"read_space",
 	"save_space_page",
 	"delegate_to_member",
-	"publish_deliverable",
 	"propose_experience",
 ] as const satisfies readonly TeamToolCall["tool"][];
 
@@ -26,20 +25,19 @@ export function prepareTeamExtension({
 }) {
 	const isLead = sessionMode === "lead";
 	const isInternal = sessionMode === "internal";
-	const canPublish = !isArchitect && isLead && isMatterLead && !discussionMode;
+	const canSaveSpace = !isArchitect && isLead && isMatterLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canProposeExperience = !isArchitect && !discussionMode && (isLead || isInternal);
 	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
 	if (!isArchitect && (isLead || isInternal)) tools.push("read_space");
-	if (canPublish) tools.push("save_space_page");
+	if (canSaveSpace) tools.push("save_space_page");
 	if (canDelegate) tools.push("delegate_to_member");
-	if (canPublish) tools.push("publish_deliverable");
 	if (canProposeExperience) tools.push("propose_experience");
 
 	return {
 		entry: resolveBuiltinExtensionPath("team-extension"),
 		tools,
-		canPublish,
+		canSaveSpace,
 		canDelegate,
 		canProposeExperience,
 		buildEnvironment({
@@ -58,7 +56,7 @@ export function prepareTeamExtension({
 			return {
 				...bridgeEnv,
 				PA_TARGET_WORKSPACE_ROOT: workspaceRoot ?? "__none__",
-				PA_CAN_PUBLISH: String(canPublish),
+				PA_CAN_SAVE_SPACE: String(canSaveSpace),
 				PA_CAN_DELEGATE: String(canDelegate),
 				PA_CAN_EXPERIENCE: String(canProposeExperience),
 				PA_REQUIRED_TOOLS: JSON.stringify(requiredTools),

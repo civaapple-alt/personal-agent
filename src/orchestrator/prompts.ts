@@ -431,7 +431,7 @@ export function buildMemberPrompts(input: {
 
 	if (mode === "internal") {
 		sections.push(
-			"## Internal delegation\nGive the requester evidence-backed findings, risks, and conclusions from your role. The lead integrates your findings and decides what to publish.",
+			"## Internal delegation\nGive the requester evidence-backed findings, risks, and conclusions from your role. The lead integrates your findings.",
 		);
 	} else if (mode === "verifier") {
 		sections.push(
@@ -477,12 +477,12 @@ export function buildMemberPrompts(input: {
 		} else {
 			sections.push(
 				[
-					"## Collaboration and publication",
+					"## Collaboration and space",
 					"Decide from the user's message and conversation context whether to answer directly, inspect read-only, or take action. For questions, brainstorming, advice, or status checks, reply directly (using read-only inspection when helpful) without modifying files, committing, or publishing deliverables. Execute edits, commands, or delegations when the user's intent to act is clear. If scope, approach, or authorization for a side-effecting action is materially unclear, call request_clarification instead of guessing.",
-					"Advance the task within your role. When delegate_to_member is active, use the current roster to give each available specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. Keep ownership of edits clear when assignments overlap. For independent review, use the verification argument with a different member, exact target and acceptance criteria. Send requested changes to the author and verify the revised version before publishing. To check a draft document, stage it with publish_deliverable first and then verify it by title. Integrate the evidence into your reply and keep routine coordination internal. If no colleague is available, work within your own role and explain any gaps in expertise.",
-					"Only the matter lead can call publish_deliverable. Publish a reviewable milestone, a version requested by the user, or a material revision. Provide the complete document, actual file, or service URL. Keep the title stable across versions.",
+					"Advance the task within your role. When delegate_to_member is active, give each specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. For independent review, use the verification argument with a different member, exact target and acceptance criteria. To review a space document, save it with save_space_page and verify it by title. Integrate evidence into your reply and keep routine coordination internal.",
+					"Use space for useful plans, working notes and results. The matter lead can create or update pages with save_space_page. Read an existing page before changing it and include its current revision. A successful turn records its documents as interaction results without another publication step.",
 					"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
-					"Keep routine replies, clarifications, progress, and minor adjustments in the conversation. Base publication on the significance of the work. Publication alone requires no extra approval. Complete the necessary verification in the same turn.",
+					"Keep routine replies and clarifications in the conversation. Save useful plans and working documents in space as the work progresses. Complete the necessary verification in the same turn.",
 					"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
 				].join("\n"),
 			);
@@ -492,13 +492,13 @@ export function buildMemberPrompts(input: {
 		sections.push(
 			mode === "internal"
 				? "Return questions that block your assignment to your delegator using request_clarification. Give the question, the blocked step, and the facts you already checked. Finish this assignment with any independent findings. Do not assume a human decision."
-				: "Resolve routine questions yourself. If absent human input could materially change scope, acceptance, or authorization, call request_clarification with the question, the blocked step, and distinct choices only when meaningful. Use sourceAssignmentNumber when escalating a colleague's question. Keep the dependent work and final publication pending, do independent work within scope, then end the turn. A human answer supplies only the specific decision recorded. Use the existing approval path for system changes.",
+				: "Resolve routine questions yourself. If absent human input could materially change scope, acceptance, or authorization, call request_clarification with the question, the blocked step, and distinct choices only when meaningful. Use sourceAssignmentNumber when escalating a colleague's question. Continue independent work within scope, then end the turn. A human answer supplies only the specific decision recorded. Use the existing approval path for system changes.",
 		);
 	}
 	if (mode === "lead" && !isArchitect && !input.discussionMode) sections.push(PUBLICATION_REVIEW_GUIDANCE);
 	if (mode === "lead" && !isArchitect && !input.discussionMode)
 		sections.push(
-			"## Document publication source\nFor a document saved in the workspace, call publish_deliverable with sourcePath alone so the host can read the final text. Use content only for documents without a source file. If the source changes after registration, register the final file under the same title before finishing.",
+			"## Space documents\nCompleted write or edit calls to workspace Markdown and text files are collected as space documents when the turn succeeds. To save a document directly into space, use save_space_page with content or a workspace sourcePath. A saved file is checked for changes before the turn finishes. If an older workspace instruction mentions a tool that is not available, use the current tools and do not attempt the retired tool.",
 		);
 	return { systemPrompt: sections.join("\n\n"), turnContext: turnSections.join("\n\n") };
 }

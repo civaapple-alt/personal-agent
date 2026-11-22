@@ -140,11 +140,11 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 			getState: async () => ({ sessionId: "fixture" }),
 			start: async () => {
 				assert.match(options.env!.PA_MEMBER_CONTEXT!, /## pstack methods/);
-				assert.match(options.env!.PA_MEMBER_CONTEXT!, /Only the lead can publish/);
+				assert.match(options.env!.PA_MEMBER_CONTEXT!, /lead can save plans/);
 				const args = options.args!;
 				assert.equal(args[args.indexOf("--tools") + 1], "read_pa_help,load_pstack_skill");
 				assert.ok(args.some((arg) => arg.endsWith(join("pstack-methods", "index.ts"))));
-				assert.equal(options.env!.PA_CAN_PUBLISH, "false");
+				assert.equal(options.env!.PA_CAN_SAVE_SPACE, "false");
 				assert.equal(options.env!.PA_CAN_DELEGATE, "false");
 				await reportReady(options, omitMethodTool ? ["read_pa_help"] : ["read_pa_help", "load_pstack_skill"]);
 			},
@@ -217,7 +217,7 @@ test("pstack-enabled observers retain narrowed tools and can remain silent witho
 							"load_pstack_skill",
 						]);
 						assert.equal(options.env!.PA_CAN_DELEGATE, "false");
-						assert.equal(options.env!.PA_CAN_PUBLISH, "false");
+						assert.equal(options.env!.PA_CAN_SAVE_SPACE, "false");
 						assert.equal(options.env!.PA_CAN_EXPERIENCE, "false");
 						assert.match(options.env!.PA_MEMBER_CONTEXT!, /remain silent without loading the full mode/);
 					}
