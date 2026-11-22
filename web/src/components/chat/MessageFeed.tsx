@@ -584,14 +584,24 @@ export function MessageFeed({
 									{progressSnapshot && (
 										<ProgressSnapshotCard
 											snapshot={progressSnapshot}
-											expanded={!collapsedSnapshots[msg.id]}
+											expanded={
+												collapsedSnapshots[msg.id] !== undefined
+													? !collapsedSnapshots[msg.id]
+													: progressSnapshot.outcome !== "completed"
+											}
 											members={members}
 											fallbackLeadName={leadFallback}
 											onToggle={() =>
-												setCollapsedSnapshots((prev) => ({
-													...prev,
-													[msg.id]: !prev[msg.id],
-												}))
+												setCollapsedSnapshots((prev) => {
+													const currentlyExpanded =
+														prev[msg.id] !== undefined
+															? !prev[msg.id]
+															: progressSnapshot.outcome !== "completed";
+													return {
+														...prev,
+														[msg.id]: currentlyExpanded,
+													};
+												})
 											}
 										/>
 									)}

@@ -395,12 +395,16 @@
 .exploring-feed {
 	margin-top: 9px;
 	padding-top: 8px;
+	padding-right: 4px;
 	border-top: 1px dashed var(--border);
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
 	font-size: var(--text-micro);
 	color: var(--text-secondary);
+	max-height: 112px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 .exploring-feed-item {
 	display: flex;
@@ -438,7 +442,8 @@
 	border-radius: 14px;
 	overflow: hidden;
 }
-.progress-snapshot-card.is-aborted {
+.progress-snapshot-card.is-aborted,
+.progress-snapshot-card.is-completed {
 	border-color: var(--border);
 	background: var(--bg-sidebar);
 }
@@ -483,6 +488,11 @@
 	border-color: var(--border);
 	color: var(--text-secondary);
 }
+.progress-snapshot-badge.is-completed {
+	background: rgba(11, 87, 78, 0.08);
+	border-color: rgba(11, 87, 78, 0.25);
+	color: #0b574e;
+}
 .progress-snapshot-duration {
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
@@ -500,7 +510,8 @@
 	gap: 4px;
 	background: var(--bg-stage);
 }
-.progress-snapshot-card.is-aborted .progress-snapshot-body {
+.progress-snapshot-card.is-aborted .progress-snapshot-body,
+.progress-snapshot-card.is-completed .progress-snapshot-body {
 	border-top-color: var(--border);
 }
 .delegation-inline-card {

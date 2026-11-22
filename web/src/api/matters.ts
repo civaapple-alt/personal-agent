@@ -187,7 +187,7 @@ export interface MatterProgressDto {
 }
 
 export interface ProgressSnapshotDto {
-	outcome: "failed" | "aborted";
+	outcome: "completed" | "failed" | "aborted";
 	stage: MatterProgressDto["stage"];
 	label: string;
 	toolName?: string;

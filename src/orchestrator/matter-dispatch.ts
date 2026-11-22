@@ -580,11 +580,19 @@ export async function dispatchMatterTurn(
 				repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
 				...(architectParsed?.roleProposals ? { roleProposals: architectParsed.roleProposals } : {}),
 				...(decision ? { humanDecision: decision } : {}),
-				...(aborted
+				...(aborted || run.recentLogs.length > 0 || run.lastProgress
 					? {
 							progressSnapshot: buildProgressSnapshot({
-								outcome: "aborted",
-								progress: run.lastProgress,
+								outcome: aborted ? "aborted" : "completed",
+								progress: run.lastProgress
+									? {
+											...run.lastProgress,
+											recentLogs:
+												run.recentLogs.length > 0 ? [...run.recentLogs] : run.lastProgress.recentLogs,
+										}
+									: run.recentLogs.length > 0
+										? { stage: "finalizing", label: "已完成回复", recentLogs: [...run.recentLogs] }
+										: null,
 								startedAtMs: run.startedAt,
 								leadMember: activeSpeaker,
 							}),

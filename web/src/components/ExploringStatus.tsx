@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type {
 	ActiveDelegationDto,
 	MatterProgressDto,
@@ -26,6 +27,7 @@ interface ProgressDetailsProps {
 	members?: TeamMemberDto[];
 	delegationHeading?: string;
 	stoppedMode?: boolean;
+	completedMode?: boolean;
 	onOpenDelegations?: () => void;
 }
 
@@ -36,15 +38,32 @@ function ProgressDetails({
 	members,
 	delegationHeading = "本轮协作路径",
 	stoppedMode = false,
+	completedMode = false,
 	onOpenDelegations,
 }: ProgressDetailsProps) {
 	const activeIndex = STAGE_ORDER.indexOf(stage);
+	const feedRef = useRef<HTMLDivElement | null>(null);
+	const logCount = recentLogs?.length ?? 0;
+
+	useEffect(() => {
+		const el = feedRef.current;
+		if (!el || logCount === 0) return;
+		el.scrollTop = el.scrollHeight;
+	}, [logCount]);
+
 	return (
 		<>
 			<div className="exploring-stepper">
 				{STAGE_ORDER.map((stepStage, idx) => {
-					const stateClass =
-						idx < activeIndex ? "done" : idx === activeIndex ? (stoppedMode ? "stopped" : "active") : "";
+					const stateClass = completedMode
+						? "done"
+						: idx < activeIndex
+							? "done"
+							: idx === activeIndex
+								? stoppedMode
+									? "stopped"
+									: "active"
+								: "";
 					return (
 						<div key={stepStage} className={`exploring-step ${stateClass}`}>
 							<span className="exploring-seg" />
@@ -74,8 +93,8 @@ function ProgressDetails({
 			)}
 
 			{recentLogs && recentLogs.length > 0 && (
-				<div className="exploring-feed">
-					{recentLogs.slice(-6).map((entry, idx) => {
+				<div ref={feedRef} className="exploring-feed">
+					{recentLogs.map((entry, idx) => {
 						const logMember = members?.find((m) => m.displayName === entry.memberName);
 						const logColor = logMember ? getMemberThemeById(members, logMember.id).bg : getBotTheme(idx).bg;
 						return (
@@ -184,33 +203,50 @@ export function ProgressSnapshotCard({
 			? members?.find((member) => member.id === snapshot.leadMemberId)?.displayName
 			: undefined) ??
 		fallbackLeadName;
-	const outcomeTitle = snapshot.outcome === "aborted" ? "中止前进度" : "异常前进度";
+	const isCompleted = snapshot.outcome === "completed";
+	const outcomeTitle = isCompleted ? "执行过程" : snapshot.outcome === "aborted" ? "中止前进度" : "异常前进度";
+	const logCount = snapshot.recentLogs?.length ?? 0;
 	return (
 		<div className={`progress-snapshot-card is-${snapshot.outcome}`}>
 			<button type="button" className="progress-snapshot-toggle" onClick={onToggle}>
 				<span className="progress-snapshot-summary">
 					<span className={`progress-snapshot-badge is-${snapshot.outcome}`}>{outcomeTitle}</span>
 					{leadName && <strong>{leadName}</strong>}
-					<span className={`exploring-stage stage-${snapshot.stage}`}>{STAGE_LABELS[snapshot.stage]}</span>
+					{!isCompleted && (
+						<span className={`exploring-stage stage-${snapshot.stage}`}>{STAGE_LABELS[snapshot.stage]}</span>
+					)}
 					<span className="progress-snapshot-duration">
-						已运行 {formatElapsedDuration(snapshot.elapsedSeconds)}
+						{isCompleted ? "耗时 " : "已运行 "}
+						{formatElapsedDuration(snapshot.elapsedSeconds)}
+						{logCount > 0 ? ` · ${logCount} 条活动` : ""}
 					</span>
 				</span>
-				<span className="progress-snapshot-toggle-text">{expanded ? "收起进度" : "查看进度"}</span>
+				<span className="progress-snapshot-toggle-text">
+					{expanded ? "收起" : isCompleted ? "查看过程" : "查看进度"}
+				</span>
 			</button>
 			{expanded && (
 				<div className="progress-snapshot-body">
-					<div className="exploring-label">
-						{snapshot.label}
-						{snapshot.capturedAt ? ` · 停于 ${formatClockTime(snapshot.capturedAt)}` : ""}
-					</div>
+					{!isCompleted && (
+						<div className="exploring-label">
+							{snapshot.label}
+							{snapshot.capturedAt ? ` · 停于 ${formatClockTime(snapshot.capturedAt)}` : ""}
+						</div>
+					)}
 					<ProgressDetails
 						stage={snapshot.stage}
 						activeDelegations={snapshot.activeDelegations}
 						recentLogs={snapshot.recentLogs}
 						members={members}
-						delegationHeading={snapshot.outcome === "aborted" ? "中止时仍在协同的岗位" : "异常时仍在协同的岗位"}
-						stoppedMode
+						delegationHeading={
+							isCompleted
+								? "本轮协作岗位"
+								: snapshot.outcome === "aborted"
+									? "中止时仍在协同的岗位"
+									: "异常时仍在协同的岗位"
+						}
+						stoppedMode={!isCompleted}
+						completedMode={isCompleted}
 					/>
 				</div>
 			)}

@@ -80,7 +80,7 @@ export interface DispatchProgressEvent {
 }
 
 export interface ProgressSnapshot {
-	outcome: "failed" | "aborted";
+	outcome: "completed" | "failed" | "aborted";
 	stage: DispatchProgressEvent["stage"];
 	label: string;
 	toolName?: string;
@@ -95,10 +95,10 @@ export interface ProgressSnapshot {
 }
 
 /**
- * Freeze the most recent execution progress into a JSON-serializable snapshot attached to failed or aborted turns.
+ * Freeze the most recent execution progress into a JSON-serializable snapshot attached to completed, failed, or aborted turns.
  */
 export function buildProgressSnapshot(input: {
-	outcome: "failed" | "aborted";
+	outcome: "completed" | "failed" | "aborted";
 	progress?: DispatchProgressEvent | null;
 	startedAtMs: number;
 	capturedAtMs?: number;
@@ -106,13 +106,18 @@ export function buildProgressSnapshot(input: {
 }): ProgressSnapshot {
 	const capturedAtMs = input.capturedAtMs ?? Date.now();
 	const progress = input.progress ?? {
-		stage: "starting",
-		label: input.outcome === "aborted" ? "已中止执行" : "正在准备执行环境...",
+		stage: input.outcome === "completed" ? "finalizing" : "starting",
+		label:
+			input.outcome === "completed"
+				? "已完成回复"
+				: input.outcome === "aborted"
+					? "已中止执行"
+					: "正在准备执行环境...",
 	};
 	return {
 		outcome: input.outcome,
-		stage: progress.stage,
-		label: progress.label,
+		stage: input.outcome === "completed" ? "finalizing" : progress.stage,
+		label: input.outcome === "completed" ? "已完成回复" : progress.label,
 		...(progress.toolName ? { toolName: progress.toolName } : {}),
 		...(progress.toolSummary ? { toolSummary: progress.toolSummary } : {}),
 		startedAt: new Date(input.startedAtMs).toISOString(),
@@ -448,8 +453,8 @@ export function pushRunLog(run: MatterRun, memberName: string, summary: string):
 	const prev = run.recentLogs.at(-1);
 	if (prev && prev.memberName === memberName && prev.summary === cleaned) return;
 	run.recentLogs.push({ memberName, summary: cleaned, at: new Date().toISOString() });
-	if (run.recentLogs.length > 6) {
-		run.recentLogs.splice(0, run.recentLogs.length - 6);
+	if (run.recentLogs.length > 60) {
+		run.recentLogs.splice(0, run.recentLogs.length - 60);
 	}
 }
 

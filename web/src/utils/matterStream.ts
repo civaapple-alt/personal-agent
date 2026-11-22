@@ -22,7 +22,14 @@ export function parseProgressSnapshot(
 		typeof rec.stage === "string" && STAGE_ORDER.includes(rec.stage as MatterProgressDto["stage"])
 			? (rec.stage as MatterProgressDto["stage"])
 			: null;
-	const outcome = rec.outcome === "aborted" ? "aborted" : rec.outcome === "failed" ? "failed" : null;
+	const outcome =
+		rec.outcome === "completed"
+			? "completed"
+			: rec.outcome === "aborted"
+				? "aborted"
+				: rec.outcome === "failed"
+					? "failed"
+					: null;
 	const label = typeof rec.label === "string" ? rec.label : "";
 	if (!stage || !outcome || !label) return null;
 	const activeDelegations = Array.isArray(rec.activeDelegations)
