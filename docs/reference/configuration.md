@@ -47,6 +47,42 @@
 
 以下默认路径相对于启动服务的目录。`<dataDir>` 是数据库所在目录，默认是 `.data/`。来源见[服务入口](../../src/server/main.ts)。
 
+```text
+.data/
+├── personal-agent.db (+ -wal / -shm)   # SQLite 主库（元数据、账号、RBAC、事项消息、记忆、索引）
+│
+├── spaces/                             # 【资料空间】按 spaceId 平铺，每个空间一个独立 Git 仓库（懒初始化）
+│   ├── spc_org_<orgId>/                #   组织默认空间（.git/ + pages/<docId>.md）
+│   ├── spc_ws_<workspaceId>/           #   仓库默认空间
+│   ├── spc_usr_<userId>/               #   人类用户个人空间（私密事项默认落此）
+│   ├── spc_mem_<memberId>/             #   AI 角色默认空间
+│   └── spc_<uuid>/                     #   自定义空间
+│
+├── roles/                              # 【运行期自定义 AI 角色】按作用域分层（覆盖/补充仓库内置 roles/）
+│   ├── <roleId>.md 或 global/          #   global：平台通用角色
+│   ├── orgs/<orgId>/<roleId>/          #   org：组织共享角色（支持角色包及内嵌 skills/）
+│   └── users/<userId>/<roleId>/        #   personal：个人私有角色（仅本人可见）
+│
+├── skills/                             # 【运行期自定义 Skill】与 roles/ 对齐的三层作用域
+│   ├── global/<skillName>/SKILL.md     #   平台通用
+│   ├── orgs/<orgId>/<skillName>/       #   组织共享
+│   └── users/<userId>/<skillName>/     #   个人私有
+│
+├── team-workspaces/                    # 【远程克隆的业务代码仓】按组织 slug 分组
+│   └── <orgSlug>/<repoName>/           #   通过 Git URL 克隆的项目仓（本地目录绑定仓位于宿主外部）
+│
+├── pi-sessions/                        # 【Pi 会话文件】平铺 JSONL（由 DB worker_sessions 按 v2 范围键索引）
+│   └── <timestamp>_<uuid>.jsonl
+│
+├── uploads/                            # 【对话附件】平铺图片与 .txt 折叠文本（由 DB uploads_index 做 ACL 索引）
+│   └── <timestamp>-<hash>.{png,txt}
+│
+├── extensions/                         # 【托管扩展包】早期工作台克隆的方法包目录
+│   └── repo/
+│
+└── inner-matter/                       # 【四步内置演示】按需准备的虚构演练 Git 仓库
+```
+
 | 路径 | 用途 | 备注 |
 | --- | --- | --- |
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
