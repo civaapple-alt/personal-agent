@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DeliverableDto } from "../web/src/api/deliverables.ts";
 import type { MatterMessageDto } from "../web/src/api/matters.ts";
 import {
 	createPastedTextAttachment,
@@ -8,7 +7,6 @@ import {
 	prepareComposerTextFiles as prepareComposerFiles,
 	shouldFoldPastedText,
 } from "../web/src/textAttachments.ts";
-import { groupDeliverableSeries } from "../web/src/utils/deliverableSeries.ts";
 import { buildMatterDelegations, liveDelegationEdges } from "../web/src/utils/matterDelegations.ts";
 import {
 	applyOrgAiRoleOverrides,
@@ -22,7 +20,6 @@ import {
 	inferDelegationMood,
 	isKeyNoticeEvent,
 	MEMORY_CATEGORY_LABELS,
-	parseDeliverableSummary,
 	parseMessageFiles,
 	parseMessageImages,
 	parseProgressSnapshot,
@@ -30,33 +27,6 @@ import {
 	resolveEffectivePrimaryContactId,
 	stripMarkdownFormatting,
 } from "../web/src/utils.ts";
-
-test("deliverable series group versions within each matter and list the latest series first", () => {
-	const first: DeliverableDto = {
-		id: "v1",
-		matterId: "m1",
-		memberId: "engineering-manager",
-		type: "document",
-		title: "验收报告",
-		summary: "",
-		contentOrPath: "",
-		serviceUrl: null,
-		version: 1,
-		feedback: null,
-		createdAt: "2026-11-18T02:00:00.000Z",
-	};
-	const second = { ...first, id: "v2", version: 2, createdAt: "2026-11-20T02:00:00.000Z" };
-	const other = { ...first, id: "other", matterId: "m2", createdAt: "2026-11-19T02:00:00.000Z" };
-	const series = groupDeliverableSeries([other, second, first]);
-
-	assert.deepEqual(
-		series.map(({ latest, versions }) => [latest.id, versions.map(({ id }) => id)]),
-		[
-			["v2", ["v1", "v2"]],
-			["other", ["other"]],
-		],
-	);
-});
 
 test("delegation boards place historical handoffs and keep only the active turn running", () => {
 	const userMessages = [
@@ -414,28 +384,7 @@ test("pickDefaultWorkspaceId prefers memory workspace, then active matter worksp
 	assert.equal(pickDefaultWorkspaceId([], null, "bookshelf"), "");
 });
 
-test("parseDeliverableSummary extracts lead takeaway and scannable process/evidence bullets", () => {
-	const raw =
-		"M1 收口：QA 验收通过（10/10），默认档 T1。\n交付依据：v1.6 收口并按用户指示收尾。QA 验收报告已归档。\n固化结论：recall 89.9%（62/69）。p95 T1 达标，待补 S1 实拍。";
-	const parsed = parseDeliverableSummary(raw);
-	assert.equal(parsed.lead, "M1 收口：QA 验收通过（10/10），默认档 T1。");
-	assert.deepEqual(parsed.details, [
-		"交付依据：v1.6 收口并按用户指示收尾。QA 验收报告已归档。",
-		"固化结论：recall 89.9%（62/69）。p95 T1 达标，待补 S1 实拍。",
-	]);
-
-	const inlineLabeled =
-		"第一句核心结论。交付依据：补充检查完成。固化结论：所有门禁全部通过，其余指标保持不变，下周继续推进下一阶段内容！";
-	const inlineParsed = parseDeliverableSummary(inlineLabeled, 40);
-	assert.equal(inlineParsed.lead, "第一句核心结论。");
-	assert.ok(inlineParsed.details.length >= 2);
-	assert.equal(parseDeliverableSummary("   ").lead, "");
-
-	const mdSummary =
-		"## 本轮成果 (commit `6a00bd4`)\n- **TS 严格模式**：新增 `tsconfig.json`，参考 [docs](https://example.com)";
-	const mdParsed = parseDeliverableSummary(mdSummary);
-	assert.equal(mdParsed.lead, "本轮成果 (commit 6a00bd4)");
-	assert.deepEqual(mdParsed.details, ["TS 严格模式：新增 tsconfig.json，参考 docs"]);
+test("stripMarkdownFormatting removes inline markers", () => {
 	assert.equal(
 		stripMarkdownFormatting("**结论**：已对齐 `my_snake_case` 与 _斜体_。"),
 		"结论：已对齐 my_snake_case 与 斜体。",

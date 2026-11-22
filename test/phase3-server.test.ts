@@ -169,6 +169,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		const boot = (await bootRes.json()) as { members: unknown[]; workspaces: unknown[] };
 		assert.equal(boot.members.length, 4);
 		assert.equal(boot.workspaces.length, 1);
+		assert.equal("deliverables" in boot, false);
 
 		// 2. Dispatch matter -> pauses at confirm dialog -> saves a space document
 		const createRes = await fetch(`${baseUrl}/api/matters`, {
@@ -211,6 +212,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 				noticeMessages: unknown[];
 			};
 			if (detail.spaceDocuments[0] && !detail.activeRun) {
+				assert.equal("deliverables" in detail, false);
 				assert.equal(detail.noticeMessages.length, 2);
 				document = detail.spaceDocuments[0];
 				break;
@@ -498,10 +500,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 test("hashRouter parses and formats deliverable, chat, team, materials, and settings hash routes", () => {
 	assert.deepEqual(parseHashRoute(""), { tab: "chats" });
 	assert.deepEqual(parseHashRoute("#/unknown"), { tab: "chats" });
-	assert.deepEqual(parseHashRoute("#/deliverables/deliv-1"), {
-		tab: "deliverables",
-		deliverableId: "deliv-1",
-	});
+	assert.deepEqual(parseHashRoute("#/deliverables"), { tab: "deliverables" });
 	assert.deepEqual(parseHashRoute("#/chats/matter%2042"), {
 		tab: "chats",
 		matterId: "matter 42",
@@ -519,7 +518,6 @@ test("hashRouter parses and formats deliverable, chat, team, materials, and sett
 	assert.deepEqual(parseHashRoute("#/settings/unknown"), { tab: "settings" });
 
 	assert.equal(formatHashRoute({ tab: "deliverables" }), "#/deliverables");
-	assert.equal(formatHashRoute({ tab: "deliverables", deliverableId: "d1" }), "#/deliverables/d1");
 	assert.deepEqual(parseHashRoute("#/space/page-1"), { tab: "deliverables", spacePageId: "page-1" });
 	assert.equal(formatHashRoute({ tab: "deliverables", spacePageId: "page-1" }), "#/space/page-1");
 	assert.equal(formatHashRoute({ tab: "chats", matterId: "m1" }), "#/chats/m1");
@@ -680,17 +678,17 @@ test("Server supports aborting a running matter and updating its bound workspace
 		assert.equal(abortJson.ok, true);
 		assert.equal(abortJson.aborted, true);
 
-		// Wait for orchestrator cleanup and confirm no bogus deliverable was recorded
+		// Wait for orchestrator cleanup and confirm no space document was saved
 		for (let i = 0; i < 30; i++) {
 			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
 				matter: { status: string };
 				userMessages: Array<{ content: string }>;
-				deliverables: unknown[];
+				spaceDocuments: unknown[];
 				activeRun?: unknown | null;
 			};
 			if (detail.userMessages.length >= 2) {
 				assert.equal(detail.matter.status, "open");
-				assert.equal(detail.deliverables.length, 0);
+				assert.equal(detail.spaceDocuments.length, 0);
 				assert.equal(detail.activeRun ?? null, null);
 				assert.match(detail.userMessages[1]?.content ?? "", /停止本次执行/);
 				break;

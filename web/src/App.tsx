@@ -5,7 +5,6 @@ import { organizationRoleModel } from "./api/organizations.ts";
 import { listSpaceDocumentFeedback, saveSpaceDocumentFeedback } from "./api/space.ts";
 import {
 	type BootstrapPayload,
-	type DeliverableDto,
 	fetchBootstrap,
 	fetchMatterDetail,
 	type InnerMatterStep,
@@ -13,7 +12,6 @@ import {
 	type MatterProgressDto,
 	type MatterVisibility,
 	openInnerMatterDemo,
-	type PreviewServiceDto,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
 import { AdminView } from "./components/AdminView.tsx";
@@ -66,11 +64,7 @@ export function App() {
 		initialRoute.isNewMatter ? null : (initialRoute.matterId ?? null),
 	);
 	const [matterDetail, setMatterDetail] = useState<MatterDetailPayload | null>(null);
-	const [selectedDeliverableId, setSelectedDeliverableId] = useState<string | null>(
-		initialRoute.deliverableId ?? null,
-	);
-	const [spaceRoute, setSpaceRoute] = useState<{ deliverableId?: string; pageId?: string }>({
-		deliverableId: initialRoute.deliverableId,
+	const [spaceRoute, setSpaceRoute] = useState<{ pageId?: string }>({
 		pageId: initialRoute.spacePageId,
 	});
 	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
@@ -111,8 +105,6 @@ export function App() {
 		handleExpandPastedFile,
 	} = useComposerDraft(composerDraftKey, composerRef, setErrorBanner);
 	const explicitNewMatterRef = useRef(Boolean(initialRoute.isNewMatter));
-	const activeTabRef = useRef<NavTab>(activeTab);
-	activeTabRef.current = activeTab;
 	const selectedMatterIdRef = useRef<string | null>(selectedMatterId);
 	selectedMatterIdRef.current = selectedMatterId;
 	const matterStreamRevision = useRef({ total: 0, byMatter: new Map<string, number>() });
@@ -122,7 +114,6 @@ export function App() {
 		initialRoute,
 		explicitNewMatterRef,
 		setActiveTab,
-		setSelectedDeliverableId,
 		setSpaceRoute,
 		setSelectedMatterId,
 		setSelectedMemberId,
@@ -179,7 +170,6 @@ export function App() {
 			}
 			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
 		});
-		setSelectedDeliverableId((prev) => prev ?? data.deliverables[0]?.id ?? null);
 	}, [applyEditionState]);
 
 	const refreshDetail = useCallback(async (matterId: string | null) => {
@@ -259,16 +249,13 @@ export function App() {
 
 	useMatterEventSync({
 		authStatus,
-		activeTabRef,
 		selectedMatterIdRef,
 		matterStreamRevision,
 		setProgressByMatter,
 		setProgressStartedAt,
 		setStreamingDelta,
 		setSseConnected,
-		setSelectedDeliverableId,
 		setPermissionRequired,
-		setNoticeBanner,
 		setErrorBanner,
 		refreshBootstrap,
 		refreshDetail,
@@ -307,15 +294,6 @@ export function App() {
 		id ? (bootstrap?.workspaces.find((w) => w.id === id)?.name ?? id) : null;
 	const organizationName = (id: string | null) =>
 		id ? (bootstrap?.organizations.find((o) => o.id === id)?.name ?? id) : null;
-
-	const previewUrlFor = useCallback(
-		(deliv: DeliverableDto | null): string | null => {
-			if (!deliv) return null;
-			const linked: PreviewServiceDto | undefined = bootstrap?.previews.find((p) => p.matterId === deliv.matterId);
-			return deliv.serviceUrl ?? linked?.url ?? null;
-		},
-		[bootstrap],
-	);
 
 	const initiation = useMatterInitiationState({
 		selectedMatterId,
@@ -720,7 +698,6 @@ export function App() {
 				filteredMatters={filteredMatters}
 				selectedMatterId={selectedMatterId}
 				selectedMemberId={selectedMemberId}
-				selectedDeliverableId={selectedDeliverableId}
 				progressByMatter={progressByMatter}
 				sseConnected={sseConnected}
 				searchQuery={searchQuery}
@@ -840,7 +817,6 @@ export function App() {
 							memberName={memberName}
 							workspaceName={workspaceName}
 							organizationName={organizationName}
-							previewUrlFor={previewUrlFor}
 							onSelectOrganization={actions.handleSelectOrganization}
 							onSelectWorkspace={actions.handleSelectWorkspace}
 							matterAiMemberIds={matterAiMemberIds}
@@ -892,16 +868,7 @@ export function App() {
 							onSendPrompt={() => void actions.handleSendPrompt()}
 							onAbortMatter={actions.handleAbortMatter}
 							onNewMatter={startNewMatterFromCurrent}
-							onOpenDeliverables={(targetId) =>
-								navigateRoute(
-									targetId &&
-										(targetId.startsWith("page_") ||
-											targetId.startsWith("doc_") ||
-											targetId.startsWith("spc_"))
-										? { tab: "deliverables", spacePageId: targetId }
-										: { tab: "deliverables", deliverableId: targetId },
-								)
-							}
+							onOpenDeliverables={(targetId) => navigateRoute({ tab: "deliverables", spacePageId: targetId })}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
 							onToggleArchiveMatter={handleSidebarToggleArchiveMatter}
 							onDistillMatter={(matterId) => runRsiDistill({ matterId })}

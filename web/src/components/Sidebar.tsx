@@ -29,7 +29,6 @@ interface SidebarProps {
 	filteredMatters: MatterDto[];
 	selectedMatterId: string | null;
 	selectedMemberId: string;
-	selectedDeliverableId: string | null;
 	progressByMatter: Record<string, MatterProgressDto>;
 	sseConnected: boolean;
 	searchQuery: string;
@@ -56,7 +55,6 @@ export const Sidebar = memo(function Sidebar({
 	filteredMatters,
 	selectedMatterId,
 	selectedMemberId,
-	selectedDeliverableId,
 	progressByMatter,
 	sseConnected,
 	searchQuery,
@@ -530,12 +528,9 @@ export const Sidebar = memo(function Sidebar({
 							type="button"
 							role="menuitem"
 							className={`footer-nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
-							onClick={() =>
-								navigateFromMenu({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })
-							}
+							onClick={() => navigateFromMenu({ tab: "deliverables" })}
 						>
 							<span>资料空间</span>
-							<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
 						</button>
 						<button
 							type="button"

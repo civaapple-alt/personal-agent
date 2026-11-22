@@ -69,10 +69,6 @@ export function createSseHub(store?: PersonalAgentStore) {
 			const orgId = typeof orgObj?.id === "string" ? orgObj.id : undefined;
 			if (orgId) return { orgId };
 		}
-		if (eventName === "deliverable_updated" && typeof obj.deliverableId === "string") {
-			const deliv = store.getDeliverable(obj.deliverableId);
-			if (deliv) return { matterId: deliv.matterId };
-		}
 		if (eventName === "preview_updated") return { adminOnly: true };
 		return undefined;
 	};

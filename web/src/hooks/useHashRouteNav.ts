@@ -6,8 +6,7 @@ interface UseHashRouteNavParams {
 	initialRoute: HashRoute;
 	explicitNewMatterRef: MutableRefObject<boolean>;
 	setActiveTab: React.Dispatch<React.SetStateAction<NavTab>>;
-	setSelectedDeliverableId: React.Dispatch<React.SetStateAction<string | null>>;
-	setSpaceRoute: React.Dispatch<React.SetStateAction<{ deliverableId?: string; pageId?: string }>>;
+	setSpaceRoute: React.Dispatch<React.SetStateAction<{ pageId?: string }>>;
 	setSelectedMatterId: React.Dispatch<React.SetStateAction<string | null>>;
 	setSelectedMemberId: React.Dispatch<React.SetStateAction<string>>;
 	setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
@@ -18,7 +17,6 @@ export function useHashRouteNav({
 	initialRoute,
 	explicitNewMatterRef,
 	setActiveTab,
-	setSelectedDeliverableId,
 	setSpaceRoute,
 	setSelectedMatterId,
 	setSelectedMemberId,
@@ -33,8 +31,7 @@ export function useHashRouteNav({
 			const update = () => {
 				setActiveTab(next.tab);
 				if (next.tab === "deliverables") {
-					setSelectedDeliverableId(next.deliverableId ?? null);
-					setSpaceRoute({ deliverableId: next.deliverableId, pageId: next.spacePageId });
+					setSpaceRoute({ pageId: next.spacePageId });
 				} else if (next.tab === "chats") {
 					if (next.isNewMatter) {
 						setSelectedMatterId(null);
@@ -54,15 +51,7 @@ export function useHashRouteNav({
 				update();
 			}
 		},
-		[
-			explicitNewMatterRef,
-			setActiveTab,
-			setSelectedDeliverableId,
-			setSpaceRoute,
-			setSelectedMatterId,
-			setSelectedMemberId,
-			setSettingsSection,
-		],
+		[explicitNewMatterRef, setActiveTab, setSpaceRoute, setSelectedMatterId, setSelectedMemberId, setSettingsSection],
 	);
 
 	const navigateRoute = useCallback(

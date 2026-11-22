@@ -10,7 +10,6 @@ import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
 	type CollaboratorDto,
-	type DeliverableDto,
 	type InnerMatterStep,
 	type MatterDetailPayload,
 	type MatterProgressDto,
@@ -76,11 +75,6 @@ interface MessageFeedProps {
 	isTurnRunning: boolean;
 	members: TeamMemberDto[];
 	memberName: (id: string) => string;
-	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
-	deliverablesPlacement: {
-		byMessageId: Map<string, DeliverableDto[]>;
-		unattached: DeliverableDto[];
-	};
 	delegations: MatterDelegations;
 	onOpenDelegations: (scope: DelegationScope, view?: DelegationView) => void;
 	onOpenLightbox: (img: { src: string; alt: string }) => void;
@@ -134,8 +128,6 @@ export function MessageFeed({
 	isTurnRunning,
 	members,
 	memberName,
-	previewUrlFor,
-	deliverablesPlacement,
 	delegations,
 	onOpenDelegations,
 	onOpenLightbox,
@@ -204,30 +196,6 @@ export function MessageFeed({
 	const activeSpeakerId =
 		activeMatterProgress?.speakerMemberId ?? matterDetail?.matter.leadMemberId ?? headerContact?.id;
 	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
-
-	const renderDeliverablePill = (deliv: DeliverableDto) => {
-		const url = previewUrlFor(deliv);
-		return (
-			<div key={deliv.id} className="deliverable-inline-pill">
-				<span className="deliverable-pill-info">
-					<span className="deliverable-pill-check">✓</span>
-					<span>
-						已记录至资料空间 · <strong>V{deliv.version}</strong>
-					</span>
-				</span>
-				<span className="deliverable-pill-actions">
-					{url && (
-						<a className="btn-inline" href={url} target="_blank" rel="noreferrer">
-							打开预览 →
-						</a>
-					)}
-					<button type="button" className="btn-inline" onClick={() => onOpenDeliverables(deliv.id)}>
-						在资料空间查看
-					</button>
-				</span>
-			</div>
-		);
-	};
 
 	return (
 		<div ref={chatScrollRef} className="chat-stream-scroll" onScroll={onScroll}>
@@ -342,7 +310,6 @@ export function MessageFeed({
 									? msg.metadata.approvedByName
 									: "所有者";
 							const speakerTheme = getMemberThemeById(members, msg.senderId);
-							const attachedDeliverables = deliverablesPlacement.byMessageId.get(msg.id) ?? [];
 							const attachedDelegations = delegations.byTurn.get(msg.id)?.assignments;
 							const progressSnapshot = parseProgressSnapshot(msg.metadata);
 							const roleProposals = !isUser && !isSystem ? parseRoleProposalsFromMetadata(msg.metadata) : null;
@@ -690,7 +657,6 @@ export function MessageFeed({
 												/>
 											);
 										})}
-									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 								</div>
 							);
 						})}
@@ -763,7 +729,6 @@ export function MessageFeed({
 							</div>
 						))}
 
-						{deliverablesPlacement.unattached.map((deliv) => renderDeliverablePill(deliv))}
 						<DelegationSummaryCard
 							items={delegations.history.assignments}
 							history

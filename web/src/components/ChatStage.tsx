@@ -6,7 +6,6 @@ import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
 	CollaboratorDto,
-	DeliverableDto,
 	DistillRsiResult,
 	InnerMatterStep,
 	MatterDetailPayload,
@@ -24,13 +23,8 @@ import { useActiveClarification } from "../hooks/useActiveClarification.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
 import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
-import { groupDeliverableSeries } from "../utils/deliverableSeries.ts";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
-import {
-	collectMatterMemories,
-	collectMatterParticipantIds,
-	mapDeliverablesToMessages,
-} from "../utils/matterStream.ts";
+import { collectMatterMemories, collectMatterParticipantIds } from "../utils/matterStream.ts";
 import { transitionView } from "../viewTransitions.ts";
 import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
@@ -117,7 +111,6 @@ interface ChatStageProps {
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
-	previewUrlFor: (deliverable: DeliverableDto | null) => string | null;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
@@ -192,7 +185,6 @@ export function ChatStage({
 	memberName,
 	workspaceName,
 	organizationName,
-	previewUrlFor,
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
@@ -346,8 +338,6 @@ export function ChatStage({
 		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
 		[memoriesByMember, matterDetail],
 	);
-	const matterDeliverables = matterDetail?.deliverables;
-	const deliverableSeries = useMemo(() => groupDeliverableSeries(matterDeliverables ?? []), [matterDeliverables]);
 	const pendingMatterMemoriesCount = useMemo(
 		() => matterMemories.filter((m) => (m.status ?? (m.verified ? "verified" : "candidate")) === "candidate").length,
 		[matterMemories],
@@ -359,7 +349,6 @@ export function ChatStage({
 						matter: matterDetail.matter,
 						userMessages: matterDetail.userMessages,
 						internalCollabMessages: matterDetail.internalCollabMessages,
-						deliverables: matterDetail.deliverables,
 					})
 				: [],
 		[matterDetail],
@@ -397,11 +386,6 @@ export function ChatStage({
 		messageCount,
 		streamLen,
 	});
-
-	const deliverablesPlacement = useMemo(
-		() => mapDeliverablesToMessages(matterDetail?.userMessages ?? [], matterDetail?.deliverables ?? []),
-		[matterDetail],
-	);
 
 	const delegationMessages = matterDetail?.internalCollabMessages;
 	const conversationMessages = matterDetail?.userMessages;
@@ -607,7 +591,6 @@ export function ChatStage({
 							panelRef={collabPanelRef}
 							collabTab={collabTab}
 							matterDetail={matterDetail}
-							deliverableSeries={deliverableSeries}
 							onOpenDeliverable={(targetId) => {
 								if (targetId && (targetId.startsWith("doc_") || targetId.startsWith("page_"))) {
 									sideDocs.openDoc(targetId);
@@ -718,8 +701,6 @@ export function ChatStage({
 					isTurnRunning={isTurnRunning}
 					members={members}
 					memberName={memberName}
-					previewUrlFor={previewUrlFor}
-					deliverablesPlacement={deliverablesPlacement}
 					delegations={delegations}
 					onOpenDelegations={openDelegations}
 					onOpenLightbox={setLightboxImage}

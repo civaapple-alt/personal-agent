@@ -2,7 +2,7 @@ import type { BootstrapPayload } from "../api.ts";
 import { SpacePages } from "./SpacePages.tsx";
 
 interface DeliverablesViewProps {
-	spaceRoute: { deliverableId?: string; pageId?: string };
+	spaceRoute: { pageId?: string };
 	bootstrap: BootstrapPayload | null;
 	memberName: (id: string) => string;
 	onOpenMatterChat: (matterId: string) => void;

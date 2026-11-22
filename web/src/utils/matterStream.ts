@@ -1,6 +1,5 @@
 import type {
 	ActiveDelegationDto,
-	DeliverableDto,
 	MatterDto,
 	MatterMessageDto,
 	MatterProgressDto,
@@ -67,56 +66,6 @@ export function parseProgressSnapshot(
 		leadMemberId: typeof rec.leadMemberId === "string" ? rec.leadMemberId : undefined,
 		leadMemberName: typeof rec.leadMemberName === "string" ? rec.leadMemberName : undefined,
 	};
-}
-
-export function mapDeliverablesToMessages(
-	userMessages: MatterMessageDto[],
-	deliverables: DeliverableDto[],
-): { byMessageId: Map<string, DeliverableDto[]>; unattached: DeliverableDto[] } {
-	const byMessageId = new Map<string, DeliverableDto[]>();
-	const unattached: DeliverableDto[] = [];
-	const memberMessages = userMessages.filter((m) => m.senderType === "member");
-	const orderedDeliverables = [...deliverables].sort(
-		(a, b) => a.createdAt.localeCompare(b.createdAt) || a.version - b.version,
-	);
-	const matchedMessageIds = new Set<string>();
-
-	const attach = (msgId: string, deliv: DeliverableDto) => {
-		const list = byMessageId.get(msgId);
-		if (list) {
-			list.push(deliv);
-		} else {
-			byMessageId.set(msgId, [deliv]);
-		}
-	};
-
-	for (const deliv of orderedDeliverables) {
-		const exactMatch = memberMessages.find(
-			(msg) =>
-				!matchedMessageIds.has(msg.id) && msg.senderId === deliv.memberId && msg.content === deliv.contentOrPath,
-		);
-		if (exactMatch) {
-			matchedMessageIds.add(exactMatch.id);
-			attach(exactMatch.id, deliv);
-			continue;
-		}
-
-		// Fall back to the nearest earlier member reply in the turn when contentOrPath differs (e.g. artifact path).
-		let fallbackMsg: MatterMessageDto | undefined;
-		for (const msg of memberMessages) {
-			if (!matchedMessageIds.has(msg.id) && msg.createdAt <= deliv.createdAt) {
-				fallbackMsg = msg;
-			}
-		}
-		if (fallbackMsg) {
-			matchedMessageIds.add(fallbackMsg.id);
-			attach(fallbackMsg.id, deliv);
-		} else {
-			unattached.push(deliv);
-		}
-	}
-
-	return { byMessageId, unattached };
 }
 
 export function isKeyNoticeEvent(rawContent: string): boolean {
@@ -235,7 +184,6 @@ export function collectMatterParticipantIds(params: {
 	matter?: MatterDto | null;
 	userMessages?: MatterMessageDto[];
 	internalCollabMessages?: MatterMessageDto[];
-	deliverables?: DeliverableDto[];
 }): string[] {
 	const ids = new Set<string>();
 	if (params.matter?.leadMemberId) ids.add(params.matter.leadMemberId);
@@ -250,9 +198,6 @@ export function collectMatterParticipantIds(params: {
 		const toMemberId =
 			msg.metadata && typeof msg.metadata.toMemberId === "string" ? msg.metadata.toMemberId : undefined;
 		if (toMemberId) ids.add(toMemberId);
-	}
-	for (const d of params.deliverables ?? []) {
-		if (d.memberId) ids.add(d.memberId);
 	}
 	return Array.from(ids);
 }

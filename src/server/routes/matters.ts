@@ -30,7 +30,6 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 			userMessages: store.listMessages(matterId, "user"),
 			internalCollabMessages: store.listMessages(matterId, "internal_collab"),
 			noticeMessages: store.listMessages(matterId, "notice"),
-			deliverables: store.listDeliverables(matterId),
 			defaultSpace,
 			spaceDocuments,
 			...(demoGuide

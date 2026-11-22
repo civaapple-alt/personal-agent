@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove legacy deliverables from matter and bootstrap responses and render only saved Space documents in the workbench.
+
 - Remove the legacy deliverable reference from memory records and experience review; memories link to their source matter.
 
 - Scope preview services to matters instead of legacy deliverable IDs, including list, stop and event permissions.

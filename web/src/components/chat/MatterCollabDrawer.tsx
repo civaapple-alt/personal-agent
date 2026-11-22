@@ -1,6 +1,5 @@
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
 import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
-import type { DeliverableSeries } from "../../utils/deliverableSeries.ts";
 import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
 import { InlineExperienceReviewSection } from "../ExperienceReviewPanel.tsx";
 
@@ -10,7 +9,6 @@ interface MatterCollabDrawerProps {
 	panelRef: RefObject<HTMLDivElement | null>;
 	collabTab: MatterCollabTab;
 	matterDetail: MatterDetailPayload;
-	deliverableSeries: DeliverableSeries[];
 	selectedMemberId: string;
 	delegationPanel: ReactNode;
 	matterMemories: MemberMemoryDto[];
@@ -39,7 +37,6 @@ export function MatterCollabDrawer({
 	panelRef,
 	collabTab,
 	matterDetail,
-	deliverableSeries,
 	selectedMemberId,
 	delegationPanel,
 	matterMemories,
@@ -65,7 +62,6 @@ export function MatterCollabDrawer({
 	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
 	const [showAllEvents, setShowAllEvents] = useState(false);
 	useEffect(() => panelRef.current?.focus({ preventScroll: true }), [panelRef]);
-	void deliverableSeries;
 	const spaceDocuments = matterDetail.spaceDocuments ?? [];
 	const defaultSpace = matterDetail.defaultSpace ?? null;
 

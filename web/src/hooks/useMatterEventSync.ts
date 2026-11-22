@@ -1,19 +1,15 @@
 import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto } from "../api.ts";
-import { formatHashRoute, type NavTab } from "../hashRouter.ts";
 
 interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
-	activeTabRef: MutableRefObject<NavTab>;
 	selectedMatterIdRef: MutableRefObject<string | null>;
 	matterStreamRevision: MutableRefObject<{ total: number; byMatter: Map<string, number> }>;
 	setProgressByMatter: React.Dispatch<React.SetStateAction<Record<string, MatterProgressDto>>>;
 	setProgressStartedAt: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 	setStreamingDelta: React.Dispatch<React.SetStateAction<string>>;
 	setSseConnected: React.Dispatch<React.SetStateAction<boolean>>;
-	setSelectedDeliverableId: React.Dispatch<React.SetStateAction<string | null>>;
 	setPermissionRequired: React.Dispatch<React.SetStateAction<boolean>>;
-	setNoticeBanner: React.Dispatch<React.SetStateAction<string | null>>;
 	setErrorBanner: React.Dispatch<React.SetStateAction<string | null>>;
 	refreshBootstrap: () => Promise<void>;
 	refreshDetail: (matterId: string | null) => Promise<void>;
@@ -23,16 +19,13 @@ interface UseMatterEventSyncParams {
 /** Subscribes to `/api/events` SSE notifications, tracks active turn start times, and handles auth revocation. */
 export function useMatterEventSync({
 	authStatus,
-	activeTabRef,
 	selectedMatterIdRef,
 	matterStreamRevision,
 	setProgressByMatter,
 	setProgressStartedAt,
 	setStreamingDelta,
 	setSseConnected,
-	setSelectedDeliverableId,
 	setPermissionRequired,
-	setNoticeBanner,
 	setErrorBanner,
 	refreshBootstrap,
 	refreshDetail,
@@ -94,25 +87,7 @@ export function useMatterEventSync({
 			}
 		});
 		es.addEventListener("matter_settled", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as {
-				matterId: string;
-				deliverable?: { id?: string; title?: string } | null;
-			};
-			if (data.deliverable?.id) {
-				setSelectedDeliverableId(data.deliverable.id);
-				if (activeTabRef.current === "deliverables") {
-					window.history.replaceState(
-						null,
-						"",
-						formatHashRoute({ tab: "deliverables", deliverableId: data.deliverable.id }),
-					);
-				}
-				const watchingThisChat = activeTabRef.current === "chats" && selectedMatterIdRef.current === data.matterId;
-				if (!watchingThisChat) {
-					const shortTitle = (data.deliverable.title ?? "新成果").slice(0, 28);
-					setNoticeBanner(`✓ 已完成交付：「${shortTitle}」`);
-				}
-			}
+			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string };
 			clearMatterProgress(data.matterId);
 		});
 		es.addEventListener("matter_failed", (ev) => {
@@ -140,7 +115,6 @@ export function useMatterEventSync({
 			"collaborator_updated",
 			"dialog_requested",
 			"dialog_resolved",
-			"deliverable_updated",
 			"workspace_updated",
 			"organization_updated",
 			"preview_updated",
@@ -169,16 +143,13 @@ export function useMatterEventSync({
 		return () => es.close();
 	}, [
 		authStatus,
-		activeTabRef,
 		selectedMatterIdRef,
 		matterStreamRevision,
 		setProgressByMatter,
 		setProgressStartedAt,
 		setStreamingDelta,
 		setSseConnected,
-		setSelectedDeliverableId,
 		setPermissionRequired,
-		setNoticeBanner,
 		setErrorBanner,
 		refreshBootstrap,
 		refreshDetail,

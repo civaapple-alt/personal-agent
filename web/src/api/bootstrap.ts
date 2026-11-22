@@ -1,6 +1,6 @@
 import type { AccountUserDto, RegistrationMode } from "./auth.ts";
 import { requestJson } from "./client.ts";
-import type { DeliverableDto, PreviewServiceDto } from "./deliverables.ts";
+import type { PreviewServiceDto } from "./deliverables.ts";
 import type { MemberMemoryDto } from "./experiences.ts";
 import type { ActiveRunSnapshotDto, MatterDto, PendingDialogDto } from "./matters.ts";
 import type {
@@ -39,7 +39,6 @@ export interface BootstrapPayload {
 		}
 	>;
 	matters: MatterDto[];
-	deliverables: DeliverableDto[];
 	pendingDialogs: PendingDialogDto[];
 	previews: PreviewServiceDto[];
 	memoriesByMember: Record<string, MemberMemoryDto[]>;

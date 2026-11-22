@@ -53,7 +53,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			.map((ws) => formatWorkspaceForActor(store, ws, actor));
 		const scopedMatters = store.listMatters().filter((matter) => canAccessMatter(store, actor, matter));
 		const allowedMatterIds = new Set(scopedMatters.map((m) => m.id));
-		const scopedDeliverables = store.listDeliverables().filter((d) => allowedMatterIds.has(d.matterId));
 		const scopedPendingDialogs = dialogBroker.listPending().filter((d) => allowedMatterIds.has(d.matterId));
 		const scopedPreviews = previewManager
 			.listPreviews()
@@ -134,7 +133,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			orgMembersByOrgId,
 			orgAiRolesByOrgId,
 			matters: scopedMatters,
-			deliverables: scopedDeliverables,
 			pendingDialogs: scopedPendingDialogs,
 			previews: scopedPreviews,
 			memoriesByMember: formatScopedMemoryMap(store, actor),

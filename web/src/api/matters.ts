@@ -1,6 +1,5 @@
 import type { InnerMatterGuide } from "../../../src/demo/inner-matter-definition.ts";
 import { requestJson } from "./client.ts";
-import type { DeliverableDto } from "./deliverables.ts";
 import type { ModelSelection } from "./models.ts";
 import type { SpaceDocumentFeedbackDto, SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
 import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
@@ -212,7 +211,6 @@ export interface MatterDetailPayload {
 	userMessages: MatterMessageDto[];
 	internalCollabMessages: MatterMessageDto[];
 	noticeMessages: MatterMessageDto[];
-	deliverables: DeliverableDto[];
 	defaultSpace?: SpaceDto | null;
 	spaceDocuments?: SpaceDocumentMetaDto[];
 	spaceFeedback?: SpaceDocumentFeedbackDto[];
