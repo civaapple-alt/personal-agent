@@ -663,7 +663,7 @@ export function App() {
 			: activeTab === "team"
 				? "我的团队"
 				: activeTab === "materials"
-					? "项目仓库与资料"
+					? "工作区"
 					: activeTab === "admin"
 						? "超级管理员控制台"
 						: activeTab === "settings"
@@ -998,12 +998,16 @@ export function App() {
 							workspaces={bootstrap?.workspaces ?? []}
 							organizations={bootstrap?.organizations ?? []}
 							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
+							matters={bootstrap?.matters ?? []}
+							memberName={memberName}
 							selectedWorkspaceId={selectedWorkspaceId}
 							allowLocalWorkspacePath={bootstrap?.platformPolicy?.allowLocalWorkspacePath ?? true}
 							isAccountMode={Boolean(accountUser)}
 							onRefresh={refreshBootstrap}
 							onNotice={(msg) => setNoticeBanner(msg)}
 							onError={(msg) => setErrorBanner(msg)}
+							onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
+							onOpenSpace={(targetId) => navigateRoute({ tab: "deliverables", spacePageId: targetId })}
 							onUseWorkspace={(workspaceId) => {
 								setSelectedWorkspaceId(workspaceId);
 								startNewMatter();

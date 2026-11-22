@@ -1234,3 +1234,119 @@
 	color: var(--text-muted);
 	flex-shrink: 0;
 }
+
+
+/* ---- Unified Two-Column Workspaces View (aligned with SpacePages) ---- */
+.ws-two-col {
+	display: grid;
+	grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+	gap: 24px;
+	align-items: start;
+}
+.ws-main-col {
+	min-width: 0;
+}
+.ws-detail-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.ws-detail-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+	flex-wrap: wrap;
+}
+.ws-detail-title-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.ws-detail-title-row h2 {
+	margin: 0;
+	font-size: var(--text-lg);
+}
+.ws-detail-sub {
+	margin-top: 4px;
+	font-size: var(--text-xs);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+.ws-detail-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+.ws-detail-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--border);
+}
+.ws-subtabs,
+.ws-detail-meta-controls {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.ws-activity-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 20px;
+}
+.ws-activity-block {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.ws-activity-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.ws-activity-card {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	width: 100%;
+	padding: 11px 13px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--bg-surface, #ffffff);
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 120ms ease, background-color 120ms ease;
+}
+.ws-activity-card:hover {
+	border-color: rgba(11, 87, 78, 0.4);
+	background: #fbfcfb;
+}
+.ws-activity-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: var(--text-sm);
+}
+.ws-activity-card-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: var(--text-micro);
+	color: var(--text-muted);
+}
+@media (max-width: 960px) {
+	.ws-two-col,
+	.ws-activity-grid {
+		grid-template-columns: 1fr;
+	}
+}

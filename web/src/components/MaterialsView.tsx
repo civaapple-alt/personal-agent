@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	addWorkspace,
+	type MatterDto,
 	type OrganizationDto,
 	type OrganizationMemberDto,
 	updateWorkspace,
@@ -8,20 +9,23 @@ import {
 	type WorkspaceSourceType,
 	type WorkspaceVisibility,
 } from "../api.ts";
-import { copyTextToClipboard } from "../clipboard.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
-import { WorkspaceCustomizationsModal } from "./WorkspaceCustomizationsModal.tsx";
+import { WorkspaceDetailPanel } from "./WorkspaceDetailPanel.tsx";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];
 	organizations: OrganizationDto[];
 	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
+	matters?: MatterDto[];
+	memberName?: (id: string) => string;
 	selectedWorkspaceId: string;
 	allowLocalWorkspacePath?: boolean;
 	isAccountMode?: boolean;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
+	onOpenMatter?: (matterId: string) => void;
+	onOpenSpace?: (targetId: string) => void;
 	onUseWorkspace: (workspaceId: string) => void;
 }
 
@@ -29,15 +33,20 @@ export function MaterialsView({
 	workspaces,
 	organizations,
 	orgMembersByOrgId = {},
+	matters = [],
+	memberName = (id) => id,
 	selectedWorkspaceId,
 	allowLocalWorkspacePath = true,
 	isAccountMode = false,
 	onRefresh,
 	onNotice,
 	onError,
+	onOpenMatter,
+	onOpenSpace,
 	onUseWorkspace,
 }: MaterialsViewProps) {
 	const defaultOrganization = organizations.find((o) => o.isDefault) ?? organizations[0] ?? null;
+	const [activeWsId, setActiveWsId] = useState<string>(selectedWorkspaceId || workspaces[0]?.id || "");
 	const [showAddModal, setShowAddModal] = useState(false);
 	const [newWsName, setNewWsName] = useState("");
 	const [newWsSourceType, setNewWsSourceType] = useState<WorkspaceSourceType>(
@@ -53,10 +62,42 @@ export function MaterialsView({
 
 	// Visibility edit modal
 	const [editingAccessWs, setEditingAccessWs] = useState<WorkspaceDto | null>(null);
-	const [customizingWorkspace, setCustomizingWorkspace] = useState<WorkspaceDto | null>(null);
 	const [editVisibility, setEditVisibility] = useState<WorkspaceVisibility>("org");
 	const [editAllowedUserIds, setEditAllowedUserIds] = useState<string[]>([]);
 	const [savingAccess, setSavingAccess] = useState(false);
+
+	useEffect(() => {
+		if (!workspaces.some((w) => w.id === activeWsId)) {
+			setActiveWsId(selectedWorkspaceId || workspaces[0]?.id || "");
+		}
+	}, [workspaces, activeWsId, selectedWorkspaceId]);
+
+	const activeWorkspace = useMemo(
+		() => workspaces.find((w) => w.id === activeWsId) ?? workspaces[0] ?? null,
+		[workspaces, activeWsId],
+	);
+
+	const groupedWorkspaces = useMemo(() => {
+		const groups: Array<{ key: string; label: string; items: WorkspaceDto[] }> = [];
+		const byOrg = new Map<string, WorkspaceDto[]>();
+		for (const ws of workspaces) {
+			const key = ws.orgId ?? "__standalone__";
+			const list = byOrg.get(key) ?? [];
+			list.push(ws);
+			byOrg.set(key, list);
+		}
+		for (const org of organizations) {
+			const items = byOrg.get(org.id);
+			if (items && items.length > 0) {
+				groups.push({ key: org.id, label: org.name, items });
+			}
+		}
+		const standalone = byOrg.get("__standalone__");
+		if (standalone && standalone.length > 0) {
+			groups.push({ key: "__standalone__", label: "独立工作区", items: standalone });
+		}
+		return groups;
+	}, [workspaces, organizations]);
 
 	const resolvedNewOrgId =
 		newWsOrgChoice === "__standalone__" ? null : newWsOrgChoice || defaultOrganization?.id || null;
@@ -145,145 +186,96 @@ export function MaterialsView({
 	const addDisabled =
 		!newWsName.trim() || submitting || (newWsSourceType === "cloned" ? !newWsCloneUrl.trim() : !newWsPath.trim());
 
+	const activeOrg = activeWorkspace?.orgId
+		? (organizations.find((o) => o.id === activeWorkspace.orgId) ?? null)
+		: null;
+	const activeCanManage = Boolean(
+		activeWorkspace &&
+			(!isAccountMode ||
+				!activeOrg?.orgRole ||
+				activeOrg.orgRole === "org_owner" ||
+				activeOrg.orgRole === "org_admin"),
+	);
+	const activeCanEditAccess = Boolean(
+		activeCanManage && activeWorkspace?.orgId && (orgMembersByOrgId[activeWorkspace.orgId]?.length ?? 0) > 0,
+	);
+
 	return (
 		<div className="subpage-scroll">
 			<div className="subpage-inner wide">
-				<div className="pane-header-row">
-					<div className="pane-header">
-						<h1>已有资料与项目仓库</h1>
-						<p>支持从 Git 地址克隆到组织主目录或绑定本地仓库；可按组织范围或指定成员控制项目访问权限。</p>
-					</div>
-					<div className="actions-row compact">
-						<button type="button" className="btn-pill-dark" onClick={openAddModal}>
-							+ 登记项目仓库
-						</button>
-					</div>
+				<div className="pane-header">
+					<h1>工作区</h1>
+					<p>统一查看工作区、配置多目录与 Rules / Skills 预算，以及追踪事项与资料空间动态。</p>
 				</div>
 
-				<div className="ui-sections-stack">
-					<section className="ui-section">
-						<div className="ui-section-head">
-							<div>
-								<h2 className="ui-section-title">已登记工作区（{workspaces.length}）</h2>
-								<p className="ui-section-desc">
-									同组织工作区共享组织记忆；受限仓库仅管理员与授权成员可见和调度
-								</p>
-							</div>
+				<div className="ws-two-col">
+					<aside className="space-nav-col" aria-label="工作区列表">
+						<div className="space-nav-head">
+							<span className="space-nav-title">全部工作区（{workspaces.length}）</span>
+							<button type="button" className="btn-inline" onClick={openAddModal}>
+								+ 新建工作区
+							</button>
 						</div>
 						{workspaces.length === 0 ? (
+							<p className="space-empty-hint">暂无已登记工作区，点击右上角添加。</p>
+						) : (
+							groupedWorkspaces.map((group) => (
+								<div key={group.key} className="space-nav-group">
+									<div className="space-nav-group-label">{group.label}</div>
+									{group.items.map((ws) => {
+										const isSelected = activeWorkspace?.id === ws.id;
+										const matterCount = matters.filter(
+											(m) => m.workspaceId === ws.id && m.status !== "archived",
+										).length;
+										return (
+											<button
+												key={ws.id}
+												type="button"
+												className={isSelected ? "space-nav-item active" : "space-nav-item"}
+												onClick={() => setActiveWsId(ws.id)}
+											>
+												<span className="space-nav-item-label">{ws.name}</span>
+												{matterCount > 0 && <span className="space-nav-item-count">{matterCount}</span>}
+											</button>
+										);
+									})}
+								</div>
+							))
+						)}
+					</aside>
+
+					<div className="ws-main-col">
+						{activeWorkspace ? (
+							<WorkspaceDetailPanel
+								workspace={activeWorkspace}
+								allWorkspaces={workspaces}
+								organizations={organizations}
+								matters={matters}
+								canManage={activeCanManage}
+								canEditAccess={activeCanEditAccess}
+								isAccountMode={isAccountMode}
+								memberName={memberName}
+								onChangeOrg={handleChangeWorkspaceOrg}
+								onOpenAccess={openEditAccessModal}
+								onUseWorkspace={onUseWorkspace}
+								onOpenMatter={onOpenMatter}
+								onOpenSpace={onOpenSpace}
+								onNotice={onNotice}
+								onChanged={onRefresh}
+							/>
+						) : (
 							<div className="ui-card">
-								<p className="ui-empty-note compact">暂无可访问的已登记仓库，可点击右上角按钮添加。</p>
+								<p className="ui-empty-note compact">暂无可访问的工作区，可点击左侧「+ 新建工作区」添加。</p>
 								<div className="actions-row compact">
 									<button type="button" className="btn-pill-outline btn-xs" onClick={openAddModal}>
-										+ 登记项目仓库
+										+ 新建工作区
 									</button>
 								</div>
 							</div>
-						) : (
-							workspaces.map((ws) => {
-								const org = ws.orgId ? organizations.find((o) => o.id === ws.orgId) : null;
-								const isActive = selectedWorkspaceId === ws.id;
-								const canManageOrg =
-									!isAccountMode ||
-									!org?.orgRole ||
-									org.orgRole === "org_owner" ||
-									org.orgRole === "org_admin";
-								return (
-									<div key={ws.id} className={`compact-row static${isActive ? " is-active" : ""}`}>
-										<div className="ui-row-main">
-											<div className="ui-row-title">
-												<span>
-													{ws.name} ({ws.defaultBranch})
-												</span>
-												{org && <span className="pill org-pill">组织：{org.name}</span>}
-												{ws.sourceType === "cloned" && <span className="pill">Git 克隆</span>}
-												{ws.visibility === "restricted" && <span className="pill">仅授权成员</span>}
-												{isActive && <span className="pill is-active">当前已选</span>}
-											</div>
-											<div className="ui-row-sub">
-												{ws.repoPath}
-												{ws.cloneUrl ? ` · 源地址：${ws.cloneUrl}` : ""}
-												{ws.repoGitUser
-													? ` · Git Committer：${ws.repoGitUser.name} <${ws.repoGitUser.email}>`
-													: ""}
-											</div>
-										</div>
-										<div className="ui-row-actions">
-											<button
-												type="button"
-												className="btn-pill-outline btn-xs"
-												onClick={() => setCustomizingWorkspace(ws)}
-											>
-												目录与规则
-											</button>
-											<button
-												type="button"
-												className="btn-inline"
-												onClick={() => void copyTextToClipboard(ws.repoPath, "仓库路径", onNotice)}
-											>
-												复制路径
-											</button>
-											{canManageOrg && ws.orgId && (orgMembersByOrgId[ws.orgId]?.length ?? 0) > 0 && (
-												<button
-													type="button"
-													className="btn-inline"
-													onClick={() => openEditAccessModal(ws)}
-												>
-													权限范围
-												</button>
-											)}
-											{organizations.length > 0 && canManageOrg && (
-												<select
-													className="select-sm select-control"
-													aria-label={`设置 ${ws.name} 的所属组织`}
-													value={ws.orgId ?? ""}
-													onChange={(e) => void handleChangeWorkspaceOrg(ws.id, e.target.value)}
-												>
-													{!isAccountMode && <option value="">独立仓库（无组织）</option>}
-													{organizations.map((item) => (
-														<option key={item.id} value={item.id}>
-															组织：{item.name}
-														</option>
-													))}
-												</select>
-											)}
-											<button
-												type="button"
-												className={`${isActive ? "btn-pill-dark" : "btn-pill-outline"} btn-xs`}
-												onClick={() => onUseWorkspace(ws.id)}
-											>
-												{isActive ? "当前已选 · 新建任务 →" : "在此仓库派活 →"}
-											</button>
-										</div>
-									</div>
-								);
-							})
 						)}
-					</section>
+					</div>
 				</div>
 			</div>
-
-			<WorkspaceCustomizationsModal
-				workspace={customizingWorkspace}
-				allWorkspaces={workspaces}
-				canManage={Boolean(
-					customizingWorkspace &&
-						(() => {
-							const targetOrg = customizingWorkspace.orgId
-								? organizations.find((o) => o.id === customizingWorkspace.orgId)
-								: null;
-							return (
-								!isAccountMode ||
-								!targetOrg?.orgRole ||
-								targetOrg.orgRole === "org_owner" ||
-								targetOrg.orgRole === "org_admin"
-							);
-						})(),
-				)}
-				onClose={() => setCustomizingWorkspace(null)}
-				onNotice={onNotice}
-				onChanged={onRefresh}
-			/>
 
 			<ModalDialog
 				open={showAddModal}

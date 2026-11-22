@@ -552,7 +552,7 @@ export const Sidebar = memo(function Sidebar({
 							className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
 							onClick={() => navigateFromMenu({ tab: "materials" })}
 						>
-							<span>项目仓库与资料</span>
+							<span>工作区</span>
 							<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
 						</button>
 						<button
