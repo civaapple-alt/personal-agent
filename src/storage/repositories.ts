@@ -1,6 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
 import { CollaboratorRepo } from "./repos/collaborator-repo.ts";
-import { DeliverableRepo, type RecordDeliverableInput } from "./repos/deliverable-repo.ts";
 import { MatterRepo } from "./repos/matter-repo.ts";
 import { MemberRepo } from "./repos/member-repo.ts";
 import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
@@ -36,7 +35,6 @@ export class PersonalAgentStore {
 	private readonly workspaces: WorkspaceRepo;
 	private readonly collaborators: CollaboratorRepo;
 	private readonly memories: MemoryRepo;
-	private readonly deliverables: DeliverableRepo;
 	private readonly turnOutcomes: TurnOutcomeRepo;
 	private readonly matters: MatterRepo;
 	private readonly sessions: SessionRepo;
@@ -57,7 +55,6 @@ export class PersonalAgentStore {
 			memberRepo: this.members,
 			workspaceRepo: this.workspaces,
 		});
-		this.deliverables = new DeliverableRepo(db);
 		this.turnOutcomes = new TurnOutcomeRepo(db, this.memories);
 		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
 		this.sessions = new SessionRepo(db);
@@ -265,22 +262,11 @@ export class PersonalAgentStore {
 		return this.matters.listMessages(matterId, channel);
 	}
 
-	// ---- Deliverables ----
-	recordDeliverable(input: RecordDeliverableInput) {
-		return this.deliverables.recordDeliverable(input);
-	}
-	recordDeliverables(inputs: RecordDeliverableInput[]) {
-		return this.deliverables.recordDeliverables(inputs);
-	}
+	// ---- Turn outcomes ----
 	recordTurnOutcome(input: Parameters<TurnOutcomeRepo["recordTurnOutcome"]>[0]) {
 		return this.turnOutcomes.recordTurnOutcome(input);
 	}
-	getDeliverable(id: string) {
-		return this.deliverables.getDeliverable(id);
-	}
-	listDeliverables(matterId?: string) {
-		return this.deliverables.listDeliverables(matterId);
-	}
+
 	// ---- Worker Sessions & Leases ----
 	recordWorkerSession(input: Parameters<SessionRepo["recordWorkerSession"]>[0]) {
 		return this.sessions.recordWorkerSession(input);

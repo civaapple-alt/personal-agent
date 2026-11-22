@@ -7,7 +7,7 @@
   - `spaces` 与 `space_documents` 保存空间元数据与文档索引；新建单文件落入 `plans/`、`specs/`、`decisions/`、`rules/`、`notes/`，目录条目支持子文件与静态预览。正文和修订历史保存在各自 Git 仓库中。每个空间的 Git 写操作按 `spaceId` 串行排队，更新时校验修订号或基线提交。
   - 私密事项默认路由到发起人的 `user` 个人空间（`spc_usr_<userId>`），从物理仓库层面隔离私密正文；非私密事项按仓库优先、其次组织默认空间路由。
   - `space_documents` 通过可选列 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联业务仓库项目的文件相对路径或链接；业务代码仓本身的 `write`/`edit` 变更留在业务仓 Git 与事项事件中，不再单独建引用表或双写正文。
-- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的空间（[space-repo.ts](repos/space-repo.ts)）、成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、成果（遗留兼容）、事项与会话子仓储。
+- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的空间（[space-repo.ts](repos/space-repo.ts)）、成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 
 需要核对的存储边界：

@@ -133,7 +133,7 @@ async function main() {
 			"Must load actual verification principle",
 		);
 		assert.ok(fix.runResult.toolExecutions.some((tool) => tool.toolName === "bash" && !tool.isError));
-		assert.equal(store.listDeliverables().length, 0);
+		assert.equal(store.spaces.listDocuments({}).length, 0);
 		assert.deepEqual(await snapshot(pack), frozen, "Method source must remain unchanged");
 		console.log(
 			"PASS engineering: actual mode and principles, real defect repaired, identical tests pass; no delivery",

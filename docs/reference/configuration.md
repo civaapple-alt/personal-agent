@@ -236,8 +236,8 @@
   - 以 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思 worker，单次默认超时 `120000` ms（2 分钟）。
   - 最多读取前 `8` 条候选并校验范围、成员和去重（可选 `supersedesMemoryId` 仅能指向同成员、同 scope/工作区旧规则，且不能成环）。
 - **应用与验收评估幂等计数**（`memory_applications`）：
-  - 每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；当前版本只评价 `deliverable_memory_applications` 中精确关联的注入记录。
-  - `memory_feedback_votes` 每成果/经验一票；相同票幂等，改票替换、`neutral` 撤回。卡片手动评价独立累计，旧历史不猜测补关联或重算。
+  - 每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；当前版本只评价 `space_document_memory_applications` 中与文档提交精确关联的注入记录。
+  - `space_document_memory_votes` 按文档提交、评价人及经验计票；相同票幂等，改票替换、`neutral` 撤回。卡片手动评价独立累计。
 
 ### 工具载荷、日志、SSE 与预览管理限制
 

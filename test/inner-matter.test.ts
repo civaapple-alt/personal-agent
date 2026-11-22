@@ -138,7 +138,7 @@ test("owner opt-in prepares one real Git workspace and one matter, without model
 	assert.equal(f.store.listMatters().length, 1);
 	assert.equal(f.store.listWorkspaces().length, 1);
 	assert.equal(f.workers(), 0);
-	assert.equal(f.store.listDeliverables().length, 0);
+	assert.equal(f.store.spaces.listDocuments({}).length, 0);
 	assert.equal(f.store.listMessages(matter.id, "internal_collab").length, 0);
 	assert.equal(f.store.listMessages(matter.id, "user")[0]?.senderType, "system");
 	assert.match(await readFile(join(f.directory, "docs/brief.md"), "utf8"), /尚需讨论/);
@@ -165,7 +165,7 @@ test("guided demo uses normal dispatch, real tool bridge, formal versions and fe
 	assert.deepEqual(await progress(), [true, false, false, false]);
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-collaboration" });
 	assert.deepEqual(await progress(), [true, true, false, false]);
-	assert.equal(f.store.listDeliverables().length, 0);
+	assert.equal(f.store.spaces.listDocuments({}).length, 0);
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-delivery" });
 	const first = f.store.spaces.listDocuments({ matterId: matter.id })[0];
 	assert.ok(first);

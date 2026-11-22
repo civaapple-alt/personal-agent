@@ -45,6 +45,26 @@ export function isTeamHealthMemoryInScope(memory: MemberMemory, scope?: TeamHeal
 	return !scope?.allowedOrgIds || scope.allowedOrgIds.has(memory.orgId);
 }
 
+/** Team health has no per-workspace ACL, so only include organization-visible material. */
+export function collectTeamHealthFeedback(store: PersonalAgentStore, scope?: TeamHealthScopeFilter) {
+	return store.spaces.listDocuments({}).flatMap((document) => {
+		const matter = document.matterId ? store.getMatter(document.matterId) : null;
+		const space = store.spaces.getSpace(document.spaceId);
+		if (!matter || matter.visibility === "private" || !space || !["org", "workspace"].includes(space.kind)) return [];
+		if (scope?.orgId && matter.orgId !== scope.orgId) return [];
+		if (scope?.allowedOrgIds && (!matter.orgId || !scope.allowedOrgIds.has(matter.orgId))) return [];
+		const workspace = matter.workspaceId ? store.getWorkspace(matter.workspaceId) : null;
+		if (matter.workspaceId && (!workspace || workspace.visibility === "restricted")) return [];
+		if (document.linkedWorkspaceId && document.linkedWorkspaceId !== matter.workspaceId) return [];
+		if (space.orgId !== matter.orgId || (space.kind === "workspace" && space.workspaceId !== matter.workspaceId))
+			return [];
+		return store.spaces
+			.listDocumentFeedback(document.id)
+			.filter((feedback) => feedback.rating === "negative")
+			.map((feedback) => ({ document, feedback }));
+	});
+}
+
 /** Bounded source records, separate from the model's interpretation of their cause or importance. */
 export function collectTeamHealthEvidence(
 	store: PersonalAgentStore,
@@ -55,14 +75,12 @@ export function collectTeamHealthEvidence(
 	const members = filterTeamMembersForScope(store.listMembers(), scope).filter(
 		(member) => !isArchitectRoleTemplate(templates.get(member.templateId) ?? { id: member.id }),
 	);
-	const memberIds = new Set(members.map((m) => m.id));
 	const scopedMatters = store.listMatters().filter((matter) => {
 		if (!scope) return true;
 		if (scope.orgId) return matter.orgId === scope.orgId;
 		if (scope.allowedOrgIds) return !matter.orgId || scope.allowedOrgIds.has(matter.orgId);
 		return true;
 	});
-	const scopedMatterIds = new Set(scopedMatters.map((m) => m.id));
 	for (const member of members.slice(0, 16)) {
 		const role = templates.get(member.templateId);
 		sources.push({
@@ -94,20 +112,14 @@ export function collectTeamHealthEvidence(
 				excerpt: message.content.slice(0, 360),
 			});
 	}
-	for (const delivery of store
-		.listDeliverables()
-		.filter(
-			(item) =>
-				item.feedbackRating === "negative" && scopedMatterIds.has(item.matterId) && memberIds.has(item.memberId),
-		)
-		.slice(0, 4)) {
+	for (const { document, feedback } of collectTeamHealthFeedback(store, scope).slice(0, 4)) {
 		sources.push({
-			id: `feedback:${delivery.id}`,
+			id: `feedback:${document.id}:${feedback.commitHash}:${feedback.actorId}`,
 			kind: "feedback",
-			sourceId: delivery.id,
-			matterId: delivery.matterId,
-			label: `${delivery.title} V${delivery.version} 负反馈`,
-			excerpt: (delivery.feedback || "记录了负反馈，缺少文字原因").slice(0, 360),
+			sourceId: document.id,
+			matterId: document.matterId ?? undefined,
+			label: `${document.title} · ${feedback.commitHash.slice(0, 7)} 负反馈`,
+			excerpt: (feedback.feedback || "记录了负反馈，缺少文字原因").slice(0, 360),
 		});
 	}
 	for (const member of members) {

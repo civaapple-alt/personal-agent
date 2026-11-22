@@ -221,15 +221,9 @@ export class MemberRepo {
 			const leadRow = this.db
 				.prepare("SELECT COUNT(*) AS count FROM matters WHERE lead_member_id = ?")
 				.get(memberId) as { count?: number } | undefined;
-			const delivRow = this.db
-				.prepare("SELECT COUNT(*) AS count FROM deliverables WHERE member_id = ?")
-				.get(memberId) as { count?: number } | undefined;
 			const leadCount = Number(leadRow?.count ?? 0);
-			const delivCount = Number(delivRow?.count ?? 0);
-			if (leadCount > 0 || delivCount > 0) {
-				throw new Error(
-					`该角色已作为主负责人关联 ${leadCount} 个事项或留存 ${delivCount} 项交付成果，不可直接删除`,
-				);
+			if (leadCount > 0) {
+				throw new Error(`该角色已作为主负责人关联 ${leadCount} 个事项，不可直接删除`);
 			}
 
 			const matterRows = this.db

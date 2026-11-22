@@ -28,21 +28,6 @@ CREATE TABLE collaborators (
 	updated_at TEXT NOT NULL
 );
 
-CREATE TABLE deliverables (
-	id TEXT PRIMARY KEY,
-	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
-	member_id TEXT NOT NULL REFERENCES team_members(id),
-	type TEXT NOT NULL,
-	title TEXT NOT NULL,
-	summary TEXT NOT NULL DEFAULT '',
-	content_or_path TEXT NOT NULL,
-	service_url TEXT,
-	version INTEGER NOT NULL,
-	feedback TEXT,
-	feedback_rating TEXT,
-	created_at TEXT NOT NULL
-);
-
 CREATE TABLE matter_execution_leases (
 	matter_id TEXT PRIMARY KEY REFERENCES matters(id) ON DELETE CASCADE,
 	owner_id TEXT NOT NULL,
@@ -367,7 +352,6 @@ CREATE TABLE workspace_members (
 
 CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
 
-CREATE INDEX idx_deliverables_matter ON deliverables(matter_id, version);
 
 CREATE INDEX idx_matter_messages_matter ON matter_messages(matter_id, channel, created_at);
 

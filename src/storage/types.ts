@@ -21,7 +21,6 @@ export type MemoryApplicationOutcome =
 export type MatterStatus = "open" | "waiting_user" | "delivered" | "archived";
 export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
-export type DeliverableType = "document" | "artifact" | "prototype_image" | "service_url";
 export type CollaboratorRole = "owner" | "collaborator";
 export type PlatformRole = "super_admin" | "user";
 export type UserStatus = "active" | "pending_review" | "disabled";
@@ -265,21 +264,6 @@ export interface MatterMessage {
 	senderId: string;
 	content: string;
 	metadata: Record<string, unknown> | null;
-	createdAt: string;
-}
-
-export interface Deliverable {
-	id: string;
-	matterId: string;
-	memberId: string;
-	type: DeliverableType;
-	title: string;
-	summary: string;
-	contentOrPath: string;
-	serviceUrl: string | null;
-	version: number;
-	feedback: string | null;
-	feedbackRating: FeedbackRating | null;
 	createdAt: string;
 }
 

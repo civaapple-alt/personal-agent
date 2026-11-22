@@ -22,6 +22,7 @@ import { applyWorkerModel, resolveConfiguredModel } from "./model-selection.ts";
 import { extractJsonObject } from "./pi-decision.ts";
 import {
 	collectTeamHealthEvidence,
+	collectTeamHealthFeedback,
 	filterTeamMembersForScope,
 	formatTeamHealthEvidence,
 	isTeamHealthMemoryInScope,
@@ -144,16 +145,10 @@ export function collectTeamFrictionDigest(
 			return true;
 		})
 		.slice(0, 12);
-	const matterIds = new Set(matters.map((m) => m.id));
-	const deliverables = store.listDeliverables().filter((deliv) => !scope || matterIds.has(deliv.matterId));
 	let abortedCount = 0;
 	let failedCount = 0;
 	let observerNotes = 0;
-	let negativeFeedback = 0;
-
-	for (const deliv of deliverables) {
-		if (deliv.feedbackRating === "negative") negativeFeedback += 1;
-	}
+	const negativeFeedback = collectTeamHealthFeedback(store, scope).length;
 	for (const matter of matters) {
 		for (const msg of store.listMessages(matter.id, "user")) {
 			if (msg.metadata?.aborted === true) abortedCount += 1;
@@ -179,7 +174,7 @@ export function collectTeamFrictionDigest(
 				return `${m.id} (${m.displayName}, tools: ${tools}${antiCount > 0 ? `, boundaries: ${antiCount}` : ""})`;
 			})
 			.join(", ")}`,
-		`- Across the latest ${matters.length} matters: ${failedCount} failures, ${abortedCount} cancellations, and ${observerNotes} observer comments. Across all deliverables: ${negativeFeedback} negative ratings. Treat counts as leads.`,
+		`- Across the latest ${matters.length} matters: ${failedCount} failures, ${abortedCount} cancellations, and ${observerNotes} observer comments. Across organization-visible Space documents: ${negativeFeedback} negative ratings. Treat counts as leads.`,
 		candidateMemories.length > 0
 			? `- Recent correction and collaboration signals:\n${candidateMemories.join("\n")}`
 			: "",

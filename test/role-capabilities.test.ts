@@ -100,6 +100,68 @@ test("Structured verification plans retain tasks, result conditions and boundari
 	assert.equal(buildRoleDesignDraft({ oneJob: "核对发布" }).verificationPlanState, "missing");
 });
 
+test("Team health uses organization-visible document feedback without private or restricted evidence", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pa-health-feedback-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	try {
+		const store = new PersonalAgentStore(db, { spacesDir: join(root, "spaces") });
+		const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+		const orchestrator = new TeamOrchestrator({ store, templates });
+		const org = store.upsertOrganization({ name: "Health A" });
+		const other = store.upsertOrganization({ name: "Health B" });
+		const open = store.upsertWorkspace({ name: "Open", repoPath: join(root, "open"), orgId: org.id });
+		const restricted = store.upsertWorkspace({
+			name: "Restricted",
+			repoPath: join(root, "restricted"),
+			orgId: org.id,
+			visibility: "restricted",
+		});
+		const foreign = store.upsertWorkspace({ name: "Foreign", repoPath: join(root, "foreign"), orgId: other.id });
+		store.spaces.ensureAllDefaultSpaces();
+		for (const [workspace, visibility, marker] of [
+			[open, "org", "VISIBLE"],
+			[open, "private", "PRIVATE"],
+			[restricted, "org", "RESTRICTED"],
+			[foreign, "org", "FOREIGN"],
+		] as const) {
+			const matter = store.createMatter({
+				title: marker,
+				leadMemberId: "product-manager",
+				workspaceId: workspace.id,
+				orgId: workspace.orgId,
+				visibility,
+			});
+			const doc = await store.spaces.createDocument({
+				spaceId: `spc_ws_${workspace.id}`,
+				matterId: matter.id,
+				title: marker,
+				content: marker,
+				actorId: "owner",
+			});
+			await store.spaces.saveDocumentFeedback({
+				documentId: doc.id,
+				commitHash: doc.headCommit,
+				actorId: "owner",
+				actorName: "Owner",
+				feedback: marker,
+				rating: "negative",
+			});
+		}
+		const evidence = collectTeamHealthEvidence(store, new Map(templates.map((role) => [role.id, role])), {
+			orgId: org.id,
+		});
+		const feedback = evidence.filter((entry) => entry.kind === "feedback");
+		assert.deepEqual(
+			feedback.map((entry) => entry.excerpt),
+			["VISIBLE"],
+		);
+		await orchestrator.shutdown();
+	} finally {
+		db.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("Team health findings resolve only actual source IDs and preserve source records", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	try {
@@ -276,7 +338,7 @@ test("Architect receives the design method and workbench help while publication 
 			preferredMemberId: "role-architect",
 			observersEnabled: false,
 		});
-		assert.equal(store.listDeliverables().length, 0);
+		assert.equal(store.spaces.listDocuments({}).length, 0);
 		await orchestrator.shutdown();
 	} finally {
 		db.close();

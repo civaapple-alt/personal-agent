@@ -256,7 +256,7 @@ export async function runRoleDesignDemo(input: {
 			executionSucceeded: error === null && turns.every((turn) => !turn.aborted),
 			expectedTurns: turns.length === expected,
 			workspacePreserved: JSON.stringify(before) === JSON.stringify(await snapshot(workspaceDir)),
-			noFormalDeliveries: store.listDeliverables().length === 0,
+			noFormalDeliveries: store.spaces.listDocuments({}).length === 0,
 			noOutstandingLease: store.listMatters().every((matter) => !store.hasLiveMatterLease(matter.id)),
 			capabilitiesAsRequested,
 			actualTaskTools,

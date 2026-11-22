@@ -1125,7 +1125,7 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 	});
 	assert.equal(f.workers[4]?.options.sessionFile, undefined);
 	assert.doesNotMatch(f.workers[4]?.prompt ?? "", /FIRST_PRIVATE_A|SECOND_PRIVATE_B/);
-	assert.equal(f.store.listDeliverables().length, 0);
+	assert.equal(f.store.spaces.listDocuments({}).length, 0);
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	assert.ok(
 		f.db
@@ -1362,7 +1362,7 @@ test("cancellation propagates into delegated worker, rejects concurrent turns, c
 	assert.equal(result.runResult.aborted, true);
 	assert.equal(cancelledChild, true);
 	assert.ok(f.workers.every((worker) => worker.stopped));
-	assert.equal(f.store.listDeliverables(matter.id).length, 0);
+	assert.equal(f.store.spaces.listDocuments({ matterId: matter.id }).length, 0);
 	const abortedMessages = f.store.listMessages(matter.id, "user");
 	assert.equal(abortedMessages.length, 2);
 	const abortedSnap = abortedMessages[1]?.metadata?.progressSnapshot as
@@ -1671,7 +1671,7 @@ test("turn deadline cancels the entire collaboration without treating it as succ
 	);
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	assert.equal(f.store.getMatter(matter.id)?.status, "open");
-	assert.equal(f.store.listDeliverables(matter.id).length, 0);
+	assert.equal(f.store.spaces.listDocuments({ matterId: matter.id }).length, 0);
 });
 
 test("shutdown cancels a host dialog wait and waits for cleanup before releasing the database", async (t) => {
@@ -1902,7 +1902,7 @@ test("proactive observer chimes in with independent user bubble while silent obs
 		userMessages.some((msg) => msg.senderId === "qa-manager"),
 		false,
 	);
-	assert.equal(f.store.listDeliverables(result.matter.id).length, 0);
+	assert.equal(f.store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 	assert.deepEqual(f.store.getMatter(result.matter.id)?.observerMemberIds, ["engineering-manager", "qa-manager"]);
 });
 

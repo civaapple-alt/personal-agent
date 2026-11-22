@@ -165,7 +165,7 @@ flowchart TB
 | `Deliverable` | 所属事项、发布成员、类型、正文或路径、链接、版本、反馈及 `feedbackRating` | 自动业务验收、统一文件托管、自动绑定 Git 提交或会话快照 |
 | `WorkspaceLink` | 工作区 ID、所属组织 `orgId`、仓库路径、默认分支等登记信息 | 动态 Git 状态快照或自动工作树管理 |
 | `WorkerSession` | 事项、成员、工作区、Pi session ID/文件、上下文键及消息游标 | 常驻进程；`active` 状态记录本身不能证明宿主仍存活 |
-| 成果与经验关联 | `deliverable_memory_applications` 关联该版本实际生成轮次的成功执行注入记录，`memory_feedback_votes` 保存每成果/经验当前评价 | 不从事项全历史推测归属，不证明经验被模型实际采用或导致结果改善 |
+| 成果与经验关联 | `space_document_memory_applications` 关联文档提交与成功执行的注入记录，`space_document_memory_votes` 保存每位评价人的当前评价 | 不从事项全历史推测归属，不证明经验被模型实际采用或导致结果改善 |
 | 事项执行占用 | SQLite 的 `matter_execution_leases` 保存宿主 PID 与占用者 ID | 分布式租约、对 PID 复用的防护 |
 
 ### 经验、历史与运行状态

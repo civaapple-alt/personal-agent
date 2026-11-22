@@ -43,7 +43,7 @@ async function run(input: {
 	}
 	await promisify(execFile)("git", ["init", "-b", "main"], { cwd: workspace });
 	const db = openPersonalAgentDatabase(join(directory, "proof.db"));
-	const store = new PersonalAgentStore(db);
+	const store = new PersonalAgentStore(db, { spacesDir: join(directory, "spaces") });
 	store.updatePlatformSettings({ defaultModelSelection: input.modelSelection });
 	const traces: ReviewToolTrace[] = [];
 	const workerConfigurations: Array<{
@@ -106,16 +106,22 @@ async function run(input: {
 			aiMemberIds: ["product-manager", "engineering-manager", "qa-manager"],
 			observersEnabled: false,
 		});
-		const history = store.recordDeliverables(
-			([1, 2] as const).map((version) => ({
-				matterId: matter.id,
-				memberId: "product-manager",
-				type: "document",
-				title: scenario.title,
-				contentOrPath: scenario.files[`deliverables/feedback-box-v${version}.md`] ?? "",
-				summary: "合成验证输入，不是本次模型产出",
-			})),
-		);
+		store.spaces.ensureAllDefaultSpaces();
+		const initial = await store.spaces.createDocument({
+			spaceId: `spc_ws_${link.id}`,
+			matterId: matter.id,
+			title: scenario.title,
+			content: scenario.files["deliverables/feedback-box-v1.md"] ?? "",
+			actorId: "product-manager",
+		});
+		const second = await store.spaces.updateDocument(initial.id, {
+			revision: initial.revision,
+			title: scenario.title,
+			content: scenario.files["deliverables/feedback-box-v2.md"] ?? "",
+			actorId: "product-manager",
+		});
+		if (!second) throw new Error("Failed to seed the second document revision");
+		const history = [initial, second];
 		let result: Awaited<ReturnType<TeamOrchestrator["dispatchMatter"]>> | undefined;
 		let error: string | null = null;
 		try {
@@ -131,16 +137,16 @@ async function run(input: {
 			await orchestrator.shutdown();
 		}
 		const v3 = await optionalReviewText(join(workspace, outputPath));
-		const fresh = store
-			.listDeliverables(matter.id)
-			.filter((delivery) => !history.some((old) => old.id === delivery.id));
+		const fresh = store.spaces.listDocuments({ matterId: matter.id });
+		const current = await store.spaces.getDocument(initial.id);
 		const preserved = await Promise.all(
 			history.map(async (old) => ({
-				version: old.version,
+				version: old.revision,
 				fileUnchanged:
-					(await optionalReviewText(join(workspace, `deliverables/feedback-box-v${old.version}.md`))) ===
-					old.contentOrPath,
-				indexUnchanged: store.getDeliverable(old.id)?.contentOrPath === old.contentOrPath,
+					(await optionalReviewText(join(workspace, `deliverables/feedback-box-v${old.revision}.md`))) ===
+					old.content,
+				indexUnchanged:
+					(await store.spaces.getDocumentCommitDetail(old.id, old.headCommit))?.content === old.content,
 			})),
 		);
 		const consulted = specialistsBeforePublication(traces, scenario.title);
@@ -166,13 +172,13 @@ async function run(input: {
 			exactlyOneV3:
 				fresh.length === 1 &&
 				fresh[0]?.title === scenario.title &&
-				fresh[0]?.type === "document" &&
-				fresh[0]?.version === 3,
+				fresh[0]?.id === initial.id &&
+				fresh[0]?.revision === 3,
 			fileSourceUsed,
-			fileMatchesPublication: v3 !== null && fresh.length === 1 && fresh[0]?.contentOrPath === v3,
+			fileMatchesPublication: v3 !== null && fresh.length === 1 && current?.content === v3,
 			noOutstandingLease: db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n === 0,
 		};
-		const published = fresh.length === 1 && fresh[0]?.type === "document" ? fresh[0].contentOrPath : null;
+		const published = fresh.length === 1 && current?.revision === 3 ? current.content : null;
 		if (published !== null) {
 			await writeFile(join(directory, "published.md"), published, { flag: "wx" });
 			await writeFile(
@@ -197,7 +203,7 @@ async function run(input: {
 					preserved,
 					consulted,
 					documentSha256: published === null ? null : reviewHash(published),
-					deliverables: fresh,
+					documents: fresh,
 					reply: result?.replyText,
 					traces,
 					internalMessages: store.listMessages(matter.id, "internal_collab"),

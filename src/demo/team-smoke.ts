@@ -56,7 +56,7 @@ if (!phase || !root) {
 					"这是 Personal Agent 的隔离协作测试：为「个人文字便笺小工具」讨论简短产品方案。单人、本地存储、纯文本，仅做设计。以下是假设，不是用户确认的产品需求。请记住本事项口令 CONTEXT_9361。现在处于需求澄清阶段，无需正式成果。请务必用 delegate_to_member 向 engineering-manager 咨询：只读 evidence.txt，给出便笺工具的最小技术建议，返回其中的技术证据标识、存储选择与阶段限制。收到同事结果后用一句话整合答复，包含口令和技术证据标识。不要写文件，不登记成果，不开展业务编码。",
 			});
 			assert.match(result.replyText, /TECHNICAL_EVIDENCE_4827/);
-			assert.equal(store.listDeliverables(result.matter.id).length, 0);
+			assert.equal(store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 			const internal = store.listMessages(result.matter.id, "internal_collab");
 			assert.ok(
 				internal.some(

@@ -6,7 +6,6 @@ import type { RoleScope } from "../roles/types.ts";
 import type { SpaceRecord } from "../storage/repos/space-repo.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
-	Deliverable,
 	Matter,
 	MemberMemory,
 	OrgMemberRole,
@@ -268,19 +267,6 @@ export function canParticipateInMatter(store: PersonalAgentStore, actor: Request
 	if (isLegacyCollaboratorActor(actor)) return true;
 	const orgRole = matter.orgId ? getActorOrgRole(store, actor, matter.orgId) : "org_member";
 	return orgRole !== "org_viewer" && orgRole !== null;
-}
-
-export function canAccessDeliverable(
-	store: PersonalAgentStore,
-	actor: RequestActor | null,
-	deliverable: Deliverable | null | undefined,
-): boolean {
-	if (!actor || !deliverable) return false;
-	if (actor.user && actor.user.status !== "active") return false;
-	if (isGlobalUnscopedActor(actor)) return true;
-	const matter = store.getMatter(deliverable.matterId);
-	if (!matter) return isSuperAdminActor(actor);
-	return canAccessMatter(store, actor, matter);
 }
 
 export function canDistillMatter(

@@ -308,7 +308,7 @@ export async function runSelection(options: {
 				JSON.stringify(await selectionTree(workspace)) === JSON.stringify(original) &&
 				git(workspace, ["rev-parse", "HEAD"]) === originalHead,
 			methodsUnchanged: JSON.stringify(await selectionTree(pack)) === JSON.stringify(frozenMethods),
-			noDeliverables: store.listDeliverables().length === 0,
+			noDeliverables: store.spaces.listDocuments({}).length === 0,
 			sessionResumed,
 			targetMethodObserved: await selectionMethodLoaded(tools, target, workspace),
 			modeObserved: await selectionMethodLoaded(tools, mode, workspace),

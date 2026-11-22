@@ -3,9 +3,6 @@ import type { ThinkingLevel } from "../../rpc/types.ts";
 import type {
 	Collaborator,
 	CollaboratorRole,
-	Deliverable,
-	DeliverableType,
-	FeedbackRating,
 	Matter,
 	MatterMessage,
 	MatterMessageChannel,
@@ -226,26 +223,6 @@ export function mapMemoryRow(row: Record<string, unknown>): MemberMemory {
 		lastAppliedAt: row.last_applied_at ? String(row.last_applied_at) : null,
 		createdAt: String(row.created_at),
 		updatedAt: row.updated_at ? String(row.updated_at) : String(row.created_at),
-	};
-}
-
-export function mapDeliverableRow(row: Record<string, unknown>): Deliverable {
-	const rawRating = row.feedback_rating;
-	const feedbackRating: FeedbackRating | null =
-		rawRating === "positive" || rawRating === "negative" || rawRating === "neutral" ? rawRating : null;
-	return {
-		id: String(row.id),
-		matterId: String(row.matter_id),
-		memberId: String(row.member_id),
-		type: row.type as DeliverableType,
-		title: String(row.title),
-		summary: String(row.summary),
-		contentOrPath: String(row.content_or_path),
-		serviceUrl: row.service_url ? String(row.service_url) : null,
-		version: Number(row.version),
-		feedback: row.feedback ? String(row.feedback) : null,
-		feedbackRating,
-		createdAt: String(row.created_at),
 	};
 }
 

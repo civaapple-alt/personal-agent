@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Drop the legacy deliverables table and repository; team health and review demos now use Git-backed Space documents and feedback.
+
 - Remove the legacy deliverables listing API and seed the isolated team sandbox with versioned Space documents.
 
 - Remove legacy deliverables from matter and bootstrap responses and render only saved Space documents in the workbench.
