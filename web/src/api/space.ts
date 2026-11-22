@@ -118,6 +118,7 @@ export function createSpaceDocument(
 		docType?: SpaceDocumentType;
 		entryKind?: SpaceEntryKind;
 		content: string;
+		extraFiles?: Array<{ path: string; content: string }>;
 		matterId?: string | null;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
@@ -163,6 +164,20 @@ export function writeSpaceDocumentFile(
 	return requestJson<{
 		document: SpaceDocumentDto;
 		subPath: string;
+		files: SpaceDocumentFileDto[];
+		previewEntryPath: string | null;
+	}>(`/api/spaces/documents/${encodeURIComponent(docId)}/files`, {
+		method: "PUT",
+		body: JSON.stringify(input),
+	});
+}
+
+export function writeSpaceDocumentFiles(
+	docId: string,
+	input: { files: Array<{ path: string; content: string }>; commitMessage?: string },
+) {
+	return requestJson<{
+		document: SpaceDocumentDto;
 		files: SpaceDocumentFileDto[];
 		previewEntryPath: string | null;
 	}>(`/api/spaces/documents/${encodeURIComponent(docId)}/files`, {

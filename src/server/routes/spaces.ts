@@ -170,6 +170,21 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			const docType = normalizeSpaceDocumentType(body.docType);
 			const entryKind = normalizeSpaceEntryKind(body.entryKind);
 			const content = typeof body.content === "string" ? body.content : null;
+			const rawExtraFiles = Array.isArray(body.extraFiles) ? body.extraFiles : [];
+			const extraFiles: Array<{ subPath: string; content: string }> = [];
+			for (const item of rawExtraFiles) {
+				if (!item || typeof item !== "object") continue;
+				const subPath =
+					typeof (item as { path?: unknown }).path === "string" ? (item as { path: string }).path.trim() : "";
+				const fileContent =
+					typeof (item as { content?: unknown }).content === "string" ? (item as { content: string }).content : "";
+				if (!subPath) continue;
+				if (fileContent.length > 512_000) {
+					sendError(res, 400, `子文件 ${subPath} 超过 512000 字上限`);
+					return true;
+				}
+				extraFiles.push({ subPath, content: fileContent });
+			}
 			const matterId = typeof body.matterId === "string" && body.matterId.trim() ? body.matterId.trim() : null;
 			const linkedOrgId =
 				typeof body.linkedOrgId === "string" && body.linkedOrgId.trim() ? body.linkedOrgId.trim() : null;
@@ -200,6 +215,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				docType,
 				entryKind,
 				content,
+				extraFiles,
 				linkedOrgId,
 				linkedWorkspaceId,
 				linkedFilePath,
@@ -367,19 +383,41 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				return true;
 			}
 			const body = await readJsonBody(req);
-			const subPath = typeof body.path === "string" ? body.path.trim() : "";
-			const content = typeof body.content === "string" ? body.content : null;
 			const commitMessage = typeof body.commitMessage === "string" ? body.commitMessage.trim() : undefined;
-			if (!subPath || content === null || content.length > 512_000) {
-				sendError(res, 400, "请提供子文件路径与正文（最多 512000 字）");
+			const batchFiles: Array<{ subPath: string; content: string }> = [];
+			if (Array.isArray(body.files)) {
+				for (const item of body.files) {
+					if (!item || typeof item !== "object") continue;
+					const p =
+						typeof (item as { path?: unknown }).path === "string" ? (item as { path: string }).path.trim() : "";
+					const c =
+						typeof (item as { content?: unknown }).content === "string"
+							? (item as { content: string }).content
+							: null;
+					if (!p || c === null || c.length > 512_000) {
+						sendError(res, 400, "每个子文件都需提供有效路径与正文（最多 512000 字）");
+						return true;
+					}
+					batchFiles.push({ subPath: p, content: c });
+				}
+			} else {
+				const subPath = typeof body.path === "string" ? body.path.trim() : "";
+				const content = typeof body.content === "string" ? body.content : null;
+				if (!subPath || content === null || content.length > 512_000) {
+					sendError(res, 400, "请提供子文件路径与正文（最多 512000 字）");
+					return true;
+				}
+				batchFiles.push({ subPath, content });
+			}
+			if (batchFiles.length === 0) {
+				sendError(res, 400, "请至少提供一个子文件");
 				return true;
 			}
 			const actorId = actor.user?.id ?? actor.collaborator.id;
 			const actorName = actor.user?.displayName ?? actor.collaborator.name;
 			try {
-				const result = await store.spaces.writeDocumentFile(docId, {
-					subPath,
-					content,
+				const result = await store.spaces.writeDocumentFiles(docId, {
+					files: batchFiles,
 					actorId,
 					actorName,
 					commitMessage,

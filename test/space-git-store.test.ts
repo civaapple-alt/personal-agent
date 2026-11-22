@@ -423,6 +423,32 @@ test("SpaceRepo supports folder entries with entry-level .gitignore, sub-files, 
 		const promotedFiles = await store.spaces.listDocumentFiles(single.id);
 		assert.ok(promotedFiles?.files.some((f) => f.path === "README.md"));
 		assert.ok(promotedFiles?.files.some((f) => f.path === ".gitignore"));
+
+		// 5. Create folder entry with multiple extraFiles in one commit + batch write multiple files
+		const multi = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "多文件演示包",
+			docType: "plan",
+			entryKind: "folder",
+			content: "# 入口说明\n",
+			extraFiles: [
+				{ subPath: "notes.md", content: "# 补充说明\n" },
+				{ subPath: "demo/index.html", content: "<html><body>Hi</body></html>" },
+			],
+			actorId: admin.id,
+		});
+		const multiFiles = await store.spaces.listDocumentFiles(multi.id);
+		assert.ok(multiFiles?.files.some((f) => f.path === "notes.md"));
+		assert.equal(multiFiles?.previewEntryPath, "demo/index.html");
+		const batchRes = await store.spaces.writeDocumentFiles(multi.id, {
+			files: [
+				{ subPath: "demo/app.js", content: "console.log('hi');" },
+				{ subPath: "demo/style.css", content: "body { margin: 0; }" },
+			],
+			actorId: admin.id,
+		});
+		assert.ok(batchRes?.files.some((f) => f.path === "demo/app.js"));
+		assert.ok(batchRes?.files.some((f) => f.path === "demo/style.css"));
 	} finally {
 		db.close();
 		await rm(spacesDir, { recursive: true, force: true });

@@ -70,6 +70,7 @@ export function SpacePages({
 	const [title, setTitle] = useState("");
 	const [docType, setDocType] = useState<SpaceDocumentType>("note");
 	const [entryKind, setEntryKind] = useState<SpaceEntryKind>("file");
+	const [extraFiles, setExtraFiles] = useState<Array<{ id: string; path: string; content: string }>>([]);
 	const [docTypeFilter, setDocTypeFilter] = useState<"all" | SpaceDocumentType>("all");
 	const [content, setContent] = useState("");
 	const [linkedWorkspaceId, setLinkedWorkspaceId] = useState("");
@@ -272,6 +273,7 @@ export function SpacePages({
 		setTitle("");
 		setDocType(docTypeFilter === "all" ? "note" : docTypeFilter);
 		setEntryKind("file");
+		setExtraFiles([]);
 		setContent("");
 		setLinkedWorkspaceId(selectedSpace?.workspaceId ?? "");
 		setLinkedFilePath("");
@@ -318,11 +320,16 @@ export function SpacePages({
 				await loadSpaceContents(selectedSpaceId);
 				await openDocument(document.id);
 			} else {
+				const validExtraFiles =
+					entryKind === "folder"
+						? extraFiles.map((f) => ({ path: f.path.trim(), content: f.content })).filter((f) => Boolean(f.path))
+						: [];
 				const { document } = await createSpaceDocument(selectedSpaceId, {
 					title,
 					docType,
 					entryKind,
 					content,
+					...(validExtraFiles.length > 0 ? { extraFiles: validExtraFiles } : {}),
 					matterId: matterId || null,
 					linkedOrgId: linkedFilePath.trim() ? resolvedLinkedOrgId : null,
 					linkedWorkspaceId: linkedFilePath.trim() ? linkedWorkspaceId || null : null,
@@ -651,14 +658,109 @@ export function SpacePages({
 								)}
 							</div>
 							<label>
-								正文（Markdown）
+								{(!selectedDoc && entryKind === "folder") || selectedDoc?.entryKind === "folder"
+									? "入口文档（README.md）"
+									: "正文（Markdown）"}
+								{!selectedDoc && entryKind === "folder" && (
+									<span className="muted-tiny">
+										目录条目会自动创建入口文件 README.md 与默认 .gitignore，下方可一次追加多个附加子文件。
+									</span>
+								)}
 								<textarea
 									className="input-field space-page-editor"
 									value={content}
 									onChange={(e) => setContent(e.target.value)}
-									placeholder="支持 Markdown"
+									placeholder={
+										!selectedDoc && entryKind === "folder"
+											? "此内容将保存为目录内的 README.md（主说明/索引页）"
+											: "支持 Markdown"
+									}
 								/>
 							</label>
+							{!selectedDoc && entryKind === "folder" && (
+								<div className="space-extra-files-section">
+									<div className="space-extra-files-header">
+										<strong>附加子文件（可选，一次提交多个）</strong>
+										<div className="space-folder-presets">
+											{["notes.md", "option-a.md", "demo/index.html", ".gitignore"].map((preset) => (
+												<button
+													key={preset}
+													type="button"
+													className="btn-inline"
+													onClick={() =>
+														setExtraFiles((prev) => [
+															...prev,
+															{
+																id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+																path: preset,
+																content: "",
+															},
+														])
+													}
+												>
+													+ {preset}
+												</button>
+											))}
+											<button
+												type="button"
+												className="btn-pill-outline btn-xs"
+												onClick={() =>
+													setExtraFiles((prev) => [
+														...prev,
+														{
+															id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+															path: "",
+															content: "",
+														},
+													])
+												}
+											>
+												+ 自定义文件
+											</button>
+										</div>
+									</div>
+									{extraFiles.map((file, idx) => (
+										<div key={file.id} className="space-extra-file-card">
+											<div className="space-extra-file-head">
+												<input
+													className="input-field"
+													placeholder={`子文件 ${idx + 1} 相对路径，如 option-a.md 或 demo/index.html`}
+													value={file.path}
+													onChange={(e) =>
+														setExtraFiles((prev) =>
+															prev.map((item) =>
+																item.id === file.id ? { ...item, path: e.target.value } : item,
+															),
+														)
+													}
+													required
+												/>
+												<button
+													type="button"
+													className="btn-inline btn-danger-inline"
+													onClick={() =>
+														setExtraFiles((prev) => prev.filter((item) => item.id !== file.id))
+													}
+												>
+													移除
+												</button>
+											</div>
+											<textarea
+												className="input-field space-extra-file-editor"
+												placeholder="输入子文件内容（Markdown / HTML / 配置 / 文本）"
+												value={file.content}
+												onChange={(e) =>
+													setExtraFiles((prev) =>
+														prev.map((item) =>
+															item.id === file.id ? { ...item, content: e.target.value } : item,
+														),
+													)
+												}
+											/>
+										</div>
+									))}
+								</div>
+							)}
 							<div className="space-create-row">
 								<label style={{ flex: 1 }}>
 									关联仓库（可选）

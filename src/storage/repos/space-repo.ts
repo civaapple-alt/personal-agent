@@ -578,6 +578,7 @@ export class SpaceRepo {
 		docType?: SpaceDocumentType;
 		entryKind?: SpaceEntryKind;
 		content: string;
+		extraFiles?: Array<{ subPath: string; content: string }>;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
 		linkedFilePath?: string | null;
@@ -600,15 +601,21 @@ export class SpaceRepo {
 		const linkedWorkspaceId = input.linkedWorkspaceId?.trim() || null;
 		const linkedFilePath = input.linkedFilePath?.trim() || null;
 		const now = nowIso();
+		const folderFilesMap = new Map<string, string>();
+		if (entryKind === "folder") {
+			folderFilesMap.set("README.md", input.content);
+			folderFilesMap.set(".gitignore", DEFAULT_FOLDER_ENTRY_GITIGNORE);
+			for (const extra of input.extraFiles ?? []) {
+				const safeSub = normalizeSafeRepoFilePath(extra.subPath);
+				folderFilesMap.set(safeSub, extra.content);
+			}
+		}
 		const { commitHash } =
 			entryKind === "folder"
 				? await this.git.writeFolderFiles({
 						spaceId: space.id,
 						dirPath: filePath,
-						files: [
-							{ subPath: "README.md", content: input.content },
-							{ subPath: ".gitignore", content: DEFAULT_FOLDER_ENTRY_GITIGNORE },
-						],
+						files: Array.from(folderFilesMap.entries()).map(([subPath, content]) => ({ subPath, content })),
 						authorName: input.actorName || input.actorId,
 						authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
 						commitMessage: input.commitMessage || `Create ${title}`,
@@ -804,11 +811,10 @@ export class SpaceRepo {
 		return this.getDocument(docId);
 	}
 
-	async writeDocumentFile(
+	async writeDocumentFiles(
 		docId: string,
 		input: {
-			subPath: string;
-			content: string;
+			files: Array<{ subPath: string; content: string }>;
 			actorId: string;
 			actorName?: string;
 			actorEmail?: string;
@@ -816,10 +822,10 @@ export class SpaceRepo {
 		},
 	): Promise<{
 		document: SpaceDocument;
-		subPath: string;
 		files: SpaceDocumentFile[];
 		previewEntryPath: string | null;
 	} | null> {
+		if (input.files.length === 0) return null;
 		let current = this.getDocumentMeta(docId);
 		if (!current) return null;
 		if (current.entryKind !== "folder") {
@@ -831,15 +837,22 @@ export class SpaceRepo {
 			current = this.getDocumentMeta(docId);
 			if (!current || current.entryKind !== "folder") return null;
 		}
-		const safeSub = normalizeSafeRepoFilePath(input.subPath);
+		const normalized = input.files.map((item) => ({
+			subPath: normalizeSafeRepoFilePath(item.subPath),
+			content: item.content,
+		}));
 		const now = nowIso();
+		const defaultMsg =
+			normalized.length === 1
+				? `Update ${normalized[0]!.subPath} in ${current.title}`
+				: `Add/update ${normalized.length} files in ${current.title}`;
 		const { commitHash } = await this.git.writeFolderFiles({
 			spaceId: current.spaceId,
 			dirPath: current.filePath,
-			files: [{ subPath: safeSub, content: input.content }],
+			files: normalized,
 			authorName: input.actorName || input.actorId,
 			authorEmail: input.actorEmail || defaultAuthorEmail(input.actorId),
-			commitMessage: input.commitMessage || `Update ${safeSub} in ${current.title}`,
+			commitMessage: input.commitMessage || defaultMsg,
 			allowEmpty: true,
 		});
 		const nextRevision = current.revision + 1;
@@ -856,10 +869,36 @@ export class SpaceRepo {
 		const listed = await this.listDocumentFiles(docId);
 		return {
 			document: doc,
-			subPath: safeSub,
 			files: listed?.files ?? [],
 			previewEntryPath: listed?.previewEntryPath ?? null,
 		};
+	}
+
+	async writeDocumentFile(
+		docId: string,
+		input: {
+			subPath: string;
+			content: string;
+			actorId: string;
+			actorName?: string;
+			actorEmail?: string;
+			commitMessage?: string;
+		},
+	): Promise<{
+		document: SpaceDocument;
+		subPath: string;
+		files: SpaceDocumentFile[];
+		previewEntryPath: string | null;
+	} | null> {
+		const safeSub = normalizeSafeRepoFilePath(input.subPath);
+		const res = await this.writeDocumentFiles(docId, {
+			files: [{ subPath: safeSub, content: input.content }],
+			actorId: input.actorId,
+			actorName: input.actorName,
+			actorEmail: input.actorEmail,
+			commitMessage: input.commitMessage,
+		});
+		return res ? { ...res, subPath: safeSub } : null;
 	}
 
 	async deleteDocumentFile(
