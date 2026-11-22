@@ -137,6 +137,7 @@ export function stripMarkdownFormatting(text: string): string {
 		.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
 		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
 		.replace(/^\s{0,3}(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+\.\s+)/gm, "")
+		.replace(/(^|\s)#{1,6}\s+/g, "$1")
 		.replace(/`([^`]+)`/g, "$1")
 		.replace(/\*\*([^*]+)\*\*/g, "$1")
 		.replace(/__([^_]+)__/g, "$1")

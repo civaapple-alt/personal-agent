@@ -339,18 +339,20 @@ export function WorkspaceDetailPanel({
 													</span>
 													Skills
 												</button>
-												{folder.role === "attached" && (
-													<button
-														type="button"
-														className="btn-icon-ghost"
-														aria-label={`移除目录 ${folder.label}`}
-														title="移除附加目录"
-														disabled={busy}
-														onClick={() => void handleRemoveFolder(folder)}
-													>
-														×
-													</button>
-												)}
+												<span className="ws-folder-remove-slot">
+													{folder.role === "attached" && (
+														<button
+															type="button"
+															className="btn-icon-ghost"
+															aria-label={`移除目录 ${folder.label}`}
+															title="移除附加目录"
+															disabled={busy}
+															onClick={() => void handleRemoveFolder(folder)}
+														>
+															×
+														</button>
+													)}
+												</span>
 											</>
 										)}
 									</div>
