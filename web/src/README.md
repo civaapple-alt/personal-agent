@@ -14,7 +14,7 @@
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
 | 布局与共用样式/格式 | [styles/tokens.css](styles/tokens.css)（`--text-*` 字号阶梯、`--page-pad-*`/`--section-gap`）、[styles/primitives.css](styles/primitives.css)（`.ui-sections-stack`、`.ui-section*`、`.ui-card` 等原语）及 [utils.ts](utils.ts)（聚合导出 [formatters.ts](utils/formatters.ts)、[matterStream.ts](utils/matterStream.ts)、[deliverableSummary.ts](utils/deliverableSummary.ts)、[orgRoster.ts](utils/orgRoster.ts) 与 [starterTasks.ts](utils/starterTasks.ts)） |
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
-| 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](components/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](components/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护）、[ExploringStatus](components/ExploringStatus.tsx) |
+| 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](components/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](components/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护，右侧分屏文档由 [useMatterSideDocs](hooks/useMatterSideDocs.ts) 与 [MatterDocSidePane](components/chat/MatterDocSidePane.tsx) 维护，底部吸附澄清由 [useActiveClarification](hooks/useActiveClarification.ts) 与 [FloatingClarificationDock](components/chat/FloatingClarificationDock.tsx) 维护，对话空间文档卡位于 [SpaceDocumentCard](components/chat/SpaceDocumentCard.tsx)）、[ExploringStatus](components/ExploringStatus.tsx) |
 | 资料空间（五类 Git 空间、文档读写、关联仓库路径、提交历史与 Diff） | [DeliverablesView](components/DeliverablesView.tsx)、[SpacePages](components/SpacePages.tsx)、[space API](api/space.ts) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx) 展示 Pi 底座、扩展及运行配置。[PstackSettings](components/PstackSettings.tsx) 启用已有方法包目录或清除 PA 的启用配置 |
@@ -51,8 +51,9 @@
 - [BotFaceIcon](components/BotFaceIcon.tsx) 支持按运行阶段/心情呈现拟人化眼神与小动作。
 - [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`；
   点击左上角 AI 头像仅用于按该角色发起新事项，已有事项顶栏始终显示该事项真实负责人且不随左上角选择切换。
-- [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费失败/中止消息的 `metadata.progressSnapshot`：
-  - 在警告或中止气泡下持久化展示停滞阶段、耗时、协同岗位与最近工具步骤（支持折叠回看）。
+- [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费已完成、失败与中止消息的 `metadata.progressSnapshot`：
+  - 运行中的 `.exploring-feed` 保持紧凑固定高度并支持向上滚动查看本轮最多 60 条完整活动轨迹（新日志自动滚底）；
+  - 正常完成回复下方默认折叠展示「执行过程 · 角色 · 耗时 · 活动条数」，点击可就地展开回看；警告或中止气泡下默认展开停滞阶段、耗时、协同岗位与步骤摘要。
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
   输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。
 - 「协作成员」面板列出主责和在组成员。「AI 旁听」开关只控制协作 AI 的主动补充。点开 AI 成员可以分别设置「允许主责委托」和「旁听补充」。统一输入框用「@成员」点名同事或 AI。
