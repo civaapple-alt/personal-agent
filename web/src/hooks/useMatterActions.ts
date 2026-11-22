@@ -10,11 +10,9 @@ import {
 	type ComposerImageAttachment,
 	createMatter,
 	dismissAiRequest,
-	type FeedbackRating,
 	type MatterSendMode,
 	type MatterVisibility,
 	postMatterMessage,
-	submitDeliverableFeedback,
 	type TeamMemberDto,
 	type UploadFilePayload,
 	updateMatterAiMembers,
@@ -564,30 +562,6 @@ export function useMatterActions({
 			});
 	};
 
-	const handleDeliverableFeedback = async (
-		deliverableId: string,
-		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
-	) => {
-		try {
-			const res = await submitDeliverableFeedback(deliverableId, payload);
-			if (res.distillationError) setErrorBanner(`验收已保存，经验复盘未完成：${res.distillationError}`);
-			const parts = ["验收记录已保存"];
-			if (res.evaluatedMemoryIds.length > 0) {
-				parts.push(`已回写 ${res.evaluatedMemoryIds.length} 条关联经验评估`);
-			}
-			if (res.distilledMemories.length > 0) {
-				parts.push(`AI 新提炼 ${res.distilledMemories.length} 条待核验经验`);
-			}
-			setNoticeBanner(parts.join(" · "));
-			await refreshBootstrap();
-			if (selectedMatterId) {
-				await refreshDetail(selectedMatterId);
-			}
-		} catch (err: unknown) {
-			setErrorBanner(err instanceof Error ? err.message : String(err));
-		}
-	};
-
 	return {
 		handleSendPrompt,
 		handleSendQuickPrompt,
@@ -606,6 +580,5 @@ export function useMatterActions({
 		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
 		handleUpdateMatterVisibility,
-		handleDeliverableFeedback,
 	};
 }

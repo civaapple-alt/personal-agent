@@ -78,7 +78,6 @@ export function buildInterruptionResumeBrief(input: {
 	const collabMessages = selectMatterContext({
 		...input,
 		messages: input.store.listMessages(input.matterId),
-		deliverables: [],
 	}).messages.filter((msg) => msg.channel === "internal_collab");
 	const responseByReqId = new Map<string, MatterMessage>();
 	for (const msg of collabMessages) {

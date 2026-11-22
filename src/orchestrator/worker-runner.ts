@@ -867,7 +867,6 @@ export async function executeWithWorkerPass(
 		const scopedContext = selectMatterContext({
 			orgId: activeOrgId,
 			messages: deps.store.listMessages(input.matterId),
-			deliverables: [],
 			workspaceId: input.workspace?.id ?? null,
 			repoPath: cwd,
 		});

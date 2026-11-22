@@ -1278,19 +1278,19 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 				await fetch(`${base}/api/rsi/distill`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
-					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+					body: JSON.stringify({ matterId: mAOpen.id }),
 				})
 			).status,
 			403,
 		);
 
-		// 5. org_member cannot trigger RSI distillation or autoDistill; org_owner CAN trigger RSI distill for own org & cross-matter deliverableId is rejected
+		// 5. org_member cannot trigger RSI distillation or autoDistill; org_owner can trigger RSI distillation for its own matter
 		assert.equal(
 			(
 				await fetch(`${base}/api/rsi/distill`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Cookie: memberACookie },
-					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+					body: JSON.stringify({ matterId: mAOpen.id }),
 				})
 			).status,
 			403,
@@ -1305,22 +1305,11 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			).status,
 			403,
 		);
-		// Cross-matter deliverableId mismatch returns 400
-		assert.equal(
-			(
-				await fetch(`${base}/api/rsi/distill`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
-					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dBOpen.id }),
-				})
-			).status,
-			400,
-		);
-		// OrgA owner CAN distill on orgA deliverable & save company_private memory, but CANNOT mutate global role_general memory
+		// OrgA owner CAN distill on an orgA matter & save company_private memory, but CANNOT mutate global role_general memory
 		const ownerADistill = await fetch(`${base}/api/rsi/distill`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: ownerACookie },
-			body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+			body: JSON.stringify({ matterId: mAOpen.id }),
 		});
 		assert.equal(ownerADistill.status, 200);
 		assert.equal(
@@ -1358,7 +1347,7 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 				await fetch(`${base}/api/rsi/distill`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Cookie: ownerBCookie },
-					body: JSON.stringify({ matterId: mAOpen.id, deliverableId: dAOpen.id }),
+					body: JSON.stringify({ matterId: mAOpen.id }),
 				})
 			).status,
 			403,

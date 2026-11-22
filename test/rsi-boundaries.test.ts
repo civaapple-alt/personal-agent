@@ -133,20 +133,13 @@ test("RSI only reflects current workspace evidence and rejects candidate owners 
 		content: "PRIVATE_COLLAB_A",
 		metadata: { workspaceId: a.id },
 	});
-	const old = f.store.recordDeliverable({
-		matterId: matter.id,
-		memberId: "product-manager",
-		type: "document",
-		title: "PRIVATE_ARTIFACT_A",
-		contentOrPath: "PRIVATE_CONTENT_A",
-	});
 	f.store.appendMessage({
 		matterId: matter.id,
 		channel: "user",
 		senderType: "member",
 		senderId: "product-manager",
 		content: "A answer",
-		metadata: { workspaceId: a.id, repoPath: a.repoPath, deliverableIds: [old.id] },
+		metadata: { workspaceId: a.id, repoPath: a.repoPath },
 	});
 	f.store.updateMatterWorkspace(matter.id, b.id);
 	f.store.appendMessage({
@@ -165,7 +158,6 @@ test("RSI only reflects current workspace evidence and rejects candidate owners 
 		["product-manager"],
 	);
 	assert.deepEqual(distilled.participatingMemberIds, ["product-manager"]);
-	await assert.rejects(f.orchestrator.distillExperiences({ matterId: matter.id, deliverableId: old.id }), /workspace/);
 });
 
 test("RSI reads feedback only from accessible space documents in the current workspace", async (t) => {

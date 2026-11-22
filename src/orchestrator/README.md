@@ -36,7 +36,7 @@
   - `consultMemberIds` 与 `observerMemberIds` 独立。前者为空数组时不允许主责委托，为 `null` 时沿用旧事项全部可用在组成员的行为。
   - 讨论轮次使用独立会话键。未点名时由当前可用的主责或在组角色回复，点名时按提及顺序回复。明确查询当前成员时，服务端按当前事项配置返回共享 AI 名册。每轮模型上下文也以运行时名册为准。讨论保留岗位工具用于查证，宿主关闭成果发布和经验提案。回复保留在事项历史，正式执行会回放同范围内新增的讨论消息。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
-  - `v2` 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话。旧 `v1` 或无范围会话继续保留，但首次升级不自动恢复；新范围建立后可切回续接。详见[迁移说明](../../docs/reference/runtime-collaboration.md#兼容历史数据)。
+  - 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话；切回已有范围时可续接。详见[数据与会话边界](../../docs/reference/runtime-collaboration.md#数据与会话边界)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
   - 经 `resolveMemberForOrg` 合并组织级 `organization_ai_roles` 覆盖后，结合工作区 `Organization` 与 `resolveRepoGitUserIdentity(cwd)` 读取目标仓库当前有效 `user.name` / `user.email`。
   - [prompts.ts](prompts.ts) 将岗位规则、工作区约束和运行模式保存在系统提示中。实时名册、适用经验、目录清单和身份信息通过 `PA_TURN_CONTEXT` 追加到 Pi 会话。角色架构师的业务名录、Skill 目录和体检证据也随轮更新。
@@ -62,6 +62,6 @@
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。
 
 从仓库根运行 `node --test test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts` 验证接续、范围隔离、委托、失败、取消和阶段交付。
-精确边界及兼容历史数据规则见[运行说明](../../docs/reference/runtime-collaboration.md)。
+精确边界见[运行说明](../../docs/reference/runtime-collaboration.md)。
 
 模型选择在[编排层](model-selection.ts)按事项、组织和平台配置解析，再由 Pi 决定缺省值。主负责人在同一个 Pi 会话中切换，内部委托和旁听分别读取自己的组织岗位配置。运行就绪记录包含实际供应商、模型和思考等级。

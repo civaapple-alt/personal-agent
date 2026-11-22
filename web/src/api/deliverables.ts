@@ -1,5 +1,4 @@
 import { requestJson } from "./client.ts";
-import type { MemberMemoryDto } from "./experiences.ts";
 
 export type FeedbackRating = "positive" | "negative" | "neutral";
 
@@ -26,34 +25,6 @@ export interface PreviewServiceDto {
 	cwd: string;
 	status: "starting" | "running" | "stopped" | "failed";
 	deliverableId: string | null;
-}
-
-export interface DeliverableFeedbackResult {
-	ok: boolean;
-	deliverableId: string;
-	feedback: string;
-	rating: FeedbackRating | null;
-	evaluatedMemoryIds: string[];
-	distilledMemories: MemberMemoryDto[];
-	distillationError?: string;
-}
-
-export function submitDeliverableFeedback(
-	deliverableId: string,
-	payload:
-		| string
-		| {
-				feedback?: string;
-				rating?: FeedbackRating;
-				autoDistill?: boolean;
-				scopeMode?: "team" | "single";
-		  },
-): Promise<DeliverableFeedbackResult> {
-	const body = typeof payload === "string" ? { feedback: payload } : payload;
-	return requestJson(`/api/deliverables/${encodeURIComponent(deliverableId)}/feedback`, {
-		method: "POST",
-		body: JSON.stringify(body),
-	});
 }
 
 export function stopPreview(previewId: string): Promise<{ preview: PreviewServiceDto }> {

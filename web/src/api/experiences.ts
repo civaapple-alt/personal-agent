@@ -1,5 +1,5 @@
 import { requestJson } from "./client.ts";
-import type { DeliverableDto, FeedbackRating } from "./deliverables.ts";
+import type { FeedbackRating } from "./deliverables.ts";
 import type { MatterDto } from "./matters.ts";
 import type { TeamMemberDto } from "./team.ts";
 
@@ -125,7 +125,6 @@ export interface DistillRsiResult {
 	aborted?: boolean;
 	matter?: MatterDto;
 	member?: TeamMemberDto;
-	deliverable?: DeliverableDto | null;
 	createdMemories: MemberMemoryDto[];
 	skippedDuplicates: number;
 	summary: string;
@@ -135,7 +134,6 @@ export interface DistillRsiResult {
 export function distillRsiExperiences(
 	input: {
 		matterId: string;
-		deliverableId?: string;
 		memberId?: string;
 		feedback?: string;
 		rating?: FeedbackRating;

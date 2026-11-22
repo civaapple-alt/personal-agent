@@ -574,7 +574,6 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 		// Distill in multi-role team mode
 		const distilled = await orchestrator.distillExperiences({
 			matterId: matter.id,
-			deliverableId: deliverable.id,
 		});
 		assert.ok(seenPrompt.includes("engineering-manager"));
 		assert.ok(seenPrompt.includes("qa-manager"));

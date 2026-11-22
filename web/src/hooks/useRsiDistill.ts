@@ -33,7 +33,6 @@ export function useRsiDistill({
 
 	const runRsiDistill = async (input: {
 		matterId: string;
-		deliverableId?: string;
 		feedback?: string;
 		rating?: FeedbackRating;
 	}): Promise<DistillRsiResult | undefined> => {
@@ -47,7 +46,6 @@ export function useRsiDistill({
 			const res = await distillRsiExperiences(
 				{
 					matterId: input.matterId,
-					deliverableId: input.deliverableId,
 					feedback: input.feedback,
 					rating: input.rating,
 					scopeMode: "team",

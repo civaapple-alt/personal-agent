@@ -84,7 +84,7 @@ export class DistillationMemberAccessError extends Error {
 	}
 }
 
-/** Run isolated multi-role RSI experience reflection over a matter / deliverable / feedback. */
+/** Run isolated multi-role RSI experience reflection over a matter, space documents and feedback. */
 export async function performDistillationPass(
 	deps: DistillerDeps,
 	input: DistillExperiencesInput & { signal: AbortSignal },
@@ -98,25 +98,12 @@ export async function performDistillationPass(
 		workspaceId: workspace?.id ?? null,
 		repoPath: cwd,
 		messages: deps.store.listMessages(matter.id),
-		deliverables: deps.store.listDeliverables(matter.id),
 	});
-	const deliverable = input.deliverableId
-		? (scoped.deliverables.find((item) => item.id === input.deliverableId) ?? null)
-		: (scoped.deliverables[0] ?? null);
-	if (input.deliverableId && !deliverable)
-		throw new Error("Deliverable does not have provenance in the current workspace");
-	const targetMemberId = input.memberId ?? deliverable?.memberId ?? matter.leadMemberId ?? undefined;
+	const targetMemberId = input.memberId ?? matter.leadMemberId ?? undefined;
 	const member = deps.routeMemberForRequest(matter.title, targetMemberId);
 	const canReviewMember = input.canReviewMember ?? (() => true);
 	if (!canReviewMember(member)) throw new DistillationMemberAccessError();
-	const publicationIndex = input.deliverableId
-		? scoped.messages.findIndex(
-				(message) =>
-					Array.isArray(message.metadata?.deliverableIds) &&
-					message.metadata.deliverableIds.includes(input.deliverableId),
-			)
-		: -1;
-	const evidence = publicationIndex >= 0 ? scoped.messages.slice(0, publicationIndex + 1) : scoped.messages;
+	const evidence = scoped.messages;
 	const allUserMessages = evidence.filter((message) => message.channel === "user");
 	const allCollabMessages = evidence.filter((message) => message.channel === "internal_collab");
 	const allNoticeMessages = evidence.filter((message) => message.channel === "notice");
@@ -232,8 +219,8 @@ export async function performDistillationPass(
 				.join("\n")}`
 		: "";
 
-	const feedbackText = (input.feedback ?? deliverable?.feedback ?? "").trim();
-	const feedbackRating = input.rating ?? deliverable?.feedbackRating ?? null;
+	const feedbackText = (input.feedback ?? "").trim();
+	const feedbackRating = input.rating ?? null;
 	const teamMode = participatingMembers.length > 1;
 	const prompt = [
 		teamMode
@@ -275,16 +262,6 @@ export async function performDistillationPass(
 		`## 当前事项\n- 编号：${matter.id}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
 		spaceEvidenceSection,
 		spaceFeedbackSection,
-		deliverable
-			? [
-					"## 关联历史记录",
-					`- 标题：${deliverable.title} (V${deliverable.version}, ${deliverable.type})`,
-					deliverable.summary ? `- 变更摘要：${deliverable.summary}` : "",
-					`- 内容摘录：${deliverable.contentOrPath.slice(0, 3000)}`,
-				]
-					.filter(Boolean)
-					.join("\n")
-			: "",
 		feedbackText || feedbackRating
 			? `## 用户验收反馈\n- 评价：${feedbackRating ?? "未评级"}\n- 意见：${feedbackText || "（无文字意见）"}`
 			: "",
@@ -384,7 +361,7 @@ export async function performDistillationPass(
 			content: candidate.content,
 			rationale: candidate.rationale || payload.summary,
 			sourceMatterId: matter.id,
-			sourceDeliverableId: deliverable?.id ?? null,
+			sourceDeliverableId: null,
 			status: "candidate",
 			verified: false,
 			supersedesMemoryId: validSupersedes,
@@ -402,7 +379,6 @@ export async function performDistillationPass(
 		senderId: member.id,
 		content: JSON.stringify({
 			method: "rsi_distilled",
-			deliverableId: deliverable?.id ?? null,
 			createdCount: createdMemories.length,
 			skippedDuplicates,
 			participatingMemberIds: participatingMembers.map((m) => m.id),
@@ -414,7 +390,6 @@ export async function performDistillationPass(
 	return {
 		matter,
 		member,
-		deliverable,
 		createdMemories,
 		skippedDuplicates,
 		summary: payload.summary,

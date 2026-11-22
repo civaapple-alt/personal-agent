@@ -167,7 +167,6 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			try {
 				const distilled = await orchestrator.distillExperiences({
 					matterId: existing.matterId,
-					deliverableId: existing.id,
 					feedback,
 					rating: rating ?? null,
 					scopeMode: body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined,

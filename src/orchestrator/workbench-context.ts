@@ -60,7 +60,6 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 		const { messages } = selectMatterContext({
 			...context,
 			messages: store.listMessages(matter.id),
-			deliverables: [],
 		});
 		for (const message of messages.toReversed()) {
 			if (message.senderId !== member.id) continue;
@@ -157,7 +156,6 @@ export async function readWorkbenchTopic(
 	const { messages } = selectMatterContext({
 		...context,
 		messages: store.listMessages(matter.id, "user"),
-		deliverables: [],
 	});
 	const scopedIds = scopedSpaceDocumentIds(messages);
 	const documents = store.spaces.listDocuments({ matterId: matter.id }).filter((doc) => scopedIds.has(doc.id));

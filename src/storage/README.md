@@ -15,7 +15,7 @@
 - `worker_sessions` 保存确切 Pi 文件、范围键及消息游标，模型历史本身保存在 Pi JSONL 文件。`active` 行不等于进程存活。
   新范围键 `v2` 包含组织；旧 `v1` 或无范围映射仍保留，但不自动恢复到新范围。
 - `matter_execution_leases` 保存单机宿主 PID 与占用者；不是分布式租约，也不是外部动作 exactly-once 保证。
-- `removed_role_templates` 在成员删除事务中记录模板 ID，启动同步跳过已移除模板，显式重新创建或导入时清除标记。该表通过兼容初始化新增，不推断旧版历史删除意图。
+- `removed_role_templates` 在成员删除事务中记录模板 ID，启动同步跳过已移除模板，显式重新创建或导入时清除标记。该表属于当前数据库结构。
 - `recordTurnOutcome` 在同一事务中写入候选经验，并将本轮经验应用关联到空间文档的 Git 提交。空间文档本身即时保存；回复与事项状态在事务之后记录，外部执行不能整体回滚。
 - 组织与成员私有身份：
   - `organizations`、`team_members` 与 `workspace_links` 维护组织名、`git_email_domain`、`use_role_git_identity`（默认 `0`，即默认使用目标仓库目录自身的 Git `user.name` / `user.email`，显式开启后才注入角色 Git Author 署名）、简介、`is_default` 与 `workspace_links.org_id`。
@@ -44,7 +44,7 @@
 - `createMatter` 可由内部调用指定固定 `id`，供按需内置演示复用；普通 HTTP 新建接口不接收该字段，仍生成随机 ID，不新增另一套演示消息或成果存储。
 - 角色 Markdown 与私有运行数据分离；不要把数据库内容导进 [可分享角色](../../roles/README.md)。预览索引和待答对话属于服务内存，未在此持久化。
 
-迁移在同一事务中更新表结构、数据和版本号。旧工作区与经验表补齐外键后，使用 `PRAGMA foreign_key_check` 验证现存引用。发现悬空引用时，迁移回滚并保留原数据。验证时使用内存库或临时库，覆盖升级和再次打开。
+验证数据库初始化和重新打开时使用内存库或临时库，不读取或改写本地用户数据库。
 
 - 团队账号、多组织 RBAC、平台策略与审计日志：
   - `users`（邮箱 + `scryptSync` 加盐密码哈希、`platform_role`: `super_admin` / `user`、`status`: `active` / `pending_review` / `disabled`、`max_orgs`、`max_active_dispatches`、`max_personal_roles`、`can_dispatch_ai`）、`user_sessions`（SHA-256 会话摘要）与 `platform_settings`（注册模式 `open_auto`/`open_review`/`invite_only`，默认 `open_review`、`workspaces_root`、`allow_local_workspace_path`、`local_workspace_allowlist_json`、`allow_command_previews`、`pstack_dir`/`pstackDir`、默认配额含 `default_max_personal_roles`）以及持久化 `audit_logs` 由 [user-auth-repo.ts](repos/user-auth-repo.ts) 维护。
@@ -53,4 +53,4 @@
   - 保留既有表兼容性，本地默认所有者用户 `DEFAULT_LOCAL_ADMIN_USER_ID`（`usr_local_owner`）在从免密回环模式原地切换至 `PA_REQUIRE_AUTH=1` 时通过 `setupInitialAdmin` 原地升级并保留既有组织与事项关联。
 
 从仓库根运行 `node --test test/space-git-store.test.ts test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts test/multi-tenant-auth-admin.test.ts`。
-存储范围如何用于运行见 [orchestrator](../orchestrator/README.md)，历史兼容细节见[运行说明](../../docs/reference/runtime-collaboration.md)。
+存储范围如何用于运行见 [orchestrator](../orchestrator/README.md)，数据与会话边界见[运行说明](../../docs/reference/runtime-collaboration.md)。

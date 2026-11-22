@@ -11,7 +11,6 @@ import type {
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	CollaboratorRole,
-	Deliverable,
 	FeedbackRating,
 	Matter,
 	MatterMessage,
@@ -260,7 +259,6 @@ export interface DelegateResult {
 
 export interface DistillExperiencesInput {
 	matterId: string;
-	deliverableId?: string;
 	memberId?: string;
 	scopeMode?: "team" | "single";
 	feedback?: string;
@@ -274,7 +272,6 @@ export interface DistillExperiencesInput {
 export interface DistillExperiencesResult {
 	matter: Matter;
 	member: TeamMember;
-	deliverable: Deliverable | null;
 	createdMemories: MemberMemory[];
 	skippedDuplicates: number;
 	summary: string;

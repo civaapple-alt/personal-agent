@@ -356,19 +356,6 @@ export async function handleMemoryRoutes(ctx: ServerRouteContext, r: RouteReques
 			sendError(res, 403, "仅所有者或对应组织管理员可在该事项触发团队经验复盘");
 			return true;
 		}
-		const deliverableId =
-			typeof body.deliverableId === "string" && body.deliverableId.trim() ? body.deliverableId.trim() : undefined;
-		if (deliverableId) {
-			const targetDeliverable = store.getDeliverable(deliverableId);
-			if (!targetDeliverable) {
-				sendError(res, 404, `Deliverable not found: ${deliverableId}`);
-				return true;
-			}
-			if (targetDeliverable.matterId !== matterId) {
-				sendError(res, 400, "deliverableId does not belong to the specified matterId");
-				return true;
-			}
-		}
 		const memberId = typeof body.memberId === "string" && body.memberId.trim() ? body.memberId.trim() : undefined;
 		const feedback = typeof body.feedback === "string" && body.feedback.trim() ? body.feedback.trim() : undefined;
 		const rating: FeedbackRating | undefined =
@@ -380,7 +367,6 @@ export async function handleMemoryRoutes(ctx: ServerRouteContext, r: RouteReques
 		try {
 			const result = await orchestrator.distillExperiences({
 				matterId,
-				deliverableId,
 				memberId,
 				feedback,
 				rating,
