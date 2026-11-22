@@ -76,21 +76,21 @@ export function PstackSettings({
 				<>
 					<form className="settings-pstack-setup" onSubmit={submitPath}>
 						<label htmlFor="pstack-package-path">pstack 方法包目录</label>
-						<div className="settings-pstack-form-row">
-							<input
-								id="pstack-package-path"
-								name="pstack-package-path"
-								type="text"
-								autoComplete="off"
-								spellCheck={false}
-								className="text-input"
-								placeholder="粘贴 pi list 显示的绝对路径"
-								value={path}
-								onChange={(event) => setInput(event.target.value)}
-								disabled={pending !== null}
-							/>
+						<input
+							id="pstack-package-path"
+							name="pstack-package-path"
+							type="text"
+							autoComplete="off"
+							spellCheck={false}
+							className="text-input"
+							placeholder="粘贴 pi list 显示的绝对路径"
+							value={path}
+							onChange={(event) => setInput(event.target.value)}
+							disabled={pending !== null}
+						/>
+						<div className="actions-row compact">
 							<button type="submit" className="btn-pill-dark" disabled={pending !== null || !path.trim()}>
-								{pending === "enable" ? "校验中…" : "启用"}
+								{pending === "enable" ? "校验中…" : pstack.configured ? "保存并启用" : "启用"}
 							</button>
 							{pstack.configured && (
 								<button

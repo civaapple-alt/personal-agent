@@ -85,6 +85,7 @@ export function WebAccessSettings({
 						<span>默认搜索供应商（web_search）</span>
 						<select
 							className="input-field"
+							style={{ maxWidth: 460 }}
 							disabled={pending !== null}
 							value={activeProvider}
 							onChange={(event) => setProviderDraft(event.target.value as "auto" | "deepseek" | "exa" | "kimi")}
@@ -120,8 +121,9 @@ export function WebAccessSettings({
 					</fieldset>
 					<div className="actions-row compact">
 						<button className="btn-pill-dark" type="submit" disabled={!canSave || pending !== null}>
-							{pending === "save" ? "保存中…" : "保存岗位权限"}
+							{pending === "save" ? "保存中…" : "保存配置"}
 						</button>
+						{changed && <span className="muted-hint">有未保存修改（包含默认供应商与岗位权限）</span>}
 					</div>
 				</form>
 			)}
