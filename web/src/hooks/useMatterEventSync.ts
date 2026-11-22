@@ -125,7 +125,7 @@ export function useMatterEventSync({
 		}
 		es.addEventListener("auth_revoked", () => {
 			es.close();
-			applyRevokedSession("当前邀请口令已被重置或已移出协同团队，请向所有者获取新的邀请链接");
+			applyRevokedSession("当前账号会话已失效，请重新登录或联系管理员");
 		});
 		es.onerror = () => {
 			setSseConnected(false);

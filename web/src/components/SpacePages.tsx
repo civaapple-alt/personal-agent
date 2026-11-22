@@ -95,8 +95,10 @@ export function SpacePages({
 			if (!actorId) return "系统";
 			const fromMember = memberName(actorId);
 			if (fromMember && fromMember !== actorId) return fromMember;
-			const collab = bootstrap?.collaborators?.find((c) => c.id === actorId);
-			if (collab) return collab.name;
+			const member = Object.values(bootstrap?.orgMembersByOrgId ?? {})
+				.flat()
+				.find((item) => item.userId === actorId);
+			if (member) return member.displayName;
 			if (bootstrap?.accountUser?.id === actorId) return bootstrap.accountUser.displayName;
 			return actorId;
 		},

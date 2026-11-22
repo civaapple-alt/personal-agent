@@ -695,7 +695,7 @@ export async function buildRuntimeOverview(options: {
 				{
 					key: "authMode",
 					label: "访问模式",
-					value: serverConfig?.requireAuth ? "强制口令认证" : "本机回环默认所有者 / 局域网邀请口令",
+					value: serverConfig?.requireAuth ? "强制账号认证" : "本机回环默认所有者 / 非回环账号认证",
 				},
 			],
 		},

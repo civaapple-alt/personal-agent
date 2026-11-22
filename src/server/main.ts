@@ -96,15 +96,15 @@ async function main(): Promise<void> {
 	if (!hadOrganizations) {
 		store.assignOrphanWorkspacesToDefaultOrganization();
 	}
-	const ownerCollab = store.ensureOwnerCollaborator(resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者");
-	const localAdmin = store.ensureLocalBootstrapAdmin(ownerCollab.name);
+	const ownerName = resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者";
+	const localAdmin = store.ensureLocalBootstrapAdmin(ownerName);
 	const adminEmailEnv = process.env.PA_ADMIN_EMAIL?.trim();
 	const adminPasswordEnv = process.env.PA_ADMIN_PASSWORD ?? "";
 	if (adminEmailEnv && adminPasswordEnv.length >= 8 && !store.hasPasswordedAdmin()) {
 		store.setupInitialAdmin({
 			email: adminEmailEnv,
 			password: adminPasswordEnv,
-			displayName: process.env.PA_ADMIN_NAME?.trim() || ownerCollab.name,
+			displayName: process.env.PA_ADMIN_NAME?.trim() || ownerName,
 		});
 	}
 	if (store.listOrgMembers(defaultOrg.id).length === 0) {

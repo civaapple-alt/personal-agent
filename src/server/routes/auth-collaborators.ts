@@ -1,6 +1,6 @@
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { isThinkingLevel } from "../../rpc/model-selection.ts";
-import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
+import { toPublicUser } from "../../storage/repositories.ts";
 import type { OrgMemberRole } from "../../storage/types.ts";
 import {
 	canAccessMatter,
@@ -39,7 +39,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		if (!requireActiveActor(res, actor)) return true;
 		const liveTemplates = orchestrator.listTemplates();
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
-		const allCollaborators = store.listCollaborators();
 		const scopedOrgs = store
 			.listOrganizations()
 			.filter((org) => canAccessOrganization(store, actor, org.id))
@@ -85,7 +84,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		}
 
 		const isAdmin = isSuperAdminActor(actor);
-		const accessibleOrgIds = new Set(scopedOrgs.map((o) => o.id));
 		const visibleMembers = store.listMembers().filter((m) => canActorUseMember(store, actor, m));
 		const visibleTemplateIds = new Set(visibleMembers.map((m) => m.templateId));
 
@@ -93,7 +91,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			innerDemoAvailable: Boolean(ctx.innerMatterDemo),
 			unifiedConversation: true,
 			authKind: actor.authKind,
-			currentUser: toPublicCollaborator(actor.collaborator),
+			currentUser: actor.collaborator,
 			accountUser: actor.user ? toPublicUser(actor.user) : null,
 			platformPolicy: {
 				requireAuth: Boolean(ctx.requireAuth),
@@ -101,13 +99,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				allowLocalWorkspacePath: settings.allowLocalWorkspacePath || isAdmin,
 				allowCommandPreviews: settings.allowCommandPreviews || isAdmin,
 			},
-			collaborators: isAdmin
-				? allCollaborators.map(toPublicCollaborator)
-				: actor.authKind === "session"
-					? allCollaborators
-							.filter((c) => Boolean(c.orgId && accessibleOrgIds.has(c.orgId)))
-							.map(toPublicCollaborator)
-					: allCollaborators.filter((c) => !c.orgId || accessibleOrgIds.has(c.orgId)).map(toPublicCollaborator),
 			members: visibleMembers,
 			templates: liveTemplates
 				.filter((t) => t.roleKind === "architect" || visibleTemplateIds.has(t.id))

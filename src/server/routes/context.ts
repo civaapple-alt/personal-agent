@@ -4,7 +4,7 @@ import { resolveRepoGitUserIdentity } from "../../orchestrator/execution-context
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
 import type { InstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
-import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../../storage/repositories.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
 import type { MemberMemory, MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
 import { canActorAccessMemory, canActorUseMember, canManageOrganization } from "../acl.ts";
 import { extractClientIp, isSuperAdminActor, type RequestActor } from "../auth.ts";
@@ -156,8 +156,8 @@ export function parseCollaboratorIds(raw: unknown, store: PersonalAgentStore): s
 	for (const item of raw) {
 		if (typeof item !== "string") continue;
 		const trimmed = item.trim();
-		if (!trimmed || trimmed === DEFAULT_OWNER_COLLABORATOR_ID || seen.has(trimmed)) continue;
-		if (!store.getCollaborator(trimmed) && !store.getUserById(trimmed)) continue;
+		if (!trimmed || seen.has(trimmed)) continue;
+		if (!store.getUserById(trimmed)) continue;
 		seen.add(trimmed);
 		ids.push(trimmed);
 	}

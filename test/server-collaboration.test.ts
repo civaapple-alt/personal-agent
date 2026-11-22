@@ -508,13 +508,9 @@ test("Account collaboration: discussion and AI request require authorized approv
 		assert.equal(collabBootRes.status, 200);
 		const collabBoot = (await collabBootRes.json()) as {
 			currentUser: { id: string; permissionRole: string; token?: string };
-			collaborators: Array<{ id: string; token?: string }>;
 		};
 		assert.equal(collabBoot.currentUser.id, colleague.id);
 		assert.equal(collabBoot.currentUser.permissionRole, "collaborator");
-		for (const item of collabBoot.collaborators) {
-			assert.equal(item.token, undefined);
-		}
 
 		// Collaborator is blocked from admin & direct AI dispatch
 		for (const [urlPath, payload] of [
@@ -828,7 +824,7 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 test("Disabled account sessions stay blocked on refresh, loopback, and live SSE", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
-	store.ensureOwnerCollaborator("团队所有者");
+	store.ensureLocalBootstrapAdmin("团队所有者");
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
 	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-revoke-"));
 	const dialogBroker = new DialogBroker();

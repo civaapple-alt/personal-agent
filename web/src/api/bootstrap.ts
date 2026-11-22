@@ -24,7 +24,6 @@ export interface BootstrapPayload {
 		allowLocalWorkspacePath: boolean;
 		allowCommandPreviews: boolean;
 	};
-	collaborators?: CollaboratorDto[];
 	members: TeamMemberDto[];
 	templates: RoleTemplateDto[];
 	workspaces: WorkspaceDto[];

@@ -17,17 +17,6 @@ CREATE TABLE audit_logs (
 	created_at TEXT NOT NULL
 );
 
-CREATE TABLE collaborators (
-	id TEXT PRIMARY KEY,
-	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
-	name TEXT NOT NULL,
-	role_title TEXT NOT NULL DEFAULT '',
-	permission_role TEXT NOT NULL DEFAULT 'collaborator',
-	token TEXT NOT NULL UNIQUE,
-	created_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL
-);
-
 CREATE TABLE matter_execution_leases (
 	matter_id TEXT PRIMARY KEY REFERENCES matters(id) ON DELETE CASCADE,
 	owner_id TEXT NOT NULL,

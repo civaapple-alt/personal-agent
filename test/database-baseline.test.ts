@@ -25,6 +25,7 @@ test("a fresh database can be reopened with its data and complete schema", () =>
 			.map((row) => row.name);
 		assert.ok(tables.includes("space_document_memory_votes"));
 		assert.ok(!tables.includes("deliverables"));
+		assert.ok(!tables.includes("collaborators"));
 		assert.ok(!tables.includes("deliverable_memory_applications"));
 		assert.ok(!tables.includes("memory_feedback_votes"));
 		db.close();

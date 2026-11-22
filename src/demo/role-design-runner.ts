@@ -107,7 +107,7 @@ export async function runRoleDesignDemo(input: {
 			return worker;
 		},
 	});
-	store.ensureOwnerCollaborator("隔离验证所有者");
+	store.ensureLocalBootstrapAdmin("隔离验证所有者");
 	const workspace = store.upsertWorkspace({ name: "虚构角色验证", repoPath: workspaceDir });
 	const turns: DemoTurn[] = [];
 	let error: string | null = null;

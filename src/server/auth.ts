@@ -97,7 +97,7 @@ export function extractHeaderToken(req: IncomingMessage): string | null {
 	return null;
 }
 
-function userToCollaboratorView(store: PersonalAgentStore, user: PlatformUser): Collaborator {
+export function userToCollaboratorView(store: PersonalAgentStore, user: PlatformUser): Collaborator {
 	const memberships = store.listUserOrganizations(user.id);
 	const primaryMembership = memberships.find((m) => m.isDefault) ?? memberships[0] ?? null;
 	const orgMembership = primaryMembership ? store.getOrgMembership(primaryMembership.id, user.id) : null;
@@ -108,7 +108,6 @@ function userToCollaboratorView(store: PersonalAgentStore, user: PlatformUser): 
 		name: user.displayName,
 		roleTitle: orgMembership?.roleTitle || (user.platformRole === "super_admin" ? "超级管理员" : "团队成员"),
 		permissionRole,
-		token: "",
 		createdAt: user.createdAt,
 		updatedAt: user.updatedAt,
 	};
@@ -137,10 +136,9 @@ export function resolveRequestActor(
 		return null;
 	}
 	if (!requireAuth && isLoopbackRemote(req)) {
-		const owner = store.ensureOwnerCollaborator();
-		const adminUser = store.ensureLocalBootstrapAdmin(owner.name);
+		const adminUser = store.ensureLocalBootstrapAdmin();
 		return {
-			collaborator: owner,
+			collaborator: userToCollaboratorView(store, adminUser),
 			user: adminUser,
 			viaToken: false,
 			authKind: "loopback",

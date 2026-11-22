@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { encodePiSessionCwdDir, resolveScopedPiSessionDir } from "../src/orchestrator/execution-context.ts";
 import { canAccessSpace, canWriteSpace } from "../src/server/acl.ts";
+import { userToCollaboratorView } from "../src/server/auth.ts";
 import { persistUploadedFiles, resolveUploadMonthBucket } from "../src/server/uploads.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { memberSpaceId, orgSpaceId, userSpaceId, workspaceSpaceId } from "../src/storage/repos/space-repo.ts";
@@ -280,13 +281,13 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 			authKind: "session" as const,
 			viaToken: false,
 			user: { ...admin, platformRole: "super_admin" as const, status: "active" as const },
-			collaborator: store.ensureOwnerCollaborator("Alice"),
+			collaborator: userToCollaboratorView(store, admin),
 		};
 		const bobActor = {
 			authKind: "session" as const,
 			viaToken: false,
 			user: bob,
-			collaborator: store.ensureOwnerCollaborator("Bob"),
+			collaborator: userToCollaboratorView(store, bob),
 		};
 		assert.equal(canAccessSpace(store, superAdminActor, adminSpace), true);
 		assert.equal(canAccessSpace(store, superAdminActor, bobSpace), false);

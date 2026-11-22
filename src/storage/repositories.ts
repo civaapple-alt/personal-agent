@@ -1,5 +1,4 @@
 import type { DatabaseSync } from "node:sqlite";
-import { CollaboratorRepo } from "./repos/collaborator-repo.ts";
 import { MatterRepo } from "./repos/matter-repo.ts";
 import { MemberRepo } from "./repos/member-repo.ts";
 import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
@@ -17,13 +16,11 @@ export {
 	DEFAULT_LOCAL_ADMIN_USER_ID,
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
-	DEFAULT_OWNER_COLLABORATOR_ID,
 	defaultMemberGitName,
 	MemoryValidationError,
 	normalizeMemoryCategory,
 	resolveEffectiveGitIdentity,
 	slugifyOrganizationName,
-	toPublicCollaborator,
 	toPublicUser,
 } from "./repos/helpers.ts";
 export { WorkspaceMutationError } from "./repos/workspace-repo.ts";
@@ -33,7 +30,6 @@ export class PersonalAgentStore {
 	private readonly members: MemberRepo;
 	private readonly orgs: OrganizationRepo;
 	private readonly workspaces: WorkspaceRepo;
-	private readonly collaborators: CollaboratorRepo;
 	private readonly memories: MemoryRepo;
 	private readonly turnOutcomes: TurnOutcomeRepo;
 	private readonly matters: MatterRepo;
@@ -49,7 +45,6 @@ export class PersonalAgentStore {
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);
-		this.collaborators = new CollaboratorRepo(db, this.orgs);
 		this.memories = new MemoryRepo({
 			db,
 			memberRepo: this.members,
@@ -178,28 +173,6 @@ export class PersonalAgentStore {
 	}
 
 	// ---- Collaborators ----
-	ensureOwnerCollaborator(defaultName?: string) {
-		return this.collaborators.ensureOwnerCollaborator(defaultName);
-	}
-	upsertCollaborator(input: Parameters<CollaboratorRepo["upsertCollaborator"]>[0]) {
-		return this.collaborators.upsertCollaborator(input);
-	}
-	regenerateCollaboratorToken(id: string) {
-		return this.collaborators.regenerateCollaboratorToken(id);
-	}
-	deleteCollaborator(id: string) {
-		return this.collaborators.deleteCollaborator(id);
-	}
-	getCollaborator(id: string) {
-		return this.collaborators.getCollaborator(id);
-	}
-	getCollaboratorByToken(token: string) {
-		return this.collaborators.getCollaboratorByToken(token);
-	}
-	listCollaborators(orgId?: string) {
-		return this.collaborators.listCollaborators(orgId);
-	}
-
 	// ---- Matters & Messages ----
 	createMatter(input: Parameters<MatterRepo["createMatter"]>[0]) {
 		return this.matters.createMatter(input);

@@ -143,12 +143,9 @@ export interface Collaborator {
 	name: string;
 	roleTitle: string;
 	permissionRole: CollaboratorRole;
-	token: string;
 	createdAt: string;
 	updatedAt: string;
 }
-
-export type PublicCollaborator = Omit<Collaborator, "token">;
 
 export interface Organization {
 	id: string;

@@ -21,7 +21,6 @@ const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 interface UseChatStageParticipantsOptions {
 	isSuperAdmin: boolean;
 	currentUser?: CollaboratorDto | null;
-	collaborators: CollaboratorDto[];
 	orgMembersByOrgId: Record<string, OrganizationMemberDto[]>;
 	orgEffectiveMemberIds: string[] | null;
 	selectedWorkspace: WorkspaceDto | null;
@@ -44,7 +43,6 @@ interface UseChatStageParticipantsOptions {
 export function useChatStageParticipants({
 	isSuperAdmin,
 	currentUser,
-	collaborators,
 	orgMembersByOrgId,
 	orgEffectiveMemberIds,
 	selectedWorkspace,
@@ -107,10 +105,7 @@ export function useChatStageParticipants({
 							}
 						: null;
 				})()
-			: currentUser?.id.startsWith("usr_")
-				? currentUser
-				: (collaborators.find((c) => c.permissionRole === "owner") ?? null);
-	const nonOwnerCollaborators = collaborators.filter((c) => c.permissionRole !== "owner");
+			: (currentUser ?? null);
 	const humanPeerCandidates = useMemo(() => {
 		const map = new Map<string, CollaboratorDto>();
 		for (const om of orgMembers) {
@@ -125,11 +120,8 @@ export function useChatStageParticipants({
 				updatedAt: om.updatedAt,
 			});
 		}
-		for (const col of nonOwnerCollaborators) {
-			if (!map.has(col.id)) map.set(col.id, col);
-		}
 		return [...map.values()];
-	}, [orgMembers, nonOwnerCollaborators, ownerCollab?.id]);
+	}, [orgMembers, ownerCollab?.id]);
 
 	const assignedCollabIds = matterDetail ? (matterDetail.matter.collaboratorIds ?? []) : draftCollaboratorIds;
 	const messageHumanAuthorIds = useMemo(() => {
@@ -194,7 +186,6 @@ export function useChatStageParticipants({
 		orgMembers,
 		scopedMembers,
 		ownerCollab,
-		nonOwnerCollaborators,
 		humanPeerCandidates,
 		assignedCollabIds,
 		matterHumanParticipants,

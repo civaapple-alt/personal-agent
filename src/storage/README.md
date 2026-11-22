@@ -7,7 +7,7 @@
   - `spaces` 与 `space_documents` 保存空间元数据与文档索引；新建单文件落入 `plans/`、`specs/`、`decisions/`、`rules/`、`notes/`，目录条目支持子文件与静态预览。正文和修订历史保存在各自 Git 仓库中。每个空间的 Git 写操作按 `spaceId` 串行排队，更新时校验修订号或基线提交。
   - 私密事项默认路由到发起人的 `user` 个人空间（`spc_usr_<userId>`），从物理仓库层面隔离私密正文；非私密事项按仓库优先、其次组织默认空间路由。
   - `space_documents` 通过可选列 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联业务仓库项目的文件相对路径或链接；业务代码仓本身的 `write`/`edit` 变更留在业务仓 Git 与事项事件中，不再单独建引用表或双写正文。
-- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的空间（[space-repo.ts](repos/space-repo.ts)）、成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、事项与会话子仓储。
+- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的空间（[space-repo.ts](repos/space-repo.ts)）、成员、组织、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 
 需要核对的存储边界：
@@ -37,9 +37,7 @@
 - `matters.ai_member_ids_json`（`NULL` 表示默认全部 AI 角色参与，数组表示当前保留的 AI 成员）、`matters.observers_enabled`
   （事项全局 AI 旁听开关）与 `matters.observer_ids_json` 协同维护事项内 AI 参与范围、负责人切换及旁听名单。关闭开关时保留旁听名单，主责的委托名单单独保存。
   由事项仓储维护。删除角色时同步从参与、请教与旁听名单移除它，删掉最后一个已配置旁听者时关闭该事项的旁听。
-- 人类协作成员与受限房间访问：
-  - `collaborators` 表与 `matters.collaborator_ids_json` 维护人类参与者（`owner` / `collaborator`）、岗位头衔及邀请口令；
-  - `ensureOwnerCollaborator` 自动初始化所有者记录，`toPublicCollaborator` 用于向非所有者隐藏邀请口令。
+- 人类成员由 `users` 和 `organization_members` 维护；`matters.collaborator_ids_json` 保存事项指定参与人的用户 ID。
 - `appendMessage` 写入当时有效组织的 `metadata.orgId` 快照；读取历史不能使用事项今天的绑定替代来源。`transitionAiRequest` 用条件 UPDATE 认领待处理的人类提请，避免重复批准或忽略。待决定问题与答案随来源消息保存，`transitionHumanDecision` 按待答状态与版本原子提交。续跑用户消息引用这条来源消息，已有成功回复时不再派发；角色确认结果与确认人随提案保存。
 - `createMatter` 可由内部调用指定固定 `id`，供按需内置演示复用；普通 HTTP 新建接口不接收该字段，仍生成随机 ID，不新增另一套演示消息或成果存储。
 - 角色 Markdown 与私有运行数据分离；不要把数据库内容导进 [可分享角色](../../roles/README.md)。预览索引和待答对话属于服务内存，未在此持久化。

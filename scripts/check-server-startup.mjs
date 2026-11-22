@@ -63,7 +63,12 @@ try {
 			assert.equal(bootstrap.members.filter((m) => m.id !== "role-architect").length, 4);
 			assert.ok(bootstrap.members.some((m) => m.id === "role-architect"));
 			assert.equal(bootstrap.matters.length, 0);
-			assert.equal(bootstrap.deliverables.length, 0);
+			assert.equal(bootstrap.authKind, "loopback");
+			assert.ok(bootstrap.accountUser?.id);
+			assert.equal("deliverables" in bootstrap, false);
+			assert.equal("collaborators" in bootstrap, false);
+			const recent = await (await fetch(`${base}/api/spaces/recent`)).json();
+			assert.deepEqual(recent.documents, []);
 			assert.equal(bootstrap.innerDemoAvailable, !memory);
 			if (memory) {
 				const memberResponse = await fetch(`${base}/api/members`, {
@@ -79,7 +84,7 @@ try {
 				const { matter } = await demoResponse.json();
 				const detail = await (await fetch(`${base}/api/matters/${matter.id}`)).json();
 				assert.equal(detail.demoGuide.steps.length, 4);
-				assert.equal(detail.deliverables.length, 0);
+				assert.deepEqual(detail.spaceDocuments, []);
 			}
 			assert.equal((await fetch(base)).status, 200);
 			const shutdownViaIpc = process.platform === "win32" || memory;

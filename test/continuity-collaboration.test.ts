@@ -589,11 +589,19 @@ test("one conversation entry point runs roles directly with their tools, preserv
 		}
 		return `回复来自 ${worker.options.env?.PA_MEMBER_ID}`;
 	});
-	const colleague = f.store.upsertCollaborator({
-		name: "张宁",
-		roleTitle: "设计同事",
-		permissionRole: "collaborator",
+	const colleague = f.store.createUser({
+		email: "zhang@example.test",
+		password: "TestPass123!",
+		displayName: "张宁",
+		status: "active",
 	});
+	if (f.workspace.orgId)
+		f.store.upsertOrgMember({
+			orgId: f.workspace.orgId,
+			userId: colleague.id,
+			orgRole: "org_member",
+			roleTitle: "设计同事",
+		});
 	const { server } = createPersonalAgentServer({
 		store: f.store,
 		orchestrator: f.orchestrator,

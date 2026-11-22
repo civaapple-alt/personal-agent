@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import type {
 	CollaborationPresetMode,
-	CollaboratorDto,
 	MatterInitiationAssessmentDto,
 	MatterVisibility,
 	OrganizationMemberDto,
@@ -14,7 +13,6 @@ import { filterBusinessMembers, isArchitectMemberId } from "../../architectApi.t
 interface MatterInitiationPanelProps {
 	isOwner: boolean;
 	members: TeamMemberDto[];
-	nonOwnerCollaborators: CollaboratorDto[];
 	orgMembers?: OrganizationMemberDto[];
 	initiatorId?: string;
 	initiatorName?: string;
@@ -85,7 +83,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		onCancelModelAssessment,
 		onOpenArchitect,
 		onStartArchitectMatter,
-		nonOwnerCollaborators,
 		orgMembers = [],
 		initiatorId,
 		initiatorName,
@@ -440,7 +437,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								</button>
 							</div>
 						)}
-						{(initiatorName || orgMembers.length > 0 || nonOwnerCollaborators.length > 0) && (
+						{(initiatorName || orgMembers.length > 0) && (
 							<div className="initiation-human-row">
 								<span className="initiation-mini-label">人类成员</span>
 								{initiatorName && <span className="initiation-initiator">{initiatorName} · 发起人</span>}
@@ -461,25 +458,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 											}
 										>
 											{member.displayName ?? member.email ?? member.userId}
-										</button>
-									))}
-								{nonOwnerCollaborators
-									.filter((collaborator) => collaborator.id !== initiatorId)
-									.map((collaborator) => (
-										<button
-											key={collaborator.id}
-											type="button"
-											className={`choice-chip ${draftCollaboratorIds.includes(collaborator.id) ? "active" : ""}`}
-											aria-pressed={draftCollaboratorIds.includes(collaborator.id)}
-											onClick={() =>
-												onUpdateDraftCollaboratorIds(
-													draftCollaboratorIds.includes(collaborator.id)
-														? draftCollaboratorIds.filter((id) => id !== collaborator.id)
-														: [...draftCollaboratorIds, collaborator.id],
-												)
-											}
-										>
-											{collaborator.name}
 										</button>
 									))}
 							</div>

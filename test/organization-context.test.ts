@@ -10,6 +10,7 @@ import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult } from "../src/rpc/pi-rpc-worker.ts";
 import { canActorAccessMemory } from "../src/server/acl.ts";
 import type { RequestActor } from "../src/server/auth.ts";
+import { userToCollaboratorView } from "../src/server/auth.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
 import { reportReady } from "./worker-helpers.ts";
@@ -150,7 +151,7 @@ test("legacy workspace reassignment isolates sessions and workspace-private memo
 	});
 	const localOwner: RequestActor = {
 		authKind: "loopback",
-		collaborator: f.store.ensureOwnerCollaborator("Fixture owner"),
+		collaborator: userToCollaboratorView(f.store, f.store.ensureLocalBootstrapAdmin("Fixture owner")),
 		user: null,
 		viaToken: false,
 	};

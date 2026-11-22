@@ -770,8 +770,7 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
 	const defaultOrg = store.ensureDefaultOrganization();
-	const ownerCollab = store.ensureOwnerCollaborator("Local Owner");
-	const localAdmin = store.ensureLocalBootstrapAdmin(ownerCollab.name);
+	const localAdmin = store.ensureLocalBootstrapAdmin("Local Owner");
 	store.upsertOrgMember({
 		orgId: defaultOrg.id,
 		userId: localAdmin.id,

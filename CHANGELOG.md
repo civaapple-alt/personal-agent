@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the legacy collaborators table and derive matter participants from account and organization membership.
+
 - Remove legacy collaborator-token authentication and management endpoints; account sessions and organization membership govern collaboration.
 
 - Grant the current administrator access to the built-in demo organization when opening it, so authenticated sessions can read and use the demo.

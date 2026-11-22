@@ -4,7 +4,7 @@ import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import { readDotEnvMap, resolveEnvFilePath } from "../../pa-extensions/env-credentials.ts";
 import { type PstackRuntime, preparePstackRuntime } from "../../pa-extensions/pstack-methods/package.ts";
-import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
+import { toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
 import {
 	extractClientIp,
@@ -80,7 +80,7 @@ export async function handleAdminAndAuthRoutes(
 			needsAdminSetup,
 			registrationMode: settings.registrationMode,
 			authKind: actor?.authKind ?? null,
-			currentUser: actor ? toPublicCollaborator(actor.collaborator) : null,
+			currentUser: actor ? actor.collaborator : null,
 			accountUser: actor?.user ? toPublicUser(actor.user) : null,
 		});
 		return true;

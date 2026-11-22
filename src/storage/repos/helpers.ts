@@ -1,8 +1,6 @@
 import { readStoredModelSelection } from "../../rpc/model-selection.ts";
 import type { ThinkingLevel } from "../../rpc/types.ts";
 import type {
-	Collaborator,
-	CollaboratorRole,
 	Matter,
 	MatterMessage,
 	MatterMessageChannel,
@@ -15,7 +13,6 @@ import type {
 	MemoryStatus,
 	Organization,
 	PlatformUser,
-	PublicCollaborator,
 	PublicPlatformUser,
 	TeamMember,
 	WorkspaceLink,
@@ -25,7 +22,6 @@ import type {
 
 export const DEFAULT_ORGANIZATION_ID = "org-default";
 export const DEFAULT_ORGANIZATION_NAME = "默认组织";
-export const DEFAULT_OWNER_COLLABORATOR_ID = "owner";
 export const DEFAULT_LOCAL_ADMIN_USER_ID = "usr_local_owner";
 
 const ASCII_PRINTABLE_RE = /^[\x20-\x7E]+$/;
@@ -35,11 +31,6 @@ export class MemoryValidationError extends Error {}
 
 export function nowIso(): string {
 	return new Date().toISOString();
-}
-
-export function toPublicCollaborator(collaborator: Collaborator): PublicCollaborator {
-	const { token: _token, ...publicInfo } = collaborator;
-	return publicInfo;
 }
 
 export function toPublicUser(user: PlatformUser): PublicPlatformUser {
@@ -223,20 +214,6 @@ export function mapMemoryRow(row: Record<string, unknown>): MemberMemory {
 		lastAppliedAt: row.last_applied_at ? String(row.last_applied_at) : null,
 		createdAt: String(row.created_at),
 		updatedAt: row.updated_at ? String(row.updated_at) : String(row.created_at),
-	};
-}
-
-export function mapCollaboratorRow(row: Record<string, unknown>): Collaborator {
-	const permissionRole: CollaboratorRole = row.permission_role === "owner" ? "owner" : "collaborator";
-	return {
-		id: String(row.id),
-		orgId: row.org_id ? String(row.org_id) : null,
-		name: String(row.name),
-		roleTitle: typeof row.role_title === "string" ? row.role_title : "",
-		permissionRole,
-		token: String(row.token),
-		createdAt: String(row.created_at),
-		updatedAt: String(row.updated_at),
 	};
 }
 

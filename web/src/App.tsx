@@ -793,7 +793,6 @@ export function App() {
 							isSuperAdmin={isSuperAdmin}
 							canDispatchAi={canDispatchAi}
 							canManageMatter={canManageMatter}
-							collaborators={bootstrap?.collaborators ?? []}
 							orgMembersByOrgId={bootstrap?.orgMembersByOrgId ?? {}}
 							orgEffectiveMemberIds={orgEffectiveMemberIds}
 							selectedWorkspace={selectedWorkspace}

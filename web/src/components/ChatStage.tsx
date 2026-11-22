@@ -87,7 +87,6 @@ interface ChatStageProps {
 	isSuperAdmin?: boolean;
 	canDispatchAi?: boolean;
 	canManageMatter: boolean;
-	collaborators?: CollaboratorDto[];
 	orgMembersByOrgId?: Record<string, OrganizationMemberDto[]>;
 	orgEffectiveMemberIds?: string[] | null;
 	selectedWorkspace: WorkspaceDto | null;
@@ -161,7 +160,6 @@ export function ChatStage({
 	isSuperAdmin = false,
 	canDispatchAi,
 	canManageMatter,
-	collaborators = [],
 	orgMembersByOrgId = {},
 	orgEffectiveMemberIds = null,
 	selectedWorkspace,
@@ -402,7 +400,6 @@ export function ChatStage({
 		orgMembers,
 		scopedMembers,
 		ownerCollab,
-		nonOwnerCollaborators,
 		humanPeerCandidates,
 		assignedCollabIds,
 		matterHumanParticipants,
@@ -417,7 +414,6 @@ export function ChatStage({
 	} = useChatStageParticipants({
 		isSuperAdmin,
 		currentUser,
-		collaborators,
 		orgMembersByOrgId,
 		orgEffectiveMemberIds,
 		selectedWorkspace,
@@ -767,7 +763,6 @@ export function ChatStage({
 										hasWorkspace={Boolean(selectedWorkspaceId)}
 										hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
 										members={scopedMembers}
-										nonOwnerCollaborators={nonOwnerCollaborators}
 										orgMembers={orgMembers}
 										initiatorId={accountUser?.id ?? currentUser?.id}
 										initiatorName={accountUser?.displayName ?? currentUser?.name}

@@ -156,10 +156,7 @@ function humanMentionCandidates(
 				? [{ id, displayName: user.displayName, kind: "human" as const }]
 				: [];
 		}
-		const guest = store.getCollaborator(id);
-		return guest && (!guest.orgId || guest.orgId === matter.orgId)
-			? [{ id, displayName: guest.name, kind: "human" as const }]
-			: [];
+		return [];
 	});
 }
 

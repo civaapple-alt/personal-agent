@@ -84,7 +84,6 @@ export interface CollaboratorDto {
 	roleTitle: string;
 	permissionRole: CollaboratorRole;
 	orgId: string | null;
-	token?: string;
 	createdAt: string;
 	updatedAt: string;
 }

@@ -274,13 +274,7 @@ export function MatterRosterPopover({
 									key={`human-${col.id}`}
 									type="button"
 									className={`wechat-member-tile ${canRemoveHuman ? "interactive" : ""}`}
-									title={
-										canRemoveHuman
-											? `移出 ${col.name}`
-											: isOwner && col.token
-												? `${col.name} · ${col.roleTitle}（点击复制邀请链接）`
-												: `${col.name} · ${col.roleTitle}`
-									}
+									title={canRemoveHuman ? `移出 ${col.name}` : `${col.name} · ${col.roleTitle}`}
 									onClick={() => {
 										if (canRemoveHuman && onUpdateMatterCollaborators) {
 											onUpdateMatterCollaborators(assignedCollabIds.filter((id) => id !== col.id));
