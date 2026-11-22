@@ -337,6 +337,7 @@ export async function executeWithWorkerPass(
 						revision: doc.revision,
 						headCommit: doc.headCommit,
 						memberId: input.member.id,
+						summary: (call.changeNote || call.summary || "").trim().slice(0, 240) || undefined,
 					});
 					input.onProgress?.({
 						stage: "tool",
@@ -367,6 +368,7 @@ export async function executeWithWorkerPass(
 					revision: doc.revision,
 					headCommit: doc.headCommit,
 					memberId: input.member.id,
+					summary: (call.changeNote || call.summary || "").trim().slice(0, 240) || undefined,
 				};
 				if (existingIdx < 0) effects.savedDocuments.push(savedEntry);
 				else effects.savedDocuments[existingIdx] = savedEntry;

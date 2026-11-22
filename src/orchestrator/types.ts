@@ -289,6 +289,7 @@ export interface SavedSpaceDocumentEffect {
 	revision: number;
 	headCommit: string;
 	memberId: string;
+	summary?: string;
 }
 
 export interface ExecutionEffects {

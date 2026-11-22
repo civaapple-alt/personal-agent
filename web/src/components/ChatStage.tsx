@@ -33,8 +33,10 @@ import { transitionView } from "../viewTransitions.ts";
 import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
 import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
 import { ComposerDock } from "./chat/ComposerDock.tsx";
+import { FloatingClarificationDock } from "./chat/FloatingClarificationDock.tsx";
 import { MatterCollabDrawer, type MatterCollabTab } from "./chat/MatterCollabDrawer.tsx";
 import { type DelegationScope, type DelegationView, MatterDelegationPanel } from "./chat/MatterDelegationPanel.tsx";
+import { MatterDocSidePane } from "./chat/MatterDocSidePane.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
@@ -232,6 +234,53 @@ export function ChatStage({
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+	const [openSideDocIds, setOpenSideDocIds] = useState<string[]>([]);
+	const [activeSideDocId, setActiveSideDocId] = useState<string | null>(null);
+	const [sideDocAutoDiff, setSideDocAutoDiff] = useState(false);
+
+	useEffect(() => {
+		void selectedMatterId;
+		setOpenSideDocIds([]);
+		setActiveSideDocId(null);
+		setSideDocAutoDiff(false);
+	}, [selectedMatterId]);
+
+	const openSideDoc = (docId: string, options?: { showDiff?: boolean }) => {
+		setOpenSideDocIds((prev) => (prev.includes(docId) ? prev : [...prev, docId]));
+		setActiveSideDocId(docId);
+		setSideDocAutoDiff(Boolean(options?.showDiff));
+		setCollabMatterId(null);
+		collabTriggerRef.current = null;
+	};
+
+	const closeSideDoc = (docId: string) => {
+		setOpenSideDocIds((prev) => {
+			const next = prev.filter((id) => id !== docId);
+			setActiveSideDocId((current) => (current === docId ? (next[next.length - 1] ?? null) : current));
+			return next;
+		});
+	};
+
+	const closeSidePane = () => {
+		setOpenSideDocIds([]);
+		setActiveSideDocId(null);
+		setSideDocAutoDiff(false);
+	};
+
+	const docTitlesById = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const doc of matterDetail?.spaceDocuments ?? []) {
+			map.set(doc.id, doc.title);
+		}
+		for (const msg of matterDetail?.userMessages ?? []) {
+			if (Array.isArray(msg.metadata?.spaceDocuments)) {
+				for (const item of msg.metadata.spaceDocuments as Array<{ id?: string; title?: string }>) {
+					if (item.id && item.title) map.set(item.id, item.title);
+				}
+			}
+		}
+		return map;
+	}, [matterDetail]);
 
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
@@ -489,295 +538,364 @@ export function ChatStage({
 		}
 	}
 
+	const activeFloatingClarification = useMemo(() => {
+		if (!matterDetail) return null;
+		const orgRole = organizations.find((o) => o.id === matterDetail.matter.orgId)?.orgRole;
+		const canParticipate = isSuperAdmin || orgRole !== "org_viewer";
+		if (!canParticipate) return null;
+		for (let i = matterDetail.userMessages.length - 1; i >= 0; i -= 1) {
+			const msg = matterDetail.userMessages[i]!;
+			const decision = readHumanDecision(msg.metadata);
+			if (!decision || decision.status !== "pending") continue;
+			if (!isCurrentHumanDecision(msg, decision, matterDetail.matter, matterDetail.userMessages.slice(i + 1))) {
+				continue;
+			}
+			const canAnswer = decision.assignedUserId
+				? accountUser?.id === decision.assignedUserId
+				: canManageMatter && (accountUser != null || currentUser?.permissionRole === "owner");
+			if (!canAnswer) continue;
+			return {
+				messageId: msg.id,
+				decision,
+				requestedBy: memberName(msg.senderId),
+			};
+		}
+		return null;
+	}, [matterDetail, organizations, isSuperAdmin, accountUser, canManageMatter, currentUser, memberName]);
+
 	return (
-		<div className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}`}>
-			<ChatStageHeader
-				selectedOrganization={selectedOrganization}
-				selectedWorkspace={selectedWorkspace}
-				headerTheme={headerTheme}
-				contactLabel={
-					!selectedMatterId && selectedMemberId === "auto" ? "新事项" : (headerContact?.displayName ?? "AI 团队")
-				}
-				matterDetail={matterDetail}
-				isArchitectMode={isArchitectMode}
-				isTurnRunning={isTurnRunning}
-				activeMatterProgress={activeMatterProgress}
-				allActiveHumans={allActiveHumans}
-				inGroupAiMembers={inGroupAiMembers}
-				totalAiMembersCount={businessCount}
-				leadAi={leadAi}
-				nonLeadGroupAiMembers={nonLeadGroupAiMembers}
-				observerAis={observerAis}
-				observersEnabled={observersEnabled}
-				rosterOpen={rosterOpen}
-				collabOpen={collabOpen}
-				collabTab={collabTab}
-				moreMenuOpen={moreMenuOpen}
-				pendingMatterMemoriesCount={pendingMatterMemoriesCount}
-				matterMemoriesCount={matterMemories.length}
-				deliverablesCount={matterDetail?.spaceDocuments?.length ?? 0}
-				headerHumansBtnRef={headerHumansBtnRef}
-				moreMenuWrapRef={moreMenuWrapRef}
-				onToggleRoster={() => {
-					transitionView("panel", () => {
-						setMoreMenuOpen(false);
-						closeCollab();
-						resetRoster(!rosterOpen);
-					});
-				}}
-				onToggleMoreMenu={() => {
-					closeRoster();
-					setMoreMenuOpen((open) => !open);
-				}}
-				onSelectMorePanel={toggleMorePanel}
-			/>
+		<div
+			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${activeSideDocId ? " has-doc-pane" : ""}`}
+		>
+			<div className="chat-stage-main">
+				<ChatStageHeader
+					selectedOrganization={selectedOrganization}
+					selectedWorkspace={selectedWorkspace}
+					headerTheme={headerTheme}
+					contactLabel={
+						!selectedMatterId && selectedMemberId === "auto"
+							? "新事项"
+							: (headerContact?.displayName ?? "AI 团队")
+					}
+					matterDetail={matterDetail}
+					isArchitectMode={isArchitectMode}
+					isTurnRunning={isTurnRunning}
+					activeMatterProgress={activeMatterProgress}
+					allActiveHumans={allActiveHumans}
+					inGroupAiMembers={inGroupAiMembers}
+					totalAiMembersCount={businessCount}
+					leadAi={leadAi}
+					nonLeadGroupAiMembers={nonLeadGroupAiMembers}
+					observerAis={observerAis}
+					observersEnabled={observersEnabled}
+					rosterOpen={rosterOpen}
+					collabOpen={collabOpen}
+					collabTab={collabTab}
+					moreMenuOpen={moreMenuOpen}
+					pendingMatterMemoriesCount={pendingMatterMemoriesCount}
+					matterMemoriesCount={matterMemories.length}
+					deliverablesCount={matterDetail?.spaceDocuments?.length ?? 0}
+					headerHumansBtnRef={headerHumansBtnRef}
+					moreMenuWrapRef={moreMenuWrapRef}
+					onToggleRoster={() => {
+						transitionView("panel", () => {
+							setMoreMenuOpen(false);
+							closeCollab();
+							resetRoster(!rosterOpen);
+						});
+					}}
+					onToggleMoreMenu={() => {
+						closeRoster();
+						setMoreMenuOpen((open) => !open);
+					}}
+					onSelectMorePanel={toggleMorePanel}
+				/>
 
-			{rosterOpen && (
-				<ViewFade type="panel">
-					<MatterRosterPopover
-						panelRef={rosterPanelRef}
-						rosterMode={rosterMode}
-						rosterSearch={rosterSearch}
-						isOwner={isOwner && canManageMatter}
-						isTurnRunning={isTurnRunning}
-						selectedMatterId={selectedMatterId}
-						currentUser={currentUser}
-						ownerCollab={ownerCollab}
-						nonOwnerCollaborators={humanPeerCandidates}
-						matterHumanParticipants={matterHumanParticipants}
-						assignedCollabIds={assignedCollabIds}
-						members={scopedMembers}
-						inGroupAiMembers={inGroupAiMembers}
-						nonLeadGroupAiMembers={nonLeadGroupAiMembers}
-						removedAiMembers={removedAiMembers}
-						leadAi={leadAi}
-						observersEnabled={observersEnabled}
-						observerAis={observerAis}
-						matterAiMemberIds={matterAiMemberIds}
-						matterConsultMemberIds={matterConsultMemberIds}
-						onSearchChange={setRosterSearch}
-						onModeChange={setRosterMode}
-						onClose={closeRoster}
-						onOpenTeam={onOpenTeam}
-						onNotice={onNotice}
-						onChangeLeadMember={onChangeLeadMember}
-						onUpdateMatterAiMembers={onUpdateMatterAiMembers}
-						onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
-						onToggleObserversEnabled={onToggleObserversEnabled}
-						onUpdateMatterObservers={onUpdateMatterObservers}
-						onUpdateMatterCollaborators={onUpdateMatterCollaborators}
-						onConsultArchitect={onConsultArchitect}
-					/>
-				</ViewFade>
-			)}
-
-			{collabOpen && activeLoadedId && matterDetail && (
-				<ViewFade type="panel">
-					<MatterCollabDrawer
-						panelRef={collabPanelRef}
-						collabTab={collabTab}
-						matterDetail={matterDetail}
-						deliverableSeries={deliverableSeries}
-						onOpenDeliverable={onOpenDeliverables}
-						selectedMemberId={selectedMemberId}
-						delegationPanel={
-							<MatterDelegationPanel
-								delegations={delegations}
-								messages={matterDetail.userMessages}
-								progress={activeMatterProgress}
-								scope={delegationScope}
-								view={delegationView}
-								memberName={memberName}
-								onSelectScope={setDelegationScope}
-								onSelectView={setDelegationView}
-								onLocateTurn={(id) => {
-									setCollabMatterId(null);
-									collabTriggerRef.current = null;
-									requestAnimationFrame(() => {
-										const message = document.getElementById(`matter-message-${id}`);
-										message?.focus({ preventScroll: true });
-										message?.scrollIntoView({ block: "center" });
-									});
-								}}
-							/>
-						}
-						matterMemories={matterMemories}
-						matterParticipantIds={matterParticipantIds}
-						members={members}
-						workspaces={workspaces}
-						organizations={organizations}
-						distillingMatter={distillingMatter}
-						distillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
-						memberName={memberName}
-						workspaceName={workspaceName}
-						organizationName={organizationName}
-						onSelectTab={setCollabTab}
-						onClose={() => transitionView("panel", closeCollab)}
-						onDistill={() => void handleDistillCurrentMatter()}
-						onCancelDistill={
-							onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
-						}
-						onOpenTeam={onOpenTeam}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-					/>
-				</ViewFade>
-			)}
-
-			{pendingDecisions.length > 0 && (
-				<details className="human-decision-jump" key={selectedMatterId}>
-					<summary>
-						{pendingDecisions.every((item) => item.isConfirmation) ? "待确认执行" : "待人类决定"} ·{" "}
-						{pendingDecisions.length}
-					</summary>
-					<ul>
-						{pendingDecisions.map(({ id, label }) => (
-							<li key={id}>
-								<button
-									type="button"
-									className="btn-inline"
-									onClick={() => {
-										const target = document.getElementById(`matter-message-${id}`);
-										target?.focus({ preventScroll: true });
-										target?.scrollIntoView({ block: "start" });
-									}}
-								>
-									{label}
-								</button>
-							</li>
-						))}
-					</ul>
-				</details>
-			)}
-
-			<MessageFeed
-				onOpenDemo={onOpenDemo}
-				demoOpening={demoOpening}
-				onDemoStep={onDemoStep}
-				demoStepBusy={demoStepBusy}
-				chatScrollRef={chatScrollRef}
-				chatStreamInnerRef={chatStreamInnerRef}
-				messagesEndRef={messagesEndRef}
-				onScroll={handleStreamScroll}
-				selectedMatterId={selectedMatterId}
-				selectedMemberId={selectedMemberId}
-				headerContact={headerContact}
-				headerTheme={headerTheme}
-				selectedOrganization={selectedOrganization}
-				selectedWorkspace={selectedWorkspace}
-				templateByRoleId={templateByRoleId}
-				matterDetail={matterDetail}
-				activeMatterProgress={activeMatterProgress}
-				activeDialogs={activeDialogs}
-				progressStartedAt={progressStartedAt}
-				streamingDelta={streamingDelta}
-				isOwner={isOwner}
-				canManageMatter={canManageMatter}
-				decisionAssignees={decisionAssignees}
-				isSuperAdmin={isSuperAdmin}
-				accountUser={accountUser}
-				currentUser={currentUser}
-				organizations={organizations}
-				isTurnRunning={isTurnRunning}
-				members={members}
-				memberName={memberName}
-				previewUrlFor={previewUrlFor}
-				deliverablesPlacement={deliverablesPlacement}
-				delegations={delegations}
-				onOpenDelegations={openDelegations}
-				onOpenLightbox={setLightboxImage}
-				onPreviewFile={openFilePreview}
-				onOpenDeliverables={onOpenDeliverables}
-				onApproveAiRequest={onApproveAiRequest}
-				onDismissAiRequest={onDismissAiRequest}
-				onApplyRoleProposals={onApplyRoleProposals}
-				onDismissRoleProposals={onDismissRoleProposals}
-				onSendQuickPrompt={onSendQuickPrompt}
-				onFillComposer={(text) => {
-					dockDraft.onComposerTextChange(text);
-					dockDraft.composerRef.current?.focus();
-				}}
-				onOpenQuickCreator={() => initiation.onOpenArchitect()}
-				onLaunchWithNewRoles={onLaunchWithNewRoles}
-				onAbortMatter={onAbortMatter}
-			/>
-
-			<ComposerDock
-				{...dockDraft}
-				modelControl={modelControl}
-				initiationPanel={
-					!selectedMatterId ? (
-						<MatterInitiationPanel
-							{...initiation}
-							isOwner={isOwner}
-							observersEnabled={observersEnabled}
-							hasWorkspace={Boolean(selectedWorkspaceId)}
-							hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
+				{rosterOpen && (
+					<ViewFade type="panel">
+						<MatterRosterPopover
+							panelRef={rosterPanelRef}
+							rosterMode={rosterMode}
+							rosterSearch={rosterSearch}
+							isOwner={isOwner && canManageMatter}
+							isTurnRunning={isTurnRunning}
+							selectedMatterId={selectedMatterId}
+							currentUser={currentUser}
+							ownerCollab={ownerCollab}
+							nonOwnerCollaborators={humanPeerCandidates}
+							matterHumanParticipants={matterHumanParticipants}
+							assignedCollabIds={assignedCollabIds}
 							members={scopedMembers}
-							nonOwnerCollaborators={nonOwnerCollaborators}
-							orgMembers={orgMembers}
-							initiatorId={accountUser?.id ?? currentUser?.id}
-							initiatorName={accountUser?.displayName ?? currentUser?.name}
-							templateByRoleId={templateByRoleId}
-							selectedMemberId={selectedMemberId}
-							draftObserverMemberIds={observerMemberIds}
-							onSelectLeadMember={onChangeLeadMember}
-							onUpdateDraftObserverIds={onUpdateMatterObservers}
+							inGroupAiMembers={inGroupAiMembers}
+							nonLeadGroupAiMembers={nonLeadGroupAiMembers}
+							removedAiMembers={removedAiMembers}
+							leadAi={leadAi}
+							observersEnabled={observersEnabled}
+							observerAis={observerAis}
+							matterAiMemberIds={matterAiMemberIds}
+							matterConsultMemberIds={matterConsultMemberIds}
+							onSearchChange={setRosterSearch}
+							onModeChange={setRosterMode}
+							onClose={closeRoster}
+							onOpenTeam={onOpenTeam}
+							onNotice={onNotice}
+							onChangeLeadMember={onChangeLeadMember}
+							onUpdateMatterAiMembers={onUpdateMatterAiMembers}
+							onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
+							onToggleObserversEnabled={onToggleObserversEnabled}
+							onUpdateMatterObservers={onUpdateMatterObservers}
+							onUpdateMatterCollaborators={onUpdateMatterCollaborators}
+							onConsultArchitect={onConsultArchitect}
 						/>
-					) : undefined
-				}
-				composerDockRef={composerDockRef}
-				isOwner={isOwner}
-				mentionMembers={[
-					...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(({ id, displayName, roleTitle }) => ({
-						id,
-						displayName,
-						roleTitle,
-						kind: "ai" as const,
-					})),
-					...allActiveHumans
-						.filter(
-							(person) =>
-								person.id !== currentUser?.id &&
-								(person.id === matterDetail?.matter.createdByUserId ||
-									assignedCollabIds.includes(person.id) ||
-									(person.id === ownerCollab?.id &&
-										(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
-						)
-						.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
-				]}
-				leadMemberId={leadAi?.id ?? null}
-				observerMemberIds={observerAis.map(({ id }) => id)}
-				allowUnboundOrg={isSuperAdmin || organizations.length === 0}
-				isArchitectMode={isArchitectMode}
-				isTurnRunning={isTurnRunning}
-				submitting={submitting}
-				effectiveOrgId={effectiveOrgId}
-				selectedWorkspaceId={selectedWorkspaceId}
-				selectedMatterId={selectedMatterId}
-				activeMatterProgress={activeMatterProgress}
-				progressStartedAt={progressStartedAt}
-				organizations={organizations}
-				orgFilteredWorkspaces={orgFilteredWorkspaces}
-				onCloseRoster={closeRoster}
-				onSelectOrganization={onSelectOrganization}
-				onSelectWorkspace={onSelectWorkspace}
-				onNewMatter={onNewMatter}
-				onSendPrompt={onSendPrompt}
-				onAbortMatter={onAbortMatter}
-				onOpenLightbox={setLightboxImage}
-				onPreviewFile={openFilePreview}
-			/>
+					</ViewFade>
+				)}
 
-			<AttachmentPreviewModals
-				lightboxImage={lightboxImage}
-				previewFile={previewFile}
-				onCloseLightbox={() => setLightboxImage(null)}
-				onCloseFilePreview={closeFilePreview}
-				onExpandPastedFile={onExpandPastedFile}
-				onNotice={onNotice}
-			/>
+				{collabOpen && activeLoadedId && matterDetail && (
+					<ViewFade type="panel">
+						<MatterCollabDrawer
+							panelRef={collabPanelRef}
+							collabTab={collabTab}
+							matterDetail={matterDetail}
+							deliverableSeries={deliverableSeries}
+							onOpenDeliverable={(targetId) => {
+								if (targetId && (targetId.startsWith("doc_") || targetId.startsWith("page_"))) {
+									openSideDoc(targetId);
+								} else {
+									onOpenDeliverables(targetId);
+								}
+							}}
+							selectedMemberId={selectedMemberId}
+							delegationPanel={
+								<MatterDelegationPanel
+									delegations={delegations}
+									messages={matterDetail.userMessages}
+									progress={activeMatterProgress}
+									scope={delegationScope}
+									view={delegationView}
+									memberName={memberName}
+									onSelectScope={setDelegationScope}
+									onSelectView={setDelegationView}
+									onLocateTurn={(id) => {
+										setCollabMatterId(null);
+										collabTriggerRef.current = null;
+										requestAnimationFrame(() => {
+											const message = document.getElementById(`matter-message-${id}`);
+											message?.focus({ preventScroll: true });
+											message?.scrollIntoView({ block: "center" });
+										});
+									}}
+								/>
+							}
+							matterMemories={matterMemories}
+							matterParticipantIds={matterParticipantIds}
+							members={members}
+							workspaces={workspaces}
+							organizations={organizations}
+							distillingMatter={distillingMatter}
+							distillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
+							memberName={memberName}
+							workspaceName={workspaceName}
+							organizationName={organizationName}
+							onSelectTab={setCollabTab}
+							onClose={() => transitionView("panel", closeCollab)}
+							onDistill={() => void handleDistillCurrentMatter()}
+							onCancelDistill={
+								onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
+							}
+							onOpenTeam={onOpenTeam}
+							onRefresh={onRefresh}
+							onNotice={onNotice}
+							onError={onError}
+						/>
+					</ViewFade>
+				)}
+
+				{pendingDecisions.length > 0 && (
+					<details className="human-decision-jump" key={selectedMatterId}>
+						<summary>
+							{pendingDecisions.every((item) => item.isConfirmation) ? "待确认执行" : "待人类决定"} ·{" "}
+							{pendingDecisions.length}
+						</summary>
+						<ul>
+							{pendingDecisions.map(({ id, label }) => (
+								<li key={id}>
+									<button
+										type="button"
+										className="btn-inline"
+										onClick={() => {
+											const target = document.getElementById(`matter-message-${id}`);
+											target?.focus({ preventScroll: true });
+											target?.scrollIntoView({ block: "start" });
+										}}
+									>
+										{label}
+									</button>
+								</li>
+							))}
+						</ul>
+					</details>
+				)}
+
+				<MessageFeed
+					onOpenDemo={onOpenDemo}
+					demoOpening={demoOpening}
+					onDemoStep={onDemoStep}
+					demoStepBusy={demoStepBusy}
+					chatScrollRef={chatScrollRef}
+					chatStreamInnerRef={chatStreamInnerRef}
+					messagesEndRef={messagesEndRef}
+					onScroll={handleStreamScroll}
+					selectedMatterId={selectedMatterId}
+					selectedMemberId={selectedMemberId}
+					headerContact={headerContact}
+					headerTheme={headerTheme}
+					selectedOrganization={selectedOrganization}
+					selectedWorkspace={selectedWorkspace}
+					templateByRoleId={templateByRoleId}
+					matterDetail={matterDetail}
+					activeMatterProgress={activeMatterProgress}
+					activeDialogs={activeDialogs}
+					progressStartedAt={progressStartedAt}
+					streamingDelta={streamingDelta}
+					isOwner={isOwner}
+					canManageMatter={canManageMatter}
+					decisionAssignees={decisionAssignees}
+					isSuperAdmin={isSuperAdmin}
+					accountUser={accountUser}
+					currentUser={currentUser}
+					organizations={organizations}
+					isTurnRunning={isTurnRunning}
+					members={members}
+					memberName={memberName}
+					previewUrlFor={previewUrlFor}
+					deliverablesPlacement={deliverablesPlacement}
+					delegations={delegations}
+					onOpenDelegations={openDelegations}
+					onOpenLightbox={setLightboxImage}
+					onPreviewFile={openFilePreview}
+					onOpenDeliverables={onOpenDeliverables}
+					onOpenSideDoc={openSideDoc}
+					onApproveAiRequest={onApproveAiRequest}
+					onDismissAiRequest={onDismissAiRequest}
+					onApplyRoleProposals={onApplyRoleProposals}
+					onDismissRoleProposals={onDismissRoleProposals}
+					onSendQuickPrompt={onSendQuickPrompt}
+					onFillComposer={(text) => {
+						dockDraft.onComposerTextChange(text);
+						dockDraft.composerRef.current?.focus();
+					}}
+					onOpenQuickCreator={() => initiation.onOpenArchitect()}
+					onLaunchWithNewRoles={onLaunchWithNewRoles}
+					onAbortMatter={onAbortMatter}
+				/>
+
+				{activeFloatingClarification && matterDetail && (
+					<FloatingClarificationDock
+						key={`${activeFloatingClarification.messageId}:${activeFloatingClarification.decision.revision}`}
+						matter={matterDetail.matter}
+						messageId={activeFloatingClarification.messageId}
+						decision={activeFloatingClarification.decision}
+						requestedBy={activeFloatingClarification.requestedBy}
+						isRunning={isTurnRunning}
+						onAnswered={() => void onRefresh()}
+					/>
+				)}
+
+				<ComposerDock
+					{...dockDraft}
+					modelControl={modelControl}
+					initiationPanel={
+						!selectedMatterId ? (
+							<MatterInitiationPanel
+								{...initiation}
+								isOwner={isOwner}
+								observersEnabled={observersEnabled}
+								hasWorkspace={Boolean(selectedWorkspaceId)}
+								hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
+								members={scopedMembers}
+								nonOwnerCollaborators={nonOwnerCollaborators}
+								orgMembers={orgMembers}
+								initiatorId={accountUser?.id ?? currentUser?.id}
+								initiatorName={accountUser?.displayName ?? currentUser?.name}
+								templateByRoleId={templateByRoleId}
+								selectedMemberId={selectedMemberId}
+								draftObserverMemberIds={observerMemberIds}
+								onSelectLeadMember={onChangeLeadMember}
+								onUpdateDraftObserverIds={onUpdateMatterObservers}
+							/>
+						) : undefined
+					}
+					composerDockRef={composerDockRef}
+					isOwner={isOwner}
+					mentionMembers={[
+						...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(
+							({ id, displayName, roleTitle }) => ({
+								id,
+								displayName,
+								roleTitle,
+								kind: "ai" as const,
+							}),
+						),
+						...allActiveHumans
+							.filter(
+								(person) =>
+									person.id !== currentUser?.id &&
+									(person.id === matterDetail?.matter.createdByUserId ||
+										assignedCollabIds.includes(person.id) ||
+										(person.id === ownerCollab?.id &&
+											(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
+							)
+							.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
+					]}
+					leadMemberId={leadAi?.id ?? null}
+					observerMemberIds={observerAis.map(({ id }) => id)}
+					allowUnboundOrg={isSuperAdmin || organizations.length === 0}
+					isArchitectMode={isArchitectMode}
+					isTurnRunning={isTurnRunning}
+					submitting={submitting}
+					effectiveOrgId={effectiveOrgId}
+					selectedWorkspaceId={selectedWorkspaceId}
+					selectedMatterId={selectedMatterId}
+					activeMatterProgress={activeMatterProgress}
+					progressStartedAt={progressStartedAt}
+					organizations={organizations}
+					orgFilteredWorkspaces={orgFilteredWorkspaces}
+					onCloseRoster={closeRoster}
+					onSelectOrganization={onSelectOrganization}
+					onSelectWorkspace={onSelectWorkspace}
+					onNewMatter={onNewMatter}
+					onSendPrompt={onSendPrompt}
+					onAbortMatter={onAbortMatter}
+					onOpenLightbox={setLightboxImage}
+					onPreviewFile={openFilePreview}
+				/>
+
+				<AttachmentPreviewModals
+					lightboxImage={lightboxImage}
+					previewFile={previewFile}
+					onCloseLightbox={() => setLightboxImage(null)}
+					onCloseFilePreview={closeFilePreview}
+					onExpandPastedFile={onExpandPastedFile}
+					onNotice={onNotice}
+				/>
+			</div>
+			{activeSideDocId && (
+				<MatterDocSidePane
+					openDocIds={openSideDocIds}
+					activeDocId={activeSideDocId}
+					autoExpandDiff={sideDocAutoDiff}
+					docTitlesById={docTitlesById}
+					workspaces={workspaces}
+					memberName={memberName}
+					onSelectDoc={(docId) => {
+						setActiveSideDocId(docId);
+						setSideDocAutoDiff(false);
+					}}
+					onCloseDoc={closeSideDoc}
+					onClosePane={closeSidePane}
+					onOpenFullSpace={(docId) => onOpenDeliverables(docId)}
+				/>
+			)}
 		</div>
 	);
 }

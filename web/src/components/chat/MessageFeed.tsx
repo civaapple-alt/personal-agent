@@ -85,6 +85,7 @@ interface MessageFeedProps {
 	onOpenLightbox: (img: { src: string; alt: string }) => void;
 	onPreviewFile: (file: PreviewableTextAttachment) => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
+	onOpenSideDoc?: (docId: string, options?: { showDiff?: boolean }) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
 	onApplyRoleProposals?: (
@@ -139,6 +140,7 @@ export function MessageFeed({
 	onOpenLightbox,
 	onPreviewFile,
 	onOpenDeliverables,
+	onOpenSideDoc,
 	onApproveAiRequest,
 	onDismissAiRequest,
 	onApplyRoleProposals,
@@ -565,9 +567,13 @@ export function MessageFeed({
 													<button
 														type="button"
 														className="btn-inline"
-														onClick={() => onOpenDeliverables(spaceSave.pageId)}
+														onClick={() =>
+															onOpenSideDoc
+																? onOpenSideDoc(spaceSave.pageId!)
+																: onOpenDeliverables(spaceSave.pageId)
+														}
 													>
-														查看资料
+														在右侧查看
 													</button>
 												)}
 											</div>
@@ -657,26 +663,62 @@ export function MessageFeed({
 												title: string;
 												revision: number;
 												headCommit?: string;
+												summary?: string;
 											}>
-										).map((doc) => (
-											<div key={doc.id} className="deliverable-inline-pill">
-												<span className="deliverable-pill-info">
-													<span className="deliverable-pill-check">✓</span>
-													<span>
-														已提交至资料空间 · <strong>{doc.title}</strong> (rev {doc.revision})
-													</span>
-												</span>
-												<span className="deliverable-pill-actions">
+										).map((doc) => {
+											const isLatestMessage =
+												Boolean(matterDetail) && messageIndex === matterDetail!.userMessages.length - 1;
+											const canProceed =
+												isLatestMessage && !isTurnRunning && isOwner && Boolean(onSendQuickPrompt);
+											const openDoc = (showDiff = false) => {
+												if (onOpenSideDoc) onOpenSideDoc(doc.id, { showDiff });
+												else onOpenDeliverables(doc.id);
+											};
+											return (
+												<div key={doc.id} className="space-doc-card">
 													<button
 														type="button"
-														className="btn-inline"
-														onClick={() => onOpenDeliverables(doc.id)}
+														className="space-doc-card-main"
+														onClick={() => openDoc(false)}
 													>
-														在资料空间查看
+														<div className="space-doc-card-head">
+															<span className="space-doc-card-icon" aria-hidden="true">
+																📄
+															</span>
+															<strong className="space-doc-card-title">{doc.title}</strong>
+															<span className="space-doc-card-rev">
+																rev {doc.revision}
+																{doc.headCommit ? ` · ${doc.headCommit.slice(0, 7)}` : ""}
+															</span>
+														</div>
+														{doc.summary && <p className="space-doc-card-summary">{doc.summary}</p>}
 													</button>
-												</span>
-											</div>
-										))}
+													<div className="space-doc-card-actions">
+														{canProceed && (
+															<button
+																type="button"
+																className="btn-pill-dark btn-xs space-doc-proceed-btn"
+																onClick={() =>
+																	void onSendQuickPrompt?.(
+																		`确认「${doc.title}」(rev ${doc.revision})，请按此方案继续推进。`,
+																	)
+																}
+															>
+																确认并推进
+															</button>
+														)}
+														{doc.revision > 1 && (
+															<button type="button" className="btn-inline" onClick={() => openDoc(true)}>
+																查看变更
+															</button>
+														)}
+														<button type="button" className="btn-inline" onClick={() => openDoc(false)}>
+															在右侧打开
+														</button>
+													</div>
+												</div>
+											);
+										})}
 									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 								</div>
 							);
