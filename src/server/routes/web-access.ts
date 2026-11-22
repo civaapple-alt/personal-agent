@@ -55,7 +55,8 @@ export async function handleWebAccessRoutes(
 		if (Object.hasOwn(updates, "TYPESAFE_API_KEY") && process.env.TYPESAFE_API_KEY === undefined) {
 			const refreshed = await readDotEnvMap(envPath);
 			const key = refreshed.TYPESAFE_API_KEY?.trim();
-			orchestrator.setClassifier(key ? createSystemOneClassifier(key) : undefined);
+			const enabled = store.getPlatformSettings(ctx.defaultWorkspacesRoot).systemOneEnabled;
+			orchestrator.setClassifier(enabled && key ? createSystemOneClassifier(key) : undefined);
 		}
 		auditActorAction(ctx, req, actor, {
 			action: "admin.env_credentials_update",

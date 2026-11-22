@@ -64,6 +64,7 @@ export interface PlatformSettings {
 	allowLocalWorkspacePath: boolean;
 	localWorkspaceAllowlist: string[];
 	allowCommandPreviews: boolean;
+	systemOneEnabled: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;

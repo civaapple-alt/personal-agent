@@ -391,6 +391,7 @@ export class UserAuthRepo {
 			allowLocalWorkspacePath: true,
 			localWorkspaceAllowlist: [],
 			allowCommandPreviews: true,
+			systemOneEnabled: false,
 			defaultMaxOrgs: 5,
 			defaultMaxActiveDispatches: 3,
 			defaultMaxPersonalRoles: 5,
@@ -427,6 +428,8 @@ export class UserAuthRepo {
 					typeof parsed.allowCommandPreviews === "boolean"
 						? parsed.allowCommandPreviews
 						: defaults.allowCommandPreviews,
+				systemOneEnabled:
+					typeof parsed.systemOneEnabled === "boolean" ? parsed.systemOneEnabled : defaults.systemOneEnabled,
 				defaultMaxOrgs:
 					typeof parsed.defaultMaxOrgs === "number" && Number.isFinite(parsed.defaultMaxOrgs)
 						? Math.max(0, Math.floor(parsed.defaultMaxOrgs))
@@ -476,6 +479,7 @@ export class UserAuthRepo {
 					: current.localWorkspaceAllowlist,
 			allowCommandPreviews:
 				patch.allowCommandPreviews !== undefined ? patch.allowCommandPreviews : current.allowCommandPreviews,
+			systemOneEnabled: patch.systemOneEnabled !== undefined ? patch.systemOneEnabled : current.systemOneEnabled,
 			defaultMaxOrgs:
 				patch.defaultMaxOrgs !== undefined ? Math.max(0, Math.floor(patch.defaultMaxOrgs)) : current.defaultMaxOrgs,
 			defaultMaxActiveDispatches:

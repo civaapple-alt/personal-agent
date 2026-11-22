@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, resolve } from "node:path";
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
+import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
+import { readDotEnvMap, resolveEnvFilePath } from "../../pa-extensions/env-credentials.ts";
 import { type PstackRuntime, preparePstackRuntime } from "../../pa-extensions/pstack-methods/package.ts";
 import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
@@ -458,6 +460,7 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 				...(typeof body.allowCommandPreviews === "boolean"
 					? { allowCommandPreviews: body.allowCommandPreviews }
 					: {}),
+				...(typeof body.systemOneEnabled === "boolean" ? { systemOneEnabled: body.systemOneEnabled } : {}),
 				...(typeof body.defaultMaxOrgs === "number" ? { defaultMaxOrgs: body.defaultMaxOrgs } : {}),
 				...(typeof body.defaultMaxActiveDispatches === "number"
 					? { defaultMaxActiveDispatches: body.defaultMaxActiveDispatches }
@@ -468,6 +471,19 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			},
 			ctx.defaultWorkspacesRoot,
 		);
+		if (typeof body.systemOneEnabled === "boolean") {
+			if (!updated.systemOneEnabled) {
+				ctx.orchestrator.setClassifier(undefined);
+			} else {
+				const envKey = process.env.TYPESAFE_API_KEY?.trim();
+				const fileKey = envKey
+					? envKey
+					: (
+							await readDotEnvMap(resolveEnvFilePath(ctx.orchestrator.getRuntimeConfig().defaultCwd))
+						).TYPESAFE_API_KEY?.trim();
+				ctx.orchestrator.setClassifier(fileKey ? createSystemOneClassifier(fileKey) : undefined);
+			}
+		}
 		auditActorAction(ctx, req, actor, {
 			action: "admin.update_settings",
 			targetType: "platform_settings",

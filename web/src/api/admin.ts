@@ -9,6 +9,7 @@ export interface PlatformSettingsDto {
 	allowLocalWorkspacePath: boolean;
 	localWorkspaceAllowlist: string[];
 	allowCommandPreviews: boolean;
+	systemOneEnabled: boolean;
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
@@ -54,6 +55,7 @@ export function updateAdminSettings(
 		allowLocalWorkspacePath: boolean;
 		localWorkspaceAllowlist: string[];
 		allowCommandPreviews: boolean;
+		systemOneEnabled: boolean;
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
 		defaultMaxPersonalRoles: number;

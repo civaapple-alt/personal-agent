@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 
 	const decisionKey = await readDecisionKey(rootDir);
 	const orchestrator = new TeamOrchestrator({
-		classifier: decisionKey ? createSystemOneClassifier(decisionKey) : undefined,
+		classifier: savedSettings.systemOneEnabled && decisionKey ? createSystemOneClassifier(decisionKey) : undefined,
 		store,
 		templates,
 		defaultCwd: rootDir,

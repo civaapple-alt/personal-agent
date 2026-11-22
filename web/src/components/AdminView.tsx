@@ -15,6 +15,7 @@ interface AdminViewProps {
 		allowLocalWorkspacePath: boolean;
 		localWorkspaceAllowlist: string[];
 		allowCommandPreviews: boolean;
+		systemOneEnabled: boolean;
 		defaultMaxOrgs: number;
 		defaultMaxActiveDispatches: number;
 		defaultMaxPersonalRoles: number;
@@ -88,6 +89,7 @@ export function AdminView({
 	const [allowLocalWorkspacePath, setAllowLocalWorkspacePath] = useState(true);
 	const [allowlistText, setAllowlistText] = useState("");
 	const [allowCommandPreviews, setAllowCommandPreviews] = useState(false);
+	const [systemOneEnabled, setSystemOneEnabled] = useState(false);
 	const [defaultMaxOrgs, setDefaultMaxOrgs] = useState(3);
 	const [defaultMaxActiveDispatches, setDefaultMaxActiveDispatches] = useState(3);
 	const [defaultMaxPersonalRoles, setDefaultMaxPersonalRoles] = useState(5);
@@ -106,6 +108,7 @@ export function AdminView({
 		setAllowLocalWorkspacePath(s.allowLocalWorkspacePath);
 		setAllowlistText(s.localWorkspaceAllowlist.join("\n"));
 		setAllowCommandPreviews(s.allowCommandPreviews);
+		setSystemOneEnabled(Boolean(s.systemOneEnabled));
 		setDefaultMaxOrgs(s.defaultMaxOrgs);
 		setDefaultMaxActiveDispatches(s.defaultMaxActiveDispatches);
 		setDefaultMaxPersonalRoles(s.defaultMaxPersonalRoles ?? 5);
@@ -144,6 +147,7 @@ export function AdminView({
 					.map((l) => l.trim())
 					.filter(Boolean),
 				allowCommandPreviews,
+				systemOneEnabled,
 				defaultMaxOrgs: Number(defaultMaxOrgs) || 1,
 				defaultMaxActiveDispatches: Number(defaultMaxActiveDispatches) || 1,
 				defaultMaxPersonalRoles: Math.max(0, Number(defaultMaxPersonalRoles) || 0),
@@ -566,6 +570,19 @@ export function AdminView({
 											onChange={(e) => setAllowCommandPreviews(e.target.checked)}
 										/>
 										<span>允许组织管理员/成员执行命令型本地预览（生产多租户部署建议保持关闭）</span>
+									</label>
+
+									<label className="admin-check-field">
+										<input
+											type="checkbox"
+											checked={systemOneEnabled}
+											onChange={(e) => setSystemOneEnabled(e.target.checked)}
+										/>
+										<span>
+											启用 System One（Jev）快速决策分类器（默认禁用；禁用时自动降级为本机 Pi
+											决策与本地规则，所有业务正常推进；启用后需在「设置 → .env 密钥配置」配置
+											TYPESAFE_API_KEY）
+										</span>
 									</label>
 
 									<div className="admin-quota-row">
