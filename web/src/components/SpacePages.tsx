@@ -60,6 +60,7 @@ export function SpacePages({
 	const [commitDetail, setCommitDetail] = useState<SpaceGitCommitDetailDto | null>(null);
 
 	const [editing, setEditing] = useState(false);
+	const [navCollapsed, setNavCollapsed] = useState(false);
 	const [creatingSpace, setCreatingSpace] = useState(false);
 	const [expandedEmptyGroups, setExpandedEmptyGroups] = useState<Record<string, boolean>>({});
 	const [newSpaceName, setNewSpaceName] = useState("");
@@ -376,224 +377,242 @@ export function SpacePages({
 				</p>
 			)}
 
-			<div className="space-three-col">
+			<div className={`space-three-col ${navCollapsed ? "is-nav-collapsed" : ""}`}>
 				{/* Column 1: 5 Space Kinds */}
-				<aside className="space-nav-col" aria-label="空间列表">
-					<div className="space-nav-head">
-						<strong>全部空间 ({spaces.length})</strong>
-						<button
-							type="button"
-							className="btn-inline"
-							onClick={() => {
-								setCreatingSpace((v) => !v);
-								setNewSpaceOrgId(bootstrap?.organizations[0]?.id ?? "");
-							}}
-						>
-							{creatingSpace ? "取消" : "+ 新建空间"}
-						</button>
-					</div>
-
-					{creatingSpace && (
-						<form className="space-create-form" onSubmit={(e) => void handleCreateCustomSpace(e)}>
-							<input
-								className="input-field"
-								placeholder="空间名称"
-								value={newSpaceName}
-								onChange={(e) => setNewSpaceName(e.target.value)}
-								maxLength={100}
-								required
-							/>
-							<input
-								className="input-field"
-								placeholder="简要说明（可选）"
-								value={newSpaceDesc}
-								onChange={(e) => setNewSpaceDesc(e.target.value)}
-								maxLength={200}
-							/>
-							<div className="space-create-row">
-								<select
-									className="input-field"
-									value={newSpaceVisibility}
-									onChange={(e) => setNewSpaceVisibility(e.target.value as SpaceVisibility)}
-								>
-									<option value="org">组织共享</option>
-									<option value="private">仅自己私密</option>
-								</select>
-								{newSpaceVisibility === "org" && (bootstrap?.organizations.length ?? 0) > 1 && (
-									<select
-										className="input-field"
-										value={newSpaceOrgId}
-										onChange={(e) => setNewSpaceOrgId(e.target.value)}
-									>
-										{bootstrap?.organizations.map((org) => (
-											<option key={org.id} value={org.id}>
-												{org.name}
-											</option>
-										))}
-									</select>
-								)}
-							</div>
-							<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
-								创建 Git 空间
-							</button>
-						</form>
-					)}
-
-					<div className="space-nav-groups">
-						<div className="space-nav-group">
+				{!navCollapsed && (
+					<aside className="space-nav-col" aria-label="空间列表">
+						<div className="space-nav-head">
+							<strong>全部空间 ({spaces.length})</strong>
 							<button
 								type="button"
-								className={`space-nav-item ${isRecentView ? "active" : ""}`}
+								className="btn-inline"
 								onClick={() => {
-									setSelectedSpaceId(RECENT_SPACE_ID);
-									setEditing(false);
-									setSelectedCommitHash(null);
-									setCommitDetail(null);
+									setCreatingSpace((v) => !v);
+									setNewSpaceOrgId(bootstrap?.organizations[0]?.id ?? "");
 								}}
 							>
-								<span className="space-nav-item-name">最近修改</span>
-								<span className="space-nav-item-count">跨空间</span>
+								{creatingSpace ? "取消" : "+ 新建空间"}
 							</button>
 						</div>
-						{SPACE_KIND_SECTIONS.map(({ kind, label }) => {
-							const group = spaces
-								.filter((s) => s.kind === kind)
-								.sort((a, b) => b.documentCount - a.documentCount || b.updatedAt.localeCompare(a.updatedAt));
-							if (group.length === 0) return null;
-							const nonEmpty = group.filter((s) => s.documentCount > 0 || s.id === selectedSpaceId);
-							const empty = group.filter((s) => s.documentCount === 0 && s.id !== selectedSpaceId);
-							const shouldFoldEmpty = spaces.length > 8 && empty.length > 0 && !expandedEmptyGroups[kind];
-							const shown = shouldFoldEmpty ? (nonEmpty.length > 0 ? nonEmpty : empty.slice(0, 2)) : group;
-							const hiddenCount = group.length - shown.length;
-							return (
-								<div key={kind} className="space-nav-group">
-									<div className="space-nav-group-label">{label}</div>
-									{shown.map((space) => (
-										<button
-											type="button"
-											key={space.id}
-											className={`space-nav-item ${selectedSpaceId === space.id ? "active" : ""}`}
-											onClick={() => {
-												setSelectedSpaceId(space.id);
-												setEditing(false);
-												setSelectedCommitHash(null);
-												setCommitDetail(null);
-											}}
+
+						{creatingSpace && (
+							<form className="space-create-form" onSubmit={(e) => void handleCreateCustomSpace(e)}>
+								<input
+									className="input-field"
+									placeholder="空间名称"
+									value={newSpaceName}
+									onChange={(e) => setNewSpaceName(e.target.value)}
+									maxLength={100}
+									required
+								/>
+								<input
+									className="input-field"
+									placeholder="简要说明（可选）"
+									value={newSpaceDesc}
+									onChange={(e) => setNewSpaceDesc(e.target.value)}
+									maxLength={200}
+								/>
+								<div className="space-create-row">
+									<select
+										className="input-field"
+										value={newSpaceVisibility}
+										onChange={(e) => setNewSpaceVisibility(e.target.value as SpaceVisibility)}
+									>
+										<option value="org">组织共享</option>
+										<option value="private">仅自己私密</option>
+									</select>
+									{newSpaceVisibility === "org" && (bootstrap?.organizations.length ?? 0) > 1 && (
+										<select
+											className="input-field"
+											value={newSpaceOrgId}
+											onChange={(e) => setNewSpaceOrgId(e.target.value)}
 										>
-											<span className="space-nav-item-name">{space.name}</span>
-											<span className="space-nav-item-count">
-												{space.documentCount > 0 ? space.documentCount : ""}
-											</span>
-										</button>
-									))}
-									{hiddenCount > 0 && (
-										<button
-											type="button"
-											className="space-nav-more"
-											onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: true }))}
-										>
-											展开其余 {hiddenCount} 个空空间
-										</button>
-									)}
-									{!shouldFoldEmpty && spaces.length > 8 && empty.length > 0 && expandedEmptyGroups[kind] && (
-										<button
-											type="button"
-											className="space-nav-more"
-											onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: false }))}
-										>
-											收起空空间
-										</button>
+											{bootstrap?.organizations.map((org) => (
+												<option key={org.id} value={org.id}>
+													{org.name}
+												</option>
+											))}
+										</select>
 									)}
 								</div>
-							);
-						})}
-					</div>
-				</aside>
-
-				{/* Column 2: Documents + Business Repo Refs */}
-				<div className="space-docs-col">
-					<div className="space-pages-toolbar">
-						<input
-							className="input-field"
-							aria-label={isRecentView ? "搜索最近修改资料" : "搜索当前空间资料"}
-							placeholder={isRecentView ? "搜索全部空间的最近资料…" : "搜索资料标题或路径…"}
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-						/>
-						{canWriteCurrentSpace && (
-							<button type="button" className="btn-pill-dark btn-xs" onClick={startNewDocument}>
-								+ 新建资料
-							</button>
+								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+									创建 Git 空间
+								</button>
+							</form>
 						)}
-					</div>
 
-					<div className="space-type-filter-bar" role="tablist" aria-label="按内容类型筛选">
-						<button
-							type="button"
-							role="tab"
-							aria-selected={docTypeFilter === "all"}
-							className={`space-type-chip ${docTypeFilter === "all" ? "active" : ""}`}
-							onClick={() => setDocTypeFilter("all")}
-						>
-							全部{documents.length > 0 ? ` (${documents.length})` : ""}
-						</button>
-						{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
-							<button
-								key={opt.value}
-								type="button"
-								role="tab"
-								aria-selected={docTypeFilter === opt.value}
-								className={`space-type-chip ${docTypeFilter === opt.value ? "active" : ""}`}
-								title={opt.hint}
-								onClick={() => setDocTypeFilter(opt.value)}
-							>
-								{opt.label}
-								{docTypeCounts[opt.value] > 0 ? ` (${docTypeCounts[opt.value]})` : ""}
-							</button>
-						))}
-					</div>
-
-					<div className="space-pages-list">
-						{filteredDocs.length === 0 ? (
-							<p className="muted-hint">
-								{documents.length
-									? "没有匹配当前筛选条件的资料"
-									: isRecentView
-										? "暂无最近修改的资料。"
-										: "当前空间还没有资料。可点击上方新建，或在对话中由 AI 保存。"}
-							</p>
-						) : (
-							filteredDocs.map((doc) => (
+						<div className="space-nav-groups">
+							<div className="space-nav-group">
 								<button
 									type="button"
-									key={doc.id}
-									className={`space-page-row ${selectedDoc?.id === doc.id && !editing ? "active" : ""}`}
-									onClick={() => void openDocument(doc.id)}
+									className={`space-nav-item ${isRecentView ? "active" : ""}`}
+									onClick={() => {
+										setSelectedSpaceId(RECENT_SPACE_ID);
+										setEditing(false);
+										setSelectedCommitHash(null);
+										setCommitDetail(null);
+									}}
 								>
-									<div className="space-page-row-head">
-										<span className={`space-doc-type-pill is-${doc.docType}`}>
-											{spaceDocTypeLabel(doc.docType)}
-										</span>
-										{doc.entryKind === "folder" && (
-											<span className="space-folder-badge" title="目录条目（支持多文件与 .gitignore）">
-												📁
-											</span>
-										)}
-										<strong>{doc.title}</strong>
-									</div>
-									<span>
-										{isRecentView ? `${spaceNameById.get(doc.spaceId) ?? doc.spaceId} · ` : ""}
-										rev {doc.revision} · {doc.headCommit.slice(0, 7)} ·{" "}
-										{new Date(doc.updatedAt).toLocaleDateString()}
-									</span>
+									<span className="space-nav-item-name">最近修改</span>
+									<span className="space-nav-item-count">跨空间</span>
 								</button>
-							))
-						)}
+							</div>
+							{SPACE_KIND_SECTIONS.map(({ kind, label }) => {
+								const group = spaces
+									.filter((s) => s.kind === kind)
+									.sort((a, b) => b.documentCount - a.documentCount || b.updatedAt.localeCompare(a.updatedAt));
+								if (group.length === 0) return null;
+								const nonEmpty = group.filter((s) => s.documentCount > 0 || s.id === selectedSpaceId);
+								const empty = group.filter((s) => s.documentCount === 0 && s.id !== selectedSpaceId);
+								const shouldFoldEmpty = spaces.length > 8 && empty.length > 0 && !expandedEmptyGroups[kind];
+								const shown = shouldFoldEmpty ? (nonEmpty.length > 0 ? nonEmpty : empty.slice(0, 2)) : group;
+								const hiddenCount = group.length - shown.length;
+								return (
+									<div key={kind} className="space-nav-group">
+										<div className="space-nav-group-label">{label}</div>
+										{shown.map((space) => (
+											<button
+												type="button"
+												key={space.id}
+												className={`space-nav-item ${selectedSpaceId === space.id ? "active" : ""}`}
+												onClick={() => {
+													setSelectedSpaceId(space.id);
+													setEditing(false);
+													setSelectedCommitHash(null);
+													setCommitDetail(null);
+												}}
+											>
+												<span className="space-nav-item-name">{space.name}</span>
+												<span className="space-nav-item-count">
+													{space.documentCount > 0 ? space.documentCount : ""}
+												</span>
+											</button>
+										))}
+										{hiddenCount > 0 && (
+											<button
+												type="button"
+												className="space-nav-more"
+												onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: true }))}
+											>
+												展开其余 {hiddenCount} 个空空间
+											</button>
+										)}
+										{!shouldFoldEmpty &&
+											spaces.length > 8 &&
+											empty.length > 0 &&
+											expandedEmptyGroups[kind] && (
+												<button
+													type="button"
+													className="space-nav-more"
+													onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: false }))}
+												>
+													收起空空间
+												</button>
+											)}
+									</div>
+								);
+							})}
+						</div>
+					</aside>
+				)}
+
+				{/* Column 2: Documents + Business Repo Refs */}
+				{!navCollapsed && (
+					<div className="space-docs-col">
+						<div className="space-pages-toolbar">
+							<input
+								className="input-field"
+								aria-label={isRecentView ? "搜索最近修改资料" : "搜索当前空间资料"}
+								placeholder={isRecentView ? "搜索全部空间的最近资料…" : "搜索资料标题或路径…"}
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+							/>
+							{canWriteCurrentSpace && (
+								<button type="button" className="btn-pill-dark btn-xs" onClick={startNewDocument}>
+									+ 新建资料
+								</button>
+							)}
+						</div>
+
+						<div className="space-type-filter-bar" role="tablist" aria-label="按内容类型筛选">
+							<button
+								type="button"
+								role="tab"
+								aria-selected={docTypeFilter === "all"}
+								className={`space-type-chip ${docTypeFilter === "all" ? "active" : ""}`}
+								onClick={() => setDocTypeFilter("all")}
+							>
+								全部{documents.length > 0 ? ` (${documents.length})` : ""}
+							</button>
+							{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
+								<button
+									key={opt.value}
+									type="button"
+									role="tab"
+									aria-selected={docTypeFilter === opt.value}
+									className={`space-type-chip ${docTypeFilter === opt.value ? "active" : ""}`}
+									title={opt.hint}
+									onClick={() => setDocTypeFilter(opt.value)}
+								>
+									{opt.label}
+									{docTypeCounts[opt.value] > 0 ? ` (${docTypeCounts[opt.value]})` : ""}
+								</button>
+							))}
+						</div>
+
+						<div className="space-pages-list">
+							{filteredDocs.length === 0 ? (
+								<p className="muted-hint">
+									{documents.length
+										? "没有匹配当前筛选条件的资料"
+										: isRecentView
+											? "暂无最近修改的资料。"
+											: "当前空间还没有资料。可点击上方新建，或在对话中由 AI 保存。"}
+								</p>
+							) : (
+								filteredDocs.map((doc) => (
+									<button
+										type="button"
+										key={doc.id}
+										className={`space-page-row ${selectedDoc?.id === doc.id && !editing ? "active" : ""}`}
+										onClick={() => void openDocument(doc.id)}
+									>
+										<div className="space-page-row-head">
+											<span className={`space-doc-type-pill is-${doc.docType}`}>
+												{spaceDocTypeLabel(doc.docType)}
+											</span>
+											{doc.entryKind === "folder" && (
+												<span className="space-folder-badge" title="目录条目（支持多文件与 .gitignore）">
+													📁
+												</span>
+											)}
+											<strong>{doc.title}</strong>
+										</div>
+										<span>
+											{isRecentView ? `${spaceNameById.get(doc.spaceId) ?? doc.spaceId} · ` : ""}
+											rev {doc.revision} · {doc.headCommit.slice(0, 7)} ·{" "}
+											{new Date(doc.updatedAt).toLocaleDateString()}
+										</span>
+									</button>
+								))
+							)}
+						</div>
 					</div>
-				</div>
+				)}
 
 				{/* Column 3: Document Viewer / Editor + Git Commits & Diff */}
 				<div className="space-page-detail">
+					<div className="space-detail-topbar">
+						<button
+							type="button"
+							className="btn-pill-outline btn-xs"
+							aria-expanded={!navCollapsed}
+							onClick={() => setNavCollapsed((v) => !v)}
+						>
+							{navCollapsed ? "展开导航目录" : "收起导航目录"}
+						</button>
+						{navCollapsed && selectedSpace && <span className="muted-tiny">当前空间：{selectedSpace.name}</span>}
+					</div>
 					{editing ? (
 						<form className="space-editor-form" onSubmit={(e) => void handleSaveDocument(e)}>
 							<div className="space-page-heading">

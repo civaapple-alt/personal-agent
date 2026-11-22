@@ -318,7 +318,7 @@ export function SpaceFolderFilesPanel({
 						aria-expanded={treeOpen}
 						onClick={() => setTreeOpen((v) => !v)}
 					>
-						{treeOpen ? `收起目录 (${visibleFileCount})` : `展开目录 (${visibleFileCount})`}
+						{treeOpen ? `收起文件树 (${visibleFileCount})` : `展开文件树 (${visibleFileCount})`}
 					</button>
 					<code className="space-folder-active-path">
 						{addingDir ? "新建子目录" : addingFiles ? "批量添加子文件" : activePath}

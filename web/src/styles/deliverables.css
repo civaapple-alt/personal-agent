@@ -679,6 +679,15 @@
 	gap: 20px;
 	align-items: start;
 }
+.space-three-col.is-nav-collapsed {
+	grid-template-columns: minmax(0, 1fr);
+}
+.space-detail-topbar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 14px;
+}
 .space-nav-col {
 	border-right: 1px solid var(--border);
 	padding-right: 14px;
