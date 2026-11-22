@@ -317,3 +317,23 @@
 	flex: 1;
 	min-width: 0;
 }
+
+.settings-env-embedded {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px dashed var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.settings-test-box {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px dashed var(--border);
+}
+.settings-test-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}

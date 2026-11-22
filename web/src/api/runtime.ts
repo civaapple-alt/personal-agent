@@ -67,6 +67,9 @@ export interface RuntimeBaseInfoDto {
 		provider?: "auto" | "deepseek" | "exa" | "kimi";
 		effectiveProvider?: "deepseek" | "exa" | "kimi" | null;
 	};
+	systemOne?: {
+		enabled: boolean;
+	};
 	isolationModes: RuntimeIsolationModeDto[];
 	envFlags: {
 		turnTimeoutMs: number;
@@ -161,4 +164,38 @@ export function updateRuntimeEnvCredentials(
 	values: Partial<Record<ManagedEnvStatusDto["key"], string | null>>,
 ): Promise<{ overview: RuntimeOverviewDto }> {
 	return requestJson("/api/admin/runtime/env", { method: "PATCH", body: JSON.stringify({ values }) });
+}
+
+export interface WebAccessTestResultDto {
+	ok: boolean;
+	provider: string | null;
+	latencyMs: number;
+	resultCount?: number;
+	sampleTitles?: string[];
+	error?: string;
+}
+
+export function testRuntimeWebAccess(input?: {
+	provider?: "auto" | "deepseek" | "exa" | "kimi";
+	query?: string;
+}): Promise<WebAccessTestResultDto> {
+	return requestJson("/api/admin/runtime/web-access/test", {
+		method: "POST",
+		body: JSON.stringify(input ?? {}),
+	});
+}
+
+export interface SystemOneTestResultDto {
+	ok: boolean;
+	enabled: boolean;
+	latencyMs: number;
+	answer?: string;
+	error?: string;
+}
+
+export function testRuntimeSystemOne(): Promise<SystemOneTestResultDto> {
+	return requestJson("/api/admin/runtime/system-one/test", {
+		method: "POST",
+		body: "{}",
+	});
 }

@@ -8,8 +8,8 @@ import type {
 	RuntimeOverviewDto,
 } from "../api.ts";
 import type { SettingsSection } from "../hashRouter.ts";
-import { EnvCredentialsSettings } from "./EnvCredentialsSettings.tsx";
 import { PstackSettings } from "./PstackSettings.tsx";
+import { SystemOneSettings } from "./SystemOneSettings.tsx";
 import { WebAccessSettings } from "./WebAccessSettings.tsx";
 
 interface SettingsViewProps {
@@ -359,6 +359,9 @@ export function SettingsView({
 												{ext.id === "pi-web-access" && isSuperAdmin && (
 													<WebAccessSettings
 														base={base}
+														envItems={(overview?.envCredentials ?? []).filter(
+															(item) => item.scope === "web_access",
+														)}
 														onRefresh={onRefresh}
 														onOverviewChange={onOverviewChange}
 														onNotice={onNotice}
@@ -367,6 +370,18 @@ export function SettingsView({
 												)}
 											</article>
 										))
+									)}
+									{isSuperAdmin && base && (
+										<SystemOneSettings
+											base={base}
+											envItems={(overview?.envCredentials ?? []).filter(
+												(item) => item.scope === "classifier",
+											)}
+											onRefresh={onRefresh}
+											onOverviewChange={onOverviewChange}
+											onNotice={onNotice}
+											onError={onError}
+										/>
 									)}
 								</div>
 
@@ -406,16 +421,6 @@ export function SettingsView({
 										</div>
 									)}
 								</div>
-
-								{isSuperAdmin && overview?.envCredentials && overview.envCredentials.length > 0 && (
-									<EnvCredentialsSettings
-										items={overview.envCredentials}
-										onOverviewChange={onOverviewChange}
-										onRefresh={onRefresh}
-										onNotice={onNotice}
-										onError={onError}
-									/>
-								)}
 
 								<div className="settings-config-sections">
 									{filteredConfigSections.map((sec) => {

@@ -2,18 +2,24 @@ import { useState } from "react";
 import {
 	configureRuntimeWebAccess,
 	installRuntimeWebAccess,
+	type ManagedEnvStatusDto,
 	type RuntimeBaseInfoDto,
 	type RuntimeOverviewDto,
+	testRuntimeWebAccess,
+	type WebAccessTestResultDto,
 } from "../api/runtime.ts";
+import { EnvCredentialsSettings } from "./EnvCredentialsSettings.tsx";
 
 export function WebAccessSettings({
 	base,
+	envItems = [],
 	onRefresh,
 	onOverviewChange,
 	onNotice,
 	onError,
 }: {
 	base: RuntimeBaseInfoDto;
+	envItems?: ManagedEnvStatusDto[];
 	onRefresh: () => Promise<void>;
 	onOverviewChange?: (overview: RuntimeOverviewDto) => void;
 	onNotice?: (message: string) => void;
@@ -23,6 +29,9 @@ export function WebAccessSettings({
 	const [draft, setDraft] = useState<string[] | null>(null);
 	const [providerDraft, setProviderDraft] = useState<"auto" | "deepseek" | "exa" | "kimi" | null>(null);
 	const [pending, setPending] = useState<"install" | "save" | null>(null);
+	const [testQuery, setTestQuery] = useState("DeepSeek Search API");
+	const [testing, setTesting] = useState(false);
+	const [testResult, setTestResult] = useState<WebAccessTestResultDto | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const selected = new Set(draft ?? roles.filter((role) => role.enabled).map((role) => role.id));
 	const activeProvider = providerDraft ?? savedProvider;
@@ -51,6 +60,28 @@ export function WebAccessSettings({
 			onError?.(message);
 		} finally {
 			setPending(null);
+		}
+	}
+
+	async function handleTestSearch() {
+		if (testing) return;
+		setTesting(true);
+		setTestResult(null);
+		try {
+			const result = await testRuntimeWebAccess({
+				provider: activeProvider,
+				query: testQuery.trim() || "DeepSeek Search API",
+			});
+			setTestResult(result);
+		} catch (cause) {
+			setTestResult({
+				ok: false,
+				provider: activeProvider,
+				latencyMs: 0,
+				error: cause instanceof Error ? cause.message : String(cause),
+			});
+		} finally {
+			setTesting(false);
 		}
 	}
 
@@ -127,6 +158,60 @@ export function WebAccessSettings({
 					</div>
 				</form>
 			)}
+
+			{envItems.length > 0 && (
+				<EnvCredentialsSettings
+					embedded
+					title="检索供应商密钥（.env）"
+					subtitle="保存后写入服务根目录 .env（权限 0600），前端不回显明文，仅注入已获 pi-web-access 授权的岗位进程。"
+					items={envItems}
+					onOverviewChange={onOverviewChange}
+					onRefresh={onRefresh}
+					onNotice={onNotice}
+					onError={onError}
+				/>
+			)}
+
+			<div className="settings-test-box">
+				<div className="settings-test-row">
+					<input
+						type="text"
+						className="input-field"
+						style={{ maxWidth: 340 }}
+						aria-label="测试搜索关键词"
+						placeholder="输入测试搜索关键词…"
+						value={testQuery}
+						disabled={testing}
+						onChange={(e) => setTestQuery(e.target.value)}
+					/>
+					<button
+						type="button"
+						className="btn-pill-outline"
+						disabled={testing}
+						onClick={() => void handleTestSearch()}
+					>
+						{testing ? "测试中…" : "测试搜索"}
+					</button>
+				</div>
+				{testResult && (
+					<div className={testResult.ok ? "muted-hint" : "settings-ext-error"} style={{ marginTop: 8 }}>
+						{testResult.ok ? (
+							<>
+								<div>
+									✓ 搜索成功（供应商：{testResult.provider} · 耗时 {testResult.latencyMs}ms · 返回{" "}
+									{testResult.resultCount ?? 0} 条）
+								</div>
+								{testResult.sampleTitles && testResult.sampleTitles.length > 0 && (
+									<div style={{ marginTop: 4 }}>示例结果：{testResult.sampleTitles.join(" ｜ ")}</div>
+								)}
+							</>
+						) : (
+							`✗ 搜索测试失败（${testResult.provider ?? "未命中供应商"} · ${testResult.latencyMs}ms）：${testResult.error}`
+						)}
+					</div>
+				)}
+			</div>
+
 			{error && (
 				<p role="alert" className="settings-ext-error">
 					{error}

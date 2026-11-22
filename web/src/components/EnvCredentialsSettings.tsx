@@ -3,6 +3,9 @@ import { type ManagedEnvStatusDto, type RuntimeOverviewDto, updateRuntimeEnvCred
 
 interface EnvCredentialsSettingsProps {
 	items: ManagedEnvStatusDto[];
+	embedded?: boolean;
+	title?: string;
+	subtitle?: string;
 	onOverviewChange?: (overview: RuntimeOverviewDto) => void;
 	onRefresh: () => Promise<void>;
 	onNotice?: (message: string) => void;
@@ -17,6 +20,9 @@ const SOURCE_TEXT: Record<ManagedEnvStatusDto["source"], string> = {
 
 export function EnvCredentialsSettings({
 	items,
+	embedded = false,
+	title = ".env 密钥配置",
+	subtitle = "保存后写入服务根目录 .env（权限 0600），前端不回显明文。",
 	onOverviewChange,
 	onRefresh,
 	onNotice,
@@ -41,14 +47,11 @@ export function EnvCredentialsSettings({
 	};
 
 	return (
-		<div className="ui-card compact settings-env-card">
+		<div className={embedded ? "settings-env-embedded" : "ui-card compact settings-env-card"}>
 			<div className="settings-env-head">
 				<div>
-					<strong>.env 密钥配置</strong>
-					<p className="muted-hint">
-						保存后写入服务根目录 <code>.env</code>（权限 0600），前端不回显明文。搜索密钥仅注入已获{" "}
-						<code>pi-web-access</code> 授权的岗位进程；<code>TYPESAFE_API_KEY</code> 更新后立即生效。
-					</p>
+					<strong>{title}</strong>
+					<p className="muted-hint">{subtitle}</p>
 				</div>
 			</div>
 			<div className="settings-env-list">

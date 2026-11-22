@@ -37,6 +37,7 @@ export interface OrchestratorRuntimeConfig {
 	pstackDir: string | null;
 	webAccessRoleGrants?: Record<string, string>;
 	webSearchProvider?: WebSearchProviderPreference;
+	systemOneEnabled?: boolean;
 	templates: RoleTemplate[];
 }
 
@@ -137,6 +138,9 @@ export interface RuntimeBaseInfo {
 		roles: Array<{ id: string; name: string; enabled: boolean }>;
 		provider: WebSearchProviderPreference;
 		effectiveProvider: ResolvedWebSearchProvider | null;
+	};
+	systemOne?: {
+		enabled: boolean;
 	};
 	isolationModes: RuntimeIsolationMode[];
 	envFlags: {
@@ -727,6 +731,9 @@ export async function buildRuntimeOverview(options: {
 				roles: webAccessRoles,
 				provider: webSearchProvider,
 				effectiveProvider: effectiveWebSearchProvider,
+			},
+			systemOne: {
+				enabled: Boolean(config.systemOneEnabled),
 			},
 			isolationModes: ISOLATION_MODES.map((mode) =>
 				mode.id === "worker" && serverConfig?.inheritLocalPiResources

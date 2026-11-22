@@ -136,6 +136,7 @@ export class TeamOrchestrator {
 			pstackDir: this.pstackDir ?? null,
 			webAccessRoleGrants: this.store.getPlatformSettings().webAccessRoleGrants,
 			webSearchProvider: this.store.getPlatformSettings().webSearchProvider,
+			systemOneEnabled: this.store.getPlatformSettings().systemOneEnabled,
 			templates: this.listTemplates(),
 		};
 	}
