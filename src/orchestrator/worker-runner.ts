@@ -307,7 +307,7 @@ export async function executeWithWorkerPass(
 					return {
 						space: { id: targetSpace.id, name: targetSpace.name, kind: targetSpace.kind },
 						availableSpaces,
-						pages: deps.store.spaces.listDocuments({ spaceId: targetSpace.id }),
+						pages: deps.store.spaces.listDocuments({ spaceId: targetSpace.id, docType: call.docType }),
 					};
 				}
 				const doc = await deps.store.spaces.getDocument(call.pageId);
@@ -348,6 +348,7 @@ export async function executeWithWorkerPass(
 						spaceId: targetSpace.id,
 						matterId: input.matterId,
 						title: call.title,
+						docType: call.docType,
 						content: draft.content,
 						linkedOrgId,
 						linkedWorkspaceId,
@@ -360,6 +361,7 @@ export async function executeWithWorkerPass(
 						id: doc.id,
 						spaceId: doc.spaceId,
 						title: doc.title,
+						docType: doc.docType,
 						revision: doc.revision,
 						headCommit: doc.headCommit,
 						memberId: input.member.id,
@@ -379,6 +381,7 @@ export async function executeWithWorkerPass(
 				const doc = await deps.store.spaces.updateDocument(previous.id, {
 					revision: call.revision ?? staged?.revision ?? previous.revision,
 					title: call.title,
+					docType: call.docType,
 					content: draft.content,
 					...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
 					actorId: input.member.id,
@@ -391,6 +394,7 @@ export async function executeWithWorkerPass(
 					id: doc.id,
 					spaceId: doc.spaceId,
 					title: doc.title,
+					docType: doc.docType,
 					revision: doc.revision,
 					headCommit: doc.headCommit,
 					memberId: input.member.id,

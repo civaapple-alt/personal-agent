@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS space_documents (
 	matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
 	file_path TEXT NOT NULL,
 	title TEXT NOT NULL,
+	doc_type TEXT NOT NULL DEFAULT 'note',
 	linked_org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	linked_workspace_id TEXT REFERENCES workspace_links(id) ON DELETE SET NULL,
 	linked_file_path TEXT,

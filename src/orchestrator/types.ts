@@ -293,6 +293,7 @@ export interface SavedSpaceDocumentEffect {
 	title: string;
 	revision: number;
 	headCommit: string;
+	docType: "plan" | "spec" | "decision" | "rule" | "note";
 	memberId: string;
 	summary?: string;
 }

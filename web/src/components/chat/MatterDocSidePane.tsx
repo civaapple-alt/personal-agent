@@ -3,9 +3,12 @@ import {
 	getSpaceDocument,
 	getSpaceDocumentCommitDetail,
 	listSpaceDocumentCommits,
+	SPACE_DOC_TYPE_OPTIONS,
 	type SpaceDocumentDto,
+	type SpaceDocumentType,
 	type SpaceGitCommitDetailDto,
 	type SpaceGitCommitDto,
+	spaceDocTypeLabel,
 	updateSpaceDocument,
 } from "../../api/space.ts";
 import type { WorkspaceDto } from "../../api.ts";
@@ -50,6 +53,7 @@ export function MatterDocSidePane({
 
 	const [editing, setEditing] = useState(false);
 	const [title, setTitle] = useState("");
+	const [docType, setDocType] = useState<SpaceDocumentType>("note");
 	const [content, setContent] = useState("");
 	const [linkedWorkspaceId, setLinkedWorkspaceId] = useState("");
 	const [linkedFilePath, setLinkedFilePath] = useState("");
@@ -144,6 +148,7 @@ export function MatterDocSidePane({
 			await updateSpaceDocument(doc.id, {
 				revision: doc.revision,
 				title,
+				docType,
 				content,
 				linkedOrgId: linkedFilePath.trim() ? (matchedWs?.orgId ?? doc.linkedOrgId) : null,
 				linkedWorkspaceId: linkedFilePath.trim() ? linkedWorkspaceId || null : null,
@@ -240,16 +245,32 @@ export function MatterDocSidePane({
 					<p className="muted-hint">正在加载文档…</p>
 				) : editing && doc ? (
 					<form className="space-editor-form" onSubmit={(e) => void handleSave(e)}>
-						<label>
-							标题
-							<input
-								className="input-field"
-								value={title}
-								onChange={(e) => setTitle(e.target.value)}
-								maxLength={200}
-								required
-							/>
-						</label>
+						<div className="space-create-row">
+							<label style={{ flex: 2 }}>
+								标题
+								<input
+									className="input-field"
+									value={title}
+									onChange={(e) => setTitle(e.target.value)}
+									maxLength={200}
+									required
+								/>
+							</label>
+							<label style={{ flex: 1 }}>
+								内容类型
+								<select
+									className="input-field"
+									value={docType}
+									onChange={(e) => setDocType(e.target.value as SpaceDocumentType)}
+								>
+									{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
+										<option key={opt.value} value={opt.value}>
+											{opt.label}
+										</option>
+									))}
+								</select>
+							</label>
+						</div>
 						<label>
 							正文（Markdown）
 							<textarea
@@ -316,6 +337,9 @@ export function MatterDocSidePane({
 							<div className="matter-doc-pane-title-wrap">
 								<h2>{doc.title}</h2>
 								<div className="space-doc-meta">
+									<span className={`space-doc-type-pill is-${doc.docType}`}>
+										{spaceDocTypeLabel(doc.docType)}
+									</span>
 									<span className="pill">
 										rev {doc.revision} · <code>{doc.headCommit.slice(0, 7)}</code>
 									</span>
@@ -339,6 +363,7 @@ export function MatterDocSidePane({
 									className="btn-secondary btn-xs"
 									onClick={() => {
 										setTitle(doc.title);
+										setDocType(doc.docType);
 										setContent(doc.content);
 										setLinkedWorkspaceId(doc.linkedWorkspaceId ?? "");
 										setLinkedFilePath(doc.linkedFilePath ?? "");

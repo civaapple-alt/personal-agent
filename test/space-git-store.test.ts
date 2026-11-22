@@ -247,3 +247,94 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		await rm(spacesDir, { recursive: true, force: true });
 	}
 });
+
+test("SpaceRepo stores documents in docType Git subdirectories, supports type filtering and cross-space recent listing", async () => {
+	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-doctype-"));
+	const db = openPersonalAgentDatabase(":memory:");
+	try {
+		const store = new PersonalAgentStore(db, { spacesDir });
+		const org = store.ensureDefaultOrganization();
+		const admin = store.ensureLocalBootstrapAdmin("Alice");
+		store.spaces.ensureAllDefaultSpaces();
+
+		const orgSpace = orgSpaceId(org.id);
+		const userSpace = userSpaceId(admin.id);
+
+		const planDoc = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "Q4 架构改造计划",
+			docType: "plan",
+			content: "# 计划\n",
+			actorId: admin.id,
+		});
+		const specDoc = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "登录接口规格",
+			docType: "spec",
+			content: "# 规格\n",
+			actorId: admin.id,
+		});
+		const decisionDoc = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "ADR-01 选择 SQLite",
+			docType: "decision",
+			content: "# 决策\n",
+			actorId: admin.id,
+		});
+		const ruleDoc = await store.spaces.createDocument({
+			spaceId: orgSpace,
+			title: "代码评审 SOP",
+			docType: "rule",
+			content: "# 规范\n",
+			actorId: admin.id,
+		});
+		const noteDoc = await store.spaces.createDocument({
+			spaceId: userSpace,
+			title: "私密调研草稿",
+			content: "# 资料\n",
+			actorId: admin.id,
+		});
+
+		assert.equal(planDoc.docType, "plan");
+		assert.ok(planDoc.filePath.startsWith("plans/"));
+		assert.ok(specDoc.filePath.startsWith("specs/"));
+		assert.ok(decisionDoc.filePath.startsWith("decisions/"));
+		assert.ok(ruleDoc.filePath.startsWith("rules/"));
+		assert.equal(noteDoc.docType, "note");
+		assert.ok(noteDoc.filePath.startsWith("notes/"));
+
+		// Type filter within a single space
+		const onlyPlans = store.spaces.listDocuments({ spaceId: orgSpace, docType: "plan" });
+		assert.equal(onlyPlans.length, 1);
+		assert.equal(onlyPlans[0]?.id, planDoc.id);
+
+		// Re-classifying docType preserves filePath and Git history
+		const reclassified = await store.spaces.updateDocument(noteDoc.id, {
+			revision: 1,
+			title: "私密调研草稿",
+			docType: "decision",
+			content: "# 决策结论\n",
+			actorId: admin.id,
+		});
+		assert.ok(reclassified);
+		assert.equal(reclassified.docType, "decision");
+		assert.equal(reclassified.filePath, noteDoc.filePath);
+		const commits = await store.spaces.listDocumentCommits(noteDoc.id);
+		assert.equal(commits.length, 2);
+
+		// Cross-space recent listing respects provided spaceIds boundary and docType/query filters
+		const orgOnlyRecent = store.spaces.listRecentDocumentsForSpaces([orgSpace]);
+		assert.equal(orgOnlyRecent.length, 4);
+		assert.ok(!orgOnlyRecent.some((d) => d.id === noteDoc.id));
+
+		const allDecisions = store.spaces.listRecentDocumentsForSpaces([orgSpace, userSpace], { docType: "decision" });
+		assert.equal(allDecisions.length, 2);
+
+		const queried = store.spaces.listRecentDocumentsForSpaces([orgSpace, userSpace], { query: "SOP" });
+		assert.equal(queried.length, 1);
+		assert.equal(queried[0]?.id, ruleDoc.id);
+	} finally {
+		db.close();
+		await rm(spacesDir, { recursive: true, force: true });
+	}
+});

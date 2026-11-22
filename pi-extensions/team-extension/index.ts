@@ -84,18 +84,26 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			name: "read_space",
 			label: "读取资料空间",
 			description:
-				"List this matter's space pages or read a page by ID. Use the returned revision when updating a page.",
-			parameters: { type: "object", properties: { pageId: { type: "string" } }, additionalProperties: false },
+				"List this matter's space pages (optionally filtered by docType) or read a page by ID. Use the returned revision when updating a page.",
+			parameters: {
+				type: "object",
+				properties: {
+					pageId: { type: "string" },
+					docType: { type: "string", enum: ["plan", "spec", "decision", "rule", "note"] },
+				},
+				additionalProperties: false,
+			},
 		},
 		{
 			name: "save_space_page",
 			label: "保存空间资料",
 			description:
-				"Save a plan, work in progress, or result to this matter's space. Provide title and either content or sourcePath for an existing workspace text file. Saving is immediate. On a successful turn the saved document is available as an interaction result. To update a page use pageId and its current revision. Read the page first and resolve conflicts without overwriting others' work.",
+				"Save a plan, spec, decision, rule/SOP, or note to this matter's space. Set docType accurately: plan (implementation/architecture plan), spec (PRD/requirements/contract), decision (ADR/review decision/retro), rule (team convention/SOP/checklist), note (research/reference/draft, default). Provide title and either content or sourcePath for an existing workspace text file. Saving is immediate. To update a page use pageId and its current revision.",
 			parameters: {
 				type: "object",
 				properties: {
 					type: { type: "string", enum: ["document", "artifact", "prototype_image", "service_url"] },
+					docType: { type: "string", enum: ["plan", "spec", "decision", "rule", "note"] },
 					title: { type: "string" },
 					content: { type: "string" },
 					sourcePath: { type: "string" },

@@ -1,3 +1,4 @@
+import { normalizeSpaceDocumentType, type SpaceDocumentType } from "../../storage/repos/space-repo.ts";
 import {
 	canAccessMatter,
 	canAccessOrganization,
@@ -87,6 +88,25 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 		return false;
 	}
 
+	if (pathname === "/api/spaces/recent" && method === "GET") {
+		if (!requireActiveActor(res, actor)) return true;
+		store.spaces.ensureAllDefaultSpaces();
+		const accessibleSpaces = store.spaces.listSpaces().filter((space) => canAccessSpace(store, actor, space));
+		const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+		const rawDocType = reqUrl.searchParams.get("docType");
+		const docType: SpaceDocumentType | undefined =
+			rawDocType && rawDocType !== "all" ? normalizeSpaceDocumentType(rawDocType) : undefined;
+		const query = reqUrl.searchParams.get("q") ?? undefined;
+		const rawLimit = Number(reqUrl.searchParams.get("limit"));
+		const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(200, Math.floor(rawLimit)) : 60;
+		const documents = store.spaces.listRecentDocumentsForSpaces(
+			accessibleSpaces.map((s) => s.id),
+			{ docType, query, limit },
+		);
+		sendJson(res, 200, { documents });
+		return true;
+	}
+
 	const spaceDocsMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/documents$/);
 	if (spaceDocsMatch) {
 		if (!requireActiveActor(res, actor)) return true;
@@ -102,7 +122,11 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		if (method === "GET") {
-			const documents = store.spaces.listDocuments({ spaceId });
+			const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+			const rawDocType = reqUrl.searchParams.get("docType");
+			const docType: SpaceDocumentType | undefined =
+				rawDocType && rawDocType !== "all" ? normalizeSpaceDocumentType(rawDocType) : undefined;
+			const documents = store.spaces.listDocuments({ spaceId, docType });
 			sendJson(res, 200, {
 				space: { ...space, canWrite: canWriteSpace(store, actor, space) },
 				documents,
@@ -116,6 +140,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			}
 			const body = await readJsonBody(req);
 			const title = typeof body.title === "string" ? body.title.trim() : "";
+			const docType = normalizeSpaceDocumentType(body.docType);
 			const content = typeof body.content === "string" ? body.content : null;
 			const matterId = typeof body.matterId === "string" && body.matterId.trim() ? body.matterId.trim() : null;
 			const linkedOrgId =
@@ -144,6 +169,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				spaceId: space.id,
 				matterId,
 				title,
+				docType,
 				content,
 				linkedOrgId,
 				linkedWorkspaceId,
@@ -231,6 +257,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			}
 			const body = await readJsonBody(req);
 			const title = typeof body.title === "string" ? body.title.trim() : "";
+			const docType = body.docType !== undefined ? normalizeSpaceDocumentType(body.docType) : undefined;
 			const content = typeof body.content === "string" ? body.content : null;
 			const linkedOrgId =
 				body.linkedOrgId === undefined
@@ -268,6 +295,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				revision,
 				expectedCommit,
 				title,
+				docType,
 				content,
 				linkedOrgId,
 				linkedWorkspaceId,

@@ -11,6 +11,26 @@ import { DEFAULT_LOCAL_ADMIN_USER_ID, DEFAULT_ORGANIZATION_ID, nowIso } from "./
 
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
+export type SpaceDocumentType = "plan" | "spec" | "decision" | "rule" | "note";
+
+export const SPACE_DOCUMENT_TYPES: readonly SpaceDocumentType[] = ["plan", "spec", "decision", "rule", "note"];
+
+const SPACE_DOC_TYPE_DIRS: Record<SpaceDocumentType, string> = {
+	plan: "plans",
+	spec: "specs",
+	decision: "decisions",
+	rule: "rules",
+	note: "notes",
+};
+
+export function normalizeSpaceDocumentType(value: unknown, fallback: SpaceDocumentType = "note"): SpaceDocumentType {
+	if (typeof value !== "string") return fallback;
+	const trimmed = value.trim().toLowerCase();
+	if (trimmed === "plan" || trimmed === "spec" || trimmed === "decision" || trimmed === "rule" || trimmed === "note") {
+		return trimmed;
+	}
+	return fallback;
+}
 
 export interface SpaceRecord {
 	id: string;
@@ -34,6 +54,7 @@ export interface SpaceDocument {
 	matterId: string | null;
 	filePath: string;
 	title: string;
+	docType: SpaceDocumentType;
 	linkedOrgId: string | null;
 	linkedWorkspaceId: string | null;
 	linkedFilePath: string | null;
@@ -72,6 +93,7 @@ interface DocumentRow {
 	matter_id: string | null;
 	file_path: string;
 	title: string;
+	doc_type?: string | null;
 	linked_org_id: string | null;
 	linked_workspace_id: string | null;
 	linked_file_path: string | null;
@@ -108,6 +130,7 @@ function mapDocumentMeta(row: DocumentRow): SpaceDocumentMeta {
 		matterId: row.matter_id,
 		filePath: row.file_path,
 		title: row.title,
+		docType: normalizeSpaceDocumentType(row.doc_type),
 		linkedOrgId: row.linked_org_id ?? null,
 		linkedWorkspaceId: row.linked_workspace_id ?? null,
 		linkedFilePath: row.linked_file_path ?? null,
@@ -136,8 +159,8 @@ export function memberSpaceId(memberId: string): string {
 	return `spc_mem_${memberId}`;
 }
 
-function defaultDocFilePath(docId: string): string {
-	return normalizeSafeRepoFilePath(`pages/${docId}.md`);
+function defaultDocFilePath(docId: string, docType: SpaceDocumentType = "note"): string {
+	return normalizeSafeRepoFilePath(`${SPACE_DOC_TYPE_DIRS[docType]}/${docId}.md`);
 }
 
 function defaultAuthorEmail(actorId: string): string {
@@ -418,7 +441,7 @@ export class SpaceRepo {
 		return this.getSpace(fallbackId)!;
 	}
 
-	listDocuments(filter?: { spaceId?: string; matterId?: string }): SpaceDocumentMeta[] {
+	listDocuments(filter?: { spaceId?: string; matterId?: string; docType?: SpaceDocumentType }): SpaceDocumentMeta[] {
 		const conditions: string[] = [];
 		const params: Array<string | number> = [];
 		if (filter?.spaceId) {
@@ -429,9 +452,41 @@ export class SpaceRepo {
 			conditions.push("matter_id = ?");
 			params.push(filter.matterId);
 		}
+		if (filter?.docType) {
+			conditions.push("doc_type = ?");
+			params.push(filter.docType);
+		}
 		const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 		const rows = this.db
 			.prepare(`SELECT * FROM space_documents ${where} ORDER BY updated_at DESC, id ASC`)
+			.all(...params) as unknown as DocumentRow[];
+		return rows.map(mapDocumentMeta);
+	}
+
+	listRecentDocumentsForSpaces(
+		spaceIds: string[],
+		filter?: { docType?: SpaceDocumentType; query?: string; limit?: number },
+	): SpaceDocumentMeta[] {
+		if (spaceIds.length === 0) return [];
+		const placeholders = spaceIds.map(() => "?").join(", ");
+		const conditions: string[] = [`space_id IN (${placeholders})`];
+		const params: Array<string | number> = [...spaceIds];
+		if (filter?.docType) {
+			conditions.push("doc_type = ?");
+			params.push(filter.docType);
+		}
+		const trimmedQuery = filter?.query?.trim();
+		if (trimmedQuery) {
+			const like = `%${trimmedQuery}%`;
+			conditions.push("(title LIKE ? OR file_path LIKE ? OR COALESCE(linked_file_path, '') LIKE ?)");
+			params.push(like, like, like);
+		}
+		const limit = Math.max(1, Math.min(200, filter?.limit ?? 60));
+		params.push(limit);
+		const rows = this.db
+			.prepare(
+				`SELECT * FROM space_documents WHERE ${conditions.join(" AND ")} ORDER BY updated_at DESC, id ASC LIMIT ?`,
+			)
 			.all(...params) as unknown as DocumentRow[];
 		return rows.map(mapDocumentMeta);
 	}
@@ -454,6 +509,7 @@ export class SpaceRepo {
 		spaceId: string;
 		matterId?: string | null;
 		title: string;
+		docType?: SpaceDocumentType;
 		content: string;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
@@ -467,7 +523,8 @@ export class SpaceRepo {
 		const space = this.getSpace(input.spaceId);
 		if (!space) throw new Error(`Space not found: ${input.spaceId}`);
 		const id = `doc_${randomUUID()}`;
-		const filePath = input.filePath ? normalizeSafeRepoFilePath(input.filePath) : defaultDocFilePath(id);
+		const docType = normalizeSpaceDocumentType(input.docType);
+		const filePath = input.filePath ? normalizeSafeRepoFilePath(input.filePath) : defaultDocFilePath(id, docType);
 		const title = input.title.trim();
 		const linkedOrgId = input.linkedOrgId?.trim() || null;
 		const linkedWorkspaceId = input.linkedWorkspaceId?.trim() || null;
@@ -484,8 +541,8 @@ export class SpaceRepo {
 		});
 		this.db
 			.prepare(
-				`INSERT INTO space_documents (id, space_id, matter_id, file_path, title, linked_org_id, linked_workspace_id, linked_file_path, head_commit, revision, created_by, updated_by, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+				`INSERT INTO space_documents (id, space_id, matter_id, file_path, title, doc_type, linked_org_id, linked_workspace_id, linked_file_path, head_commit, revision, created_by, updated_by, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -493,6 +550,7 @@ export class SpaceRepo {
 				input.matterId ?? null,
 				filePath,
 				title,
+				docType,
 				linkedOrgId,
 				linkedWorkspaceId,
 				linkedFilePath,
@@ -509,6 +567,7 @@ export class SpaceRepo {
 			matterId: input.matterId ?? null,
 			filePath,
 			title,
+			docType,
 			linkedOrgId,
 			linkedWorkspaceId,
 			linkedFilePath,
@@ -528,6 +587,7 @@ export class SpaceRepo {
 			revision?: number;
 			expectedCommit?: string;
 			title: string;
+			docType?: SpaceDocumentType;
 			content: string;
 			linkedOrgId?: string | null;
 			linkedWorkspaceId?: string | null;
@@ -547,6 +607,7 @@ export class SpaceRepo {
 			return null;
 		}
 		const title = input.title.trim();
+		const docType = input.docType !== undefined ? normalizeSpaceDocumentType(input.docType) : current.docType;
 		const linkedOrgId = input.linkedOrgId !== undefined ? input.linkedOrgId?.trim() || null : current.linkedOrgId;
 		const linkedWorkspaceId =
 			input.linkedWorkspaceId !== undefined ? input.linkedWorkspaceId?.trim() || null : current.linkedWorkspaceId;
@@ -565,6 +626,7 @@ export class SpaceRepo {
 				expectedCommit: current.headCommit || null,
 				allowEmpty:
 					title !== current.title ||
+					docType !== current.docType ||
 					linkedOrgId !== current.linkedOrgId ||
 					linkedWorkspaceId !== current.linkedWorkspaceId ||
 					linkedFilePath !== current.linkedFilePath,
@@ -578,11 +640,12 @@ export class SpaceRepo {
 		const changed = this.db
 			.prepare(
 				`UPDATE space_documents
-				 SET title = ?, linked_org_id = ?, linked_workspace_id = ?, linked_file_path = ?, head_commit = ?, revision = ?, updated_by = ?, updated_at = ?
+				 SET title = ?, doc_type = ?, linked_org_id = ?, linked_workspace_id = ?, linked_file_path = ?, head_commit = ?, revision = ?, updated_by = ?, updated_at = ?
 				 WHERE id = ? AND revision = ?`,
 			)
 			.run(
 				title,
+				docType,
 				linkedOrgId,
 				linkedWorkspaceId,
 				linkedFilePath,
@@ -598,6 +661,7 @@ export class SpaceRepo {
 		return {
 			...current,
 			title,
+			docType,
 			linkedOrgId,
 			linkedWorkspaceId,
 			linkedFilePath,

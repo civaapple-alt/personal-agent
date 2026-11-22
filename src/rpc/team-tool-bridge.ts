@@ -2,17 +2,19 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { Clarification } from "../orchestrator/human-decision.ts";
 import { isWorkbenchTopic, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import type { SpaceDocumentType } from "../storage/repos/space-repo.ts";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
 import type { MemoryCategory } from "../storage/types.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
 	| { tool: "read_pa_help"; callId: string; topics: WorkbenchTopic[]; language?: "zh" | "en" }
-	| { tool: "read_space"; callId: string; pageId?: string }
+	| { tool: "read_space"; callId: string; pageId?: string; docType?: SpaceDocumentType }
 	| ({
 			tool: "save_space_page";
 			callId: string;
 			title: string;
+			docType?: SpaceDocumentType;
 			pageId?: string;
 			revision?: number;
 			type: "document" | "artifact" | "prototype_image" | "service_url";
@@ -62,6 +64,14 @@ function parseVerification(value: unknown): VerificationRequest {
 	};
 }
 
+function parseOptionalDocType(value: unknown): SpaceDocumentType | undefined {
+	if (value === undefined) return undefined;
+	if (value === "plan" || value === "spec" || value === "decision" || value === "rule" || value === "note") {
+		return value;
+	}
+	throw new Error("Unsupported space docType (expected plan, spec, decision, rule, or note)");
+}
+
 function parseCall(value: unknown): TeamToolCall {
 	if (!value || typeof value !== "object") throw new Error("Expected a tool request");
 	if (!("tool" in value) || !("callId" in value) || !("args" in value)) throw new Error("Invalid tool request");
@@ -69,10 +79,12 @@ function parseCall(value: unknown): TeamToolCall {
 	const args = value.args;
 	if (!args || typeof args !== "object") throw new Error("Expected tool arguments");
 	if (value.tool === "read_space") {
+		const docType = "docType" in args ? parseOptionalDocType(args.docType) : undefined;
 		return {
 			tool: value.tool,
 			callId,
 			...("pageId" in args ? { pageId: requiredString(args.pageId, "pageId", 256) } : {}),
+			...(docType ? { docType } : {}),
 		};
 	}
 	if (value.tool === "save_space_page" && "title" in args) {
@@ -87,6 +99,7 @@ function parseCall(value: unknown): TeamToolCall {
 		const type = "type" in args ? args.type : "document";
 		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url")
 			throw new Error("Unsupported space item type");
+		const docType = "docType" in args ? parseOptionalDocType(args.docType) : undefined;
 		if (type !== "document" && "sourcePath" in args)
 			throw new Error("sourcePath is only supported for document items");
 		const source =
@@ -98,6 +111,7 @@ function parseCall(value: unknown): TeamToolCall {
 			callId,
 			title: requiredString(args.title, "title", 200),
 			type,
+			...(docType ? { docType } : {}),
 			...("summary" in args ? { summary: requiredString(args.summary, "summary", 1000) } : {}),
 			...("changeNote" in args ? { changeNote: requiredString(args.changeNote, "changeNote", 2000) } : {}),
 			...source,

@@ -4,20 +4,26 @@ import {
 	createSpaceDocument,
 	getSpaceDocument,
 	getSpaceDocumentCommitDetail,
+	listRecentSpaceDocuments,
 	listSpaceDocumentCommits,
 	listSpaceDocuments,
 	listSpaces,
+	SPACE_DOC_TYPE_OPTIONS,
 	type SpaceDocumentDto,
 	type SpaceDocumentMetaDto,
+	type SpaceDocumentType,
 	type SpaceDto,
 	type SpaceGitCommitDetailDto,
 	type SpaceGitCommitDto,
 	type SpaceKind,
 	type SpaceVisibility,
+	spaceDocTypeLabel,
 	updateSpaceDocument,
 } from "../api/space.ts";
 import type { BootstrapPayload } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
+
+const RECENT_SPACE_ID = "__recent__";
 
 const SPACE_KIND_SECTIONS: Array<{ kind: SpaceKind; label: string }> = [
 	{ kind: "org", label: "组织空间" },
@@ -56,6 +62,8 @@ export function SpacePages({
 	const [newSpaceOrgId, setNewSpaceOrgId] = useState<string>("");
 
 	const [title, setTitle] = useState("");
+	const [docType, setDocType] = useState<SpaceDocumentType>("note");
+	const [docTypeFilter, setDocTypeFilter] = useState<"all" | SpaceDocumentType>("all");
 	const [content, setContent] = useState("");
 	const [linkedWorkspaceId, setLinkedWorkspaceId] = useState("");
 	const [linkedFilePath, setLinkedFilePath] = useState("");
@@ -65,7 +73,12 @@ export function SpacePages({
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 
-	const selectedSpace = useMemo(() => spaces.find((s) => s.id === selectedSpaceId) ?? null, [spaces, selectedSpaceId]);
+	const isRecentView = selectedSpaceId === RECENT_SPACE_ID;
+	const selectedSpace = useMemo(
+		() => (isRecentView ? null : (spaces.find((s) => s.id === selectedSpaceId) ?? null)),
+		[spaces, selectedSpaceId, isRecentView],
+	);
+	const spaceNameById = useMemo(() => new Map(spaces.map((s) => [s.id, s.name])), [spaces]);
 
 	const resolveActorLabel = useCallback(
 		(actorId: string) => {
@@ -81,6 +94,11 @@ export function SpacePages({
 	);
 
 	const loadSpaceContents = useCallback(async (spaceId: string) => {
+		if (spaceId === RECENT_SPACE_ID) {
+			const res = await listRecentSpaceDocuments({ limit: 80 });
+			setDocuments(res.documents);
+			return res;
+		}
 		const res = await listSpaceDocuments(spaceId);
 		setDocuments(res.documents);
 		return res;
@@ -156,7 +174,7 @@ export function SpacePages({
 				if (cancelled) return;
 				let needsAutoOpen = false;
 				setSelectedDoc((prev) => {
-					if (prev && prev.spaceId === selectedSpaceId) return prev;
+					if (prev && (selectedSpaceId === RECENT_SPACE_ID || prev.spaceId === selectedSpaceId)) return prev;
 					needsAutoOpen = res.documents.length > 0;
 					return null;
 				});
@@ -241,6 +259,7 @@ export function SpacePages({
 	const startNewDocument = () => {
 		setSelectedDoc(null);
 		setTitle("");
+		setDocType(docTypeFilter === "all" ? "note" : docTypeFilter);
 		setContent("");
 		setLinkedWorkspaceId(selectedSpace?.workspaceId ?? "");
 		setLinkedFilePath("");
@@ -262,6 +281,7 @@ export function SpacePages({
 				const { document } = await updateSpaceDocument(selectedDoc.id, {
 					revision: selectedDoc.revision,
 					title,
+					docType,
 					content,
 					linkedOrgId: linkedFilePath.trim() ? resolvedLinkedOrgId : null,
 					linkedWorkspaceId: linkedFilePath.trim() ? linkedWorkspaceId || null : null,
@@ -273,6 +293,7 @@ export function SpacePages({
 			} else {
 				const { document } = await createSpaceDocument(selectedSpaceId, {
 					title,
+					docType,
 					content,
 					matterId: matterId || null,
 					linkedOrgId: linkedFilePath.trim() ? resolvedLinkedOrgId : null,
@@ -295,9 +316,20 @@ export function SpacePages({
 
 	const filteredDocs = useMemo(() => {
 		const q = search.trim().toLowerCase();
-		if (!q) return documents;
-		return documents.filter((doc) => doc.title.toLowerCase().includes(q) || doc.filePath.toLowerCase().includes(q));
-	}, [documents, search]);
+		return documents.filter((doc) => {
+			if (docTypeFilter !== "all" && doc.docType !== docTypeFilter) return false;
+			if (!q) return true;
+			return doc.title.toLowerCase().includes(q) || doc.filePath.toLowerCase().includes(q);
+		});
+	}, [documents, search, docTypeFilter]);
+
+	const docTypeCounts = useMemo(() => {
+		const counts: Record<SpaceDocumentType, number> = { plan: 0, spec: 0, decision: 0, rule: 0, note: 0 };
+		for (const doc of documents) {
+			counts[doc.docType] = (counts[doc.docType] ?? 0) + 1;
+		}
+		return counts;
+	}, [documents]);
 
 	const canWriteCurrentSpace = Boolean(selectedSpace?.canWrite);
 
@@ -373,6 +405,21 @@ export function SpacePages({
 					)}
 
 					<div className="space-nav-groups">
+						<div className="space-nav-group">
+							<button
+								type="button"
+								className={`space-nav-item ${isRecentView ? "active" : ""}`}
+								onClick={() => {
+									setSelectedSpaceId(RECENT_SPACE_ID);
+									setEditing(false);
+									setSelectedCommitHash(null);
+									setCommitDetail(null);
+								}}
+							>
+								<span className="space-nav-item-name">最近修改</span>
+								<span className="space-nav-item-count">跨空间</span>
+							</button>
+						</div>
 						{SPACE_KIND_SECTIONS.map(({ kind, label }) => {
 							const group = spaces
 								.filter((s) => s.kind === kind)
@@ -433,8 +480,8 @@ export function SpacePages({
 					<div className="space-pages-toolbar">
 						<input
 							className="input-field"
-							aria-label="搜索当前空间资料"
-							placeholder="搜索资料标题或路径…"
+							aria-label={isRecentView ? "搜索最近修改资料" : "搜索当前空间资料"}
+							placeholder={isRecentView ? "搜索全部空间的最近资料…" : "搜索资料标题或路径…"}
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>
@@ -445,12 +492,40 @@ export function SpacePages({
 						)}
 					</div>
 
+					<div className="space-type-filter-bar" role="tablist" aria-label="按内容类型筛选">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={docTypeFilter === "all"}
+							className={`space-type-chip ${docTypeFilter === "all" ? "active" : ""}`}
+							onClick={() => setDocTypeFilter("all")}
+						>
+							全部{documents.length > 0 ? ` (${documents.length})` : ""}
+						</button>
+						{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
+							<button
+								key={opt.value}
+								type="button"
+								role="tab"
+								aria-selected={docTypeFilter === opt.value}
+								className={`space-type-chip ${docTypeFilter === opt.value ? "active" : ""}`}
+								title={opt.hint}
+								onClick={() => setDocTypeFilter(opt.value)}
+							>
+								{opt.label}
+								{docTypeCounts[opt.value] > 0 ? ` (${docTypeCounts[opt.value]})` : ""}
+							</button>
+						))}
+					</div>
+
 					<div className="space-pages-list">
 						{filteredDocs.length === 0 ? (
 							<p className="muted-hint">
 								{documents.length
-									? "没有匹配的资料"
-									: "当前空间还没有资料。可点击上方新建，或在对话中由 AI 保存。"}
+									? "没有匹配当前筛选条件的资料"
+									: isRecentView
+										? "暂无最近修改的资料。"
+										: "当前空间还没有资料。可点击上方新建，或在对话中由 AI 保存。"}
 							</p>
 						) : (
 							filteredDocs.map((doc) => (
@@ -460,8 +535,14 @@ export function SpacePages({
 									className={`space-page-row ${selectedDoc?.id === doc.id && !editing ? "active" : ""}`}
 									onClick={() => void openDocument(doc.id)}
 								>
-									<strong>{doc.title}</strong>
+									<div className="space-page-row-head">
+										<span className={`space-doc-type-pill is-${doc.docType}`}>
+											{spaceDocTypeLabel(doc.docType)}
+										</span>
+										<strong>{doc.title}</strong>
+									</div>
 									<span>
+										{isRecentView ? `${spaceNameById.get(doc.spaceId) ?? doc.spaceId} · ` : ""}
 										rev {doc.revision} · {doc.headCommit.slice(0, 7)} ·{" "}
 										{new Date(doc.updatedAt).toLocaleDateString()}
 									</span>
@@ -497,16 +578,32 @@ export function SpacePages({
 									</select>
 								</label>
 							)}
-							<label>
-								标题
-								<input
-									className="input-field"
-									value={title}
-									onChange={(e) => setTitle(e.target.value)}
-									maxLength={200}
-									required
-								/>
-							</label>
+							<div className="space-create-row">
+								<label style={{ flex: 2 }}>
+									标题
+									<input
+										className="input-field"
+										value={title}
+										onChange={(e) => setTitle(e.target.value)}
+										maxLength={200}
+										required
+									/>
+								</label>
+								<label style={{ flex: 1 }}>
+									内容类型
+									<select
+										className="input-field"
+										value={docType}
+										onChange={(e) => setDocType(e.target.value as SpaceDocumentType)}
+									>
+										{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
+											<option key={opt.value} value={opt.value}>
+												{opt.label} — {opt.hint}
+											</option>
+										))}
+									</select>
+								</label>
+							</div>
 							<label>
 								正文（Markdown）
 								<textarea
@@ -573,7 +670,12 @@ export function SpacePages({
 								<div>
 									<h2>{selectedDoc.title}</h2>
 									<div className="space-doc-meta">
-										<span className="pill">{selectedSpace?.name ?? selectedDoc.spaceId}</span>
+										<span className={`space-doc-type-pill is-${selectedDoc.docType}`}>
+											{spaceDocTypeLabel(selectedDoc.docType)}
+										</span>
+										<span className="pill">
+											{spaceNameById.get(selectedDoc.spaceId) ?? selectedDoc.spaceId}
+										</span>
 										<span className="pill">
 											rev {selectedDoc.revision} · <code>{selectedDoc.headCommit.slice(0, 7)}</code>
 										</span>
@@ -598,6 +700,7 @@ export function SpacePages({
 										className="btn-secondary"
 										onClick={() => {
 											setTitle(selectedDoc.title);
+											setDocType(selectedDoc.docType);
 											setContent(selectedDoc.content);
 											setLinkedWorkspaceId(selectedDoc.linkedWorkspaceId ?? "");
 											setLinkedFilePath(selectedDoc.linkedFilePath ?? "");

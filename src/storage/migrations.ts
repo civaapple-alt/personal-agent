@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -184,6 +184,20 @@ export function migrateDatabase(db: DatabaseSync): void {
 					);
 					CREATE INDEX IF NOT EXISTS idx_workspace_folders_ws ON workspace_folders(workspace_id, sort_order, created_at);
 					PRAGMA user_version = 9;
+				`);
+			}
+			if (version < 10) {
+				if (
+					!db
+						.prepare("PRAGMA table_info(space_documents)")
+						.all()
+						.some((column) => column.name === "doc_type")
+				) {
+					db.exec("ALTER TABLE space_documents ADD COLUMN doc_type TEXT NOT NULL DEFAULT 'note'");
+				}
+				db.exec(`
+					CREATE INDEX IF NOT EXISTS idx_space_documents_type ON space_documents(space_id, doc_type, updated_at DESC);
+					PRAGMA user_version = 10;
 				`);
 			}
 			db.exec("COMMIT");

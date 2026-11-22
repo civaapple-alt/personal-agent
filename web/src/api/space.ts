@@ -2,6 +2,20 @@ import { requestJson } from "./client.ts";
 
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
+export type SpaceDocumentType = "plan" | "spec" | "decision" | "rule" | "note";
+
+export const SPACE_DOC_TYPE_OPTIONS: Array<{ value: SpaceDocumentType; label: string; hint: string }> = [
+	{ value: "plan", label: "方案", hint: "实现计划、架构方案、落地路线图" },
+	{ value: "spec", label: "规格", hint: "PRD、需求规格、接口契约、验收标准" },
+	{ value: "decision", label: "决策", hint: "ADR、方案取舍结论、评审纪要与复盘" },
+	{ value: "rule", label: "规范", hint: "团队约定、SOP 手册、检查清单" },
+	{ value: "note", label: "资料", hint: "调研分析、参考资料、README 镜像与草稿" },
+];
+
+export function spaceDocTypeLabel(docType?: SpaceDocumentType | string | null): string {
+	const found = SPACE_DOC_TYPE_OPTIONS.find((item) => item.value === docType);
+	return found ? found.label : "资料";
+}
 
 export interface SpaceDto {
 	id: string;
@@ -26,6 +40,7 @@ export interface SpaceDocumentMetaDto {
 	matterId: string | null;
 	filePath: string;
 	title: string;
+	docType: SpaceDocumentType;
 	linkedOrgId: string | null;
 	linkedWorkspaceId: string | null;
 	linkedFilePath: string | null;
@@ -72,17 +87,28 @@ export function createCustomSpace(input: {
 	});
 }
 
-export function listSpaceDocuments(spaceId: string) {
+export function listSpaceDocuments(spaceId: string, options?: { docType?: SpaceDocumentType }) {
+	const query = options?.docType ? `?docType=${encodeURIComponent(options.docType)}` : "";
 	return requestJson<{
 		space: SpaceDto;
 		documents: SpaceDocumentMetaDto[];
-	}>(`/api/spaces/${encodeURIComponent(spaceId)}/documents`);
+	}>(`/api/spaces/${encodeURIComponent(spaceId)}/documents${query}`);
+}
+
+export function listRecentSpaceDocuments(options?: { docType?: SpaceDocumentType; q?: string; limit?: number }) {
+	const params = new URLSearchParams();
+	if (options?.docType) params.set("docType", options.docType);
+	if (options?.q) params.set("q", options.q);
+	if (options?.limit) params.set("limit", String(options.limit));
+	const qs = params.toString();
+	return requestJson<{ documents: SpaceDocumentMetaDto[] }>(`/api/spaces/recent${qs ? `?${qs}` : ""}`);
 }
 
 export function createSpaceDocument(
 	spaceId: string,
 	input: {
 		title: string;
+		docType?: SpaceDocumentType;
 		content: string;
 		matterId?: string | null;
 		linkedOrgId?: string | null;
@@ -108,6 +134,7 @@ export function updateSpaceDocument(
 	input: {
 		revision: number;
 		title: string;
+		docType?: SpaceDocumentType;
 		content: string;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
