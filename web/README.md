@@ -2,6 +2,21 @@
 
 前端使用 React、esbuild 与原生 CSS，通过同源 HTTP/SSE 访问后端。这里没有独立 Vite 开发服务器或 WebSocket 通道；[index.html](index.html) 是构建输入，`web/dist/` 是生成资源，不直接修改。
 
+```text
+web/
+├── index.html          # 网页构建入口模板
+├── tsconfig.json       # 前端独立 TypeScript 配置
+├── dist/               # esbuild 构建产物（不直接编辑）
+└── src/                # 前端源码（详见 src/README.md）
+    ├── main.tsx        # 应用挂载与样式加载顺序
+    ├── App.tsx         # 顶层页面装配、Hash 路由与全局 SSE 同步
+    ├── api/            # 按业务拆分的 HTTP DTO 与请求模块（matters/space/team/orgs/runtime 等）
+    ├── hooks/          # 会话认证、事项范围、滚动、右侧分屏文档与澄清状态等 hooks
+    ├── components/     # 页面与组件（chat/ 对话流与分屏文档、team/ 团队管理、SpacePages 等）
+    ├── utils/          # 领域纯函数（委托投影、消息流解析、组织名册等）
+    └── styles/         # 按页面职责拆分的原生 CSS（tokens/primitives/chat-*/deliverables/team 等）
+```
+
 从仓库根运行：
 
 ```bash

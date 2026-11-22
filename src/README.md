@@ -2,6 +2,18 @@
 
 本层连接角色资产、SQLite 与 Pi 执行，不包含网页实现。公共导出集中在 [index.ts](index.ts)，服务入口是 [server/main.ts](server/main.ts)。
 
+```text
+src/
+├── index.ts          # 后端公共导出入口
+├── orchestrator/     # 事项派发、会话范围、跨岗位委托、旁听评审、人类澄清与经验复盘
+├── rpc/              # Pi CLI 子进程管理、JSONL 协议分帧、工具桥接与包安装
+├── pa-extensions/    # 宿主侧扩展装配（team-extension、pstack-methods、web-access、.env 密钥治理）
+├── storage/          # SQLite 数据库/迁移/领域仓储与独立 Git 资料空间引擎（SpaceGitStore）
+├── server/           # 同源 HTTP/SSE 服务、多租户鉴权、ACL、业务路由与预览管理
+├── roles/            # 角色 Markdown 与 Skill 包解析、能力报告与角色架构师规则
+└── demo/             # 调用真实模型的冒烟与对照验证脚本（与离线 test/ 区分）
+```
+
 按要改变的行为进入对应模块：
 
 | 行为 | 阅读入口 | 相邻模块 |
