@@ -2,7 +2,7 @@ import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../pa-ext
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import { isCurrentHumanDecision, readHumanDecision } from "./human-decision.ts";
-import { selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
+import { scopedSpaceDocumentIds, selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
 
 export interface WorkbenchContext extends WorkspaceContext {
 	matter: Matter;
@@ -154,19 +154,21 @@ export async function readWorkbenchTopic(
 		};
 	}
 
-	const { messages, deliverables } = selectMatterContext({
+	const { messages } = selectMatterContext({
 		...context,
 		messages: store.listMessages(matter.id, "user"),
-		deliverables: topic === "published_deliverables" ? store.listDeliverables(matter.id) : [],
+		deliverables: [],
 	});
+	const scopedIds = scopedSpaceDocumentIds(messages);
+	const documents = store.spaces.listDocuments({ matterId: matter.id }).filter((doc) => scopedIds.has(doc.id));
 	const heading =
 		topic === "pending_decisions"
 			? chinese
 				? "当前等待答复的决定"
 				: "Pending decisions"
 			: chinese
-				? "当前工作区的已发布成果"
-				: "Published deliverables in this workspace";
+				? "当前工作区的空间资料"
+				: "Space documents in this workspace";
 	const rows =
 		topic === "pending_decisions"
 			? messages.flatMap((message, index) => {
@@ -185,7 +187,7 @@ export async function readWorkbenchTopic(
 						`- ${decision.requests.map(({ question }) => plainText(question)).join(" / ")} · ${chinese ? "等待" : "Waiting for"} ${assignee}`,
 					];
 				})
-			: deliverables.map((item) => `- ${plainText(item.title)} · v${item.version}`);
+			: documents.map((item) => `- ${plainText(item.title)} · rev ${item.revision}`);
 	return {
 		source: topic,
 		heading,

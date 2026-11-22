@@ -6,7 +6,7 @@ import { resolveDiscussionMentionTargets } from "../../orchestrator/prompts.ts";
 import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
-import type { Collaborator, DeliverableType, Matter, MatterMessage, MatterVisibility } from "../../storage/types.ts";
+import type { Collaborator, Matter, MatterMessage, MatterVisibility } from "../../storage/types.ts";
 import {
 	canAccessMatter,
 	canAccessOrganization,
@@ -416,12 +416,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		}
 
 		const title = typeof body.title === "string" && body.title.trim().length > 0 ? body.title.trim() : undefined;
-		const deliverableTitle =
-			typeof body.deliverableTitle === "string" && body.deliverableTitle.trim().length > 0
-				? body.deliverableTitle.trim()
-				: undefined;
-		const deliverableType =
-			typeof body.deliverableType === "string" ? (body.deliverableType as DeliverableType) : undefined;
 		const aiMemberIds = Object.hasOwn(body, "aiMemberIds")
 			? body.aiMemberIds === null
 				? null
@@ -540,8 +534,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				preferredMemberId: leadMember.id,
 				workspaceId,
 				orgId: matter.orgId,
-				deliverableTitle,
-				deliverableType,
 				startedByUserId: actor.user?.id ?? null,
 				author: toDispatchAuthor(actor.collaborator),
 			},
@@ -796,10 +788,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			return true;
 		}
 		const workspaceId = matter.workspaceId ?? undefined;
-		const deliverableTitle =
-			typeof body.deliverableTitle === "string" && body.deliverableTitle.trim().length > 0
-				? body.deliverableTitle.trim()
-				: undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, observerMemberIds)) {
 			return true;
@@ -874,7 +862,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				workspaceId,
 				orgId: matter.orgId,
 				observerMemberIds,
-				deliverableTitle,
 				startedByUserId: actor.user?.id ?? null,
 				author: toDispatchAuthor(actor.collaborator),
 			},

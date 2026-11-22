@@ -46,6 +46,6 @@
 
 ## 角色定义的保存与更新
 
-启动时 `.data/roles/` 根目录及 `global/`（均归属 `global` 作用域，兼顾既有如 `ux-designer.md` 等全局定义）、`orgs/<orgId>/`（组织共享）与 `users/<userId>/`（个人私有）支持单文件 `<id>.md` 与带包内私有 Skill 的目录形式 `<id>/<id>.md`；同 ID 的全局定义仍优先于仓库基线，非全局目录不允许覆盖全局角色 ID，也不允许通过 frontmatter 伪造更高权限的作用域。需要更新自定义成员时，通过既有导入、团队管理或角色调整入口显式选择。
+启动时 `.data/roles/` 根目录（全局角色）、`orgs/<orgId>/`（组织共享）与 `users/<userId>/`（个人私有）支持单文件 `<id>.md` 与带包内私有 Skill 的目录形式 `<id>/<id>.md`；同 ID 的全局定义优先于仓库基线，非全局目录不允许覆盖全局角色 ID，也不允许通过 frontmatter 伪造更高权限的作用域。需要更新自定义成员时，通过导入、团队管理或角色调整入口显式选择。
 
 角色履职、英文 Skill 小样本和模型决策验证见[角色验证记录](../validation/role-design-demo.md)。

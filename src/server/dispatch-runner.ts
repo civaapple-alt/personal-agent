@@ -9,7 +9,7 @@ import {
 	type TeamOrchestrator,
 } from "../orchestrator/team-orchestrator.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { CollaboratorRole, DeliverableType } from "../storage/types.ts";
+import type { CollaboratorRole } from "../storage/types.ts";
 import { canAccessMatter, canDispatchAiInOrg, canParticipateInMatter, canTargetMatterAi } from "./acl.ts";
 import type { RequestActor } from "./auth.ts";
 import { HttpRequestError } from "./http.ts";
@@ -38,8 +38,6 @@ export interface BackgroundDispatchInput {
 	workspaceId?: string;
 	orgId?: string | null;
 	observerMemberIds?: string[];
-	deliverableTitle?: string;
-	deliverableType?: DeliverableType;
 	startedByUserId?: string | null;
 	author?: {
 		collaboratorId: string;
@@ -122,8 +120,6 @@ export function createDispatchRunner(deps: {
 					actor.authKind === "loopback" &&
 					deps.inheritsLocalPiResources(),
 				observerMemberIds: input.observerMemberIds,
-				deliverableTitle: input.deliverableTitle,
-				deliverableType: input.deliverableType,
 				author: input.author,
 				onTextDelta: (delta) => {
 					accumulatedDelta += delta;
@@ -150,7 +146,6 @@ export function createDispatchRunner(deps: {
 				broadcast("matter_settled", {
 					matterId: result.matter.id,
 					matter: result.matter,
-					deliverable: result.deliverable,
 					assignedMemberId: result.assignedMember.id,
 				});
 			})

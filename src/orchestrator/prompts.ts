@@ -1,15 +1,7 @@
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
-import type {
-	Deliverable,
-	Matter,
-	MatterMessage,
-	MemberMemory,
-	Organization,
-	TeamMember,
-	WorkspaceLink,
-} from "../storage/types.ts";
+import type { Matter, MatterMessage, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
 import { PUBLICATION_REVIEW_GUIDANCE } from "./publication-review.ts";
 import {
@@ -264,7 +256,7 @@ export function buildObserverTaskPrompt(input: {
 
 export function buildObserverContextDigest(input: {
 	matter: Matter | null;
-	deliverables: Deliverable[];
+	documents: Array<{ title: string; revision: number }>;
 	history: MatterMessage[];
 	includeMatterHeader: boolean;
 }): string {
@@ -272,14 +264,9 @@ export function buildObserverContextDigest(input: {
 	if (input.includeMatterHeader && input.matter) {
 		if (input.matter.title) parts.push(`Matter title: ${truncateInline(input.matter.title, 120)}`);
 		if (input.matter.summary) parts.push(`Progress summary: ${truncateInline(input.matter.summary, 280)}`);
-		if (input.deliverables.length > 0) {
-			const latestByTitle = new Map<string, Deliverable>();
-			for (const item of input.deliverables) {
-				const prev = latestByTitle.get(item.title);
-				if (!prev || item.version > prev.version) latestByTitle.set(item.title, item);
-			}
-			const list = [...latestByTitle.values()].map((d) => `${d.title} (V${d.version})`).join(", ");
-			if (list) parts.push(`Archived deliverables: ${truncateInline(list, 240)}`);
+		if (input.documents.length > 0) {
+			const list = input.documents.map((doc) => `${doc.title} (rev ${doc.revision})`).join(", ");
+			if (list) parts.push(`Space documents: ${truncateInline(list, 240)}`);
 		}
 	}
 	if (input.history.length > 0) {

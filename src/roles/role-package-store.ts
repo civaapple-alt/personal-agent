@@ -283,10 +283,6 @@ export async function saveRolePackage(
 	if (usePackageDir) {
 		await rm(join(scopeRolesDir, `${nextTemplate.id}.md`), { force: true });
 	}
-	if (roleScope === "global") {
-		await rm(join(params.rolesDir, "global", `${nextTemplate.id}.md`), { force: true });
-		await rm(join(params.rolesDir, "global", nextTemplate.id), { recursive: true, force: true });
-	}
 
 	return { template: nextTemplate, roleFilePath, writtenSkillPaths };
 }
@@ -310,8 +306,4 @@ export async function deleteRolePackage(params: {
 	});
 	await rm(join(scopeRolesDir, `${roleId}.md`), { force: true });
 	await rm(join(scopeRolesDir, roleId), { recursive: true, force: true });
-	if (roleScope === "global") {
-		await rm(join(params.rolesDir, "global", `${roleId}.md`), { force: true });
-		await rm(join(params.rolesDir, "global", roleId), { recursive: true, force: true });
-	}
 }

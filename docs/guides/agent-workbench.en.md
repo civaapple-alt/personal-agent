@@ -42,9 +42,11 @@ Open Role Architect or invite it from the collaboration members panel. Review ea
 
 ## Spaces and Git history
 
-Each organization, repository, human user, AI role, and custom space has its own Git repository under `<dataDir>/spaces/<spaceId>/`. Private matters default to the initiator's personal user space for physical isolation; non-private matters default to their repository space or organization space.
+Each organization, repository, human user, AI role, and custom space has its own Git repository under a scoped directory in `<dataDir>/spaces/`. Private matters default to the initiator's personal user space; non-private matters default to their repository space or organization space.
 
 Open Space from the matter header or sidebar to browse spaces, create or edit Markdown documents (optionally linked to an organization, repository, and relative file path or URL), and inspect Git commit history and unified diffs. Business repository edits via `write`/`edit` stay in the business repository itself. Matter retrospectives (RSI) distill candidate experiences directly from the conversation and space documents.
+
+Open **Version feedback** to rate or comment on the current commit. Select a historical commit to review that version. Saving again updates your feedback for that commit.
 
 ## Models, repositories, and capabilities
 

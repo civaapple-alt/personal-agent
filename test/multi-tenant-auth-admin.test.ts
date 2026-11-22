@@ -407,10 +407,10 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: bobCookie } })).status, 403);
 		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: aliceFreshCookie } })).status, 200);
 
-		// Pre-index uploads retain the ACL of the matter whose message references them.
+		// An unindexed upload cannot be accessed by account users, even if a message references it.
 		db.prepare("DELETE FROM uploads_index WHERE filename = ?").run(uploadUrl.split("/").at(-1)!);
 		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: bobCookie } })).status, 403);
-		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: aliceFreshCookie } })).status, 200);
+		assert.equal((await fetch(`${baseUrl}${uploadUrl}`, { headers: { Cookie: aliceFreshCookie } })).status, 403);
 		writeFileSync(join(tempDir, "uploads", "unreferenced.txt"), "An orphaned upload");
 		assert.equal(
 			(await fetch(`${baseUrl}/api/uploads/unreferenced.txt`, { headers: { Cookie: aliceFreshCookie } })).status,
@@ -1100,16 +1100,33 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 		const viewerACookie = `pa_session=${store.createSession(viewerA.id).rawToken}`;
 		const ownerBCookie = `pa_session=${store.createSession(ownerB.id).rawToken}`;
 
-		// Space pages follow their matter's current access and reject stale updates.
-		const createPage = await fetch(`${base}/api/space/pages`, {
+		// Space documents use workspace access and reject stale updates.
+		const spaceId = `spc_ws_${wsAOpen.id}`;
+		const createPage = await fetch(`${base}/api/spaces/${spaceId}/documents`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: memberACookie },
 			body: JSON.stringify({ matterId: mAOpen.id, title: "Working plan", content: "Draft" }),
 		});
 		assert.equal(createPage.status, 201);
-		const spacePage = ((await createPage.json()) as { page: { id: string; revision: number } }).page;
+		const spacePage = (
+			(await createPage.json()) as { document: { id: string; revision: number; headCommit: string } }
+		).document;
+		const sendFeedback = (cookie: string) =>
+			fetch(`${base}/api/spaces/documents/${spacePage.id}/feedback`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ commitHash: spacePage.headCommit, feedback: "Needs work", rating: "negative" }),
+			});
+		assert.equal((await sendFeedback(viewerACookie)).status, 403);
+		assert.equal((await sendFeedback(ownerBCookie)).status, 403);
+		assert.equal((await sendFeedback(memberACookie)).status, 200);
+		const feedbackResponse = await fetch(`${base}/api/spaces/documents/${spacePage.id}/feedback`, {
+			headers: { Cookie: viewerACookie },
+		});
+		assert.equal(feedbackResponse.status, 200);
+		assert.equal(((await feedbackResponse.json()) as { feedback: unknown[] }).feedback.length, 1);
 		const editPage = (cookie: string, revision: number, content: string) =>
-			fetch(`${base}/api/space/pages/${spacePage.id}`, {
+			fetch(`${base}/api/spaces/documents/${spacePage.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json", Cookie: cookie },
 				body: JSON.stringify({ title: "Working plan", revision, content }),
@@ -1117,16 +1134,20 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 		assert.equal((await editPage(viewerACookie, 1, "Forbidden")).status, 403);
 		assert.equal((await editPage(memberACookie, 1, "Second draft")).status, 200);
 		assert.equal((await editPage(memberACookie, 1, "Stale draft")).status, 409);
-		const pageHistory = await fetch(`${base}/api/space/pages/${spacePage.id}/revisions`, {
+		assert.equal((await sendFeedback(memberACookie)).status, 200);
+		const invalidFeedback = await fetch(`${base}/api/spaces/documents/${spacePage.id}/feedback`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: memberACookie },
+			body: JSON.stringify({ commitHash: "a".repeat(40), feedback: "unrelated" }),
+		});
+		assert.equal(invalidFeedback.status, 400);
+		const pageHistory = await fetch(`${base}/api/spaces/documents/${spacePage.id}/commits`, {
 			headers: { Cookie: viewerACookie },
 		});
 		assert.equal(pageHistory.status, 200);
-		assert.deepEqual(
-			((await pageHistory.json()) as { revisions: Array<{ content: string }> }).revisions.map((r) => r.content),
-			["Second draft", "Draft"],
-		);
+		assert.equal(((await pageHistory.json()) as { commits: unknown[] }).commits.length, 2);
 		assert.equal(
-			(await fetch(`${base}/api/space/pages/${spacePage.id}`, { headers: { Cookie: ownerBCookie } })).status,
+			(await fetch(`${base}/api/spaces/documents/${spacePage.id}`, { headers: { Cookie: ownerBCookie } })).status,
 			403,
 		);
 
@@ -1203,13 +1224,13 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 		});
 		assert.equal(tightenRes.status, 200);
 		assert.equal(
-			(await fetch(`${base}/api/space/pages/${spacePage.id}`, { headers: { Cookie: peerACookie } })).status,
+			(await fetch(`${base}/api/spaces/documents/${spacePage.id}`, { headers: { Cookie: peerACookie } })).status,
 			403,
 		);
 		const peerSpace = (await (
-			await fetch(`${base}/api/space/pages`, { headers: { Cookie: peerACookie } })
-		).json()) as { pages: Array<{ id: string }> };
-		assert.ok(!peerSpace.pages.some((page) => page.id === spacePage.id));
+			await fetch(`${base}/api/spaces/${spaceId}/documents`, { headers: { Cookie: peerACookie } })
+		).json()) as { documents: Array<{ id: string }> };
+		assert.ok(!peerSpace.documents.some((page) => page.id === spacePage.id));
 		assert.equal(
 			(await fetch(`${base}/api/deliverables/${dAOpen.id}`, { headers: { Cookie: peerACookie } })).status,
 			403,

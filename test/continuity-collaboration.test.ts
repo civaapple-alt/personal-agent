@@ -185,7 +185,7 @@ async function fixture(t: test.TestContext, respond: Responder, classifier?: Dec
 	return { root, db, store, templates, workers, options, orchestrator, workspace };
 }
 
-test("successful workspace document writes become space pages and interaction results", async (t) => {
+test("workspace writes stay in the workspace without duplicating documents", async (t) => {
 	let version = 0;
 	const f = await fixture(t, async (worker) => {
 		assert.equal(worker.tools.has("publish_deliverable"), false);
@@ -222,35 +222,11 @@ test("successful workspace document writes become space pages and interaction re
 		return "Work complete";
 	});
 	const first = await f.orchestrator.dispatchMatter({ prompt: "Prepare the plan", workspaceId: f.workspace.id });
-	assert.equal(first.deliverable?.contentOrPath, "# Plan 1");
-	const pages = f.store.spacePages.list(first.matter.id);
-	assert.equal(pages.length, 1);
-	assert.equal(pages[0]?.content, "# Plan 1");
-	assert.equal(f.store.spacePages.listRevisions(pages[0]!.id)[0]?.resultId, first.deliverable?.id);
-	const second = await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Revise the plan" });
-	assert.equal(second.deliverable?.version, 2);
-	assert.equal(f.store.spacePages.list(first.matter.id).length, 1);
-	assert.deepEqual(
-		f.store.spacePages.listRevisions(pages[0]!.id).map((revision) => revision.content),
-		["# Plan 2", "# Plan 1"],
-	);
-	assert.equal(f.store.spacePages.listRevisions(pages[0]!.id)[0]?.resultId, second.deliverable?.id);
-	const humanEdit = f.store.spacePages.update(pages[0]!.id, {
-		revision: 2,
-		title: "plan.md",
-		content: "Human changes",
-		actorId: "user",
-	});
-	assert.ok(humanEdit);
-	const third = await f.orchestrator.dispatchMatter({
-		matterId: first.matter.id,
-		prompt: "Update the workspace plan",
-	});
-	assert.equal(third.deliverable?.contentOrPath, "# Plan 3");
-	assert.equal(f.store.spacePages.get(pages[0]!.id)?.content, "Human changes");
-	assert.ok(
-		f.store.spacePages.list(first.matter.id).some((page) => page.id !== pages[0]!.id && page.content === "# Plan 3"),
-	);
+	assert.equal(await readFile(join(f.root, "plan.md"), "utf8"), "# Plan 1");
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 0);
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Revise the plan" });
+	assert.equal(await readFile(join(f.root, "plan.md"), "utf8"), "# Plan 2");
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 0);
 });
 
 test("space pages retain draft revisions, reject stale edits, and stay inside the active matter", async (t) => {
@@ -281,21 +257,19 @@ test("space pages retain draft revisions, reject stale edits, and stay inside th
 		workspaceId: f.workspace.id,
 	});
 	assert.ok(createdId);
-	assert.equal(f.store.spacePages.get(createdId)?.matterId, result.matter.id);
-	assert.equal(f.store.spacePages.get(createdId)?.content, "Revised plan");
-	assert.deepEqual(
-		f.store.spacePages.listRevisions(createdId).map((revision) => revision.content),
-		["Revised plan", "First draft"],
-	);
+	const doc = await f.store.spaces.getDocument(createdId);
+	assert.equal(doc?.matterId, result.matter.id);
+	assert.equal(doc?.content, "Revised plan");
+	assert.equal((await f.store.spaces.listDocumentCommits(createdId)).length, 2);
 });
 
-test("a human edit during a turn preserves the saved revision and links its interaction result", async (t) => {
+test("a human edit during a turn preserves the saved Git revision", async (t) => {
 	let pageId = "";
 	const f = await fixture(t, async (worker) => {
 		const saved = await worker.call("save_space_page", { title: "Shared plan", content: "Role draft" });
 		pageId = (saved.details as { result: { page: { id: string } } }).result.page.id;
 		assert.ok(
-			f.store.spacePages.update(pageId, {
+			await f.store.spaces.updateDocument(pageId, {
 				revision: 1,
 				title: "Shared plan",
 				content: "Human update",
@@ -305,15 +279,14 @@ test("a human edit during a turn preserves the saved revision and links its inte
 		return "Draft saved";
 	});
 	const result = await f.orchestrator.dispatchMatter({ prompt: "Prepare plan", workspaceId: f.workspace.id });
-	assert.equal(f.store.spacePages.get(pageId)?.content, "Human update");
-	assert.equal(result.deliverable?.contentOrPath, "Role draft");
-	assert.equal(
-		f.store.spacePages.listRevisions(pageId).find((revision) => revision.revision === 1)?.resultId,
-		result.deliverable?.id,
-	);
+	assert.equal((await f.store.spaces.getDocument(pageId))?.content, "Human update");
+	const commits = await f.store.spaces.listDocumentCommits(pageId);
+	assert.equal(commits.length, 2);
+	assert.equal((await f.store.spaces.getDocumentCommitDetail(pageId, commits[1]!.hash))?.content, "Role draft");
+	assert.equal(result.matter.id, (await f.store.spaces.getDocument(pageId))?.matterId);
 });
 
-test("a later observed file edit updates the saved document without another save call", async (t) => {
+test("a later workspace edit leaves the saved space snapshot unchanged", async (t) => {
 	const f = await fixture(t, async (worker) => {
 		await writeFile(join(f.root, "plan.md"), "Draft");
 		await worker.call("save_space_page", { title: "Shared plan", sourcePath: "plan.md" });
@@ -324,17 +297,78 @@ test("a later observed file edit updates the saved document without another save
 		return "Updated";
 	});
 	const result = await f.orchestrator.dispatchMatter({ prompt: "Update the plan", workspaceId: f.workspace.id });
-	assert.equal(result.deliverable?.contentOrPath, "Updated draft");
-	const pages = f.store.spacePages.list(result.matter.id);
+	const pages = f.store.spaces.listDocuments({ matterId: result.matter.id });
 	assert.equal(pages.length, 1);
-	assert.equal(pages[0]?.title, "Shared plan");
-	assert.deepEqual(
-		f.store.spacePages.listRevisions(pages[0]!.id).map((revision) => revision.content),
-		["Updated draft", "Draft"],
-	);
+	assert.equal((await f.store.spaces.getDocument(pages[0]!.id))?.content, "Draft");
+	assert.equal(await readFile(join(f.root, "plan.md"), "utf8"), "Updated draft");
 });
 
-test("team discussion is opt-in, preserves the roster and deliverables, and uses separate Pi sessions", async (t) => {
+test("space tools do not expose another matter's private documents", async (t) => {
+	let privateId = "";
+	const f = await fixture(t, async (worker) => {
+		const listed = await worker.call("read_space", {});
+		const pages = (listed.details as { result: { pages: Array<{ id: string }> } }).result.pages;
+		assert.ok(!pages.some((page) => page.id === privateId));
+		await assert.rejects(worker.call("read_space", { pageId: privateId }), /not found/i);
+		await assert.rejects(
+			worker.call("save_space_page", { pageId: privateId, revision: 1, title: "Secret", content: "overwrite" }),
+			/not found/i,
+		);
+		return "Done";
+	});
+	const privateMatter = f.store.createMatter({
+		title: "private",
+		workspaceId: f.workspace.id,
+		leadMemberId: "engineering-manager",
+		visibility: "private",
+	});
+	f.store.spaces.ensureAllDefaultSpaces();
+	const space = f.store.spaces.listSpaces().find((entry) => entry.workspaceId === f.workspace.id);
+	assert.ok(space);
+	const doc = await f.store.spaces.createDocument({
+		spaceId: space.id,
+		matterId: privateMatter.id,
+		title: "Secret",
+		content: "private content",
+		actorId: "owner",
+	});
+	privateId = doc.id;
+	await f.orchestrator.dispatchMatter({ prompt: "Inspect space", workspaceId: f.workspace.id });
+	assert.equal((await f.store.spaces.getDocument(privateId))?.content, "private content");
+});
+
+test("space feedback evaluates memories applied to the saved document version", async (t) => {
+	let documentId = "";
+	const f = await fixture(t, async (worker) => {
+		const saved = await worker.call("save_space_page", { title: "Plan", content: "First version" });
+		documentId = (saved.details as { result: { page: { id: string } } }).result.page.id;
+		return "Plan saved";
+	});
+	const memory = f.store.addMemory({
+		memberId: "product-manager",
+		scope: "role_general",
+		content: "Include concrete acceptance criteria",
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "Prepare the plan",
+		preferredMemberId: "product-manager",
+		workspaceId: f.workspace.id,
+	});
+	const document = await f.store.spaces.getDocument(documentId);
+	assert.ok(document);
+	assert.equal(document.matterId, result.matter.id);
+	await f.store.spaces.saveDocumentFeedback({
+		documentId,
+		commitHash: document.headCommit,
+		actorId: "reviewer",
+		actorName: "Reviewer",
+		feedback: "Criteria are clear",
+		rating: "positive",
+	});
+	assert.equal(f.store.getMemory(memory.id)?.positiveCount, 1);
+});
+
+test("team discussion is opt-in, preserves the roster, and uses separate Pi sessions", async (t) => {
 	const failingPrompt = "@engineering-manager @qa-manager Confirm the second discussion reply";
 	const f = await fixture(t, async (worker, prompt) => {
 		const memberId = worker.options.env?.PA_MEMBER_ID;
@@ -387,7 +421,6 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 		aiMemberIds: ["engineering-manager", "qa-manager", "product-manager"],
 		consultMemberIds: ["qa-manager"],
 		observerMemberIds: ["qa-manager"],
-		deliverableTitle: "Initial design",
 	});
 	const matterPath = `/api/matters/${first.matter.id}`;
 	const initialWorkerCount = f.workers.length;
@@ -432,7 +465,7 @@ test("team discussion is opt-in, preserves the roster and deliverables, and uses
 	assert.match(discussionWorkers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Discussion chat mode/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
 	assert.equal(f.store.getMatter(first.matter.id)?.status, "open");
-	assert.equal(f.store.listDeliverables(first.matter.id).length, 1);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 0);
 	const messages = f.store.listMessages(first.matter.id, "user");
 	assert.equal(messages.filter(({ content }) => content === on.message.content).length, 1);
 	assert.deepEqual(
@@ -965,7 +998,7 @@ test("workbench help reads packaged guides and active matter facts through the s
 			JSON.stringify((await worker.call("read_pa_help", { topics, language: "zh" })).details);
 		const guide = await details(["roles", "capabilities", "deliverables"]);
 		assert.match(guide, /角色架构师.*网页检索.*资料空间/);
-		const state = await details(["current_matter", "pending_decisions", "published_deliverables"]);
+		const state = await details(["current_matter", "pending_decisions", "matter_documents"]);
 		assert.match(state, /QA Manager.*持续跟进的审批.*新工作区验收/);
 		assert.doesNotMatch(state, /旧工作区|其他组织|被替代|仅存在于数据库/);
 		assert.match(await details(["runtime_tools"]), /本轮启动时的工具.*request_clarification/);
@@ -1007,13 +1040,17 @@ test("workbench help reads packaged guides and active matter facts through the s
 			},
 		});
 	};
-	const publish = (title: string, scope?: { workspaceId: string; repoPath: string; orgId: string | null }) => {
-		const deliverable = f.store.recordDeliverable({
+	f.store.spaces.ensureAllDefaultSpaces();
+	const publish = async (title: string, scope?: { workspaceId: string; repoPath: string; orgId: string | null }) => {
+		const workspaceId = scope?.workspaceId ?? workspace.id;
+		const space = f.store.spaces.listSpaces().find((item) => item.workspaceId === workspaceId);
+		assert.ok(space);
+		const document = await f.store.spaces.createDocument({
+			spaceId: space.id,
 			matterId: matter.id,
-			memberId: "qa-manager",
-			type: "document",
 			title,
-			contentOrPath: "evidence",
+			content: "evidence",
+			actorId: "qa-manager",
 		});
 		if (scope)
 			f.store.appendMessage({
@@ -1022,25 +1059,25 @@ test("workbench help reads packaged guides and active matter facts through the s
 				senderType: "member",
 				senderId: "qa-manager",
 				content: title,
-				metadata: { ...scope, deliverableIds: [deliverable.id] },
+				metadata: { ...scope, spaceDocuments: [{ id: document.id }] },
 			});
 	};
 	const oldScope = { workspaceId: oldWorkspace.id, repoPath: oldWorkspace.repoPath, orgId: oldWorkspace.orgId };
 	append("旧工作区审批", oldScope);
-	publish("旧工作区验收", oldScope);
+	await publish("旧工作区验收", oldScope);
 	f.store.updateMatterWorkspace(matter.id, workspace.id);
 	const currentScope = { workspaceId: workspace.id, repoPath, orgId: workspace.orgId };
 	append("被替代的审批", currentScope);
 	append("持续跟进的审批", currentScope);
 	append("其他组织审批", { ...currentScope, orgId: "org_elsewhere" });
-	publish("新工作区验收", currentScope);
-	publish("仅存在于数据库");
+	await publish("新工作区验收", currentScope);
+	await publish("仅存在于数据库");
 	const response = await f.orchestrator.dispatchMatter({
 		matterId: matter.id,
 		prompt: "读一下工作台帮助和当前事项",
 	});
 	assert.equal(response.replyText, "已查阅工作台");
-	assert.equal(f.store.listDeliverables(matter.id).length, 3);
+	assert.equal(f.store.spaces.listDocuments({ matterId: matter.id }).length, 3);
 });
 
 test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, and separates workspaces and matters", async (t) => {
@@ -1051,7 +1088,7 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 		preferredMemberId: "product-manager",
 	});
 	assert.equal(first.matter.status, "open");
-	assert.equal(first.deliverable, null);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 0);
 	f.store.setPrimaryContact("qa-manager");
 	const restarted = new TeamOrchestrator(f.options);
 	assert.equal(f.store.getPrimaryContact()?.id, "qa-manager");
@@ -1204,7 +1241,7 @@ test("shipped tool delegates to a real colleague execution and returns internal 
 		preferredMemberId: "product-manager",
 	});
 	assert.equal(engineerCalls, 1);
-	assert.equal(result.deliverable, null);
+	assert.equal(f.store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 	assert.equal(f.store.listMessages(result.matter.id, "user").length, 2);
 	const internal = f.store.listMessages(result.matter.id, "internal_collab");
 	assert.equal(internal.length, 2);
@@ -1213,7 +1250,7 @@ test("shipped tool delegates to a real colleague execution and returns internal 
 	assert.match(f.workers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Collaboration and communication/);
 });
 
-test("archives explicit verified deliverables and versions them, rejects missing/outside files, discards drafts on failure", async (t) => {
+test("saves space documents immediately, validates sources, and resumes after failure", async (t) => {
 	let shouldFail = false;
 	const f = await fixture(t, async (worker) => {
 		await assert.rejects(
@@ -1268,16 +1305,15 @@ test("archives explicit verified deliverables and versions them, rejects missing
 	t.after(() => rm(join(f.root, "..", `${f.root.split("/").at(-1)}-outside.txt`), { force: true }));
 	const first = await f.orchestrator.dispatchMatter({ prompt: "交付正式设计", workspaceId: f.workspace.id });
 	assert.equal(first.matter.status, "open");
-	assert.equal(f.store.listDeliverables(first.matter.id).length, 2);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 2);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "再次交付" });
-	assert.equal(f.store.listDeliverables(first.matter.id).length, 4);
-	assert.ok(f.store.listDeliverables(first.matter.id).filter((d) => d.version === 2).length === 2);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 4);
 	shouldFail = true;
 	await assert.rejects(
 		f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "失败" }),
 		/provider failed/,
 	);
-	assert.equal(f.store.listDeliverables(first.matter.id).length, 4);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 6);
 	assert.equal(f.store.getMatter(first.matter.id)?.status, "open");
 	shouldFail = false;
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "失败后接续" });
@@ -1415,7 +1451,7 @@ test("internal specialists cannot publish user deliverables and the lead receive
 		preferredMemberId: "product-manager",
 		workspaceId: f.workspace.id,
 	});
-	assert.equal(result.deliverable, null);
+	assert.equal(f.store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 	assert.equal(result.matter.status, "open");
 	assert.ok(f.store.listMessages(result.matter.id, "internal_collab").some((message) => message.metadata?.failed));
 });
@@ -1708,7 +1744,7 @@ test("legacy sessions without proven organization scope remain archived while a 
 	assert.ok(f.store.listMessages(first.matter.id).some((message) => message.content === "LEGACY_UNSCOPED_BACKGROUND"));
 });
 
-test("multiple process conversations stay in chat; explicit substantial milestone publishes one version with its change basis", async (t) => {
+test("conversations stay in chat and a saved space document carries its change basis", async (t) => {
 	const f = await fixture(t, async (worker, prompt) => {
 		if (prompt.includes("发布阶段设计版本")) {
 			await worker.call("save_space_page", {
@@ -1727,18 +1763,19 @@ test("multiple process conversations stay in chat; explicit substantial mileston
 		workspaceId: f.workspace.id,
 	});
 	for (const prompt of ["澄清一个限制", "修改「便笺设计」的一个术语，先讨论不发布"]) {
-		const result = await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt });
-		assert.equal(result.deliverable, null);
-		assert.equal(f.store.listDeliverables(first.matter.id).length, 0);
+		await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt });
+		assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 0);
 	}
-	const released = await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "发布阶段设计版本" });
-	assert.equal(released.deliverable?.version, 1);
-	assert.match(released.deliverable?.summary ?? "", /前面三轮范围澄清/);
+	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "发布阶段设计版本" });
+	const [document] = f.store.spaces.listDocuments({ matterId: first.matter.id });
+	assert.ok(document);
+	assert.equal(document.revision, 1);
 	const reply = f.store.listMessages(first.matter.id, "user").at(-1);
-	assert.deepEqual(reply?.metadata?.deliverableIds, [released.deliverable?.id]);
+	assert.match(JSON.stringify(reply?.metadata?.spaceDocuments), /前面三轮范围澄清/);
+	assert.match(JSON.stringify(reply?.metadata?.spaceDocuments), new RegExp(document.id));
 	assert.ok(reply?.metadata?.sourceUserMessageId);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "随后继续讨论一个小问题" });
-	assert.equal(f.store.listDeliverables(first.matter.id).length, 1);
+	assert.equal(f.store.spaces.listDocuments({ matterId: first.matter.id }).length, 1);
 });
 
 test("delegation suspends parent idle watchdog and forwards colleague progress and collab updates", async (t) => {

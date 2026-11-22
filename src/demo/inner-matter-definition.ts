@@ -44,7 +44,7 @@ export const INNER_MATTER_GUIDE: InnerMatterGuide = {
 		{
 			id: "revise",
 			label: "反馈修订",
-			description: "给 V1 记录模拟使用反馈，再形成同一成果系列的 V2。",
+			description: "给 V1 记录模拟使用反馈，再更新同一份空间文档。",
 			feedback:
 				"以下是虚构使用情境的演示反馈，不代表应用已经实现或经过真实试用：V1 的基本方向认可。假设同一建议来自多个渠道时会重复处理，V2 请增加手动合并重复反馈，并将处理状态细化为待处理、处理中、已完成；说明合并后如何保留来源，以及 V1 旧状态如何迁移。仍不做账号权限与自动分类。",
 			prompt:

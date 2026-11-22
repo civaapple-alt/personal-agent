@@ -17,7 +17,7 @@
     "build": "tsc -p tsconfig.build.json && node scripts/build-decision-sdk.mjs && npm run build:web",
     "start:web": "npm run build:web && node src/server/main.ts",
     "start:team:sandbox": "npm run build:web && node scripts/start-team-sandbox.mjs",
-    "test": "node --test test/**/*.test.ts",
+		"test": "node scripts/run-tests.mjs",
     "demo:rpc": "node src/demo/rpc-smoke.ts",
     "demo:team": "node src/demo/team-smoke.ts",
     "check:startup": "node scripts/check-server-startup.mjs",

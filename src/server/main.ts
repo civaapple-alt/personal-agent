@@ -60,7 +60,6 @@ async function main(): Promise<void> {
 	const store = new PersonalAgentStore(db, {
 		spacesDir: dbPath === ":memory:" ? undefined : resolve(dataDir, "spaces"),
 	});
-	await store.spaces.migrateLegacySpacePages();
 	const savedSettings = store.getPlatformSettings(defaultWorkspacesRoot);
 	const effectivePstackDir = process.env.PA_PSTACK_DIR?.trim() || savedSettings.pstackDir || undefined;
 	const builtinRolesDir = resolve(rootDir, "roles");

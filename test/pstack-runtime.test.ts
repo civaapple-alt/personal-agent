@@ -169,8 +169,7 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 			prompt: "讨论团队职责，不创建角色",
 		});
 		assert.equal(promptReached, true);
-		assert.equal(result.deliverable, null);
-		assert.equal(store.listDeliverables().length, 0);
+		assert.equal(store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 		assert.ok(store.listMessages(result.matter.id, "notice").some((m) => m.content.includes('"modeSha256"')));
 		omitMethodTool = true;
 		promptReached = false;
@@ -248,7 +247,7 @@ test("pstack-enabled observers retain narrowed tools and can remain silent witho
 			prompt: "只讨论需求，不编码不发布",
 		});
 		assert.equal(observerReached, true);
-		assert.equal(result.deliverable, null);
+		assert.equal(store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 		assert.equal(
 			store.listMessages(result.matter.id, "user").some((m) => m.senderId === "qa-manager"),
 			false,

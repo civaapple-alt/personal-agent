@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -139,6 +139,27 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.ok(updated);
 		assert.equal(updated.revision, 2);
 		assert.notEqual(updated.headCommit, doc.headCommit);
+		const firstFeedback = await store.spaces.saveDocumentFeedback({
+			documentId: doc.id,
+			commitHash: doc.headCommit,
+			actorId: admin.id,
+			actorName: "Alice",
+			feedback: "Review the initial version",
+			rating: "negative",
+		});
+		assert.equal(firstFeedback?.commitHash, doc.headCommit);
+		await store.spaces.saveDocumentFeedback({
+			documentId: doc.id,
+			commitHash: doc.headCommit,
+			actorId: admin.id,
+			actorName: "Alice",
+			feedback: "Updated review",
+			rating: "neutral",
+		});
+		assert.deepEqual(
+			store.spaces.listDocumentFeedback(doc.id).map((entry) => [entry.feedback, entry.rating]),
+			[["Updated review", "neutral"]],
+		);
 
 		// Concurrent stale revision is rejected
 		const conflict = await store.spaces.updateDocument(doc.id, {
@@ -182,21 +203,68 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.equal(linkedDoc.linkedFilePath, "README.md");
 		const reloadedLinked = await store.spaces.getDocument(linkedDoc.id);
 		assert.equal(reloadedLinked?.linkedFilePath, "README.md");
-
-		// Legacy space_pages migration imports into the target default space Git repo
-		const legacy = store.spacePages.create({
-			matterId: matter.id,
-			title: "历史页面",
-			content: "来自旧表的正文",
-			actorId: "product-manager",
+		const memory = store.addMemory({
+			memberId: "product-manager",
+			scope: "role_general",
+			content: "Use clear examples",
 		});
-		const migratedCount = await store.spaces.migrateLegacySpacePages();
-		assert.equal(migratedCount, 1);
-		const migratedDoc = await store.spaces.getDocument(legacy.id);
-		assert.ok(migratedDoc);
-		assert.equal(migratedDoc.spaceId, wsSpace.id);
-		assert.equal(migratedDoc.content, "来自旧表的正文");
-		assert.equal(await store.spaces.migrateLegacySpacePages(), 0);
+		const applicationIds = store.recordMemoryApplications({
+			memoryIds: [memory.id],
+			matterId: matter.id,
+			memberId: "product-manager",
+		});
+		const review = {
+			documentId: linkedDoc.id,
+			commitHash: linkedDoc.headCommit,
+			actorId: admin.id,
+			actorName: "Alice",
+			feedback: "Looks good",
+			rating: "positive" as const,
+		};
+		await store.spaces.saveDocumentFeedback(review);
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
+		store.recordTurnOutcome({
+			candidates: [],
+			applicationIds,
+			spaceDocuments: [{ id: linkedDoc.id, headCommit: linkedDoc.headCommit }],
+		});
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
+		await store.spaces.saveDocumentFeedback(review);
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
+		await store.spaces.saveDocumentFeedback({ ...review, rating: "negative" });
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
+		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
+		await store.spaces.saveDocumentFeedback({ ...review, rating: "neutral" });
+		assert.equal(store.getMemory(memory.id)?.negativeCount, 0);
+		await store.spaces.saveDocumentFeedback({ ...review, rating: "negative" });
+		await store.spaces.saveDocumentFeedback({ ...review, actorId: "another-reviewer", rating: "positive" });
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
+		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
+		db.prepare("DELETE FROM space_document_feedback WHERE document_id = ? AND actor_id = ?").run(
+			linkedDoc.id,
+			"another-reviewer",
+		);
+		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
+		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
+		await store.spaces.saveDocumentFeedback({ ...review, rating: null });
+		assert.equal(store.getMemory(memory.id)?.negativeCount, 0);
+		const unrelated = await store.spaces.createDocument({
+			spaceId: custom.id,
+			title: "Another document",
+			content: "unrelated",
+			actorId: admin.id,
+		});
+		await assert.rejects(
+			store.spaces.saveDocumentFeedback({
+				documentId: doc.id,
+				commitHash: unrelated.headCommit,
+				actorId: admin.id,
+				actorName: "Alice",
+				feedback: "Unrelated commit",
+				rating: null,
+			}),
+			/does not belong/,
+		);
 
 		// Personal user spaces and private custom spaces are strictly isolated to their owner (even from super_admin)
 		const bob = store.createUser({
@@ -225,16 +293,6 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.equal(canWriteSpace(store, superAdminActor, bobSpace), false);
 		assert.equal(canAccessSpace(store, bobActor, bobSpace), true);
 		assert.equal(canWriteSpace(store, bobActor, bobSpace), true);
-
-		// Legacy flat space directory migrates transparently into scoped directory
-		const legacyWsId = "spc_ws_ws_legacy_flat";
-		const legacyFlatDir = join(spacesDir, legacyWsId);
-		mkdirSync(join(legacyFlatDir, ".git"), { recursive: true });
-		writeFileSync(join(legacyFlatDir, "marker.txt"), "ok");
-		const resolvedMigrated = store.spaces.git.resolveRepoDir(legacyWsId);
-		assert.equal(resolvedMigrated, join(spacesDir, "workspaces", "ws_legacy_flat"));
-		assert.ok(existsSync(join(resolvedMigrated, "marker.txt")));
-		assert.ok(!existsSync(legacyFlatDir));
 
 		// Pi session directory encoding matches native ~/.pi/agent/sessions/--<path>--/
 		assert.equal(encodePiSessionCwdDir("/Users/cch/code/how-to"), "--Users-cch-code-how-to--");

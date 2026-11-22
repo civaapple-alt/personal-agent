@@ -168,6 +168,51 @@ test("RSI only reflects current workspace evidence and rejects candidate owners 
 	await assert.rejects(f.orchestrator.distillExperiences({ matterId: matter.id, deliverableId: old.id }), /workspace/);
 });
 
+test("RSI reads feedback only from accessible space documents in the current workspace", async (t) => {
+	let prompt = "";
+	const f = await fixture(t, async (_options, text) => {
+		prompt = text;
+		return result(JSON.stringify({ summary: "review", candidates: [] }));
+	});
+	const a = f.store.upsertWorkspace({ name: "A", repoPath: f.root });
+	const b = f.store.upsertWorkspace({ name: "B", repoPath: join(f.root, "B") });
+	const admin = f.store.ensureLocalBootstrapAdmin("Owner");
+	const matter = f.store.createMatter({ title: "Feedback", leadMemberId: "product-manager", workspaceId: b.id });
+	f.store.spaces.ensureAllDefaultSpaces();
+	const spaces = f.store.spaces.listSpaces();
+	const spaceA = spaces.find((entry) => entry.workspaceId === a.id);
+	const spaceB = spaces.find((entry) => entry.workspaceId === b.id);
+	const userSpace = spaces.find((entry) => entry.ownerUserId === admin.id && entry.kind === "user");
+	assert.ok(spaceA && spaceB && userSpace);
+	for (const [space, text] of [
+		[spaceA, "OLD_WORKSPACE_SECRET"],
+		[userSpace, "OTHER_USER_SECRET"],
+		[spaceB, "CURRENT_FEEDBACK"],
+	] as const) {
+		const doc = await f.store.spaces.createDocument({
+			spaceId: space.id,
+			matterId: matter.id,
+			title: text,
+			content: text,
+			actorId: admin.id,
+		});
+		await f.store.spaces.saveDocumentFeedback({
+			documentId: doc.id,
+			commitHash: doc.headCommit,
+			actorId: admin.id,
+			actorName: "Owner",
+			feedback: text,
+			rating: "positive",
+		});
+	}
+	await f.orchestrator.distillExperiences({
+		matterId: matter.id,
+		canReadSpace: (spaceId) => spaceId !== userSpace.id,
+	});
+	assert.match(prompt, /CURRENT_FEEDBACK/);
+	assert.doesNotMatch(prompt, /OLD_WORKSPACE_SECRET|OTHER_USER_SECRET/);
+});
+
 test("a successful colleague proposal is still discarded if the lead fails afterward", async (t) => {
 	const f = await fixture(t, async (options) => {
 		if (options.env?.PA_CAN_SAVE_SPACE === "false") {
@@ -188,7 +233,7 @@ test("a successful colleague proposal is still discarded if the lead fails after
 	assert.equal(f.store.listMemberMemories("engineering-manager").length, 0);
 });
 
-test("feedback scores only memories injected for that version, with one current vote per deliverable", async (t) => {
+test("feedback scores only memories injected for the reviewed space version", async (t) => {
 	let first = true;
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", {
@@ -219,9 +264,20 @@ test("feedback scores only memories injected for that version, with one current 
 		workspaceId: a.id,
 	});
 	first = false;
-	const v2 = await f.orchestrator.dispatchMatter({ matterId: v1.matter.id, prompt: "second", workspaceId: b.id });
-	for (const outcome of ["feedback_positive", "feedback_negative", "feedback_positive"] as const) {
-		f.store.evaluateMatterMemories({ matterId: v2.matter.id, deliverableId: v2.deliverable!.id, outcome });
+	await f.orchestrator.dispatchMatter({ matterId: v1.matter.id, prompt: "second", workspaceId: b.id });
+	const doc = f.store.spaces
+		.listDocuments({ matterId: v1.matter.id })
+		.find((entry) => entry.spaceId === `spc_ws_${b.id}`);
+	assert.ok(doc);
+	for (const rating of ["positive", "negative", "positive"] as const) {
+		await f.store.spaces.saveDocumentFeedback({
+			documentId: doc.id,
+			commitHash: doc.headCommit,
+			actorId: "reviewer",
+			actorName: "Reviewer",
+			feedback: rating,
+			rating,
+		});
 	}
 	assert.equal(f.store.getMemory(ma.id)?.positiveCount, 0);
 	assert.equal(f.store.getMemory(ma.id)?.negativeCount, 0);
@@ -355,48 +411,56 @@ test("neutral feedback retracts a version vote while manual evaluations remain i
 	});
 	const memory = f.store.addMemory({ memberId: "product-manager", scope: "role_general", content: "method" });
 	const turn = await f.orchestrator.dispatchMatter({ prompt: "publish", preferredMemberId: "product-manager" });
+	const doc = f.store.spaces.listDocuments({ matterId: turn.matter.id })[0];
+	assert.ok(doc);
 	f.store.evaluateMemory({ memoryId: memory.id, outcome: "feedback_positive" });
 	for (const rating of ["positive", "positive", "negative", "positive", "neutral"] as const)
-		f.store.recordDeliverableFeedback(turn.deliverable!.id, rating, rating);
+		await f.store.spaces.saveDocumentFeedback({
+			documentId: doc.id,
+			commitHash: doc.headCommit,
+			actorId: "reviewer",
+			actorName: "Reviewer",
+			feedback: rating,
+			rating,
+		});
 	assert.equal(f.store.getMemory(memory.id)?.positiveCount, 1, "manual positive remains");
 	assert.equal(f.store.getMemory(memory.id)?.negativeCount, 0);
-	assert.equal(f.store.getDeliverable(turn.deliverable!.id)?.feedbackRating, "neutral");
+	assert.equal(f.store.spaces.listDocumentFeedback(doc.id)[0]?.rating, "neutral");
 });
 
-test("an invalid candidate rolls back the entire result and precision links are not guessed for old deliverables", async (t) => {
+test("an invalid candidate rolls back the turn and unlinked memories are not scored", async (t) => {
 	const f = await fixture(t, async () => result());
 	const matter = f.store.createMatter({ title: "atomic", leadMemberId: "product-manager" });
 	assert.throws(
 		() =>
 			f.store.recordTurnOutcome({
-				deliverables: [
-					{
-						matterId: matter.id,
-						memberId: "product-manager",
-						type: "document",
-						title: "should roll back",
-						contentOrPath: "body",
-					},
+				candidates: [
+					{ memberId: "product-manager", scope: "role_general", content: "should roll back" },
+					{ memberId: "missing", scope: "role_general", content: "invalid" },
 				],
-				candidates: [{ memberId: "missing", scope: "role_general", content: "invalid" }],
 				applicationIds: [],
 			}),
 		/FOREIGN KEY/,
 	);
-	assert.equal(f.store.listDeliverables(matter.id).length, 0);
+	assert.equal(f.store.listMemberMemories("product-manager").length, 0);
 	const memory = f.store.addMemory({ memberId: "product-manager", scope: "role_general", content: "method" });
 	f.store.recordMemoryApplications({ memoryIds: [memory.id], matterId: matter.id, memberId: "product-manager" });
-	const old = f.store.recordDeliverable({
+	const space = f.store.spaces.resolveMatterDefaultSpace(matter);
+	const document = await f.store.spaces.createDocument({
+		spaceId: space.id,
 		matterId: matter.id,
-		memberId: "product-manager",
-		type: "document",
-		title: "legacy",
-		contentOrPath: "old",
+		title: "Manually saved",
+		content: "body",
+		actorId: "reviewer",
 	});
-	assert.deepEqual(
-		f.store.evaluateMatterMemories({ matterId: matter.id, deliverableId: old.id, outcome: "feedback_positive" }),
-		[],
-	);
+	await f.store.spaces.saveDocumentFeedback({
+		documentId: document.id,
+		commitHash: document.headCommit,
+		actorId: "reviewer",
+		actorName: "Reviewer",
+		feedback: "Good",
+		rating: "positive",
+	});
 	assert.equal(f.store.getMemory(memory.id)?.positiveCount, 0);
 });
 

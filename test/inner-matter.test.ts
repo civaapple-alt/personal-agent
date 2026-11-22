@@ -79,7 +79,11 @@ async function fixture(t: test.TestContext) {
 					const version = prompt.includes("actual-revision") ? 2 : 1;
 					const content = `# 产品方案 V${version}\n范围、专业建议与验收依据`;
 					await writeFile(join(directory, "deliverables", `feedback-box-v${version}.md`), content);
+					const prior = store.spaces
+						.listDocuments()
+						.find((entry) => entry.title === INNER_MATTER_GUIDE.deliverableTitle);
 					await invokeTool(options, "save_space_page", {
+						...(version === 2 && prior ? { pageId: prior.id, revision: prior.revision } : {}),
 						title: INNER_MATTER_GUIDE.deliverableTitle,
 						type: "document",
 						content,
@@ -153,15 +157,7 @@ test("guided demo uses normal dispatch, real tool bridge, formal versions and fe
 	const getDetail = async (): Promise<MatterDetailPayload> => {
 		const body = await jsonObject(await f.request(`/api/matters/${matter.id}`));
 		assert.ok(isObject(body.demoGuide) && Array.isArray(body.demoGuide.steps) && body.demoGuide.steps.length === 4);
-		return {
-			matter: f.store.getMatter(matter.id)!,
-			demoGuide: INNER_MATTER_GUIDE,
-			userMessages: f.store.listMessages(matter.id, "user"),
-			internalCollabMessages: f.store.listMessages(matter.id, "internal_collab"),
-			noticeMessages: f.store.listMessages(matter.id, "notice"),
-			deliverables: f.store.listDeliverables(matter.id),
-			pendingDialogs: [],
-		};
+		return body as unknown as MatterDetailPayload;
 	};
 	const progress = async () => innerDemoProgress(INNER_MATTER_GUIDE, await getDetail());
 	assert.deepEqual(await progress(), [false, false, false, false]);
@@ -170,24 +166,26 @@ test("guided demo uses normal dispatch, real tool bridge, formal versions and fe
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-collaboration" });
 	assert.deepEqual(await progress(), [true, true, false, false]);
 	assert.equal(f.store.listDeliverables().length, 0);
-	const first = await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-delivery" });
-	assert.ok(first.deliverable);
+	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-delivery" });
+	const first = f.store.spaces.listDocuments({ matterId: matter.id })[0];
+	assert.ok(first);
 	assert.deepEqual(await progress(), [true, true, true, false]);
 	const feedback = INNER_MATTER_GUIDE.steps.find((step) => step.id === "revise");
 	assert.ok(feedback?.id === "revise");
 	assert.equal(
 		(
-			await f.request(`/api/deliverables/${first.deliverable.id}/feedback`, undefined, "POST", {
+			await f.request(`/api/spaces/documents/${first.id}/feedback`, undefined, "POST", {
+				commitHash: first.headCommit,
 				feedback: feedback.feedback,
 			})
 		).status,
 		200,
 	);
-	const second = await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-revision" });
-	assert.equal(second.deliverable?.version, 2);
+	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "actual-revision" });
+	assert.equal((await f.store.spaces.getDocument(first.id))?.revision, 2);
 	assert.deepEqual(await progress(), [true, true, true, true]);
 	await f.request("/api/demos/inner-matter", undefined, "POST");
-	assert.equal(f.store.listDeliverables().length, 2);
+	assert.equal(f.store.spaces.listDocuments({ matterId: matter.id }).length, 1);
 	assert.match(await readFile(join(f.directory, "deliverables/feedback-box-v1.md"), "utf8"), /V1/);
 	assert.match(await readFile(join(f.directory, "deliverables/feedback-box-v2.md"), "utf8"), /V2/);
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);

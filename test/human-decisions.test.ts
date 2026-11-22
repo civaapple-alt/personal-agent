@@ -220,7 +220,7 @@ test("planning decisions preserve delegation provenance, require the assigned hu
 			prompt: "Plan the release.",
 		});
 		assert.equal(result.matter.status, "waiting_user");
-		assert.equal(store.listDeliverables(matter.id).length, 1);
+		assert.equal(store.spaces.listDocuments({ matterId: matter.id }).length, 1);
 		assert.equal(allowedDialogs, 0);
 		assert.ok(blockedObserver);
 		const message = store.listMessages(matter.id, "user").find((item) => readHumanDecision(item.metadata));

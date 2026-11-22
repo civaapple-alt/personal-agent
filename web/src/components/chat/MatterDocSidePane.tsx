@@ -14,6 +14,7 @@ import {
 } from "../../api/space.ts";
 import type { WorkspaceDto } from "../../api.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import { SpaceDocumentFeedback } from "../SpaceDocumentFeedback.tsx";
 import { SpaceFolderFilesPanel } from "../SpaceFolderFilesPanel.tsx";
 
 interface MatterDocSidePaneProps {
@@ -405,6 +406,12 @@ export function MatterDocSidePane({
 							</div>
 						)}
 
+						<SpaceDocumentFeedback
+							key={`${doc.id}:${viewMode === "diff" && selectedCommitHash ? selectedCommitHash : doc.headCommit}`}
+							documentId={doc.id}
+							commitHash={viewMode === "diff" && selectedCommitHash ? selectedCommitHash : doc.headCommit}
+							canWrite={canWrite}
+						/>
 						{viewMode === "content" ? (
 							doc.entryKind === "folder" ? (
 								<SpaceFolderFilesPanel

@@ -51,20 +51,30 @@ try {
 	});
 	assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "propose_experience" && !tool.isError));
 	assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError));
-	assert.ok(turn.deliverable);
+	const document = store.spaces
+		.listDocuments({ matterId: turn.matter.id })
+		.find((item) => item.title === "RSI 运行验证稿");
+	assert.ok(document);
 	assert.ok(
 		store
 			.listMemberMemories("product-manager")
 			.some((memory) => memory.id !== seed.id && memory.status === "candidate"),
 	);
-	store.recordDeliverableFeedback(turn.deliverable.id, "测试改票", "negative");
-	store.recordDeliverableFeedback(turn.deliverable.id, "测试改票", "positive");
+	for (const rating of ["negative", "positive"] as const) {
+		await store.spaces.saveDocumentFeedback({
+			documentId: document.id,
+			commitHash: document.headCommit,
+			actorId: "demo",
+			actorName: "Demo",
+			feedback: "测试改票",
+			rating,
+		});
+	}
 	assert.equal(store.getMemory(seed.id)?.positiveCount, 1);
 	assert.equal(store.getMemory(seed.id)?.negativeCount, 0);
 	console.log("PASS real proposal tool, staged candidate commit, formal document and version-specific feedback");
 	const reflection = await orchestrator.distillExperiences({
 		matterId: turn.matter.id,
-		deliverableId: turn.deliverable.id,
 		scopeMode: "single",
 		timeoutMs: 120_000,
 		feedback:
@@ -84,7 +94,7 @@ try {
 		JSON.stringify(
 			{
 				matterId: turn.matter.id,
-				deliverable: turn.deliverable,
+				document,
 				tools: turn.runResult.toolExecutions.map((tool) => ({ name: tool.toolName, isError: tool.isError })),
 				reflection,
 				seed: store.getMemory(seed.id),

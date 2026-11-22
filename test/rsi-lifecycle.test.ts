@@ -305,24 +305,20 @@ test("RSI lifecycle tracks injected vs candidate prompts, acceptance evaluation 
 		assert.equal(afterApplyOld.positiveCount, 0);
 		assert.equal(afterApplyOld.negativeCount, 0);
 
-		const deliverable = dispatchRes.deliverable!;
-		assert.ok(deliverable);
+		const document = store.spaces.listDocuments({ matterId: dispatchRes.matter.id })[0];
+		assert.ok(document);
 
 		// Idempotent acceptance evaluation
-		store.evaluateMatterMemories({
-			matterId: dispatchRes.matter.id,
-			memberId: "product-manager",
-			deliverableId: deliverable.id,
-			outcome: "feedback_negative",
-			note: "背景太多",
-		});
-		store.evaluateMatterMemories({
-			matterId: dispatchRes.matter.id,
-			memberId: "product-manager",
-			deliverableId: deliverable.id,
-			outcome: "feedback_negative",
-			note: "重复调用",
-		});
+		for (const feedback of ["背景太多", "重复调用"]) {
+			await store.spaces.saveDocumentFeedback({
+				documentId: document.id,
+				commitHash: document.headCommit,
+				actorId: "reviewer",
+				actorName: "Reviewer",
+				feedback,
+				rating: "negative",
+			});
+		}
 
 		const afterNegOld = store.getMemory(oldVerified.id)!;
 		assert.equal(afterNegOld.negativeCount, 1);
@@ -331,7 +327,6 @@ test("RSI lifecycle tracks injected vs candidate prompts, acceptance evaluation 
 		// AI reflection distillation runs isolated (--no-extensions, --no-skills, --no-mcp, --tools "")
 		const distilled = await orchestrator.distillExperiences({
 			matterId: dispatchRes.matter.id,
-			deliverableId: deliverable.id,
 			feedback: "不要写三段式背景，直接给决策清单与验证命令",
 			rating: "negative",
 		});
@@ -348,7 +343,7 @@ test("RSI lifecycle tracks injected vs candidate prompts, acceptance evaluation 
 		assert.equal(generalCandidate.status, "candidate");
 		assert.equal(generalCandidate.verified, false);
 		assert.equal(generalCandidate.workspaceId, null);
-		assert.equal(generalCandidate.sourceDeliverableId, deliverable.id);
+		assert.equal(generalCandidate.sourceMatterId, dispatchRes.matter.id);
 		assert.equal(generalCandidate.supersedesMemoryId, oldVerified.id);
 		assert.equal(privateCandidate.workspaceId, wsA.id);
 

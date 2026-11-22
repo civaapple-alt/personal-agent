@@ -3,6 +3,7 @@ import {
 	canAccessDeliverable,
 	canAccessMatter,
 	canAccessOrganization,
+	canAccessSpace,
 	canAccessWorkspace,
 	canActorAccessMemory,
 	canActorUseMember,
@@ -172,6 +173,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					scopeMode: body.scopeMode === "single" || body.scopeMode === "team" ? body.scopeMode : undefined,
 					signal: cancellation.signal,
 					canReviewMember: (member) => canActorUseMember(store, actor, member),
+					canReadSpace: (spaceId) => canAccessSpace(store, actor, store.spaces.getSpace(spaceId)),
 				});
 				distilledMemories = distilled.createdMemories.filter((memory) =>
 					canActorAccessMemory(store, actor, memory),

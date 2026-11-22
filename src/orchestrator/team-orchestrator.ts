@@ -134,7 +134,6 @@ export class TeamOrchestrator {
 			noSession: this.noSession,
 			extensions: [...this.extensions],
 			pstackDir: this.pstackDir ?? null,
-			webAccessRoleGrants: this.store.getPlatformSettings().webAccessRoleGrants,
 			webAccessDeniedRoles: this.store.getPlatformSettings().webAccessDeniedRoles,
 			webSearchProvider: this.store.getPlatformSettings().webSearchProvider,
 			systemOneEnabled: this.store.getPlatformSettings().systemOneEnabled,

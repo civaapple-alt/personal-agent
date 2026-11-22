@@ -8,6 +8,7 @@ import {
 	SpaceGitStore,
 } from "../space-git-store.ts";
 import { DEFAULT_LOCAL_ADMIN_USER_ID, DEFAULT_ORGANIZATION_ID, nowIso } from "./helpers.ts";
+import { syncSpaceFeedbackVotes } from "./space-feedback-votes.ts";
 
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
@@ -17,6 +18,17 @@ export type SpaceEntryKind = "file" | "folder";
 export interface SpaceDocumentFile {
 	path: string;
 	sizeBytes: number;
+}
+
+export interface SpaceDocumentFeedback {
+	documentId: string;
+	commitHash: string;
+	actorId: string;
+	actorName: string;
+	feedback: string;
+	rating: "positive" | "negative" | "neutral" | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export const SPACE_DOCUMENT_TYPES: readonly SpaceDocumentType[] = ["plan", "spec", "decision", "rule", "note"];
@@ -955,87 +967,76 @@ export class SpaceRepo {
 		return this.git.listCommits(meta.spaceId, meta.filePath, limit);
 	}
 
+	listDocumentFeedback(docId: string): SpaceDocumentFeedback[] {
+		const rows = this.db
+			.prepare("SELECT * FROM space_document_feedback WHERE document_id = ? ORDER BY updated_at DESC, actor_id")
+			.all(docId) as unknown as Array<{
+			document_id: string;
+			commit_hash: string;
+			actor_id: string;
+			actor_name: string;
+			feedback: string;
+			rating: SpaceDocumentFeedback["rating"];
+			created_at: string;
+			updated_at: string;
+		}>;
+		return rows.map((row) => ({
+			documentId: row.document_id,
+			commitHash: row.commit_hash,
+			actorId: row.actor_id,
+			actorName: row.actor_name,
+			feedback: row.feedback,
+			rating: row.rating,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		}));
+	}
+
+	async saveDocumentFeedback(input: {
+		documentId: string;
+		commitHash: string;
+		actorId: string;
+		actorName: string;
+		feedback: string;
+		rating: SpaceDocumentFeedback["rating"];
+	}): Promise<SpaceDocumentFeedback | null> {
+		const document = this.getDocumentMeta(input.documentId);
+		if (!document) return null;
+		const hash = input.commitHash.toLowerCase();
+		if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(hash)) throw new Error("Invalid document commit hash");
+		if (
+			hash !== document.headCommit &&
+			!(await this.git.isDocumentCommit(document.spaceId, document.filePath, hash))
+		) {
+			throw new Error("Commit does not belong to this document");
+		}
+		const now = nowIso();
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			this.db
+				.prepare(`INSERT INTO space_document_feedback
+				(document_id, commit_hash, actor_id, actor_name, feedback, rating, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(document_id, commit_hash, actor_id) DO UPDATE SET
+				actor_name = excluded.actor_name, feedback = excluded.feedback,
+				rating = excluded.rating, updated_at = excluded.updated_at`)
+				.run(input.documentId, hash, input.actorId, input.actorName, input.feedback, input.rating, now, now);
+			syncSpaceFeedbackVotes(this.db, { ...input, commitHash: hash });
+			this.db.exec("COMMIT");
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
+		return (
+			this.listDocumentFeedback(input.documentId).find(
+				(entry) => entry.commitHash === hash && entry.actorId === input.actorId,
+			) ?? null
+		);
+	}
+
 	async getDocumentCommitDetail(docId: string, commitHash: string): Promise<SpaceGitCommitDetail | null> {
 		const meta = this.getDocumentMeta(docId);
 		if (!meta) return null;
 		return this.git.getCommitDetail(meta.spaceId, commitHash, meta.filePath);
-	}
-
-	/** Import legacy DB-stored space_pages into the new Git-backed spaces once, without duplicating. */
-	async migrateLegacySpacePages(): Promise<number> {
-		const tableExists = this.db
-			.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'space_pages'")
-			.get();
-		if (!tableExists) return 0;
-		const legacyPages = this.db
-			.prepare(
-				"SELECT id, matter_id, title, content, revision, created_by, updated_by, created_at, updated_at FROM space_pages ORDER BY created_at ASC",
-			)
-			.all() as Array<{
-			id: string;
-			matter_id: string;
-			title: string;
-			content: string;
-			revision: number;
-			created_by: string;
-			updated_by: string;
-			created_at: string;
-			updated_at: string;
-		}>;
-		if (legacyPages.length === 0) return 0;
-
-		let migrated = 0;
-		for (const page of legacyPages) {
-			if (this.getDocumentMeta(page.id)) continue;
-			const matter = this.db
-				.prepare("SELECT id, org_id, workspace_id, visibility, created_by_user_id FROM matters WHERE id = ?")
-				.get(page.matter_id) as
-				| {
-						id: string;
-						org_id: string | null;
-						workspace_id: string | null;
-						visibility: "org" | "private";
-						created_by_user_id: string | null;
-				  }
-				| undefined;
-			if (!matter) continue;
-			const space = this.resolveMatterDefaultSpace({
-				id: matter.id,
-				orgId: matter.org_id,
-				workspaceId: matter.workspace_id,
-				visibility: matter.visibility === "private" ? "private" : "org",
-				createdByUserId: matter.created_by_user_id,
-			});
-			const filePath = defaultDocFilePath(page.id);
-			const { commitHash } = await this.git.writeDocument({
-				spaceId: space.id,
-				filePath,
-				content: page.content,
-				authorName: page.updated_by,
-				authorEmail: defaultAuthorEmail(page.updated_by),
-				commitMessage: `Migrate ${page.title}`,
-				allowEmpty: true,
-			});
-			this.db
-				.prepare(
-					`INSERT OR IGNORE INTO space_documents (id, space_id, matter_id, file_path, title, head_commit, revision, created_by, updated_by, created_at, updated_at)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				)
-				.run(
-					page.id,
-					space.id,
-					page.matter_id,
-					filePath,
-					page.title,
-					commitHash,
-					page.revision,
-					page.created_by,
-					page.updated_by,
-					page.created_at,
-					page.updated_at,
-				);
-			migrated += 1;
-		}
-		return migrated;
 	}
 }

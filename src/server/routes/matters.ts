@@ -1,5 +1,5 @@
 import type { RpcExtensionUIResponsePayload } from "../../rpc/types.ts";
-import { canAccessMatter, canManageOrganization, requireMatterReadAccess } from "../acl.ts";
+import { canAccessMatter, canAccessSpace, canManageOrganization, requireMatterReadAccess } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
@@ -20,15 +20,22 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
 		const active = activeRuns.get(matterId);
 		const defaultSpace = store.spaces.resolveMatterDefaultSpace(matter);
+		const demoGuide = ctx.innerMatterDemo?.guideFor(matter);
+		const spaceDocuments = store.spaces
+			.listDocuments({ matterId })
+			.filter((document) => canAccessSpace(store, actor, store.spaces.getSpace(document.spaceId)));
 		sendJson(res, 200, {
 			matter,
-			demoGuide: ctx.innerMatterDemo?.guideFor(matter),
+			demoGuide,
 			userMessages: store.listMessages(matterId, "user"),
 			internalCollabMessages: store.listMessages(matterId, "internal_collab"),
 			noticeMessages: store.listMessages(matterId, "notice"),
 			deliverables: store.listDeliverables(matterId),
 			defaultSpace,
-			spaceDocuments: store.spaces.listDocuments({ matterId }),
+			spaceDocuments,
+			...(demoGuide
+				? { spaceFeedback: spaceDocuments.flatMap((document) => store.spaces.listDocumentFeedback(document.id)) }
+				: {}),
 			pendingDialogs: dialogBroker.listPending(matterId),
 			activeRun: active
 				? {

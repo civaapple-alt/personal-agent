@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { updateMatterModelSelection, updateMatterStatus } from "./api/matters.ts";
 import type { ModelSelection } from "./api/models.ts";
 import { organizationRoleModel } from "./api/organizations.ts";
+import { listSpaceDocumentFeedback, saveSpaceDocumentFeedback } from "./api/space.ts";
 import {
 	type BootstrapPayload,
 	type DeliverableDto,
-	type FeedbackRating,
 	fetchBootstrap,
 	fetchMatterDetail,
 	type InnerMatterStep,
@@ -14,8 +14,6 @@ import {
 	type MatterVisibility,
 	openInnerMatterDemo,
 	type PreviewServiceDto,
-	stopPreview,
-	submitDeliverableFeedback,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
 import { AdminView } from "./components/AdminView.tsx";
@@ -277,21 +275,6 @@ export function App() {
 		applyRevokedSession,
 	});
 
-	const activeDeliverable: DeliverableDto | null = useMemo(() => {
-		if (!bootstrap || bootstrap.deliverables.length === 0) return null;
-		return bootstrap.deliverables.find((d) => d.id === selectedDeliverableId) ?? bootstrap.deliverables[0] ?? null;
-	}, [bootstrap, selectedDeliverableId]);
-
-	const siblingVersionsFor = useCallback(
-		(deliv: DeliverableDto | null) => {
-			if (!bootstrap || !deliv) return [];
-			return bootstrap.deliverables
-				.filter((d) => d.matterId === deliv.matterId && d.title === deliv.title)
-				.sort((a, b) => a.version - b.version);
-		},
-		[bootstrap],
-	);
-
 	const {
 		selectedWorkspace,
 		draftEffectiveOrgId,
@@ -317,13 +300,6 @@ export function App() {
 		const q = searchQuery.trim().toLowerCase();
 		if (!q) return list;
 		return list.filter((m) => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
-	}, [bootstrap, searchQuery]);
-
-	const filteredDeliverables = useMemo(() => {
-		const list = bootstrap?.deliverables ?? [];
-		const q = searchQuery.trim().toLowerCase();
-		if (!q) return list;
-		return list.filter((d) => d.title.toLowerCase().includes(q) || d.summary.toLowerCase().includes(q));
 	}, [bootstrap, searchQuery]);
 
 	const memberName = (id: string) => bootstrap?.members.find((m) => m.id === id)?.displayName ?? id;
@@ -516,13 +492,18 @@ export function App() {
 		try {
 			let prompt = step.prompt;
 			if (step.id === "revise") {
-				const v1 = matterDetail.deliverables.find(
-					(item) => item.title === matterDetail.demoGuide?.deliverableTitle && item.version === 1,
+				const v1 = matterDetail.spaceDocuments?.find(
+					(item) => item.title === matterDetail.demoGuide?.deliverableTitle,
 				);
 				if (!v1) throw new Error("请先完成 V1 阶段交付");
-				const feedback = v1.feedback?.trim() || step.feedback;
-				if (!v1.feedback?.trim()) await submitDeliverableFeedback(v1.id, { feedback });
-				prompt += `\n\n本次反馈：\n${feedback}`;
+				const existing = await listSpaceDocumentFeedback(v1.id);
+				const feedback =
+					existing.feedback.find((item) => item.commitHash === v1.headCommit && item.feedback.trim())?.feedback ??
+					step.feedback;
+				if (!existing.feedback.some((item) => item.commitHash === v1.headCommit && item.feedback.trim())) {
+					await saveSpaceDocumentFeedback(v1.id, { commitHash: v1.headCommit, feedback, rating: null });
+				}
+				prompt += `\n\n本次反馈：\n${feedback}\n\n更新已有资料时，使用 save_space_page 的 pageId=${v1.id}、revision=${v1.revision}。`;
 				await refreshDetail(matterDetail.matter.id);
 				await refreshBootstrap();
 			}
@@ -597,14 +578,6 @@ export function App() {
 		setNoticeBanner,
 		setErrorBanner,
 	});
-
-	const handleDistillExperiences = (deliv: DeliverableDto, feedback?: string, rating?: FeedbackRating) =>
-		runRsiDistill({
-			matterId: deliv.matterId,
-			deliverableId: deliv.id,
-			feedback,
-			rating,
-		});
 
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
 	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
@@ -945,37 +918,8 @@ export function App() {
 						<DeliverablesView
 							spaceRoute={spaceRoute}
 							bootstrap={bootstrap}
-							currentUser={currentUser}
-							accountUser={accountUser}
-							isSuperAdmin={isSuperAdmin}
-							activeDeliverable={activeDeliverable}
-							filteredDeliverables={filteredDeliverables}
-							siblingVersions={siblingVersionsFor(activeDeliverable)}
-							previewUrlFor={previewUrlFor}
 							memberName={memberName}
-							workspaceName={workspaceName}
-							organizationName={organizationName}
-							onSubmitFeedback={actions.handleDeliverableFeedback}
-							onDistillExperiences={handleDistillExperiences}
-							onCancelDistill={cancelRsiDistill}
-							onStopPreview={async (previewId) => {
-								await stopPreview(previewId);
-								await refreshBootstrap();
-							}}
-							onSelectDeliverable={(deliverableId, matterId) => {
-								navigateRoute({ tab: "deliverables", deliverableId });
-								if (matterId) setSelectedMatterId(matterId);
-							}}
-							onRequestRevision={(deliverable) => {
-								navigateRoute({ tab: "chats", matterId: deliverable.matterId });
-								appendComposerText(`修改「${deliverable.title}」：`, deliverable.matterId);
-							}}
 							onOpenMatterChat={(matterId) => navigateRoute({ tab: "chats", matterId })}
-							onOpenTeam={() => navigateRoute({ tab: "team" })}
-							onRefresh={refreshBootstrap}
-							onNotice={(msg) => setNoticeBanner(msg)}
-							onError={(msg) => setErrorBanner(msg)}
-							onNewTask={startNewMatter}
 						/>
 					</ViewFade>
 				)}

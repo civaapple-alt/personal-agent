@@ -22,7 +22,7 @@ export async function summarizeObserver(root: string) {
 		"observerSessionScopes",
 		"observerLoadout",
 		"leadBeforeObserver",
-		"onlyLeadDelivery",
+		"onlyLeadDocument",
 		"workspacePreserved",
 		"noOutstandingLease",
 	];

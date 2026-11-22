@@ -69,7 +69,6 @@ export interface PlatformSettings {
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
 	pstackDir: string | null;
-	webAccessRoleGrants: Record<string, string>;
 	webAccessDeniedRoles: Record<string, string>;
 	webSearchProvider: "auto" | "deepseek" | "exa" | "kimi";
 	defaultModelSelection: ModelSelection | null;
@@ -216,6 +215,9 @@ export interface MemoryApplicationRecord {
 	matterId: string;
 	memberId: string;
 	deliverableId: string | null;
+	documentId: string | null;
+	commitHash: string | null;
+	actorId: string | null;
 	outcome: MemoryApplicationOutcome;
 	note: string;
 	createdAt: string;

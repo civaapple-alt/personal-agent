@@ -7,7 +7,7 @@ import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Deliverable, MatterMessage } from "../storage/types.ts";
+import type { MatterMessage } from "../storage/types.ts";
 import { selectDemoModel } from "./model-selection.ts";
 import {
 	isControlledObserverProposal,
@@ -45,7 +45,7 @@ type WorkerOutcome = { workerId: string; prompt: string; finished: number } & (
 	| { status: "failed"; error: string }
 );
 type StepOutcome = { stepId: ObserverStepId; matterId: string } & (
-	| { status: "success"; reply: string; observerMessages: MatterMessage[]; deliverable: Deliverable | null }
+	| { status: "success"; reply: string; observerMessages: MatterMessage[]; savedDocumentIds: string[] }
 	| { status: "failed"; error: string }
 );
 const seed =
@@ -159,19 +159,24 @@ export async function runObserverSmoke(input: {
 			if (step.id === "risk") store.updateMatterObservers(riskMatter.id, ["qa-manager"]);
 			if (step.id === "disabled") store.updateMatterObserversEnabled(quietMatter.id, false);
 			const matterId = step.matter === "risk" ? riskMatter.id : quietMatter.id;
+			const previousIds = new Set(store.spaces.listDocuments({ matterId }).map((doc) => doc.id));
 			console.log(`RUN ${step.id}: ${step.label}`);
 			try {
 				const result = await orchestrator.dispatchMatter({ matterId, prompt: step.prompt, timeoutMs: 180_000 });
+				const savedDocumentIds = store.spaces
+					.listDocuments({ matterId })
+					.filter((doc) => !previousIds.has(doc.id))
+					.map((doc) => doc.id);
 				steps.push({
 					stepId: step.id,
 					matterId,
 					status: "success",
 					reply: result.replyText,
 					observerMessages: result.observerMessages ?? [],
-					deliverable: result.deliverable,
+					savedDocumentIds,
 				});
 				console.log(
-					`  lead replied; observer messages=${result.observerMessages?.length ?? 0}; deliveries=${result.deliverable ? 1 : 0}`,
+					`  lead replied; observer messages=${result.observerMessages?.length ?? 0}; documents=${savedDocumentIds.length}`,
 				);
 			} catch (error) {
 				steps.push({
@@ -196,7 +201,8 @@ export async function runObserverSmoke(input: {
 		const quietObserver = completed("quiet", "observer");
 		const quietLead = completed("quiet", "lead");
 		const riskLead = completed("risk", "lead");
-		const deliveries = store.listDeliverables();
+		const documents = await Promise.all(store.spaces.listDocuments().map((doc) => store.spaces.getDocument(doc.id)));
+		const savedDocuments = documents.filter((doc) => doc !== null);
 		const allMessages = [...store.listMessages(riskMatter.id), ...store.listMessages(quietMatter.id)];
 		const checks = {
 			executionSucceeded:
@@ -249,14 +255,16 @@ export async function runObserverSmoke(input: {
 					const lead = completed(worker.stepId, "lead");
 					return lead !== null && lead.finished < worker.started;
 				}),
-			onlyLeadDelivery:
-				deliveries.length === 1 &&
-				deliveries[0]?.memberId === "product-manager" &&
-				deliveries[0]?.title === OBSERVER_DELIVERY_TITLE &&
-				deliveries[0]?.version === 1 &&
+			onlyLeadDocument:
+				savedDocuments.length === 1 &&
+				savedDocuments[0]?.createdBy === "product-manager" &&
+				savedDocuments[0]?.title === OBSERVER_DELIVERY_TITLE &&
+				savedDocuments[0]?.revision === 1 &&
 				revision?.status === "success" &&
-				revision.deliverable?.id === deliveries[0].id &&
-				steps.every((step) => step.status === "success" && (step.stepId === "revise" || step.deliverable === null)),
+				revision.savedDocumentIds.includes(savedDocuments[0].id) &&
+				steps.every(
+					(step) => step.status === "success" && (step.stepId === "revise" || step.savedDocumentIds.length === 0),
+				),
 			workspacePreserved: (await readFile(join(workspace, "README.md"), "utf8")) === seed,
 			noOutstandingLease: db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n === 0,
 		};
@@ -308,10 +316,10 @@ export async function runObserverSmoke(input: {
 			}),
 			"## 正式阶段成果",
 			"",
-			...deliveries.flatMap((delivery) => [
-				`${delivery.title} V${delivery.version}，发布者 ${delivery.memberId}`,
+			...savedDocuments.flatMap((document) => [
+				`${document.title} rev ${document.revision}，保存者 ${document.createdBy}`,
 				"",
-				delivery.contentOrPath,
+				document.content,
 				"",
 			]),
 		].join("\n");
@@ -332,7 +340,7 @@ export async function runObserverSmoke(input: {
 					workers,
 					outcomes,
 					steps,
-					deliveries,
+					documents: savedDocuments,
 					rubric: OBSERVER_RUBRIC,
 					transcriptSha256: reviewHash(transcript),
 					notices: allMessages.filter((message) => message.channel === "notice"),

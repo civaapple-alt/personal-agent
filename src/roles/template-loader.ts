@@ -247,8 +247,7 @@ export async function loadRoleTemplatesFromDir(
 /**
  * Load shareable baseline templates from `builtinDir` merged with custom `.md` roles in `customDir`.
  * Supports:
- * - Legacy root `<customDir>/*.md` (mapped to `global`, e.g. `.data/roles/ux-designer.md`)
- * - `<customDir>/global/` -> `global`
+ * - `<customDir>/*.md` and `<customDir>/<roleId>/` -> `global`
  * - `<customDir>/orgs/<orgId>/` -> `org`
  * - `<customDir>/users/<userId>/` -> `personal`
  */
@@ -268,15 +267,6 @@ export async function loadRoleTemplatesWithCustomDir(builtinDir: string, customD
 		})) {
 			merged.set(tpl.id, tpl);
 			globalIds.add(tpl.id);
-		}
-		const globalDir = join(customDir, "global");
-		if (existsSync(globalDir)) {
-			for (const tpl of await loadRoleTemplatesFromDir(globalDir, {
-				explicitScope: { roleScope: "global", ownerOrgId: null, ownerUserId: null },
-			})) {
-				merged.set(tpl.id, tpl);
-				globalIds.add(tpl.id);
-			}
 		}
 		const orgsDir = join(customDir, "orgs");
 		if (existsSync(orgsDir)) {

@@ -2,9 +2,7 @@ import type { InnerMatterGuide, MatterDetailPayload } from "./api.ts";
 
 /** Progress is a projection of persisted execution evidence, never of button clicks. */
 export function innerDemoProgress(guide: InnerMatterGuide, detail: MatterDetailPayload): boolean[] {
-	const versions = detail.deliverables.filter(
-		(item) => item.type === "document" && item.title === guide.deliverableTitle,
-	);
+	const documents = (detail.spaceDocuments ?? []).filter((item) => item.title === guide.deliverableTitle);
 	return [
 		detail.userMessages.some(
 			(msg) =>
@@ -23,8 +21,14 @@ export function innerDemoProgress(guide: InnerMatterGuide, detail: MatterDetailP
 					!msg.metadata.failed,
 			),
 		),
-		versions.some((item) => item.version === 1),
-		versions.some((item) => item.version >= 2) &&
-			versions.some((item) => item.version === 1 && Boolean(item.feedback?.trim())),
+		documents.length > 0,
+		documents.some(
+			(doc) =>
+				doc.revision >= 2 &&
+				(detail.spaceFeedback ?? []).some(
+					(item) =>
+						item.documentId === doc.id && item.commitHash !== doc.headCommit && Boolean(item.feedback.trim()),
+				),
+		),
 	];
 }

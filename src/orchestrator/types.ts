@@ -12,7 +12,6 @@ import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	CollaboratorRole,
 	Deliverable,
-	DeliverableType,
 	FeedbackRating,
 	Matter,
 	MatterMessage,
@@ -21,7 +20,6 @@ import type {
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
-import type { DeliveryDraft } from "./execution-context.ts";
 import type { Clarification, DecisionResponse, DecisionSource } from "./human-decision.ts";
 import type { DraftVerification } from "./independent-verification.ts";
 import type { ReadPiModels } from "./model-selection.ts";
@@ -219,8 +217,6 @@ export interface DispatchMatterInput {
 	observersEnabled?: boolean;
 	observerMemberIds?: string[];
 	discussionAiEnabled?: boolean;
-	deliverableType?: DeliverableType;
-	deliverableTitle?: string;
 	author?: {
 		collaboratorId: string;
 		name: string;
@@ -237,7 +233,6 @@ export interface DispatchMatterResult {
 	assignedMember: TeamMember;
 	workspace: WorkspaceLink | null;
 	replyText: string;
-	deliverable: Deliverable | null;
 	observerMessages?: MatterMessage[];
 	directReply?: MatterMessage;
 	runResult: PromptRunResult;
@@ -273,6 +268,7 @@ export interface DistillExperiencesInput {
 	timeoutMs?: number;
 	signal?: AbortSignal;
 	canReviewMember?: (member: TeamMember) => boolean;
+	canReadSpace?: (spaceId: string) => boolean;
 }
 
 export interface DistillExperiencesResult {
@@ -299,34 +295,16 @@ export interface SavedSpaceDocumentEffect {
 }
 
 export interface ExecutionEffects {
-	deliveries: Array<{
-		memberId: string;
-		cwd: string;
-		draft: DeliveryDraft;
-		spacePage?: { id: string; revision: number };
-		autoSource?: { workspaceKey: string; sourcePath: string };
-	}>;
 	savedDocuments: SavedSpaceDocumentEffect[];
 	experiences: ExperienceDraft[];
 	applicationIds: string[];
 }
 
 export function emptyEffects(): ExecutionEffects {
-	return { deliveries: [], savedDocuments: [], experiences: [], applicationIds: [] };
+	return { savedDocuments: [], experiences: [], applicationIds: [] };
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
-	for (const entry of source.deliveries) {
-		const index = entry.autoSource
-			? target.deliveries.findIndex(
-					(existing) =>
-						existing.autoSource?.workspaceKey === entry.autoSource?.workspaceKey &&
-						existing.autoSource?.sourcePath === entry.autoSource?.sourcePath,
-				)
-			: -1;
-		if (index < 0) target.deliveries.push(entry);
-		else target.deliveries[index] = entry;
-	}
 	for (const doc of source.savedDocuments) {
 		const idx = target.savedDocuments.findIndex((existing) => existing.id === doc.id);
 		if (idx < 0) target.savedDocuments.push(doc);

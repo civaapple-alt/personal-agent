@@ -499,19 +499,4 @@ export class OrgRbacRepo {
 			createdAt: String(row.created_at),
 		};
 	}
-
-	findLegacyUploadMatterId(filename: string): string | null {
-		const matches = this.db
-			.prepare(
-				`SELECT DISTINCT m.matter_id
-				 FROM matter_messages AS m
-				 JOIN json_each(CASE WHEN json_valid(m.metadata_json) THEN m.metadata_json END) AS field
-				   ON field.key IN ('images', 'files') AND field.type = 'array'
-				 JOIN json_each(CASE WHEN field.type = 'array' THEN field.value END) AS attachment
-				 WHERE CASE WHEN attachment.type = 'object' THEN json_extract(attachment.value, '$.url') END = ?
-				 LIMIT 2`,
-			)
-			.all(`/api/uploads/${filename}`);
-		return matches.length === 1 && typeof matches[0]?.matter_id === "string" ? matches[0].matter_id : null;
-	}
 }

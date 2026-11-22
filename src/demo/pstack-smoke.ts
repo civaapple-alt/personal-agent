@@ -101,7 +101,7 @@ async function main() {
 			return expected !== undefined && hasPstackReadEvidence(tools, expected);
 		};
 		assert.ok(loaded(discussionTools, "poteto-mode"), "Product role must actually load poteto-mode");
-		assert.equal(discussion.deliverable, null);
+		assert.equal(store.spaces.listDocuments({ matterId: discussion.matter.id }).length, 0);
 		assert.equal(
 			discussionTools.some((tool) => ["read", "bash", "write", "edit"].includes(tool.toolName)),
 			false,

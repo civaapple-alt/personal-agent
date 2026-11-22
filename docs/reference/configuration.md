@@ -58,14 +58,14 @@
 │   ├── members/<memberId>/             #   AI 角色默认空间
 │   └── custom/<spaceId>/               #   自定义空间
 ├── roles/                              # 【运行期自定义 AI 角色】按作用域分层（覆盖/补充仓库内置 roles/）
-│   ├── <roleId>.md 或 global/          #   global：平台通用角色
+│   ├── <roleId>.md 或 <roleId>/        #   global：平台通用角色
 │   ├── orgs/<orgId>/<roleId>/          #   org：组织共享角色（支持角色包及内嵌 skills/）
 │   └── users/<userId>/<roleId>/        #   personal：个人私有角色（仅本人可见）
 ├── skills/                             # 【运行期自定义 Skill】与 roles/ 对齐的三层作用域
 │   ├── global/<skillName>/SKILL.md     #   平台通用
 │   ├── orgs/<orgId>/<skillName>/       #   组织共享
 │   └── users/<userId>/<skillName>/     #   个人私有
-├── uploads/                            # 【对话附件】按 YYYY-MM/ 分桶存放图片与 .txt（兼容旧平铺文件）
+├── uploads/                            # 【对话附件】按 YYYY-MM/ 分桶存放图片与 .txt
 │   └── 2026-11/<timestamp>-<hash>.{png,txt}
 │
 ├── # ── 可重建运行态 / 缓存（备份可选，可按需重拉或清理）──────────────────────────
@@ -81,14 +81,14 @@
 | 路径 | 用途 | 备注 |
 | --- | --- | --- |
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
-| `.data/spaces/` | 资料空间独立 Git 仓库目录 | 按作用域分目录存放（`orgs/<orgId>/`、`workspaces/<wsId>/`、`users/<userId>/`、`members/<memberId>/`、`custom/<spaceId>/`），首次写入或创建自定义空间时懒初始化；既有旧平铺 `spc_*` 目录自动透明迁移；自定义 `PA_DB_PATH` 时跟随数据库目录，`:memory:` 时使用临时目录 |
+| `.data/spaces/` | 资料空间独立 Git 仓库目录 | 按作用域分目录存放（`orgs/<orgId>/`、`workspaces/<wsId>/`、`users/<userId>/`、`members/<memberId>/`、`custom/<spaceId>/`），首次写入或创建自定义空间时懒初始化；自定义 `PA_DB_PATH` 时跟随数据库目录，`:memory:` 时使用临时目录 |
 | `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话文件 | 用 `PA_SESSION_DIR` 更改。按原生 Pi 规则在 `--<encoded-cwd>--/` 子目录下分仓存放（旧平铺会话文件仍按精确 `sessionFile` 继续恢复） |
-| `.data/uploads/` | 消息附件 | 跟随数据库目录；新上传按 `YYYY-MM/` 按月分桶落盘，同时兼容读取既有平铺附件 |
+| `.data/uploads/` | 消息附件 | 跟随数据库目录；上传按 `YYYY-MM/` 按月分桶落盘 |
 | `.data/team-workspaces/` | 团队 Git 克隆 | 默认跟随数据库目录。可用 `PA_WORKSPACES_ROOT` 或超管控制台更改 |
 | `.data/extensions/repo/` | 工作台克隆的方法包 | 跟随数据库目录；通过环境变量手动指定的包保留原路径 |
 | `roles/` | 内置可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`），保存仓库自带的基础模板 |
-| `.data/roles/` | 运行时自建/调整角色目录 | 根目录 `*.md`（如既有自定义全局角色）与 `global/` 属全局作用域（`global`），`orgs/<orgId>/` 属组织共享（`org`），`users/<userId>/` 属个人私有（`personal`）；各作用域同时支持 `<id>.md` 单文件与带包内 Skill 的 `<id>/<id>.md` 目录。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建临时目录并于退出后清理 |
+| `.data/roles/` | 运行时自建/调整角色目录 | 根目录属全局作用域（`global`），`orgs/<orgId>/` 属组织共享（`org`），`users/<userId>/` 属个人私有（`personal`）；各作用域同时支持 `<id>.md` 单文件与带包内 Skill 的 `<id>/<id>.md` 目录。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建临时目录并于退出后清理 |
 | `.data/skills/` | 运行时自定义 Skill 库目录 | 按 `global/`、`orgs/<orgId>/` 与 `users/<userId>/` 隔离存放确认后落盘的 `<skillName>/SKILL.md`（若随角色包隔离则位于 `<roleDir>/skills/<skillName>/SKILL.md`）；自定义 `PA_DB_PATH` 时位于数据库同级 `skills/` |
 | `skills/<name>/SKILL.md` | 内置岗位引用的技能说明文件 | 供启动参数 `--skill` 显式挂载，执行器会校验所有解析后路径落在允许作用域根目录内 |
 | `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
@@ -102,14 +102,12 @@
 | **组织 (Org)** | `organizations`、`organization_members`、`organization_invites`、`organization_ai_roles`、`member_memories(company_private)` | `spaces/orgs/<orgId>/`、`roles/orgs/<orgId>/`、`skills/orgs/<orgId>/`、`team-workspaces/<orgSlug>/` | 组织成员 RBAC（`org_owner`/`org_admin`/`org_member`/`org_viewer`） |
 | **仓库 (Workspace)** | `workspace_links`、`workspace_members`、`member_memories(project_private)` | 远程克隆仓在 `team-workspaces/<orgSlug>/<repo>/`（本地绑定仓在宿主外部路径）；配套空间在 `spaces/workspaces/<wsId>/` | 仓库可见性 `org` / `restricted` 成员名单 |
 | **人类用户 (User)** | `users`、`user_sessions`、`collaborators`、`audit_logs` | `spaces/users/<userId>/`、`roles/users/<userId>/`、`skills/users/<userId>/` | 严格本人隔离（个人空间与 `personal` 角色连超管也不可访问他人数据） |
-| **AI 成员角色 (Member)** | `team_members`、`member_memories`、`worker_sessions` | 自定义定义在 `roles/{global,orgs,users}/`；配套空间在 `spaces/members/<memberId>/`；模型上下文在 `pi-sessions/--<encoded-cwd>--/*.jsonl` | 按 `role_scope` 隔离定义，按 `v2` 会话键（含组织、仓库、事项与触发用户）隔离运行会话 |
+| **AI 成员角色 (Member)** | `team_members`、`member_memories`、`worker_sessions` | 自定义定义在 `roles/`、`roles/orgs/`、`roles/users/`；配套空间在 `spaces/members/<memberId>/`；模型上下文在 `pi-sessions/--<encoded-cwd>--/*.jsonl` | 按 `role_scope` 隔离定义，会话键包含组织、仓库、事项与触发用户 |
 | **事项 (Matter)** | `matters`、`matter_messages`、`space_documents`（索引）、`uploads_index` | 无独立事项目录：空间文档落入目标默认空间 Git 仓库（私密事项→发起人 `spaces/users/<userId>/`、非私密→`spaces/workspaces/<wsId>/` 或 `spaces/orgs/<orgId>/`）；附件按月落 `uploads/YYYY-MM/` | 按事项 `visibility`（`org`/`private`）与组织/仓库 ACL 控制 |
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。
-- 若数据库中存在旧表结构，[database.ts](../../src/storage/database.ts) 仅做幂等增量迁移，不改写历史消息或成果：
-  - 迁移范围包括 `worker_sessions.context_key`、`message_cursor`、`matters.observer_ids_json`、`matter_execution_leases`。
-  - 同时补齐 `deliverables.feedback_rating`、`member_memories` 生命周期/评估计数字段及 `memory_applications` 表。
+- [database.ts](../../src/storage/database.ts) 在空数据库创建当前表结构。其他格式的数据库会被拒绝，不会被修改；请为 0.7.0 指定新的数据目录。
 
 ---
 

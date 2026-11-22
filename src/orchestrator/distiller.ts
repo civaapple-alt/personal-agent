@@ -197,7 +197,18 @@ export async function performDistillationPass(
 		.map((entry) => `- ${entry.senderId}: ${truncateInline(entry.content, 240)}`)
 		.join("\n");
 
-	const spaceDocs = deps.store.spaces.listDocuments({ matterId: matter.id }).slice(0, 3);
+	const spaceDocs = deps.store.spaces
+		.listDocuments({ matterId: matter.id })
+		.filter((doc) => {
+			const space = deps.store.spaces.getSpace(doc.spaceId);
+			return Boolean(
+				space &&
+					(input.canReadSpace?.(space.id) ?? true) &&
+					(space.kind !== "workspace" || space.workspaceId === (workspace?.id ?? null)) &&
+					(!doc.linkedWorkspaceId || doc.linkedWorkspaceId === (workspace?.id ?? null)),
+			);
+		})
+		.slice(0, 3);
 	const spaceDocExcerpts = await Promise.all(
 		spaceDocs.map(async (meta) => {
 			const full = await deps.store.spaces.getDocument(meta.id);
@@ -208,6 +219,18 @@ export async function performDistillationPass(
 		}),
 	);
 	const spaceEvidenceSection = spaceDocExcerpts.length > 0 ? `## 关联空间资料\n${spaceDocExcerpts.join("\n")}` : "";
+	const spaceFeedback = spaceDocs.flatMap((doc) =>
+		deps.store.spaces.listDocumentFeedback(doc.id).map((entry) => ({ doc, entry })),
+	);
+	const spaceFeedbackSection = spaceFeedback.length
+		? `## 空间资料反馈\n${spaceFeedback
+				.slice(0, 10)
+				.map(
+					({ doc, entry }) =>
+						`- 「${doc.title}」提交 ${entry.commitHash.slice(0, 7)}：${entry.rating ?? "未评分"}，${entry.feedback.slice(0, 500) || "无文字意见"}`,
+				)
+				.join("\n")}`
+		: "";
 
 	const feedbackText = (input.feedback ?? deliverable?.feedback ?? "").trim();
 	const feedbackRating = input.rating ?? deliverable?.feedbackRating ?? null;
@@ -251,6 +274,7 @@ export async function performDistillationPass(
 		"",
 		`## 当前事项\n- 编号：${matter.id}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
 		spaceEvidenceSection,
+		spaceFeedbackSection,
 		deliverable
 			? [
 					"## 关联历史记录",
@@ -367,7 +391,7 @@ export async function performDistillationPass(
 		});
 	}
 
-	const saved = deps.store.recordTurnOutcome({ deliverables: [], candidates, applicationIds: [] });
+	const saved = deps.store.recordTurnOutcome({ candidates, applicationIds: [] });
 	const createdMemories = saved.memories;
 	skippedDuplicates += saved.skippedDuplicates;
 

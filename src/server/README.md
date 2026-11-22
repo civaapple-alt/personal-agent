@@ -1,6 +1,6 @@
 # HTTP、SSE 与本机服务
 
-[main.ts](main.ts) 负责启动装配：合并仓库基线 `roles/` 与运行期自定义 `.data/roles/`（含根/global、`orgs/<orgId>/`、`users/<userId>/`；不再把运行时新建/微调的角色写入版本库 `roles/` 目录）、内置 `role-architect`、运行期自定义 Skill 目录（`.data/skills/{global,orgs,users}/`）、数据库、编排核、对话 broker、预览管理器及静态网页。
+[main.ts](main.ts) 负责启动装配：合并仓库基线 `roles/` 与运行期自定义 `.data/roles/`（全局角色在根目录，组织和个人角色分别在 `orgs/<orgId>/`、`users/<userId>/`）、内置 `role-architect`、运行期自定义 Skill 目录（`.data/skills/{global,orgs,users}/`）、数据库、编排核、对话 broker、预览管理器及静态网页。
 默认端口 4310、`PA_HOST` 默认 `127.0.0.1`，`PORT`、`PA_HOST`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 读取以此文件为准；
 启动时探测 Pi CLI 并记录版本或失败原因。日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 
@@ -19,10 +19,9 @@
 | 组织、工作区与预览服务 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
 | Git 资料空间与文档提交/Diff | [spaces.ts](routes/spaces.ts)（[acl.ts](acl.ts) 提供 `canAccessSpace` / `canWriteSpace`） |
 | 多目录工作区与 Rules/Skills 预算明细 | [workspace-folders.ts](routes/workspace-folders.ts) |
-| 旧版资料页面兼容路由 | [space-pages.ts](routes/space-pages.ts) |
 
 - 经验查询与事件共用角色、组织和工作区访问规则。经验提炼只读取请求者有权使用的角色的经验。预览事件按所关联事项推送，独立预览仅对平台管理员推送。工作区更新事件用 ID 通知刷新。账号 SSE 在发送时复核会话，登出立即关闭该会话的连接。
-- 已索引附件按其事项归属校验。旧版无索引的附件按引用消息和事项授权。非全局账号只可访问能确认归属的旧附件。
+- 已索引附件按其事项归属校验；非全局账号不能访问没有索引的附件。
 - 已有事项的消息沿用现有工作区。先通过事项设置切换工作区，再发送消息。请求指定的负责人、成员与旁听角色按事项的有效组织校验。
 修改接口时同时核对[网页 API 模块](../../web/src/README.md#前端状态与组件)的 DTO 和调用方的刷新逻辑，保留已有事项、工作区、成果和反馈兼容性。
 
@@ -36,7 +35,7 @@
     同样支持可选 `observerMemberIds` 与 `images` / `files`）：
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
     - 文本/折叠粘贴文件约束：最多 6 个、单文件 UTF-8 文本 <= 512KB（拒绝含 NUL 的二进制负载），支持 `kind: "file" | "pasted_text"`，允许纯附件提交。
-  - 上传图片与 `.txt` 规范化文本附件均按 `YYYY-MM/` 按月分桶落盘 `uploadsDir`（默认 `.data/uploads/YYYY-MM/`，同时兼容读取旧平铺文件；测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问（`.txt` 响应带 `Content-Type: text/plain; charset=utf-8` 与 `X-Content-Type-Options: nosniff`），消息仅存轻量引用 `metadata.images` / `metadata.files`。
+  - 上传图片与 `.txt` 规范化文本附件均按 `YYYY-MM/` 按月分桶落盘 `uploadsDir`（默认 `.data/uploads/YYYY-MM/`；测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问（`.txt` 响应带 `Content-Type: text/plain; charset=utf-8` 与 `X-Content-Type-Options: nosniff`），消息仅存轻量引用 `metadata.images` / `metadata.files`。
   - 统一发送使用 `conversation`，默认由主责先回应。仅点名人类同事时保存消息并返回 `human_recipient`。`observersEnabled` 只控制协作 AI 主动补充。`discussionAiEnabled` 继续用于旧客户端的显式 `discussion` 请求。启动 AI 仍需满足组织派发权限与并发额度。
   - AI 讨论失败时保留已发消息、已保存的回复及原事项状态。失败消息关联触发本轮讨论的消息。
 - 组织与成员身份接口：

@@ -5,6 +5,7 @@ import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMem
 import {
 	canAccessMatter,
 	canAccessOrganization,
+	canAccessSpace,
 	canAccessWorkspace,
 	canActorAccessMemory,
 	canActorManageMember,
@@ -386,6 +387,7 @@ export async function handleMemoryRoutes(ctx: ServerRouteContext, r: RouteReques
 				scopeMode,
 				signal: cancellation.signal,
 				canReviewMember: (member) => canActorUseMember(store, actor, member),
+				canReadSpace: (spaceId) => canAccessSpace(store, actor, store.spaces.getSpace(spaceId)),
 			});
 			broadcastMemoryUpdates(broadcast, result.createdMemories);
 			sendJson(res, 200, {

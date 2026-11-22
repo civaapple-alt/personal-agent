@@ -232,37 +232,33 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 			})
 		).json()) as { matter: { id: string } };
 
-		let deliverableId = "";
+		let document: { id: string; headCommit: string } | undefined;
 		for (let i = 0; i < 40; i++) {
 			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
-				deliverables: Array<{ id: string }>;
+				spaceDocuments: Array<{ id: string; headCommit: string }>;
+				activeRun?: unknown;
 			};
-			if (detail.deliverables.length > 0) {
-				deliverableId = detail.deliverables[0]!.id;
+			if (detail.spaceDocuments.length > 0 && !detail.activeRun) {
+				document = detail.spaceDocuments[0];
 				break;
 			}
 			await new Promise((r) => setTimeout(r, 20));
 		}
-		assert.ok(deliverableId);
+		assert.ok(document);
 
 		// Submit positive acceptance rating -> links to applied seedMemory
-		const fbRes = await fetch(`${baseUrl}/api/deliverables/${deliverableId}/feedback`, {
+		const fbRes = await fetch(`${baseUrl}/api/spaces/documents/${document.id}/feedback`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
+				commitHash: document.headCommit,
 				feedback: "验证命令很实用",
 				rating: "positive",
 			}),
 		});
 		assert.equal(fbRes.status, 200);
-		const fbJson = (await fbRes.json()) as {
-			ok: boolean;
-			rating: string;
-			evaluatedMemoryIds: string[];
-		};
-		assert.equal(fbJson.ok, true);
-		assert.equal(fbJson.rating, "positive");
-		assert.deepEqual(fbJson.evaluatedMemoryIds, [seedMemory.id]);
+		const fbJson = (await fbRes.json()) as { feedback: { rating: string } };
+		assert.equal(fbJson.feedback.rating, "positive");
 
 		// Check memory applications telemetry
 		const appsRes = await fetch(`${baseUrl}/api/memories/${seedMemory.id}/applications`);
@@ -278,10 +274,10 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 
 		// A rating is one current vote for this version; neutral retracts it.
 		for (const rating of ["negative", "positive", "neutral", "positive"]) {
-			const vote = await fetch(`${baseUrl}/api/deliverables/${deliverableId}/feedback`, {
+			const vote = await fetch(`${baseUrl}/api/spaces/documents/${document.id}/feedback`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ rating }),
+				body: JSON.stringify({ commitHash: document.headCommit, rating }),
 			});
 			assert.equal(vote.status, 200);
 			assert.equal(store.getMemory(seedMemory.id)?.positiveCount, rating === "positive" ? 1 : 0);
@@ -301,35 +297,12 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		assert.equal(badReplacement.status, 400);
 		assert.equal(store.getMemory(seedMemory.id)?.status, "verified");
 
-		const legacy = store.recordDeliverable({
-			matterId: created.matter.id,
-			memberId: "engineering-manager",
-			type: "document",
-			title: "old unscoped result",
-			contentOrPath: "legacy",
-		});
-		const partial = await fetch(`${baseUrl}/api/deliverables/${legacy.id}/feedback`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				feedback: "saved despite reflection scope rejection",
-				rating: "positive",
-				autoDistill: true,
-			}),
-		});
-		assert.equal(partial.status, 200);
-		const partialJson = (await partial.json()) as { ok: boolean; distillationError?: string };
-		assert.equal(partialJson.ok, true);
-		assert.match(partialJson.distillationError ?? "", /current workspace/);
-		assert.equal(store.getDeliverable(legacy.id)?.feedbackRating, "positive");
-
 		// Trigger AI experience distillation via HTTP API
 		const distillRes = await fetch(`${baseUrl}/api/rsi/distill`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
 				matterId: created.matter.id,
-				deliverableId,
 				feedback: "需要同时考虑回滚",
 				rating: "positive",
 			}),
@@ -749,7 +722,7 @@ test("HTTP server persists uploaded text files and folded pasted text, serves wi
 		assert.match(storedFiles[0]?.url ?? "", /^\/api\/uploads\/.+\.txt$/);
 		assert.equal(storedFiles[1]?.kind, "pasted_text");
 		assert.equal(storedFiles[1]?.name, "pasted-text-1.txt");
-		assert.equal(readdirSync(uploadsDir).length, 2);
+		assert.equal(readdirSync(join(uploadsDir, readdirSync(uploadsDir)[0]!)).length, 2);
 
 		// Served uploaded text uses text/plain + nosniff
 		const fileGetRes = await fetch(`${baseUrl}${storedFiles[0]!.url!}`);

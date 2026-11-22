@@ -7,8 +7,8 @@ import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
 import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
-import { SpacePageRepo } from "./repos/space-page-repo.ts";
 import { SpaceRepo } from "./repos/space-repo.ts";
+import { TurnOutcomeRepo } from "./repos/turn-outcome-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 import { WorkspaceFolderRepo } from "./repos/workspace-folder-repo.ts";
 import { WorkspaceRepo } from "./repos/workspace-repo.ts";
@@ -37,16 +37,15 @@ export class PersonalAgentStore {
 	private readonly collaborators: CollaboratorRepo;
 	private readonly memories: MemoryRepo;
 	private readonly deliverables: DeliverableRepo;
+	private readonly turnOutcomes: TurnOutcomeRepo;
 	private readonly matters: MatterRepo;
 	private readonly sessions: SessionRepo;
 	private readonly userAuth: UserAuthRepo;
 	private readonly orgRbac: OrgRbacRepo;
-	readonly spacePages: SpacePageRepo;
 	readonly spaces: SpaceRepo;
 	readonly workspaceFolders: WorkspaceFolderRepo;
 
 	constructor(db: DatabaseSync, options?: { spacesDir?: string }) {
-		this.spacePages = new SpacePageRepo(db);
 		this.spaces = new SpaceRepo(db, new SpaceGitStore(options?.spacesDir));
 		this.workspaceFolders = new WorkspaceFolderRepo(db);
 		this.members = new MemberRepo(db);
@@ -60,6 +59,7 @@ export class PersonalAgentStore {
 			getDeliverable: (id) => this.deliverables.getDeliverable(id),
 		});
 		this.deliverables = new DeliverableRepo(db, this.memories);
+		this.turnOutcomes = new TurnOutcomeRepo(db, this.memories);
 		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
 		this.sessions = new SessionRepo(db);
 		this.userAuth = new UserAuthRepo(db);
@@ -279,8 +279,8 @@ export class PersonalAgentStore {
 	recordDeliverables(inputs: RecordDeliverableInput[]) {
 		return this.deliverables.recordDeliverables(inputs);
 	}
-	recordTurnOutcome(input: Parameters<DeliverableRepo["recordTurnOutcome"]>[0]) {
-		return this.deliverables.recordTurnOutcome(input);
+	recordTurnOutcome(input: Parameters<TurnOutcomeRepo["recordTurnOutcome"]>[0]) {
+		return this.turnOutcomes.recordTurnOutcome(input);
 	}
 	linkDeliverableApplications(deliverableId: string, applicationIds: string[]) {
 		return this.deliverables.linkDeliverableApplications(deliverableId, applicationIds);
@@ -467,9 +467,6 @@ export class PersonalAgentStore {
 	}
 	getUploadRecord(filename: string) {
 		return this.orgRbac.getUploadRecord(filename);
-	}
-	findLegacyUploadMatterId(filename: string) {
-		return this.orgRbac.findLegacyUploadMatterId(filename);
 	}
 	updateMatterModelSelection(...args: Parameters<MatterRepo["updateMatterModelSelection"]>) {
 		return this.matters.updateMatterModelSelection(...args);

@@ -25,6 +25,7 @@ import {
 } from "../api/space.ts";
 import type { BootstrapPayload } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
+import { SpaceDocumentFeedback } from "./SpaceDocumentFeedback.tsx";
 import { SpaceFolderFilesPanel } from "./SpaceFolderFilesPanel.tsx";
 
 const RECENT_SPACE_ID = "__recent__";
@@ -929,6 +930,12 @@ export function SpacePages({
 								</div>
 							)}
 
+							<SpaceDocumentFeedback
+								key={`${selectedDoc.id}:${selectedCommitHash ?? selectedDoc.headCommit}`}
+								documentId={selectedDoc.id}
+								commitHash={selectedCommitHash ?? selectedDoc.headCommit}
+								canWrite={docCanWrite}
+							/>
 							<details className="space-commits-panel" open={commits.length > 1}>
 								<summary>Git 提交历史（{commits.length}）</summary>
 								<ul className="space-commit-list">

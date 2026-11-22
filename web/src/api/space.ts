@@ -63,6 +63,33 @@ export interface SpaceDocumentDto extends SpaceDocumentMetaDto {
 	content: string;
 }
 
+export interface SpaceDocumentFeedbackDto {
+	documentId: string;
+	commitHash: string;
+	actorId: string;
+	actorName: string;
+	feedback: string;
+	rating: "positive" | "negative" | "neutral" | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export function listSpaceDocumentFeedback(docId: string) {
+	return requestJson<{ feedback: SpaceDocumentFeedbackDto[] }>(
+		`/api/spaces/documents/${encodeURIComponent(docId)}/feedback`,
+	);
+}
+
+export function saveSpaceDocumentFeedback(
+	docId: string,
+	input: { commitHash: string; feedback: string; rating: SpaceDocumentFeedbackDto["rating"] },
+) {
+	return requestJson<{ feedback: SpaceDocumentFeedbackDto }>(
+		`/api/spaces/documents/${encodeURIComponent(docId)}/feedback`,
+		{ method: "POST", body: JSON.stringify(input) },
+	);
+}
+
 export interface SpaceGitCommitDto {
 	hash: string;
 	shortHash: string;

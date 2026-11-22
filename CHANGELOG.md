@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Start the 0.7.0 fresh-data baseline: initialize a complete schema without historical migrations, reject existing databases without modifying them, and remove DB-backed Space pages and flat Space/upload storage fallback.
+- Enforce matter visibility when listing or accessing linked Space documents and when AI roles use Space tools.
+- Add per-commit Space feedback, with reviewer-specific ratings linked to the memories applied for that document version.
+- Run the offline suite with a temporary Pi configuration directory so installed local extensions do not affect fixtures.
+- Remove the legacy turn-level deliverable staging and implicit API export; independent reviews use saved Space documents and turn outcomes link memories to document commits.
 - Restore explicitly requested API exports and historical deliverables in matter details, reconnect independent reviews to saved Space documents, and fix the English workbench help section lookup.
 - Isolate Space static previews with a browser CSP sandbox, and validate every folder batch path before writing any file. Correct Space schema and Web Access setup documentation.
 - Switch `pi-web-access` role permissions to default-allow for all business AI roles (including newly created roles) via `webAccessDeniedRoles` opt-out denylist, while gracefully skipping web access when `pi-web-access` is not installed.

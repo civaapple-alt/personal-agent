@@ -6,7 +6,7 @@ import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
+import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
 import type { Clarification, HumanDecision } from "./human-decision.ts";
 import { messageMatchesContext } from "./matter-context.ts";
@@ -328,7 +328,6 @@ export async function dispatchMatterTurn(
 					workspace,
 					replyText: directReply.content,
 					directReply,
-					deliverable: null,
 					runResult: { ...emptyAbortedResult(), aborted: false },
 				};
 			}
@@ -498,59 +497,18 @@ export async function dispatchMatterTurn(
 			: architectParsed?.replyText ||
 				rawReply ||
 				(decision ? "等待你在卡片里提交决定。" : "本轮未返回正文，请继续追问；执行记录保留在协作过程中。");
-		// Keep explicit document exports supported by API callers. Chat has no implicit export.
-		if (
-			!aborted &&
-			!isDiscussionTurn &&
-			!decision &&
-			rawReply &&
-			input.deliverableTitle &&
-			(!input.deliverableType || input.deliverableType === "document") &&
-			run.effects.deliveries.length === 0
-		) {
-			run.effects.deliveries.push({
-				memberId: assignedMember.id,
-				cwd: workspace?.repoPath ?? deps.defaultCwd,
-				autoSource: {
-					workspaceKey: workspace?.id ?? "__no_workspace__",
-					sourcePath: `api-export:${input.deliverableTitle}`,
-				},
-				draft: {
-					tool: "save_space_page",
-					callId: "explicit-export",
-					changeNote: "API 调用方明确指定文档交付标题",
-					type: "document",
-					title: input.deliverableTitle,
-					content: rawReply,
-					source: { kind: "inline" },
-					summary: rawReply.slice(0, 200),
-				},
-			});
-		}
 		const savedDocuments = !aborted && !isDiscussionTurn ? run.effects.savedDocuments : [];
-		const deliveries: Deliverable[] = [];
 		if (
 			!aborted &&
 			!isDiscussionTurn &&
-			(run.effects.deliveries.length > 0 ||
-				run.effects.experiences.length > 0 ||
-				run.effects.applicationIds.length > 0)
+			(run.effects.experiences.length > 0 || run.effects.applicationIds.length > 0)
 		) {
 			run.controller.signal.throwIfAborted();
 			const outcome = deps.store.recordTurnOutcome({
-				deliverables: run.effects.deliveries.map(({ memberId, draft }) => ({
-					matterId: matter.id,
-					memberId,
-					type: draft.type,
-					title: draft.title,
-					contentOrPath: draft.content,
-					summary: [draft.summary, `过程依据：${draft.changeNote}`].filter(Boolean).join("\n"),
-					serviceUrl: draft.type === "service_url" ? draft.content : null,
-				})),
 				candidates: run.effects.experiences,
 				applicationIds: run.effects.applicationIds,
+				spaceDocuments: savedDocuments,
 			});
-			deliveries.push(...outcome.deliverables);
 			for (const memory of outcome.memories)
 				deps.store.appendMessage({
 					matterId: matter.id,
@@ -585,7 +543,6 @@ export async function dispatchMatterTurn(
 				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
 				toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
-				...(deliveries.length > 0 ? { deliverableIds: deliveries.map((delivery) => delivery.id) } : {}),
 				...(savedDocuments.length > 0 ? { spaceDocuments: savedDocuments } : {}),
 				sourceUserMessageId: run.userMessageId,
 				workspaceId: workspace?.id ?? null,
@@ -659,7 +616,6 @@ export async function dispatchMatterTurn(
 							mentionedInDiscussion: true,
 							...(isConversation ? { conversationRouted: true } : {}),
 							toolsUsed: extraResult.toolExecutions.map((tool) => tool.toolName),
-							deliverableIds: [],
 							sourceUserMessageId: run.userMessageId,
 							workspaceId: workspace?.id ?? null,
 							repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
@@ -722,7 +678,6 @@ export async function dispatchMatterTurn(
 			assignedMember: activeSpeaker,
 			workspace,
 			replyText,
-			deliverable: deliveries.at(-1) ?? null,
 			observerMessages: [...extraMentionMessages, ...observerMessages],
 			runResult: { ...result, aborted: aborted || (isDiscussionTurn && (extraReplyAborted || run.cancelled)) },
 		};
@@ -756,7 +711,6 @@ export async function dispatchMatterTurn(
 				assignedMember: activeSpeaker,
 				workspace,
 				replyText,
-				deliverable: null,
 				runResult: emptyAbortedResult(),
 			};
 		}

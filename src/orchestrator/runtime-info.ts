@@ -35,7 +35,6 @@ export interface OrchestratorRuntimeConfig {
 	noSession: boolean;
 	extensions: string[];
 	pstackDir: string | null;
-	webAccessRoleGrants?: Record<string, string>;
 	webAccessDeniedRoles?: Record<string, string>;
 	webSearchProvider?: WebSearchProviderPreference;
 	systemOneEnabled?: boolean;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { Deliverable, DeliverableType, FeedbackRating, MemberMemory } from "../types.ts";
 import { mapDeliverableRow, nowIso } from "./helpers.ts";
-import type { AddMemoryInput, MemoryRepo } from "./memory-repo.ts";
+import type { MemoryRepo } from "./memory-repo.ts";
 
 export interface RecordDeliverableInput {
 	matterId: string;
@@ -12,7 +12,6 @@ export interface RecordDeliverableInput {
 	summary?: string;
 	contentOrPath: string;
 	serviceUrl?: string | null;
-	spacePage?: { id: string; revision: number };
 }
 
 /** Manages versioned deliverables, turn outcome commits, and deliverable-level memory feedback. */
@@ -72,49 +71,13 @@ export class DeliverableRepo {
 		};
 	}
 
-	/** Commit a turn's index entries together, including their version numbers. */
+	/** Record a batch of explicit deliveries atomically. */
 	recordDeliverables(inputs: RecordDeliverableInput[]): Deliverable[] {
-		return this.recordTurnOutcome({ deliverables: inputs, candidates: [], applicationIds: [] }).deliverables;
-	}
-
-	recordTurnOutcome(input: {
-		deliverables: RecordDeliverableInput[];
-		candidates: AddMemoryInput[];
-		applicationIds: string[];
-	}): { deliverables: Deliverable[]; memories: MemberMemory[]; skippedDuplicates: number } {
 		this.db.exec("BEGIN IMMEDIATE");
 		try {
-			const deliverables = input.deliverables.map((entry) => {
-				const deliverable = this.recordDeliverable(entry);
-				if (entry.spacePage) {
-					this.db
-						.prepare(
-							"INSERT INTO space_page_result_links (page_id, revision, deliverable_id) VALUES (?, ?, ?) ON CONFLICT(page_id, revision) DO UPDATE SET deliverable_id = excluded.deliverable_id",
-						)
-						.run(entry.spacePage.id, entry.spacePage.revision, deliverable.id);
-				}
-				return deliverable;
-			});
-			for (const delivery of deliverables) this.linkDeliverableApplications(delivery.id, input.applicationIds);
-			const memories: MemberMemory[] = [];
-			let skippedDuplicates = 0;
-			for (const candidate of input.candidates) {
-				if (
-					this.memoryRepo.findActiveDuplicateMemory(
-						candidate.memberId,
-						candidate.scope,
-						candidate.workspaceId ?? null,
-						candidate.content,
-						candidate.orgId ?? null,
-					)
-				) {
-					skippedDuplicates++;
-					continue;
-				}
-				memories.push(this.memoryRepo.addMemory({ ...candidate, status: "candidate", verified: false }));
-			}
+			const result = inputs.map((input) => this.recordDeliverable(input));
 			this.db.exec("COMMIT");
-			return { deliverables, memories, skippedDuplicates };
+			return result;
 		} catch (error) {
 			this.db.exec("ROLLBACK");
 			throw error;

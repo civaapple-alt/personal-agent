@@ -3,7 +3,6 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
 	defaultMemberGitName,
@@ -179,7 +178,7 @@ test("isolates project-private memories across workspaces while preserving share
 	db.close();
 });
 
-test("routes tasks by role, keeps internal_collab & notices separate, handles waiting_user, and versions deliverables", async () => {
+test("routes tasks by role, keeps internal_collab & notices separate, and handles waiting_user", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
@@ -225,7 +224,6 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 		title: "评估架构依赖",
 		prompt: "帮我评估一下仓库的架构和 SQLite 接口依赖",
 		workspaceId: ws.id,
-		deliverableTitle: "架构评估报告",
 	});
 
 	assert.equal(engResult.assignedMember.id, "engineering-manager");
@@ -234,11 +232,7 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	assert.match(spawnedWorkers[0]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Turn confirmed goals into working/);
 	assert.deepEqual(seenStatusesDuringDialog, ["waiting_user"]);
 	assert.equal(engResult.matter.status, "open");
-	assert.ok(engResult.deliverable);
-	assert.equal(engResult.deliverable.version, 1);
-	const exportedPage = store.spacePages.list(engResult.matter.id).find((page) => page.title === "架构评估报告");
-	assert.ok(exportedPage);
-	assert.equal(store.spacePages.listRevisions(exportedPage.id)[0]?.resultId, engResult.deliverable.id);
+	assert.equal(store.spaces.listDocuments({ matterId: engResult.matter.id }).length, 0);
 
 	// 2. Internal delegation from PM to QA stays in internal_collab channel, not user channel
 	const collab = await orchestrator.delegateToMember({
@@ -260,11 +254,9 @@ test("routes tasks by role, keeps internal_collab & notices separate, handles wa
 	const v2Result = await orchestrator.dispatchMatter({
 		matterId: engResult.matter.id,
 		prompt: "请基于最新需求补充功能范围和验收条件",
-		deliverableTitle: "架构评估报告",
 	});
 	assert.equal(v2Result.assignedMember.id, "engineering-manager");
-	assert.ok(v2Result.deliverable);
-	assert.equal(v2Result.deliverable.version, 2);
+	assert.equal(store.spaces.listDocuments({ matterId: v2Result.matter.id }).length, 0);
 
 	db.close();
 });
@@ -573,130 +565,6 @@ test("default organization seeding, switching default, and assigning orphan work
 		assert.equal(store.getDefaultOrganization()?.id, customOrg.id);
 	} finally {
 		db.close();
-	}
-});
-
-test("openPersonalAgentDatabase upgrades legacy databases without member identity or org columns", () => {
-	const tempRoot = mkdtempSync(join(tmpdir(), "pa-legacy-migration-"));
-	const dbPath = join(tempRoot, "legacy.sqlite");
-	const raw = new DatabaseSync(dbPath);
-	raw.exec(`
-		CREATE TABLE team_members (
-			id TEXT PRIMARY KEY,
-			template_id TEXT NOT NULL,
-			display_name TEXT NOT NULL,
-			role_title TEXT NOT NULL,
-			is_primary_contact INTEGER NOT NULL DEFAULT 0,
-			provider TEXT NOT NULL,
-			model TEXT NOT NULL,
-			thinking_level TEXT NOT NULL,
-			keywords_json TEXT NOT NULL DEFAULT '[]',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE TABLE workspace_links (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			repo_path TEXT NOT NULL UNIQUE,
-			org_id TEXT,
-			default_branch TEXT NOT NULL DEFAULT 'main',
-			description TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE matters (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			summary TEXT NOT NULL DEFAULT '',
-			status TEXT NOT NULL DEFAULT 'open',
-			lead_member_id TEXT,
-			workspace_id TEXT,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE TABLE member_memories (
-			id TEXT PRIMARY KEY,
-			member_id TEXT NOT NULL,
-			scope TEXT NOT NULL,
-			workspace_id TEXT,
-			content TEXT NOT NULL,
-			source_deliverable_id TEXT,
-			verified INTEGER NOT NULL DEFAULT 1,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE worker_sessions (
-			id TEXT PRIMARY KEY,
-			member_id TEXT NOT NULL,
-			matter_id TEXT,
-			workspace_id TEXT,
-			pi_session_id TEXT,
-			session_file TEXT,
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-		CREATE TABLE deliverables (
-			id TEXT PRIMARY KEY,
-			matter_id TEXT NOT NULL,
-			member_id TEXT NOT NULL,
-			type TEXT NOT NULL,
-			title TEXT NOT NULL,
-			summary TEXT NOT NULL DEFAULT '',
-			content_or_path TEXT NOT NULL,
-			service_url TEXT,
-			version INTEGER NOT NULL DEFAULT 1,
-			feedback TEXT,
-			created_at TEXT NOT NULL
-		);
-		INSERT INTO team_members VALUES (
-			'legacy-pm', 'product-manager', 'Legacy PM', 'Product Manager', 1,
-			'kimi-coding', 'kimi-for-coding', 'high', '[]', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
-		);
-		INSERT INTO workspace_links VALUES ('ws-1', 'legacy-repo', '/tmp/legacy-repo', NULL, 'main', '', '2026-01-01T00:00:00Z');
-		INSERT INTO member_memories VALUES ('mem-1', 'legacy-pm', 'company_private', 'ws-1', 'Legacy workspace memory', NULL, 1, '2026-01-01T00:00:00Z');
-	`);
-	raw.close();
-
-	const db = openPersonalAgentDatabase(dbPath);
-	try {
-		const store = new PersonalAgentStore(db);
-		const member = store.getMember("legacy-pm");
-		assert.ok(member);
-		assert.equal(member.gitName, "Legacy PM");
-		assert.equal(member.gitEmail, "legacy-pm@team.local");
-		assert.equal(member.identitySummary, "");
-
-		const ws = store.getWorkspace("ws-1");
-		assert.ok(ws);
-		assert.equal(ws.orgId, null);
-
-		const relevant = store.listRelevantMemories("legacy-pm", "ws-1");
-		assert.equal(relevant.length, 1);
-		assert.equal(relevant[0]?.orgId, null);
-		assert.equal(relevant[0]?.workspaceId, "ws-1");
-		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 11);
-		assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
-		const fresh = openPersonalAgentDatabase();
-		try {
-			for (const table of ["workspace_links", "member_memories"]) {
-				const keys = (source: DatabaseSync) =>
-					source
-						.prepare(`PRAGMA foreign_key_list(${table})`)
-						.all()
-						.map((row) => [row.from, row.table, row.on_delete].join(":"))
-						.sort();
-				assert.deepEqual(keys(db), keys(fresh));
-			}
-		} finally {
-			fresh.close();
-		}
-		assert.throws(() => db.prepare("UPDATE workspace_links SET org_id = ?").run("missing-org"), /FOREIGN KEY/);
-		assert.throws(
-			() => db.prepare("UPDATE member_memories SET source_deliverable_id = ?").run("missing-result"),
-			/FOREIGN KEY/,
-		);
-	} finally {
-		db.close();
-		rmSync(tempRoot, { recursive: true, force: true });
 	}
 });
 

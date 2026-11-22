@@ -46,7 +46,7 @@ export function InnerDemoGuide({
 				))}
 			</ol>
 			{completed.every(Boolean) && (
-				<output>已形成 V1、反馈与 V2，可以到成果库比较版本，也可以继续在下方讨论。</output>
+				<output>已形成 V1、反馈与 V2，可以到资料空间比较版本，也可以继续在下方讨论。</output>
 			)}
 		</section>
 	);

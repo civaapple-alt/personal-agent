@@ -6,6 +6,18 @@ export interface WorkspaceContext {
 	orgId?: string | null;
 }
 
+/** Collect document IDs from the scoped messages that recorded their creation or update. */
+export function scopedSpaceDocumentIds(messages: MatterMessage[]): Set<string> {
+	const ids = new Set<string>();
+	for (const message of messages) {
+		if (!Array.isArray(message.metadata?.spaceDocuments)) continue;
+		for (const item of message.metadata.spaceDocuments) {
+			if (item && typeof item === "object" && "id" in item && typeof item.id === "string") ids.add(item.id);
+		}
+	}
+	return ids;
+}
+
 export function messageMatchesContext(message: MatterMessage, context: WorkspaceContext): boolean {
 	return (
 		message.metadata?.workspaceId === context.workspaceId &&

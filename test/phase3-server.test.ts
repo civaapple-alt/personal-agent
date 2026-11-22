@@ -20,7 +20,7 @@ import {
 } from "../src/index.ts";
 import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
 import { parseProgressSnapshot } from "../web/src/utils.ts";
-import { reportReady } from "./worker-helpers.ts";
+import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
@@ -73,6 +73,9 @@ class InteractiveTestWorker implements RpcWorkerLike {
 			: { cancelled: true as const };
 
 		const confirmed = "confirmed" in reply ? reply.confirmed : false;
+		if (confirmed) {
+			await invokeTool(this.options, "save_space_page", { title: "交付说明", content: "交付原型已准备就绪" });
+		}
 		return {
 			disposition: "started",
 			aborted: false,
@@ -167,11 +170,11 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		assert.equal(boot.members.length, 4);
 		assert.equal(boot.workspaces.length, 1);
 
-		// 2. Dispatch matter -> pauses at confirm dialog -> answer dialog -> matter delivered
+		// 2. Dispatch matter -> pauses at confirm dialog -> saves a space document
 		const createRes = await fetch(`${baseUrl}/api/matters`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ prompt: "帮我准备 V4 交互原型交付", deliverableTitle: "交付说明" }),
+			body: JSON.stringify({ prompt: "帮我准备 V4 交互原型交付" }),
 		});
 		assert.equal(createRes.status, 202);
 		const created = (await createRes.json()) as { matter: { id: string } };
@@ -198,36 +201,37 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		});
 		assert.equal(answerRes.status, 200);
 
-		// Wait until matter reaches delivered
-		let deliverableId: string | null = null;
+		// Wait until the document is saved and the turn settles.
+		let document: { id: string; headCommit: string } | undefined;
 		for (let i = 0; i < 40; i++) {
 			const detail = (await (await fetch(`${baseUrl}/api/matters/${created.matter.id}`)).json()) as {
 				matter: { status: string };
-				deliverables: Array<{ id: string; contentOrPath: string }>;
+				spaceDocuments: Array<{ id: string; headCommit: string }>;
+				activeRun?: unknown;
 				noticeMessages: unknown[];
 			};
-			if (detail.deliverables[0]) {
-				assert.equal(detail.deliverables[0].contentOrPath, "交付原型已准备就绪");
+			if (detail.spaceDocuments[0] && !detail.activeRun) {
 				assert.equal(detail.noticeMessages.length, 2);
-				deliverableId = detail.deliverables[0].id;
+				document = detail.spaceDocuments[0];
 				break;
 			}
 			await new Promise((r) => setTimeout(r, 20));
 		}
-		assert.ok(deliverableId, "Expected delivered deliverable");
+		assert.ok(document, "Expected a saved space document");
+		assert.equal((await store.spaces.getDocument(document.id))?.content, "交付原型已准备就绪");
 
-		// 3. Submit deliverable feedback & register external preview URL
-		const fbRes = await fetch(`${baseUrl}/api/deliverables/${deliverableId}/feedback`, {
+		// 3. Submit document feedback & register external preview URL
+		const fbRes = await fetch(`${baseUrl}/api/spaces/documents/${document.id}/feedback`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ feedback: "按钮文案清晰" }),
+			body: JSON.stringify({ commitHash: document.headCommit, feedback: "按钮文案清晰" }),
 		});
 		assert.equal(fbRes.status, 200);
 
 		const prevRes = await fetch(`${baseUrl}/api/previews`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ title: "V4 体验服务", url: "http://127.0.0.1:4999", deliverableId }),
+			body: JSON.stringify({ title: "V4 体验服务", url: "http://127.0.0.1:4999" }),
 		});
 		assert.equal(prevRes.status, 201);
 

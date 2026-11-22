@@ -73,8 +73,7 @@ if (!phase || !root) {
 				prompt:
 					"继续澄清：仍只讨论单人、本地纯文本便笺，先不用对方案做正式发布。请简短确认前面的阶段限制即可，不调用同事，不登记成果。",
 			});
-			assert.equal(discussion.deliverable, null);
-			assert.equal(store.listDeliverables(result.matter.id).length, 0);
+			assert.equal(store.spaces.listDocuments({ matterId: result.matter.id }).length, 0);
 
 			await writeFile(join(root, "matter-id.txt"), result.matter.id);
 			await writeFile(
@@ -107,15 +106,15 @@ if (!phase || !root) {
 				prompt:
 					"请回忆刚才本事项的口令，以及研发同事从文件读取的技术证据标识。请不要读取文件，不调用同事，也不要猜测。把记得的这两个标识、之前的存储选择和仅设计不编码的限制整合为简短便笺设计测试稿，用 save_space_page 登记 document，标题固定为「隔离协作测试记录」。请在 changeNote 中说明这是为验证本次重启接续而明确要求发布的设计测试版本。这是测试记录，不能视为产品确认。最后简短答复。",
 			});
-			const delivery = result.deliverable;
-			assert.ok(delivery);
-			assert.match(delivery.contentOrPath, /CONTEXT_9361/);
-			assert.match(delivery.contentOrPath, /TECHNICAL_EVIDENCE_4827/);
-			assert.match(delivery.contentOrPath, /IndexedDB/i);
-			assert.equal(result.matter.status, "delivered");
-			assert.equal(store.listDeliverables(matterId).length, 1);
-			assert.equal(delivery.version, 1);
-			assert.match(delivery.summary, /交付依据/);
+			const meta = store.spaces.listDocuments({ matterId }).find((doc) => doc.title === "隔离协作测试记录");
+			assert.ok(meta);
+			const document = await store.spaces.getDocument(meta.id);
+			assert.ok(document);
+			assert.match(document.content, /CONTEXT_9361/);
+			assert.match(document.content, /TECHNICAL_EVIDENCE_4827/);
+			assert.match(document.content, /IndexedDB/i);
+			assert.equal(result.matter.status, "open");
+			assert.equal(document.revision, 1);
 			assert.ok(
 				result.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError),
 			);
@@ -130,7 +129,7 @@ if (!phase || !root) {
 			await writeFile(
 				join(root, "restart.json"),
 				JSON.stringify(
-					{ reply: result.replyText, delivery, sessions, tools: result.runResult.toolExecutions },
+					{ reply: result.replyText, document, sessions, tools: result.runResult.toolExecutions },
 					null,
 					2,
 				),

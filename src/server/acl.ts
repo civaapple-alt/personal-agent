@@ -370,10 +370,7 @@ export function canActorAccessUpload(store: PersonalAgentStore, actor: RequestAc
 	if (actor.user && actor.user.status !== "active") return false;
 	if (isGlobalUnscopedActor(actor)) return true;
 	const record = store.getUploadRecord(filename);
-	if (!record) {
-		const matterId = store.findLegacyUploadMatterId(filename);
-		return Boolean(matterId && canAccessMatter(store, actor, store.getMatter(matterId)));
-	}
+	if (!record) return false;
 	if (record.matterId) {
 		return canAccessMatter(store, actor, store.getMatter(record.matterId));
 	}

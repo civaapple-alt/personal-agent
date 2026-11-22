@@ -25,7 +25,7 @@ import {
 	resolveScopedPiSessionDir,
 	validateSavedSession,
 } from "./execution-context.ts";
-import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
+import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "./matter-context.ts";
 import { buildArchitectMatterContext } from "./meta-architect.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
 import {
@@ -271,6 +271,10 @@ export async function executeWithWorkerPass(
 		};
 		bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
 			toolSignal.throwIfAborted();
+			const visibleInMatter = (document: { matterId: string | null }) => {
+				if (!document.matterId || document.matterId === input.matterId) return true;
+				return deps.store.getMatter(document.matterId)?.visibility === "org";
+			};
 			if (call.tool === "read_pa_help") {
 				const context = workbenchContext();
 				const chinese = call.language ? call.language === "zh" : /\p{Script=Han}/u.test(input.taskPrompt);
@@ -301,17 +305,21 @@ export async function executeWithWorkerPass(
 							id: space.id,
 							name: space.name,
 							kind: space.kind,
-							documentCount: space.documentCount,
+							documentCount: deps.store.spaces.listDocuments({ spaceId: space.id }).filter(visibleInMatter)
+								.length,
 							isDefaultForMatter: space.id === targetSpace.id,
 						}));
 					return {
 						space: { id: targetSpace.id, name: targetSpace.name, kind: targetSpace.kind },
 						availableSpaces,
-						pages: deps.store.spaces.listDocuments({ spaceId: targetSpace.id, docType: call.docType }),
+						pages: deps.store.spaces
+							.listDocuments({ spaceId: targetSpace.id, docType: call.docType })
+							.filter(visibleInMatter),
 					};
 				}
 				const doc = await deps.store.spaces.getDocument(call.pageId);
-				if (!doc || doc.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
+				if (!doc || doc.spaceId !== targetSpace.id || !visibleInMatter(doc))
+					throw new Error("Space page not found in this space");
 				if (doc.entryKind === "folder") {
 					const listed = await deps.store.spaces.listDocumentFiles(doc.id);
 					if (call.subPath) {
@@ -420,7 +428,8 @@ export async function executeWithWorkerPass(
 				}
 				const targetDocId = call.pageId ?? staged!.id;
 				const previous = deps.store.spaces.getDocumentMeta(targetDocId);
-				if (!previous || previous.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
+				if (!previous || previous.spaceId !== targetSpace.id || !visibleInMatter(previous))
+					throw new Error("Space page not found in this space");
 				let doc: Awaited<ReturnType<typeof deps.store.spaces.updateDocument>>;
 				if (batchFiles.length > 0) {
 					const allToWrite = [
@@ -858,11 +867,12 @@ export async function executeWithWorkerPass(
 		const scopedContext = selectMatterContext({
 			orgId: activeOrgId,
 			messages: deps.store.listMessages(input.matterId),
-			deliverables: deps.store.listDeliverables(input.matterId),
+			deliverables: [],
 			workspaceId: input.workspace?.id ?? null,
 			repoPath: cwd,
 		});
 		const lastUserMsg = scopedContext.messages.filter((msg) => msg.channel === "user").at(-1);
+		const scopedDocumentIds = scopedSpaceDocumentIds(scopedContext.messages);
 		const context =
 			sessionMode === "observer"
 				? buildObserverContextDigest({
@@ -874,7 +884,9 @@ export async function executeWithWorkerPass(
 									?.content.slice(0, 120) ?? `Matter ${input.matterId}`,
 							summary: lastUserMsg ? formatMessageHistoryContent(lastUserMsg) : "",
 						},
-						deliverables: scopedContext.deliverables,
+						documents: deps.store.spaces
+							.listDocuments({ matterId: input.matterId })
+							.filter((doc) => scopedDocumentIds.has(doc.id)),
 						history: filteredHistory,
 						includeMatterHeader: !previous,
 					})

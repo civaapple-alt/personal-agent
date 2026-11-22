@@ -8,6 +8,7 @@ import {
 	canAccessMatter,
 	canAccessOrganization,
 	canAccessSpace,
+	canParticipateInMatter,
 	canWriteSpace,
 	getActorOrgRole,
 	isViewerInAllOrgsOrTarget,
@@ -41,6 +42,8 @@ const PREVIEW_MIME_BY_EXT: Record<string, string> = {
 export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, broadcast } = ctx;
 	const { actor, req, res, method, pathname } = r;
+	const canReadDocument = (document: { matterId: string | null }) =>
+		!document.matterId || canAccessMatter(store, actor, store.getMatter(document.matterId));
 
 	if (pathname === "/api/spaces") {
 		if (!requireActiveActor(res, actor)) return true;
@@ -52,6 +55,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				.filter((space) => canAccessSpace(store, actor, space))
 				.map((space) => ({
 					...space,
+					documentCount: store.spaces.listDocuments({ spaceId: space.id }).filter(canReadDocument).length,
 					canWrite: canWriteSpace(store, actor, space),
 				}));
 			sendJson(res, 200, { spaces });
@@ -126,10 +130,12 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 		const query = reqUrl.searchParams.get("q") ?? undefined;
 		const rawLimit = Number(reqUrl.searchParams.get("limit"));
 		const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(200, Math.floor(rawLimit)) : 60;
-		const documents = store.spaces.listRecentDocumentsForSpaces(
-			accessibleSpaces.map((s) => s.id),
-			{ docType, query, limit },
-		);
+		const documents = store.spaces
+			.listRecentDocumentsForSpaces(
+				accessibleSpaces.map((s) => s.id),
+				{ docType, query, limit },
+			)
+			.filter(canReadDocument);
 		sendJson(res, 200, { documents });
 		return true;
 	}
@@ -153,9 +159,13 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			const rawDocType = reqUrl.searchParams.get("docType");
 			const docType: SpaceDocumentType | undefined =
 				rawDocType && rawDocType !== "all" ? normalizeSpaceDocumentType(rawDocType) : undefined;
-			const documents = store.spaces.listDocuments({ spaceId, docType });
+			const documents = store.spaces.listDocuments({ spaceId, docType }).filter(canReadDocument);
 			sendJson(res, 200, {
-				space: { ...space, canWrite: canWriteSpace(store, actor, space) },
+				space: {
+					...space,
+					documentCount: store.spaces.listDocuments({ spaceId }).filter(canReadDocument).length,
+					canWrite: canWriteSpace(store, actor, space),
+				},
 				documents,
 			});
 			return true;
@@ -230,6 +240,62 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 		return false;
 	}
 
+	const feedbackMatch = pathname.match(/^\/api\/spaces\/documents\/([^/]+)\/feedback$/);
+	if (feedbackMatch && (method === "GET" || method === "POST")) {
+		if (!requireActiveActor(res, actor)) return true;
+		const docId = decodeURIComponent(feedbackMatch[1]!);
+		const document = store.spaces.getDocumentMeta(docId);
+		if (!document) {
+			sendError(res, 404, "资料不存在");
+			return true;
+		}
+		const space = store.spaces.getSpace(document.spaceId);
+		if (!space || !canAccessSpace(store, actor, space) || !canReadDocument(document)) {
+			sendError(res, 403, "无权访问该资料");
+			return true;
+		}
+		if (method === "GET") {
+			sendJson(res, 200, { feedback: store.spaces.listDocumentFeedback(docId) });
+			return true;
+		}
+		const matter = document.matterId ? store.getMatter(document.matterId) : null;
+		if (!canWriteSpace(store, actor, space) || (matter && !canParticipateInMatter(store, actor, matter))) {
+			sendError(res, 403, "无权评价该资料");
+			return true;
+		}
+		const body = await readJsonBody(req);
+		const commitHash = typeof body.commitHash === "string" ? body.commitHash.trim() : "";
+		const feedback = typeof body.feedback === "string" ? body.feedback.trim() : "";
+		const rating = body.rating === undefined || body.rating === null ? null : body.rating;
+		if (
+			!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(commitHash) ||
+			feedback.length > 5000 ||
+			(rating !== null && rating !== "positive" && rating !== "negative" && rating !== "neutral") ||
+			(!feedback && !rating)
+		) {
+			sendError(res, 400, "请提供文档提交号和评价或反馈（最多 5000 字）");
+			return true;
+		}
+		try {
+			const saved = await store.spaces.saveDocumentFeedback({
+				documentId: docId,
+				commitHash,
+				actorId: actor.user?.id ?? actor.collaborator.id,
+				actorName: actor.user?.displayName ?? actor.collaborator.name,
+				feedback,
+				rating,
+			});
+			if (!saved) {
+				sendError(res, 404, "资料不存在");
+				return true;
+			}
+			sendJson(res, 200, { feedback: saved });
+		} catch (error) {
+			sendError(res, 400, error instanceof Error ? error.message : "无法保存反馈");
+		}
+		return true;
+	}
+
 	const docCommitDetailMatch = pathname.match(/^\/api\/spaces\/documents\/([^/]+)\/commits\/([^/]+)$/);
 	if (docCommitDetailMatch && method === "GET") {
 		if (!requireActiveActor(res, actor)) return true;
@@ -241,7 +307,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!canAccessSpace(store, actor, space)) {
+		if (!canAccessSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权访问该资料");
 			return true;
 		}
@@ -264,7 +330,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!canAccessSpace(store, actor, space)) {
+		if (!canAccessSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权访问该资料");
 			return true;
 		}
@@ -283,7 +349,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!space || !canWriteSpace(store, actor, space)) {
+		if (!space || !canWriteSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权编辑该资料");
 			return true;
 		}
@@ -315,7 +381,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!space || !canAccessSpace(store, actor, space)) {
+		if (!space || !canAccessSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权访问该空间预览");
 			return true;
 		}
@@ -352,7 +418,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!space || !canAccessSpace(store, actor, space)) {
+		if (!space || !canAccessSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权访问该资料");
 			return true;
 		}
@@ -482,7 +548,7 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			return true;
 		}
 		const space = store.spaces.getSpace(meta.spaceId);
-		if (!space || !canAccessSpace(store, actor, space)) {
+		if (!space || !canAccessSpace(store, actor, space) || !canReadDocument(meta)) {
 			sendError(res, 403, "无权访问该资料");
 			return true;
 		}

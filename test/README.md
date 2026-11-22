@@ -42,7 +42,7 @@
 node --test test/continuity-collaboration.test.ts
 ```
 
-- 完整离线验证先运行 `npm run build:web` 生成服务测试所需静态资源，再运行 `npm test`。
+- 完整离线验证先运行 `npm run build:web` 生成服务测试所需静态资源，再运行 `npm test`。测试脚本使用临时 Pi 配置目录，不读取本机安装的 Pi 软件包。
 - 代码交付还需相应的 `npm run check` 与 `npm run build`。
 - 验证源码和构建入口使用 `npm run check:startup`，前提是后端和网页均已构建。
 

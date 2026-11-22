@@ -1,48 +1,14 @@
-import type {
-	AccountUserDto,
-	BootstrapPayload,
-	CollaboratorDto,
-	DeliverableDto,
-	DistillRsiResult,
-	FeedbackRating,
-} from "../api.ts";
+import type { BootstrapPayload } from "../api.ts";
 import { SpacePages } from "./SpacePages.tsx";
 
 interface DeliverablesViewProps {
 	spaceRoute: { deliverableId?: string; pageId?: string };
 	bootstrap: BootstrapPayload | null;
-	currentUser?: CollaboratorDto | null;
-	accountUser?: AccountUserDto | null;
-	isSuperAdmin?: boolean;
-	activeDeliverable?: DeliverableDto | null;
-	filteredDeliverables?: DeliverableDto[];
-	siblingVersions?: DeliverableDto[];
-	previewUrlFor?: (deliverable: DeliverableDto | null) => string | null;
 	memberName: (id: string) => string;
-	workspaceName?: (id: string | null) => string | null;
-	organizationName?: (id: string | null) => string | null;
-	onSubmitFeedback?: (
-		deliverableId: string,
-		payload: { feedback?: string; rating?: FeedbackRating; autoDistill?: boolean },
-	) => Promise<void>;
-	onDistillExperiences?: (
-		deliverable: DeliverableDto,
-		feedback?: string,
-		rating?: FeedbackRating,
-	) => Promise<DistillRsiResult | undefined>;
-	onCancelDistill?: (matterId: string) => void;
-	onStopPreview?: (previewId: string) => Promise<void>;
-	onSelectDeliverable?: (deliverableId: string, matterId?: string) => void;
-	onRequestRevision?: (deliverable: DeliverableDto) => void;
 	onOpenMatterChat: (matterId: string) => void;
-	onOpenTeam?: () => void;
-	onRefresh?: () => Promise<void>;
-	onNotice?: (message: string) => void;
-	onError?: (message: string) => void;
-	onNewTask?: () => void;
 }
 
-/** Unified Space view backed by per-space Git repositories (replaces the legacy dual Deliverables/Space split). */
+/** Browse documents and their Git revisions across accessible spaces. */
 export function DeliverablesView(props: DeliverablesViewProps) {
 	return (
 		<div className="subpage-scroll">

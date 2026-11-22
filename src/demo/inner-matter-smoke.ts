@@ -23,17 +23,32 @@ const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: root, 
 try {
 	const workspace = join(root, "inner-matter");
 	const matter = await new InnerMatterDemo(store, workspace).prepare();
-	assert.equal(store.listDeliverables().length, 0);
+	assert.equal(store.spaces.listDocuments({ matterId: matter.id }).length, 0);
 	const turns = [];
 	for (const step of INNER_MATTER_GUIDE.steps) {
+		let previousDoc: ReturnType<typeof store.spaces.listDocuments>[number] | undefined;
 		if (step.id === "revise") {
-			const first = store.listDeliverables(matter.id).find((item) => item.version === 1);
+			const first = store.spaces
+				.listDocuments({ matterId: matter.id })
+				.find((item) => item.title === INNER_MATTER_GUIDE.deliverableTitle);
 			assert.ok(first);
-			store.recordDeliverableFeedback(first.id, step.feedback);
+			previousDoc = first;
+			await store.spaces.saveDocumentFeedback({
+				documentId: first.id,
+				commitHash: first.headCommit,
+				actorId: "demo",
+				actorName: "Demo",
+				feedback: step.feedback,
+				rating: null,
+			});
 		}
 		const turn = await orchestrator.dispatchMatter({
 			matterId: matter.id,
-			prompt: step.prompt + (step.id === "revise" ? `\n\n本次反馈：\n${step.feedback}` : ""),
+			prompt:
+				step.prompt +
+				(step.id === "revise" && previousDoc
+					? `\n\n本次反馈：\n${step.feedback}\n\n更新已有资料时，使用 save_space_page 的 pageId=${previousDoc.id}、revision=${previousDoc.revision}。`
+					: ""),
 			timeoutMs: 180_000,
 		});
 		assert.equal(turn.runResult.aborted, false);
@@ -41,10 +56,11 @@ try {
 			step: step.id,
 			reply: turn.replyText,
 			tools: turn.runResult.toolExecutions.map((tool) => ({ name: tool.toolName, isError: tool.isError })),
-			deliverable: turn.deliverable,
+			spaceDocuments: store.spaces.listDocuments({ matterId: matter.id }),
 		});
 		await writeFile(join(root, "turns.json"), JSON.stringify(turns, null, 2));
-		if (step.id === "discuss" || step.id === "collaborate") assert.equal(store.listDeliverables(matter.id).length, 0);
+		if (step.id === "discuss" || step.id === "collaborate")
+			assert.equal(store.spaces.listDocuments({ matterId: matter.id }).length, 0);
 		if (step.id === "collaborate") {
 			for (const id of INNER_MATTER_GUIDE.collaborationMemberIds)
 				assert.ok(
@@ -59,14 +75,14 @@ try {
 				);
 		}
 		if (step.id === "deliver" || step.id === "revise") {
-			assert.equal(turn.deliverable?.title, INNER_MATTER_GUIDE.deliverableTitle);
-			assert.equal(turn.deliverable?.version, step.id === "deliver" ? 1 : 2);
+			const doc = store.spaces
+				.listDocuments({ matterId: matter.id })
+				.find((item) => item.title === INNER_MATTER_GUIDE.deliverableTitle);
+			assert.ok(doc);
+			assert.equal(doc.revision, step.id === "deliver" ? 1 : 2);
 			assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError));
-			const content = await readFile(
-				join(workspace, `deliverables/feedback-box-v${turn.deliverable!.version}.md`),
-				"utf8",
-			);
-			assert.equal(turn.deliverable?.contentOrPath, content);
+			const content = await readFile(join(workspace, `deliverables/feedback-box-v${doc.revision}.md`), "utf8");
+			assert.equal((await store.spaces.getDocument(doc.id))?.content, content);
 			assert.ok(
 				turn.runResult.toolExecutions.some(
 					(tool) =>
@@ -80,7 +96,7 @@ try {
 				),
 			);
 		}
-		console.log(`PASS ${step.label}: ${store.listDeliverables(matter.id).length} formal versions`);
+		console.log(`PASS ${step.label}: ${store.spaces.listDocuments({ matterId: matter.id }).length} space documents`);
 	}
 	assert.equal(db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
 	console.log("PASS real four-stage walkthrough; sessions, turns.json and proof.db retained");

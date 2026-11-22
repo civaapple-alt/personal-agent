@@ -65,28 +65,38 @@ async function fixture(t: test.TestContext, respond: (options: PiRpcWorkerOption
 
 const publication = { type: "document", title: "设计说明", changeNote: "根据已保存的最终文件发布" };
 
-test("sourcePath publication archives exact file text and retains earlier version snapshots", async (t) => {
+test("sourcePath saves exact file text and retains earlier Git revisions", async (t) => {
 	let version = 1;
 	const f = await fixture(t, async (options) => {
-		await invokeTool(options, "save_space_page", { ...publication, sourcePath: `v${version}.md` });
+		const prior = f.store.spaces.listDocuments().find((doc) => doc.title === publication.title);
+		await invokeTool(options, "save_space_page", {
+			...publication,
+			sourcePath: `v${version}.md`,
+			...(prior ? { pageId: prior.id, revision: prior.revision } : {}),
+		});
 	});
 	const firstText = "\uFEFF\n# 文档一\r\n正文含中文与 emoji ✅。\r\n\n";
 	await writeFile(join(f.workspace, "v1.md"), firstText);
 	const first = await f.dispatch();
-	assert.equal(first.deliverable?.contentOrPath, firstText);
+	const document = f.store.spaces.listDocuments({ matterId: first.matter.id })[0];
+	assert.ok(document);
+	assert.equal((await f.store.spaces.getDocument(document.id))?.content, firstText);
 	version = 2;
 	await writeFile(join(f.workspace, "v2.md"), "# 第二版\nAC9 引用第 4.5 节。\n");
-	const second = await f.dispatch(first.matter.id);
-	assert.equal(second.deliverable?.version, 2);
-	assert.equal(second.deliverable?.contentOrPath, await readFile(join(f.workspace, "v2.md"), "utf8"));
+	await f.dispatch(first.matter.id);
+	assert.equal((await f.store.spaces.getDocument(document.id))?.revision, 2);
+	assert.equal(
+		(await f.store.spaces.getDocument(document.id))?.content,
+		await readFile(join(f.workspace, "v2.md"), "utf8"),
+	);
 	await writeFile(join(f.workspace, "v1.md"), "后续编辑不改变归档历史");
-	assert.equal(f.store.getDeliverable(first.deliverable!.id)?.contentOrPath, firstText);
+	assert.equal((await f.store.spaces.getDocumentCommitDetail(document.id, document.headCommit))?.content, firstText);
 });
 
 test("document sources reject ambiguity, missing/outside/non-text files and non-document sourcePath", async (t) => {
 	const f = await fixture(t, async (options) => {
 		for (const [args, expected] of [
-			[{ sourcePath: "valid.md", content: "另写的正文" }, /exactly one|both/i],
+			[{ sourcePath: "valid.md", content: "另写的正文" }, /at most one|both/i],
 			[{ sourcePath: "missing.md" }, /ENOENT/],
 			[{ sourcePath: "." }, /file/],
 			[{ sourcePath: "../outside.md" }, /workspace/],
@@ -107,10 +117,10 @@ test("document sources reject ambiguity, missing/outside/non-text files and non-
 	await writeFile(join(f.workspace, "invalid.md"), Buffer.from([0xff, 0xfe]));
 	await writeFile(join(f.workspace, "large.md"), Buffer.alloc(1_048_577, 65));
 	await f.dispatch();
-	assert.equal(f.store.listDeliverables().length, 1);
+	assert.equal(f.store.spaces.listDocuments().length, 1);
 });
 
-test("changing a document after staging rejects the turn atomically instead of archiving stale text", async (t) => {
+test("changing a workspace file after saving leaves the saved snapshot intact", async (t) => {
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await invokeTool(options, "propose_experience", {
@@ -121,13 +131,15 @@ test("changing a document after staging rejects the turn atomically instead of a
 		await writeFile(join(f.workspace, "final.md"), "# 后改的正文\n");
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 已登记快照\n");
-	await assert.rejects(f.dispatch(), /changed.*save.*latest/i);
-	assert.equal(f.store.listDeliverables().length, 0);
-	assert.equal(f.store.listMemberMemories("product-manager").length, 0);
+	await f.dispatch();
+	const [document] = f.store.spaces.listDocuments();
+	assert.ok(document);
+	assert.equal((await f.store.spaces.getDocument(document.id))?.content, "# 已登记快照\n");
+	assert.equal(f.store.listMemberMemories("product-manager").length, 1);
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
 });
 
-test("republishing a revised same-title document replaces its staged draft without adding extra versions", async (t) => {
+test("saving a revised same-title document in one turn updates the space document", async (t) => {
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await writeFile(join(f.workspace, "final.md"), "# 修订后的最终稿\n");
@@ -135,31 +147,36 @@ test("republishing a revised same-title document replaces its staged draft witho
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 初稿\n");
 	const result = await f.dispatch();
-	assert.equal(result.deliverable?.contentOrPath, "# 修订后的最终稿\n");
-	assert.equal(result.deliverable?.version, 1);
-	assert.equal(f.store.listDeliverables().length, 1);
+	const docs = f.store.spaces.listDocuments({ matterId: result.matter.id });
+	assert.equal(docs.length, 1);
+	assert.equal((await f.store.spaces.getDocument(docs[0]!.id))?.content, "# 修订后的最终稿\n");
+	assert.equal(docs[0]?.revision, 2);
 });
 
-test("a source symlink cannot be redirected between staging and final commit", async (t) => {
+test("a source symlink change after saving cannot alter the saved snapshot", async (t) => {
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "alias.md" });
 		await rm(join(f.workspace, "alias.md"));
 		await symlink(join(f.workspace, "other.md"), join(f.workspace, "alias.md"));
 	});
 	await writeFile(join(f.workspace, "first.md"), "# 相同正文\n");
-	await writeFile(join(f.workspace, "other.md"), "# 相同正文\n");
+	await writeFile(join(f.workspace, "other.md"), "# 不同正文\n");
 	await symlink(join(f.workspace, "first.md"), join(f.workspace, "alias.md"));
-	await assert.rejects(f.dispatch(), /changed.*save.*latest/i);
-	assert.equal(f.store.listDeliverables().length, 0);
+	await f.dispatch();
+	const [document] = f.store.spaces.listDocuments();
+	assert.ok(document);
+	assert.equal((await f.store.spaces.getDocument(document.id))?.content, "# 相同正文\n");
 });
 
-test("a source deleted after staging cannot leave an archived document or an execution lease", async (t) => {
+test("deleting a source after saving keeps the space snapshot and releases the execution lease", async (t) => {
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
 		await rm(join(f.workspace, "final.md"));
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 最终稿\n");
-	await assert.rejects(f.dispatch(), /ENOENT/);
-	assert.equal(f.store.listDeliverables().length, 0);
+	await f.dispatch();
+	const [document] = f.store.spaces.listDocuments();
+	assert.ok(document);
+	assert.equal((await f.store.spaces.getDocument(document.id))?.content, "# 最终稿\n");
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
 });

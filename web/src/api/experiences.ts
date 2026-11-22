@@ -51,6 +51,9 @@ export interface MemoryApplicationDto {
 	matterId: string;
 	memberId: string;
 	deliverableId: string | null;
+	documentId: string | null;
+	commitHash: string | null;
+	actorId: string | null;
 	outcome: MemoryApplicationOutcome;
 	note: string;
 	createdAt: string;

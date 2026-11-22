@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, statSync } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
@@ -107,18 +107,6 @@ export class SpaceGitStore {
 		const rel = relative(this.rootDir, repoDir);
 		if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
 			throw new Error(`Space directory escapes root: ${spaceId}`);
-		}
-		// Transparently migrate legacy flat spaces/<spaceId>/.git to scoped spaces/<scope>/<id>/.git once.
-		if (!existsSync(repoDir)) {
-			const legacyDir = resolve(this.rootDir, safeId);
-			if (legacyDir !== repoDir && existsSync(join(legacyDir, ".git"))) {
-				mkdirSync(dirname(repoDir), { recursive: true });
-				try {
-					renameSync(legacyDir, repoDir);
-				} catch {
-					return legacyDir;
-				}
-			}
 		}
 		return repoDir;
 	}
@@ -503,6 +491,20 @@ export class SpaceGitStore {
 				.filter((commit) => Boolean(commit.hash));
 		} catch {
 			return [];
+		}
+	}
+
+	/** Check that a full commit belongs to this document's reachable history. */
+	async isDocumentCommit(spaceId: string, filePath: string, commitHash: string): Promise<boolean> {
+		if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commitHash)) return false;
+		const repoDir = this.resolveRepoDir(spaceId);
+		const safePath = normalizeSafeRepoFilePath(filePath);
+		try {
+			await this.runGit(repoDir, ["merge-base", "--is-ancestor", commitHash, "HEAD"]);
+			const result = await this.runGit(repoDir, ["log", "-1", "--format=%H", commitHash, "--", safePath]);
+			return result.stdout.trim() === commitHash;
+		} catch {
+			return false;
 		}
 	}
 

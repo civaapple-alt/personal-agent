@@ -152,8 +152,6 @@ function findExistingUploadPath(uploadsDir: string, filename: string): string | 
 	const root = resolve(uploadsDir);
 	const bucketed = resolve(root, resolveUploadMonthBucket(filename), filename);
 	if (bucketed.startsWith(root) && existsSync(bucketed)) return bucketed;
-	const legacyFlat = resolve(root, filename);
-	if (legacyFlat.startsWith(root) && existsSync(legacyFlat)) return legacyFlat;
 	return null;
 }
 

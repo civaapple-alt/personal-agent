@@ -23,7 +23,7 @@ function extractCookie(res: Response): string {
 	return header.split(";")[0]!;
 }
 
-test("Scoped loader preserves legacy root .data/roles/*.md as global, supports role package dirs, and blocks scope spoofing", async () => {
+test("Scoped loader reads global roles, supports role package dirs, and blocks scope spoofing", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pa-scoped-loader-"));
 	try {
 		const rolesDir = join(dir, "roles");
@@ -35,7 +35,7 @@ test("Scoped loader preserves legacy root .data/roles/*.md as global, supports r
 		await mkdir(join(skillsDir, "orgs", "org_a", "org-checklist"), { recursive: true });
 		await mkdir(join(skillsDir, "global", "shared-addon"), { recursive: true });
 
-		// Legacy root role (mirroring .data/roles/ux-designer.md) -> global
+		// Root role -> global
 		const builtin = await loadRoleTemplatesWithCustomDir(resolve("roles"));
 		const uxTemplate = serializeRoleTemplateMarkdown({
 			...builtin[0]!,
@@ -45,6 +45,11 @@ test("Scoped loader preserves legacy root .data/roles/*.md as global, supports r
 			isPrimaryContact: false,
 		});
 		await writeFile(join(rolesDir, "ux-designer.md"), uxTemplate, "utf8");
+		await mkdir(join(rolesDir, "global"));
+		await writeFile(
+			join(rolesDir, "global", "ux-designer.md"),
+			uxTemplate.replace("UX Designer", "Ignored override"),
+		);
 
 		// Org role package attempting to spoof roleScope: global inside frontmatter -> forced to org/org_a
 		const orgSpoofed = serializeRoleTemplateMarkdown({
@@ -90,6 +95,7 @@ test("Scoped loader preserves legacy root .data/roles/*.md as global, supports r
 		const loaded = await loadRoleTemplatesWithCustomDir(resolve("roles"), rolesDir);
 		const ux = loaded.find((t) => t.id === "ux-designer");
 		assert.equal(ux?.roleScope, "global");
+		assert.equal(ux?.name, "UX Designer");
 		assert.equal(ux?.ownerOrgId ?? null, null);
 		assert.equal(ux?.ownerUserId ?? null, null);
 
