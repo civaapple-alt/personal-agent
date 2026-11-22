@@ -22,6 +22,7 @@ import {
 	prepareDelivery,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
+	resolveScopedPiSessionDir,
 	validateSavedSession,
 } from "./execution-context.ts";
 import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
@@ -558,7 +559,7 @@ export async function executeWithWorkerPass(
 			cwd,
 			provider: selection?.provider,
 			model: selection?.model,
-			sessionDir: deps.sessionDir,
+			sessionDir: resolveScopedPiSessionDir(deps.sessionDir, cwd),
 			sessionFile,
 			noSession: deps.noSession,
 			args,

@@ -4,13 +4,13 @@
 
 ## 五类空间模型
 
-| 类型 (`kind`) | 目录与标识 | 权限边界与用途 |
+| 类型 (`kind`) | 标识与磁盘路径 | 权限边界与用途 |
 | --- | --- | --- |
-| `org`（组织默认空间） | `spc_org_<orgId>` | 每个组织自动拥有；组织成员可读，非 `org_viewer` 可写 |
-| `workspace`（仓库默认空间） | `spc_ws_<workspaceId>` | 每个业务仓库自动拥有；沿用仓库访问控制（受限仓库仅授权人与管理员可访问） |
-| `user`（人类用户个人空间） | `spc_usr_<userId>` | 每个人类用户自动拥有；严格仅本人可读写（连超管亦不可访问他人个人空间）；**私密事项**的资料默认落入发起人个人空间，从物理 Git 仓库层面隔离 |
-| `member`（AI 角色空间） | `spc_mem_<memberId>` | 每个 AI 角色自动拥有；沿用角色可见作用域（`global`/`org`/`personal`），承载岗位沉淀与过程资料 |
-| `custom`（自定义空间） | `spc_<uuid>` | 用户按需创建，可设为组织共享（`org`）或仅自己私密（`private`） |
+| `org`（组织默认空间） | `spc_org_<orgId>` → `spaces/orgs/<orgId>/` | 每个组织自动拥有；组织成员可读，非 `org_viewer` 可写 |
+| `workspace`（仓库默认空间） | `spc_ws_<workspaceId>` → `spaces/workspaces/<workspaceId>/` | 每个业务仓库自动拥有；沿用仓库访问控制（受限仓库仅授权人与管理员可访问） |
+| `user`（人类用户个人空间） | `spc_usr_<userId>` → `spaces/users/<userId>/` | 每个人类用户自动拥有；严格仅本人可读写（连超管亦不可访问他人个人空间）；**私密事项**的资料默认落入发起人个人空间，从物理 Git 仓库层面隔离 |
+| `member`（AI 角色空间） | `spc_mem_<memberId>` → `spaces/members/<memberId>/` | 每个 AI 角色自动拥有；沿用角色可见作用域（`global`/`org`/`personal`），承载岗位沉淀与过程资料 |
+| `custom`（自定义空间） | `spc_<uuid>` → `spaces/custom/<spaceId>/` | 用户按需创建，可设为组织共享（`org`）或仅自己私密（`private`） |
 
 ## 事项路由与仓库文件关联
 

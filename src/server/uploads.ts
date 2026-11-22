@@ -138,6 +138,25 @@ export function parseIncomingFiles(raw: unknown): ParsedUploadFile[] {
 	return parsed;
 }
 
+/** Derive a YYYY-MM storage bucket from a timestamp-prefixed upload filename (or current UTC month). */
+export function resolveUploadMonthBucket(filename: string): string {
+	const match = filename.match(/^(\d{10,16})-/);
+	const ts = match ? Number(match[1]) : Number.NaN;
+	const date = Number.isFinite(ts) && ts > 0 ? new Date(ts) : new Date();
+	const year = date.getUTCFullYear();
+	const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+	return `${year}-${month}`;
+}
+
+function findExistingUploadPath(uploadsDir: string, filename: string): string | null {
+	const root = resolve(uploadsDir);
+	const bucketed = resolve(root, resolveUploadMonthBucket(filename), filename);
+	if (bucketed.startsWith(root) && existsSync(bucketed)) return bucketed;
+	const legacyFlat = resolve(root, filename);
+	if (legacyFlat.startsWith(root) && existsSync(legacyFlat)) return legacyFlat;
+	return null;
+}
+
 async function persistUploadBytes(
 	filename: string,
 	buffer: Buffer,
@@ -146,8 +165,9 @@ async function persistUploadBytes(
 	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>,
 ): Promise<void> {
 	if (uploadsDir) {
-		await mkdir(resolve(uploadsDir), { recursive: true });
-		await writeFile(join(resolve(uploadsDir), filename), buffer);
+		const bucketDir = resolve(uploadsDir, resolveUploadMonthBucket(filename));
+		await mkdir(bucketDir, { recursive: true });
+		await writeFile(join(bucketDir, filename), buffer);
 		return;
 	}
 	memoryUploads.set(filename, { buffer, mimeType });
@@ -252,8 +272,8 @@ async function readStoredUploadBuffer(
 	const filename = url.slice("/api/uploads/".length);
 	if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return undefined;
 	if (uploadsDir) {
-		const filePath = join(resolve(uploadsDir), filename);
-		if (existsSync(filePath)) {
+		const filePath = findExistingUploadPath(uploadsDir, filename);
+		if (filePath) {
 			return await readFile(filePath);
 		}
 	}
@@ -332,8 +352,8 @@ export async function handleUploadGet(
 		return;
 	}
 	if (uploadsDir) {
-		const targetPath = resolve(uploadsDir, filename);
-		if (targetPath.startsWith(resolve(uploadsDir)) && existsSync(targetPath)) {
+		const targetPath = findExistingUploadPath(uploadsDir, filename);
+		if (targetPath) {
 			const content = await readFile(targetPath);
 			res.writeHead(200, {
 				"Content-Type": mime,

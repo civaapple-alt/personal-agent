@@ -49,47 +49,42 @@
 
 ```text
 .data/
+├── # ── 核心业务资产（备份必选）──────────────────────────────────────────────────
 ├── personal-agent.db (+ -wal / -shm)   # SQLite 主库（元数据、账号、RBAC、事项消息、记忆、索引）
-│
-├── spaces/                             # 【资料空间】按 spaceId 平铺，每个空间一个独立 Git 仓库（懒初始化）
-│   ├── spc_org_<orgId>/                #   组织默认空间（.git/ + pages/<docId>.md）
-│   ├── spc_ws_<workspaceId>/           #   仓库默认空间
-│   ├── spc_usr_<userId>/               #   人类用户个人空间（私密事项默认落此）
-│   ├── spc_mem_<memberId>/             #   AI 角色默认空间
-│   └── spc_<uuid>/                     #   自定义空间
-│
+├── spaces/                             # 【资料空间】按作用域分目录，每个空间独立 Git 仓库（懒初始化）
+│   ├── orgs/<orgId>/                   #   组织默认空间（.git/ + pages/<docId>.md）
+│   ├── workspaces/<workspaceId>/       #   仓库默认空间
+│   ├── users/<userId>/                 #   人类用户个人空间（私密事项默认落此）
+│   ├── members/<memberId>/             #   AI 角色默认空间
+│   └── custom/<spaceId>/               #   自定义空间
 ├── roles/                              # 【运行期自定义 AI 角色】按作用域分层（覆盖/补充仓库内置 roles/）
 │   ├── <roleId>.md 或 global/          #   global：平台通用角色
 │   ├── orgs/<orgId>/<roleId>/          #   org：组织共享角色（支持角色包及内嵌 skills/）
 │   └── users/<userId>/<roleId>/        #   personal：个人私有角色（仅本人可见）
-│
 ├── skills/                             # 【运行期自定义 Skill】与 roles/ 对齐的三层作用域
 │   ├── global/<skillName>/SKILL.md     #   平台通用
 │   ├── orgs/<orgId>/<skillName>/       #   组织共享
 │   └── users/<userId>/<skillName>/     #   个人私有
+├── uploads/                            # 【对话附件】按 YYYY-MM/ 分桶存放图片与 .txt（兼容旧平铺文件）
+│   └── 2026-11/<timestamp>-<hash>.{png,txt}
 │
-├── team-workspaces/                    # 【远程克隆的业务代码仓】按组织 slug 分组
-│   └── <orgSlug>/<repoName>/           #   通过 Git URL 克隆的项目仓（本地目录绑定仓位于宿主外部）
-│
-├── pi-sessions/                        # 【Pi 会话文件】平铺 JSONL（由 DB worker_sessions 按 v2 范围键索引）
-│   └── <timestamp>_<uuid>.jsonl
-│
-├── uploads/                            # 【对话附件】平铺图片与 .txt 折叠文本（由 DB uploads_index 做 ACL 索引）
-│   └── <timestamp>-<hash>.{png,txt}
-│
+├── # ── 可重建运行态 / 缓存（备份可选，可按需重拉或清理）──────────────────────────
+├── pi-sessions/                        # 【Pi 会话文件】对齐原生 ~/.pi/agent/sessions/--<encoded-cwd>--/
+│   └── --Users-xxx-repo--/<timestamp>_<uuid>.jsonl
+├── team-workspaces/                    # 【远程克隆的业务代码仓】按组织 slug 分组（可重新 clone）
+│   └── <orgSlug>/<repoName>/
 ├── extensions/                         # 【托管扩展包】早期工作台克隆的方法包目录
 │   └── repo/
-│
 └── inner-matter/                       # 【四步内置演示】按需准备的虚构演练 Git 仓库
 ```
 
 | 路径 | 用途 | 备注 |
 | --- | --- | --- |
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
-| `.data/spaces/` | 资料空间独立 Git 仓库目录 | 按 `spaceId` 平铺为独立 Git 仓库（`spc_org_<orgId>` 组织默认、`spc_ws_<wsId>` 仓库默认、`spc_usr_<userId>` 人类个人、`spc_mem_<memberId>` AI 角色、`spc_<uuid>` 自定义），首次写入或创建自定义空间时懒初始化；自定义 `PA_DB_PATH` 时跟随数据库目录，`:memory:` 时使用临时目录 |
+| `.data/spaces/` | 资料空间独立 Git 仓库目录 | 按作用域分目录存放（`orgs/<orgId>/`、`workspaces/<wsId>/`、`users/<userId>/`、`members/<memberId>/`、`custom/<spaceId>/`），首次写入或创建自定义空间时懒初始化；既有旧平铺 `spc_*` 目录自动透明迁移；自定义 `PA_DB_PATH` 时跟随数据库目录，`:memory:` 时使用临时目录 |
 | `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
-| `.data/pi-sessions` | Pi 会话文件 | 用 `PA_SESSION_DIR` 更改。按事项、成员、工作区和会话模式记录 `sessionFile` 与 `piSessionId` |
-| `.data/uploads/` | 消息附件 | 跟随数据库目录 |
+| `.data/pi-sessions` | Pi 会话文件 | 用 `PA_SESSION_DIR` 更改。按原生 Pi 规则在 `--<encoded-cwd>--/` 子目录下分仓存放（旧平铺会话文件仍按精确 `sessionFile` 继续恢复） |
+| `.data/uploads/` | 消息附件 | 跟随数据库目录；新上传按 `YYYY-MM/` 按月分桶落盘，同时兼容读取既有平铺附件 |
 | `.data/team-workspaces/` | 团队 Git 克隆 | 默认跟随数据库目录。可用 `PA_WORKSPACES_ROOT` 或超管控制台更改 |
 | `.data/extensions/repo/` | 工作台克隆的方法包 | 跟随数据库目录；通过环境变量手动指定的包保留原路径 |
 | `roles/` | 内置可分享岗位模板 Markdown 目录 | 启动时扫描 `.md`（自动跳过 `README.md`），保存仓库自带的基础模板 |
@@ -104,11 +99,11 @@
 
 | 维度 | SQLite (`personal-agent.db`) | `.data/` 磁盘位置 | 权限与隔离边界 |
 | --- | --- | --- | --- |
-| **组织 (Org)** | `organizations`、`organization_members`、`organization_invites`、`organization_ai_roles`、`member_memories(company_private)` | `spaces/spc_org_<orgId>/`、`roles/orgs/<orgId>/`、`skills/orgs/<orgId>/`、`team-workspaces/<orgSlug>/` | 组织成员 RBAC（`org_owner`/`org_admin`/`org_member`/`org_viewer`） |
-| **仓库 (Workspace)** | `workspace_links`、`workspace_members`、`member_memories(project_private)` | 远程克隆仓在 `team-workspaces/<orgSlug>/<repo>/`（本地绑定仓在宿主外部路径）；配套空间在 `spaces/spc_ws_<wsId>/` | 仓库可见性 `org` / `restricted` 成员名单 |
-| **人类用户 (User)** | `users`、`user_sessions`、`collaborators`、`audit_logs` | `spaces/spc_usr_<userId>/`、`roles/users/<userId>/`、`skills/users/<userId>/` | 严格本人隔离（个人空间与 `personal` 角色连超管也不可访问他人数据） |
-| **AI 成员角色 (Member)** | `team_members`、`member_memories`、`worker_sessions` | 自定义定义在 `roles/{global,orgs,users}/`；配套空间在 `spaces/spc_mem_<memberId>/`；模型上下文在 `pi-sessions/*.jsonl` | 按 `role_scope` 隔离定义，按 `v2` 会话键（含组织、仓库、事项与触发用户）隔离运行会话 |
-| **事项 (Matter)** | `matters`、`matter_messages`、`space_documents`（索引）、`uploads_index` | 无独立事项目录：空间文档落入目标默认空间 Git 仓库（私密事项→发起人 `spc_usr_`、非私密→`spc_ws_` 或 `spc_org_`）；附件落 `uploads/` | 按事项 `visibility`（`org`/`private`）与组织/仓库 ACL 控制 |
+| **组织 (Org)** | `organizations`、`organization_members`、`organization_invites`、`organization_ai_roles`、`member_memories(company_private)` | `spaces/orgs/<orgId>/`、`roles/orgs/<orgId>/`、`skills/orgs/<orgId>/`、`team-workspaces/<orgSlug>/` | 组织成员 RBAC（`org_owner`/`org_admin`/`org_member`/`org_viewer`） |
+| **仓库 (Workspace)** | `workspace_links`、`workspace_members`、`member_memories(project_private)` | 远程克隆仓在 `team-workspaces/<orgSlug>/<repo>/`（本地绑定仓在宿主外部路径）；配套空间在 `spaces/workspaces/<wsId>/` | 仓库可见性 `org` / `restricted` 成员名单 |
+| **人类用户 (User)** | `users`、`user_sessions`、`collaborators`、`audit_logs` | `spaces/users/<userId>/`、`roles/users/<userId>/`、`skills/users/<userId>/` | 严格本人隔离（个人空间与 `personal` 角色连超管也不可访问他人数据） |
+| **AI 成员角色 (Member)** | `team_members`、`member_memories`、`worker_sessions` | 自定义定义在 `roles/{global,orgs,users}/`；配套空间在 `spaces/members/<memberId>/`；模型上下文在 `pi-sessions/--<encoded-cwd>--/*.jsonl` | 按 `role_scope` 隔离定义，按 `v2` 会话键（含组织、仓库、事项与触发用户）隔离运行会话 |
+| **事项 (Matter)** | `matters`、`matter_messages`、`space_documents`（索引）、`uploads_index` | 无独立事项目录：空间文档落入目标默认空间 Git 仓库（私密事项→发起人 `spaces/users/<userId>/`、非私密→`spaces/workspaces/<wsId>/` 或 `spaces/orgs/<orgId>/`）；附件按月落 `uploads/YYYY-MM/` | 按事项 `visibility`（`org`/`private`）与组织/仓库 ACL 控制 |
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。

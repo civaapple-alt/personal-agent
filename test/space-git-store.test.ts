@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { encodePiSessionCwdDir, resolveScopedPiSessionDir } from "../src/orchestrator/execution-context.ts";
 import { canAccessSpace, canWriteSpace } from "../src/server/acl.ts";
+import { persistUploadedFiles, resolveUploadMonthBucket } from "../src/server/uploads.ts";
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { memberSpaceId, orgSpaceId, userSpaceId, workspaceSpaceId } from "../src/storage/repos/space-repo.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { resolveScopedSpaceRelativeDir } from "../src/storage/space-git-store.ts";
 
 test("SpaceRepo initializes 5 space kinds, routes private matters to user space, and tracks Git commits + diffs", async () => {
 	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-test-"));
@@ -90,7 +93,11 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		});
 		assert.equal(doc.revision, 1);
 		assert.match(doc.headCommit, /^[0-9a-f]{40}$/);
-		assert.ok(existsSync(join(spacesDir, custom.id, ".git")));
+		assert.ok(existsSync(join(spacesDir, "custom", custom.id, ".git")));
+		assert.equal(resolveScopedSpaceRelativeDir(orgSpaceId(org.id)), join("orgs", org.id));
+		assert.equal(resolveScopedSpaceRelativeDir(workspaceSpaceId(ws.id)), join("workspaces", ws.id));
+		assert.equal(resolveScopedSpaceRelativeDir(userSpaceId(admin.id)), join("users", admin.id));
+		assert.equal(resolveScopedSpaceRelativeDir(memberSpaceId("product-manager")), join("members", "product-manager"));
 
 		// Update generates a new commit and preserves diff
 		const updated = await store.spaces.updateDocument(doc.id, {
@@ -190,6 +197,51 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.equal(canWriteSpace(store, superAdminActor, bobSpace), false);
 		assert.equal(canAccessSpace(store, bobActor, bobSpace), true);
 		assert.equal(canWriteSpace(store, bobActor, bobSpace), true);
+
+		// Legacy flat space directory migrates transparently into scoped directory
+		const legacyWsId = "spc_ws_ws_legacy_flat";
+		const legacyFlatDir = join(spacesDir, legacyWsId);
+		mkdirSync(join(legacyFlatDir, ".git"), { recursive: true });
+		writeFileSync(join(legacyFlatDir, "marker.txt"), "ok");
+		const resolvedMigrated = store.spaces.git.resolveRepoDir(legacyWsId);
+		assert.equal(resolvedMigrated, join(spacesDir, "workspaces", "ws_legacy_flat"));
+		assert.ok(existsSync(join(resolvedMigrated, "marker.txt")));
+		assert.ok(!existsSync(legacyFlatDir));
+
+		// Pi session directory encoding matches native ~/.pi/agent/sessions/--<path>--/
+		assert.equal(encodePiSessionCwdDir("/Users/cch/code/how-to"), "--Users-cch-code-how-to--");
+		assert.equal(
+			resolveScopedPiSessionDir("/tmp/pi-sessions", "/Users/cch/code/how-to"),
+			"/tmp/pi-sessions/--Users-cch-code-how-to--",
+		);
+
+		// Uploads persist into YYYY-MM buckets while keeping flat URL format
+		const uploadsDir = await mkdtemp(join(tmpdir(), "pa-uploads-bucket-"));
+		try {
+			const storedFiles = await persistUploadedFiles(
+				[
+					{
+						kind: "file",
+						name: "note.txt",
+						mimeType: "text/plain",
+						content: "hello bucket",
+						buffer: Buffer.from("hello bucket", "utf8"),
+						sizeBytes: 12,
+						lineCount: 1,
+						charCount: 12,
+						previewText: "hello bucket",
+					},
+				],
+				uploadsDir,
+				new Map(),
+			);
+			const filename = storedFiles[0]!.url!.slice("/api/uploads/".length);
+			const bucket = resolveUploadMonthBucket(filename);
+			assert.match(bucket, /^\d{4}-\d{2}$/);
+			assert.ok(existsSync(join(uploadsDir, bucket, filename)));
+		} finally {
+			await rm(uploadsDir, { recursive: true, force: true });
+		}
 	} finally {
 		db.close();
 		await rm(spacesDir, { recursive: true, force: true });

@@ -36,6 +36,19 @@ export async function resolveRoleSkills(
 }
 
 /** Pi --session accepts missing paths by creating new sessions. Reject missing or foreign saved sessions ourselves. */
+/** Encode a working directory identically to native Pi (~/.pi/agent/sessions/--<path>--/). */
+export function encodePiSessionCwdDir(cwd: string): string {
+	return `--${resolve(cwd)
+		.replace(/^[/\\]/, "")
+		.replace(/[/\\:]/g, "-")}--`;
+}
+
+/** Resolve the per-cwd Pi session directory under the configured session root. */
+export function resolveScopedPiSessionDir(baseSessionDir: string | undefined, cwd: string): string | undefined {
+	if (!baseSessionDir) return undefined;
+	return resolve(baseSessionDir, encodePiSessionCwdDir(cwd));
+}
+
 export async function validateSavedSession(session: WorkerSessionRecord, cwd: string): Promise<string> {
 	if (!session.sessionFile) throw new Error("Saved session has no file");
 	const file = await open(session.sessionFile, "r");

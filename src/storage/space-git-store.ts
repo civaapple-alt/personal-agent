@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, renameSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
@@ -68,7 +68,25 @@ function sanitizeGitIdentity(value: string, fallback: string): string {
 	return cleaned || fallback;
 }
 
-/** Git-backed storage engine where each space owns an isolated Git repository under spacesDir/<spaceId>. */
+/** Map a spaceId to its scoped subdirectory under spacesRoot (aligned with roles/ and skills/). */
+export function resolveScopedSpaceRelativeDir(spaceId: string): string {
+	const safeId = normalizeSafeSpaceId(spaceId);
+	if (safeId.startsWith("spc_org_") && safeId.length > "spc_org_".length) {
+		return join("orgs", safeId.slice("spc_org_".length));
+	}
+	if (safeId.startsWith("spc_ws_") && safeId.length > "spc_ws_".length) {
+		return join("workspaces", safeId.slice("spc_ws_".length));
+	}
+	if (safeId.startsWith("spc_usr_") && safeId.length > "spc_usr_".length) {
+		return join("users", safeId.slice("spc_usr_".length));
+	}
+	if (safeId.startsWith("spc_mem_") && safeId.length > "spc_mem_".length) {
+		return join("members", safeId.slice("spc_mem_".length));
+	}
+	return join("custom", safeId);
+}
+
+/** Git-backed storage engine where each space owns an isolated Git repository under spacesDir/<scope>/<id>. */
 export class SpaceGitStore {
 	readonly rootDir: string;
 	private readonly writeQueues = new Map<string, Promise<unknown>>();
@@ -84,10 +102,23 @@ export class SpaceGitStore {
 
 	resolveRepoDir(spaceId: string): string {
 		const safeId = normalizeSafeSpaceId(spaceId);
-		const repoDir = resolve(this.rootDir, safeId);
+		const scopedRel = resolveScopedSpaceRelativeDir(safeId);
+		const repoDir = resolve(this.rootDir, scopedRel);
 		const rel = relative(this.rootDir, repoDir);
 		if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
 			throw new Error(`Space directory escapes root: ${spaceId}`);
+		}
+		// Transparently migrate legacy flat spaces/<spaceId>/.git to scoped spaces/<scope>/<id>/.git once.
+		if (!existsSync(repoDir)) {
+			const legacyDir = resolve(this.rootDir, safeId);
+			if (legacyDir !== repoDir && existsSync(join(legacyDir, ".git"))) {
+				mkdirSync(dirname(repoDir), { recursive: true });
+				try {
+					renameSync(legacyDir, repoDir);
+				} catch {
+					return legacyDir;
+				}
+			}
 		}
 		return repoDir;
 	}
