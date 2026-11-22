@@ -91,7 +91,6 @@ CREATE TABLE member_memories (
 	content TEXT NOT NULL,
 	rationale TEXT NOT NULL DEFAULT '',
 	source_matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
-	source_deliverable_id TEXT REFERENCES deliverables(id) ON DELETE SET NULL,
 	status TEXT NOT NULL DEFAULT 'candidate',
 	verified INTEGER NOT NULL DEFAULT 0,
 	superseded_by TEXT,

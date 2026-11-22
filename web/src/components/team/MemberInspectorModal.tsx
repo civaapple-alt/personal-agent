@@ -46,7 +46,6 @@ interface MemberInspectorModalProps {
 	organizationName?: (id: string | null) => string | null;
 	onClose: () => void;
 	onOpenMatter?: (matterId: string) => void;
-	onOpenDeliverable?: (deliverableId: string) => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -75,7 +74,6 @@ export function MemberInspectorModal({
 	organizationName,
 	onClose,
 	onOpenMatter,
-	onOpenDeliverable,
 	onRefresh,
 	onNotice,
 	onError,
@@ -461,7 +459,6 @@ export function MemberInspectorModal({
 									workspaceName={workspaceName}
 									organizationName={organizationName}
 									onOpenMatter={onOpenMatter}
-									onOpenDeliverable={onOpenDeliverable}
 									onRefresh={onRefresh}
 									onNotice={onNotice}
 									onError={onError}

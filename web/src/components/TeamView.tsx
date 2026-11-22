@@ -47,7 +47,6 @@ interface TeamViewProps {
 	onOpenArchitect?: () => void;
 	onOpenArchitectMatter?: () => void;
 	onOpenMatter?: (matterId: string) => void;
-	onOpenDeliverable?: (deliverableId: string) => void;
 	onOpenOrganizations?: () => void;
 }
 
@@ -75,7 +74,6 @@ export function TeamView({
 	onOpenArchitect,
 	onOpenArchitectMatter,
 	onOpenMatter,
-	onOpenDeliverable,
 	onOpenOrganizations,
 }: TeamViewProps) {
 	const isOwner = isSuperAdmin || (!accountUser && currentUser?.permissionRole !== "collaborator");
@@ -413,7 +411,6 @@ export function TeamView({
 				organizationName={organizationName}
 				onClose={() => setInspectState(null)}
 				onOpenMatter={onOpenMatter}
-				onOpenDeliverable={onOpenDeliverable}
 				onRefresh={onRefresh}
 				onNotice={onNotice}
 				onError={onError}

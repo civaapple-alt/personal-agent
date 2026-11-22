@@ -21,7 +21,6 @@ export interface AddMemoryInput {
 	content: string;
 	rationale?: string;
 	sourceMatterId?: string | null;
-	sourceDeliverableId?: string | null;
 	status?: MemoryStatus;
 	verified?: boolean;
 	supersedesMemoryId?: string | null;
@@ -71,11 +70,11 @@ export class MemoryRepo {
 			.prepare(
 				`INSERT INTO member_memories (
 					id, member_id, scope, category, org_id, workspace_id, content, rationale,
-					source_matter_id, source_deliverable_id, status, verified,
+					source_matter_id, status, verified,
 					superseded_by, supersedes_memory_id,
 					applied_count, positive_count, negative_count, last_applied_at,
 					created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, ?)`,
 			)
 			.run(
 				id,
@@ -87,7 +86,6 @@ export class MemoryRepo {
 				input.content,
 				input.rationale ?? "",
 				input.sourceMatterId ?? null,
-				input.sourceDeliverableId ?? null,
 				status,
 				verified ? 1 : 0,
 				null,

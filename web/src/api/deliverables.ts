@@ -24,7 +24,7 @@ export interface PreviewServiceDto {
 	port: number;
 	cwd: string;
 	status: "starting" | "running" | "stopped" | "failed";
-	deliverableId: string | null;
+	matterId: string | null;
 }
 
 export function stopPreview(previewId: string): Promise<{ preview: PreviewServiceDto }> {

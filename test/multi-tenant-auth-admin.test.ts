@@ -644,10 +644,6 @@ test("Team event streams share the resource ACL and logout closes only the curre
 		createdByUserId: owner.id,
 		visibility: "private",
 	});
-	const [delivery] = store.recordDeliverables([
-		{ matterId: matter.id, memberId, type: "document", title: "Fixture", contentOrPath: "Document" },
-	]);
-	assert.ok(delivery);
 	const ownerCookie = `pa_session=${store.createSession(owner.id).rawToken}`;
 	const otherOwnerCookie = `pa_session=${store.createSession(owner.id).rawToken}`;
 	const teammateCookie = `pa_session=${store.createSession(teammate.id).rawToken}`;
@@ -713,15 +709,40 @@ test("Team event streams share the resource ACL and logout closes only the curre
 		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: otherOwnerCookie } })).status, 200);
 		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: teammateCookie } })).status, 403);
 
+		const previewResponse = await post("/api/previews", otherOwnerCookie, {
+			title: "RESTRICTED_PREVIEW",
+			url: "https://preview.example.test/",
+			matterId: matter.id,
+		});
+		assert.equal(previewResponse.status, 201);
+		const { preview } = (await previewResponse.json()) as { preview: { id: string; matterId: string } };
+		assert.equal(preview.matterId, matter.id);
+		const teammatePreviews = (await (
+			await fetch(`${baseUrl}/api/previews`, {
+				headers: { Cookie: teammateCookie },
+			})
+		).json()) as { previews: Array<{ id: string }> };
+		assert.ok(!teammatePreviews.previews.some((item) => item.id === preview.id));
+		assert.equal((await post(`/api/previews/${preview.id}/stop`, teammateCookie, {})).status, 403);
+		assert.equal(
+			(
+				await post("/api/previews", teammateCookie, {
+					title: "forbidden",
+					url: "https://preview.example.test/",
+					matterId: matter.id,
+				})
+			).status,
+			403,
+		);
 		assert.equal(
 			(
 				await post("/api/previews", otherOwnerCookie, {
-					title: "RESTRICTED_PREVIEW",
+					title: "missing",
 					url: "https://preview.example.test/",
-					deliverableId: delivery.id,
+					matterId: "missing",
 				})
 			).status,
-			201,
+			404,
 		);
 		assert.equal(
 			(await post("/api/memories", otherOwnerCookie, { memberId, content: "VISIBLE_MEMORY_SIGNAL" })).status,

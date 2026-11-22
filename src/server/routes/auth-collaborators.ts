@@ -55,12 +55,9 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		const allowedMatterIds = new Set(scopedMatters.map((m) => m.id));
 		const scopedDeliverables = store.listDeliverables().filter((d) => allowedMatterIds.has(d.matterId));
 		const scopedPendingDialogs = dialogBroker.listPending().filter((d) => allowedMatterIds.has(d.matterId));
-		const allowedMatterMap = new Map(scopedMatters.map((m) => [m.id, m]));
-		const scopedPreviews = previewManager.listPreviews().filter((preview) => {
-			if (!preview.deliverableId) return isSuperAdminActor(actor);
-			const deliv = store.getDeliverable(preview.deliverableId);
-			return deliv ? allowedMatterMap.has(deliv.matterId) : isSuperAdminActor(actor);
-		});
+		const scopedPreviews = previewManager
+			.listPreviews()
+			.filter((preview) => (preview.matterId ? allowedMatterIds.has(preview.matterId) : isSuperAdminActor(actor)));
 		const scopedActiveRuns = Object.fromEntries(
 			[...activeRuns.entries()]
 				.filter(([matterId]) => allowedMatterIds.has(matterId))

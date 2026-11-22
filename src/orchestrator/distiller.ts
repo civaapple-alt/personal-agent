@@ -361,7 +361,6 @@ export async function performDistillationPass(
 			content: candidate.content,
 			rationale: candidate.rationale || payload.summary,
 			sourceMatterId: matter.id,
-			sourceDeliverableId: null,
 			status: "candidate",
 			verified: false,
 			supersedesMemoryId: validSupersedes,

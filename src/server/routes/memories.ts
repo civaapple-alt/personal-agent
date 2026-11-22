@@ -120,8 +120,6 @@ export async function handleMemoryRoutes(ctx: ServerRouteContext, r: RouteReques
 			content,
 			rationale: typeof body.rationale === "string" ? body.rationale.trim() : "",
 			sourceMatterId: typeof body.sourceMatterId === "string" && body.sourceMatterId ? body.sourceMatterId : null,
-			sourceDeliverableId:
-				typeof body.sourceDeliverableId === "string" && body.sourceDeliverableId ? body.sourceDeliverableId : null,
 			status,
 			verified: status === "verified",
 			supersedesMemoryId:

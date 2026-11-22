@@ -319,7 +319,6 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			content: "Alpha Studio 所有发布方案必须附带灰度放量比例、监控阈值与一键回滚开关。",
 			rationale: "来自历史发布复盘沉淀",
 			sourceMatterId: mAlphaShared.id,
-			sourceDeliverableId: delAlphaV1.id,
 			status: "verified",
 			verified: true,
 		});
@@ -370,7 +369,6 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			content: "发布检查清单应先执行离线启动检查再进入灰度验证。",
 			rationale: "来自 Q4 发布方案 V2 复盘候选",
 			sourceMatterId: mAlphaShared.id,
-			sourceDeliverableId: delAlphaV2.id,
 			status: "candidate",
 			verified: false,
 		});
@@ -416,7 +414,7 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			createdByUserId: ownerAlpha.id,
 			visibility: "org",
 		});
-		const [delAlphaSecret] = store.recordDeliverables([
+		store.recordDeliverables([
 			{
 				matterId: mAlphaSecret.id,
 				memberId: "engineering-manager",
@@ -436,7 +434,6 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			content: "Alpha Secret 仓库任何配置变更须采用双密钥滚动过渡，禁止原地覆盖。",
 			rationale: "受限仓库专属约束",
 			sourceMatterId: mAlphaSecret.id,
-			sourceDeliverableId: delAlphaSecret.id,
 			status: "verified",
 			verified: true,
 		});

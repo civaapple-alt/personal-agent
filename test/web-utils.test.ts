@@ -314,7 +314,6 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					workspaceId: null,
 					content: "verified pm rule",
 					sourceMatterId: "mat-1",
-					sourceDeliverableId: null,
 					status: "verified",
 					verified: true,
 					appliedCount: 0,
@@ -333,7 +332,6 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					workspaceId: null,
 					content: "candidate eng rule",
 					sourceMatterId: "mat-1",
-					sourceDeliverableId: "deliv-1",
 					status: "candidate",
 					verified: false,
 					appliedCount: 0,
@@ -350,7 +348,6 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 					workspaceId: null,
 					content: "other matter rule",
 					sourceMatterId: "mat-other",
-					sourceDeliverableId: null,
 					status: "candidate",
 					verified: false,
 					appliedCount: 0,
@@ -361,7 +358,6 @@ test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role
 			],
 		},
 		"mat-1",
-		"deliv-1",
 	);
 	assert.deepEqual(
 		sorted.map((m) => m.id),

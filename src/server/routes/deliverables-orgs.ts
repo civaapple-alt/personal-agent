@@ -420,9 +420,8 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 		if (!requireActiveActor(res, actor)) return true;
 		const isAdmin = isSuperAdminActor(actor);
 		const previews = previewManager.listPreviews().filter((preview) => {
-			if (!preview.deliverableId) return isAdmin;
-			const deliv = store.getDeliverable(preview.deliverableId);
-			const matter = deliv ? store.getMatter(deliv.matterId) : null;
+			if (!preview.matterId) return isAdmin;
+			const matter = store.getMatter(preview.matterId);
 			return matter ? canAccessMatter(store, actor, matter) : isAdmin;
 		});
 		sendJson(res, 200, { previews });
@@ -433,13 +432,20 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 		if (!requireActiveActor(res, actor)) return true;
 		const body = await readJsonBody(req);
 		const title = typeof body.title === "string" ? body.title.trim() : "独立预览服务";
-		const deliverableId = typeof body.deliverableId === "string" ? body.deliverableId : null;
+		const matterId = typeof body.matterId === "string" && body.matterId.trim() ? body.matterId.trim() : null;
+		const matter = matterId ? store.getMatter(matterId) : null;
+		if (matterId && !matter) {
+			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
 
 		if (typeof body.url === "string" && body.url.trim().length > 0) {
 			if (!isSuperAdminActor(actor)) {
-				const deliv = deliverableId ? store.getDeliverable(deliverableId) : null;
-				const matter = deliv ? store.getMatter(deliv.matterId) : null;
-				if (!matter || !canManageOrganization(store, actor, matter.orgId)) {
+				if (
+					!matter ||
+					!canAccessMatter(store, actor, matter) ||
+					!canManageOrganization(store, actor, matter.orgId)
+				) {
 					sendError(res, 403, "仅所有者（Owner）或对应组织管理员可登记预览链接");
 					return true;
 				}
@@ -447,7 +453,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			const info = previewManager.registerExternalPreview({
 				title,
 				url: body.url.trim(),
-				deliverableId,
+				matterId,
 			});
 			broadcast("preview_updated", info);
 			sendJson(res, 201, { preview: info });
@@ -470,7 +476,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			args,
 			cwd,
 			port,
-			deliverableId,
+			matterId,
 		});
 		auditActorAction(ctx, req, actor, {
 			action: "preview.start_command",
@@ -493,8 +499,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			return true;
 		}
 		if (!(isGlobalUnscopedActor(actor) || isSuperAdminActor(actor))) {
-			const linkedDeliv = existingPreview.deliverableId ? store.getDeliverable(existingPreview.deliverableId) : null;
-			const linkedMatter = linkedDeliv ? store.getMatter(linkedDeliv.matterId) : null;
+			const linkedMatter = existingPreview.matterId ? store.getMatter(existingPreview.matterId) : null;
 			if (
 				!linkedMatter ||
 				!canAccessMatter(store, actor, linkedMatter) ||

@@ -214,20 +214,16 @@ const MEMORY_STATUS_SORT_ORDER: Record<string, number> = {
 export function collectMatterMemories(
 	memoriesByMember: Record<string, MemberMemoryDto[]>,
 	matterId: string,
-	deliverableId?: string,
 ): MemberMemoryDto[] {
 	const items: MemberMemoryDto[] = [];
 	for (const list of Object.values(memoriesByMember)) {
 		for (const memory of list) {
-			if (memory.sourceMatterId === matterId || (deliverableId && memory.sourceDeliverableId === deliverableId)) {
+			if (memory.sourceMatterId === matterId) {
 				items.push(memory);
 			}
 		}
 	}
 	return items.sort((a, b) => {
-		const aDeliv = deliverableId && a.sourceDeliverableId === deliverableId ? 0 : 1;
-		const bDeliv = deliverableId && b.sourceDeliverableId === deliverableId ? 0 : 1;
-		if (aDeliv !== bDeliv) return aDeliv - bDeliv;
 		const aRank = MEMORY_STATUS_SORT_ORDER[a.status] ?? 9;
 		const bRank = MEMORY_STATUS_SORT_ORDER[b.status] ?? 9;
 		if (aRank !== bRank) return aRank - bRank;

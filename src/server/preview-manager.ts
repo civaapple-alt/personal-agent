@@ -11,7 +11,7 @@ export interface PreviewServiceInfo {
 	command: string;
 	pid: number | null;
 	status: "starting" | "running" | "stopped" | "failed";
-	deliverableId: string | null;
+	matterId: string | null;
 	startedAt: string;
 	error?: string;
 }
@@ -29,7 +29,7 @@ export interface StartPreviewInput {
 	args?: string[];
 	cwd?: string;
 	port?: number;
-	deliverableId?: string | null;
+	matterId?: string | null;
 	startupTimeoutMs?: number;
 }
 
@@ -77,8 +77,7 @@ async function waitForPortListening(port: number, timeoutMs: number): Promise<bo
 }
 
 /**
- * Manages independent local preview processes so deliverables can expose
- * clickable `http://127.0.0.1:<port>` links for V4's "打开查看 →".
+ * Manages independent local preview processes, optionally scoped to a matter.
  */
 export class PreviewManager {
 	private readonly services = new Map<string, ManagedPreview>();
@@ -102,7 +101,7 @@ export class PreviewManager {
 		url: string;
 		port?: number;
 		cwd?: string;
-		deliverableId?: string | null;
+		matterId?: string | null;
 	}): PreviewServiceInfo {
 		const id = input.id ?? `prev_${randomUUID()}`;
 		const parsedUrl = new URL(input.url);
@@ -116,7 +115,7 @@ export class PreviewManager {
 			command: "external",
 			pid: null,
 			status: "running",
-			deliverableId: input.deliverableId ?? null,
+			matterId: input.matterId ?? null,
 			startedAt: new Date().toISOString(),
 		};
 		this.services.set(id, { info, child: null, logs: [] });
@@ -138,7 +137,7 @@ export class PreviewManager {
 			command: [input.command, ...(input.args ?? [])].join(" "),
 			pid: null,
 			status: "starting",
-			deliverableId: input.deliverableId ?? null,
+			matterId: input.matterId ?? null,
 			startedAt: new Date().toISOString(),
 		};
 

@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the legacy deliverable reference from memory records and experience review; memories link to their source matter.
+
+- Scope preview services to matters instead of legacy deliverable IDs, including list, stop and event permissions.
+
 - Remove the legacy deliverable feedback endpoint; Space document feedback records ratings against Git commits.
 
 - Reflect on the current matter and accessible Space documents instead of selecting a legacy deliverable version.

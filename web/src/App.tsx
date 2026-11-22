@@ -311,7 +311,7 @@ export function App() {
 	const previewUrlFor = useCallback(
 		(deliv: DeliverableDto | null): string | null => {
 			if (!deliv) return null;
-			const linked: PreviewServiceDto | undefined = bootstrap?.previews.find((p) => p.deliverableId === deliv.id);
+			const linked: PreviewServiceDto | undefined = bootstrap?.previews.find((p) => p.matterId === deliv.matterId);
 			return deliv.serviceUrl ?? linked?.url ?? null;
 		},
 		[bootstrap],
@@ -956,7 +956,6 @@ export function App() {
 							onOpenArchitect={() => initiation.openArchitectForGap()}
 							onOpenArchitectMatter={() => startArchitectMatter()}
 							onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
-							onOpenDeliverable={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
 							onOpenOrganizations={() => navigateRoute({ tab: "organizations" })}
 						/>
 					</ViewFade>

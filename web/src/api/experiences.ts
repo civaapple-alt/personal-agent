@@ -32,7 +32,6 @@ export interface MemberMemoryDto {
 	content: string;
 	rationale?: string;
 	sourceMatterId?: string | null;
-	sourceDeliverableId?: string | null;
 	status: MemoryStatus;
 	verified: boolean;
 	supersededBy?: string | null;
@@ -66,7 +65,6 @@ export function saveMemberMemory(input: {
 	orgId?: string | null;
 	workspaceId?: string | null;
 	sourceMatterId?: string;
-	sourceDeliverableId?: string;
 	rationale?: string;
 	status?: MemoryStatus;
 	verified?: boolean;

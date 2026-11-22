@@ -33,7 +33,6 @@ interface ExperienceItemCardProps {
 	showMemberBadge?: boolean;
 	canManage?: boolean;
 	onOpenMatter?: (matterId: string) => void;
-	onOpenDeliverable?: (deliverableId: string) => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
@@ -51,7 +50,6 @@ export function ExperienceItemCard({
 	showMemberBadge = false,
 	canManage = true,
 	onOpenMatter,
-	onOpenDeliverable,
 	onRefresh,
 	onNotice,
 	onError,
@@ -291,10 +289,7 @@ export function ExperienceItemCard({
 				<>
 					<div className="memory-item-content">{memory.content}</div>
 					{memory.rationale && <div className="memory-rationale">依据：{memory.rationale}</div>}
-					{(memory.supersedesMemoryId ||
-						memory.supersededBy ||
-						memory.sourceMatterId ||
-						memory.sourceDeliverableId) && (
+					{(memory.supersedesMemoryId || memory.supersededBy || memory.sourceMatterId) && (
 						<div className="memory-source-row">
 							{memory.supersedesMemoryId && <span>替代旧规则 {memory.supersedesMemoryId}</span>}
 							{memory.supersededBy && <span>已被 {memory.supersededBy} 替代</span>}
@@ -305,15 +300,6 @@ export function ExperienceItemCard({
 									onClick={() => onOpenMatter(memory.sourceMatterId!)}
 								>
 									查看原对话 →
-								</button>
-							)}
-							{onOpenDeliverable && memory.sourceDeliverableId && (
-								<button
-									type="button"
-									className="btn-inline btn-xs"
-									onClick={() => onOpenDeliverable(memory.sourceDeliverableId!)}
-								>
-									查看来源成果 →
 								</button>
 							)}
 						</div>
@@ -397,7 +383,6 @@ interface ManualExperienceFormProps {
 	allowSelectMember?: boolean;
 	defaultWorkspaceId?: string | null;
 	sourceMatterId?: string;
-	sourceDeliverableId?: string;
 	defaultContent?: string;
 	headerLabel?: string;
 	onSaved?: () => void;
@@ -415,7 +400,6 @@ export function ManualExperienceForm({
 	allowSelectMember = true,
 	defaultWorkspaceId = null,
 	sourceMatterId,
-	sourceDeliverableId,
 	defaultContent = "",
 	headerLabel,
 	onSaved,
@@ -477,7 +461,6 @@ export function ManualExperienceForm({
 				orgId: resolvedOrgId,
 				workspaceId: resolvedWsId,
 				sourceMatterId,
-				sourceDeliverableId,
 				rationale: rationale.trim() || undefined,
 				status,
 				verified: status === "verified",
@@ -619,7 +602,6 @@ export function ManualExperienceForm({
 
 interface InlineExperienceReviewSectionProps {
 	matterId: string;
-	deliverableId?: string;
 	defaultMemberId: string;
 	workspaceId: string | null;
 	participantIds: string[];
@@ -649,7 +631,6 @@ interface InlineExperienceReviewSectionProps {
 
 export function InlineExperienceReviewSection({
 	matterId,
-	deliverableId,
 	defaultMemberId,
 	workspaceId,
 	participantIds,
@@ -784,7 +765,6 @@ export function InlineExperienceReviewSection({
 					allowSelectMember={true}
 					defaultWorkspaceId={workspaceId}
 					sourceMatterId={matterId}
-					sourceDeliverableId={deliverableId}
 					defaultContent={defaultManualContent}
 					onSaved={() => {
 						if (manualOpen === undefined) setInternalManualOpen(false);

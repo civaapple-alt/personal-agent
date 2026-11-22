@@ -196,7 +196,6 @@ export interface MemberMemory {
 	content: string;
 	rationale: string;
 	sourceMatterId: string | null;
-	sourceDeliverableId: string | null;
 	status: MemoryStatus;
 	verified: boolean;
 	supersededBy: string | null;

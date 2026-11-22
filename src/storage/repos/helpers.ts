@@ -216,7 +216,6 @@ export function mapMemoryRow(row: Record<string, unknown>): MemberMemory {
 		content: String(row.content),
 		rationale: typeof row.rationale === "string" ? row.rationale : "",
 		sourceMatterId: row.source_matter_id ? String(row.source_matter_id) : null,
-		sourceDeliverableId: row.source_deliverable_id ? String(row.source_deliverable_id) : null,
 		status,
 		verified: status === "verified",
 		supersededBy: row.superseded_by ? String(row.superseded_by) : null,
