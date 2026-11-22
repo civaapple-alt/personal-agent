@@ -69,6 +69,10 @@ export function App() {
 	const [selectedDeliverableId, setSelectedDeliverableId] = useState<string | null>(
 		initialRoute.deliverableId ?? null,
 	);
+	const [spaceRoute, setSpaceRoute] = useState<{ deliverableId?: string; pageId?: string }>({
+		deliverableId: initialRoute.deliverableId,
+		pageId: initialRoute.spacePageId,
+	});
 	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
 	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => readStoredSetting("pa.defaultOrgId"));
 	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
@@ -119,6 +123,7 @@ export function App() {
 		explicitNewMatterRef,
 		setActiveTab,
 		setSelectedDeliverableId,
+		setSpaceRoute,
 		setSelectedMatterId,
 		setSelectedMemberId,
 		setSettingsSection,
@@ -654,7 +659,7 @@ export function App() {
 
 	const mobileViewTitle =
 		activeTab === "deliverables"
-			? "交付成果库"
+			? "资料空间"
 			: activeTab === "team"
 				? "我的团队"
 				: activeTab === "materials"
@@ -885,7 +890,13 @@ export function App() {
 							onSendPrompt={() => void actions.handleSendPrompt()}
 							onAbortMatter={actions.handleAbortMatter}
 							onNewMatter={startNewMatterFromCurrent}
-							onOpenDeliverables={(deliverableId) => navigateRoute({ tab: "deliverables", deliverableId })}
+							onOpenDeliverables={(deliverableId) =>
+								navigateRoute(
+									deliverableId?.startsWith("page_")
+										? { tab: "deliverables", spacePageId: deliverableId }
+										: { tab: "deliverables", deliverableId },
+								)
+							}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
 							onDistillMatter={(matterId) => runRsiDistill({ matterId })}
 							onCancelDistillMatter={cancelRsiDistill}
@@ -899,6 +910,7 @@ export function App() {
 				{activeTab === "deliverables" && (
 					<ViewFade>
 						<DeliverablesView
+							spaceRoute={spaceRoute}
 							bootstrap={bootstrap}
 							currentUser={currentUser}
 							accountUser={accountUser}

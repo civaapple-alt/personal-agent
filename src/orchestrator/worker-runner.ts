@@ -256,6 +256,52 @@ export async function executeWithWorkerPass(
 				return { topics };
 			}
 			if (isArchitect) throw new Error("Role architect cannot execute team tools");
+			if (call.tool === "read_space") {
+				if (sessionMode !== "lead" && sessionMode !== "internal")
+					throw new Error("This worker cannot access space pages");
+				if (!call.pageId)
+					return {
+						pages: deps.store.spacePages.list(input.matterId).map(({ content: _content, ...page }) => page),
+					};
+				const page = deps.store.spacePages.get(call.pageId);
+				if (!page || page.matterId !== input.matterId) throw new Error("Space page not found in this matter");
+				return { page };
+			}
+			if (call.tool === "save_space_page") {
+				if (!canPublish) throw new Error("Only the matter lead can save space pages");
+				if (!call.pageId) {
+					const page = deps.store.spacePages.create({
+						matterId: input.matterId,
+						title: call.title,
+						content: call.content,
+						actorId: input.member.id,
+					});
+					input.onProgress?.({
+						stage: "tool",
+						label: `${input.member.displayName}保存了资料`,
+						toolName: "save_space_page",
+						collabUpdated: true,
+					});
+					return { page };
+				}
+				const previous = deps.store.spacePages.get(call.pageId);
+				if (!previous || previous.matterId !== input.matterId)
+					throw new Error("Space page not found in this matter");
+				const page = deps.store.spacePages.update(previous.id, {
+					revision: call.revision!,
+					title: call.title,
+					content: call.content,
+					actorId: input.member.id,
+				});
+				if (!page) throw new Error("Space page changed. Read its latest revision before saving.");
+				input.onProgress?.({
+					stage: "tool",
+					label: `${input.member.displayName}更新了资料`,
+					toolName: "save_space_page",
+					collabUpdated: true,
+				});
+				return { page };
+			}
 			const releaseIdle = worker?.suspendIdleTimeout?.();
 			const resumeMonitor = activity?.wait();
 			try {

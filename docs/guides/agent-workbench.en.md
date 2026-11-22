@@ -42,7 +42,9 @@ Open Role Architect or invite it from the collaboration members panel. Review ea
 
 ## Deliverables and feedback
 
-The lead of an authorized work turn can publish deliverables. Open the matter's deliverable library from the header menu and expand the version history to see earlier versions. Leave feedback on a version to help the lead revise it and publish a new version.
+Open Space from the matter header or sidebar to find working pages and published deliverables. Create a page for a plan, working notes, or a result. Pages belong to a matter and keep revision history. Matter participants can edit, and viewers have read-only access. The lead can read and save pages using its tools. A successful tool save takes effect immediately, including when the later turn fails.
+
+Open the deliverable version history to see earlier versions. Leave feedback on a version to help the lead revise it and publish a new version.
 
 ## Models, repositories, and capabilities
 

@@ -4,6 +4,7 @@ export type SettingsSection = "all" | "base" | "extensions" | "config";
 export interface HashRoute {
 	tab: NavTab;
 	deliverableId?: string;
+	spacePageId?: string;
 	matterId?: string;
 	isNewMatter?: boolean;
 	settingsSection?: SettingsSection;
@@ -22,6 +23,9 @@ export function parseHashRoute(rawHash: string): HashRoute {
 
 	if (segment0 === "deliverables") {
 		return segment1 ? { tab: "deliverables", deliverableId: segment1 } : { tab: "deliverables" };
+	}
+	if (segment0 === "space") {
+		return segment1 ? { tab: "deliverables", spacePageId: segment1 } : { tab: "deliverables" };
 	}
 	if (segment0 === "chats") {
 		if (segment1 === "new") {
@@ -49,6 +53,7 @@ export function parseHashRoute(rawHash: string): HashRoute {
 
 export function formatHashRoute(route: HashRoute): string {
 	if (route.tab === "deliverables") {
+		if (route.spacePageId) return `#/space/${encodeURIComponent(route.spacePageId)}`;
 		return route.deliverableId ? `#/deliverables/${encodeURIComponent(route.deliverableId)}` : "#/deliverables";
 	}
 	if (route.tab === "chats") {

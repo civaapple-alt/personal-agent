@@ -534,7 +534,7 @@ export const Sidebar = memo(function Sidebar({
 								navigateFromMenu({ tab: "deliverables", deliverableId: selectedDeliverableId ?? undefined })
 							}
 						>
-							<span>交付成果库</span>
+							<span>资料空间</span>
 							<span className="pill">{bootstrap?.deliverables.length ?? 0}</span>
 						</button>
 						<button

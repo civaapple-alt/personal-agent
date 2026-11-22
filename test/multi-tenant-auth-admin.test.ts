@@ -1100,6 +1100,36 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 		const viewerACookie = `pa_session=${store.createSession(viewerA.id).rawToken}`;
 		const ownerBCookie = `pa_session=${store.createSession(ownerB.id).rawToken}`;
 
+		// Space pages follow their matter's current access and reject stale updates.
+		const createPage = await fetch(`${base}/api/space/pages`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: memberACookie },
+			body: JSON.stringify({ matterId: mAOpen.id, title: "Working plan", content: "Draft" }),
+		});
+		assert.equal(createPage.status, 201);
+		const spacePage = ((await createPage.json()) as { page: { id: string; revision: number } }).page;
+		const editPage = (cookie: string, revision: number, content: string) =>
+			fetch(`${base}/api/space/pages/${spacePage.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ title: "Working plan", revision, content }),
+			});
+		assert.equal((await editPage(viewerACookie, 1, "Forbidden")).status, 403);
+		assert.equal((await editPage(memberACookie, 1, "Second draft")).status, 200);
+		assert.equal((await editPage(memberACookie, 1, "Stale draft")).status, 409);
+		const pageHistory = await fetch(`${base}/api/space/pages/${spacePage.id}/revisions`, {
+			headers: { Cookie: viewerACookie },
+		});
+		assert.equal(pageHistory.status, 200);
+		assert.deepEqual(
+			((await pageHistory.json()) as { revisions: Array<{ content: string }> }).revisions.map((r) => r.content),
+			["Second draft", "Draft"],
+		);
+		assert.equal(
+			(await fetch(`${base}/api/space/pages/${spacePage.id}`, { headers: { Cookie: ownerBCookie } })).status,
+			403,
+		);
+
 		// 1. Multi-org filtering for OwnerA (belongs to both orgA & orgB)
 		const allOwnerA = (await (
 			await fetch(`${base}/api/deliverables`, { headers: { Cookie: ownerACookie } })
@@ -1172,6 +1202,14 @@ test("Deliverables API enforces org, restricted workspace, private visibility, o
 			body: JSON.stringify({ visibility: "private" }),
 		});
 		assert.equal(tightenRes.status, 200);
+		assert.equal(
+			(await fetch(`${base}/api/space/pages/${spacePage.id}`, { headers: { Cookie: peerACookie } })).status,
+			403,
+		);
+		const peerSpace = (await (
+			await fetch(`${base}/api/space/pages`, { headers: { Cookie: peerACookie } })
+		).json()) as { pages: Array<{ id: string }> };
+		assert.ok(!peerSpace.pages.some((page) => page.id === spacePage.id));
 		assert.equal(
 			(await fetch(`${base}/api/deliverables/${dAOpen.id}`, { headers: { Cookie: peerACookie } })).status,
 			403,

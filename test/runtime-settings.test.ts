@@ -166,6 +166,8 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(teamExt.fileStatus, "present");
 	assert.deepEqual(teamExt.registeredTools, [
 		"read_pa_help",
+		"read_space",
+		"save_space_page",
 		"delegate_to_member",
 		"publish_deliverable",
 		"propose_experience",

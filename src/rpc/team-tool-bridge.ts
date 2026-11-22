@@ -8,6 +8,8 @@ import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
 	| { tool: "read_pa_help"; callId: string; topics: WorkbenchTopic[]; language?: "zh" | "en" }
+	| { tool: "read_space"; callId: string; pageId?: string }
+	| { tool: "save_space_page"; callId: string; title: string; content: string; pageId?: string; revision?: number }
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
 	| ({
@@ -67,6 +69,29 @@ function parseCall(value: unknown): TeamToolCall {
 	const callId = requiredString(value.callId, "callId", 256);
 	const args = value.args;
 	if (!args || typeof args !== "object") throw new Error("Expected tool arguments");
+	if (value.tool === "read_space") {
+		return {
+			tool: value.tool,
+			callId,
+			...("pageId" in args ? { pageId: requiredString(args.pageId, "pageId", 256) } : {}),
+		};
+	}
+	if (value.tool === "save_space_page" && "title" in args && "content" in args) {
+		const pageId = "pageId" in args ? requiredString(args.pageId, "pageId", 256) : undefined;
+		const revision = "revision" in args ? args.revision : undefined;
+		if (
+			(pageId === undefined) !== (revision === undefined) ||
+			(revision !== undefined && (!Number.isSafeInteger(revision) || Number(revision) < 1))
+		)
+			throw new Error("Provide pageId and revision together");
+		return {
+			tool: value.tool,
+			callId,
+			title: requiredString(args.title, "title", 200),
+			content: requiredString(args.content, "content", 64_000),
+			...(pageId ? { pageId, revision: Number(revision) } : {}),
+		};
+	}
 	if (value.tool === "read_pa_help" && "topics" in args) {
 		if (Object.keys(args).some((key) => key !== "topics" && key !== "language")) {
 			throw new Error("PA help accepts only topics and language");

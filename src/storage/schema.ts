@@ -237,6 +237,28 @@ CREATE TABLE IF NOT EXISTS deliverables (
 	created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS space_pages (
+	id TEXT PRIMARY KEY,
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	title TEXT NOT NULL,
+	content TEXT NOT NULL,
+	revision INTEGER NOT NULL,
+	created_by TEXT NOT NULL,
+	updated_by TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS space_page_revisions (
+	page_id TEXT NOT NULL REFERENCES space_pages(id) ON DELETE CASCADE,
+	revision INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	content TEXT NOT NULL,
+	updated_by TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	PRIMARY KEY (page_id, revision)
+);
+
 CREATE TABLE IF NOT EXISTS memory_applications (
 	id TEXT PRIMARY KEY,
 	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,

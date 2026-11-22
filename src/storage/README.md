@@ -3,6 +3,7 @@
 模块文件分工：
 
 - [database.ts](database.ts) 打开数据库，[schema.ts](schema.ts) 定义表结构，[migrations.ts](migrations.ts) 按 SQLite `user_version` 执行迁移。[types.ts](types.ts) 定义领域记录。
+- [space-page-repo.ts](repos/space-page-repo.ts) 保存事项资料及修订快照。更新使用修订号进行并发检查，页面和修订写入同一事务。正式成果继续由成果仓储管理。
 - [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、成果、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 

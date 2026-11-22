@@ -652,3 +652,4 @@
 	padding-top: 8px;
 	border-top: 1px dashed rgba(180, 83, 9, 0.25);
 }
+.space-message-action { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); }

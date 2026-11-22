@@ -81,6 +81,30 @@ export default function teamExtension(pi: PiExtensionApi): void {
 
 	for (const tool of [
 		{
+			name: "read_space",
+			label: "读取资料空间",
+			description:
+				"List this matter's space pages or read a page by ID. Use the returned revision when updating a page.",
+			parameters: { type: "object", properties: { pageId: { type: "string" } }, additionalProperties: false },
+		},
+		{
+			name: "save_space_page",
+			label: "保存空间资料",
+			description:
+				"Save a plan, work in progress, or result to this matter's space when useful or requested. Saving is immediate and survives later turn failure. Create with title and content, or update an existing page with pageId and its current revision. Read the page first and handle revision conflicts without overwriting others' work.",
+			parameters: {
+				type: "object",
+				properties: {
+					title: { type: "string" },
+					content: { type: "string" },
+					pageId: { type: "string" },
+					revision: { type: "integer", minimum: 1 },
+				},
+				required: ["title", "content"],
+				additionalProperties: false,
+			},
+		},
+		{
 			name: "read_pa_help",
 			label: "Read PA help",
 			description:
@@ -204,6 +228,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 	]) {
 		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
 		if (tool.name === "publish_deliverable" && env.PA_CAN_PUBLISH === "false") continue;
+		if (tool.name === "save_space_page" && env.PA_CAN_PUBLISH === "false") continue;
 		if (tool.name === "propose_experience" && env.PA_CAN_EXPERIENCE === "false") continue;
 		pi.registerTool({
 			...tool,

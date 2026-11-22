@@ -184,6 +184,42 @@ async function fixture(t: test.TestContext, respond: Responder, classifier?: Dec
 	return { root, db, store, templates, workers, options, orchestrator, workspace };
 }
 
+test("space pages retain draft revisions, reject stale edits, and stay inside the active matter", async (t) => {
+	let createdId = "";
+	const f = await fixture(t, async (worker) => {
+		const created = await worker.call("save_space_page", { title: "Working plan", content: "First draft" });
+		const page = (created.details as { result: { page: { id: string; revision: number } } }).result.page;
+		createdId = page.id;
+		assert.equal(page.revision, 1);
+		const read = await worker.call("read_space", { pageId: page.id });
+		assert.equal((read.details as { result: { page: { content: string } } }).result.page.content, "First draft");
+		await worker.call("save_space_page", {
+			pageId: page.id,
+			revision: 1,
+			title: "Working plan",
+			content: "Revised plan",
+		});
+		await assert.rejects(
+			worker.call("save_space_page", { pageId: page.id, revision: 1, title: "Stale", content: "Lost update" }),
+			/changed/i,
+		);
+		await assert.rejects(worker.call("read_space", { pageId: "page_other" }), /not found/i);
+		return "Plan saved";
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "Save a working plan",
+		preferredMemberId: "engineering-manager",
+		workspaceId: f.workspace.id,
+	});
+	assert.ok(createdId);
+	assert.equal(f.store.spacePages.get(createdId)?.matterId, result.matter.id);
+	assert.equal(f.store.spacePages.get(createdId)?.content, "Revised plan");
+	assert.deepEqual(
+		f.store.spacePages.listRevisions(createdId).map((revision) => revision.content),
+		["Revised plan", "First draft"],
+	);
+});
+
 test("team discussion is opt-in, preserves the roster and deliverables, and uses separate Pi sessions", async (t) => {
 	const failingPrompt = "@engineering-manager @qa-manager Confirm the second discussion reply";
 	const f = await fixture(t, async (worker, prompt) => {
@@ -630,7 +666,7 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		[runtimeQuestion, { topic: "runtime_tools", match: /本轮启动时的工具.*request_clarification/ }],
 		[howToRun, { topic: "starting_work", match: /直接使用自己配置的/ }],
 		[paAndPi, { topic: "pa_and_pi", match: /Pi 是岗位的执行底座/ }],
-		["怎么看成果版本", { topic: "deliverables", match: /成果库/ }],
+		["怎么看成果版本", { topic: "deliverables", match: /资料空间/ }],
 		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],
 	]);
 	const review = "我们现有岗位之间有没有做了同一件事的";
@@ -814,7 +850,7 @@ test("workbench help reads packaged guides and active matter facts through the s
 		const details = async (topics: string[]) =>
 			JSON.stringify((await worker.call("read_pa_help", { topics, language: "zh" })).details);
 		const guide = await details(["roles", "capabilities", "deliverables"]);
-		assert.match(guide, /角色架构师.*网页检索.*成果库/);
+		assert.match(guide, /角色架构师.*网页检索.*资料空间/);
 		const state = await details(["current_matter", "pending_decisions", "published_deliverables"]);
 		assert.match(state, /QA Manager.*持续跟进的审批.*新工作区验收/);
 		assert.doesNotMatch(state, /旧工作区|其他组织|被替代|仅存在于数据库/);

@@ -16,6 +16,7 @@
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](components/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](components/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护）、[ExploringStatus](components/ExploringStatus.tsx) |
 | 成果系列、版本、验收与提炼 | [DeliverablesView](components/DeliverablesView.tsx)、[DeliverableCard](components/DeliverableCard.tsx) |
+| 资料空间页面、编辑及修订 | [SpacePages](components/SpacePages.tsx)、[space API](api/space.ts) |
 | 团队、经验审核、资料及头像 | [TeamView](components/TeamView.tsx)、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](components/MaterialsView.tsx)、[BotFaceIcon](components/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](components/SettingsView.tsx) 展示 Pi 底座、扩展及运行配置。[PstackSettings](components/PstackSettings.tsx) 启用已有方法包目录或清除 PA 的启用配置 |
 | 账号门禁与超级管理员控制台 | [AuthGateView](components/AuthGateView.tsx)（超管首次初始化、邮箱密码登录/开放注册、待审核提示及 `?invite=` / `orginv_` 加入组织）、[AdminView](components/AdminView.tsx)（对应 `#/admin`，管理用户审核/配额含 `maxPersonalRoles`/`defaultMaxPersonalRoles`、注册策略、克隆主目录、运行任务紧急中止与审计日志） |
@@ -23,7 +24,7 @@
 样式按页面职责定位到[团队](styles/team.css)、[角色架构师](styles/role-architect.css)、[设置](styles/settings.css)、[账号与超管](styles/account-admin.css)、[对话流](styles/chat-stream.css)和[对话卡片](styles/chat-cards.css)。修改共用选择器时按 [main.tsx](main.tsx) 中的加载顺序检查作用范围。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。
 
-[useHashRouteNav](hooks/useHashRouteNav.ts) 将页签和路由选项一起更新。跨页、成果详情与协作浮层分别使用 [ViewFade](components/ViewTransitions.tsx) 淡入淡出。浏览器前进后退加载 URL 指定的成果，成果库根路由打开默认可见成果。减少动态效果或浏览器缺少 View Transitions 时即时切换。
+[useHashRouteNav](hooks/useHashRouteNav.ts) 将页签和路由选项一起更新。跨页、成果详情与协作浮层分别使用 [ViewFade](components/ViewTransitions.tsx) 淡入淡出。资料空间根路由显示资料，旧成果链接仍可打开对应版本，`#/space/:id` 打开资料。减少动态效果或浏览器缺少 View Transitions 时即时切换。
 
 [ChatStage](components/ChatStage.tsx) 使用 `composerDraft` 和 `initiation` 接收草稿、附件与立项操作。输入区和立项面板定义各自的属性类型，状态仍由上层对应的 hooks 持有。
 
@@ -55,7 +56,7 @@
 - [ChatStage](components/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
   输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。
 - 「协作成员」面板列出主责和在组成员。「AI 旁听」开关只控制协作 AI 的主动补充。点开 AI 成员可以分别设置「允许主责委托」和「旁听补充」。统一输入框用「@成员」点名同事或 AI。
-- [Sidebar](components/Sidebar.tsx) 用事项关联的组织和仓库标注最近事项。[事项协作面板](components/chat/MatterCollabDrawer.tsx) 的「成果库」从事项详情读取成果，并用与全局成果库相同的[版本分组](utils/deliverableSeries.ts)显示最新和历史版本。
+- [Sidebar](components/Sidebar.tsx) 用事项关联的组织和仓库标注最近事项。[事项协作面板](components/chat/MatterCollabDrawer.tsx) 的「资料空间」展示所属事项的资料和成果，成果使用[版本分组](utils/deliverableSeries.ts)显示历史版本。
 - [团队委托面板](components/chat/MatterDelegationPanel.tsx) 根据 [轮次投影](utils/matterDelegations.ts) 展示派发、回报和转派关系，从消息或运行卡片直达对应轮次，并可定位到原始消息。[关系图](components/chat/DelegationGraph.tsx) 同时用于进行中和历史轮次。「事项事件」保留事项级工具记录与关键事件筛选，截断的历史工具 JSON 由 [matterStream.ts](utils/matterStream.ts) 解析。
 - [ComposerDock](components/chat/ComposerDock.tsx) 在「开始新事项 / 已有事项空闲 / 角色架构师 / 执行中」统一使用同一 `.composer-card` 结构：运行中在卡片顶部显示含阶段徽标、实时耗时和「停止执行」的 `.composer-run-banner`；顶部栏保留组织、仓库与新事项操作；工具栏仅保留单一 `+` 按钮用于同时上传图片（最多 6 张，支持缩放与灯箱预览）和 UTF-8 文本/代码文件（最多 6 个、单文件 `<= 512KB`），并支持拖拽与 `Ctrl/Cmd+V` 粘贴截图；粘贴超过 600 字符或 10 行的大段纯文本自动折叠为附件胶囊，发送前后均可经 [ModalDialog](components/ModalDialog.tsx) 弹层查看完整内容（草稿状态支持「放回输入框」展开编辑），输入区随单行紧凑默认与多行自动增高平滑过渡（显示行数与发送快捷键提示）；[MarkdownView](MarkdownView.tsx) 配合 [deliverables.css](styles/deliverables.css) / [chat-stream.css](styles/chat-stream.css) 支持单元格与行内代码自然换行与两列表格首列保底宽度，避免窄列单字竖排挤压。
 

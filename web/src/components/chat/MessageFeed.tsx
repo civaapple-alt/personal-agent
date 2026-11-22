@@ -5,6 +5,7 @@ import {
 	readHumanDecision,
 } from "../../../../src/orchestrator/human-decision.ts";
 import { hasRoleProposalActions } from "../../../../src/roles/role-proposal-state.ts";
+import { createSpacePage } from "../../api/space.ts";
 import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
@@ -150,6 +151,28 @@ export function MessageFeed({
 }: MessageFeedProps) {
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [dialogInput, setDialogInput] = useState("");
+	const [spaceSave, setSpaceSave] = useState<{ id: string; message: string; pageId?: string } | null>(null);
+	const [savingSpaceMessage, setSavingSpaceMessage] = useState<string | null>(null);
+
+	async function saveMessageToSpace(matterId: string, id: string, content: string) {
+		setSavingSpaceMessage(id);
+		setSpaceSave(null);
+		try {
+			const title =
+				content
+					.split("\n")
+					.find((line) => line.trim())
+					?.replace(/^#+\s*/, "")
+					.trim()
+					.slice(0, 60) || "对话记录";
+			const result = await createSpacePage({ matterId, title, content });
+			setSpaceSave({ id, message: "已保存到资料空间", pageId: result.page.id });
+		} catch (error) {
+			setSpaceSave({ id, message: error instanceof Error ? error.message : String(error) });
+		} finally {
+			setSavingSpaceMessage(null);
+		}
+	}
 	const selectedIsArchitect = isArchitectMemberId(selectedMemberId, members, templateByRoleId);
 	const isArchitectMatter = Boolean(
 		matterDetail && isArchitectMemberId(matterDetail.matter.leadMemberId, members, templateByRoleId),
@@ -166,6 +189,8 @@ export function MessageFeed({
 	});
 	const completedDecisions = listCompletedHumanDecisions(matterDetail?.userMessages ?? []);
 	const matterOrgRole = organizations?.find(({ id }) => id === matterDetail?.matter.orgId)?.orgRole;
+	const canSaveSpace =
+		!accountUser || isSuperAdmin || (accountUser.status === "active" && matterOrgRole !== "org_viewer");
 	const canParticipateInDecisions = isSuperAdmin || matterOrgRole !== "org_viewer";
 	const canOperateRoleProposals = accountUser ? accountUser.status === "active" && canParticipateInDecisions : isOwner;
 	const activeSpeakerId =
@@ -508,6 +533,28 @@ export function MessageFeed({
 												</>
 											) : (
 												<MarkdownView content={msg.content} />
+											)}
+										</div>
+									)}
+									{canSaveSpace && !isSystem && !decision && msg.content.trim() && (
+										<div className="space-message-action">
+											<button
+												type="button"
+												className="btn-inline"
+												disabled={savingSpaceMessage !== null}
+												onClick={() => void saveMessageToSpace(matterDetail.matter.id, msg.id, msg.content)}
+											>
+												{savingSpaceMessage === msg.id ? "正在保存" : "保存文字到资料空间"}
+											</button>
+											{spaceSave?.id === msg.id && <output>{spaceSave.message}</output>}
+											{spaceSave?.id === msg.id && spaceSave.pageId && (
+												<button
+													type="button"
+													className="btn-inline"
+													onClick={() => onOpenDeliverables(spaceSave.pageId)}
+												>
+													查看资料
+												</button>
 											)}
 										</div>
 									)}

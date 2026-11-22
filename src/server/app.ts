@@ -24,6 +24,7 @@ import { handleMatterRoutes } from "./routes/matters.ts";
 import { handleMemoryRoutes } from "./routes/memories.ts";
 import { handleModelSettingsRoutes } from "./routes/model-settings.ts";
 import { handleRoleDesignRoutes } from "./routes/role-design.ts";
+import { handleSpacePageRoutes } from "./routes/space-pages.ts";
 import { handleTeamRoutes } from "./routes/team.ts";
 import { createSseHub } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
@@ -171,6 +172,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		handleMatterSettingsRoutes,
 		handleMatterMessageRoutes,
 		handleHumanDecisionRoutes,
+		handleSpacePageRoutes,
 		handleDeliverableOrgPreviewRoutes,
 		handleRoleDesignRoutes,
 		handleTeamRoutes,

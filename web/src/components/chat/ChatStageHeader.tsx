@@ -174,8 +174,8 @@ export function ChatStageHeader({
 							className={`btn-pill-outline btn-xs header-more-btn ${moreMenuOpen || collabOpen ? "active" : ""}`}
 							title={
 								pendingMatterMemoriesCount > 0
-									? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与成果库`
-									: "团队委托、经验复盘与成果库"
+									? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与资料空间`
+									: "团队委托、经验复盘与资料空间"
 							}
 							onClick={onToggleMoreMenu}
 						>
@@ -212,7 +212,7 @@ export function ChatStageHeader({
 									className={`header-more-item ${collabOpen && collabTab === "deliverables" ? "active" : ""}`}
 									onClick={() => onSelectMorePanel("deliverables")}
 								>
-									<span className="header-more-label">成果库</span>
+									<span className="header-more-label">资料空间</span>
 									<span className="header-more-meta">{deliverablesCount}</span>
 								</button>
 							</div>

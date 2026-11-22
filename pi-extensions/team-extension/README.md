@@ -7,6 +7,8 @@
 | `read_pa_help` | 查阅指定的工作台帮助主题或本事项工作区的快照 |
 | `delegate_to_member` | 请其他岗位提供协作结果，或委托独立验收 |
 | `publish_deliverable` | 暂存交付成果，在本轮成功收尾后归档 |
+| `read_space` | 查看当前事项的资料清单或指定资料 |
+| `save_space_page` | 主责立即保存资料；更新时提交当前修订号，冲突后重新读取 |
 | `propose_experience` | 提交候选经验 |
 
 [human-question](../human-question/README.md) 独立注册 `request_clarification`。两个扩展共用[桥接客户端](../shared/team-bridge-client.ts)。

@@ -466,6 +466,8 @@ test("hashRouter parses and formats deliverable, chat, team, materials, and sett
 
 	assert.equal(formatHashRoute({ tab: "deliverables" }), "#/deliverables");
 	assert.equal(formatHashRoute({ tab: "deliverables", deliverableId: "d1" }), "#/deliverables/d1");
+	assert.deepEqual(parseHashRoute("#/space/page-1"), { tab: "deliverables", spacePageId: "page-1" });
+	assert.equal(formatHashRoute({ tab: "deliverables", spacePageId: "page-1" }), "#/space/page-1");
 	assert.equal(formatHashRoute({ tab: "chats", matterId: "m1" }), "#/chats/m1");
 	assert.equal(formatHashRoute({ tab: "chats", isNewMatter: true }), "#/chats/new");
 	assert.equal(formatHashRoute({ tab: "team" }), "#/team");

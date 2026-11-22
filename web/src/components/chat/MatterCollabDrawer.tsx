@@ -1,4 +1,5 @@
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
+import { listSpacePages, type SpacePage } from "../../api/space.ts";
 import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
 import type { DeliverableSeries } from "../../utils/deliverableSeries.ts";
 import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
@@ -25,7 +26,7 @@ interface MatterCollabDrawerProps {
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
 	onSelectTab: (tab: MatterCollabTab) => void;
-	onOpenDeliverable: (id: string) => void;
+	onOpenDeliverable: (id?: string) => void;
 	onClose: () => void;
 	onDistill: () => void;
 	onCancelDistill?: () => void;
@@ -65,7 +66,26 @@ export function MatterCollabDrawer({
 }: MatterCollabDrawerProps) {
 	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
 	const [showAllEvents, setShowAllEvents] = useState(false);
+	const [spacePages, setSpacePages] = useState<SpacePage[]>([]);
+	const [spaceError, setSpaceError] = useState("");
 	useEffect(() => panelRef.current?.focus({ preventScroll: true }), [panelRef]);
+	useEffect(() => {
+		if (collabTab !== "deliverables") return;
+		let cancelled = false;
+		listSpacePages()
+			.then(({ pages }) => {
+				if (!cancelled) {
+					setSpacePages(pages.filter((page) => page.matterId === matterDetail.matter.id));
+					setSpaceError("");
+				}
+			})
+			.catch((error: unknown) => {
+				if (!cancelled) setSpaceError(error instanceof Error ? error.message : String(error));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [collabTab, matterDetail.matter.id, matterDetail]);
 
 	const filteredNotices = useMemo(() => {
 		const ordered = [...matterDetail.noticeMessages].reverse();
@@ -112,7 +132,7 @@ export function MatterCollabDrawer({
 							aria-pressed={collabTab === "deliverables"}
 							onClick={() => onSelectTab("deliverables")}
 						>
-							成果库 ({deliverableSeries.length})
+							资料空间
 						</button>
 					</div>
 					<button type="button" className="btn-inline" onClick={onClose}>
@@ -146,11 +166,37 @@ export function MatterCollabDrawer({
 					) : collabTab === "delegations" ? (
 						delegationPanel
 					) : collabTab === "deliverables" ? (
-						<MatterDeliverablesPanel
-							series={deliverableSeries}
-							memberName={memberName}
-							onOpenDeliverable={onOpenDeliverable}
-						/>
+						<>
+							<div className="collab-section">
+								<h3>本事项资料</h3>
+								{spaceError && <p role="alert">{spaceError}</p>}
+								{spacePages.length === 0 ? (
+									<p className="muted-hint">暂无资料</p>
+								) : (
+									<ul>
+										{spacePages.map((page) => (
+											<li key={page.id}>
+												<button
+													type="button"
+													className="btn-inline"
+													onClick={() => onOpenDeliverable(page.id)}
+												>
+													{page.title}
+												</button>
+											</li>
+										))}
+									</ul>
+								)}
+								<button type="button" className="btn-secondary" onClick={() => onOpenDeliverable()}>
+									打开资料空间
+								</button>
+							</div>
+							<MatterDeliverablesPanel
+								series={deliverableSeries}
+								memberName={memberName}
+								onOpenDeliverable={onOpenDeliverable}
+							/>
+						</>
 					) : matterDetail.noticeMessages.length === 0 ? (
 						<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
 					) : (

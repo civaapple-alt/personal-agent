@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	type AccountUserDto,
 	type BootstrapPayload,
@@ -11,6 +11,7 @@ import {
 import { groupDeliverableSeries } from "../utils/deliverableSeries.ts";
 import { collectMatterParticipantIds, formatClockTime, parseDeliverableSummary } from "../utils.ts";
 import { DeliverableCard } from "./DeliverableCard.tsx";
+import { SpacePages } from "./SpacePages.tsx";
 import { ViewFade } from "./ViewTransitions.tsx";
 
 interface DeliverableFamily {
@@ -27,6 +28,7 @@ interface DeliverableFamily {
 }
 
 interface DeliverablesViewProps {
+	spaceRoute: { deliverableId?: string; pageId?: string };
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
@@ -59,7 +61,54 @@ interface DeliverablesViewProps {
 	onNewTask: () => void;
 }
 
-export function DeliverablesView({
+export function DeliverablesView(props: DeliverablesViewProps) {
+	const [section, setSection] = useState<"pages" | "deliverables">(
+		props.spaceRoute.deliverableId ? "deliverables" : "pages",
+	);
+	useEffect(() => {
+		setSection(props.spaceRoute.deliverableId ? "deliverables" : "pages");
+	}, [props.spaceRoute]);
+	return (
+		<div className="subpage-scroll">
+			<div className="subpage-inner wide">
+				<div className="pane-header">
+					<h1>资料空间</h1>
+				</div>
+				<div className="space-tabs" role="tablist" aria-label="资料空间">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={section === "pages"}
+						className={`choice-chip ${section === "pages" ? "active" : ""}`}
+						onClick={() => setSection("pages")}
+					>
+						资料
+					</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={section === "deliverables"}
+						className={`choice-chip ${section === "deliverables" ? "active" : ""}`}
+						onClick={() => setSection("deliverables")}
+					>
+						成果与版本
+					</button>
+				</div>
+				{section === "pages" ? (
+					<SpacePages
+						bootstrap={props.bootstrap}
+						pageId={props.spaceRoute.pageId}
+						onOpenMatter={props.onOpenMatterChat}
+					/>
+				) : (
+					<DeliverablesArchive {...props} />
+				)}
+			</div>
+		</div>
+	);
+}
+
+function DeliverablesArchive({
 	bootstrap,
 	currentUser,
 	accountUser = null,
@@ -371,11 +420,11 @@ export function DeliverablesView({
 	};
 
 	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
+		<div>
+			<div>
 				<div className="pane-header-row">
 					<div className="pane-header">
-						<h1>交付成果库</h1>
+						<h2>成果与版本</h2>
 						<p>
 							{visibleFamilies.length !== allFamilies.length
 								? `筛选显示 ${visibleFamilies.length} / ${allFamilies.length} 项成果 · 共 ${bootstrap?.deliverables.length ?? 0} 个版本`

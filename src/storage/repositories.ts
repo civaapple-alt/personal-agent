@@ -7,6 +7,7 @@ import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
 import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
+import { SpacePageRepo } from "./repos/space-page-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 import { WorkspaceRepo } from "./repos/workspace-repo.ts";
 
@@ -37,8 +38,10 @@ export class PersonalAgentStore {
 	private readonly sessions: SessionRepo;
 	private readonly userAuth: UserAuthRepo;
 	private readonly orgRbac: OrgRbacRepo;
+	readonly spacePages: SpacePageRepo;
 
 	constructor(db: DatabaseSync) {
+		this.spacePages = new SpacePageRepo(db);
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);

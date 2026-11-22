@@ -17,6 +17,7 @@
 | 角色设计、架构师对话及请求取消 | [role-design.ts](routes/role-design.ts) |
 | 经验可见性、来源、审核和提炼 | [memories.ts](routes/memories.ts) |
 | 组织、工作区和交付成果 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
+| 资料空间页面与修订 | [space-pages.ts](routes/space-pages.ts) |
 
 - 经验查询与事件共用角色、组织和工作区访问规则。经验提炼只读取请求者有权使用的角色的经验。预览事件按所关联事项推送，独立预览仅对平台管理员推送。工作区更新事件用 ID 通知刷新。账号 SSE 在发送时复核会话，登出立即关闭该会话的连接。
 - 已索引附件按其事项归属校验。旧版无索引的附件按引用消息和事项授权。非全局账号只可访问能确认归属的旧附件。

@@ -7,6 +7,7 @@ interface UseHashRouteNavParams {
 	explicitNewMatterRef: MutableRefObject<boolean>;
 	setActiveTab: React.Dispatch<React.SetStateAction<NavTab>>;
 	setSelectedDeliverableId: React.Dispatch<React.SetStateAction<string | null>>;
+	setSpaceRoute: React.Dispatch<React.SetStateAction<{ deliverableId?: string; pageId?: string }>>;
 	setSelectedMatterId: React.Dispatch<React.SetStateAction<string | null>>;
 	setSelectedMemberId: React.Dispatch<React.SetStateAction<string>>;
 	setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
@@ -18,6 +19,7 @@ export function useHashRouteNav({
 	explicitNewMatterRef,
 	setActiveTab,
 	setSelectedDeliverableId,
+	setSpaceRoute,
 	setSelectedMatterId,
 	setSelectedMemberId,
 	setSettingsSection,
@@ -32,6 +34,7 @@ export function useHashRouteNav({
 				setActiveTab(next.tab);
 				if (next.tab === "deliverables") {
 					setSelectedDeliverableId(next.deliverableId ?? null);
+					setSpaceRoute({ deliverableId: next.deliverableId, pageId: next.spacePageId });
 				} else if (next.tab === "chats") {
 					if (next.isNewMatter) {
 						setSelectedMatterId(null);
@@ -55,6 +58,7 @@ export function useHashRouteNav({
 			explicitNewMatterRef,
 			setActiveTab,
 			setSelectedDeliverableId,
+			setSpaceRoute,
 			setSelectedMatterId,
 			setSelectedMemberId,
 			setSettingsSection,

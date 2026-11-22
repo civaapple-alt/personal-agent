@@ -4,6 +4,8 @@ import { resolveBuiltinExtensionPath } from "../builtin-paths.ts";
 
 export const TEAM_EXTENSION_TOOLS = [
 	"read_pa_help",
+	"read_space",
+	"save_space_page",
 	"delegate_to_member",
 	"publish_deliverable",
 	"propose_experience",
@@ -28,6 +30,8 @@ export function prepareTeamExtension({
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canProposeExperience = !isArchitect && !discussionMode && (isLead || isInternal);
 	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
+	if (!isArchitect && (isLead || isInternal)) tools.push("read_space");
+	if (canPublish) tools.push("save_space_page");
 	if (canDelegate) tools.push("delegate_to_member");
 	if (canPublish) tools.push("publish_deliverable");
 	if (canProposeExperience) tools.push("propose_experience");
