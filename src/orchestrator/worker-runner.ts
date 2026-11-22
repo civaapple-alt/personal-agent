@@ -183,7 +183,6 @@ export async function executeWithWorkerPass(
 	let bridge: Awaited<ReturnType<typeof createTeamToolBridge>> | undefined;
 	const cleanups: Array<() => void> = [];
 	const effects = emptyEffects();
-	const deliveries = effects.deliveries;
 	// A disconnected tool request cancels only that colleague subtree, not unrelated work.
 	const controller = new AbortController();
 	const signal = AbortSignal.any([input.signal, controller.signal]);
@@ -259,13 +258,16 @@ export async function executeWithWorkerPass(
 			if (call.tool === "read_space") {
 				if (sessionMode !== "lead" && sessionMode !== "internal")
 					throw new Error("This worker cannot access space pages");
+				const currentMatter = deps.requireMatter(input.matterId);
+				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
 				if (!call.pageId)
 					return {
-						pages: deps.store.spacePages.list(input.matterId).map(({ content: _content, ...page }) => page),
+						space: { id: targetSpace.id, name: targetSpace.name, kind: targetSpace.kind },
+						pages: deps.store.spaces.listDocuments({ spaceId: targetSpace.id }),
 					};
-				const page = deps.store.spacePages.get(call.pageId);
-				if (!page || page.matterId !== input.matterId) throw new Error("Space page not found in this matter");
-				return { page };
+				const doc = await deps.store.spaces.getDocument(call.pageId);
+				if (!doc || doc.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
+				return { page: doc };
 			}
 			if (call.tool === "save_space_page") {
 				if (!canSaveSpace) throw new Error("Only the matter lead can save space pages");
@@ -283,34 +285,39 @@ export async function executeWithWorkerPass(
 					cwd,
 				);
 				toolSignal.throwIfAborted();
+				const currentMatter = deps.requireMatter(input.matterId);
+				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
+				const linkedFilePath =
+					draft.type === "document" && draft.source.kind === "workspace_file"
+						? relative(cwd, draft.source.realPath).replace(/\\/g, "/")
+						: null;
+				const linkedOrgId = linkedFilePath ? activeOrgId : null;
+				const linkedWorkspaceId = linkedFilePath ? (input.workspace?.id ?? null) : null;
 				const staged = !call.pageId
-					? deliveries.find(
-							(entry) =>
-								entry.memberId === input.member.id && entry.draft.title === call.title && entry.spacePage,
+					? effects.savedDocuments.find(
+							(entry) => entry.memberId === input.member.id && entry.title === call.title,
 						)
 					: undefined;
 				if (!call.pageId && !staged) {
-					const page =
-						draft.type === "document" && draft.source.kind === "workspace_file"
-							? deps.store.spacePages.saveWorkspaceDocument({
-									matterId: input.matterId,
-									workspaceKey: input.workspace?.id ?? cwd,
-									sourcePath: draft.source.realPath,
-									title: call.title,
-									content: draft.content,
-									actorId: input.member.id,
-								})
-							: deps.store.spacePages.create({
-									matterId: input.matterId,
-									title: call.title,
-									content: draft.content,
-									actorId: input.member.id,
-								});
-					deliveries.push({
+					const doc = await deps.store.spaces.createDocument({
+						spaceId: targetSpace.id,
+						matterId: input.matterId,
+						title: call.title,
+						content: draft.content,
+						linkedOrgId,
+						linkedWorkspaceId,
+						linkedFilePath,
+						actorId: input.member.id,
+						actorName: input.member.displayName,
+						commitMessage: call.changeNote || `Create ${call.title}`,
+					});
+					effects.savedDocuments.push({
+						id: doc.id,
+						spaceId: doc.spaceId,
+						title: doc.title,
+						revision: doc.revision,
+						headCommit: doc.headCommit,
 						memberId: input.member.id,
-						cwd,
-						draft,
-						spacePage: { id: page.id, revision: page.revision },
 					});
 					input.onProgress?.({
 						stage: "tool",
@@ -318,44 +325,39 @@ export async function executeWithWorkerPass(
 						toolName: "save_space_page",
 						collabUpdated: true,
 					});
-					return { page };
+					return { page: doc };
 				}
-				const previous = deps.store.spacePages.get(call.pageId ?? staged!.spacePage!.id);
-				if (!previous || previous.matterId !== input.matterId)
-					throw new Error("Space page not found in this matter");
-				const page = deps.store.spacePages.update(previous.id, {
-					revision: call.revision ?? staged!.spacePage!.revision,
+				const targetDocId = call.pageId ?? staged!.id;
+				const previous = deps.store.spaces.getDocumentMeta(targetDocId);
+				if (!previous || previous.spaceId !== targetSpace.id) throw new Error("Space page not found in this space");
+				const doc = await deps.store.spaces.updateDocument(previous.id, {
+					revision: call.revision ?? staged?.revision ?? previous.revision,
 					title: call.title,
 					content: draft.content,
+					...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
 					actorId: input.member.id,
+					actorName: input.member.displayName,
+					commitMessage: call.changeNote || `Update ${call.title}`,
 				});
-				if (!page) throw new Error("Space page changed. Read its latest revision before saving.");
-				if (draft.type === "document" && draft.source.kind === "workspace_file") {
-					deps.store.spacePages.advanceWorkspaceSource({
-						matterId: input.matterId,
-						workspaceKey: input.workspace?.id ?? cwd,
-						sourcePath: draft.source.realPath,
-						pageId: page.id,
-						previousRevision: previous.revision,
-						revision: page.revision,
-					});
-				}
-				const previousDraft = deliveries.findIndex((entry) => entry.spacePage?.id === page.id);
-				const entry = {
+				if (!doc) throw new Error("Space page changed. Read its latest revision before saving.");
+				const existingIdx = effects.savedDocuments.findIndex((entry) => entry.id === doc.id);
+				const savedEntry = {
+					id: doc.id,
+					spaceId: doc.spaceId,
+					title: doc.title,
+					revision: doc.revision,
+					headCommit: doc.headCommit,
 					memberId: input.member.id,
-					cwd,
-					draft,
-					spacePage: { id: page.id, revision: page.revision },
 				};
-				if (previousDraft < 0) deliveries.push(entry);
-				else deliveries[previousDraft] = entry;
+				if (existingIdx < 0) effects.savedDocuments.push(savedEntry);
+				else effects.savedDocuments[existingIdx] = savedEntry;
 				input.onProgress?.({
 					stage: "tool",
 					label: `${input.member.displayName}更新了资料`,
 					toolName: "save_space_page",
 					collabUpdated: true,
 				});
-				return { page };
+				return { page: doc };
 			}
 			const releaseIdle = worker?.suspendIdleTimeout?.();
 			const resumeMonitor = activity?.wait();
@@ -859,67 +861,6 @@ export async function executeWithWorkerPass(
 			});
 		}
 		if (!result.aborted && !input.run.cancelled) {
-			if (!isArchitect && !isVerifier && sessionMode !== "observer" && input.workspace) {
-				for (const execution of result.toolExecutions) {
-					if (
-						(execution.toolName !== "write" && execution.toolName !== "edit") ||
-						execution.isError ||
-						execution.result === undefined
-					)
-						continue;
-					if (
-						!execution.args ||
-						typeof execution.args !== "object" ||
-						!("path" in execution.args) ||
-						typeof execution.args.path !== "string"
-					)
-						continue;
-					const sourcePath = execution.args.path;
-					if (!/\.(?:md|markdown|txt)$/i.test(sourcePath)) continue;
-					const title = relative(cwd, resolve(cwd, sourcePath)).slice(0, 200);
-					try {
-						const draft = await prepareDelivery(
-							{
-								tool: "save_space_page",
-								callId: execution.toolCallId,
-								title,
-								type: "document",
-								summary: "",
-								changeNote: "本轮修改的工作区文档",
-								sourcePath,
-							},
-							cwd,
-						);
-						if (draft.type !== "document" || draft.source.kind !== "workspace_file") continue;
-						const sourceKey = draft.source.realPath;
-						const existingIndex = deliveries.findIndex(
-							(entry) =>
-								entry.draft.type === "document" &&
-								entry.draft.source.kind === "workspace_file" &&
-								entry.draft.source.realPath === sourceKey,
-						);
-						const entry = {
-							memberId: input.member.id,
-							cwd,
-							draft: existingIndex < 0 ? draft : { ...draft, title: deliveries[existingIndex]!.draft.title },
-							autoSource: { workspaceKey: input.workspace.id, sourcePath: sourceKey },
-						};
-						if (existingIndex < 0) deliveries.push(entry);
-						else {
-							const previous = deliveries[existingIndex]!;
-							if (
-								previous.autoSource ||
-								(previous.draft.type === "document" &&
-									previous.draft.source.kind === "workspace_file" &&
-									previous.draft.source.sha256 !== draft.source.sha256)
-							)
-								deliveries[existingIndex] = entry;
-						}
-					} catch {
-						// A removed, unreadable or out-of-workspace file cannot become a space document.
-					}
-				}
-			}
 			for (const item of stagedExperiences) {
 				const orgId = item.scope === "company_private" ? activeOrgId : null;
 				const workspaceId = item.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);

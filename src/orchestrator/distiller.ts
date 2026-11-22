@@ -197,6 +197,18 @@ export async function performDistillationPass(
 		.map((entry) => `- ${entry.senderId}: ${truncateInline(entry.content, 240)}`)
 		.join("\n");
 
+	const spaceDocs = deps.store.spaces.listDocuments({ matterId: matter.id }).slice(0, 3);
+	const spaceDocExcerpts = await Promise.all(
+		spaceDocs.map(async (meta) => {
+			const full = await deps.store.spaces.getDocument(meta.id);
+			const linkNote = meta.linkedFilePath ? ` [关联路径: ${meta.linkedFilePath}]` : "";
+			return full
+				? `- 文档「${full.title}」(rev ${full.revision}, ${full.headCommit.slice(0, 7)})${linkNote}: ${full.content.slice(0, 1200)}`
+				: `- 文档「${meta.title}」(rev ${meta.revision})${linkNote}`;
+		}),
+	);
+	const spaceEvidenceSection = spaceDocExcerpts.length > 0 ? `## 关联空间资料\n${spaceDocExcerpts.join("\n")}` : "";
+
 	const feedbackText = (input.feedback ?? deliverable?.feedback ?? "").trim();
 	const feedbackRating = input.rating ?? deliverable?.feedbackRating ?? null;
 	const teamMode = participatingMembers.length > 1;
@@ -238,9 +250,10 @@ export async function performDistillationPass(
 		`{"summary":"一句话说明复盘范围与提炼依据","candidates":[{"memberId":"${member.id}","category":"efficiency|troubleshooting|collaboration|user_correction|domain_constraint","scope":"role_general|company_private|project_private","content":"...","rationale":"...","supersedesMemoryId":"可选"}]}`,
 		"",
 		`## 当前事项\n- 编号：${matter.id}\n- 仓库：${workspace ? `${workspace.name} (${workspace.repoPath})` : "未绑定仓库"}`,
+		spaceEvidenceSection,
 		deliverable
 			? [
-					"## 关联交付成果",
+					"## 关联历史记录",
 					`- 标题：${deliverable.title} (V${deliverable.version}, ${deliverable.type})`,
 					deliverable.summary ? `- 变更摘要：${deliverable.summary}` : "",
 					`- 内容摘录：${deliverable.contentOrPath.slice(0, 3000)}`,

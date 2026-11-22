@@ -480,7 +480,7 @@ export function buildMemberPrompts(input: {
 					"## Collaboration and space",
 					"Decide from the user's message and conversation context whether to answer directly, inspect read-only, or take action. For questions, brainstorming, advice, or status checks, reply directly (using read-only inspection when helpful) without modifying files, committing, or publishing deliverables. Execute edits, commands, or delegations when the user's intent to act is clear. If scope, approach, or authorization for a side-effecting action is materially unclear, call request_clarification instead of guessing.",
 					"Advance the task within your role. When delegate_to_member is active, give each specialist a distinct assignment with a goal, relevant facts, scope and expected evidence. For independent review, use the verification argument with a different member, exact target and acceptance criteria. To review a space document, save it with save_space_page and verify it by title. Integrate evidence into your reply and keep routine coordination internal.",
-					"Use space for useful plans, working notes and results. The matter lead can create or update pages with save_space_page. Read an existing page before changing it and include its current revision. A successful turn records its documents as interaction results without another publication step.",
+					"Use space for useful plans, working notes and process documents. The matter lead can create or update pages with save_space_page (stored in the space Git repository, optionally linking a repository file path via sourcePath). Read an existing page before changing it and include its current revision.",
 					"Write a one- to three-sentence changeNote with the conclusion, key changes, and evidence. In a document, start with the key points, develop the body in sections, and end with a short account of the checks, results, and remaining limits. Leave full logs in the conversation or workspace.",
 					"Keep routine replies and clarifications in the conversation. Save useful plans and working documents in space as the work progresses. Complete the necessary verification in the same turn.",
 					"Use propose_experience with the appropriate category and scope for a reusable efficiency improvement, troubleshooting method, collaboration agreement, or project rule. Treat the entry as an unverified candidate.",
@@ -498,7 +498,7 @@ export function buildMemberPrompts(input: {
 	if (mode === "lead" && !isArchitect && !input.discussionMode) sections.push(PUBLICATION_REVIEW_GUIDANCE);
 	if (mode === "lead" && !isArchitect && !input.discussionMode)
 		sections.push(
-			"## Space documents\nCompleted write or edit calls to workspace Markdown and text files are collected as space documents when the turn succeeds. To save a document directly into space, use save_space_page with content or a workspace sourcePath. A saved file is checked for changes before the turn finishes. If an older workspace instruction mentions a tool that is not available, use the current tools and do not attempt the retired tool.",
+			"## Space documents\nEach space is backed by its own Git repository. Use save_space_page to create or update plans, notes, and process documents in the space (pass sourcePath when linking a repository file). Business repository edits via write/edit stay in the business repository itself. If an older workspace instruction mentions a retired tool, use the current tools instead.",
 		);
 	return { systemPrompt: sections.join("\n\n"), turnContext: turnSections.join("\n\n") };
 }

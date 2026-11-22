@@ -40,11 +40,11 @@ Ask for a decision card demo and open the trial below the help reply to submit a
 
 Open Role Architect or invite it from the collaboration members panel. Review each proposed role, its responsibilities, tools, availability scope, and intended matter participation before confirming. Creating a role and adding it to a matter are separate choices.
 
-## Deliverables and feedback
+## Spaces and Git history
 
-Open Space from the matter header or sidebar to find working pages and interaction results. Create a page for a plan, working notes, or a result. Pages belong to a matter and keep revision history. Matter participants can edit, and viewers have read-only access. The lead can read and save pages using its tools. A successful tool save takes effect immediately, including when the later turn fails.
+Each organization, repository, human user, AI role, and custom space has its own Git repository under `<dataDir>/spaces/<spaceId>/`. Private matters default to the initiator's personal user space for physical isolation; non-private matters default to their repository space or organization space.
 
-Open the deliverable version history to see earlier versions. Leave feedback on a version to help the lead revise it and save a new version.
+Open Space from the matter header or sidebar to browse spaces, create or edit Markdown documents (optionally linked to an organization, repository, and relative file path or URL), and inspect Git commit history and unified diffs. Business repository edits via `write`/`edit` stay in the business repository itself. Matter retrospectives (RSI) distill candidate experiences directly from the conversation and space documents.
 
 ## Models, repositories, and capabilities
 

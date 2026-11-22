@@ -2,9 +2,13 @@
 
 模块文件分工：
 
-- [database.ts](database.ts) 打开数据库，[schema.ts](schema.ts) 定义表结构，[migrations.ts](migrations.ts) 按 SQLite `user_version` 执行迁移。[types.ts](types.ts) 定义领域记录。
-- [space-page-repo.ts](repos/space-page-repo.ts) 保存事项资料及修订快照。更新使用修订号进行并发检查，页面和修订写入同一事务。正式成果继续由成果仓储管理。
-- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、成果、事项与会话子仓储。
+- [database.ts](database.ts) 打开数据库，[schema.ts](schema.ts) 定义表结构，[migrations.ts](migrations.ts) 按 SQLite `user_version` 执行迁移（当前版本 8）。[types.ts](types.ts) 定义领域记录。
+- [space-git-store.ts](space-git-store.ts) 与 [space-repo.ts](repos/space-repo.ts) 维护基于独立 Git 仓库（`<dataDir>/spaces/<spaceId>/`）的五类资料空间（`org` 组织默认、`workspace` 仓库默认、`user` 人类用户个人默认、`member` AI 角色默认、`custom` 自定义空间）：
+  - 仅需 `spaces` 与 `space_documents` 两张表保存空间元数据与文档索引，正文和修订历史以各自 Git 仓库的提交与 Diff 为唯一真相；每个空间的 Git 写操作按 `spaceId` 串行排队，更新时校验修订号/基线提交以防并发覆盖。
+  - 私密事项默认路由到发起人的 `user` 个人空间（`spc_usr_<userId>`），从物理仓库层面隔离私密正文；非私密事项按仓库优先、其次组织默认空间路由。
+  - `space_documents` 通过可选列 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联业务仓库项目的文件相对路径或链接；业务代码仓本身的 `write`/`edit` 变更留在业务仓 Git 与事项事件中，不再单独建引用表或双写正文。
+  - `migrateLegacySpacePages` 在启动时将旧表 `space_pages`（[space-page-repo.ts](repos/space-page-repo.ts)）中的历史资料平滑导入对应默认空间的 Git 仓库。
+- [repositories.ts](repositories.ts) 提供 `PersonalAgentStore` 门面，按域委托给 [repos/](repos/helpers.ts) 下的空间（[space-repo.ts](repos/space-repo.ts)）、成员、组织、协作成员、用户鉴权与平台配置（[user-auth-repo.ts](repos/user-auth-repo.ts)）、组织 RBAC / 邀请 / 组织 AI 角色与上传索引（[org-rbac-repo.ts](repos/org-rbac-repo.ts)）、[工作区与授权](repos/workspace-repo.ts)、经验、成果（遗留兼容）、事项与会话子仓储。
 - 默认用户数据库的位置由 [server/main.ts](../server/main.ts) 决定，测试应使用内存或临时数据库。
 
 需要核对的存储边界：
@@ -49,5 +53,5 @@
   - `organization_members`（`org_owner` / `org_admin` / `org_member` / `org_viewer`）、`organization_invites`（SHA-256 哈希邀请码与原子核销）、`organization_ai_roles`（按组织启停 AI 角色、主联系人与 `git_name_override`/`git_email_override` 组织级 Git 署名覆盖，经 `resolveEffectiveOrgMembers(orgId)` 与 `resolveMemberForOrg(orgId, member)` 投影至组织名册与执行上下文，再经 `resolveEffectiveOrgMembersForUser(orgId, userId)` 追加调用者自己的 `personal` 角色，且批量设置组织名册时忽略 `personal`/跨组织角色）及 `uploads_index`（上传文件权限作用域归属）由 [org-rbac-repo.ts](repos/org-rbac-repo.ts) 维护。`workspace_members` 和工作区可见性由 [workspace-repo.ts](repos/workspace-repo.ts) 维护，事项可见性由 [matter-repo.ts](repos/matter-repo.ts) 维护。
   - 保留既有表兼容性，本地默认所有者用户 `DEFAULT_LOCAL_ADMIN_USER_ID`（`usr_local_owner`）在从免密回环模式原地切换至 `PA_REQUIRE_AUTH=1` 时通过 `setupInitialAdmin` 原地升级并保留既有组织与事项关联。
 
-从仓库根运行 `node --test test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts test/multi-tenant-auth-admin.test.ts`。
+从仓库根运行 `node --test test/space-git-store.test.ts test/phase2-orchestrator.test.ts test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts test/multi-tenant-auth-admin.test.ts`。
 存储范围如何用于运行见 [orchestrator](../orchestrator/README.md)，历史兼容细节见[运行说明](../../docs/reference/runtime-collaboration.md)。

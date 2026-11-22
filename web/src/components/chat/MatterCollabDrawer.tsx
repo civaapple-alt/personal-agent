@@ -1,10 +1,8 @@
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
-import { listSpacePages, type SpacePage } from "../../api/space.ts";
 import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
 import type { DeliverableSeries } from "../../utils/deliverableSeries.ts";
 import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
 import { InlineExperienceReviewSection } from "../ExperienceReviewPanel.tsx";
-import { MatterDeliverablesPanel } from "./MatterDeliverablesPanel.tsx";
 
 export type MatterCollabTab = "delegations" | "events" | "experiences" | "deliverables";
 
@@ -66,26 +64,10 @@ export function MatterCollabDrawer({
 }: MatterCollabDrawerProps) {
 	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
 	const [showAllEvents, setShowAllEvents] = useState(false);
-	const [spacePages, setSpacePages] = useState<SpacePage[]>([]);
-	const [spaceError, setSpaceError] = useState("");
 	useEffect(() => panelRef.current?.focus({ preventScroll: true }), [panelRef]);
-	useEffect(() => {
-		if (collabTab !== "deliverables") return;
-		let cancelled = false;
-		listSpacePages()
-			.then(({ pages }) => {
-				if (!cancelled) {
-					setSpacePages(pages.filter((page) => page.matterId === matterDetail.matter.id));
-					setSpaceError("");
-				}
-			})
-			.catch((error: unknown) => {
-				if (!cancelled) setSpaceError(error instanceof Error ? error.message : String(error));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [collabTab, matterDetail.matter.id, matterDetail]);
+	void deliverableSeries;
+	const spaceDocuments = matterDetail.spaceDocuments ?? [];
+	const defaultSpace = matterDetail.defaultSpace ?? null;
 
 	const filteredNotices = useMemo(() => {
 		const ordered = [...matterDetail.noticeMessages].reverse();
@@ -166,37 +148,44 @@ export function MatterCollabDrawer({
 					) : collabTab === "delegations" ? (
 						delegationPanel
 					) : collabTab === "deliverables" ? (
-						<>
-							<div className="collab-section">
-								<h3>本事项资料</h3>
-								{spaceError && <p role="alert">{spaceError}</p>}
-								{spacePages.length === 0 ? (
-									<p className="muted-hint">暂无资料</p>
-								) : (
-									<ul>
-										{spacePages.map((page) => (
-											<li key={page.id}>
+						<div className="collab-section">
+							<h3>本事项空间资料{defaultSpace ? ` · ${defaultSpace.name}` : ""}</h3>
+							{spaceDocuments.length === 0 ? (
+								<p className="muted-hint">当前事项暂无空间资料。</p>
+							) : (
+								<ul className="matter-deliverables-list">
+									{spaceDocuments.map((doc) => (
+										<li key={doc.id} className="matter-deliverable">
+											<div className="matter-deliverable-head">
+												<div className="matter-deliverable-copy">
+													<strong>{doc.title}</strong>
+													<span className="matter-deliverable-meta">
+														rev {doc.revision} · {doc.headCommit.slice(0, 7)}
+														{doc.linkedFilePath ? ` · ${doc.linkedFilePath}` : ""} ·{" "}
+														{memberName(doc.updatedBy)} · {formatClockTime(doc.updatedAt)}
+													</span>
+												</div>
 												<button
 													type="button"
-													className="btn-inline"
-													onClick={() => onOpenDeliverable(page.id)}
+													className="btn-pill-outline btn-xs"
+													onClick={() => onOpenDeliverable(doc.id)}
 												>
-													{page.title}
+													查看资料
 												</button>
-											</li>
-										))}
-									</ul>
-								)}
-								<button type="button" className="btn-secondary" onClick={() => onOpenDeliverable()}>
-									打开资料空间
-								</button>
-							</div>
-							<MatterDeliverablesPanel
-								series={deliverableSeries}
-								memberName={memberName}
-								onOpenDeliverable={onOpenDeliverable}
-							/>
-						</>
+											</div>
+										</li>
+									))}
+								</ul>
+							)}
+							<button
+								type="button"
+								className="btn-secondary"
+								style={{ marginTop: "10px" }}
+								onClick={() => onOpenDeliverable(defaultSpace?.id)}
+							>
+								打开资料空间
+							</button>
+						</div>
 					) : matterDetail.noticeMessages.length === 0 ? (
 						<p className="muted-hint">当前事项暂无底层工具或过程事件。</p>
 					) : (

@@ -44,7 +44,7 @@
   - 在 `buildMemberPrompt` 中注入「角色与组织身份」、目标工作区作用域边界与顶层目录清单（并经 `PA_TARGET_WORKSPACE_ROOT` 在扩展内过滤掉宿主/父目录 `AGENTS.md`，同时在隔离辅助 pass `distiller.ts`/`meta-architect.ts`/`pi-decision.ts` 传入 `--no-context-files`），以及分三层组织的「岗位通用 / 组织记忆 / 仓库记忆」清单。
   - 工具事件（`tool_execution_start` / `tool_execution_end`）只写入精简合法 JSON（工具名、截断后关键参数、`isError`）到 `notice` 通道。
   - 注入的经验记入 `memory_applications`；成果草稿、经验提案（工作区属组织时 `company_private` 自动归入对应 `orgId`）与应用 ID 先暂存，主执行成功后再事务提交，失败或取消分支不保留候选。
-- `distillExperiences`：使用无状态、无工具/扩展/Skills 的只读 reflection pass，按当前工作区筛选用户纠偏、内部委托、异常、中断快照与反馈（工作区属组织时 `company_private` 归入 `orgId`）。
+- `distillExperiences`：使用无状态、无工具/扩展/Skills 的只读 reflection pass，按当前工作区筛选用户纠偏、内部委托、异常、中断快照、反馈，并直接读取当前事项的空间文档摘录（`space_documents`）作为上下文（工作区属组织时 `company_private` 归入 `orgId`）。
   - 指定成果时证据截止其发布回复；候选仅可归属实际参与成员或明确指定成员，写入前再次检查工作区与取消状态，且仅允许同成员、同 scope、同 org、同 workspace 的无环替代关系。
 - 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../docs/reference/runtime-collaboration.md#等待人类决定)。
 - `delegate`：由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者。
@@ -56,9 +56,7 @@
   - `abortDistillation(matterId)` 会立即中止进行中的 `distillExperiences` Worker 并丢弃未完成候选。
 
 - 内部委托成员与旁听成员不能通过 `save_space_page` 直接修改事项资料。旁听成员同时禁用 `delegate_to_member`。
-- 主成员可通过 `save_space_page` 保存计划、过程和结果。成功回合关联空间资料和反馈记录；岗位通过 `write` / `edit` 修改的工作区 Markdown 和文本文件在回合结束时收录：
-  - 页面即时保存，成功回合关联成果与反馈。自动收录要求文件写入工具已成功完成；普通回复按对话保存。
-  - 已落盘文档使用 `sourcePath`，宿主直接读取正文；不同时传 `content`。本轮后续成功的文件编辑会更新快照，提交前再次校验来源。文件快照一致性不代表正文语义正确。
+- 主成员可通过 `save_space_page` 将计划、过程资料直接提交到当前事项默认空间的独立 Git 仓库（私密事项自动路由至发起人的个人空间 `spc_usr_<userId>`，非私密事项按仓库空间优先、其次组织空间）；传入 `sourcePath` 时同步记录 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联，并在本轮回复消息的 `metadata.spaceDocuments` 中精确绑定记录。业务代码仓的 `write` / `edit` 修改保留在业务仓库本身。
   - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../docs/validation/publication-review.md)检查。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。

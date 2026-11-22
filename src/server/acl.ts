@@ -3,6 +3,7 @@ import type { ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../roles/role-architect.ts";
 import type { RoleScope } from "../roles/types.ts";
+import type { SpaceRecord } from "../storage/repos/space-repo.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type {
 	Deliverable,
@@ -426,4 +427,78 @@ export function validateLocalWorkspaceBindingPath(input: {
 		}
 	}
 	return realTarget;
+}
+
+export function canAccessSpace(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	space: SpaceRecord | null | undefined,
+): boolean {
+	if (!actor || !space) return false;
+	if (actor.user && actor.user.status !== "active") return false;
+	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
+
+	if (space.kind === "org") {
+		return canAccessOrganization(store, actor, space.orgId);
+	}
+	if (space.kind === "workspace") {
+		const workspace = space.workspaceId ? store.getWorkspace(space.workspaceId) : null;
+		return canAccessWorkspace(store, actor, workspace);
+	}
+	if (space.kind === "user") {
+		if (actor.user && space.ownerUserId === actor.user.id) return true;
+		return false;
+	}
+	if (space.kind === "member") {
+		const member = space.memberId ? store.getMember(space.memberId) : null;
+		if (!member) return false;
+		return canActorUseMember(store, actor, member);
+	}
+	// custom space
+	if (space.visibility === "private") {
+		if (actor.user && (space.ownerUserId === actor.user.id || space.createdBy === actor.user.id)) {
+			return true;
+		}
+		return false;
+	}
+	return space.orgId ? canAccessOrganization(store, actor, space.orgId) : true;
+}
+
+export function canWriteSpace(
+	store: PersonalAgentStore,
+	actor: RequestActor | null,
+	space: SpaceRecord | null | undefined,
+): boolean {
+	if (!actor || !space) return false;
+	if (!canAccessSpace(store, actor, space)) return false;
+	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
+
+	if (space.kind === "user") {
+		return Boolean(actor.user && space.ownerUserId === actor.user.id);
+	}
+	if (space.kind === "org") {
+		return getActorOrgRole(store, actor, space.orgId) !== "org_viewer";
+	}
+	if (space.kind === "workspace") {
+		const workspace = space.workspaceId ? store.getWorkspace(space.workspaceId) : null;
+		return getActorOrgRole(store, actor, workspace?.orgId ?? space.orgId) !== "org_viewer";
+	}
+	if (space.kind === "member") {
+		const member = space.memberId ? store.getMember(space.memberId) : null;
+		if (!member) return false;
+		if (member.roleScope === "personal") {
+			return Boolean(actor.user && member.ownerUserId === actor.user.id);
+		}
+		if (member.roleScope === "org") {
+			return getActorOrgRole(store, actor, member.ownerOrgId) !== "org_viewer";
+		}
+		return !isViewerInAllOrgsOrTarget(store, actor);
+	}
+	// custom space
+	if (space.visibility === "private") {
+		return Boolean(actor.user && (space.ownerUserId === actor.user.id || space.createdBy === actor.user.id));
+	}
+	return space.orgId
+		? getActorOrgRole(store, actor, space.orgId) !== "org_viewer"
+		: !isViewerInAllOrgsOrTarget(store, actor);
 }

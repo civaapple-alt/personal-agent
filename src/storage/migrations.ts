@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 8;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -93,6 +93,78 @@ export function migrateDatabase(db: DatabaseSync): void {
 					);
 					PRAGMA user_version = 6;
 				`);
+			}
+			if (version < 7) {
+				db.exec(`
+					CREATE TABLE IF NOT EXISTS spaces (
+						id TEXT PRIMARY KEY,
+						kind TEXT NOT NULL CHECK (kind IN ('org', 'workspace', 'user', 'member', 'custom')),
+						org_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+						workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
+						owner_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+						member_id TEXT REFERENCES team_members(id) ON DELETE CASCADE,
+						name TEXT NOT NULL,
+						description TEXT NOT NULL DEFAULT '',
+						visibility TEXT NOT NULL DEFAULT 'org' CHECK (visibility IN ('org', 'private')),
+						created_by TEXT NOT NULL,
+						created_at TEXT NOT NULL,
+						updated_at TEXT NOT NULL
+					);
+					CREATE TABLE IF NOT EXISTS space_documents (
+						id TEXT PRIMARY KEY,
+						space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+						matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
+						file_path TEXT NOT NULL,
+						title TEXT NOT NULL,
+						head_commit TEXT NOT NULL DEFAULT '',
+						revision INTEGER NOT NULL DEFAULT 1,
+						created_by TEXT NOT NULL,
+						updated_by TEXT NOT NULL,
+						created_at TEXT NOT NULL,
+						updated_at TEXT NOT NULL,
+						UNIQUE (space_id, file_path)
+					);
+					CREATE TABLE IF NOT EXISTS space_workspace_refs (
+						id TEXT PRIMARY KEY,
+						space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+						matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+						workspace_id TEXT REFERENCES workspace_links(id) ON DELETE SET NULL,
+						file_path TEXT NOT NULL,
+						member_id TEXT NOT NULL,
+						message_id TEXT,
+						summary TEXT NOT NULL DEFAULT '',
+						created_at TEXT NOT NULL,
+						updated_at TEXT NOT NULL,
+						UNIQUE (space_id, matter_id, file_path)
+					);
+					CREATE INDEX IF NOT EXISTS idx_spaces_kind ON spaces(kind, org_id, updated_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_space_documents_space ON space_documents(space_id, updated_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_space_documents_matter ON space_documents(matter_id, updated_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_space_workspace_refs_space ON space_workspace_refs(space_id, updated_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_space_workspace_refs_matter ON space_workspace_refs(matter_id, updated_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_space_workspace_refs_message ON space_workspace_refs(message_id);
+					PRAGMA user_version = 7;
+				`);
+			}
+			if (version < 8) {
+				db.exec("DROP TABLE IF EXISTS space_workspace_refs;");
+				const docCols = new Set(
+					(db.prepare("PRAGMA table_info(space_documents)").all() as Array<{ name: string }>).map((c) => c.name),
+				);
+				if (!docCols.has("linked_org_id")) {
+					db.exec(
+						"ALTER TABLE space_documents ADD COLUMN linked_org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL;",
+					);
+				}
+				if (!docCols.has("linked_workspace_id")) {
+					db.exec(
+						"ALTER TABLE space_documents ADD COLUMN linked_workspace_id TEXT REFERENCES workspace_links(id) ON DELETE SET NULL;",
+					);
+				}
+				if (!docCols.has("linked_file_path")) {
+					db.exec("ALTER TABLE space_documents ADD COLUMN linked_file_path TEXT;");
+				}
+				db.exec("PRAGMA user_version = 8;");
 			}
 			db.exec("COMMIT");
 		} catch (error) {

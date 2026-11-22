@@ -315,8 +315,44 @@ CREATE TABLE IF NOT EXISTS memory_feedback_votes (
 	rating TEXT NOT NULL,
 	PRIMARY KEY (deliverable_id, memory_id)
 );
+CREATE TABLE IF NOT EXISTS spaces (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL CHECK (kind IN ('org', 'workspace', 'user', 'member', 'custom')),
+	org_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+	workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
+	owner_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+	member_id TEXT REFERENCES team_members(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	visibility TEXT NOT NULL DEFAULT 'org' CHECK (visibility IN ('org', 'private')),
+	created_by TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS space_documents (
+	id TEXT PRIMARY KEY,
+	space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+	matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
+	file_path TEXT NOT NULL,
+	title TEXT NOT NULL,
+	linked_org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+	linked_workspace_id TEXT REFERENCES workspace_links(id) ON DELETE SET NULL,
+	linked_file_path TEXT,
+	head_commit TEXT NOT NULL DEFAULT '',
+	revision INTEGER NOT NULL DEFAULT 1,
+	created_by TEXT NOT NULL,
+	updated_by TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	UNIQUE (space_id, file_path)
+);
+
 CREATE INDEX IF NOT EXISTS idx_matter_messages_matter ON matter_messages(matter_id, channel, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliverables_matter ON deliverables(matter_id, version);
 CREATE INDEX IF NOT EXISTS idx_memory_applications_lookup ON memory_applications(memory_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memory_applications_matter ON memory_applications(matter_id, member_id);
+CREATE INDEX IF NOT EXISTS idx_spaces_kind ON spaces(kind, org_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_space_documents_space ON space_documents(space_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_space_documents_matter ON space_documents(matter_id, updated_at DESC);
 `;

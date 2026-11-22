@@ -8,9 +8,7 @@ import type { ImageContent } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Deliverable, Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
-import { validateDelivery } from "./execution-context.ts";
 import type { Clarification, HumanDecision } from "./human-decision.ts";
-import { draftDigest } from "./independent-verification.ts";
 import { messageMatchesContext } from "./matter-context.ts";
 import { recordRosterReply } from "./matter-roster-query.ts";
 import { buildArchitectMessageProposals } from "./meta-architect.ts";
@@ -529,61 +527,19 @@ export async function dispatchMatterTurn(
 				},
 			});
 		}
+		const savedDocuments = !aborted && !isDiscussionTurn ? run.effects.savedDocuments : [];
 		const deliveries: Deliverable[] = [];
-		if (!aborted && !isDiscussionTurn) {
-			// Recheck all paths before writing any index entry. Failed/cancelled turns publish nothing.
-			const validated = await Promise.all(
-				run.effects.deliveries.map(async (entry) => ({
-					...entry,
-					draft: await validateDelivery(entry.draft, entry.cwd),
-				})),
-			);
-			for (const { draft } of validated) {
-				const review = run.draftVerifications.get(draft.title);
-				if (
-					review &&
-					(draft.type !== "document" || review.digest !== draftDigest(draft) || review.verdict !== "passed")
-				) {
-					throw new Error(`Independent verification has not passed for the final draft: ${draft.title}`);
-				}
-			}
-			for (const entry of validated) {
-				if (!entry.spacePage) continue;
-				const revision = deps.store.spacePages
-					.listRevisions(entry.spacePage.id)
-					.find((item) => item.revision === entry.spacePage!.revision);
-				if (!revision || revision.content !== entry.draft.content) {
-					throw new Error("The saved space page revision is unavailable or changed.");
-				}
-			}
-			for (const entry of validated) {
-				if (!entry.autoSource) continue;
-				const page = deps.store.spacePages.saveWorkspaceDocument({
-					matterId: matter.id,
-					workspaceKey: entry.autoSource.workspaceKey,
-					sourcePath: entry.autoSource.sourcePath,
-					title: entry.draft.title,
-					content: entry.draft.content,
-					actorId: entry.memberId,
-				});
-				entry.spacePage = { id: page.id, revision: page.revision };
-			}
+		if (
+			!aborted &&
+			!isDiscussionTurn &&
+			(run.effects.experiences.length > 0 || run.effects.applicationIds.length > 0)
+		) {
 			run.controller.signal.throwIfAborted();
 			const outcome = deps.store.recordTurnOutcome({
-				deliverables: validated.map(({ memberId, draft, spacePage }) => ({
-					matterId: matter.id,
-					memberId,
-					type: draft.type,
-					title: draft.title,
-					contentOrPath: draft.content,
-					summary: [draft.summary, `过程依据：${draft.changeNote}`].filter(Boolean).join("\n"),
-					serviceUrl: draft.type === "service_url" ? draft.content : null,
-					spacePage,
-				})),
+				deliverables: [],
 				candidates: run.effects.experiences,
 				applicationIds: run.effects.applicationIds,
 			});
-			deliveries.push(...outcome.deliverables);
 			for (const memory of outcome.memories)
 				deps.store.appendMessage({
 					matterId: matter.id,
@@ -618,7 +574,7 @@ export async function dispatchMatterTurn(
 				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
 				toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
-				deliverableIds: deliveries.map((delivery) => delivery.id),
+				...(savedDocuments.length > 0 ? { spaceDocuments: savedDocuments } : {}),
 				sourceUserMessageId: run.userMessageId,
 				workspaceId: workspace?.id ?? null,
 				repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),

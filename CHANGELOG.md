@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Replace DB-only space pages and the redundant "成果与版本" dual tab with Git-backed Spaces (`<dataDir>/spaces/<spaceId>/`): automatically provision default Git repositories for organizations, workspaces, human users (isolating private matters), and AI roles, plus user-created custom spaces with Git commit history, unified diff viewing, and optional document links to `(org, workspace, relativePath/URL)`; keep business repo `write`/`edit` changes inside the business repo without duplicating them into space or legacy deliverables; and feed space documents directly into matter RSI distillation.
 - Apply model and thinking-level choices immediately when composing a new matter, so the selected model appears in the composer and is included when the matter is created.
 - Remove the `publish_deliverable` runtime tool. Saved space pages and successfully written or edited workspace text documents become interaction results at turn completion, with revision-to-feedback links and legacy result history preserved.
 - Upgrade the workbench's deliverables library to a Space for editable matter pages and existing published deliverables. People and matter leads can save working plans and other in-progress material, review page revisions, and detect concurrent edits. Matter permissions continue to govern access; existing deliverable versions and feedback remain available.

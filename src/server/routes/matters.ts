@@ -19,13 +19,16 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		}
 		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
 		const active = activeRuns.get(matterId);
+		const defaultSpace = store.spaces.resolveMatterDefaultSpace(matter);
 		sendJson(res, 200, {
 			matter,
 			demoGuide: ctx.innerMatterDemo?.guideFor(matter),
 			userMessages: store.listMessages(matterId, "user"),
 			internalCollabMessages: store.listMessages(matterId, "internal_collab"),
 			noticeMessages: store.listMessages(matterId, "notice"),
-			deliverables: store.listDeliverables(matterId),
+			deliverables: [],
+			defaultSpace,
+			spaceDocuments: store.spaces.listDocuments({ matterId }),
 			pendingDialogs: dialogBroker.listPending(matterId),
 			activeRun: active
 				? {

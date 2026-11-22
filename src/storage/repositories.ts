@@ -8,8 +8,10 @@ import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
 import { SpacePageRepo } from "./repos/space-page-repo.ts";
+import { SpaceRepo } from "./repos/space-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 import { WorkspaceRepo } from "./repos/workspace-repo.ts";
+import { SpaceGitStore } from "./space-git-store.ts";
 
 export {
 	DEFAULT_LOCAL_ADMIN_USER_ID,
@@ -39,9 +41,11 @@ export class PersonalAgentStore {
 	private readonly userAuth: UserAuthRepo;
 	private readonly orgRbac: OrgRbacRepo;
 	readonly spacePages: SpacePageRepo;
+	readonly spaces: SpaceRepo;
 
-	constructor(db: DatabaseSync) {
+	constructor(db: DatabaseSync, options?: { spacesDir?: string }) {
 		this.spacePages = new SpacePageRepo(db);
+		this.spaces = new SpaceRepo(db, new SpaceGitStore(options?.spacesDir));
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);

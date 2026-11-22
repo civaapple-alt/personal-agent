@@ -2,6 +2,7 @@ import type { InnerMatterGuide } from "../../../src/demo/inner-matter-definition
 import { requestJson } from "./client.ts";
 import type { DeliverableDto } from "./deliverables.ts";
 import type { ModelSelection } from "./models.ts";
+import type { SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
 import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
 
 export type MatterVisibility = "org" | "private";
@@ -212,6 +213,8 @@ export interface MatterDetailPayload {
 	internalCollabMessages: MatterMessageDto[];
 	noticeMessages: MatterMessageDto[];
 	deliverables: DeliverableDto[];
+	defaultSpace?: SpaceDto | null;
+	spaceDocuments?: SpaceDocumentMetaDto[];
 	pendingDialogs: PendingDialogDto[];
 	activeRun?: ActiveRunSnapshotDto | null;
 }

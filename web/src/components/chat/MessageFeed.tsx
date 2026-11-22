@@ -5,7 +5,7 @@ import {
 	readHumanDecision,
 } from "../../../../src/orchestrator/human-decision.ts";
 import { hasRoleProposalActions } from "../../../../src/roles/role-proposal-state.ts";
-import { createSpacePage } from "../../api/space.ts";
+import { createSpaceDocument } from "../../api/space.ts";
 import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
@@ -155,6 +155,11 @@ export function MessageFeed({
 	const [savingSpaceMessage, setSavingSpaceMessage] = useState<string | null>(null);
 
 	async function saveMessageToSpace(matterId: string, id: string, content: string) {
+		const targetSpaceId = matterDetail?.defaultSpace?.id;
+		if (!targetSpaceId) {
+			setSpaceSave({ id, message: "未找到当前事项的默认资料空间" });
+			return;
+		}
 		setSavingSpaceMessage(id);
 		setSpaceSave(null);
 		try {
@@ -165,8 +170,8 @@ export function MessageFeed({
 					?.replace(/^#+\s*/, "")
 					.trim()
 					.slice(0, 60) || "对话记录";
-			const result = await createSpacePage({ matterId, title, content });
-			setSpaceSave({ id, message: "已保存到资料空间", pageId: result.page.id });
+			const result = await createSpaceDocument(targetSpaceId, { matterId, title, content });
+			setSpaceSave({ id, message: "已保存到资料空间", pageId: result.document.id });
 		} catch (error) {
 			setSpaceSave({ id, message: error instanceof Error ? error.message : String(error) });
 		} finally {
@@ -536,28 +541,37 @@ export function MessageFeed({
 											)}
 										</div>
 									)}
-									{canSaveSpace && !isSystem && !decision && msg.content.trim() && (
-										<div className="space-message-action">
-											<button
-												type="button"
-												className="btn-inline"
-												disabled={savingSpaceMessage !== null}
-												onClick={() => void saveMessageToSpace(matterDetail.matter.id, msg.id, msg.content)}
-											>
-												{savingSpaceMessage === msg.id ? "正在保存" : "保存文字到资料空间"}
-											</button>
-											{spaceSave?.id === msg.id && <output>{spaceSave.message}</output>}
-											{spaceSave?.id === msg.id && spaceSave.pageId && (
+									{canSaveSpace &&
+										!isSystem &&
+										!isUser &&
+										!decision &&
+										msg.content.trim().length >= 80 &&
+										!(
+											Array.isArray(msg.metadata?.spaceDocuments) && msg.metadata.spaceDocuments.length > 0
+										) && (
+											<div className="space-message-action">
 												<button
 													type="button"
 													className="btn-inline"
-													onClick={() => onOpenDeliverables(spaceSave.pageId)}
+													disabled={savingSpaceMessage !== null}
+													onClick={() =>
+														void saveMessageToSpace(matterDetail.matter.id, msg.id, msg.content)
+													}
 												>
-													查看资料
+													{savingSpaceMessage === msg.id ? "正在保存…" : "保存文字到资料空间"}
 												</button>
-											)}
-										</div>
-									)}
+												{spaceSave?.id === msg.id && <output>{spaceSave.message}</output>}
+												{spaceSave?.id === msg.id && spaceSave.pageId && (
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => onOpenDeliverables(spaceSave.pageId)}
+													>
+														查看资料
+													</button>
+												)}
+											</div>
+										)}
 									{(msg.metadata?.workbenchHelpTopic === "decisions" ||
 										(isWorkbenchHelp && msg.metadata?.humanDecisionHelp === true)) && <DecisionDemo />}
 									{progressSnapshot && (
@@ -635,6 +649,34 @@ export function MessageFeed({
 											onLaunchWithNewRoles={onLaunchWithNewRoles}
 										/>
 									)}
+									{Array.isArray(msg.metadata?.spaceDocuments) &&
+										(
+											msg.metadata.spaceDocuments as Array<{
+												id: string;
+												spaceId: string;
+												title: string;
+												revision: number;
+												headCommit?: string;
+											}>
+										).map((doc) => (
+											<div key={doc.id} className="deliverable-inline-pill">
+												<span className="deliverable-pill-info">
+													<span className="deliverable-pill-check">✓</span>
+													<span>
+														已提交至资料空间 · <strong>{doc.title}</strong> (rev {doc.revision})
+													</span>
+												</span>
+												<span className="deliverable-pill-actions">
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => onOpenDeliverables(doc.id)}
+													>
+														在资料空间查看
+													</button>
+												</span>
+											</div>
+										))}
 									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 								</div>
 							);

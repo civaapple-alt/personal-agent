@@ -282,6 +282,15 @@ export interface DistillExperiencesResult {
 
 export type ExperienceDraft = Parameters<PersonalAgentStore["addMemory"]>[0];
 
+export interface SavedSpaceDocumentEffect {
+	id: string;
+	spaceId: string;
+	title: string;
+	revision: number;
+	headCommit: string;
+	memberId: string;
+}
+
 export interface ExecutionEffects {
 	deliveries: Array<{
 		memberId: string;
@@ -290,12 +299,13 @@ export interface ExecutionEffects {
 		spacePage?: { id: string; revision: number };
 		autoSource?: { workspaceKey: string; sourcePath: string };
 	}>;
+	savedDocuments: SavedSpaceDocumentEffect[];
 	experiences: ExperienceDraft[];
 	applicationIds: string[];
 }
 
 export function emptyEffects(): ExecutionEffects {
-	return { deliveries: [], experiences: [], applicationIds: [] };
+	return { deliveries: [], savedDocuments: [], experiences: [], applicationIds: [] };
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
@@ -309,6 +319,11 @@ export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects)
 			: -1;
 		if (index < 0) target.deliveries.push(entry);
 		else target.deliveries[index] = entry;
+	}
+	for (const doc of source.savedDocuments) {
+		const idx = target.savedDocuments.findIndex((existing) => existing.id === doc.id);
+		if (idx < 0) target.savedDocuments.push(doc);
+		else target.savedDocuments[idx] = doc;
 	}
 	target.experiences.push(...source.experiences);
 	target.applicationIds.push(...source.applicationIds);

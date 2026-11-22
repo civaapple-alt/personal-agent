@@ -891,11 +891,14 @@ export function App() {
 							onSendPrompt={() => void actions.handleSendPrompt()}
 							onAbortMatter={actions.handleAbortMatter}
 							onNewMatter={startNewMatterFromCurrent}
-							onOpenDeliverables={(deliverableId) =>
+							onOpenDeliverables={(targetId) =>
 								navigateRoute(
-									deliverableId?.startsWith("page_")
-										? { tab: "deliverables", spacePageId: deliverableId }
-										: { tab: "deliverables", deliverableId },
+									targetId &&
+										(targetId.startsWith("page_") ||
+											targetId.startsWith("doc_") ||
+											targetId.startsWith("spc_"))
+										? { tab: "deliverables", spacePageId: targetId }
+										: { tab: "deliverables", deliverableId: targetId },
 								)
 							}
 							onOpenTeam={() => navigateRoute({ tab: "team" })}
