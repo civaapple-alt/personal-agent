@@ -289,11 +289,7 @@ export function MessageFeed({
 							const isObserverIntervention = msg.metadata?.observerIntervention === true;
 							const isLeadReply = msg.senderType === "member" && msg.metadata?.matterLeadReply === true;
 							const isDiscussionReply =
-								!isUser &&
-								!isSystem &&
-								!isObserverIntervention &&
-								msg.metadata?.discussionTurn === true &&
-								decision?.kind !== "execution_confirmation";
+								!isUser && !isSystem && !isObserverIntervention && msg.metadata?.discussionTurn === true;
 							const msgMode = isUser && typeof msg.metadata?.mode === "string" ? msg.metadata.mode : "dispatch";
 							const isDiscussion = isUser && msgMode === "discussion";
 							const isAiRequest = isUser && msgMode === "ai_request";

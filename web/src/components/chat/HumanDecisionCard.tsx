@@ -49,7 +49,6 @@ export function HumanDecisionCard({
 		(active.assignedUserId
 			? accountUser?.id === active.assignedUserId
 			: canManage && (accountUser != null || currentUser?.permissionRole === "owner"));
-	const executionConfirmation = active.kind === "execution_confirmation";
 	const options = active.requests.length === 1 ? (active.requests[0]?.options ?? []) : [];
 
 	async function submit(action: HumanDecisionAction) {
@@ -67,31 +66,13 @@ export function HumanDecisionCard({
 		}
 	}
 
-	const canAssign =
-		!executionConfirmation &&
-		active.status === "pending" &&
-		current &&
-		canManage &&
-		canParticipate &&
-		candidates.length > 0;
-	const headerTitle = executionConfirmation
-		? active.status === "answered"
-			? "已确认"
-			: current
-				? "确认开始执行"
-				: "历史确认"
-		: active.status === "answered"
-			? "已答复"
-			: current
-				? "待你决定"
-				: "历史澄清";
-	const headerMeta = executionConfirmation
-		? `将由 ${requestedBy} 执行`
-		: `${sourceName ? `${sourceName} 提出 · ` : ""}${requestedBy} 提请`;
+	const canAssign = active.status === "pending" && current && canManage && canParticipate && candidates.length > 0;
+	const headerTitle = active.status === "answered" ? "已答复" : current ? "待你决定" : "历史澄清";
+	const headerMeta = `${sourceName ? `${sourceName} 提出 · ` : ""}${requestedBy} 提请`;
 
 	return (
 		<section
-			className={`human-decision-card${executionConfirmation ? " is-confirmation" : ""}${active.status === "answered" ? " is-answered" : ""}`}
+			className={`human-decision-card${active.status === "answered" ? " is-answered" : ""}`}
 			aria-labelledby={inputId}
 		>
 			<header>
@@ -133,11 +114,7 @@ export function HumanDecisionCard({
 					</p>
 					{current && !completed && (
 						<p className="human-decision-note">
-							{isRunning
-								? "答案已保存，事项正在处理。"
-								: executionConfirmation
-									? "已保存，可以继续处理。"
-									: "答案已保存，可以继续执行。"}
+							{isRunning ? "答案已保存，事项正在处理。" : "答案已保存，可以继续执行。"}
 						</p>
 					)}
 					{current && !completed && (canAnswer || canManage) && canDispatch && (
@@ -147,7 +124,7 @@ export function HumanDecisionCard({
 							disabled={submitting || isRunning}
 							onClick={() => void submit({ action: "resume", revision: active.revision })}
 						>
-							{executionConfirmation && active.answer === "先讨论" ? "继续讨论" : "继续执行"}
+							继续执行
 						</button>
 					)}
 				</>
@@ -158,22 +135,7 @@ export function HumanDecisionCard({
 							{active.assignedName ? `等待 ${active.assignedName} 答复` : "等待事项管理者答复"}
 						</p>
 					)}
-					{canAnswer && executionConfirmation && (
-						<div className="human-decision-actions">
-							{options.map((option) => (
-								<button
-									key={option}
-									type="button"
-									className={option === "开始执行" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-									disabled={submitting}
-									onClick={() => void submit({ action: "answer", revision: active.revision, answer: option })}
-								>
-									{submitting ? "处理中…" : option}
-								</button>
-							))}
-						</div>
-					)}
-					{canAnswer && !executionConfirmation && (
+					{canAnswer && (
 						<DecisionAnswerForm
 							options={options}
 							submitting={submitting}

@@ -18,7 +18,7 @@ export type MemoryApplicationOutcome =
 	| "turn_failed"
 	| "feedback_positive"
 	| "feedback_negative";
-export type MatterStatus = "open" | "waiting_user" | "delivered" | "archived";
+export type MatterStatus = "open" | "waiting_user" | "archived";
 export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
 export type CollaboratorRole = "owner" | "collaborator";

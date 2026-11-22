@@ -13,7 +13,7 @@ import type {
 } from "../types.ts";
 import { DEFAULT_LOCAL_ADMIN_USER_ID, nowIso } from "./helpers.ts";
 
-const SETTINGS_KEY = "platform_settings_v1";
+const SETTINGS_KEY = "platform_settings";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function hashOpaqueToken(raw: string): string {

@@ -3,7 +3,6 @@ import type { MatterProgressDto, MemoryCategory, TeamMemberDto } from "../api.ts
 export const STATUS_LABELS: Record<string, string> = {
 	open: "推进中",
 	waiting_user: "待你确认",
-	delivered: "已交付",
 	archived: "已归档",
 };
 

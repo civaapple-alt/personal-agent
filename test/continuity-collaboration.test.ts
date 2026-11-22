@@ -500,14 +500,14 @@ test("team discussion is opt-in, preserves the roster, and uses separate Pi sess
 		],
 	);
 
-	f.store.updateMatterStatus(first.matter.id, "delivered", "Published summary");
+	f.store.updateMatterStatus(first.matter.id, "open", "Published summary");
 	const failingDiscussion = await request(`${matterPath}/messages`, "POST", {
 		mode: "discussion",
 		prompt: failingPrompt,
 	});
 	assert.equal(failingDiscussion.aiDiscussionTriggered, true);
 	await waitForTurn(first.matter.id);
-	assert.equal(f.store.getMatter(first.matter.id)?.status, "delivered");
+	assert.equal(f.store.getMatter(first.matter.id)?.status, "open");
 	assert.equal(f.store.getMatter(first.matter.id)?.summary, "Published summary");
 	const replies = f.store
 		.listMessages(first.matter.id, "user")
@@ -1039,7 +1039,7 @@ test("workbench help reads packaged guides and active matter facts through the s
 			metadata: {
 				...scope,
 				humanDecision: {
-					kind: "execution_confirmation",
+					kind: "role_clarification",
 					status: "pending",
 					revision: 1,
 					assignedUserId: null,

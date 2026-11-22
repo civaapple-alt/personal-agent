@@ -13,7 +13,7 @@ export interface DecisionSource {
 }
 
 interface DecisionRequest {
-	kind: "planning" | "role_clarification" | "execution_confirmation";
+	kind: "planning" | "role_clarification";
 	requests: Clarification[];
 	assignedUserId: string | null;
 	assignedName?: string;
@@ -53,7 +53,7 @@ export function readHumanDecision(metadata: Record<string, unknown> | null | und
 	if (!value) return null;
 	const { kind, status, revision, assignedUserId, assignedName } = value;
 	if (
-		(kind !== "planning" && kind !== "role_clarification" && kind !== "execution_confirmation") ||
+		(kind !== "planning" && kind !== "role_clarification") ||
 		typeof revision !== "number" ||
 		!Number.isSafeInteger(revision) ||
 		revision < 1 ||
@@ -146,7 +146,7 @@ export function isCurrentHumanDecision(
 		!matter.aiMemberIds.includes(message.senderId)
 	)
 		return false;
-	if (decision.kind === "execution_confirmation" || decision.kind === "planning")
+	if (decision.kind === "planning")
 		return !laterMessages.some(
 			(item) =>
 				item.senderType === "member" &&

@@ -38,7 +38,7 @@ CREATE TABLE matters (
 	id TEXT PRIMARY KEY,
 	title TEXT NOT NULL,
 	summary TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL DEFAULT 'open',
+	status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'waiting_user', 'archived')),
 	lead_member_id TEXT REFERENCES team_members(id),
 	workspace_id TEXT REFERENCES workspace_links(id),
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,

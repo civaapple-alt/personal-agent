@@ -120,11 +120,7 @@ export function FloatingClarificationDock({
 					<span className="clarification-q-icon" aria-hidden="true">
 						?
 					</span>
-					<span>
-						{active.kind === "execution_confirmation"
-							? `${requestedBy} 等待确认开始执行`
-							: `${requestedBy} 有 ${total} 个待确认问题（已选 ${answeredCount}/${total}）`}
-					</span>
+					<span>{`${requestedBy} 有 ${total} 个待确认问题（已选 ${answeredCount}/${total}）`}</span>
 					<strong>展开作答 ↑</strong>
 				</button>
 			</div>

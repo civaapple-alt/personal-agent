@@ -207,11 +207,9 @@ export const Sidebar = memo(function Sidebar({
 			? stripMarkdownFormatting(prog.label) || "运行中"
 			: isWaitingUser
 				? "等待你的确认"
-				: matter.status === "delivered"
-					? "已交付"
-					: matter.status === "archived"
-						? "已归档"
-						: null;
+				: matter.status === "archived"
+					? "已归档"
+					: null;
 		const tooltip = statusLabel
 			? `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}\n状态：${statusLabel}`
 			: `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}`;

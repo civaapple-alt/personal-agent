@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove obsolete execution-confirmation compatibility; human decisions use planning and role clarification.
+
+- Remove the historical delivered matter status; documents and their feedback live in Spaces.
+
 - Remove the legacy collaborators table and derive matter participants from account and organization membership.
 
 - Remove legacy collaborator-token authentication and management endpoints; account sessions and organization membership govern collaboration.

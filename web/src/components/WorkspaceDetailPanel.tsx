@@ -57,7 +57,6 @@ function FolderGlyph() {
 const MATTER_STATUS_LABEL: Record<MatterDto["status"], string> = {
 	open: "进行中",
 	waiting_user: "待确认",
-	delivered: "已记录",
 	archived: "已归档",
 };
 

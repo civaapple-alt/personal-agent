@@ -15,7 +15,6 @@ export interface WorkbenchContext extends WorkspaceContext {
 const MATTER_STATUS_LABELS = {
 	open: "开放",
 	waiting_user: "等待用户答复",
-	delivered: "已交付",
 	archived: "已归档",
 } satisfies Record<Matter["status"], string>;
 

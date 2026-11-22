@@ -12,7 +12,7 @@ export interface MatterDto {
 	id: string;
 	title: string;
 	summary: string;
-	status: "open" | "waiting_user" | "delivered" | "archived";
+	status: "open" | "waiting_user" | "archived";
 	leadMemberId: string | null;
 	workspaceId: string | null;
 	orgId?: string | null;

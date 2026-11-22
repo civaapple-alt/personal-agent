@@ -26,6 +26,13 @@ test("a fresh database can be reopened with its data and complete schema", () =>
 		assert.ok(tables.includes("space_document_memory_votes"));
 		assert.ok(!tables.includes("deliverables"));
 		assert.ok(!tables.includes("collaborators"));
+		assert.throws(
+			() =>
+				db
+					.prepare("INSERT INTO matters (id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+					.run("old", "Old", "delivered", "now", "now"),
+			/CHECK constraint/,
+		);
 		assert.ok(!tables.includes("deliverable_memory_applications"));
 		assert.ok(!tables.includes("memory_feedback_votes"));
 		db.close();
