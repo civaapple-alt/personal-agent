@@ -826,6 +826,10 @@ export class SpaceRepo {
 		previewEntryPath: string | null;
 	} | null> {
 		if (input.files.length === 0) return null;
+		const normalized = input.files.map((item) => ({
+			subPath: normalizeSafeRepoFilePath(item.subPath),
+			content: item.content,
+		}));
 		let current = this.getDocumentMeta(docId);
 		if (!current) return null;
 		if (current.entryKind !== "folder") {
@@ -837,10 +841,6 @@ export class SpaceRepo {
 			current = this.getDocumentMeta(docId);
 			if (!current || current.entryKind !== "folder") return null;
 		}
-		const normalized = input.files.map((item) => ({
-			subPath: normalizeSafeRepoFilePath(item.subPath),
-			content: item.content,
-		}));
 		const now = nowIso();
 		const defaultMsg =
 			normalized.length === 1

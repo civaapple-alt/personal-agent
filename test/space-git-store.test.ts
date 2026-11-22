@@ -10,7 +10,35 @@ import { persistUploadedFiles, resolveUploadMonthBucket } from "../src/server/up
 import { openPersonalAgentDatabase } from "../src/storage/database.ts";
 import { memberSpaceId, orgSpaceId, userSpaceId, workspaceSpaceId } from "../src/storage/repos/space-repo.ts";
 import { PersonalAgentStore } from "../src/storage/repositories.ts";
-import { resolveScopedSpaceRelativeDir } from "../src/storage/space-git-store.ts";
+import { resolveScopedSpaceRelativeDir, SpaceGitStore } from "../src/storage/space-git-store.ts";
+
+test("folder batch rejects invalid paths before changing any files", async () => {
+	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-batch-"));
+	try {
+		const git = new SpaceGitStore(spacesDir);
+		const base = {
+			spaceId: "spc_batch",
+			dirPath: "notes/bundle",
+			authorName: "Alice",
+			authorEmail: "alice@example.com",
+			commitMessage: "Update bundle",
+		};
+		await git.writeFolderFiles({ ...base, files: [{ subPath: "first.md", content: "original" }] });
+		await assert.rejects(
+			git.writeFolderFiles({
+				...base,
+				files: [
+					{ subPath: "first.md", content: "changed" },
+					{ subPath: "../escape", content: "invalid" },
+				],
+			}),
+			/Invalid space document path/,
+		);
+		assert.equal(await git.readDocument(base.spaceId, `${base.dirPath}/first.md`), "original");
+	} finally {
+		await rm(spacesDir, { recursive: true, force: true });
+	}
+});
 
 test("SpaceRepo initializes 5 space kinds, routes private matters to user space, and tracks Git commits + diffs", async () => {
 	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-test-"));
@@ -416,6 +444,11 @@ test("SpaceRepo supports folder entries with entry-level .gitignore, sub-files, 
 			actorId: admin.id,
 		});
 		assert.equal(single.entryKind, "file");
+		await assert.rejects(
+			store.spaces.writeDocumentFile(single.id, { subPath: "../escape", content: "bad", actorId: admin.id }),
+			/Invalid space document path/,
+		);
+		assert.equal((await store.spaces.getDocument(single.id))?.entryKind, "file");
 		const promoted = await store.spaces.promoteDocumentToFolder(single.id, { actorId: admin.id });
 		assert.ok(promoted);
 		assert.equal(promoted.entryKind, "folder");

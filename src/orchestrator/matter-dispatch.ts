@@ -532,14 +532,25 @@ export async function dispatchMatterTurn(
 		if (
 			!aborted &&
 			!isDiscussionTurn &&
-			(run.effects.experiences.length > 0 || run.effects.applicationIds.length > 0)
+			(run.effects.deliveries.length > 0 ||
+				run.effects.experiences.length > 0 ||
+				run.effects.applicationIds.length > 0)
 		) {
 			run.controller.signal.throwIfAborted();
 			const outcome = deps.store.recordTurnOutcome({
-				deliverables: [],
+				deliverables: run.effects.deliveries.map(({ memberId, draft }) => ({
+					matterId: matter.id,
+					memberId,
+					type: draft.type,
+					title: draft.title,
+					contentOrPath: draft.content,
+					summary: [draft.summary, `过程依据：${draft.changeNote}`].filter(Boolean).join("\n"),
+					serviceUrl: draft.type === "service_url" ? draft.content : null,
+				})),
 				candidates: run.effects.experiences,
 				applicationIds: run.effects.applicationIds,
 			});
+			deliveries.push(...outcome.deliverables);
 			for (const memory of outcome.memories)
 				deps.store.appendMessage({
 					matterId: matter.id,
@@ -574,6 +585,7 @@ export async function dispatchMatterTurn(
 				...(isDiscussionTurn && mentionedTargets.length > 0 ? { mentionedInDiscussion: true } : {}),
 				...(isConversation || input.keepMatterLead ? { conversationRouted: true } : {}),
 				toolsUsed: result.toolExecutions.map((tool) => tool.toolName),
+				...(deliveries.length > 0 ? { deliverableIds: deliveries.map((delivery) => delivery.id) } : {}),
 				...(savedDocuments.length > 0 ? { spaceDocuments: savedDocuments } : {}),
 				sourceUserMessageId: run.userMessageId,
 				workspaceId: workspace?.id ?? null,

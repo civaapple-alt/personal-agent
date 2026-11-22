@@ -244,6 +244,50 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 	}
 });
 
+test("Space static preview is served in a sandbox", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	const dialogBroker = new DialogBroker();
+	const previewManager = new PreviewManager();
+	const orchestrator = new TeamOrchestrator({ store, templates });
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager,
+		dialogBroker,
+		webDistDir: resolve(process.cwd(), "web/dist"),
+	});
+	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+	const baseUrl = `http://127.0.0.1:${address.port}`;
+	try {
+		store.ensureDefaultOrganization();
+		store.spaces.ensureAllDefaultSpaces();
+		const orgSpace = store.spaces.listSpaces().find((space) => space.kind === "org");
+		assert.ok(orgSpace);
+		const previewDoc = await store.spaces.createDocument({
+			spaceId: orgSpace.id,
+			title: "Preview",
+			entryKind: "folder",
+			content: "Preview",
+			extraFiles: [{ subPath: "index.html", content: "<script>document.body.textContent='preview'</script>" }],
+			actorId: "owner",
+		});
+		const staticPreview = await fetch(`${baseUrl}/api/spaces/documents/${previewDoc.id}/preview/index.html`);
+		assert.equal(staticPreview.status, 200);
+		assert.match(staticPreview.headers.get("content-security-policy") ?? "", /sandbox allow-scripts/);
+		assert.match(staticPreview.headers.get("content-security-policy") ?? "", /connect-src 'none'/);
+		assert.match(await staticPreview.text(), /document\.body/);
+	} finally {
+		await previewManager.stopAll();
+		await new Promise<void>((done) => server.close(() => done()));
+		db.close();
+	}
+});
+
 class ProgressTestWorker implements RpcWorkerLike {
 	readonly options: PiRpcWorkerOptions;
 	constructor(options: PiRpcWorkerOptions) {

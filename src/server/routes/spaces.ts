@@ -330,6 +330,8 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 			res.writeHead(200, {
 				"Content-Type": mime,
 				"Content-Length": String(buf.length),
+				"Content-Security-Policy":
+					"sandbox allow-scripts; default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'",
 				"X-Content-Type-Options": "nosniff",
 				"Cache-Control": "no-store",
 			});

@@ -1489,7 +1489,7 @@ test("delegations enforce depth and turn budget without preventing professional 
 	);
 });
 
-test("independent review links to a completed assignment and gates the exact final document", async (t) => {
+test("independent review links to a completed assignment and reviews the saved space document", async (t) => {
 	const title = "Implementation report";
 	const evidence = "Checked the exact supplied version and acceptance criteria";
 	const f = await fixture(t, async (worker, prompt) => {
@@ -1541,7 +1541,8 @@ test("independent review links to a completed assignment and gates the exact fin
 		preferredMemberId: "product-manager",
 		workspaceId: f.workspace.id,
 	});
-	assert.equal(result.deliverable?.contentOrPath, "Reviewed content with checks");
+	const saved = f.store.spaces.listDocuments({ matterId: result.matter.id });
+	assert.equal((await f.store.spaces.getDocument(saved[0]!.id))?.content, "Reviewed content with checks");
 	const records = f.store.listMessages(result.matter.id, "internal_collab");
 	const [work] = records;
 	const reviews = records.filter(
@@ -1554,11 +1555,13 @@ test("independent review links to a completed assignment and gates the exact fin
 	assert.ok(
 		records.some((entry) => entry.metadata?.requestMessageId === reviews[1]?.id && entry.content.includes(evidence)),
 	);
-	await assert.rejects(
-		f.orchestrator.dispatchMatter({ matterId: result.matter.id, prompt: "Change after inspection" }),
-		/Independent verification has not passed for the final draft/,
+	await f.orchestrator.dispatchMatter({ matterId: result.matter.id, prompt: "Change after inspection" });
+	const latest = f.store.spaces.listDocuments({ matterId: result.matter.id });
+	assert.ok(
+		(await Promise.all(latest.map((entry) => f.store.spaces.getDocument(entry.id)))).some(
+			(doc) => doc?.content === "Unreviewed different version",
+		),
 	);
-	assert.equal(f.store.listDeliverables(result.matter.id).length, 1);
 });
 
 test("file reviews detect changed snapshots and commit reviews require observed workspace checks", async (t) => {
@@ -1615,6 +1618,7 @@ test("a changed saved session header is rejected, and the session directory alon
 
 test("turn deadline cancels the entire collaboration without treating it as successful completion", async (t) => {
 	const f = await fixture(t, async (_worker, _prompt, options) => {
+		options.signal?.throwIfAborted();
 		await new Promise<void>((_resolve, reject) =>
 			options.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true }),
 		);

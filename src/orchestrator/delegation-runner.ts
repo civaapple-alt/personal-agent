@@ -78,6 +78,7 @@ export async function delegateBetweenMembers(
 					cwd: workspace?.repoPath,
 					verification,
 					deliveries: effectsTarget.deliveries,
+					savedDocuments: effectsTarget.savedDocuments,
 				},
 				signal,
 			)

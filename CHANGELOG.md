@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Restore explicitly requested API exports and historical deliverables in matter details, reconnect independent reviews to saved Space documents, and fix the English workbench help section lookup.
+- Isolate Space static previews with a browser CSP sandbox, and validate every folder batch path before writing any file. Correct Space schema and Web Access setup documentation.
 - Switch `pi-web-access` role permissions to default-allow for all business AI roles (including newly created roles) via `webAccessDeniedRoles` opt-out denylist, while gracefully skipping web access when `pi-web-access` is not installed.
 - Co-locate `.env` credentials and live connectivity testing inside each corresponding extension card in Settings (`pi-web-access` embeds `EXA_API_KEY`/`DEEPSEEK_API_KEY`/`MOONSHOT_API_KEY` + `POST /api/admin/runtime/web-access/test` live search test; `SystemOneSettings` embeds `TYPESAFE_API_KEY` + enable/disable switch + `POST /api/admin/runtime/system-one/test` connectivity check), keeping "运行配置" strictly read-only.
 - Support DeepSeek Search (`DEEPSEEK_API_KEY`) in `.env` credentials management and `pi-web-access`, add a root `.env.example` template for users and developers, add a configurable `webSearchProvider` setting (`auto` / `deepseek` / `exa` / `kimi`, defaulting to `auto` with priority `EXA_API_KEY → DEEPSEEK_API_KEY → MOONSHOT_API_KEY`) injected via `PA_WEB_SEARCH_PROVIDER` into `web_search` calls, and unify extension action buttons (`PstackSettings` and `WebAccessSettings`) onto dedicated left-aligned action rows with clear "保存配置" + unsaved-changes hints.

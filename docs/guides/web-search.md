@@ -15,7 +15,7 @@ pi list
 
 ## 检索密钥与默认供应商顺序
 
-PA 在「设置 → `.env 密钥配置`」（或项目根目录 `.env`，参考 [.env.example](../../.env.example)）支持管理以下 3 个网页检索密钥，且仅注入已获 `pi-web-access` 授权的岗位进程：
+PA 在「设置 → 扩展插件 → pi-web-access」卡片（或项目根目录 `.env`，参考 [.env.example](../../.env.example)）支持管理以下 3 个网页检索密钥，且仅注入可使用 `pi-web-access` 的岗位进程：
 
 | 优先级（`auto` 模式） | 环境变量 | 对应供应商 | 说明 |
 | --- | --- | --- | --- |
@@ -41,6 +41,6 @@ PA 在「设置 → `.env 密钥配置`」（或项目根目录 `.env`，参考 
 
 ## 核对运行状态
 
-安装成功后仍需保存岗位授权。PA 启动获授权的岗位时核查 `web_search`、`get_search_content` 和 `fetch_content`，因此应在扩展配置中保留这三个工具及其默认名称。卡片有安装异常时，在服务账号中运行 `pi list` 核对包入口。
+安装成功后岗位默认可用；修改岗位选择后须保存配置。PA 启动可用岗位时核查 `web_search`、`get_search_content` 和 `fetch_content`，因此应在扩展配置中保留这三个工具及其默认名称。卡片有安装异常时，在服务账号中运行 `pi list` 核对包入口。
 
 PA 将网页搜索设为直接返回搜索结果，关闭按次指定代理；`fetch_content` 允许抓取公开 HTTP/HTTPS 网页正文（由 `pi-web-access` 阻止内网地址与非 HTTP(S) 协议）。旁听、独立验收、角色设计和经验提炼沿用各自的窄工具配置。 [Pi 扩展装配](../../pi-extensions/README.md)

@@ -320,6 +320,7 @@ export class SpaceGitStore {
 		allowEmpty?: boolean;
 	}): Promise<{ commitHash: string; committedAt: string }> {
 		const safeDir = normalizeSafeRepoFilePath(input.dirPath);
+		const files = input.files.map((file) => ({ ...file, subPath: normalizeSafeRepoFilePath(file.subPath) }));
 		return this.enqueue(input.spaceId, async () => {
 			const repoDir = await this.ensureRepoUnlocked(input.spaceId);
 			if (input.expectedCommit !== undefined) {
@@ -328,8 +329,8 @@ export class SpaceGitStore {
 					throw new SpaceConflictError("资料已被修改，请重新加载后再保存", currentCommit);
 				}
 			}
-			for (const file of input.files) {
-				const safeSub = normalizeSafeRepoFilePath(file.subPath);
+			for (const file of files) {
+				const safeSub = file.subPath;
 				const fullPath = resolve(repoDir, safeDir, safeSub);
 				const rel = relative(resolve(repoDir, safeDir), fullPath);
 				if (!rel || rel.startsWith("..") || isAbsolute(rel)) {

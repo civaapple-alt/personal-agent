@@ -35,7 +35,7 @@ const GUIDES = {
 	},
 	deliverables: {
 		heading: "成果与反馈",
-		english: "Deliverables and feedback",
+		english: "Spaces and Git history",
 		rubric: "How or where to publish, open, view version history for, or give feedback on PA deliverables.",
 	},
 	capabilities: {

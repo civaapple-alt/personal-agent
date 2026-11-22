@@ -21,7 +21,7 @@
 
 - `pstackDir` 为正常岗位执行指定已有方法包。[PA 扩展集成](../pa-extensions/README.md#pstack-方法包) 提供岗位提示和方法工具，[pstack-methods](../../pi-extensions/pstack-methods/README.md) 在 Pi 内读取模式、原则和 playbook。独立 JSON 决策和反思沿用各自的隔离配置。 [启用 pstack](../../docs/guides/pstack-runtime.md)
 - [团队扩展集成](../pa-extensions/README.md#团队扩展) 给岗位提供本轮工具清单和启动环境。编排器使用同一组能力判断校验桥接调用。
-- `webAccessRoleGrants` 按岗位 ID 和创建时间保存网页检索授权。[PA 扩展集成](../pa-extensions/README.md#web-access) 为主责、内部成员和讨论回复解析已安装的扩展入口及工具清单。
+- 安装网页检索扩展后，业务岗位默认可用；`webAccessDeniedRoles` 按岗位 ID 和创建时间保存停用名单。[PA 扩展集成](../pa-extensions/README.md#web-access) 为主责、内部成员和讨论回复解析已安装的扩展入口及工具清单。
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案，同时按目标作用域校验并输出可选 `newSkills` 草案（`role_local` / 目标库位置，确认前不写盘）；已有缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
 - 决策结果的 `repoReadEnabled` 只表示开放只读工具，`usedRepoRead` / `repoReadPaths` 仅来自已完成且成功的工作区内读取记录；路径按真实文件解析，排除指向工作区外的符号链接。它们不证明模型正确理解或采用了文件内容。抛出异常的 Schema 校验统一归类为 `PiDecisionError.validation_error`。
 
