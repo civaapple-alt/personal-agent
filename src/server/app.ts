@@ -27,6 +27,7 @@ import { handleRoleDesignRoutes } from "./routes/role-design.ts";
 import { handleSpacePageRoutes } from "./routes/space-pages.ts";
 import { handleSpaceRoutes } from "./routes/spaces.ts";
 import { handleTeamRoutes } from "./routes/team.ts";
+import { handleWorkspaceFolderRoutes } from "./routes/workspace-folders.ts";
 import { createSseHub } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
 
@@ -175,6 +176,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		handleHumanDecisionRoutes,
 		handleSpaceRoutes,
 		handleSpacePageRoutes,
+		handleWorkspaceFolderRoutes,
 		handleDeliverableOrgPreviewRoutes,
 		handleRoleDesignRoutes,
 		handleTeamRoutes,

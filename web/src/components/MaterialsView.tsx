@@ -10,6 +10,7 @@ import {
 } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
+import { WorkspaceCustomizationsModal } from "./WorkspaceCustomizationsModal.tsx";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];
@@ -52,6 +53,7 @@ export function MaterialsView({
 
 	// Visibility edit modal
 	const [editingAccessWs, setEditingAccessWs] = useState<WorkspaceDto | null>(null);
+	const [customizingWorkspace, setCustomizingWorkspace] = useState<WorkspaceDto | null>(null);
 	const [editVisibility, setEditVisibility] = useState<WorkspaceVisibility>("org");
 	const [editAllowedUserIds, setEditAllowedUserIds] = useState<string[]>([]);
 	const [savingAccess, setSavingAccess] = useState(false);
@@ -210,6 +212,13 @@ export function MaterialsView({
 											<button
 												type="button"
 												className="btn-inline"
+												onClick={() => setCustomizingWorkspace(ws)}
+											>
+												目录与规则
+											</button>
+											<button
+												type="button"
+												className="btn-inline"
 												onClick={() => void copyTextToClipboard(ws.repoPath, "仓库路径", onNotice)}
 											>
 												复制路径
@@ -253,6 +262,28 @@ export function MaterialsView({
 					</section>
 				</div>
 			</div>
+
+			<WorkspaceCustomizationsModal
+				workspace={customizingWorkspace}
+				allWorkspaces={workspaces}
+				canManage={Boolean(
+					customizingWorkspace &&
+						(() => {
+							const targetOrg = customizingWorkspace.orgId
+								? organizations.find((o) => o.id === customizingWorkspace.orgId)
+								: null;
+							return (
+								!isAccountMode ||
+								!targetOrg?.orgRole ||
+								targetOrg.orgRole === "org_owner" ||
+								targetOrg.orgRole === "org_admin"
+							);
+						})(),
+				)}
+				onClose={() => setCustomizingWorkspace(null)}
+				onNotice={onNotice}
+				onChanged={onRefresh}
+			/>
 
 			<ModalDialog
 				open={showAddModal}

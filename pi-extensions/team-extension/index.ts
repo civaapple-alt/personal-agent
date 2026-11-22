@@ -257,6 +257,24 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				env.PA_TARGET_WORKSPACE_ROOT,
 			);
 		}
+		if (env.PA_ATTACHED_CONTEXT_FILES_JSON && options) {
+			try {
+				const parsed = JSON.parse(env.PA_ATTACHED_CONTEXT_FILES_JSON) as Array<{ path?: string; content?: string }>;
+				if (Array.isArray(parsed) && parsed.length > 0) {
+					const existing = Array.isArray(options.contextFiles) ? [...options.contextFiles] : [];
+					const seen = new Set(existing.map((f) => f.path));
+					for (const item of parsed) {
+						if (typeof item?.path === "string" && typeof item?.content === "string" && !seen.has(item.path)) {
+							seen.add(item.path);
+							existing.push({ path: item.path, content: item.content });
+						}
+					}
+					options.contextFiles = existing;
+				}
+			} catch {
+				// Ignore malformed attached context files payload.
+			}
+		}
 		const context = [
 			env.PA_MEMBER_CONTEXT,
 			`Active tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,

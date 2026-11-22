@@ -44,18 +44,23 @@ export function prepareTeamExtension({
 			bridgeEnv,
 			requiredTools,
 			workspaceRoot,
+			attachedContextFiles,
 			memberContext,
 			turnContext,
 		}: {
 			bridgeEnv: Awaited<ReturnType<typeof createTeamToolBridge>>["env"];
 			requiredTools: string[];
 			workspaceRoot?: string;
+			attachedContextFiles?: Array<{ path: string; content: string }>;
 			memberContext: Array<string | undefined>;
 			turnContext: Array<string | undefined>;
 		}) {
 			return {
 				...bridgeEnv,
 				PA_TARGET_WORKSPACE_ROOT: workspaceRoot ?? "__none__",
+				...(attachedContextFiles && attachedContextFiles.length > 0
+					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
+					: {}),
 				PA_CAN_SAVE_SPACE: String(canSaveSpace),
 				PA_CAN_DELEGATE: String(canDelegate),
 				PA_CAN_EXPERIENCE: String(canProposeExperience),

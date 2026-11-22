@@ -10,6 +10,7 @@ import { SessionRepo } from "./repos/session-repo.ts";
 import { SpacePageRepo } from "./repos/space-page-repo.ts";
 import { SpaceRepo } from "./repos/space-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
+import { WorkspaceFolderRepo } from "./repos/workspace-folder-repo.ts";
 import { WorkspaceRepo } from "./repos/workspace-repo.ts";
 import { SpaceGitStore } from "./space-git-store.ts";
 
@@ -42,10 +43,12 @@ export class PersonalAgentStore {
 	private readonly orgRbac: OrgRbacRepo;
 	readonly spacePages: SpacePageRepo;
 	readonly spaces: SpaceRepo;
+	readonly workspaceFolders: WorkspaceFolderRepo;
 
 	constructor(db: DatabaseSync, options?: { spacesDir?: string }) {
 		this.spacePages = new SpacePageRepo(db);
 		this.spaces = new SpaceRepo(db, new SpaceGitStore(options?.spacesDir));
+		this.workspaceFolders = new WorkspaceFolderRepo(db);
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);

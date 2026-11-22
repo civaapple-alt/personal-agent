@@ -673,7 +673,7 @@ test("openPersonalAgentDatabase upgrades legacy databases without member identit
 		assert.equal(relevant.length, 1);
 		assert.equal(relevant[0]?.orgId, null);
 		assert.equal(relevant[0]?.workspaceId, "ws-1");
-		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 8);
+		assert.equal(db.prepare("PRAGMA user_version").get()?.user_version, 9);
 		assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 		const fresh = openPersonalAgentDatabase();
 		try {

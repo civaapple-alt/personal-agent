@@ -53,6 +53,11 @@ import {
 	type WorkerSessionMode,
 } from "./types.ts";
 import { readWorkbenchTopic } from "./workbench-context.ts";
+import {
+	buildAttachedFolderContextFiles,
+	buildWorkspaceCustomizations,
+	extractAttachedSkillPaths,
+} from "./workspace-customizations.ts";
 
 export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;
@@ -188,7 +193,27 @@ export async function executeWithWorkerPass(
 	const controller = new AbortController();
 	const signal = AbortSignal.any([input.signal, controller.signal]);
 	try {
-		const skillPaths = isVerifier ? [] : await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
+		const workspaceFolders = input.workspace ? deps.store.workspaceFolders.listFolders(input.workspace.id) : [];
+		const workspaceCustomizations =
+			!isArchitect && !isVerifier && workspaceFolders.length > 0
+				? buildWorkspaceCustomizations(workspaceFolders)
+				: null;
+		const attachedContextFiles = workspaceCustomizations
+			? buildAttachedFolderContextFiles(workspaceCustomizations)
+			: [];
+		const attachedSkillPaths = workspaceCustomizations ? extractAttachedSkillPaths(workspaceCustomizations) : [];
+		const attachedFoldersPrompt =
+			workspaceFolders.length > 1
+				? [
+						"## Attached workspace folders",
+						"This workspace includes additional attached folders alongside the primary working directory:",
+						...workspaceFolders
+							.filter((f) => f.role === "attached")
+							.map((f) => `- \`${f.label}\`: \`${f.path}\``),
+					].join("\n")
+				: undefined;
+		const baseSkillPaths = isVerifier ? [] : await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
+		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths])];
 		const pstack = await preparePstackForWorker(deps.pstackDir, sessionMode);
 		const previous = deps.noSession
 			? null
@@ -568,13 +593,14 @@ export async function executeWithWorkerPass(
 					bridgeEnv: bridge.env,
 					requiredTools: toolPatterns,
 					workspaceRoot: input.workspace ? cwd : undefined,
+					attachedContextFiles,
 					memberContext: [
 						systemPrompt,
 						WORKBENCH_HELP_PROMPT,
 						architectContext?.systemPrompt,
 						pstack?.systemPrompt,
 					],
-					turnContext: [turnContext, architectContext?.turnContext],
+					turnContext: [turnContext, attachedFoldersPrompt, architectContext?.turnContext],
 				}),
 				...pstack?.env,
 				...humanQuestion.env,

@@ -18,6 +18,7 @@
 | 经验可见性、来源、审核和提炼 | [memories.ts](routes/memories.ts) |
 | 组织、工作区与预览服务 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
 | Git 资料空间与文档提交/Diff | [spaces.ts](routes/spaces.ts)（[acl.ts](acl.ts) 提供 `canAccessSpace` / `canWriteSpace`） |
+| 多目录工作区与 Rules/Skills 预算明细 | [workspace-folders.ts](routes/workspace-folders.ts) |
 | 旧版资料页面兼容路由 | [space-pages.ts](routes/space-pages.ts) |
 
 - 经验查询与事件共用角色、组织和工作区访问规则。经验提炼只读取请求者有权使用的角色的经验。预览事件按所关联事项推送，独立预览仅对平台管理员推送。工作区更新事件用 ID 通知刷新。账号 SSE 在发送时复核会话，登出立即关闭该会话的连接。

@@ -348,6 +348,21 @@ CREATE TABLE IF NOT EXISTS space_documents (
 	UNIQUE (space_id, file_path)
 );
 
+CREATE TABLE IF NOT EXISTS workspace_folders (
+	id TEXT PRIMARY KEY,
+	workspace_id TEXT NOT NULL REFERENCES workspace_links(id) ON DELETE CASCADE,
+	label TEXT NOT NULL,
+	path TEXT NOT NULL,
+	source_type TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloned')),
+	role TEXT NOT NULL DEFAULT 'attached' CHECK (role IN ('primary', 'attached')),
+	load_rules INTEGER NOT NULL DEFAULT 1,
+	load_skills INTEGER NOT NULL DEFAULT 1,
+	sort_order INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	UNIQUE (workspace_id, path)
+);
+
 CREATE INDEX IF NOT EXISTS idx_matter_messages_matter ON matter_messages(matter_id, channel, created_at);
 CREATE INDEX IF NOT EXISTS idx_deliverables_matter ON deliverables(matter_id, version);
 CREATE INDEX IF NOT EXISTS idx_memory_applications_lookup ON memory_applications(memory_id, created_at);
@@ -355,4 +370,5 @@ CREATE INDEX IF NOT EXISTS idx_memory_applications_matter ON memory_applications
 CREATE INDEX IF NOT EXISTS idx_spaces_kind ON spaces(kind, org_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_space_documents_space ON space_documents(space_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_space_documents_matter ON space_documents(matter_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_folders_ws ON workspace_folders(workspace_id, sort_order, created_at);
 `;

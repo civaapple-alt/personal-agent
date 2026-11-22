@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MEMBER_MEMORIES_SQL, MESSAGE_WORKSPACE_ID_SQL, SCHEMA_SQL, WORKSPACE_LINKS_SQL } from "./schema.ts";
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 export function migrateDatabase(db: DatabaseSync): void {
 	const readVersion = () => Number(db.prepare("PRAGMA user_version").get()?.user_version);
@@ -165,6 +165,26 @@ export function migrateDatabase(db: DatabaseSync): void {
 					db.exec("ALTER TABLE space_documents ADD COLUMN linked_file_path TEXT;");
 				}
 				db.exec("PRAGMA user_version = 8;");
+			}
+			if (version < 9) {
+				db.exec(`
+					CREATE TABLE IF NOT EXISTS workspace_folders (
+						id TEXT PRIMARY KEY,
+						workspace_id TEXT NOT NULL REFERENCES workspace_links(id) ON DELETE CASCADE,
+						label TEXT NOT NULL,
+						path TEXT NOT NULL,
+						source_type TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloned')),
+						role TEXT NOT NULL DEFAULT 'attached' CHECK (role IN ('primary', 'attached')),
+						load_rules INTEGER NOT NULL DEFAULT 1,
+						load_skills INTEGER NOT NULL DEFAULT 1,
+						sort_order INTEGER NOT NULL DEFAULT 0,
+						created_at TEXT NOT NULL,
+						updated_at TEXT NOT NULL,
+						UNIQUE (workspace_id, path)
+					);
+					CREATE INDEX IF NOT EXISTS idx_workspace_folders_ws ON workspace_folders(workspace_id, sort_order, created_at);
+					PRAGMA user_version = 9;
+				`);
 			}
 			db.exec("COMMIT");
 		} catch (error) {
