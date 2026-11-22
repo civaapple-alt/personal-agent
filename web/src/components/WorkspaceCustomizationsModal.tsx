@@ -9,6 +9,7 @@ import {
 } from "../api/workspaceFolders.ts";
 import type { WorkspaceDto } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
+import { stripMarkdownFormatting } from "../utils.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
 
 interface WorkspaceCustomizationsModalProps {
@@ -23,6 +24,25 @@ interface WorkspaceCustomizationsModalProps {
 function formatPercent(used: number, budget: number): string {
 	if (budget <= 0) return "0.0%";
 	return `${Math.min(100, (used / budget) * 100).toFixed(1)}%`;
+}
+
+function FolderGlyph() {
+	return (
+		<svg
+			className="ws-folder-icon"
+			width="15"
+			height="15"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.9"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M3 7a2 2 0 0 1 2-2h4.6a2 2 0 0 1 1.4.58l1.42 1.42a2 2 0 0 0 1.4.58H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+		</svg>
+	);
 }
 
 /** Multi-folder workspace manager + cross-folder Rules/Skills token budget breakdown modal. */
@@ -141,8 +161,8 @@ export function WorkspaceCustomizationsModal({
 	return (
 		<ModalDialog
 			open={Boolean(workspace)}
-			title={workspace.name}
-			subtitle="管理工作区挂载目录（Folders）与跨目录 Rules / Skills 上下文预算。"
+			title={`${workspace.name} · 目录与规则`}
+			subtitle="管理工作区挂载目录与跨目录 Rules / Skills 上下文预算。"
 			size="md"
 			onClose={onClose}
 		>
@@ -154,44 +174,56 @@ export function WorkspaceCustomizationsModal({
 				)}
 
 				<section className="ws-folders-section">
-					<h3 className="ws-section-title">Folders</h3>
+					<div className="ws-section-head-row">
+						<h3 className="ws-section-title">挂载目录 ({folders.length})</h3>
+						<span className="ws-section-hint">主目录作为 Pi 默认工作目录，附加目录共享上下文</span>
+					</div>
 					<div className="ws-folders-list">
 						{folders.map((folder) => (
 							<div key={folder.id} className="ws-folder-row">
 								<div className="ws-folder-main">
 									<div className="ws-folder-title">
-										<span aria-hidden="true">📁</span>
+										<FolderGlyph />
 										<strong>{folder.label}/</strong>
-										{folder.role === "primary" && <span className="pill">主目录</span>}
+										{folder.role === "primary" && <span className="ws-role-pill">主目录</span>}
 									</div>
 									<div className="ws-folder-path">{folder.path}</div>
 								</div>
 								<div className="ws-folder-controls">
 									{canManage && (
 										<>
-											<label className="ws-toggle-chip">
-												<input
-													type="checkbox"
-													checked={folder.loadRules}
-													disabled={busy}
-													onChange={() => void handleToggleFlag(folder, "loadRules")}
-												/>
-												<span>Rules</span>
-											</label>
-											<label className="ws-toggle-chip">
-												<input
-													type="checkbox"
-													checked={folder.loadSkills}
-													disabled={busy}
-													onChange={() => void handleToggleFlag(folder, "loadSkills")}
-												/>
-												<span>Skills</span>
-											</label>
+											<button
+												type="button"
+												aria-pressed={folder.loadRules}
+												className={`ws-toggle-pill ${folder.loadRules ? "is-on" : ""}`}
+												disabled={busy}
+												title="是否加载该目录的 AGENTS.md / CLAUDE.md"
+												onClick={() => void handleToggleFlag(folder, "loadRules")}
+											>
+												<span className="ws-toggle-check" aria-hidden="true">
+													{folder.loadRules ? "✓" : ""}
+												</span>
+												Rules
+											</button>
+											<button
+												type="button"
+												aria-pressed={folder.loadSkills}
+												className={`ws-toggle-pill ${folder.loadSkills ? "is-on" : ""}`}
+												disabled={busy}
+												title="是否加载该目录的 .agents/skills 与 .pi/skills"
+												onClick={() => void handleToggleFlag(folder, "loadSkills")}
+											>
+												<span className="ws-toggle-check" aria-hidden="true">
+													{folder.loadSkills ? "✓" : ""}
+												</span>
+												Skills
+											</button>
 											{folder.role === "attached" && (
 												<button
 													type="button"
 													className="btn-icon-ghost"
 													aria-label={`移除目录 ${folder.label}`}
+													title="移除附加目录"
 													disabled={busy}
 													onClick={() => void handleRemoveFolder(folder)}
 												>
@@ -264,7 +296,7 @@ export function WorkspaceCustomizationsModal({
 									onClick={() => setAddingFolder(true)}
 									disabled={busy}
 								>
-									+ Add Folder
+									+ 添加目录
 								</button>
 							))}
 					</div>
@@ -272,14 +304,14 @@ export function WorkspaceCustomizationsModal({
 
 				<section className="ws-customizations-section">
 					<div className="ws-customizations-head">
-						<h3 className="ws-section-title">Customizations</h3>
+						<h3 className="ws-section-title">上下文规则与技能预算</h3>
 						<select
 							className="select-sm select-control"
-							aria-label="按目录筛选 Customizations"
+							aria-label="按目录筛选上下文规则与技能"
 							value={folderFilter}
 							onChange={(e) => handleFilterChange(e.target.value)}
 						>
-							<option value="">All Folders</option>
+							<option value="">全部目录</option>
 							{folders.map((f) => (
 								<option key={f.id} value={f.id}>
 									{f.label}/
@@ -293,33 +325,42 @@ export function WorkspaceCustomizationsModal({
 					) : report ? (
 						<div className="ws-budget-card">
 							<p className="ws-budget-desc">
-								展示来自工作区目录的 Rules（AGENTS.md / CLAUDE.md）与 Skills 的估算 Token
-								占用。若超出预算，较大的附加目录规则将自动降级为路径指针。
+								统计已启用目录中 Rules（AGENTS.md / CLAUDE.md）与 Skills 的估算 Token
+								占用；超出预算时，较大的附加目录规则将自动降级为路径指针。
 							</p>
 
-							<div className="ws-budget-bar-block">
-								<div className="ws-budget-bar-label">
-									<strong>Rules</strong>
-									<span>
-										{report.rulesTokensUsed.toLocaleString()} / {report.rulesBudgetTokens.toLocaleString()}{" "}
-										tokens ({formatPercent(report.rulesTokensUsed, report.rulesBudgetTokens)})
-									</span>
+							<div className="ws-budget-bars">
+								<div className="ws-budget-bar-block">
+									<div className="ws-budget-bar-label">
+										<strong>Rules 规则</strong>
+										<span className="ws-budget-metric">
+											{report.rulesTokensUsed.toLocaleString()} / {report.rulesBudgetTokens.toLocaleString()}{" "}
+											tokens ({formatPercent(report.rulesTokensUsed, report.rulesBudgetTokens)})
+										</span>
+									</div>
+									<div className="ws-budget-track">
+										<div
+											className="ws-budget-fill is-rules"
+											style={{ width: `${rulesPct > 0 ? Math.max(2, rulesPct) : 0}%` }}
+										/>
+									</div>
 								</div>
-								<div className="ws-budget-track">
-									<div className="ws-budget-fill is-rules" style={{ width: `${rulesPct}%` }} />
-								</div>
-							</div>
 
-							<div className="ws-budget-bar-block">
-								<div className="ws-budget-bar-label">
-									<strong>Other Customizations (Skills)</strong>
-									<span>
-										{report.skillsTokensUsed.toLocaleString()} / {report.skillsBudgetTokens.toLocaleString()}{" "}
-										tokens ({formatPercent(report.skillsTokensUsed, report.skillsBudgetTokens)})
-									</span>
-								</div>
-								<div className="ws-budget-track">
-									<div className="ws-budget-fill is-skills" style={{ width: `${skillsPct}%` }} />
+								<div className="ws-budget-bar-block">
+									<div className="ws-budget-bar-label">
+										<strong>Skills 技能</strong>
+										<span className="ws-budget-metric">
+											{report.skillsTokensUsed.toLocaleString()} /{" "}
+											{report.skillsBudgetTokens.toLocaleString()} tokens (
+											{formatPercent(report.skillsTokensUsed, report.skillsBudgetTokens)})
+										</span>
+									</div>
+									<div className="ws-budget-track">
+										<div
+											className="ws-budget-fill is-skills"
+											style={{ width: `${skillsPct > 0 ? Math.max(2, skillsPct) : 0}%` }}
+										/>
+									</div>
 								</div>
 							</div>
 
@@ -327,15 +368,14 @@ export function WorkspaceCustomizationsModal({
 								<div className="ws-breakdown-row">
 									<span className="ws-breakdown-title">
 										<span className="ws-dot is-rules" />
-										Rules ({report.rulesTokensUsed.toLocaleString()} tokens){" "}
-										{formatPercent(report.rulesTokensUsed, report.rulesBudgetTokens)}
+										Rules（{report.rules.length} 项 · {report.rulesTokensUsed.toLocaleString()} tokens）
 									</span>
 									<button
 										type="button"
 										className="btn-inline"
 										onClick={() => setShowRulesBreakdown((v) => !v)}
 									>
-										{showRulesBreakdown ? "收起明细" : `展开 ${report.rules.length} 条明细`}
+										{showRulesBreakdown ? "收起明细" : "展开明细"}
 									</button>
 								</div>
 								{showRulesBreakdown && (
@@ -349,11 +389,13 @@ export function WorkspaceCustomizationsModal({
 														<div className="ws-rule-card-title">
 															<strong>{rule.fileName}</strong>
 															<span className="ws-source-pill">{rule.folderLabel}</span>
-															{rule.mode === "pointer" && <span className="pill">已降级为路径指针</span>}
-															{rule.mode === "disabled" && <span className="pill">已停用</span>}
+															{rule.mode === "pointer" && (
+																<span className="ws-warn-pill">已降级为路径指针</span>
+															)}
+															{rule.mode === "disabled" && <span className="ws-muted-pill">已停用</span>}
 														</div>
 														<div className="ws-rule-card-right">
-															<span className="ws-token-num">{rule.tokens.toLocaleString()}</span>
+															<span className="ws-token-num">{rule.tokens.toLocaleString()} tokens</span>
 															<button
 																type="button"
 																className="btn-icon-ghost"
@@ -367,7 +409,9 @@ export function WorkspaceCustomizationsModal({
 														</div>
 													</div>
 													<div className="ws-rule-path">{rule.filePath}</div>
-													{rule.preview && <p className="ws-rule-preview">{rule.preview}</p>}
+													{rule.preview && (
+														<p className="ws-rule-preview">{stripMarkdownFormatting(rule.preview)}</p>
+													)}
 												</div>
 											))
 										)}
@@ -379,15 +423,14 @@ export function WorkspaceCustomizationsModal({
 								<div className="ws-breakdown-row">
 									<span className="ws-breakdown-title">
 										<span className="ws-dot is-skills" />
-										Skills ({report.skillsTokensUsed.toLocaleString()} tokens){" "}
-										{formatPercent(report.skillsTokensUsed, report.skillsBudgetTokens)}
+										Skills（{report.skills.length} 项 · {report.skillsTokensUsed.toLocaleString()} tokens）
 									</span>
 									<button
 										type="button"
 										className="btn-inline"
 										onClick={() => setShowSkillsBreakdown((v) => !v)}
 									>
-										{showSkillsBreakdown ? "收起明细" : `展开 ${report.skills.length} 条明细`}
+										{showSkillsBreakdown ? "收起明细" : "展开明细"}
 									</button>
 								</div>
 								{showSkillsBreakdown && (
@@ -401,9 +444,9 @@ export function WorkspaceCustomizationsModal({
 														<span className="ws-dot is-skills" />
 														<strong>{skill.name}</strong>
 														<span className="ws-source-pill">{skill.folderLabel}</span>
-														{skill.excluded && <span className="pill">已跳过</span>}
+														{skill.excluded && <span className="ws-muted-pill">已跳过</span>}
 													</div>
-													<span className="ws-token-num">{skill.tokens.toLocaleString()}</span>
+													<span className="ws-token-num">{skill.tokens.toLocaleString()} tokens</span>
 												</div>
 											))
 										)}

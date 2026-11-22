@@ -211,7 +211,7 @@ export function MaterialsView({
 										<div className="ui-row-actions">
 											<button
 												type="button"
-												className="btn-inline"
+												className="btn-pill-outline btn-xs"
 												onClick={() => setCustomizingWorkspace(ws)}
 											>
 												目录与规则
