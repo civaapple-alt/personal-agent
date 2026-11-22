@@ -163,11 +163,12 @@ export function SpacePages({
 						// Fallback to first available space
 					}
 				}
-				const preferred =
-					loaded.find((s) => s.documentCount > 0) ??
-					loaded.find((s) => s.kind === "workspace") ??
-					loaded[0] ??
-					null;
+				// Default to cross-space "最近修改" when opening 资料空间 without a deep-link
+				if (loaded.some((s) => s.documentCount > 0)) {
+					setSelectedSpaceId(RECENT_SPACE_ID);
+					return;
+				}
+				const preferred = loaded.find((s) => s.kind === "workspace") ?? loaded[0] ?? null;
 				if (preferred) setSelectedSpaceId(preferred.id);
 			} catch (err) {
 				if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -465,7 +466,12 @@ export function SpacePages({
 								const nonEmpty = group.filter((s) => s.documentCount > 0 || s.id === selectedSpaceId);
 								const empty = group.filter((s) => s.documentCount === 0 && s.id !== selectedSpaceId);
 								const shouldFoldEmpty = spaces.length > 8 && empty.length > 0 && !expandedEmptyGroups[kind];
-								const shown = shouldFoldEmpty ? (nonEmpty.length > 0 ? nonEmpty : empty.slice(0, 2)) : group;
+								const minVisible = Math.min(2, group.length);
+								const shown = shouldFoldEmpty
+									? nonEmpty.length >= minVisible
+										? nonEmpty
+										: [...nonEmpty, ...empty.slice(0, minVisible - nonEmpty.length)]
+									: group;
 								const hiddenCount = group.length - shown.length;
 								return (
 									<div key={kind} className="space-nav-group">
