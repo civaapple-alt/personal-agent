@@ -636,6 +636,39 @@
 .matter-doc-pane-diff-view {
 	margin-top: 14px;
 }
+.space-editor-form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.space-editor-form label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: var(--text-xs);
+	font-weight: 600;
+	color: var(--text-secondary);
+}
+.space-editor-form .input-field {
+	width: 100%;
+	box-sizing: border-box;
+	font-weight: 400;
+}
+.space-editor-form .space-page-editor {
+	min-height: 360px;
+	line-height: 1.6;
+}
+.space-editor-form .space-create-row {
+	display: flex;
+	gap: 12px;
+	align-items: flex-end;
+}
+.space-editor-form .space-page-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-top: 4px;
+}
 
 /* ---- Actionable Space Document Card inside Chat Stream ---- */
 .space-doc-card {
