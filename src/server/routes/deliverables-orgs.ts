@@ -37,10 +37,6 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 
 	if (method === "POST" && pathname === "/api/organizations") {
 		if (!requireActiveActor(res, actor)) return true;
-		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
-			sendError(res, 403, "仅所有者或正式注册用户可创建组织");
-			return true;
-		}
 		const body = await readJsonBody(req);
 		const name = typeof body.name === "string" ? body.name.trim() : "";
 		if (!name) {
@@ -160,10 +156,6 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 
 	if (method === "POST" && pathname === "/api/workspaces") {
 		if (!requireActiveActor(res, actor)) return true;
-		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
-			sendError(res, 403, "仅所有者或组织管理员可登记项目仓库");
-			return true;
-		}
 		const body = await readJsonBody(req);
 		const name = typeof body.name === "string" ? body.name.trim() : "";
 		const rawCloneUrl = typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : "";

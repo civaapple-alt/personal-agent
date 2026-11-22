@@ -56,17 +56,9 @@
   - `GET /api/admin/overview`、`PATCH /api/admin/settings`、`PATCH /api/admin/users/:id`、`GET /api/admin/audit`、`POST /api/admin/matters/:id/abort` 及 `POST /api/admin/runtime/pstack/{install,enable,disable}`（调用 Pi 安装官方方法包，或保存、清除 `platform_settings.pstackDir`，后续岗位读取新设置）仅供 `super_admin`（或未启用强制认证时的本机回环所有者）访问；变更写入 `audit_logs`，禁用账号立即吊销全量会话并断开 SSE。
   - 任何已启用账号成员均可在 `maxOrgs` 配额内自建组织（`POST /api/organizations`），经 `/api/organizations/:id/members*`、`invites*`、`POST /api/organizations/join`、`PATCH /api/organizations/:id`（支持 `useRoleGitIdentity`，默认 `false`）与 `PUT /api/organizations/:id/ai-roles`（支持按组织启用 AI 角色、指定主联系人、覆写各启用角色的 `gitNameOverride` / `gitEmailOverride` 及同步切换 `useRoleGitIdentity`）配置组织人类成员、邀请链接与组织 AI 名册（`ensureOrgEnabledAiRequest` 拦截未启用角色）。
   - `POST /api/workspaces` 支持 `sourceType: "clone"`（校验 `cloneUrl` 禁用 `file:`/`ext::`/参数注入后安全克隆至 `<workspacesRoot>/<orgSlug>/`）与 `sourceType: "local"`（非超管受 `allowLocalWorkspacePath`、`localWorkspaceAllowlist` 与内部运行目录隔离保护），并按 `visibility: "org" | "restricted"` 控制可见成员。
-  - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 与受限内网 `legacy_token` 仍禁止直接触发 AI；`/api/bootstrap`、`/api/spaces*`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL（`canAccessMatter`、`canAccessSpace`、`canAccessWorkspace`）严格隔离，同时阻止兼容态 `legacy_token` 访客读取/反馈他人 `private` 或受限事项，并允许所属组织的 `org_owner`/`org_admin` 在 `POST /api/previews/:id/stop` 中停止其可访问事项的预览。
+  - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 禁止直接触发 AI；`/api/bootstrap`、`/api/spaces*`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL（`canAccessMatter`、`canAccessSpace`、`canAccessWorkspace`）严格隔离，并允许所属组织的 `org_owner`/`org_admin` 在 `POST /api/previews/:id/stop` 中停止其可访问事项的预览。
   - `POST /api/matters` 优先使用仓库所属组织，再使用请求中指定的组织。普通账号在未绑定仓库时省略 `orgId`，或传入 `null`、空字符串，均解析为其所属的默认组织或首个组织。无所属组织时返回 403。Role Architect 与普通事项共用此规则。
-  - 多人类受限协作与显式讨论隔离（兼容模式）：
-  - `127.0.0.1`/`::1` 仅在未携带 `pa_session` Cookie 时默认映射为所有者（已持失效 `pa_session` 不回落所有者，须重新登录或显式
-    登出）；非回环局域网与 `requireAuth: true` 须通过 `/api/auth/login` 签发 `pa_session` 或携带 `x-pa-token` / `Bearer`。
-  - `/api/collaborators` 与 `/api/collaborators/:id/regenerate-token` 仅所有者可管理（向协同成员隐藏 `token`）；重置口令或删除成员会
-    立即向对应在线 SSE 推送 `auth_revoked` 并断开连接，后续请求统一返回 `401`。
-  - `POST /api/matters` 与 `POST /api/matters/:id/messages` 支持 `mode`：`"discussion"`（团队讨论，不占 AI 锁且支持
-    AI 运行中续发）、`"ai_request"`（同事提请单）与 `"dispatch"`（仅所有者可触发）。
-  - 所有者可通过 `/api/matters/:id/messages/:msgId/approve-ai` 或 `dismiss-ai` 一键批准并派发或忽略提请；
-    仓库/组织/成员/记忆/弹窗/预览写入与 `autoDistill: true` 均对协同成员返回 `403`。
+  - 本机回环可在未启用强制认证时以所有者访问；携带无效会话凭证时不会回退到免密身份。团队成员通过正式账号和组织邀请加入，并按组织角色和账号派发权限参与事项。
   - 提请只允许从 `pending` 原子转为 `approved` 或 `dismissed`；重复处理/非提请返回 409。批准先校验来源组织与仓库、AI 成员和附件，失败保持待处理；附件缺失返回 410。
   - 图片上传完成后由 `dispatch-runner` 统一检查运行占用，冲突返回 409，不能覆盖原运行进度。运行中的仓库也不能经 PATCH 或同路径 upsert 改归属组织。
 - Phase 4 RSI 接口：

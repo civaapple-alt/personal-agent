@@ -1,7 +1,7 @@
 import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { isThinkingLevel } from "../../rpc/model-selection.ts";
-import { DEFAULT_OWNER_COLLABORATOR_ID, toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
-import type { CollaboratorRole, OrgMemberRole } from "../../storage/types.ts";
+import { toPublicCollaborator, toPublicUser } from "../../storage/repositories.ts";
+import type { OrgMemberRole } from "../../storage/types.ts";
 import {
 	canAccessMatter,
 	canAccessOrganization,
@@ -12,7 +12,7 @@ import {
 	requireOrgAccess,
 	requireOrgAdmin,
 } from "../acl.ts";
-import { isSuperAdminActor, requireActiveActor, requireOwner } from "../auth.ts";
+import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import {
 	auditActorAction,
@@ -30,9 +30,9 @@ function parseOrgMemberRole(raw: unknown): OrgMemberRole | null {
 	return null;
 }
 
-/** Handle `/api/bootstrap`, `/api/runtime`, legacy `/api/collaborators*`, and per-org member/invite/AI-role routes. */
+/** Handle `/api/bootstrap`, `/api/runtime`, per-org member/invite/AI-role routes. */
 export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, dialogBroker, previewManager, activeRuns, broadcast, revokeTokenSessions } = ctx;
+	const { store, orchestrator, dialogBroker, previewManager, activeRuns, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
 
 	if (method === "GET" && pathname === "/api/bootstrap") {
@@ -102,7 +102,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 				allowCommandPreviews: settings.allowCommandPreviews || isAdmin,
 			},
 			collaborators: isAdmin
-				? allCollaborators
+				? allCollaborators.map(toPublicCollaborator)
 				: actor.authKind === "session"
 					? allCollaborators
 							.filter((c) => Boolean(c.orgId && accessibleOrgIds.has(c.orgId)))
@@ -514,128 +514,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			});
 			return true;
 		}
-	}
-
-	// ---- Legacy LAN Collaborators (backwards compatible) ----
-	if (method === "GET" && pathname === "/api/collaborators") {
-		if (!requireActiveActor(res, actor)) return true;
-		const list = store.listCollaborators();
-		const isAdmin = isSuperAdminActor(actor);
-		sendJson(res, 200, {
-			collaborators: isAdmin
-				? list
-				: list.filter((c) => !c.orgId || canAccessOrganization(store, actor, c.orgId)).map(toPublicCollaborator),
-		});
-		return true;
-	}
-
-	if (method === "POST" && pathname === "/api/collaborators") {
-		if (!requireOwner(res, actor)) return true;
-		const body = await readJsonBody(req);
-		const name = typeof body.name === "string" ? body.name.trim() : "";
-		if (!name) {
-			sendError(res, 400, "name is required");
-			return true;
-		}
-		const roleTitle = typeof body.roleTitle === "string" ? body.roleTitle.trim() : "";
-		const orgId = typeof body.orgId === "string" && body.orgId.trim() ? body.orgId.trim() : null;
-		if (orgId && !store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
-		}
-		const permissionRole: CollaboratorRole = body.permissionRole === "owner" ? "owner" : "collaborator";
-		const collaborator = store.upsertCollaborator({
-			id: typeof body.id === "string" && body.id.trim() ? body.id.trim() : undefined,
-			name,
-			roleTitle: roleTitle || (permissionRole === "owner" ? "团队所有者" : "协同同事"),
-			permissionRole,
-			orgId,
-		});
-		broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
-		sendJson(res, 201, { collaborator });
-		return true;
-	}
-
-	const collabRegenMatch = pathname.match(/^\/api\/collaborators\/([^/]+)\/regenerate-token$/);
-	if (method === "POST" && collabRegenMatch) {
-		if (!requireOwner(res, actor)) return true;
-		const collabId = decodeURIComponent(collabRegenMatch[1]!);
-		const collaborator = store.regenerateCollaboratorToken(collabId);
-		if (!collaborator) {
-			sendError(res, 404, `Collaborator not found: ${collabId}`);
-			return true;
-		}
-		revokeTokenSessions(collabId, "token_regenerated");
-		broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
-		sendJson(res, 200, { collaborator });
-		return true;
-	}
-
-	const collabItemMatch = pathname.match(/^\/api\/collaborators\/([^/]+)$/);
-	if (method === "PATCH" && collabItemMatch) {
-		if (!requireOwner(res, actor)) return true;
-		const collabId = decodeURIComponent(collabItemMatch[1]!);
-		const existing = store.getCollaborator(collabId);
-		if (!existing) {
-			sendError(res, 404, `Collaborator not found: ${collabId}`);
-			return true;
-		}
-		const body = await readJsonBody(req);
-		const orgId =
-			body.orgId === null
-				? null
-				: typeof body.orgId === "string" && body.orgId.trim()
-					? body.orgId.trim()
-					: existing.orgId;
-		if (orgId && !store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
-		}
-		const permissionRole: CollaboratorRole =
-			collabId === DEFAULT_OWNER_COLLABORATOR_ID
-				? "owner"
-				: body.permissionRole === "owner"
-					? "owner"
-					: body.permissionRole === "collaborator"
-						? "collaborator"
-						: existing.permissionRole;
-		const collaborator = store.upsertCollaborator({
-			id: collabId,
-			name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name,
-			roleTitle:
-				typeof body.roleTitle === "string" && body.roleTitle.trim() ? body.roleTitle.trim() : existing.roleTitle,
-			permissionRole,
-			orgId,
-		});
-		broadcast("collaborator_updated", { collaborator: toPublicCollaborator(collaborator) });
-		sendJson(res, 200, { collaborator });
-		return true;
-	}
-
-	if (method === "DELETE" && collabItemMatch) {
-		if (!requireOwner(res, actor)) return true;
-		const collabId = decodeURIComponent(collabItemMatch[1]!);
-		if (collabId === DEFAULT_OWNER_COLLABORATOR_ID) {
-			sendError(res, 400, "Cannot delete the default owner collaborator");
-			return true;
-		}
-		if (!store.getCollaborator(collabId)) {
-			sendError(res, 404, `Collaborator not found: ${collabId}`);
-			return true;
-		}
-		for (const matter of store.listMatters()) {
-			if (matter.collaboratorIds.includes(collabId)) {
-				store.updateMatterCollaborators(
-					matter.id,
-					matter.collaboratorIds.filter((id) => id !== collabId),
-				);
-			}
-		}
-		store.deleteCollaborator(collabId);
-		revokeTokenSessions(collabId, "collaborator_deleted");
-		broadcast("collaborator_updated", { deletedId: collabId });
-		sendJson(res, 200, { ok: true, deletedId: collabId });
-		return true;
 	}
 
 	return false;

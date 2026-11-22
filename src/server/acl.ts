@@ -18,12 +18,7 @@ import { sendError } from "./http.ts";
 
 export function isGlobalUnscopedActor(actor: RequestActor): boolean {
 	if (actor.authKind === "loopback") return true;
-	if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole === "owner") return true;
 	return false;
-}
-
-function isLegacyCollaboratorActor(actor: RequestActor): boolean {
-	return actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner";
 }
 
 export function getActorOrgRole(
@@ -32,18 +27,12 @@ export function getActorOrgRole(
 	orgId: string | null | undefined,
 ): OrgMemberRole | null {
 	if (!orgId) {
-		return isGlobalUnscopedActor(actor) || isLegacyCollaboratorActor(actor) ? "org_owner" : null;
+		return isGlobalUnscopedActor(actor) ? "org_owner" : null;
 	}
 	if (isGlobalUnscopedActor(actor)) return "org_owner";
 	if (actor.user) {
 		const membership = store.getOrgMembership(orgId, actor.user.id);
 		if (membership) return membership.orgRole;
-		return null;
-	}
-	if (isLegacyCollaboratorActor(actor)) {
-		if (!actor.collaborator.orgId || actor.collaborator.orgId === orgId) {
-			return "org_member";
-		}
 		return null;
 	}
 	return null;
@@ -57,7 +46,7 @@ export function canAccessOrganization(
 	if (!actor) return false;
 	if (actor.user && actor.user.status !== "active") return false;
 	if (isGlobalUnscopedActor(actor)) return true;
-	if (!orgId) return isLegacyCollaboratorActor(actor) && !actor.collaborator.orgId;
+	if (!orgId) return false;
 	return getActorOrgRole(store, actor, orgId) !== null;
 }
 
@@ -89,7 +78,7 @@ export function isViewerInAllOrgsOrTarget(
 	orgId?: string | null,
 ): boolean {
 	if (actor.authKind === "loopback" || isSuperAdminActor(actor)) return false;
-	if (!actor.user) return isLegacyCollaboratorActor(actor);
+	if (!actor.user) return false;
 	if (orgId) {
 		return getActorOrgRole(store, actor, orgId) === "org_viewer";
 	}
@@ -118,9 +107,6 @@ export function canActorCreateRoleInScope(
 			return { allowed: true };
 		}
 		return { allowed: false, reason: "仅组织所有者或管理员可创建该组织的共享 AI 角色与 Skill" };
-	}
-	if (isLegacyCollaboratorActor(actor)) {
-		return { allowed: false, reason: "访客邀请口令不支持创建个人私有角色，请登录个人账号后操作" };
 	}
 	if (!actor.user) {
 		return { allowed: false, reason: "当前会话未绑定个人账号，无法创建个人私有角色" };
@@ -233,19 +219,9 @@ export function canAccessMatter(
 			return false;
 		}
 	}
-	if (!matter.orgId && actor.authKind === "legacy_token" && !isGlobalUnscopedActor(actor)) {
-		if (actor.collaborator.orgId && !matter.collaboratorIds.includes(actor.collaborator.id)) {
-			return false;
-		}
-	}
 	if (matter.workspaceId) {
 		const ws = store.getWorkspace(matter.workspaceId);
 		if (ws && !canAccessWorkspace(store, actor, ws)) return false;
-	}
-	if (matter.visibility === "private" && actor.authKind === "legacy_token" && !isGlobalUnscopedActor(actor)) {
-		if (!matter.collaboratorIds.includes(actor.collaborator.id)) {
-			return false;
-		}
 	}
 	if (matter.visibility === "private" && actor.authKind === "session") {
 		const uid = actor.user?.id ?? "";
@@ -264,7 +240,6 @@ export function canParticipateInMatter(store: PersonalAgentStore, actor: Request
 	if (!canAccessMatter(store, actor, matter)) return false;
 	if (!actor) return false;
 	if (isGlobalUnscopedActor(actor)) return true;
-	if (isLegacyCollaboratorActor(actor)) return true;
 	const orgRole = matter.orgId ? getActorOrgRole(store, actor, matter.orgId) : "org_member";
 	return orgRole !== "org_viewer" && orgRole !== null;
 }
@@ -286,8 +261,6 @@ export function canDispatchAiInOrg(
 ): boolean {
 	if (!actor) return false;
 	if (actor.user && actor.user.status !== "active") return false;
-	// Legacy LAN guests remain strictly blocked from direct AI dispatch.
-	if (isLegacyCollaboratorActor(actor)) return false;
 	if (isGlobalUnscopedActor(actor)) return true;
 	if (actor.user && !actor.user.canDispatchAi) return false;
 	if (!orgId) return false;

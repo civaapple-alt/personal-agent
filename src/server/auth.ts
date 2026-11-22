@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { DEFAULT_OWNER_COLLABORATOR_ID, type PersonalAgentStore } from "../storage/repositories.ts";
+import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Collaborator, CollaboratorRole, PlatformUser } from "../storage/types.ts";
 import { sendError } from "./http.ts";
 
 export const SESSION_COOKIE_NAME = "pa_session";
 
-export type ActorAuthKind = "session" | "legacy_token" | "loopback";
+export type ActorAuthKind = "session" | "loopback";
 
 export interface RequestActor {
 	collaborator: Collaborator;
@@ -133,17 +133,6 @@ export function resolveRequestActor(
 				sessionTokenHash: sessionHit.session.id,
 			};
 		}
-		const legacyMatched = store.getCollaboratorByToken(rawToken);
-		if (legacyMatched) {
-			const linkedUser =
-				legacyMatched.id === DEFAULT_OWNER_COLLABORATOR_ID ? store.ensureLocalBootstrapAdmin() : null;
-			return {
-				collaborator: legacyMatched,
-				user: linkedUser,
-				viaToken: true,
-				authKind: "legacy_token",
-			};
-		}
 		// Never silently elevate an invalidated/unknown session token to loopback owner.
 		return null;
 	}
@@ -182,7 +171,7 @@ export function isSuperAdminActor(actor: RequestActor | null): boolean {
 	if (actor.user && actor.user.platformRole === "super_admin" && actor.user.status === "active") {
 		return true;
 	}
-	return actor.authKind === "legacy_token" && actor.collaborator.permissionRole === "owner";
+	return false;
 }
 
 export function requireSuperAdmin(res: ServerResponse, actor: RequestActor | null): actor is RequestActor {

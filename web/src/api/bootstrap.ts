@@ -15,7 +15,7 @@ import type { RoleTemplateDto, TeamMemberDto } from "./team.ts";
 export interface BootstrapPayload {
 	innerDemoAvailable?: boolean;
 	unifiedConversation?: boolean;
-	authKind?: "session" | "legacy_token" | "loopback" | null;
+	authKind?: "session" | "loopback" | null;
 	currentUser?: CollaboratorDto;
 	accountUser?: AccountUserDto | null;
 	platformPolicy?: {

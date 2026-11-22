@@ -278,13 +278,14 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 	const url = `http://127.0.0.1:${address.port}`;
 
 	try {
-		const col = (await (
-			await fetch(`${url}/api/collaborators`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: "Bob", roleTitle: "运营同事" }),
-			})
-		).json()) as { collaborator: { id: string } };
+		const org = store.ensureDefaultOrganization();
+		const colleague = store.createUser({
+			email: "bob@roster.test",
+			password: "TestPass123!",
+			displayName: "Bob",
+			status: "active",
+		});
+		store.upsertOrgMember({ orgId: org.id, userId: colleague.id, orgRole: "org_member", roleTitle: "运营同事" });
 
 		// 1) Gap detection for contract/legal prompt when only 4 default roles exist
 		const gapRes = (await (
@@ -368,7 +369,7 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 					preferredMemberId: createdMember.member.id,
 					aiMemberIds: [createdMember.member.id, "qa-manager"],
 					observerMemberIds: ["qa-manager"],
-					collaboratorIds: [creator.id, col.collaborator.id],
+					collaboratorIds: [creator.id, colleague.id],
 					visibility: "private",
 				}),
 			})
@@ -382,7 +383,7 @@ test("assessMatterInitiation and HTTP endpoints surface role gaps, design new ro
 		};
 		assert.deepEqual(createdMatter.matter.aiMemberIds, [createdMember.member.id, "qa-manager"]);
 		assert.deepEqual(createdMatter.matter.observerMemberIds, ["qa-manager"]);
-		assert.deepEqual(createdMatter.matter.collaboratorIds, [col.collaborator.id]);
+		assert.deepEqual(createdMatter.matter.collaboratorIds, [colleague.id]);
 		assert.equal(createdMatter.matter.createdByUserId, creator.id);
 	} finally {
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
@@ -576,17 +577,19 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 		assert.equal(store.listMembers().length, initialCount + 2);
 
 		// Non-owner collaborator cannot invoke Meta-Bot or batch member creation
-		const col = (await (
-			await fetch(`${url}/api/collaborators`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: "Guest", roleTitle: "成员" }),
-			})
-		).json()) as { collaborator: { token: string } };
+		const guest = store.createUser({
+			email: "guest@architect.test",
+			password: "TestPass123!",
+			displayName: "Guest",
+			status: "active",
+		});
+		const guestOrg = store.ensureDefaultOrganization();
+		store.upsertOrgMember({ orgId: guestOrg.id, userId: guest.id, orgRole: "org_viewer" });
+		const guestSession = store.createSession(guest.id).rawToken;
 		const forbiddenChat = await fetch(`${url}/api/members/architect/chat`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json", "x-pa-token": col.collaborator.token },
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+			headers: { "Content-Type": "application/json", "x-pa-token": guestSession },
+			body: JSON.stringify({ orgId: guestOrg.id, messages: [{ role: "user", content: "hi" }] }),
 		});
 		assert.equal(forbiddenChat.status, 403);
 

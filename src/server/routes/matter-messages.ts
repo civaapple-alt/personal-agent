@@ -438,11 +438,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		}
 		const discussionAiEnabled = body.discussionAiEnabled === true;
 		const initialCollaboratorIds = [...requestedCollaboratorIds];
-		if (actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") {
-			if (!initialCollaboratorIds.includes(actor.collaborator.id)) {
-				initialCollaboratorIds.push(actor.collaborator.id);
-			}
-		}
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, [
 				...(aiMemberIds ?? []),
@@ -811,15 +806,6 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		});
 
 		if (mode !== "dispatch") {
-			// Legacy LAN guest discussion may record guest collaborator ID on non-private shared matters,
-			// but never auto-grants access to private matters.
-			if (
-				actor.authKind === "legacy_token" &&
-				actor.collaborator.permissionRole !== "owner" &&
-				matter.visibility !== "private"
-			) {
-				store.addMatterCollaborator(matterId, actor.collaborator.id);
-			}
 			const { message, refreshedMatter } = appendHumanMessage(ctx, {
 				matter,
 				actorCollaborator: actor.collaborator,

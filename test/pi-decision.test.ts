@@ -171,12 +171,17 @@ test("Typed Pi initiation decision model enforces schema, repo-read flag, owner 
 	const url = `http://127.0.0.1:${address.port}`;
 
 	try {
-		const collab = store.upsertCollaborator({ name: "Viewer", roleTitle: "旁观同事" });
-		assert.ok(collab.token);
+		const collab = store.createUser({
+			email: "viewer@decision.test",
+			password: "TestPass123!",
+			displayName: "Viewer",
+			status: "active",
+		});
+		const session = store.createSession(collab.id).rawToken;
 		// 1) Non-owner collaborator cannot trigger model decision
 		const forbiddenRes = await fetch(`${url}/api/matters/assess`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Authorization: `Bearer ${collab.token}` },
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
 			body: JSON.stringify({ prompt: "帮我看下这个接口", mode: "model", workspaceId: ws.id }),
 		});
 		assert.equal(forbiddenRes.status, 403);

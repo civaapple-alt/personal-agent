@@ -92,12 +92,19 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
-	store.ensureOwnerCollaborator("Owner");
-	const collaborator = store.upsertCollaborator({
-		name: "Alice",
-		roleTitle: "Reviewer",
-		permissionRole: "collaborator",
+	const owner = store.setupInitialAdmin({
+		email: "owner@runtime.test",
+		password: "TestPass123!",
+		displayName: "Owner",
 	});
+	const collaborator = store.createUser({
+		email: "reviewer@runtime.test",
+		password: "TestPass123!",
+		displayName: "Alice",
+		status: "active",
+	});
+	const ownerToken = store.createSession(owner.id).rawToken;
+	const collaboratorToken = store.createSession(collaborator.id).rawToken;
 
 	const sessionDir = join(tempDir, "pi-sessions");
 	mkdirSync(sessionDir, { recursive: true });
@@ -136,9 +143,6 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	// Unauthenticated requests are rejected.
 	const unauthRes = await fetch(`${baseUrl}/api/runtime`);
 	assert.equal(unauthRes.status, 401);
-
-	const ownerToken = store.listCollaborators().find((c) => c.permissionRole === "owner")?.token;
-	assert.ok(ownerToken);
 
 	const ownerRes = await fetch(`${baseUrl}/api/runtime`, {
 		headers: { Authorization: `Bearer ${ownerToken}` },
@@ -222,7 +226,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 
 	// Collaborator view redacts host filesystem paths while keeping capability info intact.
 	const collabRes = await fetch(`${baseUrl}/api/runtime`, {
-		headers: { Authorization: `Bearer ${collaborator.token}` },
+		headers: { Authorization: `Bearer ${collaboratorToken}` },
 	});
 	assert.equal(collabRes.status, 200);
 	const collabPayload = (await collabRes.json()) as RuntimeOverviewPayload;

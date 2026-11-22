@@ -21,7 +21,7 @@ interface SidebarProps {
 	activeTab: NavTab;
 	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
-	authKind?: "session" | "legacy_token" | "loopback" | null;
+	authKind?: "session" | "loopback" | null;
 	requireAuth?: boolean | null;
 	isSuperAdmin?: boolean;
 	orgEffectiveMemberIds?: string[] | null;
@@ -176,19 +176,10 @@ export const Sidebar = memo(function Sidebar({
 	const userLabel =
 		authKind === "session" && bootstrap?.accountUser
 			? `${bootstrap.accountUser.displayName} · ${bootstrap.accountUser.platformRole === "super_admin" ? "超管" : "成员"}`
-			: authKind === "legacy_token" && currentUser
-				? `${currentUser.name} · 协同访客`
-				: currentUser
-					? `${currentUser.name} · 本机所有者`
-					: "Pi RPC";
-	const accountActionLabel =
-		authKind === "loopback"
-			? "切换账号"
-			: authKind === "legacy_token"
-				? window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-					? "恢复所有者"
-					: "退出"
-				: "退出登录";
+			: currentUser
+				? `${currentUser.name} · 本机所有者`
+				: "Pi RPC";
+	const accountActionLabel = authKind === "loopback" ? "切换账号" : "退出登录";
 	const hasSecondaryTabActive = activeTab !== "chats";
 
 	const handleArchiveClick = async (matter: MatterDto) => {

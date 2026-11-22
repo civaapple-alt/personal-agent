@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -20,10 +20,17 @@ async function fixture(
 	hold?: Promise<void>,
 	settings?: { requireAuth: boolean; host?: string; inheritLocalPiResources?: boolean; ownerToken?: boolean },
 ) {
-	const root = await mkdtemp(join(tmpdir(), "pa-request-lifecycle-"));
+	const root = await realpath(await mkdtemp(join(tmpdir(), "pa-request-lifecycle-")));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
-	const owner = store.ensureOwnerCollaborator();
+	const owner = store.setupInitialAdmin({
+		email: "owner@request.test",
+		password: "TestPass123!",
+		displayName: "Owner",
+	});
+	const ownerToken = store.createSession(owner.id).rawToken;
+	const org = store.ensureDefaultOrganization();
+	store.upsertOrgMember({ orgId: org.id, userId: owner.id, orgRole: "org_owner" });
 	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
 	let runs = 0;
 	const runStarted = Promise.withResolvers<void>();
@@ -81,11 +88,16 @@ async function fixture(
 			method,
 			headers: {
 				"Content-Type": "application/json",
-				...((settings?.ownerToken ?? settings?.requireAuth ?? true) ? { "x-pa-token": owner.token } : {}),
+				...((settings?.ownerToken ?? settings?.requireAuth ?? true) ? { "x-pa-token": ownerToken } : {}),
 			},
 			body: JSON.stringify(body),
 		});
-	const matter = store.createMatter({ title: "request", leadMemberId: "product-manager" });
+	const matter = store.createMatter({
+		title: "request",
+		leadMemberId: "product-manager",
+		orgId: org.id,
+		createdByUserId: owner.id,
+	});
 	const message = (mode = "ai_request", status = "pending") =>
 		store.appendMessage({
 			matterId: matter.id,
@@ -105,6 +117,8 @@ async function fixture(
 	});
 	return {
 		root,
+		owner,
+		org,
 		store,
 		orchestrator,
 		matter,
@@ -148,6 +162,7 @@ test("concurrent approval claims one request once and validates execution settin
 test("an old request cannot silently execute after its matter moves to another organization", async (t) => {
 	const f = await fixture(t);
 	const org = f.store.upsertOrganization({ name: "Other org" });
+	f.store.upsertOrgMember({ orgId: org.id, userId: f.owner.id, orgRole: "org_owner" });
 	const msg = f.message();
 	f.store.updateMatterOrganization(f.matter.id, org.id);
 	const response = await f.post(f.endpoint(msg.id));
@@ -174,6 +189,7 @@ test("workspace organization cannot be reassigned through PATCH or upsert during
 	const f = await fixture(t, finish.promise);
 	const a = f.store.upsertOrganization({ name: "A" });
 	const b = f.store.upsertOrganization({ name: "B" });
+	for (const org of [a, b]) f.store.upsertOrgMember({ orgId: org.id, userId: f.owner.id, orgRole: "org_owner" });
 	const workspace = f.store.upsertWorkspace({ name: "repo", repoPath: f.root, orgId: a.id });
 	const pending = f.orchestrator.dispatchMatter({ prompt: "work", workspaceId: workspace.id });
 	try {
@@ -218,13 +234,13 @@ test("Only the local owner on a loopback listener inherits native Pi resources",
 		{ name: "personal owner", requireAuth: false, inherit: true },
 		{ name: "explicit opt-out", requireAuth: false, inheritLocalPiResources: false, inherit: false },
 		{ name: "LAN listener", requireAuth: false, host: "0.0.0.0", inherit: false },
-		{ name: "legacy owner token", requireAuth: false, ownerToken: true, inherit: false },
+		{ name: "signed-in owner", requireAuth: false, ownerToken: true, inherit: false },
 		{ name: "team server", requireAuth: true, inherit: false },
 	];
 	for (const { name, inherit, ...settings } of scenarios) {
 		await t.test(name, async (t) => {
 			const f = await fixture(t, undefined, settings);
-			const workspace = f.store.upsertWorkspace({ name: "local fixture", repoPath: f.root });
+			const workspace = f.store.upsertWorkspace({ name: "local fixture", repoPath: f.root, orgId: f.org.id });
 			const response = await f.post("/api/matters", {
 				prompt: "Inspect the fixture",
 				workspaceId: workspace.id,

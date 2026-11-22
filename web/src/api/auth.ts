@@ -30,7 +30,7 @@ export interface AuthSessionPayload {
 	pendingApproval?: boolean;
 	needsAdminSetup?: boolean;
 	registrationMode?: RegistrationMode;
-	authKind?: "session" | "legacy_token" | "loopback" | null;
+	authKind?: "session" | "loopback" | null;
 	currentUser: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
 }

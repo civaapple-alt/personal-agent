@@ -61,7 +61,7 @@ export function useAuthSession({
 	const [pendingApproval, setPendingApproval] = useState(false);
 	const [registrationMode, setRegistrationMode] = useState<RegistrationMode>("open_review");
 	const [sessionAccountUser, setSessionAccountUser] = useState<AccountUserDto | null>(null);
-	const [authKind, setAuthKind] = useState<"session" | "legacy_token" | "loopback" | null>(null);
+	const [authKind, setAuthKind] = useState<"session" | "loopback" | null>(null);
 	const [activeOrgInviteToken, setActiveOrgInviteToken] = useState(initialOrgInvite);
 	const [invitePreview, setInvitePreview] = useState<OrgInvitePreviewDto | null>(null);
 	const [showInviteSwitchModal, setShowInviteSwitchModal] = useState(false);

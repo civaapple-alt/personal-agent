@@ -62,7 +62,7 @@ export async function handleHumanDecisionRoutes(ctx: ServerRouteContext, r: Rout
 		actor.authKind === "loopback" ||
 		(matter.createdByUserId != null && userId === matter.createdByUserId) ||
 		canManageOrganization(store, actor, matter.orgId);
-	const canParticipate = actor.authKind !== "legacy_token" && canParticipateInMatter(store, actor, matter);
+	const canParticipate = canParticipateInMatter(store, actor, matter);
 	const name = actor.user?.displayName ?? actor.collaborator.name;
 	const publishUpdate = (updated: NonNullable<ReturnType<typeof store.getMessage>>) =>
 		ctx.broadcast("matter_message", { matterId, message: updated, matter }, { matterId });

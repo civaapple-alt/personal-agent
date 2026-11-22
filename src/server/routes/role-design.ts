@@ -64,10 +64,7 @@ export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRe
 			sendError(res, 403, "无权访问所选组织");
 			return true;
 		}
-		if (
-			(actor.authKind === "legacy_token" && actor.collaborator.permissionRole !== "owner") ||
-			isViewerInAllOrgsOrTarget(store, actor, effectiveOrgId)
-		) {
+		if (isViewerInAllOrgsOrTarget(store, actor, effectiveOrgId)) {
 			sendError(res, 403, "只读成员或访客口令不支持调用角色架构师");
 			return true;
 		}

@@ -409,10 +409,24 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 	}
 });
 
-test("Multi-human restricted collaboration: auth gate, discussion vs ai_request vs dispatch, owner approval, and token redaction", async () => {
+test("Account collaboration: discussion and AI request require authorized approval", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
-	const owner = store.ensureOwnerCollaborator("团队所有者");
+	const owner = store.setupInitialAdmin({
+		email: "owner@collab.test",
+		password: "TestPass123!",
+		displayName: "Owner",
+	});
+	const org = store.ensureDefaultOrganization();
+	store.upsertOrgMember({ orgId: org.id, userId: owner.id, orgRole: "org_owner" });
+	const colleague = store.createUser({
+		email: "colleague@collab.test",
+		password: "TestPass123!",
+		displayName: "李四",
+		status: "active",
+		canDispatchAi: false,
+	});
+	store.upsertOrgMember({ orgId: org.id, userId: colleague.id, orgRole: "org_member", roleTitle: "后端研发" });
 	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
 	const tempDir = mkdtempSync(join(tmpdir(), "pa-server-collab-"));
 	const dialogBroker = new DialogBroker();
@@ -479,24 +493,17 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		const retiredLogin = await fetch(`${baseUrl}/api/auth/login`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ token: owner.token }),
+			body: JSON.stringify({ token: "inv_obsolete" }),
 		});
 		assert.equal(retiredLogin.status, 400);
-		// Existing token authentication is exercised directly while its storage is being removed.
-		const ownerCookie = `pa_session=${owner.token}`;
-		const addCollabRes = await fetch(`${baseUrl}/api/collaborators`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
-			body: JSON.stringify({ name: "李四", roleTitle: "后端研发" }),
-		});
-		assert.equal(addCollabRes.status, 201);
-		const { collaborator: colleague } = (await addCollabRes.json()) as {
-			collaborator: { id: string; name: string; roleTitle: string; token: string; permissionRole: string };
-		};
-		assert.equal(colleague.permissionRole, "collaborator");
-		assert.ok(colleague.token.startsWith("inv_"));
-
-		const collabCookie = `pa_session=${colleague.token}`;
+		assert.equal(
+			(await fetch(`${baseUrl}/api/bootstrap`, { headers: { "x-pa-token": "inv_obsolete" } })).status,
+			401,
+		);
+		const ownerCookie = `pa_session=${store.createSession(owner.id).rawToken}`;
+		assert.equal((await fetch(`${baseUrl}/api/collaborators`, { headers: { Cookie: ownerCookie } })).status, 404);
+		const colleagueToken = store.createSession(colleague.id).rawToken;
+		const collabCookie = `pa_session=${colleagueToken}`;
 		const collabBootRes = await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: collabCookie } });
 		assert.equal(collabBootRes.status, 200);
 		const collabBoot = (await collabBootRes.json()) as {
@@ -512,9 +519,8 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		// Collaborator is blocked from admin & direct AI dispatch
 		for (const [urlPath, payload] of [
 			["/api/matters", { prompt: "直接触发 AI" }],
-			["/api/organizations", { name: "Unauthorized Org" }],
 			["/api/workspaces", { name: "bad-ws", repoPath: tempDir }],
-			["/api/members", { name: "hack", title: "Hack" }],
+			["/api/members", { name: "hack", title: "Hack", roleScope: "global" }],
 			["/api/previews", { url: "http://127.0.0.1:9999" }],
 		] as const) {
 			const res = await fetch(`${baseUrl}${urlPath}`, {
@@ -533,9 +539,9 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		});
 		assert.equal(startDiscussionRes.status, 201);
 		const { matter } = (await startDiscussionRes.json()) as {
-			matter: { id: string; collaboratorIds: string[] };
+			matter: { id: string; createdByUserId: string };
 		};
-		assert.ok(matter.collaboratorIds.includes(colleague.id));
+		assert.equal(matter.createdByUserId, colleague.id);
 
 		const enableDiscussion = await fetch(`${baseUrl}/api/matters/${matter.id}`, {
 			method: "PATCH",
@@ -616,7 +622,7 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		});
 		assert.equal(forbiddenDistill.status, 403);
 
-		// Dismiss flow + token regeneration
+		// Dismiss flow and session revocation
 		const secondReqRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: collabCookie },
@@ -631,11 +637,7 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		assert.equal(dismissRes.status, 200);
 		assert.equal(store.getMessage(secondReq.id)?.metadata?.aiRequestStatus, "dismissed");
 
-		const regenRes = await fetch(`${baseUrl}/api/collaborators/${colleague.id}/regenerate-token`, {
-			method: "POST",
-			headers: { Cookie: ownerCookie },
-		});
-		assert.equal(regenRes.status, 200);
+		store.revokeSessionByToken(colleagueToken);
 		const oldSession = await fetch(`${baseUrl}/api/auth/session`, { headers: { Cookie: collabCookie } });
 		assert.equal(((await oldSession.json()) as { authenticated: boolean }).authenticated, false);
 	} finally {
@@ -823,7 +825,7 @@ test("Matter AI roster, lead switching, Matter-wide observer toggle, and delegat
 	}
 });
 
-test("Revoked or deleted collaborator session stays blocked on refresh, loopback, and live SSE", async () => {
+test("Disabled account sessions stay blocked on refresh, loopback, and live SSE", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
 	store.ensureOwnerCollaborator("团队所有者");
@@ -876,15 +878,13 @@ test("Revoked or deleted collaborator session stays blocked on refresh, loopback
 	const baseUrl = `http://127.0.0.1:${address.port}`;
 
 	try {
-		const addRes = await fetch(`${baseUrl}/api/collaborators`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: "potato", roleTitle: "协同同事" }),
+		const user = store.createUser({
+			email: "revoked@example.test",
+			password: "TestPass123!",
+			displayName: "User",
+			status: "active",
 		});
-		assert.equal(addRes.status, 201);
-		const { collaborator } = (await addRes.json()) as { collaborator: { id: string; token: string } };
-
-		const staleCookie = `pa_session=${collaborator.token}`;
+		const staleCookie = `pa_session=${store.createSession(user.id).rawToken}`;
 		// Open live SSE stream as the collaborator.
 		const sseRes = await fetch(`${baseUrl}/api/events`, {
 			headers: { Cookie: staleCookie },
@@ -896,12 +896,13 @@ test("Revoked or deleted collaborator session stays blocked on refresh, loopback
 		const firstChunk = await reader.read();
 		assert.match(decoder.decode(firstChunk.value), /event: connected/);
 
-		// Owner regenerates collaborator token -> live SSE must receive auth_revoked and close.
-		const regenRes = await fetch(`${baseUrl}/api/collaborators/${collaborator.id}/regenerate-token`, {
-			method: "POST",
+		// Disabling the account revokes sessions and closes its event stream.
+		const disableRes = await fetch(`${baseUrl}/api/admin/users/${user.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ status: "disabled" }),
 		});
-		assert.equal(regenRes.status, 200);
-
+		assert.equal(disableRes.status, 200);
 		let sseText = "";
 		for (let i = 0; i < 5; i++) {
 			const chunk = await reader.read();
@@ -941,18 +942,19 @@ test("Revoked or deleted collaborator session stays blocked on refresh, loopback
 		});
 		assert.equal(matterPostAfter.status, 401);
 
-		// New token works; deleting collaborator also invalidates its active cookie session.
-		const { collaborator: refreshed } = (await regenRes.json()) as { collaborator: { token: string } };
-		const newCookie = `pa_session=${refreshed.token}`;
-		const delRes = await fetch(`${baseUrl}/api/collaborators/${collaborator.id}`, {
-			method: "DELETE",
+		const reenableRes = await fetch(`${baseUrl}/api/admin/users/${user.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ status: "active" }),
 		});
-		assert.equal(delRes.status, 200);
-
-		const bootAfterDelete = await fetch(`${baseUrl}/api/bootstrap`, {
-			headers: { Cookie: newCookie },
-		});
-		assert.equal(bootAfterDelete.status, 401);
+		assert.equal(reenableRes.status, 200);
+		const newCookie = `pa_session=${store.createSession(user.id).rawToken}`;
+		assert.equal((await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: newCookie } })).status, 200);
+		assert.equal(
+			(await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", headers: { Cookie: newCookie } })).status,
+			200,
+		);
+		assert.equal((await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: newCookie } })).status, 401);
 	} finally {
 		await orchestrator.shutdown();
 		server.closeAllConnections();
