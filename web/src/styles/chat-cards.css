@@ -624,8 +624,17 @@
 	font-size: var(--text-lg);
 	line-height: 1.35;
 }
+.matter-doc-pane-modebar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 14px;
+}
 .matter-doc-pane-markdown {
-	margin-top: 18px;
+	margin-top: 16px;
+}
+.matter-doc-pane-diff-view {
+	margin-top: 14px;
 }
 
 /* ---- Actionable Space Document Card inside Chat Stream ---- */

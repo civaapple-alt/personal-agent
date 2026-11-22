@@ -15,6 +15,7 @@ interface MatterDocSidePaneProps {
 	openDocIds: string[];
 	activeDocId: string;
 	autoExpandDiff?: boolean;
+	openNonce?: number;
 	docTitlesById: Map<string, string>;
 	workspaces: WorkspaceDto[];
 	memberName: (id: string) => string;
@@ -29,6 +30,7 @@ export function MatterDocSidePane({
 	openDocIds,
 	activeDocId,
 	autoExpandDiff = false,
+	openNonce = 0,
 	docTitlesById,
 	workspaces,
 	memberName,
@@ -42,6 +44,7 @@ export function MatterDocSidePane({
 	const [commits, setCommits] = useState<SpaceGitCommitDto[]>([]);
 	const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
 	const [commitDetail, setCommitDetail] = useState<SpaceGitCommitDetailDto | null>(null);
+	const [viewMode, setViewMode] = useState<"content" | "diff">(autoExpandDiff ? "diff" : "content");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
@@ -78,9 +81,26 @@ export function MatterDocSidePane({
 	}, []);
 
 	useEffect(() => {
+		void openNonce;
 		setEditing(false);
+		setViewMode(autoExpandDiff ? "diff" : "content");
 		void loadDoc(activeDocId, autoExpandDiff);
-	}, [activeDocId, autoExpandDiff, loadDoc]);
+	}, [activeDocId, autoExpandDiff, openNonce, loadDoc]);
+
+	const handleSwitchMode = async (mode: "content" | "diff") => {
+		setViewMode(mode);
+		if (mode === "diff" && doc && !selectedCommitHash && commits[0]) {
+			const latestHash = commits[0].hash;
+			setSelectedCommitHash(latestHash);
+			setCommitDetail(null);
+			try {
+				const res = await getSpaceDocumentCommitDetail(doc.id, latestHash);
+				setCommitDetail(res.detail);
+			} catch (err) {
+				setError(err instanceof Error ? err.message : String(err));
+			}
+		}
+	};
 
 	// Keep the side pane in sync when the AI or another collaborator updates the active document.
 	useEffect(() => {
@@ -331,53 +351,78 @@ export function MatterDocSidePane({
 							)}
 						</div>
 
-						<div className="matter-doc-pane-markdown">
-							<MarkdownView content={doc.content || "（空白）"} />
-						</div>
+						{commits.length > 0 && (
+							<div className="matter-doc-pane-modebar" role="tablist" aria-label="文档视图">
+								<button
+									type="button"
+									role="tab"
+									aria-selected={viewMode === "content"}
+									className={viewMode === "content" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
+									onClick={() => void handleSwitchMode("content")}
+								>
+									正文
+								</button>
+								<button
+									type="button"
+									role="tab"
+									aria-selected={viewMode === "diff"}
+									className={viewMode === "diff" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
+									onClick={() => void handleSwitchMode("diff")}
+								>
+									变更对比（{commits.length}）
+								</button>
+							</div>
+						)}
 
-						<details className="space-commits-panel" open={autoExpandDiff || commits.length > 1}>
-							<summary>Git 提交历史（{commits.length}）</summary>
-							<ul className="space-commit-list">
-								{commits.map((commit) => (
-									<li key={commit.hash} className="space-commit-item">
-										<button
-											type="button"
-											className={`space-commit-btn ${selectedCommitHash === commit.hash ? "active" : ""}`}
-											onClick={() => void handleToggleCommit(commit.hash)}
-										>
-											<code className="space-commit-hash">{commit.shortHash}</code>
-											<span className="space-commit-subject">{commit.subject}</span>
-											<span className="space-commit-meta">
-												{resolveLabel(commit.authorName)} · {new Date(commit.committedAt).toLocaleString()}
-											</span>
-										</button>
-										{selectedCommitHash === commit.hash && commitDetail && (
-											<div className="space-commit-diff-box">
-												<pre className="space-diff-pre">
-													{(commitDetail.diff || "（无文本差异）").split("\n").map((line, index) => (
-														<span
-															key={`${commit.hash}-${index}`}
-															className={
-																line.startsWith("+") && !line.startsWith("+++")
-																	? "diff-add"
-																	: line.startsWith("-") && !line.startsWith("---")
-																		? "diff-del"
-																		: line.startsWith("@@")
-																			? "diff-hunk"
-																			: ""
-															}
-														>
-															{line}
-															{"\n"}
-														</span>
-													))}
-												</pre>
-											</div>
-										)}
-									</li>
-								))}
-							</ul>
-						</details>
+						{viewMode === "content" ? (
+							<div className="matter-doc-pane-markdown">
+								<MarkdownView content={doc.content || "（空白）"} />
+							</div>
+						) : (
+							<div className="matter-doc-pane-diff-view">
+								<ul className="space-commit-list">
+									{commits.map((commit) => (
+										<li key={commit.hash} className="space-commit-item">
+											<button
+												type="button"
+												className={`space-commit-btn ${selectedCommitHash === commit.hash ? "active" : ""}`}
+												onClick={() => void handleToggleCommit(commit.hash)}
+											>
+												<code className="space-commit-hash">{commit.shortHash}</code>
+												<span className="space-commit-subject">{commit.subject}</span>
+												<span className="space-commit-meta">
+													{resolveLabel(commit.authorName)} ·{" "}
+													{new Date(commit.committedAt).toLocaleString()}
+												</span>
+											</button>
+											{selectedCommitHash === commit.hash && commitDetail && (
+												<div className="space-commit-diff-box">
+													<pre className="space-diff-pre">
+														{(commitDetail.diff || "（无文本差异）").split("\n").map((line, index) => (
+															<span
+																key={`${commit.hash}-${index}`}
+																className={
+																	line.startsWith("+") && !line.startsWith("+++")
+																		? "diff-add"
+																		: line.startsWith("-") && !line.startsWith("---")
+																			? "diff-del"
+																			: line.startsWith("@@")
+																				? "diff-hunk"
+																				: ""
+																}
+															>
+																{line}
+																{"\n"}
+															</span>
+														))}
+													</pre>
+												</div>
+											)}
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
 					</>
 				) : null}
 			</div>

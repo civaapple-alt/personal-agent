@@ -14,12 +14,14 @@ export function useMatterSideDocs({
 	const [openDocIds, setOpenDocIds] = useState<string[]>([]);
 	const [activeDocId, setActiveDocId] = useState<string | null>(null);
 	const [autoDiff, setAutoDiff] = useState(false);
+	const [openNonce, setOpenNonce] = useState(0);
 
 	useEffect(() => {
 		void selectedMatterId;
 		setOpenDocIds([]);
 		setActiveDocId(null);
 		setAutoDiff(false);
+		setOpenNonce(0);
 	}, [selectedMatterId]);
 
 	const openDoc = useCallback(
@@ -27,6 +29,7 @@ export function useMatterSideDocs({
 			setOpenDocIds((prev) => (prev.includes(docId) ? prev : [...prev, docId]));
 			setActiveDocId(docId);
 			setAutoDiff(Boolean(options?.showDiff));
+			setOpenNonce((n) => n + 1);
 			onOpened?.();
 		},
 		[onOpened],
@@ -70,6 +73,7 @@ export function useMatterSideDocs({
 		openDocIds,
 		activeDocId,
 		autoDiff,
+		openNonce,
 		docTitlesById,
 		openDoc,
 		selectDoc,

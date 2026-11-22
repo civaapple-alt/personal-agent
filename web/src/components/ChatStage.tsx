@@ -833,6 +833,7 @@ export function ChatStage({
 					openDocIds={sideDocs.openDocIds}
 					activeDocId={sideDocs.activeDocId}
 					autoExpandDiff={sideDocs.autoDiff}
+					openNonce={sideDocs.openNonce}
 					docTitlesById={sideDocs.docTitlesById}
 					workspaces={workspaces}
 					memberName={memberName}

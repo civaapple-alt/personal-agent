@@ -667,29 +667,15 @@ export function MessageFeed({
 										/>
 									)}
 									{Array.isArray(msg.metadata?.spaceDocuments) &&
-										(msg.metadata.spaceDocuments as ChatSpaceDocumentItem[]).map((doc) => {
-											const isLatestMessage =
-												Boolean(matterDetail) && messageIndex === matterDetail!.userMessages.length - 1;
-											const canProceed =
-												isLatestMessage && !isTurnRunning && isOwner && Boolean(onSendQuickPrompt);
-											return (
-												<SpaceDocumentCard
-													key={doc.id}
-													doc={doc}
-													canProceed={canProceed}
-													onOpen={(showDiff) =>
-														onOpenSideDoc
-															? onOpenSideDoc(doc.id, { showDiff })
-															: onOpenDeliverables(doc.id)
-													}
-													onProceed={() =>
-														void onSendQuickPrompt?.(
-															`确认「${doc.title}」(rev ${doc.revision})，请按此方案继续推进。`,
-														)
-													}
-												/>
-											);
-										})}
+										(msg.metadata.spaceDocuments as ChatSpaceDocumentItem[]).map((doc) => (
+											<SpaceDocumentCard
+												key={doc.id}
+												doc={doc}
+												onOpen={(showDiff) =>
+													onOpenSideDoc ? onOpenSideDoc(doc.id, { showDiff }) : onOpenDeliverables(doc.id)
+												}
+											/>
+										))}
 									{attachedDeliverables.map((deliv) => renderDeliverablePill(deliv))}
 								</div>
 							);
