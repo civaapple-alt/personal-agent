@@ -212,6 +212,9 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				const matter = await innerMatterDemo.prepare();
+				if (actor.user && matter.orgId && !store.getOrgMembership(matter.orgId, actor.user.id)) {
+					store.upsertOrgMember({ orgId: matter.orgId, userId: actor.user.id, orgRole: "org_owner" });
+				}
 				sse.broadcast("matter_updated", { matterId: matter.id }, { matterId: matter.id });
 				sendJson(res, 200, { matter });
 				return;

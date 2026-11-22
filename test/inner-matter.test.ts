@@ -94,8 +94,19 @@ async function fixture(t: test.TestContext) {
 			},
 		}),
 	});
-	const owner = store.ensureOwnerCollaborator();
-	const colleague = store.upsertCollaborator({ name: "同事" });
+	const owner = store.setupInitialAdmin({
+		email: "owner@fixture.local",
+		password: "TestPass123!",
+		displayName: "Owner",
+	});
+	const ownerToken = store.createSession(owner.id).rawToken;
+	const colleague = store.createUser({
+		email: "peer@fixture.local",
+		password: "TestPass123!",
+		displayName: "同事",
+		status: "active",
+	});
+	const colleagueToken = store.createSession(colleague.id).rawToken;
 	const { server } = createPersonalAgentServer({
 		store,
 		orchestrator,
@@ -108,7 +119,7 @@ async function fixture(t: test.TestContext) {
 	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 	const address = server.address();
 	assert.ok(address && typeof address === "object");
-	const request = (path: string, token = owner.token, method = "GET", body?: unknown) =>
+	const request = (path: string, token = ownerToken, method = "GET", body?: unknown) =>
 		fetch(`http://127.0.0.1:${address.port}${path}`, {
 			method,
 			headers: { "x-pa-token": token, "Content-Type": "application/json" },
@@ -121,13 +132,13 @@ async function fixture(t: test.TestContext) {
 		db.close();
 		await rm(root, { recursive: true, force: true });
 	});
-	return { root, directory, store, db, orchestrator, request, owner, colleague, workers: () => workers };
+	return { root, directory, store, db, orchestrator, request, owner, colleagueToken, workers: () => workers };
 }
 
 test("owner opt-in prepares one real Git workspace and one matter, without model calls or fabricated outcomes", async (t) => {
 	const f = await fixture(t);
 	assert.equal((await jsonObject(await f.request("/api/bootstrap"))).innerDemoAvailable, true);
-	assert.equal((await f.request("/api/demos/inner-matter", f.colleague.token, "POST")).status, 403);
+	assert.equal((await f.request("/api/demos/inner-matter", f.colleagueToken, "POST")).status, 403);
 	assert.equal(f.store.listMatters().length, 0);
 	const responses = await Promise.all([
 		f.request("/api/demos/inner-matter", undefined, "POST"),

@@ -244,9 +244,8 @@ export async function handleAdminAndAuthRoutes(
 		const body = await readJsonBody(req);
 		const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 		const password = typeof body.password === "string" ? body.password : "";
-		const token = typeof body.token === "string" ? body.token.trim() : "";
 		const inviteToken = typeof body.inviteToken === "string" ? body.inviteToken.trim() : "";
-		const rateKey = `login:${ip}:${email || "token"}`;
+		const rateKey = `login:${ip}:${email}`;
 		if (!authRateLimiter.check(rateKey)) {
 			sendError(res, 429, "登录尝试过于频繁，请 5 分钟后再试");
 			return true;
@@ -297,22 +296,8 @@ export async function handleAdminAndAuthRoutes(
 			});
 			return true;
 		}
-		if (!token) {
-			sendError(res, 400, "请填写邮箱与密码，或提供有效的邀请口令");
-			return true;
-		}
-		const matched = store.getCollaboratorByToken(token);
-		if (!matched) {
-			authRateLimiter.recordFailure(rateKey);
-			sendError(res, 401, "无效或已失效的邀请口令");
-			return true;
-		}
-		authRateLimiter.reset(rateKey);
-		setSessionCookie(req, res, matched.token);
-		sendJson(res, 200, {
-			ok: true,
-			currentUser: toPublicCollaborator(matched),
-		});
+		authRateLimiter.recordFailure(rateKey);
+		sendError(res, 400, "请填写邮箱与密码");
 		return true;
 	}
 

@@ -476,16 +476,14 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		const unauthBoot = await fetch(`${baseUrl}/api/bootstrap`);
 		assert.equal(unauthBoot.status, 401);
 
-		// Owner login sets cookie & adds collaborator
-		const ownerLogin = await fetch(`${baseUrl}/api/auth/login`, {
+		const retiredLogin = await fetch(`${baseUrl}/api/auth/login`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ token: owner.token }),
 		});
-		assert.equal(ownerLogin.status, 200);
-		const ownerCookie = ownerLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
-		assert.match(ownerCookie, /^pa_session=/);
-
+		assert.equal(retiredLogin.status, 400);
+		// Existing token authentication is exercised directly while its storage is being removed.
+		const ownerCookie = `pa_session=${owner.token}`;
 		const addCollabRes = await fetch(`${baseUrl}/api/collaborators`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
@@ -498,15 +496,7 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 		assert.equal(colleague.permissionRole, "collaborator");
 		assert.ok(colleague.token.startsWith("inv_"));
 
-		// Collaborator login & token redaction
-		const collabLogin = await fetch(`${baseUrl}/api/auth/login`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ token: colleague.token }),
-		});
-		assert.equal(collabLogin.status, 200);
-		const collabCookie = collabLogin.headers.get("set-cookie")?.split(";")[0] ?? "";
-
+		const collabCookie = `pa_session=${colleague.token}`;
 		const collabBootRes = await fetch(`${baseUrl}/api/bootstrap`, { headers: { Cookie: collabCookie } });
 		assert.equal(collabBootRes.status, 200);
 		const collabBoot = (await collabBootRes.json()) as {
@@ -646,12 +636,8 @@ test("Multi-human restricted collaboration: auth gate, discussion vs ai_request 
 			headers: { Cookie: ownerCookie },
 		});
 		assert.equal(regenRes.status, 200);
-		const oldLogin = await fetch(`${baseUrl}/api/auth/login`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ token: colleague.token }),
-		});
-		assert.equal(oldLogin.status, 401);
+		const oldSession = await fetch(`${baseUrl}/api/auth/session`, { headers: { Cookie: collabCookie } });
+		assert.equal(((await oldSession.json()) as { authenticated: boolean }).authenticated, false);
 	} finally {
 		await orchestrator.shutdown();
 		server.closeAllConnections();
@@ -898,15 +884,7 @@ test("Revoked or deleted collaborator session stays blocked on refresh, loopback
 		assert.equal(addRes.status, 201);
 		const { collaborator } = (await addRes.json()) as { collaborator: { id: string; token: string } };
 
-		const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ token: collaborator.token }),
-		});
-		assert.equal(loginRes.status, 200);
-		const staleCookie = loginRes.headers.get("set-cookie")?.split(";")[0] ?? "";
-		assert.match(staleCookie, /^pa_session=/);
-
+		const staleCookie = `pa_session=${collaborator.token}`;
 		// Open live SSE stream as the collaborator.
 		const sseRes = await fetch(`${baseUrl}/api/events`, {
 			headers: { Cookie: staleCookie },
@@ -965,14 +943,7 @@ test("Revoked or deleted collaborator session stays blocked on refresh, loopback
 
 		// New token works; deleting collaborator also invalidates its active cookie session.
 		const { collaborator: refreshed } = (await regenRes.json()) as { collaborator: { token: string } };
-		const reloginRes = await fetch(`${baseUrl}/api/auth/login`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ token: refreshed.token }),
-		});
-		assert.equal(reloginRes.status, 200);
-		const newCookie = reloginRes.headers.get("set-cookie")?.split(";")[0] ?? "";
-
+		const newCookie = `pa_session=${refreshed.token}`;
 		const delRes = await fetch(`${baseUrl}/api/collaborators/${collaborator.id}`, {
 			method: "DELETE",
 		});

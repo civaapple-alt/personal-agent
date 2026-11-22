@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Grant the current administrator access to the built-in demo organization when opening it, so authenticated sessions can read and use the demo.
+
+- Remove collaborator-token login from the account login endpoint; registered accounts use email and password.
+
 - Remove legacy LAN-token sign-in and collaborator invitation controls from the workbench; organization invitations use registered accounts.
 
 - Use explicit turn references for delegation boards and remove obsolete role-heading and starter-task compatibility paths.
