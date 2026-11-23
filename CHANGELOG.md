@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Fix organization creation and editing form fields wrapping into each other.
+
 - Restrict observer and independent verification workers to configured read tools, excluding shell, MCP and operator extensions; clarify runtime isolation and role architect modes in Settings.
 
 - Update review scenarios to read and revise the seeded Space document by ID and revision.
