@@ -11,6 +11,7 @@ import {
 import type { MatterDto, OrganizationDto, WorkspaceDto } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
 import { formatClockTime, stripMarkdownFormatting } from "../utils.ts";
+import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
 
 interface WorkspaceDetailPanelProps {
 	workspace: WorkspaceDto;
@@ -87,6 +88,7 @@ export function WorkspaceDetailPanel({
 	const [showSkillsBreakdown, setShowSkillsBreakdown] = useState(false);
 
 	const [addingFolder, setAddingFolder] = useState(false);
+	const [browsingDirectory, setBrowsingDirectory] = useState(false);
 	const [newPath, setNewPath] = useState("");
 	const [newLabel, setNewLabel] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -121,6 +123,7 @@ export function WorkspaceDetailPanel({
 	useEffect(() => {
 		setFolderFilter("");
 		setAddingFolder(false);
+		setBrowsingDirectory(false);
 		setNewPath("");
 		setNewLabel("");
 		void loadCustomizations(workspace.id);
@@ -370,6 +373,13 @@ export function WorkspaceDetailPanel({
 												onChange={(e) => setNewPath(e.target.value)}
 												required
 											/>
+											<button
+												type="button"
+												className="btn-secondary"
+												onClick={() => setBrowsingDirectory(!browsingDirectory)}
+											>
+												选择目录
+											</button>
 											<input
 												className="input-field"
 												style={{ flex: 1 }}
@@ -379,6 +389,17 @@ export function WorkspaceDetailPanel({
 												maxLength={60}
 											/>
 										</div>
+										{browsingDirectory && (
+											<ServerDirectoryPicker
+												workspaceId={workspace.id}
+												initialPath={newPath || workspace.repoPath}
+												onClose={() => setBrowsingDirectory(false)}
+												onSelect={(path) => {
+													setNewPath(path);
+													setBrowsingDirectory(false);
+												}}
+											/>
+										)}
 										{quickAddCandidates.length > 0 && (
 											<div className="ws-quick-candidates">
 												<span className="muted-hint">快速选择已有工作区：</span>

@@ -1,3 +1,5 @@
+import { readdir } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 import { buildWorkspaceCustomizations } from "../../orchestrator/workspace-customizations.ts";
 import {
 	canAccessWorkspace,
@@ -13,6 +15,82 @@ import type { RouteRequest, ServerRouteContext } from "./context.ts";
 export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, broadcast, dataDir, defaultWorkspacesRoot } = ctx;
 	const { actor, req, res, method, pathname } = r;
+
+	if (method === "GET" && pathname === "/api/workspaces/directory-browser") {
+		if (!requireActiveActor(res, actor)) return true;
+		const url = new URL(req.url ?? "/", "http://127.0.0.1");
+		const workspaceId = url.searchParams.get("workspaceId");
+		const orgId = url.searchParams.get("orgId");
+		if (workspaceId) {
+			const workspace = store.getWorkspace(workspaceId);
+			if (
+				!workspace ||
+				!canAccessWorkspace(store, actor, workspace) ||
+				(!isSuperAdminActor(actor) && !canManageOrganization(store, actor, workspace.orgId))
+			) {
+				sendError(res, 403, "无权管理该工作区目录");
+				return true;
+			}
+		} else if (!isSuperAdminActor(actor) && (!orgId || !canManageOrganization(store, actor, orgId))) {
+			sendError(res, 403, "仅组织管理员可浏览服务器目录");
+			return true;
+		}
+		const settings = store.getPlatformSettings(defaultWorkspacesRoot);
+		const validate = (rawPath: string) => validateLocalWorkspaceBindingPath({ rawPath, settings, actor, dataDir });
+		const requested = url.searchParams.get("path")?.trim();
+		try {
+			if (requested && !isAbsolute(requested)) throw new Error("请输入服务器上的绝对路径");
+			const candidates = requested
+				? [requested]
+				: !isSuperAdminActor(actor) && settings.localWorkspaceAllowlist.length > 0
+					? settings.localWorkspaceAllowlist
+					: [process.cwd()];
+			let current: string | undefined;
+			for (const candidate of candidates) {
+				try {
+					current = validate(candidate);
+					break;
+				} catch {
+					/* Try the next permitted root. */
+				}
+			}
+			if (!current) throw new Error("无法访问该目录，或目录不在允许范围内");
+			const entries = await readdir(current, { withFileTypes: true });
+			const roots: string[] = [];
+			if (!isSuperAdminActor(actor)) {
+				for (const candidate of settings.localWorkspaceAllowlist) {
+					try {
+						const root = validate(candidate);
+						if (!roots.includes(root)) roots.push(root);
+					} catch {
+						/* Skip unavailable or forbidden roots. */
+					}
+				}
+			}
+			const directories: Array<{ name: string; path: string }> = [];
+			for (const entry of entries) {
+				if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+				try {
+					directories.push({ name: entry.name, path: validate(join(current, entry.name)) });
+				} catch {
+					/* Exclude inaccessible paths. */
+				}
+			}
+			directories.sort((a, b) => a.name.localeCompare(b.name));
+			let parent: string | null = null;
+			if (dirname(current) !== current) {
+				try {
+					parent = validate(dirname(current));
+				} catch {
+					/* The parent is outside the permitted scope. */
+				}
+			}
+			sendJson(res, 200, { path: current, parent, roots, directories });
+		} catch (error) {
+			sendError(res, 403, error instanceof Error ? error.message : "无法读取目录");
+		}
+		return true;
+	}
 
 	const customizationsMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/customizations$/);
 	if (customizationsMatch && method === "GET") {

@@ -10,6 +10,7 @@ import {
 	type WorkspaceVisibility,
 } from "../api.ts";
 import { ModalDialog } from "./ModalDialog.tsx";
+import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
 import { WorkspaceDetailPanel } from "./WorkspaceDetailPanel.tsx";
 
 interface MaterialsViewProps {
@@ -55,6 +56,7 @@ export function MaterialsView({
 	const [newWsCloneUrl, setNewWsCloneUrl] = useState("");
 	const [newWsBranch, setNewWsBranch] = useState("");
 	const [newWsPath, setNewWsPath] = useState("");
+	const [browsingDirectory, setBrowsingDirectory] = useState(false);
 	const [newWsOrgChoice, setNewWsOrgChoice] = useState<string>("");
 	const [newWsVisibility, setNewWsVisibility] = useState<WorkspaceVisibility>("org");
 	const [newWsAllowedUserIds, setNewWsAllowedUserIds] = useState<string[]>([]);
@@ -109,6 +111,7 @@ export function MaterialsView({
 		setNewWsCloneUrl("");
 		setNewWsBranch("");
 		setNewWsPath("");
+		setBrowsingDirectory(false);
 		setNewWsOrgChoice("");
 		setNewWsVisibility("org");
 		setNewWsAllowedUserIds([]);
@@ -384,15 +387,39 @@ export function MaterialsView({
 						</label>
 					</div>
 				) : (
-					<label className="identity-field">
-						<span className="identity-field-label">本地仓库绝对路径</span>
-						<input
-							className="input-field"
-							placeholder="/Users/you/code/order-service"
-							value={newWsPath}
-							onChange={(e) => setNewWsPath(e.target.value)}
-						/>
-					</label>
+					<div className="identity-field">
+						<label className="identity-field-label" htmlFor="workspace-local-path">
+							本地仓库绝对路径
+						</label>
+						<div className="server-directory-input">
+							<input
+								id="workspace-local-path"
+								className="input-field"
+								placeholder="/Users/you/code/order-service"
+								value={newWsPath}
+								onChange={(e) => setNewWsPath(e.target.value)}
+							/>
+							<button
+								type="button"
+								className="btn-secondary"
+								onClick={() => setBrowsingDirectory(!browsingDirectory)}
+							>
+								选择目录
+							</button>
+						</div>
+						{browsingDirectory && (
+							<ServerDirectoryPicker
+								key={resolvedNewOrgId ?? "standalone"}
+								orgId={resolvedNewOrgId}
+								initialPath={newWsPath}
+								onClose={() => setBrowsingDirectory(false)}
+								onSelect={(path) => {
+									setNewWsPath(path);
+									setBrowsingDirectory(false);
+								}}
+							/>
+						)}
+					</div>
 				)}
 
 				{resolvedNewOrgId && (

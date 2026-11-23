@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -108,10 +117,12 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 	const dataDir = join(tempDir, "data");
 	const workspacesRoot = join(tempDir, "workspaces-root");
 	const allowedLocalRoot = join(tempDir, "allowed-repos");
+	const secondAllowedRoot = join(tempDir, "more-repos");
 	const forbiddenLocalRoot = join(tempDir, "outside-repos");
 	mkdirSync(dataDir, { recursive: true });
 	mkdirSync(workspacesRoot, { recursive: true });
 	mkdirSync(join(allowedLocalRoot, "allowed-app"), { recursive: true });
+	mkdirSync(secondAllowedRoot, { recursive: true });
 	mkdirSync(join(forbiddenLocalRoot, "outside-app"), { recursive: true });
 
 	const gitHttp = await startBareGitHttpServer(tempDir);
@@ -287,7 +298,7 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 			headers: { "Content-Type": "application/json", Cookie: adminCookie },
 			body: JSON.stringify({
 				allowLocalWorkspacePath: true,
-				localWorkspaceAllowlist: [allowedLocalRoot],
+				localWorkspaceAllowlist: [allowedLocalRoot, secondAllowedRoot],
 				registrationMode: "open_review",
 			}),
 		});
@@ -325,6 +336,42 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 			}),
 		});
 		assert.equal(allowedWsRes.status, 201);
+		const { workspace: allowedWorkspace } = (await allowedWsRes.json()) as { workspace: { id: string } };
+		const browseUrl = (path: string) =>
+			`${baseUrl}/api/workspaces/directory-browser?orgId=${encodeURIComponent(orgA.id)}&path=${encodeURIComponent(path)}`;
+		const browseAllowed = await fetch(browseUrl(allowedLocalRoot), { headers: { Cookie: aliceFreshCookie } });
+		assert.equal(browseAllowed.status, 200);
+		const listing = (await browseAllowed.json()) as {
+			parent: string | null;
+			roots: string[];
+			directories: Array<{ name: string }>;
+		};
+		assert.equal(listing.parent, null);
+		assert.equal(listing.roots.length, 2);
+		assert.equal((await fetch(browseUrl(secondAllowedRoot), { headers: { Cookie: aliceFreshCookie } })).status, 200);
+		assert.ok(listing.directories.some((entry) => entry.name === "allowed-app"));
+		assert.equal((await fetch(browseUrl(forbiddenLocalRoot), { headers: { Cookie: aliceFreshCookie } })).status, 403);
+		assert.equal((await fetch(browseUrl(dataDir), { headers: { Cookie: aliceFreshCookie } })).status, 403);
+		symlinkSync(forbiddenLocalRoot, join(allowedLocalRoot, "outside-link"), "dir");
+		assert.equal(
+			(await fetch(browseUrl(join(allowedLocalRoot, "outside-link")), { headers: { Cookie: aliceFreshCookie } }))
+				.status,
+			403,
+		);
+		assert.equal((await fetch(browseUrl(allowedLocalRoot), { headers: { Cookie: aliceCookie } })).status, 401);
+		assert.equal(
+			(
+				await fetch(
+					`${baseUrl}/api/workspaces/directory-browser?workspaceId=${allowedWorkspace.id}&path=${encodeURIComponent(allowedLocalRoot)}`,
+					{ headers: { Cookie: aliceFreshCookie } },
+				)
+			).status,
+			200,
+		);
+		assert.equal(
+			(await fetch(`${baseUrl}/api/workspaces/directory-browser`, { headers: { Cookie: aliceFreshCookie } })).status,
+			403,
+		);
 
 		// Git clone into <workspacesRoot>/<orgSlug>/ over ephemeral http://127.0.0.1 bare server
 		const clonedWsRes = await fetch(`${baseUrl}/api/workspaces`, {
@@ -569,6 +616,15 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 			},
 		);
 		assert.equal(bobViewerPatch.status, 200);
+		assert.equal((await fetch(browseUrl(allowedLocalRoot), { headers: { Cookie: bobCookie } })).status, 403);
+		assert.equal(
+			(
+				await fetch(`${baseUrl}/api/workspaces/directory-browser?workspaceId=${allowedWorkspace.id}`, {
+					headers: { Cookie: bobCookie },
+				})
+			).status,
+			403,
+		);
 		const viewerDispatch = await fetch(`${baseUrl}/api/matters`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: bobCookie },

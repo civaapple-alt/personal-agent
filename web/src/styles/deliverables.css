@@ -1754,3 +1754,23 @@
 	margin-top: 8px;
 	padding-left: 22px;
 }
+
+.server-directory-picker {
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	background: var(--bg-stage);
+}
+.server-directory-header { display: flex; justify-content: space-between; align-items: center; }
+.server-directory-picker p { margin: 0; }
+.server-directory-path { overflow-wrap: anywhere; }
+.server-directory-list { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; }
+.server-directory-list button { text-align: left; padding: 8px; border: 0; background: transparent; cursor: pointer; border-radius: 6px; }
+.server-directory-list button:hover, .server-directory-list button:focus-visible { background: var(--border); }
+.server-directory-picker > .btn-pill-dark { align-self: flex-start; }
+.server-directory-input { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.server-directory-input .input-field { flex: 1; min-width: 0; }
+@media (max-width: 600px) { .server-directory-input, .ws-add-folder-form .space-create-row { flex-wrap: wrap; } }
