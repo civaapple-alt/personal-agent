@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-23
+
 - Make the new-matter AI formation recommendation visible before typing and consistently offer optional repository reading.
 
 - Identify team collaboration health checks under the independent Role Architect isolation policy.
