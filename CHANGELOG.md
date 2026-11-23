@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-24
+
+See the [0.7.1 release guide](docs/releases/v0.7.1.md) for downloads and upgrade instructions.
+
 - Normalize `/skill:` prefixes in `load_available_skill`, expose clean skill `name` entries without terminal slash instructions in `skill-catalog`, and compact per-turn execution records in `ExploringStatus` to single-line rows.
 
 - Package built-in role methodology Skills as a standard Pi Package under `pi-extensions/role-skills` (`pa-role-skills`), mount it natively on Pi workers, and include `source` metadata in `skill-catalog` command and resource listings.
