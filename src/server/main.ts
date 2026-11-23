@@ -61,7 +61,6 @@ async function main(): Promise<void> {
 		spacesDir: dbPath === ":memory:" ? undefined : resolve(dataDir, "spaces"),
 	});
 	const savedSettings = store.getPlatformSettings(defaultWorkspacesRoot);
-	const effectivePstackDir = process.env.PA_PSTACK_DIR?.trim() || savedSettings.pstackDir || undefined;
 	const builtinRolesDir = resolve(rootDir, "roles");
 	const temporaryRolesDir = dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-roles-")) : undefined;
 	const temporarySkillsDir =
@@ -83,7 +82,6 @@ async function main(): Promise<void> {
 		defaultCwd: rootDir,
 		noSession: false,
 		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
-		pstackDir: effectivePstackDir,
 		sessionDir: process.env.PA_SESSION_DIR?.trim()
 			? resolve(process.env.PA_SESSION_DIR.trim())
 			: resolve(rootDir, ".data/pi-sessions"),

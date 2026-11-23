@@ -24,7 +24,6 @@
 | `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../../src/server/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
 | `PA_LOCAL_PI_RESOURCES` | 个人版回环监听下启用 | [服务入口](../../src/server/main.ts) | 设为 `0` 时恢复显式装配。本机所有者在个人版回环监听下启动的业务主责与内部委托可使用 Pi 原生资源发现 |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../../src/server/main.ts) → [编排核](../../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
-| `PA_PSTACK_DIR` | 未设置（可由工作台 `#/settings/extensions` 克隆启用至 `.data/extensions/repo/pstack`） | [服务入口](../../src/server/main.ts) → [执行装配](../../src/orchestrator/worker-runner.ts) | 完整 pstack 包根目录，包含 `plugin.json` 和 `skills/poteto-mode/SKILL.md`；启动未传该变量时回退读取 `platform_settings.pstackDir`，详见 [pstack 内循环](../guides/pstack-runtime.md) |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
 | `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) / [编排核](../../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
 | `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / 对话框等待期间自动暂停 |
@@ -125,7 +124,7 @@
 
 个人版回环免密所有者可选择继承完整的本机 Pi 资源，Pi 根据现有信任记录处理仓库资源。未选择继承时，PA 使用 `--no-extensions --no-approve`：扩展由 PA 显式装配，Pi 仍发现服务账号启用的用户级 Skills，但不会自动信任项目资源。托管克隆同样不自动信任项目；PA 配置的附加目录 Skills 仍按工作区配置显式装配。团队服务使用服务账号的用户级 Skills，应将它们视为供该服务岗位使用的共享资源。Pi 对已禁用资源的设置仍生效。
 
-启用 pstack 时，PA 还显式装配选定方法包与兼容读取工具；即使不启用该适配，Pi 已安装并启用的方法仍可通过通用 Skill 目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
+pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
 
 工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../src/orchestrator/execution-context.ts)
 

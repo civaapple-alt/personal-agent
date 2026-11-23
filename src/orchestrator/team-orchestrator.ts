@@ -93,13 +93,11 @@ export class TeamOrchestrator {
 	private readonly architectTasks = new Set<Promise<void>>();
 	private shuttingDown = false;
 	private readonly extensions: string[];
-	private pstackDir: string | undefined;
 
 	constructor(options: TeamOrchestratorOptions) {
 		this.store = options.store;
 		this.classifier = options.classifier;
 		this.extensions = options.extensions ?? [];
-		this.pstackDir = options.pstackDir;
 		this.defaultCwd = options.defaultCwd ?? process.cwd();
 		this.sessionDir = options.sessionDir;
 		this.skillsDir = options.skillsDir;
@@ -133,16 +131,10 @@ export class TeamOrchestrator {
 			sessionDir: this.sessionDir ?? null,
 			noSession: this.noSession,
 			extensions: [...this.extensions],
-			pstackDir: this.pstackDir ?? null,
 			webSearchProvider: this.store.getPlatformSettings().webSearchProvider,
 			systemOneEnabled: this.store.getPlatformSettings().systemOneEnabled,
 			templates: this.listTemplates(),
 		};
-	}
-
-	/** Dynamically enable or disable the configured pstack method pack directory. */
-	setPstackDir(pstackDir: string | undefined): void {
-		this.pstackDir = pstackDir?.trim() || undefined;
 	}
 
 	/** Dynamically update or clear the System One decision classifier. */
@@ -619,7 +611,6 @@ export class TeamOrchestrator {
 				skillsDir: this.skillsDir,
 				noSession: this.noSession,
 				extensions: this.extensions,
-				pstackDir: this.pstackDir,
 				workerFactory: this.workerFactory,
 				readPiModels: (selection) => this.getPiModels(selection),
 				getDialogHandler: () => this.dialogHandler,
@@ -785,7 +776,6 @@ export class TeamOrchestrator {
 					defaultCwd: this.defaultCwd,
 					skillsDir: this.skillsDir,
 					extensions: this.extensions,
-					pstackDir: this.pstackDir,
 					workerFactory: this.workerFactory,
 					templatesById: this.templatesById,
 				},

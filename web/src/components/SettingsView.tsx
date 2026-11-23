@@ -8,7 +8,6 @@ import type {
 	RuntimeOverviewDto,
 } from "../api.ts";
 import type { SettingsSection } from "../hashRouter.ts";
-import { PstackSettings } from "./PstackSettings.tsx";
 import { SystemOneSettings } from "./SystemOneSettings.tsx";
 import { WebAccessSettings } from "./WebAccessSettings.tsx";
 
@@ -212,16 +211,6 @@ export function SettingsView({
 											<strong className="settings-kv-value mono-wrap">{base.defaultCwd ?? "-"}</strong>
 										</div>
 										<div className="settings-kv-item">
-											<span className="settings-kv-label">pstack 方法包</span>
-											<strong className="settings-kv-value">
-												{!base.pstack.configured
-													? "未配置"
-													: base.pstack.available
-														? `v${base.pstack.version}（${base.pstack.skillCount} 项）`
-														: `异常：${base.pstack.error ?? "不可用"}`}
-											</strong>
-										</div>
-										<div className="settings-kv-item">
 											<span className="settings-kv-label">空闲看门狗</span>
 											<strong className="settings-kv-value">
 												{base.envFlags.idleTimeoutMs === 0
@@ -350,16 +339,6 @@ export function SettingsView({
 														)}
 													</div>
 												)}
-												{ext.id === "builtin-pstack-extension" && (
-													<PstackSettings
-														base={base}
-														canManage={isSuperAdmin}
-														onRefresh={onRefresh}
-														onOverviewChange={onOverviewChange}
-														onNotice={onNotice}
-														onError={onError}
-													/>
-												)}
 												{ext.id === "pi-web-access" && isSuperAdmin && (
 													<WebAccessSettings
 														base={base}
@@ -390,7 +369,7 @@ export function SettingsView({
 								</div>
 
 								<p className="muted-hint">
-									扩展以服务账户的权限运行。可在上方管理 pstack 和 pi-web-access，其他扩展可通过启动参数{" "}
+									扩展以服务账户的权限运行。可在上方管理 pi-web-access；其他扩展可通过启动参数{" "}
 									<code>PA_PI_EXTENSIONS</code> 接入。
 								</p>
 							</section>

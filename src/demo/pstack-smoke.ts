@@ -5,7 +5,6 @@ import { cp, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { preparePstackRuntime, readPstackResource } from "../../pi-extensions/pstack-methods/methods.js";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
@@ -13,6 +12,7 @@ import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { selectDemoModel } from "./model-selection.ts";
 import { hasPstackReadEvidence } from "./pstack-evidence.ts";
+import { preparePstackRuntime, readPstackResource } from "./pstack-fixture.ts";
 
 async function snapshot(root: string, relative = ""): Promise<Record<string, string>> {
 	const result: Record<string, string> = {};
@@ -43,8 +43,8 @@ async function main() {
 		);
 		return;
 	}
-	const source = values.source ?? process.env.PA_PSTACK_DIR;
-	if (!source) throw new Error("Provide --source or PA_PSTACK_DIR (complete pstack pack with poteto-mode)");
+	const source = values.source;
+	if (!source) throw new Error("Provide --source (complete pstack pack with poteto-mode)");
 	const sourceRuntime = await preparePstackRuntime(source);
 	const root = await mkdtemp(join(tmpdir(), "personal-agent-pstack-"));
 	console.log(`Isolated pstack evidence: ${root}`);
@@ -82,9 +82,12 @@ async function main() {
 	const orchestrator = new TeamOrchestrator({
 		store,
 		templates,
-		workerFactory: (options) => new PiRpcWorker({ ...options, args: [...(options.args ?? []), "--no-skills"] }),
+		workerFactory: (options) =>
+			new PiRpcWorker({
+				...options,
+				args: [...(options.args ?? []), "--no-skills", "--skill", join(pack, "skills")],
+			}),
 		defaultCwd: root,
-		pstackDir: pack,
 		sessionDir: join(root, "sessions"),
 	});
 	const records: Array<Record<string, unknown>> = [];

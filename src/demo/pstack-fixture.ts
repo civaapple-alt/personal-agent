@@ -6,7 +6,7 @@ const MAX_METHOD_BYTES = 256 * 1024;
 const METHOD_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Reads bounded Markdown resources only. This never installs packages or executes their scripts. */
-export async function readPstackResource(root, name, resource = "SKILL.md") {
+export async function readPstackResource(root: string, name: string, resource = "SKILL.md") {
 	if (!METHOD_ID.test(name)) throw new Error("Invalid pstack skill name");
 	if (isAbsolute(resource) || !resource.endsWith(".md"))
 		throw new Error("Only relative Markdown resources are supported");
@@ -42,11 +42,11 @@ export async function readPstackResource(root, name, resource = "SKILL.md") {
 }
 
 /** Requires the complete pack: the curated ChatGPT subset has no poteto-mode. */
-export async function preparePstackRuntime(directory) {
+export async function preparePstackRuntime(directory: string) {
 	const root = await realpath(directory);
 	const mode = await readPstackResource(root, "poteto-mode");
 	const entries = await readdir(resolve(root, "skills"), { withFileTypes: true });
-	const skills = [];
+	const skills: Array<{ name: string; description: string }> = [];
 	for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
 		if ((!entry.isDirectory() && !entry.isSymbolicLink()) || !METHOD_ID.test(entry.name)) continue;
 		const method = await readPstackResource(root, entry.name);
@@ -57,7 +57,7 @@ export async function preparePstackRuntime(directory) {
 		if (description) skills.push({ name: entry.name, description });
 	}
 	const manifestFile = await open(resolve(root, "plugin.json"), "r");
-	let manifest;
+	let manifest: unknown;
 	try {
 		if ((await manifestFile.stat()).size > 64 * 1024) throw new Error("pstack manifest is too large");
 		manifest = JSON.parse(await manifestFile.readFile("utf8"));

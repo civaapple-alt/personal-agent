@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
-import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
 import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
 import {
@@ -414,7 +413,6 @@ export function parseMetaArchitectResponse(
 
 export interface MetaArchitectDeps {
 	extensions?: string[];
-	pstackDir?: string;
 	store: PersonalAgentStore;
 	defaultCwd: string;
 	skillsDir?: string;
@@ -648,7 +646,6 @@ export async function runMetaArchitectChat(
 		store: deps.store,
 		envFilePath: resolve(deps.defaultCwd, ".env"),
 	});
-	const pstack = await preparePstackForWorker(deps.pstackDir, "lead");
 	const worker = deps.workerFactory({
 		cwd,
 		provider: selection?.provider,
@@ -665,11 +662,10 @@ export async function runMetaArchitectChat(
 			...(webAccess ? ["--extension", webAccess.entry] : []),
 			"--extension",
 			"builtin:mcp",
-			...(pstack?.args ?? []),
 			"--tools",
 			"*",
 		],
-		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt, ...webAccess?.env, ...pstack?.env },
+		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt, ...webAccess?.env },
 	});
 	const onAbortWorker = () => {
 		void worker.abort?.().catch(() => {});

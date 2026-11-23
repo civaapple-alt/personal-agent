@@ -159,7 +159,7 @@
 	gap: 8px;
 	flex-wrap: wrap;
 }
-.settings-pstack-panel {
+.settings-web-access-panel {
 	margin-top: 4px;
 	padding-top: 8px;
 	border-top: 1px dashed var(--border);
@@ -168,7 +168,7 @@
 	gap: 6px;
 	min-width: 0;
 }
-.settings-pstack-setup {
+.settings-web-access-setup {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -188,16 +188,7 @@
 	align-items: center;
 	gap: 6px;
 }
-.settings-pstack-form-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: wrap;
-}
-.settings-pstack-form-row .text-input {
-	flex: 1 1 280px;
-	min-width: 0;
-}
+
 .settings-config-sections {
 	display: flex;
 	flex-direction: column;

@@ -37,7 +37,7 @@ personal-agent/
 ├── web/            # 本地 React 网页工作台（同源 HTTP/SSE，esbuild 构建至 web/dist/）
 ├── roles/          # 内置可分享 AI 岗位角色定义（Markdown）
 ├── skills/         # 内置可分享 Skills（SKILL.md）
-├── pi-extensions/  # 运行在 Pi 进程内的扩展（team-extension、pstack-methods、human-question）
+├── pi-extensions/  # 运行在 Pi 进程内的扩展（team-extension、skill-catalog、human-question）
 ├── docs/           # 使用教程、部署指南、配置与架构参考（入口见 docs/README.md）
 ├── test/           # 离线单元测试与集成测试
 ├── scripts/        # 构建、打包、文档校验与隔离团队沙盒启动脚本

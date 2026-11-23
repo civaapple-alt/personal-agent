@@ -395,7 +395,6 @@ export class UserAuthRepo {
 			defaultMaxOrgs: 5,
 			defaultMaxActiveDispatches: 3,
 			defaultMaxPersonalRoles: 5,
-			pstackDir: null,
 			webAccessDeniedRoles: {},
 			webSearchProvider: "auto",
 			defaultModelSelection: null,
@@ -444,10 +443,6 @@ export class UserAuthRepo {
 					typeof parsed.defaultMaxPersonalRoles === "number" && Number.isFinite(parsed.defaultMaxPersonalRoles)
 						? Math.max(0, Math.floor(parsed.defaultMaxPersonalRoles))
 						: defaults.defaultMaxPersonalRoles,
-				pstackDir:
-					typeof parsed.pstackDir === "string" && parsed.pstackDir.trim()
-						? parsed.pstackDir.trim()
-						: defaults.pstackDir,
 				webAccessDeniedRoles: Object.fromEntries(
 					Object.entries(parsed.webAccessDeniedRoles ?? {}).filter(
 						([id, createdAt]) => id.length > 0 && typeof createdAt === "string" && createdAt.length > 0,
@@ -499,12 +494,6 @@ export class UserAuthRepo {
 					: current.defaultMaxPersonalRoles,
 			defaultModelSelection:
 				patch.defaultModelSelection === undefined ? current.defaultModelSelection : patch.defaultModelSelection,
-			pstackDir:
-				patch.pstackDir === null || patch.pstackDir === ""
-					? null
-					: typeof patch.pstackDir === "string" && patch.pstackDir.trim()
-						? resolve(patch.pstackDir.trim())
-						: current.pstackDir,
 			webAccessDeniedRoles: patch.webAccessDeniedRoles ?? current.webAccessDeniedRoles,
 			webSearchProvider: patch.webSearchProvider ?? current.webSearchProvider,
 		};

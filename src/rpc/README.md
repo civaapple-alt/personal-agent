@@ -11,7 +11,7 @@
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
 | [team-extension](../../pi-extensions/team-extension/README.md) | PA 在启动岗位时加载此扩展。它注册团队工具，通过当轮桥接调用 PA，补充岗位上下文并核查实际工具 |
 | [human-question](../../pi-extensions/human-question/README.md) | 注册 `request_clarification` 并使用同一桥接。独立 Pi 会话使用原生问答交互 |
-| [pstack-methods](../../pi-extensions/pstack-methods/README.md) | 显式配置时注册只读 `load_pstack_skill`，从选定的方法包读取正文和哈希 |
+| [skill-catalog](../../pi-extensions/skill-catalog/README.md) | 列出 Pi 当前已发现的 Skills，并按需读取完整正文和哈希 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每轮执行专用的 loopback HTTP、bearer token、参数校验、调用 ID 去重和取消。宿主将 `read_pa_help` 限于允许的帮助主题和本轮事项上下文，并再次拒绝内部成员发布及旁听模式提案 |
 
 `agent_settled` 表示执行收尾，不能据此自动生成交付；`disposition: handled` 不等待 settled。

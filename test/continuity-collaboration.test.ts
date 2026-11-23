@@ -2108,24 +2108,24 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 			(await worker.call("read_pa_help", { topics: ["runtime_tools", "current_matter"], language: "zh" })).details,
 		);
 		assert.match(before, /本轮未见调用，实际效果未验证/);
-		assert.match(before, /load_pstack_skill: 本轮未见调用，实际效果未验证.*启动时未加载/);
+		assert.match(before, /load_available_skill: 本轮未见调用，实际效果未验证.*启动时已加载/);
 		assert.match(before, /当前工作区空间/);
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "search-1", toolName: "web_search" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "search-1", toolName: "web_search", isError: true });
-		worker.emitEvent({ type: "tool_execution_start", toolCallId: "pstack-1", toolName: "load_pstack_skill" });
+		worker.emitEvent({ type: "tool_execution_start", toolCallId: "skill-1", toolName: "load_available_skill" });
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "content-1", toolName: "fetch_content" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "content-1", toolName: "fetch_content" });
 		worker.emitEvent({
 			type: "tool_execution_end",
-			toolCallId: "pstack-1",
-			toolName: "load_pstack_skill",
+			toolCallId: "skill-1",
+			toolName: "load_available_skill",
 			isError: false,
 		});
 		const after = JSON.stringify(
 			(await worker.call("read_pa_help", { topics: ["runtime_tools"], language: "zh" })).details,
 		);
 		assert.match(after, /web_search: 最近调用报告错误/);
-		assert.match(after, /load_pstack_skill: 最近调用结束且未报告工具错误/);
+		assert.match(after, /load_available_skill: 最近调用结束且未报告工具错误/);
 		assert.match(after, /fetch_content: 调用已结束但结果状态未知/);
 		assert.match(after, /有 bash 不等于只读/);
 		checked = true;

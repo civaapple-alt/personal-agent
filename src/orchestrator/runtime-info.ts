@@ -10,8 +10,6 @@ import {
 	resolveEnvFilePath,
 } from "../pa-extensions/env-credentials.ts";
 import { HUMAN_QUESTION_TOOL } from "../pa-extensions/human-question/runtime.ts";
-import { findInstalledPstack, preparePstackRuntime } from "../pa-extensions/pstack-methods/package.ts";
-import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
 import { TEAM_EXTENSION_TOOLS } from "../pa-extensions/team-extension/runtime.ts";
 import { findInstalledPiWebAccess } from "../pa-extensions/web-access/package.ts";
 import {
@@ -32,7 +30,6 @@ export interface OrchestratorRuntimeConfig {
 	sessionDir: string | null;
 	noSession: boolean;
 	extensions: string[];
-	pstackDir: string | null;
 	webSearchProvider?: WebSearchProviderPreference;
 	systemOneEnabled?: boolean;
 	templates: RoleTemplate[];
@@ -118,17 +115,6 @@ export interface RuntimeBaseInfo {
 	sessionMode: "persisted" | "no_session";
 	sessionDir: string | null;
 	defaultCwd: string | null;
-	pstack: {
-		configured: boolean;
-		available: boolean;
-		root: string | null;
-		installedRoot: string | null;
-		version: string | null;
-		modeSha256: string | null;
-		skillCount: number;
-		error: string | null;
-		source?: "env" | "settings" | "none";
-	};
 	webAccess: {
 		installedVersion: string | null;
 		roles: Array<{ id: string; name: string; enabled: boolean }>;
@@ -144,7 +130,6 @@ export interface RuntimeBaseInfo {
 		promptTimeoutMs: number;
 		idleTimeoutMs: number;
 		customExtensionsEnvConfigured: boolean;
-		pstackDirEnvConfigured: boolean;
 	};
 }
 
@@ -307,74 +292,23 @@ export async function buildRuntimeOverview(options: {
 	const { config, serverConfig, activeMembers, isOwner } = options;
 	const probePromise = (options.probePiCli ?? (() => probePiCli()))();
 	const teamExtPath = resolveBuiltinExtensionPath("team-extension");
-	const pstackExtPath = resolveBuiltinExtensionPath("pstack-extension");
 	const humanQuestionPath = resolveBuiltinExtensionPath("human-question");
 	const skillCatalogPath = resolveBuiltinExtensionPath("skill-catalog");
 
-	const [piProbe, teamFileStatus, pstackExtFileStatus, humanQuestionFileStatus, skillCatalogFileStatus] =
-		await Promise.all([
-			probePromise,
-			checkFileOrDir(teamExtPath),
-			checkFileOrDir(pstackExtPath),
-			checkFileOrDir(humanQuestionPath),
-			checkFileOrDir(skillCatalogPath),
-		]);
+	const [piProbe, teamFileStatus, humanQuestionFileStatus, skillCatalogFileStatus] = await Promise.all([
+		probePromise,
+		checkFileOrDir(teamExtPath),
+		checkFileOrDir(humanQuestionPath),
+		checkFileOrDir(skillCatalogPath),
+	]);
 
-	const pstackEnvSet = Boolean(process.env.PA_PSTACK_DIR?.trim());
-	let pstackInfo: RuntimeBaseInfo["pstack"] = {
-		configured: Boolean(config.pstackDir),
-		available: false,
-		root: null,
-		installedRoot: null,
-		version: null,
-		modeSha256: null,
-		skillCount: 0,
-		error: null,
-		source: pstackEnvSet ? "env" : config.pstackDir ? "settings" : "none",
-	};
-
-	if (config.pstackDir) {
-		try {
-			const runtime = await preparePstackRuntime(config.pstackDir);
-			pstackInfo = {
-				...pstackInfo,
-				configured: true,
-				available: true,
-				root: isOwner ? runtime.root : basename(runtime.root) || "pstack",
-				version: runtime.version,
-				modeSha256: runtime.modeSha256,
-				skillCount: runtime.skills.length,
-				error: null,
-			};
-		} catch (error: unknown) {
-			pstackInfo = {
-				...pstackInfo,
-				configured: true,
-				available: false,
-				root: isOwner ? config.pstackDir : basename(config.pstackDir) || "pstack",
-				version: null,
-				modeSha256: null,
-				skillCount: 0,
-				error: isOwner
-					? error instanceof Error
-						? error.message
-						: String(error)
-					: "无法读取已配置的 pstack 方法包",
-			};
-		}
-	}
 	let packageListing: Promise<string> | undefined;
 	const readPackages = (executable: string) => {
 		packageListing ??= (options.listPiPackages ?? listPiPackages)(executable);
 		return packageListing;
 	};
-	const [pstackInstalledRoot, webAccessPackage] = await Promise.all([
-		isOwner && !pstackEnvSet && !pstackInfo.available && piProbe.available
-			? findInstalledPstack(piProbe.executable, readPackages)
-			: null,
-		isOwner && piProbe.available ? findInstalledPiWebAccess(piProbe.executable, readPackages) : null,
-	]);
-	pstackInfo.installedRoot = pstackInstalledRoot;
+	const webAccessPackage =
+		isOwner && piProbe.available ? await findInstalledPiWebAccess(piProbe.executable, readPackages) : null;
 
 	const templateById = new Map(config.templates.map((tpl) => [tpl.id, tpl]));
 	const webAccessRoles = activeMembers.map((member) => ({
@@ -458,33 +392,6 @@ export async function buildRuntimeOverview(options: {
 		error: humanQuestionFileStatus === "missing" ? "未找到扩展入口文件" : null,
 	};
 
-	const pstackStatus: RuntimeExtensionStatus = !config.pstackDir
-		? "inactive"
-		: pstackExtFileStatus === "present" && pstackInfo.available
-			? "active"
-			: "error";
-	const pstackError = !config.pstackDir
-		? null
-		: pstackExtFileStatus === "missing"
-			? "未找到扩展入口文件"
-			: pstackInfo.error;
-
-	const pstackExtensionItem: RuntimeExtensionItem = {
-		id: "builtin-pstack-extension",
-		name: "pstack-methods",
-		sourceKind: "builtin_conditional",
-		status: pstackStatus,
-		entryPath: isOwner ? pstackExtPath : builtinExtensionPaths["pstack-extension"],
-		fileStatus: pstackExtFileStatus,
-		scopeSummary: "配置已有 pstack 方法包后随常规岗位挂载",
-		description: "只读加载外部 pstack 的 mode、playbook 与原则原文。",
-		registeredTools: [PSTACK_TOOL_NAME],
-		hooks: ["poteto-mode --skill"],
-		declaredByRoles: [],
-		mcpServers: [],
-		error: pstackError,
-	};
-
 	const mcpExtensionItem: RuntimeExtensionItem = {
 		id: "pi-builtin-mcp",
 		name: "builtin:mcp",
@@ -546,7 +453,6 @@ export async function buildRuntimeOverview(options: {
 		teamExtensionItem,
 		skillCatalogItem,
 		humanQuestionItem,
-		pstackExtensionItem,
 		mcpExtensionItem,
 		webAccessExtensionItem,
 		...operatorExtensionItems,
@@ -612,19 +518,6 @@ export async function buildRuntimeOverview(options: {
 					value: serverConfig?.inheritLocalPiResources ? "本机所有者的业务执行启用" : "仅显式装配",
 					defaultValue: "个人版回环监听时启用",
 					overridden: process.env.PA_LOCAL_PI_RESOURCES?.trim() === "0",
-				},
-				{
-					key: "PA_PSTACK_DIR",
-					label: "pstack 方法包",
-					value: !config.pstackDir
-						? "未设置"
-						: pstackInfo.available
-							? isOwner && pstackInfo.root
-								? `${pstackInfo.root} · v${pstackInfo.version} (${pstackInfo.skillCount} 项)`
-								: `v${pstackInfo.version} (${pstackInfo.skillCount} 项)`
-							: "配置异常",
-					defaultValue: "不启用",
-					overridden: Boolean(config.pstackDir),
 				},
 				{
 					key: "PA_TURN_TIMEOUT_MS",
@@ -742,7 +635,6 @@ export async function buildRuntimeOverview(options: {
 					: basename(config.sessionDir) || "pi-sessions"
 				: null,
 			defaultCwd: isOwner ? config.defaultCwd : basename(config.defaultCwd) || ".",
-			pstack: pstackInfo,
 			webAccess: {
 				installedVersion: webAccessPackage?.version ?? null,
 				roles: webAccessRoles,
@@ -770,7 +662,6 @@ export async function buildRuntimeOverview(options: {
 				promptTimeoutMs,
 				idleTimeoutMs,
 				customExtensionsEnvConfigured: Boolean(process.env.PA_PI_EXTENSIONS?.trim()),
-				pstackDirEnvConfigured: Boolean(process.env.PA_PSTACK_DIR?.trim()),
 			},
 		},
 		extensions,

@@ -30,8 +30,8 @@ async function main() {
 		process.exitCode = summary.exitCode;
 		return;
 	}
-	const source = values.source ?? process.env.PA_PSTACK_DIR;
-	if (!source) throw new Error("Provide --source or PA_PSTACK_DIR");
+	const source = values.source;
+	if (!source) throw new Error("Provide --source");
 	const cases = selectionCases.filter((scenario) => values.case === "all" || scenario.id === values.case);
 	if (!cases.length) throw new Error("Unknown selection case");
 	const directory = await mkdtemp(join(tmpdir(), "silver-desk-"));

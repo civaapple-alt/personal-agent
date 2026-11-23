@@ -78,7 +78,7 @@ export function WebAccessSettings({
 	}
 
 	return (
-		<div className="settings-pstack-panel">
+		<div className="settings-web-access-panel">
 			{installedVersion ? (
 				<p className="muted-hint">
 					Pi 已安装 v{installedVersion}。所有 AI 角色均可使用网页检索，供应商配置在下次运行生效。
@@ -100,7 +100,7 @@ export function WebAccessSettings({
 			)}
 			{installedVersion && (
 				<form
-					className="settings-pstack-setup"
+					className="settings-web-access-setup"
 					onSubmit={(event) => {
 						event.preventDefault();
 						if (canSave && !pending) void update("save");

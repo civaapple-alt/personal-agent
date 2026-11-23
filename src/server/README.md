@@ -54,7 +54,7 @@
   - 角色写入在当前服务内依次处理；批量提案先校验全部新增与调整，只有待应用提案可生效。新建 ID 冲突返回 409，非法文件名或思考档位返回 400；导入可更新业务模板，内置架构师不可覆盖。文件采用临时文件替换，删除标记保存在数据库，防止启动复活。具体边界见[角色管理一致性](../../docs/reference/runtime-collaboration.md#角色管理一致性)。
 - 多用户团队账号、超级管理员与权限作用域（`PA_REQUIRE_AUTH=1` / `#/admin`）：
   - `GET /api/auth/session`、`GET /api/auth/invite-preview`（未登录安全预览 `orginv_` 邀请组织名/角色及当前用户是否已成员）、`POST /api/auth/setup-admin`（仅零已设密超管时开放一次性初始化超级管理员，支持原地升级 `usr_local_owner`）、`POST /api/auth/register`（支持 `open_auto` / `open_review` / `invite_only`，默认 `open_review`）、`POST /api/auth/login`（邮箱密码 + 可选组织邀请码；受滑动窗口限流 `429` 保护）、`POST /api/auth/logout`（服务端即时吊销）与 `POST /api/auth/change-password` 在 [routes/admin-auth.ts](routes/admin-auth.ts) 维护；`consumeOrgInviteByToken` 对已是成员的用户幂等返回且不扣减使用次数。
-  - `GET /api/admin/overview`、`PATCH /api/admin/settings`、`PATCH /api/admin/users/:id`、`GET /api/admin/audit`、`POST /api/admin/matters/:id/abort` 及 `POST /api/admin/runtime/pstack/{install,enable,disable}`（调用 Pi 安装官方方法包，或保存、清除 `platform_settings.pstackDir`，后续岗位读取新设置）仅供 `super_admin`（或未启用强制认证时的本机回环所有者）访问；变更写入 `audit_logs`，禁用账号立即吊销全量会话并断开 SSE。
+  - `GET /api/admin/overview`、`PATCH /api/admin/settings`、`PATCH /api/admin/users/:id`、`GET /api/admin/audit`、`POST /api/admin/matters/:id/abort`仅供 `super_admin`（或未启用强制认证时的本机回环所有者）访问；变更写入 `audit_logs`，禁用账号立即吊销全量会话并断开 SSE。
   - 任何已启用账号成员均可在 `maxOrgs` 配额内自建组织（`POST /api/organizations`），经 `/api/organizations/:id/members*`、`invites*`、`POST /api/organizations/join`、`PATCH /api/organizations/:id`（支持 `useRoleGitIdentity`，默认 `false`）与 `PUT /api/organizations/:id/ai-roles`（支持按组织启用 AI 角色、指定主联系人、覆写各启用角色的 `gitNameOverride` / `gitEmailOverride` 及同步切换 `useRoleGitIdentity`）配置组织人类成员、邀请链接与组织 AI 名册（`ensureOrgEnabledAiRequest` 拦截未启用角色）。
   - `POST /api/workspaces` 支持 `sourceType: "clone"`（校验 `cloneUrl` 禁用 `file:`/`ext::`/参数注入后安全克隆至 `<workspacesRoot>/<orgSlug>/`）与 `sourceType: "local"`（非超管受 `allowLocalWorkspacePath`、`localWorkspaceAllowlist` 与内部运行目录隔离保护），并按 `visibility: "org" | "restricted"` 控制可见成员。
   - 组织内 `org_member` / `org_admin` / `org_owner` 若账号 `canDispatchAi` 启用，可在可见项目与组织/指定私密（`visibility: "org" | "private"`）事项中直接触发 AI `dispatch`（受 `maxActiveDispatches` 并发配额限制），`org_viewer` 禁止直接触发 AI；`/api/bootstrap`、`/api/spaces*`、`/api/matters*`、`/api/uploads/:filename` 与 SSE 推送均按用户 ACL（`canAccessMatter`、`canAccessSpace`、`canAccessWorkspace`）严格隔离，并允许所属组织的 `org_owner`/`org_admin` 在 `POST /api/previews/:id/stop` 中停止其可访问事项的预览。
@@ -69,7 +69,7 @@
   - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
 - 运行态恢复与快照：
   - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端 F5 刷新恢复。
-  - `GET /api/runtime` 返回当前 Agent 底座探测结果（Pi CLI 可用性与 `--version`、会话持久化策略、`pstack` 状态与各执行路径隔离边界）、已加载的 Pi Extensions（内置 `team-extension`、`pstack-methods`、`builtin:mcp` 声明汇总及 `PA_PI_EXTENSIONS` 文件校验），以及按节分组的当前运行配置（环境变量与服务、目录与存储位置、Pi RPC 与桥接参数、编排与工作台边界）；非所有者协同成员请求时将本机路径收口为目录/文件名。
+  - `GET /api/runtime` 返回当前 Agent 底座探测结果（Pi CLI 可用性与 `--version`、会话持久化策略与各执行路径隔离边界）、已加载的 Pi Extensions（内置 `team-extension`、`skill-catalog`、`builtin:mcp` 声明汇总及 `PA_PI_EXTENSIONS` 文件校验），以及按节分组的当前运行配置（环境变量与服务、目录与存储位置、Pi RPC 与桥接参数、编排与工作台边界）；非所有者协同成员请求时将本机路径收口为目录/文件名。
   - 执行失败时先提取 `ProgressSnapshot` 并连同错误与工作区锚点写入 `user` 系统消息 `metadata`（并广播 `matter_failed`），供前端回看与同作用域续跑。
 - [dialog-broker.ts](dialog-broker.ts) 在内存中等待 Extension UI 回答，HTTP 回复最终经 RPC 回写 Pi。它不是对所有命令的通用权限拦截器。
 - [preview-manager.ts](preview-manager.ts) 启停本地命令或登记外部服务链接；索引在内存中，不是部署系统，也不会因成果登记自动创建预览。

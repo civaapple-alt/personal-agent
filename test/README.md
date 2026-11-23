@@ -18,7 +18,7 @@
 | 多租户作用域角色/Skill 目录、角色包落盘、确认后生成新 Skill 草案、个人配额与严格用户隔离 | [scoped-roles-and-skills.test.ts](scoped-roles-and-skills.test.ts) |
 | 五个角色方法装载、能力组合、体检来源、设计到导出一致性与缺失依赖提前失败 | [role-capabilities.test.ts](role-capabilities.test.ts) |
 | Pi Skill 目录、仅手动调用的 Skill 和重名处理 | [skill-catalog.test.ts](skill-catalog.test.ts) |
-| pstack 模式/原则按需读取、方法目录、路径/大小/取消与岗位能力握手 | [pstack-runtime.test.ts](pstack-runtime.test.ts) |
+| pstack 演示的隔离方法资源读取、路径与大小边界 | [pstack-runtime.test.ts](pstack-runtime.test.ts) |
 | 自然任务不泄露方法名称、临时读取范围、完整正文证据、质量分层及无模型汇总 | [pstack-selection.test.ts](pstack-selection.test.ts) |
 | 开源元数据、私有路径、历史凭据脱敏、素材归档排除与原型保留 | [open-source.test.ts](open-source.test.ts) |
 | 角色真实演示的待审阅/失败区分、输入哈希、原文引用、离线帮助和目录保护 | [role-design-demo.test.ts](role-design-demo.test.ts) |

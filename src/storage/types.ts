@@ -67,7 +67,6 @@ export interface PlatformSettings {
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
-	pstackDir: string | null;
 	webAccessDeniedRoles: Record<string, string>;
 	webSearchProvider: "auto" | "deepseek" | "exa" | "kimi";
 	defaultModelSelection: ModelSelection | null;

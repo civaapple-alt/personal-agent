@@ -28,7 +28,6 @@ export interface ServerRouteContext {
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
 	probePiCli?: () => Promise<PiCliProbeResult>;
-	installPstack: () => Promise<string>;
 	installWebAccess: () => Promise<InstalledPiWebAccess>;
 	getServerRuntimeConfig?: () => ServerRuntimeConfig;
 	rolesDir?: string;

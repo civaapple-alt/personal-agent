@@ -3,7 +3,6 @@ import { relative, resolve } from "node:path";
 import { classifyGithubFetches } from "../../pi-extensions/team-extension/web-fetch-evidence.js";
 import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
-import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
 import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
@@ -65,7 +64,6 @@ export interface WorkerRunnerDeps {
 	skillsDir?: string;
 	noSession: boolean;
 	extensions: string[];
-	pstackDir?: string;
 	workerFactory: WorkerFactory;
 	readPiModels: ReadPiModels;
 	getDialogHandler: () => OrchestratorDialogHandler | undefined;
@@ -204,7 +202,6 @@ export async function executeWithWorkerPass(
 				: undefined;
 		const baseSkillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
 		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths])];
-		const pstack = await preparePstackForWorker(deps.pstackDir, sessionMode);
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
@@ -222,7 +219,6 @@ export async function executeWithWorkerPass(
 			"load_available_skill",
 			...teamExtension.tools,
 			...humanQuestion.tools,
-			...(pstack?.tools ?? []),
 		];
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
@@ -578,7 +574,6 @@ export async function executeWithWorkerPass(
 		if (webAccess) args.push("--extension", webAccess.entry);
 		args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
-		if (pstack) args.push(...pstack.args);
 		args.push("--tools", "*");
 
 		const effectiveMember = activeOrgId ? deps.store.resolveMemberForOrg(activeOrgId, input.member) : input.member;
@@ -660,15 +655,9 @@ export async function executeWithWorkerPass(
 					requiredTools,
 					workspaceRoot: input.workspace ? cwd : undefined,
 					attachedContextFiles,
-					memberContext: [
-						systemPrompt,
-						WORKBENCH_HELP_PROMPT,
-						architectContext?.systemPrompt,
-						pstack?.systemPrompt,
-					],
+					memberContext: [systemPrompt, WORKBENCH_HELP_PROMPT, architectContext?.systemPrompt],
 					turnContext: [turnContext, attachedFoldersPrompt, architectContext?.turnContext],
 				}),
-				...pstack?.env,
 				...humanQuestion.env,
 				...webAccess?.env,
 				PA_WEB_SEARCH_ENABLED: String(Boolean(webAccess)),
@@ -701,10 +690,10 @@ export async function executeWithWorkerPass(
 				const compactArgs =
 					event.type === "tool_execution_start" && rawArgs
 						? {
-								...(toolName === "load_pstack_skill" && typeof rawArgs.name === "string"
+								...(toolName === "load_available_skill" && typeof rawArgs.name === "string"
 									? { name: rawArgs.name.slice(0, 128) }
 									: {}),
-								...(toolName === "load_pstack_skill" && typeof rawArgs.resource === "string"
+								...(toolName === "load_available_skill" && typeof rawArgs.resource === "string"
 									? { resource: rawArgs.resource.slice(0, 240) }
 									: {}),
 								...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
@@ -878,7 +867,6 @@ export async function executeWithWorkerPass(
 				discussionMode: isDiscussionMode,
 				skills: skillPaths,
 				resourcePolicy: inheritsLocalResources ? "local-pi" : "explicit",
-				...(pstack ? { pstack: pstack.readyDetails } : {}),
 				model: state.model
 					? { provider: state.model.provider, model: state.model.id, thinkingLevel: state.thinkingLevel }
 					: selection,

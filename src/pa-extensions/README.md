@@ -2,10 +2,6 @@
 
 此目录维护随 PA 编译的扩展集成模块。管理路由保存配置，岗位运行器按当前岗位和运行模式组装扩展入口、工具清单和子进程环境。Pi 进程内的扩展入口见 [Pi 扩展](../../pi-extensions/README.md)。
 
-## pstack 方法包
-
-发现和校验已安装的方法包，并为岗位装配方法工具和提示。 [pstack-methods 维护入口](pstack-methods/README.md)
-
 ## 团队扩展
 
 按岗位权限选择团队工具，并向 Pi 提供桥接地址、所需工具和运行上下文。 [team-extension 维护入口](team-extension/README.md)

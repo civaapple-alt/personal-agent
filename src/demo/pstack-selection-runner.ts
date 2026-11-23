@@ -3,7 +3,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { preparePstackRuntime, readPstackResource } from "../../pi-extensions/pstack-methods/methods.js";
 import { resolveRoleSkills } from "../orchestrator/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { defaultWorkerFactory } from "../orchestrator/types.ts";
@@ -13,6 +12,7 @@ import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { selectDemoModel } from "./model-selection.ts";
 import { hasPstackReadEvidence } from "./pstack-evidence.ts";
+import { preparePstackRuntime, readPstackResource } from "./pstack-fixture.ts";
 import { earlierIntake, type SelectionId, selectionCases, selectionFiles } from "./pstack-selection-cases.ts";
 import { assessQuality, qualityReviewTemplate, reviewHash, reviewObject } from "./publication-review-quality.ts";
 
@@ -89,7 +89,7 @@ async function writeWorkspace(path: string) {
 
 function methodActions(tools: ToolExecutionRecord[]) {
 	return tools
-		.filter((tool) => ["load_pstack_skill", "load_available_skill"].includes(tool.toolName))
+		.filter((tool) => tool.toolName === "load_available_skill")
 		.map((tool) => ({ args: tool.args, succeeded: !tool.isError && tool.result !== undefined }));
 }
 
@@ -235,7 +235,6 @@ export async function runSelection(options: {
 				store,
 				templates,
 				defaultCwd: workspace,
-				pstackDir: pack,
 				sessionDir: sessions,
 				extensions: [
 					fileURLToPath(
@@ -248,7 +247,7 @@ export async function runSelection(options: {
 				workerFactory: (config) =>
 					defaultWorkerFactory({
 						...config,
-						args: [...(config.args ?? []), "--no-skills"],
+						args: [...(config.args ?? []), "--no-skills", "--skill", join(pack, "skills")],
 						env: {
 							...config.env,
 							PA_FIXTURE_READ_ROOTS: JSON.stringify([workspace, sessions, pack, ...approvedRoleMethods]),

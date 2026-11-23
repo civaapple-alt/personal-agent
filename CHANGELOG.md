@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the pstack-specific runtime, settings and loader; use Pi-managed Skills and the shared skill catalog.
+
 - Let AI roles discover and choose Pi-installed Skills, including manual-only Skills, without forcing a pstack mode.
 
 - Add a reusable project skill for reviewing matter evidence, runtime capabilities, and architectural improvements.

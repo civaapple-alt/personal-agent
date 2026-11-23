@@ -7,7 +7,7 @@ src/
 ├── index.ts          # 后端公共导出入口
 ├── orchestrator/     # 事项派发、会话范围、跨岗位委托、旁听评审、人类澄清与经验复盘
 ├── rpc/              # Pi CLI 子进程管理、JSONL 协议分帧、工具桥接与包安装
-├── pa-extensions/    # 宿主侧扩展装配（team-extension、pstack-methods、web-access、.env 密钥治理）
+├── pa-extensions/    # 宿主侧扩展装配（team-extension、web-access、.env 密钥治理）
 ├── storage/          # SQLite 数据库/领域仓储与独立 Git 资料空间引擎（SpaceGitStore）
 ├── server/           # 同源 HTTP/SSE 服务、多租户鉴权、ACL、业务路由与预览管理
 ├── roles/            # 角色 Markdown 与 Skill 包解析、能力报告与角色架构师规则

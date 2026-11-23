@@ -1,8 +1,0 @@
-{
-	"name": "pa-pstack-methods",
-	"private": true,
-	"type": "module",
-	"pi": {
-		"extensions": ["./index.ts"]
-	}
-}

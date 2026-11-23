@@ -17,7 +17,7 @@ test("natural selection cases do not tell candidates method names or expose the 
 	for (const scenario of selectionCases) {
 		assert.doesNotMatch(
 			`${scenario.prompt}\n${scenario.priorMessage ?? ""}`,
-			/\b(?:pstack|poteto-mode|how|why|teach|recall|architect|load_pstack_skill)\b/i,
+			/\b(?:pstack|poteto-mode|how|why|teach|recall|architect|load_available_skill)\b/i,
 		);
 		assert.equal(scenario.rubric.length, 3);
 		assert.match(scenario.prompt, /不改文件/);
@@ -129,7 +129,7 @@ test("offline summaries keep missing method selection separate from reviewed sem
 test("selection help performs no model or source configuration work", () => {
 	const result = spawnSync(process.execPath, [resolve("src/demo/pstack-selection-smoke.ts"), "--help"], {
 		encoding: "utf8",
-		env: { ...process.env, PA_PSTACK_DIR: "/missing/never-used" },
+		env: process.env,
 	});
 	assert.equal(result.status, 0, result.stderr);
 	assert.match(result.stdout, /--summarize/);

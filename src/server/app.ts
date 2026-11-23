@@ -2,7 +2,6 @@ import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
-import { installPiPstack } from "../pa-extensions/pstack-methods/package.ts";
 import { type InstalledPiWebAccess, installPiWebAccess } from "../pa-extensions/web-access/package.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
@@ -44,7 +43,6 @@ export interface PersonalAgentServerOptions {
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
-	installPiPstack?: typeof installPiPstack;
 	runtimeMeta?: Pick<ServerRuntimeConfig, "host" | "port" | "dbPath" | "builtinRolesDir">;
 }
 
@@ -66,7 +64,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	const sse = createSseHub(store);
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 	let roleMutationTail = Promise.resolve();
-	let pstackInstallation: Promise<string> | undefined;
 	let webAccessInstallation: Promise<InstalledPiWebAccess> | undefined;
 	let packageInstallTail = Promise.resolve();
 	const probeRuntimePi = options.probePiCli ?? probePiCli;
@@ -111,12 +108,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		previewManager,
 		dialogBroker,
 		probePiCli: probeRuntimePi,
-		installPstack: () => {
-			pstackInstallation ??= queuePiInstall(options.installPiPstack ?? installPiPstack).finally(() => {
-				pstackInstallation = undefined;
-			});
-			return pstackInstallation;
-		},
 		installWebAccess: () => {
 			webAccessInstallation ??= queuePiInstall(installPiWebAccess).finally(() => {
 				webAccessInstallation = undefined;

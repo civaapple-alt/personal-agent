@@ -51,7 +51,7 @@ function readRuntimeTools(message: MatterMessage): string[] | undefined {
 const MANAGED_EXTENSIONS = [
 	["read_pa_help", "team-extension"],
 	["request_clarification", "human-question"],
-	["load_pstack_skill", "pstack-methods"],
+	["load_available_skill", "skill-catalog"],
 	["web_search", "pi-web-access"],
 ] as const;
 
@@ -83,7 +83,7 @@ function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchCont
 				typeof event.toolName !== "string"
 			)
 				continue;
-			if (!["web_search", "get_search_content", "fetch_content", "load_pstack_skill"].includes(event.toolName))
+			if (!["web_search", "get_search_content", "fetch_content", "load_available_skill"].includes(event.toolName))
 				continue;
 			if (event.type === "tool_execution_start")
 				calls.set(event.toolCallId, { name: event.toolName, outcome: "pending" });
@@ -100,7 +100,7 @@ function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchCont
 			/* Ignore non-JSON notices. */
 		}
 	}
-	return ["web_search", "get_search_content", "fetch_content", "load_pstack_skill"]
+	return ["web_search", "get_search_content", "fetch_content", "load_available_skill"]
 		.map((name) => {
 			const matching = [...calls.values()].filter((call) => call.name === name);
 			const outcome = matching.at(-1)?.outcome;

@@ -1,9 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isAbsolute, resolve } from "node:path";
-import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
+import { resolve } from "node:path";
 import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import { readDotEnvMap, resolveEnvFilePath } from "../../pa-extensions/env-credentials.ts";
-import { type PstackRuntime, preparePstackRuntime } from "../../pa-extensions/pstack-methods/package.ts";
 import { toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
 import {
@@ -17,7 +15,7 @@ import {
 	SESSION_COOKIE_NAME,
 	SlidingWindowRateLimiter,
 } from "../auth.ts";
-import { HttpRequestError, readJsonBody, sendError, sendJson } from "../http.ts";
+import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
 import { handleWebAccessRoutes } from "./web-access.ts";
@@ -562,100 +560,6 @@ export async function handleAdminRoutes(ctx: ServerRouteContext, r: RouteRequest
 			detail: { aborted },
 		});
 		sendJson(res, 200, { ok: true, aborted });
-		return true;
-	}
-
-	if (method === "POST" && pathname === "/api/admin/runtime/pstack/install") {
-		let installedRoot: string;
-		try {
-			installedRoot = await ctx.installPstack();
-		} catch (error) {
-			if (error instanceof HttpRequestError) throw error;
-			sendError(res, 502, error instanceof Error ? error.message : String(error));
-			return true;
-		}
-		auditActorAction(ctx, req, actor, {
-			action: "admin.pstack_install",
-			targetType: "runtime_extension",
-			targetId: "pstack",
-			detail: { path: installedRoot },
-		});
-		const overview = await buildRuntimeOverview({
-			config: orchestrator.getRuntimeConfig(),
-			serverConfig: ctx.getServerRuntimeConfig?.(),
-			activeMembers: store.listMembers(),
-			isOwner: true,
-			probePiCli: ctx.probePiCli,
-		});
-		sendJson(res, 200, { installedRoot, overview });
-		return true;
-	}
-
-	if (method === "POST" && pathname === "/api/admin/runtime/pstack/enable") {
-		if (process.env.PA_PSTACK_DIR?.trim()) {
-			sendError(res, 409, "当前由启动环境变量 PA_PSTACK_DIR 接管，请从启动参数移除后重启服务");
-			return true;
-		}
-		const body = await readJsonBody(req);
-		const path = typeof body.path === "string" ? body.path.trim() : "";
-		if (!isAbsolute(path)) {
-			sendError(res, 400, "请填写服务主机上已有的 pstack 方法包绝对路径，可用 pi list 查看");
-			return true;
-		}
-		let runtime: PstackRuntime;
-		try {
-			runtime = await preparePstackRuntime(path);
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			sendError(res, 400, `无法启用 pstack 方法包：${msg}`);
-			return true;
-		}
-		const updatedSettings = store.updatePlatformSettings({ pstackDir: runtime.root }, ctx.defaultWorkspacesRoot);
-		orchestrator.setPstackDir(runtime.root);
-		auditActorAction(ctx, req, actor, {
-			action: "admin.pstack_enable",
-			targetType: "runtime_extension",
-			targetId: "pstack",
-			detail: {
-				path: runtime.root,
-				version: runtime.version,
-				skillCount: runtime.skills.length,
-			},
-		});
-		const overview = await buildRuntimeOverview({
-			config: orchestrator.getRuntimeConfig(),
-			serverConfig: ctx.getServerRuntimeConfig?.(),
-			activeMembers: store.listMembers(),
-			isOwner: true,
-			probePiCli: ctx.probePiCli,
-		});
-		sendJson(res, 200, {
-			settings: updatedSettings,
-			overview,
-		});
-		return true;
-	}
-
-	if (method === "POST" && pathname === "/api/admin/runtime/pstack/disable") {
-		if (process.env.PA_PSTACK_DIR?.trim()) {
-			sendError(res, 409, "当前由启动环境变量 PA_PSTACK_DIR 接管，请从启动参数移除后重启服务以停用");
-			return true;
-		}
-		const updatedSettings = store.updatePlatformSettings({ pstackDir: null }, ctx.defaultWorkspacesRoot);
-		orchestrator.setPstackDir(undefined);
-		auditActorAction(ctx, req, actor, {
-			action: "admin.pstack_disable",
-			targetType: "runtime_extension",
-			targetId: "pstack",
-		});
-		const overview = await buildRuntimeOverview({
-			config: orchestrator.getRuntimeConfig(),
-			serverConfig: ctx.getServerRuntimeConfig?.(),
-			activeMembers: store.listMembers(),
-			isOwner: true,
-			probePiCli: ctx.probePiCli,
-		});
-		sendJson(res, 200, { settings: updatedSettings, overview });
 		return true;
 	}
 

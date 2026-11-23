@@ -17,7 +17,7 @@
 | 审核账号、邀请同事、设置仓库和事项权限 | [团队账号、超级管理员与组织协作](guides/team-administration.md#团队账号超级管理员与组织协作) |
 | 核对本机执行权限、数据流和网络边界 | [安全说明](../SECURITY.md) |
 | 查环境变量、存储路径、Pi 资源发现或超时 | [配置参考](reference/configuration.md) |
-| 安装、更新或停用完整 pstack 方法包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
+| 使用 Pi 管理 pstack 等 Skill 包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
 | 安装 pi-web-access、授权岗位或使用 Kimi 搜索 | [为 AI 岗位启用网页检索](guides/web-search.md) |
 
 ## 开发与贡献
@@ -31,7 +31,7 @@
 | Git 资料空间、五类默认空间与仓库文件关联 | [资料空间设计](concepts/space-design.md) |
 | 会话范围、委托、取消、成果归档与经验生命周期 | [运行与协作参考](reference/runtime-collaboration.md) |
 | 内置岗位的职责、能力报告与角色作用域 | [内置角色与能力参考](reference/role-design.md)、[角色定义](../roles/README.md)、[内置 Skills](../skills/README.md) |
-| pstack 方法工具的参数和执行权限 | [pstack 方法工具参考](reference/pstack-tools.md) |
+| Pi Skill 目录工具的参数与使用范围 | [pstack 方法工具参考](reference/pstack-tools.md) |
 
 ## 复核实现与证据
 

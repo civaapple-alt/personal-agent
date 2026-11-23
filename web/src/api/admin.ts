@@ -13,7 +13,6 @@ export interface PlatformSettingsDto {
 	defaultMaxOrgs: number;
 	defaultMaxActiveDispatches: number;
 	defaultMaxPersonalRoles: number;
-	pstackDir?: string | null;
 	defaultModelSelection?: ModelSelection | null;
 	updatedAt: string;
 }

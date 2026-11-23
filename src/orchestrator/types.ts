@@ -170,8 +170,6 @@ export interface TeamOrchestratorOptions {
 	onDialog?: OrchestratorDialogHandler;
 	/** Operator-approved Pi extensions supplying declared custom/MCP tools. */
 	extensions?: string[];
-	/** Explicit complete pstack source pack; not inherited from the outer coding assistant. */
-	pstackDir?: string;
 }
 
 export interface PromptImageAttachment extends ImageContent {
@@ -361,7 +359,8 @@ const TOOL_LABELS: Record<string, string> = {
 	delegate_to_member: "委托团队成员",
 	save_space_page: "保存资料",
 	propose_experience: "提炼候选经验",
-	load_pstack_skill: "读取 pstack 方法",
+	list_available_skills: "查看可用 Skills",
+	load_available_skill: "读取 Skill",
 };
 
 function parseTimeoutEnv(raw: string | undefined): number | undefined {

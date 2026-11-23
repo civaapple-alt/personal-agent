@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 export const builtinExtensionPaths = {
 	"team-extension": "pi-extensions/team-extension/index.ts",
-	"pstack-extension": "pi-extensions/pstack-methods/index.ts",
 	"skill-catalog": "pi-extensions/skill-catalog/index.ts",
 	"human-question": "pi-extensions/human-question/index.ts",
 } as const;

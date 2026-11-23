@@ -52,7 +52,7 @@ Open **Version feedback** to rate or comment on the current commit. Select a his
 
 Use the composer model picker to select the lead's model for the matter. Authorized administrators configure organization role and platform defaults. Select the matter's repository in its settings.
 
-Web search requires administrator setup and a role grant. The pstack methods package can be configured in platform settings. Check the active tools for the running role before claiming a capability is available. PA capabilities are configured through platform settings, roles, and skills. Pi manages installation of its own extensions. New PA product capabilities require a maintained PA release.
+Web search requires administrator setup. The service account uses Pi to install and manage pstack and other skill packages. Check the active tools for the running role before claiming a capability is available. PA capabilities are configured through platform settings, roles, and skills. Pi manages installation of its own extensions. New PA product capabilities require a maintained PA release.
 
 Ask what tools or extensions the role can use to see the tools reported when it started in this workspace. Human Question provides `request_clarification`. Leads use it to request decisions from people, and collaborators use it to ask their delegator.
 

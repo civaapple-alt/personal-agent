@@ -1,4 +1,3 @@
-import type { PlatformSettingsDto } from "./admin.ts";
 import { requestJson } from "./client.ts";
 
 export type RuntimeExtensionSourceKind =
@@ -50,17 +49,6 @@ export interface RuntimeBaseInfoDto {
 	sessionMode: "persisted" | "no_session";
 	sessionDir: string | null;
 	defaultCwd: string | null;
-	pstack: {
-		configured: boolean;
-		available: boolean;
-		root: string | null;
-		installedRoot: string | null;
-		version: string | null;
-		modeSha256: string | null;
-		skillCount: number;
-		error: string | null;
-		source?: "env" | "settings" | "none";
-	};
 	webAccess: {
 		installedVersion: string | null;
 		roles: Array<{ id: string; name: string; enabled: boolean }>;
@@ -76,7 +64,6 @@ export interface RuntimeBaseInfoDto {
 		promptTimeoutMs: number;
 		idleTimeoutMs: number;
 		customExtensionsEnvConfigured: boolean;
-		pstackDirEnvConfigured: boolean;
 	};
 }
 
@@ -120,30 +107,6 @@ export interface RuntimeOverviewDto {
 
 export function fetchRuntimeOverview(): Promise<RuntimeOverviewDto> {
 	return requestJson("/api/runtime");
-}
-
-export function installRuntimePstack(): Promise<{ installedRoot: string; overview: RuntimeOverviewDto }> {
-	return requestJson("/api/admin/runtime/pstack/install", { method: "POST", body: "{}" });
-}
-
-export function enableRuntimePstack(path: string): Promise<{
-	settings: PlatformSettingsDto;
-	overview: RuntimeOverviewDto;
-}> {
-	return requestJson("/api/admin/runtime/pstack/enable", {
-		method: "POST",
-		body: JSON.stringify({ path }),
-	});
-}
-
-export function disableRuntimePstack(): Promise<{
-	settings: PlatformSettingsDto;
-	overview: RuntimeOverviewDto;
-}> {
-	return requestJson("/api/admin/runtime/pstack/disable", {
-		method: "POST",
-		body: JSON.stringify({}),
-	});
 }
 
 export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDto }> {
