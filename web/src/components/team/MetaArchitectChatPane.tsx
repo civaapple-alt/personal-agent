@@ -266,7 +266,7 @@ export function MetaArchitectChatPane({
 						disabled={sending}
 						onClick={() =>
 							void sendMessage(
-								"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽，并输出结构化体检卡片与可直接勾选调整的权限/边界提案。",
+								"请对当前团队做一次协作体检：检查现有成员分工是否重叠，并输出结构化体检卡片与可直接勾选调整的职责和边界提案。",
 								true,
 							)
 						}
@@ -403,7 +403,7 @@ export function MetaArchitectChatPane({
 										</span>
 										{toLabel && (
 											<span className="meta-diff-pill">
-												权限：{fromLabel} ({adj.currentTools.join(", ") || "无"}) →{" "}
+												建议工具（不限制运行能力）：{fromLabel} ({adj.currentTools.join(", ") || "无"}) →{" "}
 												<b>
 													{toLabel} ({adj.suggestedTools?.join(", ") || "无"})
 												</b>

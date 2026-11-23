@@ -19,7 +19,7 @@ function buildPstackGuidance(runtime: PstackRuntime, sessionMode: WorkerSessionM
 }
 
 export async function preparePstackForWorker(pstackDir: string | undefined, sessionMode: WorkerSessionMode) {
-	if (!pstackDir || sessionMode === "verifier") return undefined;
+	if (!pstackDir) return undefined;
 
 	const runtime = await preparePstackRuntime(pstackDir);
 	return {

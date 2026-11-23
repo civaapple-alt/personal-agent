@@ -252,7 +252,7 @@ test("Only the local owner on a loopback listener inherits native Pi resources",
 			assert.equal(worker.args?.includes("--no-extensions"), !inherit);
 			assert.equal(worker.args?.includes("--no-skills"), !inherit);
 			assert.ok(worker.args?.includes("--skill"));
-			assert.ok(worker.args?.includes("--no-mcp"));
+			assert.ok(worker.args?.includes("builtin:mcp"));
 			assert.ok(worker.args?.includes("--tools"));
 			assert.equal(worker.cwd, f.root);
 		});

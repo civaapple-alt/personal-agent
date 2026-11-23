@@ -61,7 +61,7 @@ export function TeamHealthcheckPanel({
 						{
 							role: "user",
 							content:
-								"请对当前团队做一次协作体检：检查现有成员分工是否重叠、工具权限是否过宽、近期运行摩擦有哪些，并给出可直接勾选执行的权限收窄或边界补充建议。",
+								"请对当前团队做一次协作体检：检查现有成员分工是否重叠、近期运行摩擦有哪些，并给出可直接勾选执行的职责或边界补充建议。",
 						},
 					],
 					includeHealthcheck: true,
@@ -219,7 +219,7 @@ export function TeamHealthcheckPanel({
 													<strong>{adj.memberName}</strong>
 												</span>
 												<span className="meta-diff-pill">
-													{formatRoleToolTierLabel(adj.currentTools)} →{" "}
+													建议工具：{formatRoleToolTierLabel(adj.currentTools)} →{" "}
 													{adj.suggestedTools
 														? formatRoleToolTierLabel(adj.suggestedTools)
 														: formatRoleToolTierLabel(adj.currentTools)}

@@ -297,7 +297,7 @@ test("Architect receives the design method and workbench help while publication 
 			defaultCwd: directory,
 			noSession: true,
 			workerFactory: (options) => ({
-				start: () => reportReady(options, ["read_pa_help"]),
+				start: () => reportReady(options),
 				getState: async () => ({ sessionId: "controlled-architect" }),
 				stop: async () => {},
 				onNotice: () => () => {},

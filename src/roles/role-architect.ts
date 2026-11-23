@@ -183,12 +183,12 @@ function resolveToolsForScope(scope: RoleWorkspaceScope): { tools: string[]; sum
 		case "read_only_repo":
 			return {
 				tools: ["read"],
-				summary: "仅只读查看工作区与文档（read，不修改代码、不执行命令）",
+				summary: "以工作区和文档核查为主（建议 read）",
 			};
 		case "no_repo_docs":
 			return {
 				tools: [],
-				summary: "纯分析与文本协同（无文件系统与命令工具）",
+				summary: "以分析与文本协同为主",
 			};
 	}
 }
@@ -298,7 +298,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	const tools = input.workspaceTools
 		? normalizeRoleTools(input.workspaceTools).filter((tool) => profile.tools.includes(tool))
 		: profile.tools;
-	const toolSummary = input.workspaceTools ? tools.join(" / ") || "无工作区工具" : profile.summary;
+	const toolSummary = input.workspaceTools ? tools.join(" / ") || "无特别建议" : profile.summary;
 	const antiJobs = buildDefaultAntiJobs({
 		interactionStyle,
 		workspaceScope,
@@ -319,9 +319,9 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	];
 	const toolSection =
 		workspaceScope === "no_repo_docs"
-			? "- 纯分析与文稿协作，不挂载文件编辑与终端工具。"
+			? "- 以分析与文稿协作为主，按任务选择共享运行工具。"
 			: workspaceScope === "read_only_repo"
-				? "- 仅使用只读文档与代码核查能力（`read`），确保事实可溯源。"
+				? "- 以文档与代码核查为主，按任务选择共享运行工具，确保事实可溯源。"
 				: "- 具备工作区读写与命令验证能力（`read` / `edit` / `write` / `bash`），改动须附实际运行验证。";
 	const baseCollabSection =
 		interactionStyle === "risk_observer"
@@ -393,7 +393,7 @@ export function buildRoleDesignDraft(input: RoleDesignBriefInput): RoleArchitect
 	const designNotes = [
 		`已收敛为单核心职责：${oneJob}`,
 		`已配置 ${antiJobs.length} 条明确不做边界（Anti-Jobs），避免职责膨胀`,
-		`最小权限工具集：${tools.length > 0 ? tools.join(", ") : "无工具（纯文本协同）"}`,
+		`建议工具：${tools.length > 0 ? tools.join(", ") : "无"}（不限制运行时工具）`,
 	];
 
 	return {
@@ -468,11 +468,11 @@ const ARCHITECT_SECTIONS = {
 		"- Base proposals on the actual workflow. If invited into an active matter, confine your work to role planning and collaboration diagnosis. Formal business deliverables remain with the lead.",
 	].join("\n"),
 	skillsAndMethods: [
-		"- Assign one core outcome per role. Specify actions outside its remit, grant only necessary tools, and define when it should remain silent.",
+		"- Assign one core outcome per role. Specify actions outside its remit, suggest relevant tools without restricting runtime access, and define when it should remain silent.",
 		"- Ask only about gaps that affect responsibilities, capabilities, or outcomes. When the goal is clear, propose a plan using existing members and installed methods where possible.",
 	].join("\n"),
 	toolsAndEnvironment:
-		"- Use the team configuration and recent collaboration evidence supplied by the host for planning and diagnosis. The role has no code-writing or shell tools.",
+		"- Use the team configuration and recent collaboration evidence supplied by the host for planning and diagnosis. Use the configured runtime tools as needed for the task.",
 	collaborationConventions: [
 		"- Discuss team design and health in a dedicated matter, or help an existing matter fill a gap or narrow a role's scope when invited.",
 		"- Return changes as proposals the owner can confirm. Leave role edits and routine business dispatch to the existing workflow.",

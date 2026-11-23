@@ -234,7 +234,7 @@ export function SettingsView({
 									<details className="settings-details">
 										<summary>调用隔离策略</summary>
 										<p className="muted-hint">
-											以下为调用策略概览，实际能力随角色和执行模式变化。Pi
+											岗位执行共享已配置的运行工具；团队业务操作仍遵循事项协作规则。Pi
 											以服务账号权限运行，不是操作系统沙箱。
 										</p>
 										<div className="settings-isolation-list">

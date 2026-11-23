@@ -328,8 +328,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				await new Promise((resolve) => setTimeout(resolve, 100));
 				available = pi.getAllTools().map((tool) => tool.name);
 			}
-			if (expected.length)
-				pi.setActiveTools(available.filter((name) => expected.some((pattern) => matches(pattern, name))));
+			pi.setActiveTools(available);
 			await post("/ready", pi.getActiveTools());
 		};
 		void prepare().catch(() => {

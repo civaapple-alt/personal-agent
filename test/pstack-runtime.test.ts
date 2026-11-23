@@ -120,7 +120,7 @@ test("Pi method tool supports catalogue, real principles and cancellation withou
 	}
 });
 
-test("orchestrator wires pstack into the real loadout without widening the architect's business permissions", async () => {
+test("orchestrator wires pstack and shared runtime tools into the architect", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pa-pstack-wiring-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -142,11 +142,16 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 				assert.match(options.env!.PA_MEMBER_CONTEXT!, /## pstack methods/);
 				assert.match(options.env!.PA_MEMBER_CONTEXT!, /lead can save plans/);
 				const args = options.args!;
-				assert.equal(args[args.indexOf("--tools") + 1], "read_pa_help,load_pstack_skill");
+				assert.equal(args[args.indexOf("--tools") + 1], "*");
 				assert.ok(args.some((arg) => arg.endsWith(join("pstack-methods", "index.ts"))));
 				assert.equal(options.env!.PA_CAN_SAVE_SPACE, "false");
 				assert.equal(options.env!.PA_CAN_DELEGATE, "false");
-				await reportReady(options, omitMethodTool ? ["read_pa_help"] : ["read_pa_help", "load_pstack_skill"]);
+				await reportReady(
+					options,
+					omitMethodTool
+						? JSON.parse(options.env!.PA_REQUIRED_TOOLS!).filter((name: string) => name !== "load_pstack_skill")
+						: undefined,
+				);
 			},
 			runPromptAndWait: async () => {
 				promptReached = true;
@@ -185,7 +190,7 @@ test("orchestrator wires pstack into the real loadout without widening the archi
 	}
 });
 
-test("pstack-enabled observers retain narrowed tools and can remain silent without loading the full mode", async () => {
+test("pstack-enabled observers retain runtime tools and can remain silent without loading the full mode", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "pa-pstack-observer-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -210,11 +215,7 @@ test("pstack-enabled observers retain narrowed tools and can remain silent witho
 				start: async () => {
 					if (observer) {
 						const args = options.args!;
-						assert.deepEqual(args[args.indexOf("--tools") + 1]!.split(","), [
-							"read",
-							"read_pa_help",
-							"load_pstack_skill",
-						]);
+						assert.equal(args[args.indexOf("--tools") + 1], "*");
 						assert.equal(options.env!.PA_CAN_DELEGATE, "false");
 						assert.equal(options.env!.PA_CAN_SAVE_SPACE, "false");
 						assert.equal(options.env!.PA_CAN_EXPERIENCE, "false");

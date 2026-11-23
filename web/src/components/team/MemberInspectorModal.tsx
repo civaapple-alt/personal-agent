@@ -336,7 +336,7 @@ export function MemberInspectorModal({
 
 						<div className="form-footer">
 							<span className="muted-tiny">
-								声明工具：{template?.tools.length ? template.tools.join(", ") : "纯分析与文稿（无工具）"}
+								岗位建议工具：{template?.tools.length ? template.tools.join(", ") : "无"}（不限制运行工具）
 							</span>
 							<div className="ui-row-actions">
 								<button type="button" className="btn-pill-outline" onClick={onClose}>

@@ -8,7 +8,7 @@ import {
 	type WorkspaceDto,
 } from "../../api.ts";
 import { getMemberScopeBadge } from "../../architectApi.ts";
-import { formatMemberGitIdentity, formatRoleToolTierLabel, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
+import { formatMemberGitIdentity, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
 import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
 interface MemberCardProps {
@@ -159,11 +159,8 @@ export function MemberCard({
 			)}
 			{member.identitySummary && <div className="member-summary-line">{member.identitySummary}</div>}
 
-			<div
-				className="member-meta-line"
-				title={`Git Author：${gitIdentity.formatted}${template?.tools.length ? ` · 工具：${template.tools.join(", ")}` : ""}`}
-			>
-				<span>{formatRoleToolTierLabel(template?.tools)}</span>
+			<div className="member-meta-line" title={`Git Author：${gitIdentity.formatted}`}>
+				<span>共享运行工具</span>
 				{antiJobsCount > 0 && (
 					<>
 						<span aria-hidden="true">·</span>

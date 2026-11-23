@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
+import { prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
 import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
 import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
@@ -410,6 +412,8 @@ export function parseMetaArchitectResponse(
 }
 
 export interface MetaArchitectDeps {
+	extensions?: string[];
+	pstackDir?: string;
 	store: PersonalAgentStore;
 	defaultCwd: string;
 	skillsDir?: string;
@@ -425,7 +429,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"## Design roles",
 	"1. Give each role one core outcome.",
 	"2. For non-coding, review, and observer roles, state which actions are outside their remit and when to return [SILENT].",
-	"3. Choose the minimum workspace access. Use `no_repo_docs` for text without tools, `read_only_repo` for inspection, or `read_write_code` for workspace writes. Include an explicit `tools` array using only `read`, `edit`, `write`, or `bash` as needed. For document editing without commands, omit `bash`. Describe any directory limits as working rules, since these tools run with the host's workspace access.",
+	"3. Describe the role's typical workspace activities using `no_repo_docs`, `read_only_repo`, or `read_write_code` and suggest relevant tools. These declarations do not restrict runtime capabilities; all roles share configured tools. Describe directory limits as working rules.",
 	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
 	"5. Ask up to three questions, limited to gaps that could change the goal, capability, or acceptance criteria. Use answers already given. When you have enough information, return the smallest workable plan.",
 	'6. Use relevant installed Skills in `skills`. If the workflow lacks a tailored SOP, also propose an optional draft in `newSkills: [{ name, description, body, storageScope }]` (default `storageScope: "role_local"`) for user confirmation instead of placing unconfirmed names in `skills`. Identify missing dependencies without assuming that an integration works.',
@@ -639,6 +643,11 @@ export async function runMetaArchitectChat(
 
 	const methodPaths = await resolveRoleSkills(BUILTIN_ROLE_ARCHITECT_TEMPLATE, { skillsDir: deps.skillsDir });
 	const selection = resolveConfiguredModel(deps.store, targetOrgId, primary?.id);
+	const webAccess = await prepareWebAccessForWorker({
+		store: deps.store,
+		envFilePath: resolve(deps.defaultCwd, ".env"),
+	});
+	const pstack = await preparePstackForWorker(deps.pstackDir, "lead");
 	const worker = deps.workerFactory({
 		cwd,
 		provider: selection?.provider,
@@ -648,13 +657,17 @@ export async function runMetaArchitectChat(
 			"--no-approve",
 			"--no-extensions",
 			"--no-skills",
-			"--no-mcp",
 			"--no-context-files",
 			...methodPaths.flatMap((path) => ["--skill", path]),
+			...(deps.extensions ?? []).flatMap((entry) => ["--extension", entry]),
+			...(webAccess ? ["--extension", webAccess.entry] : []),
+			"--extension",
+			"builtin:mcp",
+			...(pstack?.args ?? []),
 			"--tools",
-			"",
+			"*",
 		],
-		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt },
+		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt, ...webAccess?.env, ...pstack?.env },
 	});
 	const onAbortWorker = () => {
 		void worker.abort?.().catch(() => {});

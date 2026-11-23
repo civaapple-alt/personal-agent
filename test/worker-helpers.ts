@@ -1,7 +1,7 @@
 import type { PiRpcWorkerOptions } from "../src/rpc/pi-rpc-worker.ts";
 
 export async function reportReady(options: PiRpcWorkerOptions, tools?: string[]): Promise<void> {
-	const requested = options.args?.[(options.args?.indexOf("--tools") ?? -1) + 1]?.split(",") ?? [];
+	const requested: string[] = JSON.parse(options.env?.PA_REQUIRED_TOOLS ?? "[]");
 	const response = await fetch(`${options.env?.PA_TEAM_BRIDGE_URL}/ready`, {
 		method: "POST",
 		headers: { Authorization: `Bearer ${options.env?.PA_TEAM_BRIDGE_TOKEN}` },

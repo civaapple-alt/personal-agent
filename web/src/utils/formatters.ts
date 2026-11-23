@@ -153,7 +153,7 @@ export function formatByteSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Formats declared RoleTemplate tool lists into concise 4-tier permission badges. */
+/** Formats suggested RoleTemplate tool lists, which do not restrict runtime capabilities. */
 export function formatRoleToolTierLabel(tools: string[] | undefined): string {
 	if (!tools || tools.length === 0) return "纯文稿";
 	if (tools.includes("edit") || tools.includes("write")) return "可改代码";

@@ -189,7 +189,7 @@ test("v1 sessions and messages without organization provenance remain archived, 
 	assert.ok(f.store.listMessages(matter.id).some((msg) => msg.content === "UNKNOWN_ORG_SECRET"));
 });
 
-test("Native resource discovery separates sessions and leaves observer and managed workspace execution isolated", async (t) => {
+test("Native resource discovery separates sessions, includes observers, and isolates managed workspaces", async (t) => {
 	const f = await fixture(t);
 	const local = f.store.upsertWorkspace({ name: "local", repoPath: f.root, orgId: f.a.id });
 	const matter = f.store.createMatter({
@@ -216,8 +216,8 @@ test("Native resource discovery separates sessions and leaves observer and manag
 		inheritLocalPiResources: true,
 	});
 	assert.ok(!f.calls[4]?.options.args?.includes("--no-extensions"));
-	assert.ok(f.calls[5]?.options.args?.includes("--no-extensions"));
-	assert.ok(f.calls[5]?.options.args?.includes("--no-skills"));
+	assert.ok(!f.calls[5]?.options.args?.includes("--no-extensions"));
+	assert.ok(!f.calls[5]?.options.args?.includes("--no-skills"));
 
 	const managed = f.store.upsertWorkspace({
 		name: "managed clone",

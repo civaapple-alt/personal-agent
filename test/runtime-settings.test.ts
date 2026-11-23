@@ -223,7 +223,10 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(builtinTelemetry.fileStatus, "builtin");
 
 	assert.equal(ownerPayload.summary.activeCount, 4);
-	assert.equal(ownerPayload.summary.conditionalCount, 2);
+	assert.equal(
+		ownerPayload.summary.conditionalCount,
+		ownerPayload.extensions.filter((ext) => ext.status === "conditional").length,
+	);
 	assert.equal(ownerPayload.summary.operatorCount, 3);
 	assert.equal(ownerPayload.summary.errorCount, 1);
 
@@ -326,7 +329,7 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 	assert.equal(pstackExt?.status, "error");
 
 	const mcpExt = payload.extensions.find((ext) => ext.id === "pi-builtin-mcp");
-	assert.equal(mcpExt?.status, "inactive");
+	assert.equal(mcpExt?.status, "conditional");
 	assert.deepEqual(mcpExt?.declaredByRoles, []);
 
 	assert.ok(statSync(resolveBuiltinExtensionPath("team-extension")).isFile());

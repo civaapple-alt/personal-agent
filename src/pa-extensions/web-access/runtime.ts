@@ -1,13 +1,8 @@
-import type { WorkerSessionMode } from "../../orchestrator/types.ts";
-import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
-import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
-import type { PlatformSettings, TeamMember } from "../../storage/types.ts";
 import { readWebAccessEnvFromDotEnv, resolveEnvFilePath } from "../env-credentials.ts";
 import { findInstalledPiWebAccess } from "./package.ts";
 
 export const PI_WEB_SEARCH_TOOLS = ["web_search", "get_search_content", "fetch_content"] as const;
-const WEB_ACCESS_TOOLS = new Set<string>([...PI_WEB_SEARCH_TOOLS, "web_enable", "source_check"]);
 
 export type WebSearchProviderPreference = "auto" | "deepseek" | "exa" | "kimi";
 export type ResolvedWebSearchProvider = "deepseek" | "exa" | "kimi";
@@ -39,39 +34,14 @@ export function resolveEffectiveWebSearchProvider(
 	return undefined;
 }
 
-export function isPiWebAccessTool(name: string): boolean {
-	return WEB_ACCESS_TOOLS.has(name);
-}
-
-export function isWebAccessRole(member: TeamMember, template?: RoleTemplate): boolean {
-	return !isArchitectRoleTemplate(template ?? { id: member.id });
-}
-
-/** All business roles are allowed web access by default (including newly created roles) unless explicitly denied. */
-export function hasWebAccessGrant(
-	member: TeamMember,
-	deniedRoles: PlatformSettings["webAccessDeniedRoles"] | undefined,
-): boolean {
-	return deniedRoles?.[member.id] !== member.createdAt;
-}
-
 export async function prepareWebAccessForWorker({
 	store,
-	member,
-	template,
-	sessionMode,
 	envFilePath = resolveEnvFilePath(),
 }: {
 	store: Pick<PersonalAgentStore, "getPlatformSettings">;
-	member: TeamMember;
-	template: RoleTemplate | undefined;
-	sessionMode: WorkerSessionMode;
 	envFilePath?: string;
 }) {
-	if (sessionMode === "observer" || sessionMode === "verifier" || !isWebAccessRole(member, template)) return null;
 	const settings = store.getPlatformSettings();
-	if (!hasWebAccessGrant(member, settings.webAccessDeniedRoles)) return null;
-
 	const installed = await findInstalledPiWebAccess("pi");
 	if (!installed) {
 		return null;

@@ -4,11 +4,7 @@ import { classifyGithubFetches } from "../../pi-extensions/team-extension/web-fe
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
-import {
-	escapeWebAccessSlashCommand,
-	isPiWebAccessTool,
-	prepareWebAccessForWorker,
-} from "../pa-extensions/web-access/runtime.ts";
+import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
 import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -117,7 +113,6 @@ export async function executeWithWorkerPass(
 	input.signal.throwIfAborted();
 	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
 	const isDiscussionMode = Boolean(input.discussionMode);
-	const isVerifier = sessionMode === "verifier";
 	const matter = deps.store.getMatter(input.matterId);
 	const isMatterLead = !matter?.leadMemberId || input.member.id === matter.leadMemberId;
 	const actorUserId = input.run.startedByUserId ?? null;
@@ -158,13 +153,7 @@ export async function executeWithWorkerPass(
 			deps.store
 				.listMembers()
 				.some((member) => member.roleScope === "personal" && member.ownerUserId === actorUserId));
-	const inheritsLocalResources =
-		input.run.inheritLocalPiResources &&
-		!isArchitect &&
-		!isDiscussionMode &&
-		!isVerifier &&
-		sessionMode !== "observer" &&
-		input.workspace?.sourceType !== "cloned";
+	const inheritsLocalResources = input.run.inheritLocalPiResources && input.workspace?.sourceType !== "cloned";
 	const contextKey = JSON.stringify([
 		"v2",
 		input.workspace?.id ?? null,
@@ -197,9 +186,7 @@ export async function executeWithWorkerPass(
 	try {
 		const workspaceFolders = input.workspace ? deps.store.workspaceFolders.listFolders(input.workspace.id) : [];
 		const workspaceCustomizations =
-			!isArchitect && !isVerifier && workspaceFolders.length > 0
-				? buildWorkspaceCustomizations(workspaceFolders)
-				: null;
+			workspaceFolders.length > 0 ? buildWorkspaceCustomizations(workspaceFolders) : null;
 		const attachedContextFiles = workspaceCustomizations
 			? buildAttachedFolderContextFiles(workspaceCustomizations)
 			: [];
@@ -214,36 +201,26 @@ export async function executeWithWorkerPass(
 							.map((f) => `- \`${f.label}\`: \`${f.path}\``),
 					].join("\n")
 				: undefined;
-		const baseSkillPaths = isVerifier ? [] : await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
+		const baseSkillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
 		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths])];
 		const pstack = await preparePstackForWorker(deps.pstackDir, sessionMode);
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
 		const sessionFile = previous ? await validateSavedSession(previous, cwd) : undefined;
-		const baseTools = isArchitect
-			? []
-			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter(
-					(tool) => tool !== "mcp" && !isPiWebAccessTool(tool),
-				);
-		const isReadOnlyPass = isVerifier || sessionMode === "observer";
-		const requestedTools = isReadOnlyPass ? baseTools.filter((tool) => tool === "read") : baseTools;
+		// Role declarations describe responsibilities, not the runtime tool allowlist.
+		const requestedTools = ["read", process.platform === "win32" ? "powershell" : "bash", "edit", "write"];
 		const webAccess = await prepareWebAccessForWorker({
 			store: deps.store,
-			member: input.member,
-			template,
-			sessionMode,
 			envFilePath: resolve(deps.defaultCwd, ".env"),
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
-		const mcpDependencies = isArchitect || isReadOnlyPass ? [] : (template?.mcpDependencies ?? []);
 		const requiredTools = [
 			...requestedTools,
 			...teamExtension.tools,
 			...humanQuestion.tools,
 			...(pstack?.tools ?? []),
 		];
-		const toolPatterns = [...requiredTools, ...mcpDependencies.map((name) => `mcp__${name}__*`)];
 		const stagedExperiences: Array<{
 			scope: MemoryScope;
 			category: MemoryCategory;
@@ -593,13 +570,12 @@ export async function executeWithWorkerPass(
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", teamExtension.entry);
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
-		if (!isReadOnlyPass) for (const extension of deps.extensions) args.push("--extension", extension);
+		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
-		if (mcpDependencies.length === 0) args.push("--no-mcp");
-		else args.push("--extension", "builtin:mcp");
+		args.push("--extension", "builtin:mcp");
 		for (const path of skillPaths) args.push("--skill", path);
 		if (pstack) args.push(...pstack.args);
-		args.push("--tools", toolPatterns.join(","));
+		args.push("--tools", "*");
 
 		const effectiveMember = activeOrgId ? deps.store.resolveMemberForOrg(activeOrgId, input.member) : input.member;
 		const useRoleGitIdentity = Boolean(organization?.useRoleGitIdentity);
@@ -677,7 +653,7 @@ export async function executeWithWorkerPass(
 			env: {
 				...teamExtension.buildEnvironment({
 					bridgeEnv: bridge.env,
-					requiredTools: toolPatterns,
+					requiredTools,
 					workspaceRoot: input.workspace ? cwd : undefined,
 					attachedContextFiles,
 					memberContext: [
@@ -879,8 +855,6 @@ export async function executeWithWorkerPass(
 		const tools = await bridge.waitReady();
 		observedTools = tools;
 		const missing = requiredTools.filter((name) => !tools.includes(name));
-		for (const dependency of mcpDependencies)
-			if (!tools.some((name) => name.startsWith(`mcp__${dependency}__`))) missing.push(`MCP:${dependency}`);
 		if (missing.length) throw new Error(`Required capabilities unavailable: ${missing.join(", ")}`);
 		deps.store.appendMessage({
 			matterId: input.matterId,

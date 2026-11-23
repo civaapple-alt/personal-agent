@@ -15,8 +15,6 @@ import { PSTACK_TOOL_NAME } from "../pa-extensions/pstack-methods/runtime.ts";
 import { TEAM_EXTENSION_TOOLS } from "../pa-extensions/team-extension/runtime.ts";
 import { findInstalledPiWebAccess } from "../pa-extensions/web-access/package.ts";
 import {
-	hasWebAccessGrant,
-	isWebAccessRole,
 	PI_WEB_SEARCH_TOOLS,
 	type ResolvedWebSearchProvider,
 	resolveEffectiveWebSearchProvider,
@@ -35,7 +33,6 @@ export interface OrchestratorRuntimeConfig {
 	noSession: boolean;
 	extensions: string[];
 	pstackDir: string | null;
-	webAccessDeniedRoles?: Record<string, string>;
 	webSearchProvider?: WebSearchProviderPreference;
 	systemOneEnabled?: boolean;
 	templates: RoleTemplate[];
@@ -261,8 +258,8 @@ const ISOLATION_MODES: RuntimeIsolationMode[] = [
 		label: "常规岗位执行",
 		usage: "主责 / 内部委托 / 旁听 / 独立验收",
 		sessionStrategy: "按事项、成员与作用域保存会话",
-		extensionsPolicy: "按岗位和运行模式装配",
-		toolsPolicy: "旁听与独立验收的基础工具仅保留 read",
+		extensionsPolicy: "所有岗位使用已配置的运行扩展",
+		toolsPolicy: "所有岗位使用可用的运行工具",
 	},
 	{
 		id: "decision",
@@ -277,16 +274,16 @@ const ISOLATION_MODES: RuntimeIsolationMode[] = [
 		label: "事项中的角色架构师",
 		usage: "事项内规划 / 诊断",
 		sessionStrategy: "事项作用域 Pi 会话",
-		extensionsPolicy: "团队帮助及已配置扩展 / Skills",
-		toolsPolicy: "无业务读写工具",
+		extensionsPolicy: "已配置扩展 / Skills",
+		toolsPolicy: "所有岗位使用可用的运行工具",
 	},
 	{
 		id: "architect-aux",
 		label: "独立角色架构师",
 		usage: "团队协作体检 / 角色规划对话",
 		sessionStrategy: "无持久 Pi 会话；传入对话内容",
-		extensionsPolicy: "禁用扩展和 MCP；显式加载角色 Skill",
-		toolsPolicy: "无业务工具",
+		extensionsPolicy: "已配置扩展 / MCP；显式加载角色 Skill",
+		toolsPolicy: "共享运行工具；提案需用户确认",
 	},
 	{
 		id: "distill",
@@ -377,13 +374,11 @@ export async function buildRuntimeOverview(options: {
 	pstackInfo.installedRoot = pstackInstalledRoot;
 
 	const templateById = new Map(config.templates.map((tpl) => [tpl.id, tpl]));
-	const webAccessRoles = activeMembers
-		.filter((member) => isWebAccessRole(member, templateById.get(member.templateId)))
-		.map((member) => ({
-			id: member.id,
-			name: member.displayName,
-			enabled: Boolean(webAccessPackage) && hasWebAccessGrant(member, config.webAccessDeniedRoles),
-		}));
+	const webAccessRoles = activeMembers.map((member) => ({
+		id: member.id,
+		name: member.displayName,
+		enabled: Boolean(webAccessPackage),
+	}));
 	const webAccessEnabledRoles = webAccessRoles.filter((role) => role.enabled);
 	const webAccessExtensionItem: RuntimeExtensionItem = {
 		id: "pi-web-access",
@@ -392,7 +387,7 @@ export async function buildRuntimeOverview(options: {
 		status: webAccessEnabledRoles.length === 0 ? "inactive" : isOwner && !webAccessPackage ? "error" : "conditional",
 		entryPath: webAccessPackage?.entry ?? null,
 		fileStatus: webAccessPackage ? "present" : "unknown",
-		scopeSummary: "仅授权岗位的讨论、主责和内部委托",
+		scopeSummary: "所有岗位执行，包括旁听与独立验收",
 		description: "搜索公开网页并读取已保存的搜索结果。",
 		registeredTools: [...PI_WEB_SEARCH_TOOLS],
 		hooks: ["session_start 工具握手"],
@@ -475,11 +470,11 @@ export async function buildRuntimeOverview(options: {
 		id: "pi-builtin-mcp",
 		name: "builtin:mcp",
 		sourceKind: "pi_builtin",
-		status: mcpServers.length > 0 ? "conditional" : "inactive",
+		status: "conditional",
 		entryPath: "builtin:mcp",
 		fileStatus: "builtin",
-		scopeSummary: mcpServers.length > 0 ? "仅声明了 mcpDependencies 的角色启用" : "无角色声明，保持 --no-mcp",
-		description: "接入角色声明的 Pi MCP 服务工具前缀。",
+		scopeSummary: "所有岗位可使用已配置的 Pi MCP 服务",
+		description: "接入 Pi 已配置的 MCP 服务；角色声明仅供参考。",
 		registeredTools: mcpServers.map((server) => `mcp__${server}__*`),
 		hooks: ["session_start 工具握手"],
 		declaredByRoles: mcpDeclaringRoles,

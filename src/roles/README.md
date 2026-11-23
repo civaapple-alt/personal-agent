@@ -12,6 +12,6 @@ frontmatter 是本项目支持的简单字段/数组格式，不是完整 YAML �
 
 目录加载只把角色 Markdown 作为资产，排除 `README.md` 文档。解析器使用五个英文标题。创建和调整通过 `formatRoleTemplateBody` 写英文标题。导入后直接导出会保留原 Markdown 正文。
 
-导出不会自动附带私有数据库记录，但也不能自动识别用户写入正文中的秘密。`skills`、`tools`、`mcpDependencies` 由 [执行装配](../orchestrator/README.md)落实，解析成功不代表能力可用。
+导出不会自动附带私有数据库记录，但也不能自动识别用户写入正文中的秘密。`skills` 由 [执行装配](../orchestrator/README.md)加载；`tools` 和 `mcpDependencies` 是角色建议，不限制共享运行工具，也不代表能力已经可用。
 
 从仓库根运行 `node --test test/phase2-orchestrator.test.ts`，验证目录文档与四个初始资产共存、正文解析及序列化。修改导入/导出接口时再按 [server](../server/README.md)选择对应覆盖。

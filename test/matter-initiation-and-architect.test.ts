@@ -495,7 +495,7 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 	try {
 		const initialCount = store.listMembers().length;
 
-		// Turn 1: Meta-Bot asks clarifying Intake questions with toolless isolation (--tools "") and team healthcheck digest
+		// Turn 1: Meta-Bot asks clarifying Intake questions with shared runtime tools (--tools "*") and team healthcheck digest
 		const turn1Resp = await fetch(`${url}/api/members/architect/chat`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -516,7 +516,7 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 		assert.equal(turn1.followUpQuestions.length, 1);
 		assert.ok(observedPrompts[0]!.args.includes("--tools"));
 		const toolsVal = observedPrompts[0]!.args[observedPrompts[0]!.args.indexOf("--tools") + 1];
-		assert.equal(toolsVal, "");
+		assert.equal(toolsVal, "*");
 		assert.ok(observedPrompts[0]!.prompt.includes("## Recent team health evidence"));
 		assert.equal(store.listMembers().length, initialCount);
 
@@ -666,8 +666,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		const context = opts.env?.PA_TURN_CONTEXT ?? "";
 		const args = opts.args ?? [];
 		return {
-			start: async () =>
-				reportReady(opts, memberId === ROLE_ARCHITECT_MEMBER_ID ? ["read_pa_help"] : ["read", "read_pa_help"]),
+			start: async () => reportReady(opts),
 			stop: async () => {},
 			onNotice: () => () => {},
 			setDialogHandler: () => {},
@@ -783,7 +782,7 @@ test("Built-in Role Architect acts as a persistent AI role without polluting aut
 		assert.equal(archTurn.observerMessages?.length ?? 0, 0);
 		assert.equal(archTurn.replyText, "已检查现有分工与工具权限，建议收窄产品经理权限。");
 		const archRun = capturedRuns.at(-1)!;
-		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "read_pa_help");
+		assert.equal(archRun.args[archRun.args.indexOf("--tools") + 1], "*");
 		assert.ok(archRun.context.includes("## Current business roles"));
 		const archPersistedMsg = store
 			.listMessages(archTurn.matter.id, "user")

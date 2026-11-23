@@ -134,7 +134,6 @@ export class TeamOrchestrator {
 			noSession: this.noSession,
 			extensions: [...this.extensions],
 			pstackDir: this.pstackDir ?? null,
-			webAccessDeniedRoles: this.store.getPlatformSettings().webAccessDeniedRoles,
 			webSearchProvider: this.store.getPlatformSettings().webSearchProvider,
 			systemOneEnabled: this.store.getPlatformSettings().systemOneEnabled,
 			templates: this.listTemplates(),
@@ -777,7 +776,7 @@ export class TeamOrchestrator {
 		);
 	}
 
-	/** Run an isolated multi-turn Role Architect Meta-Bot conversation (read-only, proposes 1..N blueprints). */
+	/** Run an isolated multi-turn Role Architect conversation that proposes 1..N blueprints. */
 	async chatWithRoleArchitect(input: MetaArchitectChatInput): Promise<MetaArchitectChatResult> {
 		return this.runTrackedAuxTask("Role architect session was aborted", input.signal, (signal) =>
 			runMetaArchitectChat(
@@ -785,6 +784,8 @@ export class TeamOrchestrator {
 					store: this.store,
 					defaultCwd: this.defaultCwd,
 					skillsDir: this.skillsDir,
+					extensions: this.extensions,
+					pstackDir: this.pstackDir,
 					workerFactory: this.workerFactory,
 					templatesById: this.templatesById,
 				},

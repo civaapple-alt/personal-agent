@@ -25,35 +25,27 @@ export function WebAccessSettings({
 	onNotice?: (message: string) => void;
 	onError?: (message: string) => void;
 }) {
-	const { installedVersion, roles, provider: savedProvider = "auto", effectiveProvider = null } = base.webAccess;
-	const [draft, setDraft] = useState<string[] | null>(null);
+	const { installedVersion, provider: savedProvider = "auto", effectiveProvider = null } = base.webAccess;
 	const [providerDraft, setProviderDraft] = useState<"auto" | "deepseek" | "exa" | "kimi" | null>(null);
 	const [pending, setPending] = useState<"install" | "save" | null>(null);
 	const [testQuery, setTestQuery] = useState("DeepSeek Search API");
 	const [testing, setTesting] = useState(false);
 	const [testResult, setTestResult] = useState<WebAccessTestResultDto | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const selected = new Set(draft ?? roles.filter((role) => role.enabled).map((role) => role.id));
 	const activeProvider = providerDraft ?? savedProvider;
-	const changed = roles.some((role) => selected.has(role.id) !== role.enabled) || activeProvider !== savedProvider;
-	const canSave = changed && (Boolean(installedVersion) || selected.size === 0);
+	const changed = activeProvider !== savedProvider;
+	const canSave = changed && Boolean(installedVersion);
 
 	async function update(action: "install" | "save") {
 		setPending(action);
 		setError(null);
 		try {
 			const { overview } =
-				action === "install"
-					? await installRuntimeWebAccess()
-					: await configureRuntimeWebAccess(
-							roles.filter((role) => selected.has(role.id)).map((role) => role.id),
-							activeProvider,
-						);
+				action === "install" ? await installRuntimeWebAccess() : await configureRuntimeWebAccess(activeProvider);
 			if (onOverviewChange) onOverviewChange(overview);
 			else await onRefresh();
-			setDraft(null);
 			setProviderDraft(null);
-			onNotice?.(action === "install" ? "pi-web-access 已安装，可以为岗位启用" : "网页检索配置已保存");
+			onNotice?.(action === "install" ? "pi-web-access 已安装，角色下次运行时可使用" : "网页检索配置已保存");
 		} catch (cause) {
 			const message = cause instanceof Error ? cause.message : String(cause);
 			setError(message);
@@ -89,8 +81,7 @@ export function WebAccessSettings({
 		<div className="settings-pstack-panel">
 			{installedVersion ? (
 				<p className="muted-hint">
-					Pi 已安装 v{installedVersion}。默认允许全部 AI
-					岗位（含新建角色）使用网页检索，可取消勾选以单独禁用，保存后下次运行生效。
+					Pi 已安装 v{installedVersion}。所有 AI 角色均可使用网页检索，供应商配置在下次运行生效。
 				</p>
 			) : (
 				<div className="actions-row compact">
@@ -107,7 +98,7 @@ export function WebAccessSettings({
 					</span>
 				</div>
 			)}
-			{(installedVersion || roles.some((role) => role.enabled)) && (
+			{installedVersion && (
 				<form
 					className="settings-pstack-setup"
 					onSubmit={(event) => {
@@ -133,31 +124,12 @@ export function WebAccessSettings({
 							<option value="kimi">Moonshot / Kimi（需配置 MOONSHOT_API_KEY 或 Pi /login kimi-coding）</option>
 						</select>
 					</label>
-					<fieldset className="settings-web-access-roles" disabled={pending !== null}>
-						<legend>允许网页检索的 AI 岗位</legend>
-						{roles.map((role) => (
-							<label key={role.id}>
-								<input
-									type="checkbox"
-									checked={selected.has(role.id)}
-									disabled={!installedVersion && !selected.has(role.id)}
-									onChange={(event) =>
-										setDraft(
-											event.target.checked
-												? [...selected, role.id]
-												: [...selected].filter((id) => id !== role.id),
-										)
-									}
-								/>
-								{role.name}
-							</label>
-						))}
-					</fieldset>
+
 					<div className="actions-row compact">
 						<button className="btn-pill-dark" type="submit" disabled={!canSave || pending !== null}>
 							{pending === "save" ? "保存中…" : "保存配置"}
 						</button>
-						{changed && <span className="muted-hint">有未保存修改（包含默认供应商与岗位权限）</span>}
+						{changed && <span className="muted-hint">默认供应商有未保存修改</span>}
 					</div>
 				</form>
 			)}
@@ -166,7 +138,7 @@ export function WebAccessSettings({
 				<EnvCredentialsSettings
 					embedded
 					title="检索供应商密钥（.env）"
-					subtitle="保存后写入服务根目录 .env（权限 0600），前端不回显明文，仅注入已获 pi-web-access 授权的岗位进程。"
+					subtitle="保存后写入服务根目录 .env（权限 0600），前端不回显明文，注入使用 pi-web-access 的岗位进程。"
 					items={envItems}
 					onOverviewChange={onOverviewChange}
 					onRefresh={onRefresh}

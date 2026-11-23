@@ -63,7 +63,7 @@ export function buildTeamCapabilities(
 		if (snapshot) snapshots.set(message.senderId, snapshot);
 	}
 	const lines = [
-		"Team capability cards: role definitions are declarations, not proof of skill or permissions. Runtime records below are past internal-delegation startup snapshots for this matter and workspace, not live availability or proof of a successful tool call. Unknown means no matching record. Tool access varies by mode and turn.",
+		"Team capability cards: role definitions are declarations, not proof of skill or permissions. Runtime records below are past internal-delegation startup snapshots for this matter and workspace, not live availability or proof of a successful tool call. Unknown means no matching record. Configured runtime tools are shared across role execution modes; actual availability may change between turns.",
 		"A missing internal-delegation snapshot for the lead does not mean the lead has not started; the lead's current startup is reported separately.",
 	];
 	for (const member of input.members.slice(0, 40)) {
@@ -77,7 +77,7 @@ export function buildTeamCapabilities(
 			[
 				`- ${compact(member.id, 100)} · ${compact(member.displayName, 100)} (${compact(member.roleTitle, 100)}): ${member.id === input.matter.leadMemberId ? "lead" : consult ? "consultable" : "not consultable"}${observer ? ", observer" : ""}.`,
 				template
-					? `  Role definition — responsibilities: ${compact(template.sections.responsibilitiesAndBoundaries, 360) || "not declared"}; boundaries: ${list(template.antiJobs ?? [], 5)}; configured base tools: ${list(template.tools)}; declared skills: ${list(template.skills)}; declared MCP dependencies: ${list(template.mcpDependencies)}.`
+					? `  Role definition — responsibilities: ${compact(template.sections.responsibilitiesAndBoundaries, 360) || "not declared"}; boundaries: ${list(template.antiJobs ?? [], 5)}; role tool suggestions (not an allowlist): ${list(template.tools)}; declared skills: ${list(template.skills)}; declared MCP dependencies: ${list(template.mcpDependencies)}.`
 					: "  Role definition unavailable; responsibilities, boundaries, tools, and skills are unknown.",
 				snapshot
 					? `  Last internal startup: ${snapshot.createdAt}; discussion mode: ${snapshot.discussion === null ? "unknown" : snapshot.discussion}; source turn: ${snapshot.turnId ?? "unknown"}; tools: ${list(snapshot.tools, 40)}.`
@@ -87,7 +87,7 @@ export function buildTeamCapabilities(
 	}
 	if (input.members.length > 40) lines.push(`Showing 40 of ${input.members.length} visible members.`);
 	lines.push(
-		"Choose collaborators based on the task, responsibilities, boundaries, consult permission and available evidence. If required capability is unknown, say so and verify only when needed. Do not assume that a role title, a tool name, or a previous startup proves successful execution or current availability. Having bash can allow writes even without write/edit tools; Pi is not an OS sandbox. Observer and independent verification use narrower tools than ordinary internal delegation.",
+		"Choose collaborators based on the task, responsibilities, boundaries, consult permission and available evidence. If required capability is unknown, say so and verify only when needed. Do not assume that a role title, a tool name, or a previous startup proves successful execution or current availability. Having bash can allow writes even without write/edit tools; Pi is not an OS sandbox. Observer and independent verification can use the same runtime tools; their collaboration responsibilities remain distinct.",
 	);
 	return lines.join("\n");
 }

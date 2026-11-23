@@ -1,4 +1,4 @@
-import { buildRuntimeOverview, probePiCli } from "../../orchestrator/runtime-info.ts";
+import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
 import { choice, createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import {
 	isManagedEnvKey,
@@ -8,9 +8,7 @@ import {
 	resolveEnvFilePath,
 	updateManagedDotEnv,
 } from "../../pa-extensions/env-credentials.ts";
-import { findInstalledPiWebAccess } from "../../pa-extensions/web-access/package.ts";
 import {
-	isWebAccessRole,
 	isWebSearchProviderPreference,
 	resolveEffectiveWebSearchProvider,
 } from "../../pa-extensions/web-access/runtime.ts";
@@ -270,46 +268,16 @@ export async function handleWebAccessRoutes(
 			throw new HttpRequestError(502, error instanceof Error ? error.message : String(error));
 		}
 	} else {
-		const { roleIds, provider } = await readJsonBody(req);
-		if (!Array.isArray(roleIds) || !roleIds.every((id): id is string => typeof id === "string")) {
-			throw new HttpRequestError(400, "请提供允许使用网页检索的岗位列表");
-		}
-		if (provider !== undefined && !isWebSearchProviderPreference(provider)) {
+		const { provider } = await readJsonBody(req);
+		if (!isWebSearchProviderPreference(provider)) {
 			throw new HttpRequestError(400, "不支持的网页检索默认供应商（可选 auto / deepseek / exa / kimi）");
 		}
-		const ids = [...new Set(roleIds)];
-		if (ids.length > 0) {
-			const pi = await (ctx.probePiCli ?? probePiCli)();
-			if (!pi.available || !(await findInstalledPiWebAccess(pi.executable))) {
-				throw new HttpRequestError(409, "请先安装 pi-web-access");
-			}
-		}
-		const allowedSet = new Set(ids);
-		for (const id of ids) {
-			const member = store.getMember(id);
-			if (!member || !isWebAccessRole(member, orchestrator.getTemplateForMember(member))) {
-				throw new HttpRequestError(400, "请选择可参与业务事项的岗位");
-			}
-		}
-		const deniedEntries = store
-			.listMembers()
-			.filter(
-				(member) =>
-					isWebAccessRole(member, orchestrator.getTemplateForMember(member)) && !allowedSet.has(member.id),
-			)
-			.map((member) => [member.id, member.createdAt] as const);
-		store.updatePlatformSettings(
-			{
-				webAccessDeniedRoles: Object.fromEntries(deniedEntries),
-				...(provider !== undefined ? { webSearchProvider: provider } : {}),
-			},
-			ctx.defaultWorkspacesRoot,
-		);
+		store.updatePlatformSettings({ webSearchProvider: provider }, ctx.defaultWorkspacesRoot);
 		auditActorAction(ctx, req, actor, {
 			action: "admin.web_access_configure",
 			targetType: "runtime_extension",
 			targetId: "pi-web-access",
-			detail: { roleIds: ids, ...(provider !== undefined ? { provider } : {}) },
+			detail: { provider },
 		});
 	}
 

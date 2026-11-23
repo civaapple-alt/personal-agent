@@ -12,7 +12,7 @@
 
 ## Web Access
 
-发现和安装 `pi-web-access`，为获授权的岗位装配网页检索工具。 [web-access 维护入口](web-access/README.md)
+发现和安装 `pi-web-access`，为事项岗位执行装配网页检索工具。 [web-access 维护入口](web-access/README.md)
 
 ## Human Question
 

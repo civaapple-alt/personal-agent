@@ -244,17 +244,18 @@ export async function runObserverSmoke(input: {
 				observerWorkers.length === 3 &&
 				observerWorkers.every(
 					(worker) =>
-						worker.tools.length === 2 &&
-						worker.tools.includes("read") &&
-						worker.tools.includes("read_pa_help") &&
+						worker.tools.includes("*") &&
 						!worker.canSaveSpace &&
 						!worker.canDelegate &&
 						!worker.canExperience &&
-						worker.mcpDisabled,
+						!worker.mcpDisabled,
 				) &&
 				observerWorkers.every((worker) => {
 					const outcome = outcomes.find((row) => row.workerId === worker.id);
-					return outcome?.status === "success" && outcome.tools.every((tool) => worker.tools.includes(tool.name));
+					return (
+						outcome?.status === "success" &&
+						(worker.tools.includes("*") || outcome.tools.every((tool) => worker.tools.includes(tool.name)))
+					);
 				}),
 			leadBeforeObserver:
 				observerWorkers.length === 3 &&

@@ -151,12 +151,11 @@ export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDt
 }
 
 export function configureRuntimeWebAccess(
-	roleIds: string[],
-	provider?: "auto" | "deepseek" | "exa" | "kimi",
+	provider: "auto" | "deepseek" | "exa" | "kimi",
 ): Promise<{ overview: RuntimeOverviewDto }> {
 	return requestJson("/api/admin/runtime/web-access", {
 		method: "PATCH",
-		body: JSON.stringify({ roleIds, ...(provider !== undefined ? { provider } : {}) }),
+		body: JSON.stringify({ provider }),
 	});
 }
 

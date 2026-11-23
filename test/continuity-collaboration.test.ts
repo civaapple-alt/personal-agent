@@ -77,8 +77,16 @@ class SessionWorker implements RpcWorkerLike {
 				on: (event, handler) => {
 					if (event === "session_start") onStart = handler as () => Promise<void>;
 				},
-				getActiveTools: () => ["read", "bash", "edit", "write", ...this.tools.keys()],
-				getAllTools: () => ["read", "bash", "edit", "write", ...this.tools.keys()].map((name) => ({ name })),
+				getActiveTools: () => [
+					...new Set([...JSON.parse(this.options.env?.PA_REQUIRED_TOOLS ?? "[]"), ...this.tools.keys()]),
+				],
+				getAllTools: () =>
+					[
+						...new Set<string>([
+							...JSON.parse(this.options.env?.PA_REQUIRED_TOOLS ?? "[]"),
+							...this.tools.keys(),
+						]),
+					].map((name) => ({ name })),
 				setActiveTools: () => {},
 			});
 			if (this.options.args?.includes(resolveBuiltinExtensionPath("human-question"))) {
@@ -461,7 +469,7 @@ test("team discussion is opt-in, preserves the roster, and uses separate Pi sess
 	);
 	assert.equal(discussionWorkers[1]?.options.sessionFile, undefined);
 	const engineeringArgs = discussionWorkers[1]?.options.args ?? [];
-	assert.ok(engineeringArgs[engineeringArgs.indexOf("--tools") + 1]?.split(",").includes("bash"));
+	assert.equal(engineeringArgs[engineeringArgs.indexOf("--tools") + 1], "*");
 	assert.match(discussionWorkers[1]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Discussion chat mode/);
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
 	assert.equal(f.store.getMatter(first.matter.id)?.status, "open");
@@ -1415,10 +1423,7 @@ test("fails clearly for missing sessions, skills or required runtime tools and c
 		...f.options,
 		templates: f.templates.map((template) => ({ ...template, tools: ["custom_research"] })),
 	});
-	await assert.rejects(
-		missingTool.dispatchMatter({ prompt: "能力" }),
-		/Required capabilities unavailable: custom_research/,
-	);
+	await missingTool.dispatchMatter({ prompt: "能力" });
 	assert.ok(f.workers.every((worker) => worker.stopped));
 	let stopped = false;
 	const startupFailure = new TeamOrchestrator({
@@ -1543,9 +1548,9 @@ test("independent review links to a completed assignment and reviews the saved s
 			assert.match(prompt, /\[Acceptance criteria\]/);
 			assert.match(prompt, /\[Document snapshot\]/);
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]");
-			assert.ok(manifest.every((name: string) => ["read", "read_pa_help"].includes(name)));
-			assert.ok(worker.options.args?.includes("--no-mcp"));
-			assert.ok(!worker.options.args?.includes("/tmp/operator-extension.ts"));
+			assert.ok(["read", "bash", "edit", "write"].every((name) => manifest.includes(name)));
+			assert.ok(worker.options.args?.includes("builtin:mcp"));
+			assert.ok(worker.options.args?.includes("/tmp/operator-extension.ts"));
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("propose_experience"), false);
@@ -1887,9 +1892,9 @@ test("proactive observer chimes in with independent user bubble while silent obs
 			assert.equal(worker.options.env?.PA_CAN_SAVE_SPACE, "false");
 			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]") as string[];
-			assert.ok(!manifest.some((name) => ["bash", "edit", "write"].includes(name) || name.startsWith("mcp__")));
-			assert.ok(worker.options.args?.includes("--no-mcp"));
-			assert.ok(!worker.options.args?.includes("/tmp/operator-extension.ts"));
+			assert.ok(["read", "bash", "edit", "write"].every((name) => manifest.includes(name)));
+			assert.ok(worker.options.args?.includes("builtin:mcp"));
+			assert.ok(worker.options.args?.includes("/tmp/operator-extension.ts"));
 			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.match(ctx, /## Observer participation/);
@@ -2090,7 +2095,7 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 		assert.match(prompt, /Tools observed during this worker's startup handshake: .*read_pa_help/);
 		assert.match(turn, /engineering-manager.*consultable/);
 		assert.match(turn, /Role definition — responsibilities/);
-		assert.match(turn, /configured base tools/);
+		assert.match(turn, /role tool suggestions/);
 		assert.match(turn, /historical_marker/);
 		assert.doesNotMatch(turn, /outside_workspace_marker|outside_org_marker|observer_marker/);
 		assert.match(turn, /not live availability/);
