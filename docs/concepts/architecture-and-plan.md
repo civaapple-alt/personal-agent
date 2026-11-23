@@ -38,7 +38,7 @@
 | 服务预览 | `PreviewManager` 与预览 HTTP API | 启停本地服务或登记外部链接；预览索引和进程句柄在服务内存中，不是持久部署记录 |
 | 工程验证 | Biome、`tsc`、`node:test` | 构建、代码检查、回归和隔离实机脚本各有独立入口 |
 
-Pi 验证版本为 1.5.2。成员的 provider、model 和 thinking level 来自成员配置，启动时应用；当前没有根据任务复杂度自动选择或调档模型的策略。RPC 封装中存在的方法也不等于网页已提供对应操作。
+Pi 验证版本为 1.5.2。模型按事项主责、组织岗位、平台默认及 Pi 默认的顺序选择；当前没有根据任务复杂度自动选择或调档模型的策略。RPC 封装中存在的方法也不等于网页已提供对应操作。
 
 ### 当前架构图
 
@@ -158,7 +158,7 @@ flowchart TB
 | --- | --- | --- |
 | `Organization` | 组织关联成员及其权限、邀请、启用的 AI 角色和组织主联系人。仓库和事项按组织归属维护访问范围。组织可配置默认标记、Git 邮箱域名和简介 | 企业 SSO |
 | `RoleTemplate` | Markdown 定义职责、方法、`antiJobs`（不做边界）、工具依赖、协作和验证约定及多租户作用域（`global`/`org`/`personal`）；内置模板位于 `roles/`，工作台自建/调整角色及确认落盘的 Skill 按作用域持久化于 `.data/roles/`（含 `<roleId>/<roleId>.md` 角色包与包内 `skills/`）及 `.data/skills/`，内置 `role-architect` 作为系统元角色与业务池隔离 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
-| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、模型配置、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏）；非默认业务成员支持经 `DELETE /api/members/:id` 安全删除并联动清理记忆与旁听引用 | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
+| `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏）；非默认业务成员支持经 `DELETE /api/members/:id` 安全删除并联动清理记忆与旁听引用 | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
 | `MemberMemory` | 成员经验与记忆支持岗位、组织、仓库三个作用域，记录类别、核验状态、来源、替代关系、注入次数和反馈。执行时按当前上下文筛选经验 | 后台定时复盘与工作区级记忆加密 |
 | `Matter` | 事项标题、摘要、组织/工作区、负责人、AI 参与模式与范围（支持 `solo` / `lead_consult` / `lead_review` / `human_first` 与按人 `observerMemberIds`）、旁听开关、人类协作名单与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
 | `MatterMessage` | `user`、`internal_collab`、`notice` 三个通道及元数据（如 `observerIntervention`、`progressSnapshot`、截断安全的工具摘要 JSON） | 完整逐事件审计库；并非每个 Pi 流式事件都落入 SQLite |

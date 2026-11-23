@@ -1,7 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { RoleScope } from "../../roles/types.ts";
-import type { ThinkingLevel } from "../../rpc/types.ts";
 import type { TeamMember } from "../types.ts";
 import { defaultMemberGitName, mapMemberRow, nowIso, parseUniqueIds } from "./helpers.ts";
 
@@ -19,9 +18,6 @@ export class MemberRepo {
 		displayName: string;
 		roleTitle: string;
 		isPrimaryContact: boolean;
-		provider?: string;
-		model?: string;
-		thinkingLevel?: ThinkingLevel;
 		keywords: string[];
 		gitName?: string;
 		gitEmail?: string;
@@ -61,7 +57,7 @@ export class MemberRepo {
 				.prepare(
 					`UPDATE team_members
 					 SET template_id = ?, display_name = ?, role_title = ?, is_primary_contact = ?,
-					     provider = ?, model = ?, thinking_level = ?, keywords_json = ?,
+					     keywords_json = ?,
 					     git_name = ?, git_email = ?, identity_summary = ?,
 					     role_scope = ?, owner_org_id = ?, owner_user_id = ?, updated_at = ?
 					 WHERE id = ?`,
@@ -71,9 +67,6 @@ export class MemberRepo {
 					input.displayName,
 					input.roleTitle,
 					isPrimaryContact,
-					input.provider ?? existing?.provider ?? "",
-					input.model ?? existing?.model ?? "",
-					input.thinkingLevel ?? existing?.thinkingLevel ?? "off",
 					JSON.stringify(input.keywords),
 					gitName,
 					gitEmail,
@@ -92,9 +85,9 @@ export class MemberRepo {
 			.prepare(
 				`INSERT INTO team_members (
 					id, template_id, display_name, role_title, is_primary_contact,
-					provider, model, thinking_level, keywords_json,
+					keywords_json,
 					git_name, git_email, identity_summary, role_scope, owner_org_id, owner_user_id, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				input.id,
@@ -102,9 +95,6 @@ export class MemberRepo {
 				input.displayName,
 				input.roleTitle,
 				isPrimaryContact,
-				input.provider ?? "",
-				input.model ?? "",
-				input.thinkingLevel ?? "off",
 				JSON.stringify(input.keywords),
 				gitName,
 				gitEmail,

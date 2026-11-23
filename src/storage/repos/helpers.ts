@@ -1,5 +1,4 @@
 import { readStoredModelSelection } from "../../rpc/model-selection.ts";
-import type { ThinkingLevel } from "../../rpc/types.ts";
 import type {
 	Matter,
 	MatterMessage,
@@ -153,9 +152,6 @@ export function mapMemberRow(row: Record<string, unknown>): TeamMember {
 		displayName,
 		roleTitle,
 		isPrimaryContact: roleScope === "global" ? Boolean(row.is_primary_contact) : false,
-		provider: String(row.provider),
-		model: String(row.model),
-		thinkingLevel: row.thinking_level as ThinkingLevel,
 		keywords: JSON.parse(String(row.keywords_json)) as string[],
 		gitName: rawGitName || defaultMemberGitName({ id, displayName, roleTitle }),
 		gitEmail: rawGitEmail || `${id}@team.local`,

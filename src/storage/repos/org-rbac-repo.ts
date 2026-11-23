@@ -427,9 +427,6 @@ export class OrgRbacRepo {
 				return {
 					...member,
 					displayName: cfg.displayNameOverride ?? member.displayName,
-					provider: cfg.providerOverride ?? member.provider,
-					model: cfg.modelOverride ?? member.model,
-					thinkingLevel: cfg.thinkingLevelOverride ?? member.thinkingLevel,
 					gitName: cfg.gitNameOverride?.trim() || member.gitName,
 					gitEmail: cfg.gitEmailOverride?.trim() || member.gitEmail,
 					isPrimaryContact: hasPrimaryOverride ? cfg.isPrimaryContact : member.isPrimaryContact,

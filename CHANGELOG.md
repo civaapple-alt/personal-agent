@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove obsolete per-member model metadata; active model selection remains scoped to matter, organization role, and platform settings.
+
 - Remove obsolete execution-confirmation compatibility; human decisions use planning and role clarification.
 
 - Remove the historical delivered matter status; documents and their feedback live in Spaces.

@@ -129,19 +129,12 @@ export function applyOrgAiRoleOverrides(
 		const nextGitName = cfg.gitNameOverride?.trim() || m.gitName;
 		const nextGitEmail = cfg.gitEmailOverride?.trim() || m.gitEmail;
 		const nextDisplayName = cfg.displayNameOverride?.trim() || m.displayName;
-		const nextModel = cfg.modelOverride?.trim() || m.model;
-		if (
-			nextGitName === m.gitName &&
-			nextGitEmail === m.gitEmail &&
-			nextDisplayName === m.displayName &&
-			nextModel === m.model
-		) {
+		if (nextGitName === m.gitName && nextGitEmail === m.gitEmail && nextDisplayName === m.displayName) {
 			return m;
 		}
 		return {
 			...m,
 			displayName: nextDisplayName,
-			model: nextModel,
 			gitName: nextGitName,
 			gitEmail: nextGitEmail,
 		};

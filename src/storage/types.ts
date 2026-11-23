@@ -167,10 +167,6 @@ export interface TeamMember {
 	displayName: string;
 	roleTitle: string;
 	isPrimaryContact: boolean;
-	/** Legacy member metadata retained for existing databases and clients. Worker selection is scoped separately. */
-	provider: string;
-	model: string;
-	thinkingLevel: ThinkingLevel;
 	keywords: string[];
 	gitName: string;
 	gitEmail: string;

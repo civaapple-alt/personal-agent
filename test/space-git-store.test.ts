@@ -60,9 +60,6 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 			displayName: "Product Manager",
 			roleTitle: "产品经理",
 			isPrimaryContact: true,
-			provider: "anthropic",
-			model: "claude",
-			thinkingLevel: "low",
 			keywords: [],
 		});
 

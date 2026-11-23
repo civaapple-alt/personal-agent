@@ -573,17 +573,12 @@ test("default gitName uses English roleTitle/id and preserves explicitly saved U
 			displayName: "系统架构师",
 			roleTitle: "System Architect",
 			isPrimaryContact: false,
-			provider: "kimi-coding",
-			model: "kimi-for-coding",
-			thinkingLevel: "high",
 			keywords: ["架构"],
 		});
 		assert.equal(pm.gitName, "System Architect");
 		assert.equal(defaultMemberGitName({ id: "sec-ops", displayName: "安全官", roleTitle: "安全负责人" }), "sec-ops");
 
 		store.updateMemberIdentity("architect-lead", { gitName: "系统架构师" });
-		// Released databases never recorded a schema version.
-		db.exec("PRAGMA user_version = 0");
 	} finally {
 		db.close();
 	}

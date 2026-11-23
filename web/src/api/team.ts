@@ -21,9 +21,6 @@ export interface TeamMemberDto {
 	roleScope?: RoleScope;
 	ownerOrgId?: string | null;
 	ownerUserId?: string | null;
-	provider: string;
-	model: string;
-	thinkingLevel: string;
 	keywords: string[];
 	gitName: string;
 	gitEmail: string;
