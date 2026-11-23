@@ -62,6 +62,10 @@
 		z-index: 55;
 		cursor: pointer;
 	}
+	.app-banners {
+		top: calc(50px + max(12px, env(safe-area-inset-top)));
+		max-height: calc(100% - 74px);
+	}
 	.mobile-topbar {
 		display: flex;
 		align-items: center;

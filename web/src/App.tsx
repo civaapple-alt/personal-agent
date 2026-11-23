@@ -932,7 +932,12 @@ export function App() {
 
 				{activeTab === "admin" && isSuperAdmin && (
 					<ViewFade>
-						<AdminView {...adminProps} currentUserId={accountUser?.id ?? null} />
+						<AdminView
+							{...adminProps}
+							currentUserId={accountUser?.id ?? null}
+							onNotice={setNoticeBanner}
+							onError={setErrorBanner}
+						/>
 					</ViewFade>
 				)}
 			</main>

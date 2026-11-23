@@ -33,6 +33,8 @@ interface AdminViewProps {
 		},
 	) => Promise<void>;
 	onAbortMatter: (matterId: string) => Promise<void>;
+	onNotice: (message: string) => void;
+	onError: (message: string) => void;
 }
 
 type AdminSectionTab = "settings" | "users" | "orgs" | "audit";
@@ -73,12 +75,13 @@ export function AdminView({
 	onSaveSettings,
 	onUpdateUser,
 	onAbortMatter,
+	onNotice,
+	onError,
 }: AdminViewProps) {
 	const [activeTab, setActiveTab] = useState<AdminSectionTab>("users");
 	const [userFilter, setUserFilter] = useState<UserStatusFilter>("all");
 	const [savingSettings, setSavingSettings] = useState(false);
 	const [busyUserId, setBusyUserId] = useState<string | null>(null);
-	const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
 	const { catalog, reload: reloadModels } = useModelCatalog();
 	const [modelEdit, setModelEdit] = useState<ModelSelection | null | undefined>(undefined);
@@ -135,7 +138,6 @@ export function AdminView({
 	const handleSaveSettings = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setSavingSettings(true);
-		setActionFeedback(null);
 		try {
 			await onSaveSettings({
 				registrationMode,
@@ -153,9 +155,9 @@ export function AdminView({
 				defaultMaxPersonalRoles: Math.max(0, Number(defaultMaxPersonalRoles) || 0),
 			});
 			if (modelEdit !== undefined) reloadModels();
-			setActionFeedback("平台配置已保存");
+			onNotice("平台配置已保存");
 		} catch (error) {
-			setActionFeedback(error instanceof Error ? error.message : String(error));
+			onError(error instanceof Error ? error.message : String(error));
 		} finally {
 			setSavingSettings(false);
 		}
@@ -174,10 +176,11 @@ export function AdminView({
 		message: string,
 	) => {
 		setBusyUserId(user.id);
-		setActionFeedback(null);
 		try {
 			await onUpdateUser(user.id, patch);
-			setActionFeedback(message);
+			onNotice(message);
+		} catch (error) {
+			onError(error instanceof Error ? error.message : String(error));
 		} finally {
 			setBusyUserId(null);
 		}
@@ -243,11 +246,6 @@ export function AdminView({
 					</button>
 				</div>
 
-				{actionFeedback && (
-					<div className="notice-card" aria-live="polite">
-						{actionFeedback}
-					</div>
-				)}
 				{error && (
 					<div className="approval-card" role="alert">
 						{error}
@@ -649,7 +647,13 @@ export function AdminView({
 													<button
 														type="button"
 														className="btn-inline"
-														onClick={() => void onAbortMatter(run.matterId)}
+														onClick={() =>
+															void onAbortMatter(run.matterId).then(
+																() => onNotice("已请求中止任务"),
+																(error: unknown) =>
+																	onError(error instanceof Error ? error.message : String(error)),
+															)
+														}
 													>
 														紧急中止
 													</button>

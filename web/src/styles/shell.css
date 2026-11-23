@@ -17,8 +17,25 @@
 	overflow: hidden;
 }
 .app-banners {
-	flex: 0 0 auto;
-	padding: 12px var(--page-pad-x) 0;
+	position: absolute;
+	top: max(12px, env(safe-area-inset-top));
+	right: var(--page-pad-x);
+	z-index: 90;
+	width: min(460px, calc(100% - 2 * var(--page-pad-x)));
+	max-height: calc(100% - 24px);
+	display: grid;
+	gap: 8px;
+	overflow-y: auto;
+	pointer-events: none;
+}
+.app-banners > * {
+	margin: 0;
+	box-shadow: var(--shadow-md);
+	pointer-events: auto;
+}
+.app-banners .banner-row > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 .sidebar-top {
 	height: 56px;
@@ -797,6 +814,7 @@
 	color: var(--text-muted);
 }
 .main-stage {
+	position: relative;
 	background: var(--bg-stage);
 	min-width: 0;
 	min-height: 0;

@@ -2,7 +2,7 @@
 
 [main.tsx](main.tsx) 挂载应用并排列样式加载顺序。[App.tsx](App.tsx) 装配页面、导航、bootstrap/事项详情刷新与 SSE 同步。认证、草稿、事项范围和面板加载分别由下表中的 hooks 维护，页面内的临时状态留在所属组件。
 
-[WorkbenchBanners](components/WorkbenchBanners.tsx) 在各页共用的区域显示操作错误与通知，支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](components/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
+[WorkbenchBanners](components/WorkbenchBanners.tsx) 以悬浮层显示工作台操作错误与通知，不挤压页面内容（管理员操作反馈也使用同一入口），支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](components/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
 
 | 修改目标 | 入口 |
 | --- | --- |
