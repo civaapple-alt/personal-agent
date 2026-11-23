@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Report GitHub fetch evidence and temporary clone lifetime, and guide resumed sessions when a prior clone path no longer exists.
+
 - Provide scoped team capability cards to leads, distinguish historical startup manifests from observed tool calls, and correct workspace and isolation guidance.
 
 - Add a server directory browser for workspace registration and attached folders, with organization permissions and local path policy checks.

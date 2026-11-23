@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { createTeamBridgeClient } from "../shared/team-bridge-client.ts";
+import { classifyGithubFetches, temporaryClonePaths } from "./web-fetch-evidence.js";
 
 interface BeforeAgentStartResult {
 	systemPrompt?: string;
@@ -23,6 +24,16 @@ export interface PiExtensionApi {
 	on(event: "session_start", handler: () => Promise<void>): void;
 	on(event: "tool_call", handler: (event: { toolName: string; input: Record<string, unknown> }) => void): void;
 	on(
+		event: "tool_result",
+		handler: (event: {
+			toolName: string;
+			input: Record<string, unknown>;
+			content: Array<{ type: string; [key: string]: unknown }>;
+			isError: boolean;
+			structuredContent?: unknown;
+		}) => { content: Array<{ type: string; [key: string]: unknown }>; structuredContent?: unknown } | undefined,
+	): void;
+	on(
 		event: "before_agent_start",
 		handler: (
 			event: {
@@ -36,7 +47,15 @@ export interface PiExtensionApi {
 			},
 			ctx?: {
 				sessionManager?: {
-					buildSessionProjection?(): { messages: Array<{ role: string; customType?: string; content?: unknown }> };
+					buildSessionProjection?(): {
+						messages: Array<{
+							role: string;
+							customType?: string;
+							toolName?: string;
+							isError?: boolean;
+							content?: unknown;
+						}>;
+					};
 				};
 			},
 		) => BeforeAgentStartResult | undefined,
@@ -78,6 +97,7 @@ export function filterContextFilesForTargetWorkspace<T extends { path: string }>
 export default function teamExtension(pi: PiExtensionApi): void {
 	const env = { ...process.env };
 	const post = createTeamBridgeClient(env);
+	const cloneRoots = new Set<string>();
 
 	for (const tool of [
 		{
@@ -247,6 +267,49 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			}
 		});
 	}
+	pi.on("tool_result", (event) => {
+		if (event.toolName === "fetch_content") {
+			const evidenceList = classifyGithubFetches(event.input, event.content, event.isError, event.structuredContent);
+			if (!evidenceList.length) return;
+			const notes = evidenceList.map((evidence) => {
+				if (evidence.clonePath) cloneRoots.add(resolve(evidence.clonePath));
+				const note =
+					evidence.kind === "temporary_clone"
+						? "PA evidence: The tool reports a temporary GitHub clone for this worker. It can be cleaned up when this worker/session ends; it is not a registered or durable workspace. On a later turn check the path or fetch again. Report the actual files read and any truncation; do not infer a commit, file counts, or successful operations without evidence."
+						: evidence.kind === "github_api"
+							? "PA evidence: The tool reports an API-only GitHub view, not a clone. Report which content was returned and any truncation; do not infer a local checkout, commit, file counts, or successful operations without evidence."
+							: "PA evidence: GitHub content was returned, but the retrieval mechanism is not established by the tool output. Do not claim a clone or API method without further evidence. Report actual files read and any truncation.";
+				return { type: "text", text: `${evidence.source}: ${note}` };
+			});
+			return {
+				content: [...event.content, ...notes],
+				...(event.structuredContent !== undefined ? { structuredContent: event.structuredContent } : {}),
+			};
+		}
+		if (event.toolName !== "read" || !event.isError || typeof event.input.path !== "string") return;
+		const target = resolve(event.input.path);
+		const knownClone = [...cloneRoots].some((root) => {
+			const rel = relative(root, target);
+			return rel === "" || (rel !== ".." && !rel.startsWith("../") && !rel.startsWith("..\\") && !isAbsolute(rel));
+		});
+		if (
+			!knownClone ||
+			!event.content.some(
+				(part) => part.type === "text" && typeof part.text === "string" && /\bENOENT\b/.test(part.text),
+			)
+		)
+			return;
+		return {
+			content: [
+				...event.content,
+				{
+					type: "text",
+					text: "PA evidence: This path came from an earlier temporary GitHub clone and is now missing. Do not treat it as a durable checkout. Fetch the source again, or arrange a persistent workspace when needed.",
+				},
+			],
+			...(event.structuredContent !== undefined ? { structuredContent: event.structuredContent } : {}),
+		};
+	});
 	pi.on("session_start", async () => {
 		// MCP/custom tools may register after session_start. Never block later extensions' startup handlers.
 		const prepare = async () => {
@@ -274,6 +337,10 @@ export default function teamExtension(pi: PiExtensionApi): void {
 		});
 	});
 	pi.on("before_agent_start", (event, ctx) => {
+		for (const message of ctx?.sessionManager?.buildSessionProjection?.().messages ?? []) {
+			if (message.role !== "toolResult" || message.toolName !== "fetch_content" || message.isError) continue;
+			for (const root of temporaryClonePaths(message.content)) cloneRoots.add(resolve(root));
+		}
 		const options = event.systemPromptOptions;
 		if (env.PA_TARGET_WORKSPACE_ROOT !== undefined && Array.isArray(options?.contextFiles)) {
 			options.contextFiles = filterContextFilesForTargetWorkspace(

@@ -5,6 +5,7 @@
 | 你改了什么 | 主要覆盖 |
 | --- | --- |
 | Pi RPC、JSONL、超时或退出 | [pi-rpc-worker.test.ts](pi-rpc-worker.test.ts) |
+| GitHub 抓取来源、临时克隆失效、事件脱敏与展示 | [web-fetch-evidence.test.ts](web-fetch-evidence.test.ts) 和 [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |
 | 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 运行巡检、等待豁免与恢复 | [turn-monitor.test.ts](turn-monitor.test.ts) |

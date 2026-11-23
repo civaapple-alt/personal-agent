@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { classifyGithubFetches } from "../../pi-extensions/team-extension/web-fetch-evidence.js";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
@@ -706,10 +707,13 @@ export async function executeWithWorkerPass(
 			},
 		});
 		input.run.workers.add(worker);
+		const fetchInputs = new Map<string, unknown>();
 		const offEvent = worker.onEvent?.((event) => {
 			if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
 				const toolName = String(event.toolName ?? "tool");
 				const toolCallId = String(event.toolCallId);
+				if (toolName === "fetch_content" && event.type === "tool_execution_start")
+					fetchInputs.set(toolCallId, event.args);
 				if (event.type === "tool_execution_start") activity?.toolStarted(toolCallId, formatToolAction(toolName));
 				else activity?.toolFinished(toolCallId, `已返回${formatToolAction(toolName)}`);
 				const rawArgs =
@@ -754,6 +758,44 @@ export async function executeWithWorkerPass(
 							: {}),
 					}),
 				});
+				if (toolName === "fetch_content" && event.type === "tool_execution_end") {
+					const inputArgs = fetchInputs.get(toolCallId);
+					fetchInputs.delete(toolCallId);
+					const result = event.result;
+					const content = result && typeof result === "object" && "content" in result ? result.content : undefined;
+					const structured =
+						result && typeof result === "object" && "structuredContent" in result
+							? result.structuredContent
+							: undefined;
+					for (const evidence of classifyGithubFetches(inputArgs, content, event.isError !== false, structured)) {
+						deps.store.appendMessage({
+							matterId: input.matterId,
+							channel: "notice",
+							senderType: "system",
+							senderId: input.member.id,
+							metadata: {
+								workspaceId: input.workspace?.id ?? null,
+								repoPath: cwd,
+								orgId: activeOrgId,
+								sourceUserMessageId: input.run.userMessageId,
+							},
+							content: JSON.stringify({
+								method: "web_fetch_evidence",
+								toolCallId,
+								source: evidence.source,
+								kind: evidence.kind,
+								truncated: evidence.truncated,
+							}),
+						});
+						const label =
+							evidence.kind === "temporary_clone"
+								? "已获取 GitHub 临时副本，跨轮次可能失效"
+								: evidence.kind === "github_api"
+									? "已获取 GitHub API 视图，未确认本地克隆"
+									: "已获取 GitHub 内容，获取方式未确认";
+						pushRunLog(input.run, input.member.displayName, label);
+					}
+				}
 				const toolSummary = event.type === "tool_execution_start" ? summarizeToolArgs(event.args) : undefined;
 				if (event.type === "tool_execution_start" && toolName !== "delegate_to_member") {
 					pushRunLog(

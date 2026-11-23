@@ -58,6 +58,8 @@ Ask what tools or extensions the role can use to see the tools reported when it 
 
 The lead receives team role declarations and the latest scoped internal startup evidence. A role definition or historical tool list does not guarantee a future worker's tools or success. Tool registration does not prove credentials, network, or provider operation; a call without a reported error does not prove output quality. Ordinary collaborators with `bash` can modify files even without `write`. Observers and independent verifiers use narrower tool lists. Pi runs with the service account's permissions and is not an OS sandbox.
 
+For GitHub fetches, matter events identify a temporary clone, an API view, or an unknown retrieval method when the tool result supports that classification. A temporary clone may disappear when the worker exits; it is not a registered workspace. Verify the path or fetch again before reuse. Report inspected files, known truncation, and verified revisions without inventing file counts or claiming to have inspected other local copies.
+
 ## Team experience
 
 A matter retrospective can propose reusable working practices. Review the evidence and the organization or repository scope before confirming an experience as verified.

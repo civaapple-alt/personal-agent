@@ -100,6 +100,9 @@ export function formatNoticeEventLine(rawContent: string): string {
 			scope?: string;
 			content?: string;
 			createdCount?: number;
+			kind?: string;
+			source?: string;
+			truncated?: boolean;
 			firstRequest?: { cacheRead: number; input: number; cacheWrite: number };
 			totals?: { cacheRead: number; input: number; cacheWrite: number };
 		};
@@ -118,6 +121,15 @@ export function formatNoticeEventLine(rawContent: string): string {
 		}
 		if (parsed.method === "runtime_ready") {
 			return `工作进程就绪（${parsed.tools?.join(", ") ?? "标准工具"}）`;
+		}
+		if (parsed.method === "web_fetch_evidence") {
+			const action =
+				parsed.kind === "temporary_clone"
+					? "GitHub 临时副本（跨轮次可能失效）"
+					: parsed.kind === "github_api"
+						? "GitHub API 视图（未确认本地克隆）"
+						: "GitHub 内容（获取方式未确认）";
+			return `已获取 ${action}${parsed.source ? `：${parsed.source}` : ""}${parsed.truncated ? "；返回内容有截断" : ""}`;
 		}
 		if (parsed.method === "runtime_model_usage" && parsed.firstRequest && parsed.totals) {
 			const first = parsed.firstRequest;

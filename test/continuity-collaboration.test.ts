@@ -2147,3 +2147,47 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "了解团队能力" });
 	assert.equal(checked, true);
 });
+
+test("GitHub fetch events report evidence and temporary lifetime without exposing the host clone path", async (t) => {
+	const f = await fixture(t, async (worker) => {
+		worker.emitEvent({
+			type: "tool_execution_start",
+			toolCallId: "fetch-1",
+			toolName: "fetch_content",
+			args: { url: "https://github.com/example/repo?token=hidden" },
+		});
+		worker.emitEvent({
+			type: "tool_execution_end",
+			toolCallId: "fetch-1",
+			toolName: "fetch_content",
+			isError: false,
+			result: {
+				content: [
+					{
+						type: "text",
+						text: "Repository cloned to: /tmp/pi-github-repos/runtime-test/abc\n\n## Structure\n... (truncated at 200 entries)",
+					},
+				],
+			},
+		});
+		return "看过目录与 README";
+	});
+	const result = await f.orchestrator.dispatchMatter({
+		prompt: "了解仓库",
+		workspaceId: f.workspace.id,
+		preferredMemberId: "product-manager",
+	});
+	const entries = f.store.listMessages(result.matter.id, "notice");
+	const notice = entries.find((item) => item.content.includes('"method":"web_fetch_evidence"'));
+	assert.ok(notice);
+	assert.deepEqual(JSON.parse(notice.content), {
+		method: "web_fetch_evidence",
+		toolCallId: "fetch-1",
+		source: "https://github.com/example/repo",
+		kind: "temporary_clone",
+		truncated: true,
+	});
+	assert.doesNotMatch(notice.content, /token|runtime-test/);
+	assert.equal(notice.metadata?.workspaceId, f.workspace.id);
+	assert.ok(typeof notice.metadata?.sourceUserMessageId === "string");
+});
