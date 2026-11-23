@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Present Pi Skill and extension command descriptions to AI roles and allow commands to be submitted with explicit unconfirmed outcome.
+
 - Show per-turn tool calls and actual Skill reads, including completion status, in execution progress.
 
 - Remove the pstack-specific runtime, settings and loader; use Pi-managed Skills and the shared skill catalog.

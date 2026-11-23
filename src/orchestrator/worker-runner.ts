@@ -217,6 +217,8 @@ export async function executeWithWorkerPass(
 			...requestedTools,
 			"list_available_skills",
 			"load_available_skill",
+			"list_pi_commands",
+			"request_pi_command",
 			...teamExtension.tools,
 			...humanQuestion.tools,
 		];
@@ -690,7 +692,8 @@ export async function executeWithWorkerPass(
 				const compactArgs =
 					event.type === "tool_execution_start" && rawArgs
 						? {
-								...(toolName === "load_available_skill" && typeof rawArgs.name === "string"
+								...((toolName === "load_available_skill" || toolName === "request_pi_command") &&
+								typeof rawArgs.name === "string"
 									? { name: rawArgs.name.slice(0, 128) }
 									: {}),
 								...(toolName === "load_available_skill" && typeof rawArgs.resource === "string"

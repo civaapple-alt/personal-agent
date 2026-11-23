@@ -21,7 +21,8 @@ import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { DelegationGraph } from "./chat/DelegationGraph.tsx";
 import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
-function toolStatusLabel(status: TurnToolCall["status"]): string {
+function toolStatusLabel(status: TurnToolCall["status"], toolName?: string): string {
+	if (toolName === "request_pi_command" && status === "success") return "已提交";
 	switch (status) {
 		case "running":
 			return "进行中";
@@ -113,12 +114,12 @@ function ProgressDetails({
 									</span>
 								)}
 								<span className={`exploring-tool-status is-${call.status}`}>
-									{toolStatusLabel(call.status)}
+									{toolStatusLabel(call.status, call.toolName)}
 								</span>
 							</div>
 						))}
 					</div>
-					<p className="exploring-tool-hint">成功读取表示内容已返回，不代表方法已应用。</p>
+					<p className="exploring-tool-hint">读取成功不代表方法已应用；插件命令“已提交”不代表已执行成功。</p>
 				</section>
 			)}
 
@@ -157,7 +158,7 @@ function ProgressDetails({
 								{entry.toolName && <code className="exploring-tool-name">{entry.toolName}</code>}
 								{entry.toolStatus && (
 									<span className={`exploring-tool-status is-${entry.toolStatus}`}>
-										{toolStatusLabel(entry.toolStatus)}
+										{toolStatusLabel(entry.toolStatus, entry.toolName)}
 									</span>
 								)}
 							</div>

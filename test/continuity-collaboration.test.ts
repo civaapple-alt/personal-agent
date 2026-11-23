@@ -2113,6 +2113,18 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "search-1", toolName: "web_search" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "search-1", toolName: "web_search", isError: true });
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "skill-1", toolName: "load_available_skill" });
+		worker.emitEvent({
+			type: "tool_execution_start",
+			toolCallId: "command-1",
+			toolName: "request_pi_command",
+			args: { name: "fixture" },
+		});
+		worker.emitEvent({
+			type: "tool_execution_end",
+			toolCallId: "command-1",
+			toolName: "request_pi_command",
+			isError: false,
+		});
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "content-1", toolName: "fetch_content" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "content-1", toolName: "fetch_content" });
 		worker.emitEvent({
@@ -2127,6 +2139,7 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 		assert.match(after, /web_search: 最近调用报告错误/);
 		assert.match(after, /load_available_skill: 最近调用结束且未报告工具错误/);
 		assert.match(after, /fetch_content: 调用已结束但结果状态未知/);
+		assert.match(after, /request_pi_command: 命令已提交，执行结果未知/);
 		assert.match(after, /有 bash 不等于只读/);
 		checked = true;
 		return "能力已检查";

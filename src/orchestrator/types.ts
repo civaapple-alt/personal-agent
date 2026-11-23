@@ -365,6 +365,8 @@ const TOOL_LABELS: Record<string, string> = {
 	propose_experience: "提炼候选经验",
 	list_available_skills: "查看可用 Skills",
 	load_available_skill: "读取 Skill",
+	list_pi_commands: "查看 Pi 插件命令",
+	request_pi_command: "提交 Pi 插件命令",
 };
 
 function parseTimeoutEnv(raw: string | undefined): number | undefined {
