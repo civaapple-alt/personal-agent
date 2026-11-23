@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Identify team collaboration health checks under the independent Role Architect isolation policy.
+
 - Show workbench and administrator action notifications as a floating overlay without shifting page content.
 
 - Fix organization creation and editing form fields wrapping into each other.

@@ -283,7 +283,7 @@ const ISOLATION_MODES: RuntimeIsolationMode[] = [
 	{
 		id: "architect-aux",
 		label: "独立角色架构师",
-		usage: "角色设计 / 团队体检接口",
+		usage: "团队协作体检 / 角色规划对话",
 		sessionStrategy: "无持久 Pi 会话；传入对话内容",
 		extensionsPolicy: "禁用扩展和 MCP；显式加载角色 Skill",
 		toolsPolicy: "无业务工具",

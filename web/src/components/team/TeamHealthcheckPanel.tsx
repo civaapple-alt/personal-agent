@@ -147,9 +147,9 @@ export function TeamHealthcheckPanel({
 						<div className="notice-card">
 							<strong>确认发起 AI 团队协作体检？</strong>
 							<p className="healthcheck-confirm-desc">
-								本次将调用大模型（Role Architect）只读扫描当前 <strong>{memberCount}</strong>{" "}
-								位业务成员的职责边界与工具权限， 并结合近 <strong>{matterCount}</strong>{" "}
-								个事项的运行摩擦信号给出优化建议，通常耗时 10~30 秒，不会擅自修改任何成员或代码。
+								本次由工作台汇总当前可见团队的职责、工具配置和近期协作信号，交给角色架构师分析。 当前有{" "}
+								<strong>{memberCount}</strong> 位业务成员和 <strong>{matterCount}</strong>{" "}
+								个事项；模型调用不使用业务工具，也不保存 Pi 会话。建议须经你选择确认后才会应用。
 							</p>
 						</div>
 						<div className="form-footer">

@@ -170,7 +170,10 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	);
 	assert.ok(
 		ownerPayload.base.isolationModes.some(
-			(mode) => mode.id === "architect-aux" && mode.extensionsPolicy.includes("Skill"),
+			(mode) =>
+				mode.id === "architect-aux" &&
+				mode.extensionsPolicy.includes("Skill") &&
+				mode.usage.includes("团队协作体检"),
 		),
 	);
 
