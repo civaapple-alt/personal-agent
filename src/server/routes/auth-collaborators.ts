@@ -88,7 +88,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		const visibleTemplateIds = new Set(visibleMembers.map((m) => m.templateId));
 
 		sendJson(res, 200, {
-			innerDemoAvailable: Boolean(ctx.innerMatterDemo),
 			unifiedConversation: true,
 			authKind: actor.authKind,
 			currentUser: actor.collaborator,

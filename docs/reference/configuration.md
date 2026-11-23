@@ -75,14 +75,12 @@
 │   └── <orgSlug>/<repoName>/
 ├── extensions/                         # 【托管扩展包】早期工作台克隆的方法包目录
 │   └── repo/
-└── inner-matter/                       # 【四步内置演示】按需准备的虚构演练 Git 仓库
 ```
 
 | 路径 | 用途 | 备注 |
 | --- | --- | --- |
 | `.data/personal-agent.db` | 默认用户 SQLite 数据库 | 可通过 `PA_DB_PATH` 重定向 |
 | `.data/spaces/` | 资料空间独立 Git 仓库目录 | 按作用域分目录存放（`orgs/<orgId>/`、`workspaces/<wsId>/`、`users/<userId>/`、`members/<memberId>/`、`custom/<spaceId>/`），首次写入或创建自定义空间时懒初始化；自定义 `PA_DB_PATH` 时跟随数据库目录，`:memory:` 时使用临时目录 |
-| `.data/inner-matter` | 按需准备的内置演示 Git 工作区 | 自定义 `PA_DB_PATH` 时位于数据库同级的 `inner-matter/`；`:memory:` 启动不提供演示入口。初始化不运行模型、不覆盖已有文件 |
 | `.data/pi-sessions` | Pi 会话文件 | 用 `PA_SESSION_DIR` 更改。按原生 Pi 规则在 `--<encoded-cwd>--/` 子目录下分仓存放（旧平铺会话文件仍按精确 `sessionFile` 继续恢复） |
 | `.data/uploads/` | 消息附件 | 跟随数据库目录；上传按 `YYYY-MM/` 按月分桶落盘 |
 | `.data/team-workspaces/` | 团队 Git 克隆 | 默认跟随数据库目录。可用 `PA_WORKSPACES_ROOT` 或超管控制台更改 |

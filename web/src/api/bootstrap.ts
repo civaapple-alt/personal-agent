@@ -13,7 +13,6 @@ import type {
 import type { RoleTemplateDto, TeamMemberDto } from "./team.ts";
 
 export interface BootstrapPayload {
-	innerDemoAvailable?: boolean;
 	unifiedConversation?: boolean;
 	authKind?: "session" | "loopback" | null;
 	currentUser?: CollaboratorDto;

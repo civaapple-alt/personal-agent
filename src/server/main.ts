@@ -145,7 +145,6 @@ async function main(): Promise<void> {
 		defaultWorkspacesRoot,
 		dataDir,
 		probePiCli: () => piProbe,
-		innerMatterDir: dbPath === ":memory:" ? undefined : resolve(dirname(resolve(dbPath)), "inner-matter"),
 		runtimeMeta: {
 			host,
 			port,

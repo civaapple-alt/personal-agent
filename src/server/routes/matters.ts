@@ -20,21 +20,16 @@ export async function handleMatterRoutes(ctx: ServerRouteContext, r: RouteReques
 		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
 		const active = activeRuns.get(matterId);
 		const defaultSpace = store.spaces.resolveMatterDefaultSpace(matter);
-		const demoGuide = ctx.innerMatterDemo?.guideFor(matter);
 		const spaceDocuments = store.spaces
 			.listDocuments({ matterId })
 			.filter((document) => canAccessSpace(store, actor, store.spaces.getSpace(document.spaceId)));
 		sendJson(res, 200, {
 			matter,
-			demoGuide,
 			userMessages: store.listMessages(matterId, "user"),
 			internalCollabMessages: store.listMessages(matterId, "internal_collab"),
 			noticeMessages: store.listMessages(matterId, "notice"),
 			defaultSpace,
 			spaceDocuments,
-			...(demoGuide
-				? { spaceFeedback: spaceDocuments.flatMap((document) => store.spaces.listDocumentFeedback(document.id)) }
-				: {}),
 			pendingDialogs: dialogBroker.listPending(matterId),
 			activeRun: active
 				? {

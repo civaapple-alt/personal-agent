@@ -25,7 +25,6 @@
 - 已有事项的消息沿用现有工作区。先通过事项设置切换工作区，再发送消息。请求指定的负责人、成员与旁听角色按事项的有效组织校验。
 修改接口时同时核对[网页 API 模块](../../web/src/README.md#前端状态与组件)的 DTO 和调用方的刷新逻辑，核对事项、工作区、空间文档和反馈的权限与行为。
 
-[inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/tutorials/inner-matter-demo.md)。
 
 - 并发、工作区切换与图片上传：
   - 同事项运行中再次派发、切换工作区或负责人返回 409。团队讨论消息仍保存，待本轮结束后可再次邀请 AI。调整全局旁听开关（`observersEnabled`）、

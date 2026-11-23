@@ -48,7 +48,6 @@ export interface ServerRuntimeConfig {
 	builtinRolesDir?: string;
 	rolesDir?: string;
 	uploadsDir?: string;
-	innerMatterDir?: string;
 	webDistDir?: string;
 	requireAuth?: boolean;
 	inheritLocalPiResources?: boolean;
@@ -656,11 +655,6 @@ export async function buildRuntimeOverview(options: {
 					key: ".data/uploads",
 					label: "图片上传目录",
 					value: formatDisplayPath(serverConfig?.uploadsDir, isOwner, "内存缓存"),
-				},
-				{
-					key: ".data/inner-matter",
-					label: "内置演示目录",
-					value: formatDisplayPath(serverConfig?.innerMatterDir, isOwner, "未启用（:memory: 或未配置）"),
 				},
 				{
 					key: "web/dist/",

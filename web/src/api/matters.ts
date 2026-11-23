@@ -1,7 +1,6 @@
-import type { InnerMatterGuide } from "../../../src/demo/inner-matter-definition.ts";
 import { requestJson } from "./client.ts";
 import type { ModelSelection } from "./models.ts";
-import type { SpaceDocumentFeedbackDto, SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
+import type { SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
 import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
 
 export type MatterVisibility = "org" | "private";
@@ -206,14 +205,12 @@ export interface ActiveRunSnapshotDto extends MatterProgressDto {
 }
 
 export interface MatterDetailPayload {
-	demoGuide?: InnerMatterGuide;
 	matter: MatterDto;
 	userMessages: MatterMessageDto[];
 	internalCollabMessages: MatterMessageDto[];
 	noticeMessages: MatterMessageDto[];
 	defaultSpace?: SpaceDto | null;
 	spaceDocuments?: SpaceDocumentMetaDto[];
-	spaceFeedback?: SpaceDocumentFeedbackDto[];
 	pendingDialogs: PendingDialogDto[];
 	activeRun?: ActiveRunSnapshotDto | null;
 }
@@ -232,10 +229,6 @@ export function actOnHumanDecision(matterId: string, messageId: string, input: H
 		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/human-decision`,
 		{ method: "POST", body: JSON.stringify(input) },
 	);
-}
-
-export function openInnerMatterDemo(): Promise<{ matter: MatterDto }> {
-	return requestJson("/api/demos/inner-matter", { method: "POST", body: "{}" });
 }
 
 export function assessMatterInitiation(

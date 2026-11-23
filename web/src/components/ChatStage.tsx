@@ -7,7 +7,6 @@ import type {
 	ApplyMatterRoleProposalsPayload,
 	CollaboratorDto,
 	DistillRsiResult,
-	InnerMatterStep,
 	MatterDetailPayload,
 	MatterProgressDto,
 	MemberMemoryDto,
@@ -78,10 +77,6 @@ type MatterInitiationProps = Pick<
 interface ChatStageProps {
 	composerDraft: ComposerDraftProps;
 	initiation: MatterInitiationProps;
-	onOpenDemo?: () => void;
-	demoOpening?: boolean;
-	onDemoStep?: (step: InnerMatterStep) => void;
-	demoStepBusy?: boolean;
 	currentUser?: CollaboratorDto | null;
 	accountUser?: AccountUserDto | null;
 	isSuperAdmin?: boolean;
@@ -151,10 +146,6 @@ interface ChatStageProps {
 export function ChatStage({
 	composerDraft,
 	initiation,
-	onOpenDemo,
-	demoOpening,
-	onDemoStep,
-	demoStepBusy,
 	currentUser,
 	accountUser = null,
 	isSuperAdmin = false,
@@ -656,10 +647,6 @@ export function ChatStage({
 				)}
 
 				<MessageFeed
-					onOpenDemo={onOpenDemo}
-					demoOpening={demoOpening}
-					onDemoStep={onDemoStep}
-					demoStepBusy={demoStepBusy}
 					chatScrollRef={chatScrollRef}
 					chatStreamInnerRef={chatStreamInnerRef}
 					messagesEndRef={messagesEndRef}

@@ -84,7 +84,7 @@ PA_REQUIRE_AUTH=1 PA_HOST=127.0.0.1 PORT=4310 npm run start:web
 
 ## 保存与备份运行资料
 
-1. 停止服务和相关执行，再复制运行目录。核心业务资产为 `.data/` 下的 `personal-agent.db`、`spaces/`、`roles/`、`skills/` 与 `uploads/`（备份必选）；`team-workspaces/`（可重新 clone）、`pi-sessions/`、`extensions/` 与 `inner-matter/` 属可重建运行态，可按需选择是否一并归档。
+1. 停止服务和相关执行，再复制运行目录。核心业务资产为 `.data/` 下的 `personal-agent.db`、`spaces/`、`roles/`、`skills/` 与 `uploads/`（备份必选）；`team-workspaces/`（可重新 clone）、`pi-sessions/`与 `extensions/` 属可重建运行态，可按需选择是否一并归档。
 2. 如果设置了 `PA_DB_PATH`，另外保留数据库所在目录。Pi 会话默认仍在启动目录的 `.data/pi-sessions`，也可以用 `PA_SESSION_DIR` 单独配置。核对[实际存储路径](../reference/configuration.md#2-目录结构与默认存储位置)。
 3. 保留外部工作区和配置单独指定的资源。迁移主机后，核对数据库中登记的仓库路径、新服务的启动目录和 Pi 会话位置。
 4. 恢复时使用与备份对应的应用版本，并同时恢复数据库及资料空间仓库。

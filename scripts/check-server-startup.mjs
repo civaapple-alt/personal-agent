@@ -69,7 +69,8 @@ try {
 			assert.equal("collaborators" in bootstrap, false);
 			const recent = await (await fetch(`${base}/api/spaces/recent`)).json();
 			assert.deepEqual(recent.documents, []);
-			assert.equal(bootstrap.innerDemoAvailable, !memory);
+			assert.equal("innerDemoAvailable" in bootstrap, false);
+			assert.equal((await fetch(`${base}/api/demos/inner-matter`, { method: "POST" })).status, 404);
 			if (memory) {
 				const memberResponse = await fetch(`${base}/api/members`, {
 					method: "POST",
@@ -78,13 +79,6 @@ try {
 				});
 				assert.equal(memberResponse.status, 201);
 				await assert.rejects(lstat(join(cwd, "roles/startup-probe.md")), { code: "ENOENT" });
-			} else {
-				const demoResponse = await fetch(`${base}/api/demos/inner-matter`, { method: "POST" });
-				assert.equal(demoResponse.status, 200);
-				const { matter } = await demoResponse.json();
-				const detail = await (await fetch(`${base}/api/matters/${matter.id}`)).json();
-				assert.equal(detail.demoGuide.steps.length, 4);
-				assert.deepEqual(detail.spaceDocuments, []);
 			}
 			assert.equal((await fetch(base)).status, 200);
 			const shutdownViaIpc = process.platform === "win32" || memory;
@@ -103,7 +97,7 @@ try {
 			]);
 			assert.deepEqual(result, { code: 0, signal: null });
 			console.log(
-				`PASS ${entry} (${memory ? "memory DB, isolated role creation" : "file DB, built-in demo"}): bootstrap, built UI and graceful ${shutdownViaIpc ? "IPC" : "SIGTERM"} shutdown`,
+				`PASS ${entry} (${memory ? "memory DB, isolated role creation" : "file DB, clean bootstrap"}): bootstrap, built UI and graceful ${shutdownViaIpc ? "IPC" : "SIGTERM"} shutdown`,
 			);
 		} finally {
 			if (child.exitCode === null) child.kill("SIGKILL");

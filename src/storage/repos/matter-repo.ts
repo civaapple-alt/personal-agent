@@ -42,7 +42,6 @@ export class MatterRepo {
 	}
 
 	createMatter(input: {
-		id?: string;
 		title: string;
 		summary?: string;
 		leadMemberId?: string | null;
@@ -58,7 +57,7 @@ export class MatterRepo {
 		modelSelection?: ModelSelection | null;
 		collaboratorIds?: string[];
 	}): Matter {
-		const id = input.id ?? `mat_${randomUUID()}`;
+		const id = `mat_${randomUUID()}`;
 		const timestamp = nowIso();
 		let storedAiIds =
 			input.aiMemberIds === undefined || input.aiMemberIds === null ? null : normalizeUniqueIds(input.aiMemberIds);

@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Remove the built-in feedback-box demo, its dedicated endpoint, workspace setup, guide and smoke command.
+
 - Remove obsolete per-member model metadata; active model selection remains scoped to matter, organization role, and platform settings.
 
 - Remove obsolete execution-confirmation compatibility; human decisions use planning and role clarification.
@@ -13,8 +15,6 @@ All notable changes to Personal Agent are documented in this file.
 - Remove the legacy collaborators table and derive matter participants from account and organization membership.
 
 - Remove legacy collaborator-token authentication and management endpoints; account sessions and organization membership govern collaboration.
-
-- Grant the current administrator access to the built-in demo organization when opening it, so authenticated sessions can read and use the demo.
 
 - Remove collaborator-token login from the account login endpoint; registered accounts use email and password.
 

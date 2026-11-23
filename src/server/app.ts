@@ -7,11 +7,10 @@ import { type InstalledPiWebAccess, installPiWebAccess } from "../pa-extensions/
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
 import { canActorAccessUpload } from "./acl.ts";
-import { isLoopbackAddress, requireActiveActor, requireOwner, resolveRequestActor } from "./auth.ts";
+import { isLoopbackAddress, requireActiveActor, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
-import { HttpRequestError, isAllowedMutatingOrigin, sendError, sendJson, serveStaticAsset } from "./http.ts";
-import { InnerMatterDemo } from "./inner-matter.ts";
+import { HttpRequestError, isAllowedMutatingOrigin, sendError, serveStaticAsset } from "./http.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth.ts";
 import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
@@ -42,7 +41,6 @@ export interface PersonalAgentServerOptions {
 	uploadsDir?: string;
 	requireAuth?: boolean;
 	inheritLocalPiResources?: boolean;
-	innerMatterDir?: string;
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
@@ -66,7 +64,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				? resolve(dirname(rolesDir), "skills")
 				: undefined);
 	const sse = createSseHub(store);
-	const innerMatterDemo = options.innerMatterDir ? new InnerMatterDemo(store, options.innerMatterDir) : undefined;
 	const memoryUploads = new Map<string, { buffer: Buffer; mimeType: string }>();
 	let roleMutationTail = Promise.resolve();
 	let pstackInstallation: Promise<string> | undefined;
@@ -136,7 +133,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				builtinRolesDir: options.runtimeMeta?.builtinRolesDir,
 				rolesDir,
 				uploadsDir,
-				innerMatterDir: options.innerMatterDir,
 				webDistDir,
 				requireAuth: Boolean(options.requireAuth),
 				inheritLocalPiResources: inheritsLocalPiResources(),
@@ -159,7 +155,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		revokeTokenSessions: sse.revokeTokenSessions,
 		closeAccountSession: sse.closeAccountSession,
 		runDispatchInBackground,
-		innerMatterDemo,
 		requireAuth: Boolean(options.requireAuth),
 		defaultWorkspacesRoot: options.defaultWorkspacesRoot,
 		dataDir: options.dataDir,
@@ -205,21 +200,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			if (pathname.startsWith("/api/") && !requireActiveActor(res, actor)) {
 				return;
 			}
-			if (method === "POST" && pathname === "/api/demos/inner-matter") {
-				if (!requireOwner(res, actor)) return;
-				if (!innerMatterDemo) {
-					sendError(res, 404, "当前服务未启用内置演示");
-					return;
-				}
-				const matter = await innerMatterDemo.prepare();
-				if (actor.user && matter.orgId && !store.getOrgMembership(matter.orgId, actor.user.id)) {
-					store.upsertOrgMember({ orgId: matter.orgId, userId: actor.user.id, orgRole: "org_owner" });
-				}
-				sse.broadcast("matter_updated", { matterId: matter.id }, { matterId: matter.id });
-				sendJson(res, 200, { matter });
-				return;
-			}
-
 			if (method === "GET" && pathname === "/api/events") {
 				sse.handleEventsStream(res, actor);
 				return;

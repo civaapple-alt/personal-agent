@@ -941,7 +941,6 @@
 .chat-stage.is-new-matter .chat-stream-scroll { flex: 0 0 auto; overflow: visible; padding-bottom: 0; }
 .chat-stage.is-new-matter .welcome-hero { padding: clamp(20px, 6vh, 56px) 16px 18px; gap: 8px; }
 .chat-stage.is-new-matter .welcome-hero h1 { font-size: var(--text-xl); }
-.chat-stage.is-new-matter .inner-demo-entry { margin: 4px 0 0; }
 .chat-stage.is-new-matter .composer-dock { flex: 0 0 auto; background: none; padding-top: 6px; }
 .chat-stage.is-new-matter .composer-dock-inner { max-width: 760px; }
 @media (max-width: 600px) {

@@ -10,7 +10,6 @@ import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
 	type CollaboratorDto,
-	type InnerMatterStep,
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type OrganizationDto,
@@ -39,16 +38,11 @@ import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 import { DecisionDemo } from "./DecisionDemo.tsx";
 import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { HumanDecisionCard } from "./HumanDecisionCard.tsx";
-import { InnerDemoGuide } from "./InnerDemoGuide.tsx";
 import type { DelegationScope, DelegationView } from "./MatterDelegationPanel.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
 import { type ChatSpaceDocumentItem, SpaceDocumentCard } from "./SpaceDocumentCard.tsx";
 
 interface MessageFeedProps {
-	onOpenDemo?: () => void;
-	demoOpening?: boolean;
-	onDemoStep?: (step: InnerMatterStep) => void;
-	demoStepBusy?: boolean;
 	chatScrollRef: RefObject<HTMLDivElement | null>;
 	chatStreamInnerRef: RefObject<HTMLDivElement | null>;
 	messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -98,10 +92,6 @@ interface MessageFeedProps {
 
 /** Scrollable message feed covering the empty-state welcome hero, chat messages, inline approvals, and live run status. */
 export function MessageFeed({
-	onOpenDemo,
-	demoOpening,
-	onDemoStep,
-	demoStepBusy,
 	chatScrollRef,
 	chatStreamInnerRef,
 	messagesEndRef,
@@ -260,23 +250,9 @@ export function MessageFeed({
 								)}
 							</>
 						)}
-						{isOwner && !selectedIsArchitect && onOpenDemo && (
-							<div className="inner-demo-entry">
-								<button type="button" className="btn-inline" disabled={demoOpening} onClick={onOpenDemo}>
-									{demoOpening ? "正在准备演示…" : "体验内置演示"}
-								</button>
-							</div>
-						)}
 					</div>
 				) : (
 					<>
-						{matterDetail?.demoGuide && (
-							<InnerDemoGuide
-								detail={matterDetail}
-								disabled={isTurnRunning || Boolean(demoStepBusy)}
-								onChooseStep={isOwner ? onDemoStep : undefined}
-							/>
-						)}
 						{matterDetail?.userMessages.map((msg, messageIndex) => {
 							const decision = readHumanDecision(msg.metadata);
 							const isUser = msg.senderType === "user";

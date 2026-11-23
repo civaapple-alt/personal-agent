@@ -1,4 +1,3 @@
-export type { InnerMatterGuide, InnerMatterStep } from "../../src/demo/inner-matter-definition.ts";
 export * from "./api/admin.ts";
 export * from "./api/auth.ts";
 export * from "./api/bootstrap.ts";

@@ -2,16 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { updateMatterModelSelection, updateMatterStatus } from "./api/matters.ts";
 import type { ModelSelection } from "./api/models.ts";
 import { organizationRoleModel } from "./api/organizations.ts";
-import { listSpaceDocumentFeedback, saveSpaceDocumentFeedback } from "./api/space.ts";
 import {
 	type BootstrapPayload,
 	fetchBootstrap,
 	fetchMatterDetail,
-	type InnerMatterStep,
 	type MatterDetailPayload,
 	type MatterProgressDto,
 	type MatterVisibility,
-	openInnerMatterDemo,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
 import { AdminView } from "./components/AdminView.tsx";
@@ -77,7 +74,6 @@ export function App() {
 	const [streamingDelta, setStreamingDelta] = useState("");
 	const [sseConnected, setSseConnected] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
-	const [demoOpening, setDemoOpening] = useState(false);
 	const [errorBanner, setErrorBanner] = useState<string | null>(null);
 	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
 	const dismissError = useCallback(() => setErrorBanner(null), []);
@@ -448,56 +444,6 @@ export function App() {
 					effectiveOrg?.orgRole === "org_owner" ||
 					effectiveOrg?.orgRole === "org_admin"),
 		);
-	const handleOpenDemo = async () => {
-		if (demoOpening) return;
-		setDemoOpening(true);
-		try {
-			const { matter } = await openInnerMatterDemo();
-			explicitNewMatterRef.current = false;
-			navigateRoute({ tab: "chats", matterId: matter.id });
-			await refreshBootstrap();
-			await refreshDetail(matter.id);
-		} catch (error) {
-			setErrorBanner(error instanceof Error ? error.message : String(error));
-		} finally {
-			setDemoOpening(false);
-		}
-	};
-	const handleDemoStep = async (step: InnerMatterStep) => {
-		if (!matterDetail?.demoGuide || submitting || !isOwner) return;
-		const targetMatterId = matterDetail.matter.id;
-		setSubmitting(true);
-		try {
-			let prompt = step.prompt;
-			if (step.id === "revise") {
-				const v1 = matterDetail.spaceDocuments?.find(
-					(item) => item.title === matterDetail.demoGuide?.deliverableTitle,
-				);
-				if (!v1) throw new Error("请先完成 V1 阶段交付");
-				const existing = await listSpaceDocumentFeedback(v1.id);
-				const feedback =
-					existing.feedback.find((item) => item.commitHash === v1.headCommit && item.feedback.trim())?.feedback ??
-					step.feedback;
-				if (!existing.feedback.some((item) => item.commitHash === v1.headCommit && item.feedback.trim())) {
-					await saveSpaceDocumentFeedback(v1.id, { commitHash: v1.headCommit, feedback, rating: null });
-				}
-				prompt += `\n\n本次反馈：\n${feedback}\n\n更新已有资料时，使用 save_space_page 的 pageId=${v1.id}、revision=${v1.revision}。`;
-				await refreshDetail(matterDetail.matter.id);
-				await refreshBootstrap();
-			}
-			if (selectedMatterIdRef.current !== targetMatterId) return;
-			appendComposerText(prompt);
-			setNoticeBanner(
-				step.id === "revise" ? "V1 反馈已保留，修订要求已填入；发送后开始执行" : "提问已填入，可修改后发送给团队",
-			);
-			composerRef.current?.focus();
-		} catch (error) {
-			setErrorBanner(error instanceof Error ? error.message : String(error));
-		} finally {
-			setSubmitting(false);
-		}
-	};
-
 	const actions = useMatterActions({
 		bootstrap,
 		isOwner,
@@ -784,10 +730,6 @@ export function App() {
 								onOpenArchitect: initiation.openArchitectForGap,
 								onStartArchitectMatter: startArchitectMatter,
 							}}
-							onOpenDemo={bootstrap?.innerDemoAvailable && isOwner ? () => void handleOpenDemo() : undefined}
-							demoOpening={demoOpening}
-							onDemoStep={(step) => void handleDemoStep(step)}
-							demoStepBusy={submitting}
 							currentUser={currentUser}
 							accountUser={accountUser}
 							isSuperAdmin={isSuperAdmin}

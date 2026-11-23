@@ -5,7 +5,6 @@
 | 你要完成什么 | 阅读入口 |
 | --- | --- |
 | 从预构建包启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
-| 体验专业协作、阶段交付和反馈修订 | [完成四步内置演示](tutorials/inner-matter-demo.md) |
 | 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
 | 查阅随版本发布的工作台功能说明 | [工作台功能速查](guides/agent-workbench.md) · [English](guides/agent-workbench.en.md) |
 | 下载已发布版本；了解下一版本准备 | [0.6.4 发布说明](releases/v0.6.4.md) · [0.7.0 发布准备](releases/v0.7.0.md) |
@@ -40,7 +39,7 @@
 
 | 要核对的行为 | 阅读入口 |
 | --- | --- |
-| 会话接续、真实委托、经验与内置演示 | [协作链路验证](validation/runtime-checks.md) |
+| 会话接续、真实委托与经验 | [协作链路验证](validation/runtime-checks.md) |
 | 旁听何时补充、保持静默或停止 | [旁听验证](validation/observer-demo.md) |
 | 发布前协作、文件一致性和独立正文质量 | [发布前复核验证](validation/publication-review.md) |
 | 角色创建后履职、模型决策与英文 Skill 对照 | [角色真实任务验证](validation/role-design-demo.md) |

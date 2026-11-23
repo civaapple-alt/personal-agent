@@ -29,7 +29,6 @@
 | 多用户注册/审核/超管配额、组织成员与 AI 角色隔离、Git 克隆主目录边界、成员直接派发、交付成果库按组织筛选/私密/受限/只读、RSI 权限边界与团队版一键沙盒脚本（[start-team-sandbox.mjs](../scripts/start-team-sandbox.mjs)） | [multi-tenant-auth-admin.test.ts](multi-tenant-auth-admin.test.ts) |
 | 组织会话切换、旁听背景、复盘失效与旧范围保留 | [organization-context.test.ts](organization-context.test.ts) |
 | 提请状态、并发批准、附件缺失与并发图片派发 | [ai-request-lifecycle.test.ts](ai-request-lifecycle.test.ts) |
-| 内置演示准备、文件保留、四步进度与正常归档 | [inner-matter.test.ts](inner-matter.test.ts) |
 | 复核对照的工具证据判定，排除失败、未完成及发布后的咨询 | [publication-review.test.ts](publication-review.test.ts) |
 | 场景要求、重复顺序、独立审阅来源/行号/缺项校验、三层汇总与离线模式 | [publication-review-evaluation.test.ts](publication-review-evaluation.test.ts) |
 | 旁听演示的后加入前情、受限桥接、反馈接续、会话、静默与失败区分 | [observer-demo.test.ts](observer-demo.test.ts) |
