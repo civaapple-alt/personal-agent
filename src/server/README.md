@@ -23,7 +23,7 @@
 - 经验查询与事件共用角色、组织和工作区访问规则。经验提炼只读取请求者有权使用的角色的经验。预览事件按所关联事项推送，独立预览仅对平台管理员推送。工作区更新事件用 ID 通知刷新。账号 SSE 在发送时复核会话，登出立即关闭该会话的连接。
 - 已索引附件按其事项归属校验；非全局账号不能访问没有索引的附件。
 - 已有事项的消息沿用现有工作区。先通过事项设置切换工作区，再发送消息。请求指定的负责人、成员与旁听角色按事项的有效组织校验。
-修改接口时同时核对[网页 API 模块](../../web/src/README.md#前端状态与组件)的 DTO 和调用方的刷新逻辑，保留已有事项、工作区、成果和反馈兼容性。
+修改接口时同时核对[网页 API 模块](../../web/src/README.md#前端状态与组件)的 DTO 和调用方的刷新逻辑，核对事项、工作区、空间文档和反馈的权限与行为。
 
 [inner-matter.ts](inner-matter.ts) 按所有者显式打开准备内置演示；`POST /api/demos/inner-matter` 复用同一事项，仅补齐缺失初始文件，不运行模型或创建成果。默认目录为 `.data/inner-matter`，自定义数据库时跟随数据库目录。bootstrap 的 `innerDemoAvailable` 控制入口，事项详情的 `demoGuide` 控制引导；用法见[演示说明](../../docs/tutorials/inner-matter-demo.md)。
 
@@ -64,7 +64,7 @@
 - Phase 4 RSI 接口：
   - `POST /api/spaces/documents/:id/feedback` 按文档提交和评价人记录反馈，只评价该提交关联的经验；`neutral` 撤回该评价人的计数。
   - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止）及 `POST /api/rsi/distill/abort` 支持事项经验提炼与取消；组织 `org_owner`/`org_admin` 可为本组织可见事项触发复盘。
-  - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期；`org_owner`/`org_admin` 可管理所属组织的 `company_private`、`project_private` 及组织内 `org` 角色经验，全局平台角色 `role_general` 仍限超级管理员管理，`org_member`/`org_viewer`/`legacy_token` 禁止写改记忆。
+  - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期；`org_owner`/`org_admin` 可管理所属组织的 `company_private`、`project_private` 及组织内 `org` 角色经验，全局平台角色 `role_general` 仍限超级管理员管理，`org_member`/`org_viewer` 禁止写改记忆。
   - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
 - 运行态恢复与快照：
   - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端 F5 刷新恢复。

@@ -57,7 +57,7 @@ export function ensureOrgEnabledAiRequest(
 	return true;
 }
 
-/** Legacy discussion mode supports a local roster lookup. */
+/** Answer current-matter roster questions from the local record. */
 export function replyWithCurrentMatterRoster(
 	ctx: ServerRouteContext,
 	matter: Matter,

@@ -289,7 +289,7 @@ export class MemoryRepo {
 		}
 	}
 
-	/** Inject role-general facts, organization-shared memory for the workspace's org (or single-workspace legacy company memory), and workspace-specific facts. */
+	/** Inject role-general facts, organization-shared memory for the workspace's org (or single-workspace company memory), and workspace-specific facts. */
 	listRelevantMemories(
 		memberId: string,
 		workspaceId: string | null,

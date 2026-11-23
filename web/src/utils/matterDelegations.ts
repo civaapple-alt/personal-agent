@@ -190,7 +190,7 @@ export function liveDelegationEdges(
 	status: DelegationEdge["status"] = "running",
 ): DelegationEdge[] {
 	return entries.map((entry, index) => ({
-		id: entry.requestMessageId ?? `${entry.kind ?? "legacy"}:${entry.memberId}:${index}`,
+		id: entry.requestMessageId ?? `${entry.kind ?? "delegation"}:${entry.memberId}:${index}`,
 		number: entry.delegationNumber,
 		parentId: entry.parentRequestMessageId,
 		from: entry.fromMemberName ?? "",

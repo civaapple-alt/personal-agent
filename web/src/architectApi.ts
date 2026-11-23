@@ -31,15 +31,14 @@ export function canMemberManageRole(
 	if (!member) return false;
 	const scope = member.roleScope ?? (member.ownerUserId ? "personal" : member.ownerOrgId ? "org" : "global");
 	if (scope === "personal") {
-		if (ctx.accountUser) return Boolean(member.ownerUserId && member.ownerUserId === ctx.accountUser.id);
-		return ctx.currentUser?.permissionRole !== "collaborator";
+		return Boolean(ctx.accountUser && member.ownerUserId === ctx.accountUser.id);
 	}
 	if (scope === "org") {
 		if (ctx.isSuperAdmin) return true;
 		const org = member.ownerOrgId ? ctx.organizations?.find((o) => o.id === member.ownerOrgId) : undefined;
 		return org?.orgRole === "org_owner" || org?.orgRole === "org_admin";
 	}
-	return Boolean(ctx.isSuperAdmin || (!ctx.accountUser && ctx.currentUser?.permissionRole !== "collaborator"));
+	return Boolean(ctx.isSuperAdmin);
 }
 
 export function buildRoleScopeChoices(ctx: {
@@ -49,7 +48,6 @@ export function buildRoleScopeChoices(ctx: {
 	organizations?: OrganizationDto[];
 }): RoleScopeChoiceDto[] {
 	const choices: RoleScopeChoiceDto[] = [];
-	const isLegacyCollab = !ctx.accountUser && ctx.currentUser?.permissionRole === "collaborator";
 	const orgs = ctx.organizations ?? [];
 	const manageableOrgs = ctx.isSuperAdmin
 		? orgs
@@ -69,7 +67,7 @@ export function buildRoleScopeChoices(ctx: {
 			label: `组织共享 · ${org.name}`,
 		});
 	}
-	if (!isLegacyCollab && !isViewerOnly) {
+	if (ctx.accountUser && !isViewerOnly) {
 		choices.push({ key: "personal", roleScope: "personal", ownerOrgId: null, label: "个人私有（仅我可用）" });
 	}
 	return choices;

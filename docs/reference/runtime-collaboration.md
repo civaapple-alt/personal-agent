@@ -96,7 +96,7 @@
 
 - `company_private` 支持两种绑定模式：
   - 工作区已归属某个 `Organization` 时，该组织下所有工作区按 `orgId` 共享同一组织的经验与记忆，并按组织可选的 `gitEmailDomain` 派生默认 Git 邮箱。
-  - 工作区尚未归属任何组织时，继续兼容按单一 `workspaceId` 注入与隔离。
+  - 工作区尚未归属任何组织时，按单一 `workspaceId` 注入与隔离。
 - `project_private` 无论是否同属一个组织，都严格绑定当前工作区 `workspaceId`。
 - 无工作区与无组织的旧私有记忆继续保存并可查看，但不会在所有项目执行中加载。
 - `role_general` 用于跨组织、跨工作区通用的岗位经验与方法论。
