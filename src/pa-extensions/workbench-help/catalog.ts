@@ -54,6 +54,8 @@ const GUIDES = {
 export const WORKBENCH_TOPICS = {
 	...Object.fromEntries(Object.entries(GUIDES).map(([key, guide]) => [key, guide.rubric])),
 	current_matter: "Current matter status, lead, team participation, or bound repository as it exists now.",
+	team_capabilities:
+		"Responsibilities, declared boundaries, configured tools and skills, consult eligibility, and scoped past internal startup evidence for the current matter's team. Includes other team members' capabilities and tools. Past startup evidence is not live availability.",
 	runtime_tools:
 		"Which tools or extensions the current AI role can actually use in this matter. Includes '你能用哪些工具', '包含 human question 和 request_clarification 吗', and questions about whether a named tool is available. Choose capabilities only for platform setup or customization.",
 	pending_decisions:
@@ -64,6 +66,7 @@ export const WORKBENCH_TOPICS = {
 export type WorkbenchTopic =
 	| keyof typeof GUIDES
 	| "current_matter"
+	| "team_capabilities"
 	| "runtime_tools"
 	| "pending_decisions"
 	| "matter_documents";
@@ -75,7 +78,7 @@ export function isWorkbenchTopic(topic: unknown): topic is WorkbenchTopic {
 export const WORKBENCH_HELP_PROMPT = [
 	"Personal Agent help: call read_pa_help for questions about the workbench's features or current matter state. Use the business repository for questions about the project itself.",
 	`Guide topics: ${Object.keys(GUIDES).join(", ")}.`,
-	"Live topics: current_matter (roles and repository), runtime_tools (actual tools and extension availability), pending_decisions, matter_documents.",
+	"Live topics: current_matter (roles and repository), team_capabilities (role declarations and scoped past internal startups), runtime_tools (current role's startup tools, not verified operation), pending_decisions, matter_documents.",
 ].join("\n");
 
 export function isGuideTopic(topic: WorkbenchTopic): topic is keyof typeof GUIDES {

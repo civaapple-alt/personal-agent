@@ -6,6 +6,7 @@
 | --- | --- |
 | [rpc-smoke.ts](rpc-smoke.ts)，根命令 `npm run demo:rpc` | 在仓库根 cwd 运行，无持久 session，读取架构文档并输出 RPC 状态；属于早期 transport 冒烟，不覆盖团队协作 |
 | [team-smoke.ts](team-smoke.ts)，根命令 `npm run demo:team` | 创建临时工作区、数据库和会话；主成员真实委托同事，继续澄清不归档，再跨宿主进程接续并发布一个明确测试版本 |
+| [team-capabilities-smoke.ts](team-capabilities-smoke.ts)，根命令 `npm run demo:team:capabilities` | 使用合成的历史内部启动清单，询问真实主责对职责、边界与工具证据的判断；保留原文和事件，需独立审阅，脚本结束不代表语义质量通过 |
 | [space-smoke.ts](space-smoke.ts)，根命令 `npm run demo:space` | 在临时数据库、Git 资料空间与工作区中，通过账号登录和 HTTP 派发真实模型，检查同组织读取、跨组织拒绝、版本差异、旧版本反馈、编辑冲突及私密目录预览权限；保留 `evidence.json` |
 | [rsi-smoke.ts](rsi-smoke.ts)，根命令 `npm run demo:rsi` | 临时工作区/数据库/会话中验证真实经验提案、成功收尾提交、正式文件、版本改评和无工具复盘，保留 `evidence.json` |
 | [publication-review-smoke.ts](publication-review-smoke.ts)，根命令 `npm run demo:review` | 默认一次自主场景配对，支持 `--scenario required/solo/all`、`--repeat N`；分开报告发布、场景协作与正文质量，独立审阅后用 `--summarize <目录>` 离线汇总。未审阅返回 2，不算通过。详见[评估说明](../../docs/validation/publication-review.md) |

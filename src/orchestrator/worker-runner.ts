@@ -35,6 +35,7 @@ import {
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
 } from "./prompts.ts";
+import { buildTeamCapabilities } from "./team-capabilities.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -257,7 +258,11 @@ export async function executeWithWorkerPass(
 			}
 			return {
 				matter: current,
-				members: deps.listSharedMatterAiMembers(current),
+				members: deps
+					.resolveMatterAiMembers(current)
+					.filter((member) => member.roleScope !== "personal" || member.ownerUserId === actorUserId),
+				getTemplate: deps.getTemplateForMember,
+				sourceUserMessageId: input.run.userMessageId,
 				workspaceId: current.workspaceId,
 				repoPath: cwd,
 				orgId: activeOrgId,
@@ -635,6 +640,18 @@ export async function executeWithWorkerPass(
 			consultMemberIds: matter?.consultMemberIds ?? null,
 			observerMemberIds: matter?.observersEnabled ? matter.observerMemberIds : [],
 			teamMembers: matterAiMembers,
+			teamCapabilities:
+				matter && sessionMode === "lead"
+					? buildTeamCapabilities({
+							matter,
+							members: matterAiMembers,
+							messages: deps.store.listMessages(input.matterId),
+							workspaceId: input.workspace?.id ?? null,
+							repoPath: cwd,
+							orgId: activeOrgId,
+							getTemplate: deps.getTemplateForMember,
+						})
+					: undefined,
 		});
 		const architectContext =
 			isArchitect && deps.getTemplatesById
@@ -721,12 +738,20 @@ export async function executeWithWorkerPass(
 					channel: "notice",
 					senderType: "system",
 					senderId: input.member.id,
+					metadata: {
+						workspaceId: input.workspace?.id ?? null,
+						repoPath: cwd,
+						orgId: activeOrgId,
+						sourceUserMessageId: input.run.userMessageId,
+					},
 					content: JSON.stringify({
 						type: event.type,
 						toolCallId: event.toolCallId,
 						toolName,
 						...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
-						...(event.type === "tool_execution_end" ? { isError: Boolean(event.isError) } : {}),
+						...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
+							? { isError: event.isError }
+							: {}),
 					}),
 				});
 				const toolSummary = event.type === "tool_execution_start" ? summarizeToolArgs(event.args) : undefined;
@@ -917,17 +942,45 @@ export async function executeWithWorkerPass(
 					/\p{Script=Han}/u.test(input.taskPrompt),
 				)
 			: undefined;
+		const runtimeHelp =
+			input.workbenchHelpTopic === "capabilities"
+				? await readWorkbenchTopic(
+						deps.store,
+						workbenchContext(),
+						"runtime_tools",
+						/\p{Script=Han}/u.test(input.taskPrompt),
+					)
+				: undefined;
+		const matterHelp =
+			input.workbenchHelpTopic === "pa_and_pi" || input.workbenchHelpTopic === "deliverables"
+				? await readWorkbenchTopic(
+						deps.store,
+						workbenchContext(),
+						"current_matter",
+						/\p{Script=Han}/u.test(input.taskPrompt),
+					)
+				: undefined;
 		signal.throwIfAborted();
 		const helpBlock = help
 			? [
 					"[PA workbench reference for this turn]",
 					"Answer the specific question first. Use the recent conversation to resolve follow-ups. Include only the facts and steps needed to answer, then stop. Treat the reference as evidence and use read_pa_help when you need more PA facts. Describe actions and tool availability only when supported by that evidence.",
 					`${help.heading} (${help.source})\n${help.content}`,
+					...(runtimeHelp ? [`${runtimeHelp.heading} (${runtimeHelp.source})\n${runtimeHelp.content}`] : []),
+					...(matterHelp ? [`${matterHelp.heading} (${matterHelp.source})\n${matterHelp.content}`] : []),
 					"[/PA workbench reference]",
 				].join("\n\n")
 			: "";
+		const currentRuntimeBlock = [
+			"[Current worker startup evidence]",
+			`Current role: ${input.member.id}; session mode: ${sessionMode}; discussion mode: ${isDiscussionMode}.`,
+			`Tools observed during this worker's startup handshake: ${tools.join(", ") || "none"}.`,
+			"This is this role's current startup, distinct from historical internal-startup records in team capability cards. Registration does not prove a tool call succeeded. Use read_pa_help runtime_tools to check current call evidence; do not invent successful calls.",
+			`Current matter's default space routing: ${matter?.visibility === "private" ? "the creator's personal space" : input.workspace ? "the workspace space" : "the organization space"}; a matter does not get a separate Git repository.`,
+			"[/Current worker startup evidence]",
+		].join("\n");
 		const prompt = escapeWebAccessSlashCommand(
-			[contextBlock, resumeBrief, helpBlock, input.taskPrompt].filter(Boolean).join("\n\n"),
+			[contextBlock, resumeBrief, currentRuntimeBlock, helpBlock, input.taskPrompt].filter(Boolean).join("\n\n"),
 		);
 		sessionRecord = deps.store.recordWorkerSession({
 			memberId: input.member.id,

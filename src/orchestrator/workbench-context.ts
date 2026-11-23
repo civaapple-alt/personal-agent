@@ -1,8 +1,10 @@
 import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import type { RoleTemplate } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
 import { isCurrentHumanDecision, readHumanDecision } from "./human-decision.ts";
 import { scopedSpaceDocumentIds, selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
+import { buildTeamCapabilities } from "./team-capabilities.ts";
 
 export interface WorkbenchContext extends WorkspaceContext {
 	matter: Matter;
@@ -10,6 +12,8 @@ export interface WorkbenchContext extends WorkspaceContext {
 	workspaceName?: string;
 	runtimeMemberId?: string;
 	activeTools?: string[];
+	getTemplate?: (member: TeamMember) => RoleTemplate | undefined;
+	sourceUserMessageId?: string;
 }
 
 const MATTER_STATUS_LABELS = {
@@ -51,10 +55,91 @@ const MANAGED_EXTENSIONS = [
 	["web_search", "pi-web-access"],
 ] as const;
 
+function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchContext, chinese: boolean): string {
+	if (!context.sourceUserMessageId || !context.runtimeMemberId || !context.activeTools) {
+		return chinese
+			? "当前调用结果未知；历史启动记录不证明当前调用成功。"
+			: "Current call results are unknown; a historical startup is not proof of a successful call.";
+	}
+	const calls = new Map<string, { name: string; outcome: "pending" | "success" | "error" | "unknown" }>();
+	for (const message of selectMatterContext({ ...context, messages: store.listMessages(context.matter.id) })
+		.messages) {
+		if (
+			message.channel !== "notice" ||
+			message.senderType !== "system" ||
+			message.senderId !== context.runtimeMemberId ||
+			message.metadata?.sourceUserMessageId !== context.sourceUserMessageId
+		)
+			continue;
+		try {
+			const event: unknown = JSON.parse(message.content);
+			if (
+				!event ||
+				typeof event !== "object" ||
+				!("type" in event) ||
+				!("toolCallId" in event) ||
+				typeof event.toolCallId !== "string" ||
+				!("toolName" in event) ||
+				typeof event.toolName !== "string"
+			)
+				continue;
+			if (!["web_search", "get_search_content", "fetch_content", "load_pstack_skill"].includes(event.toolName))
+				continue;
+			if (event.type === "tool_execution_start")
+				calls.set(event.toolCallId, { name: event.toolName, outcome: "pending" });
+			if (event.type === "tool_execution_end" && calls.get(event.toolCallId)?.name === event.toolName) {
+				const outcome =
+					"isError" in event && typeof event.isError === "boolean"
+						? event.isError
+							? "error"
+							: "success"
+						: "unknown";
+				calls.set(event.toolCallId, { name: event.toolName, outcome });
+			}
+		} catch {
+			/* Ignore non-JSON notices. */
+		}
+	}
+	return ["web_search", "get_search_content", "fetch_content", "load_pstack_skill"]
+		.map((name) => {
+			const matching = [...calls.values()].filter((call) => call.name === name);
+			const outcome = matching.at(-1)?.outcome;
+			const label = chinese
+				? outcome === "success"
+					? "最近调用结束且未报告工具错误"
+					: outcome === "error"
+						? "最近调用报告错误"
+						: outcome === "pending"
+							? "调用尚未结束"
+							: outcome === "unknown"
+								? "调用已结束但结果状态未知"
+								: "本轮未见调用，实际效果未验证"
+				: outcome === "success"
+					? "latest call ended without a reported tool error"
+					: outcome === "error"
+						? "latest call reported an error"
+						: outcome === "pending"
+							? "call still pending"
+							: outcome === "unknown"
+								? "call ended but its result status is unknown"
+								: "no call observed this turn; effectiveness unverified";
+			const loaded = context.activeTools?.includes(name)
+				? chinese
+					? "启动时已加载"
+					: "loaded at startup"
+				: chinese
+					? "启动时未加载"
+					: "not loaded at startup";
+			return `${name}: ${label} (${loaded})`;
+		})
+		.join("\n");
+}
+
 function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchContext, chinese: boolean) {
 	const { matter, members, runtimeMemberId, activeTools } = context;
 	const member = members.find((item) => item.id === (runtimeMemberId ?? matter.leadMemberId));
 	let tools = activeTools;
+	let lastStartup: MatterMessage | undefined;
 	if (!tools && member) {
 		const { messages } = selectMatterContext({
 			...context,
@@ -63,7 +148,10 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 		for (const message of messages.toReversed()) {
 			if (message.senderId !== member.id) continue;
 			tools = readRuntimeTools(message);
-			if (tools) break;
+			if (tools) {
+				lastStartup = message;
+				break;
+			}
 		}
 	}
 	const label = member ? plainText(member.displayName) : chinese ? "当前岗位" : "Current role";
@@ -86,6 +174,11 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 					? `从清单识别到的 PA 扩展：${codeList(extensions)}。`
 					: `PA-managed extensions identified from the list: ${codeList(extensions)}.`
 				: null,
+			lastStartup
+				? chinese
+					? `历史启动记录时间：${lastStartup.createdAt}；该记录仅代表当时的调用模式和配置。`
+					: `Historical startup time: ${lastStartup.createdAt}; this record only describes its original call mode and configuration.`
+				: null,
 			tools
 				? chinese
 					? `这次启动时 Human Question ${tools.includes("request_clarification") ? "已启用" : "未启用"}。`
@@ -94,6 +187,10 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 			chinese
 				? "`human-question` 注册 `request_clarification`。主责用它向人提请决定，协作者用它向直接委托者澄清。旁听、验收和角色架构师不加载此工具。"
 				: "`human-question` registers `request_clarification`. Leads can request a human decision and collaborators can ask their delegator. Observers, verifiers, and Role Architect do not load it.",
+			chinese
+				? "工具已加载只表示启动时注册成功，不证明凭据、网络、供应商或方法调用成功。未调用时应说尚未验证；有 bash 不等于只读，Pi 不是操作系统沙箱。"
+				: "Loaded tools only confirm registration at startup, not working credentials, network, provider, or method calls. If not called, say unverified. Bash can write; Pi is not an OS sandbox.",
+			describeTurnToolCalls(store, context, chinese),
 		]
 			.filter(Boolean)
 			.join("\n\n"),
@@ -108,6 +205,17 @@ export async function readWorkbenchTopic(
 ) {
 	if (isGuideTopic(topic)) return readWorkbenchGuide(topic, chinese);
 	if (topic === "runtime_tools") return describeRuntimeTools(store, context, chinese);
+	if (topic === "team_capabilities") {
+		return {
+			source: "team_capabilities",
+			heading: chinese ? "当前事项团队能力与证据" : "Team capabilities and evidence",
+			content: buildTeamCapabilities({
+				...context,
+				messages: store.listMessages(context.matter.id),
+				getTemplate: context.getTemplate ?? (() => undefined),
+			}),
+		};
+	}
 
 	const { matter, members, workspaceName, activeTools } = context;
 	if (topic === "current_matter") {
@@ -135,6 +243,9 @@ export async function readWorkbenchTopic(
 				chinese
 					? `仓库：${workspaceName ? plainText(workspaceName) : "未绑定"}。AI 旁听：${matter.observersEnabled ? "开启" : "关闭"}。主责默认回应。`
 					: `Repository: ${workspaceName ? plainText(workspaceName) : "none"}. AI observers: ${matter.observersEnabled ? "on" : "off"}. The lead responds by default.`,
+				chinese
+					? `默认资料空间路由：${matter.visibility === "private" ? "发起人的个人空间" : matter.workspaceId ? "当前工作区空间" : "所属组织空间"}；事项关联文档，不为每个事项单独创建 Git 仓库。`
+					: `Default space route: ${matter.visibility === "private" ? "creator's personal space" : matter.workspaceId ? "workspace space" : "organization space"}; matters link documents rather than each creating a separate Git repository.`,
 				...roster.slice(0, 40),
 				...(roster.length > 40
 					? [

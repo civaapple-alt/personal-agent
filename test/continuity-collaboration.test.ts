@@ -2080,3 +2080,70 @@ test("dispatchMatter forwards attached images to lead and observer workers witho
 	assert.equal(lateObserverPrompts.length, 1);
 	assert.match(lateObserverPrompts[0]!, /\[Image attachments: 1\]/);
 });
+
+test("lead receives scoped team capability evidence and distinguishes tool startup from calls", async (t) => {
+	let checked = false;
+	const f = await fixture(t, async (worker, prompt) => {
+		const turn = worker.options.env?.PA_TURN_CONTEXT ?? "";
+		assert.match(turn, /Team capability cards/);
+		assert.match(prompt, /Current role: product-manager; session mode: lead/);
+		assert.match(prompt, /Tools observed during this worker's startup handshake: .*read_pa_help/);
+		assert.match(turn, /engineering-manager.*consultable/);
+		assert.match(turn, /Role definition — responsibilities/);
+		assert.match(turn, /configured base tools/);
+		assert.match(turn, /historical_marker/);
+		assert.doesNotMatch(turn, /outside_workspace_marker|outside_org_marker|observer_marker/);
+		assert.match(turn, /not live availability/);
+		const team = JSON.stringify(
+			(await worker.call("read_pa_help", { topics: ["team_capabilities"], language: "zh" })).details,
+		);
+		assert.match(team, /historical_marker/);
+		assert.doesNotMatch(team, /outside_workspace_marker|outside_org_marker|observer_marker/);
+		const before = JSON.stringify(
+			(await worker.call("read_pa_help", { topics: ["runtime_tools", "current_matter"], language: "zh" })).details,
+		);
+		assert.match(before, /本轮未见调用，实际效果未验证/);
+		assert.match(before, /load_pstack_skill: 本轮未见调用，实际效果未验证.*启动时未加载/);
+		assert.match(before, /当前工作区空间/);
+		worker.emitEvent({ type: "tool_execution_start", toolCallId: "search-1", toolName: "web_search" });
+		worker.emitEvent({ type: "tool_execution_end", toolCallId: "search-1", toolName: "web_search", isError: true });
+		worker.emitEvent({ type: "tool_execution_start", toolCallId: "pstack-1", toolName: "load_pstack_skill" });
+		worker.emitEvent({ type: "tool_execution_start", toolCallId: "content-1", toolName: "fetch_content" });
+		worker.emitEvent({ type: "tool_execution_end", toolCallId: "content-1", toolName: "fetch_content" });
+		worker.emitEvent({
+			type: "tool_execution_end",
+			toolCallId: "pstack-1",
+			toolName: "load_pstack_skill",
+			isError: false,
+		});
+		const after = JSON.stringify(
+			(await worker.call("read_pa_help", { topics: ["runtime_tools"], language: "zh" })).details,
+		);
+		assert.match(after, /web_search: 最近调用报告错误/);
+		assert.match(after, /load_pstack_skill: 最近调用结束且未报告工具错误/);
+		assert.match(after, /fetch_content: 调用已结束但结果状态未知/);
+		assert.match(after, /有 bash 不等于只读/);
+		checked = true;
+		return "能力已检查";
+	});
+	const matter = f.store.createMatter({
+		title: "能力检查",
+		workspaceId: f.workspace.id,
+		leadMemberId: "product-manager",
+	});
+	const appendReady = (workspaceId: string, repoPath: string, mode: string, tool: string, orgId = f.workspace.orgId) =>
+		f.store.appendMessage({
+			matterId: matter.id,
+			channel: "notice",
+			senderType: "system",
+			senderId: "engineering-manager",
+			metadata: { workspaceId, repoPath, orgId, sourceUserMessageId: "earlier-turn" },
+			content: JSON.stringify({ method: "runtime_ready", sessionMode: mode, discussionMode: false, tools: [tool] }),
+		});
+	appendReady(f.workspace.id, f.workspace.repoPath, "internal", "historical_marker");
+	appendReady("other-workspace", "/elsewhere", "internal", "outside_workspace_marker");
+	appendReady(f.workspace.id, f.workspace.repoPath, "internal", "outside_org_marker", "org-other");
+	appendReady(f.workspace.id, f.workspace.repoPath, "observer", "observer_marker");
+	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "了解团队能力" });
+	assert.equal(checked, true);
+});

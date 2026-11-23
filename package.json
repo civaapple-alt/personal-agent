@@ -20,6 +20,7 @@
 		"test": "node scripts/run-tests.mjs",
     "demo:rpc": "node src/demo/rpc-smoke.ts",
     "demo:team": "node src/demo/team-smoke.ts",
+    "demo:team:capabilities": "node src/demo/team-capabilities-smoke.ts",
     "demo:space": "node src/demo/space-smoke.ts",
     "check:startup": "node scripts/check-server-startup.mjs",
     "check:docs": "node scripts/check-docs.mjs",

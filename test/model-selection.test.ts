@@ -97,7 +97,7 @@ test("Pi defaults, platform, organization and matter model settings resolve in o
 				async runPromptAndWait(prompt) {
 					executions.push({ member: options.env?.PA_MEMBER_ID, selection, sessionId });
 					sessions.set(sessionId, selection);
-					if (prompt === "ask-qa")
+					if (prompt.trimEnd().endsWith("\n\nask-qa"))
 						await invokeTool(options, "delegate_to_member", { memberId: "qa-manager", task: "review-model" });
 					return {
 						disposition: "started",

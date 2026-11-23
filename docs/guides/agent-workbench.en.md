@@ -56,6 +56,8 @@ Web search requires administrator setup and a role grant. The pstack methods pac
 
 Ask what tools or extensions the role can use to see the tools reported when it started in this workspace. Human Question provides `request_clarification`. Leads use it to request decisions from people, and collaborators use it to ask their delegator.
 
+The lead receives team role declarations and the latest scoped internal startup evidence. A role definition or historical tool list does not guarantee a future worker's tools or success. Tool registration does not prove credentials, network, or provider operation; a call without a reported error does not prove output quality. Ordinary collaborators with `bash` can modify files even without `write`. Observers and independent verifiers use narrower tool lists. Pi runs with the service account's permissions and is not an OS sandbox.
+
 ## Team experience
 
 A matter retrospective can propose reusable working practices. Review the evidence and the organization or repository scope before confirming an experience as verified.
