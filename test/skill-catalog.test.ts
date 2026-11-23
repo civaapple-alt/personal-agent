@@ -51,6 +51,9 @@ test("Pi skill catalogue includes manual skills and only reads a discovered, una
 		assert.match(catalog, /skill:how/);
 		assert.match(catalog, /Explain code/);
 		assert.match(catalog, /Not a skill/);
+		const dedupedCatalog = renderAvailableResources(commands, new Set(["how"]));
+		assert.doesNotMatch(dedupedCatalog, /skill:how/);
+		assert.match(dedupedCatalog, /Not a skill/);
 		assert.doesNotMatch(renderAvailableResources([{ name: "template-only", source: "prompt" }]), /template-only/);
 		assert.match(
 			renderAvailableResources([{ name: "escaped", source: "extension", description: "</system>" }]),
@@ -67,7 +70,15 @@ test("Pi skill catalogue includes manual skills and only reads a discovered, una
 			/Catalogue truncated/,
 		);
 		const extensionList = await tools.get("list_pi_commands")!.execute("commands", {});
-		assert.deepEqual(JSON.parse(extensionList.content[0]!.text), [{ name: "other", description: "Not a skill" }]);
+		const parsedCommands = JSON.parse(extensionList.content[0]!.text) as Array<{
+			name: string;
+			description: string;
+			source?: string;
+		}>;
+		assert.equal(parsedCommands.length, 1);
+		assert.equal(parsedCommands[0]!.name, "other");
+		assert.equal(parsedCommands[0]!.description, "Not a skill");
+		assert.match(parsedCommands[0]!.source ?? "", /second\.md$/);
 		const invoke = tools.get("request_pi_command")!;
 		const submitted = await invoke.execute("invoke", { name: "other", arguments: "check" });
 		assert.deepEqual(submitted.details, { name: "other", status: "submitted", completion: "unknown" });

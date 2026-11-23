@@ -134,8 +134,8 @@
 
 角色 Skill 解析与分享边界如下：
 
-- 角色 `skills` 中的名称解析到仓库 `skills/<name>/SKILL.md`，或解析角色包中的 `skills/<name>/SKILL.md` 相对路径。
-- 角色声明对应实际 Pi Skill 文件（含新增的 `technical-writing`），并通过显式 `--skill` 装载；缺失 Skill 会在模型请求前失败。
+- 角色 `skills` 中的名称解析到内置 Pi 包 `pi-extensions/role-skills/skills/<name>/SKILL.md`，或解析角色包中的 `skills/<name>/SKILL.md` 相对路径。
+- 角色声明对应实际 Pi Skill 文件（含内置 `deliverable-writing`），并通过原生 `role-skills` 包及 `--skill` 装载；缺失 Skill 会在模型请求前失败。
 - 分享角色定义不会把私有记忆打包，也不会自动安装其引用的 Skills 或插件。
 
 扩展与工具清单装配如下：

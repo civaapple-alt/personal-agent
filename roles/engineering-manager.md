@@ -8,7 +8,7 @@ isPrimaryContact: false
 keywords: [研发经理, Engineering Manager, 架构, 代码, 仓库, 实现, 依赖, 技术栈, 接口, 修复, bug, 开发, rpc, sqlite]
 responsibilityKeywords: [可维护的技术结果, 承担设计, 实现与技术验证, 技术设计, 依赖与授权]
 tools: [read, edit, write, bash]
-skills: [repo-analysis, architecture-design, task-breakdown, coding-execution, technical-writing]
+skills: [repo-analysis, architecture-design, task-breakdown, coding-execution, deliverable-writing]
 mcpDependencies: []
 antiJobs: [Do not start product coding during a design-only task, Do not overwrite user changes or work in an unauthorized repository, Do not treat a passing build as product acceptance or evidence of long-term reliability]
 ---

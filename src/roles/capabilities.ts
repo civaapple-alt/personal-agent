@@ -4,7 +4,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RoleCapabilityReport, RoleScope, RoleTemplate } from "./types.ts";
 
-export const builtinSkillsDir = fileURLToPath(new URL("../../skills/", import.meta.url));
+export const builtinSkillsDir = fileURLToPath(new URL("../../pi-extensions/role-skills/skills/", import.meta.url));
 const SAFE_SEGMENT_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ROLE_LOCAL_SKILL_RE = /^skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;

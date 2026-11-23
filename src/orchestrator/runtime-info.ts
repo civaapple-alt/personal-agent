@@ -294,13 +294,16 @@ export async function buildRuntimeOverview(options: {
 	const teamExtPath = resolveBuiltinExtensionPath("team-extension");
 	const humanQuestionPath = resolveBuiltinExtensionPath("human-question");
 	const skillCatalogPath = resolveBuiltinExtensionPath("skill-catalog");
+	const roleSkillsPath = resolveBuiltinExtensionPath("role-skills");
 
-	const [piProbe, teamFileStatus, humanQuestionFileStatus, skillCatalogFileStatus] = await Promise.all([
-		probePromise,
-		checkFileOrDir(teamExtPath),
-		checkFileOrDir(humanQuestionPath),
-		checkFileOrDir(skillCatalogPath),
-	]);
+	const [piProbe, teamFileStatus, humanQuestionFileStatus, skillCatalogFileStatus, roleSkillsFileStatus] =
+		await Promise.all([
+			probePromise,
+			checkFileOrDir(teamExtPath),
+			checkFileOrDir(humanQuestionPath),
+			checkFileOrDir(skillCatalogPath),
+			checkFileOrDir(roleSkillsPath),
+		]);
 
 	let packageListing: Promise<string> | undefined;
 	const readPackages = (executable: string) => {
@@ -374,6 +377,22 @@ export async function buildRuntimeOverview(options: {
 		declaredByRoles: [],
 		mcpServers: [],
 		error: skillCatalogFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
+	const roleSkillsItem: RuntimeExtensionItem = {
+		id: "builtin-role-skills",
+		name: "role-skills",
+		sourceKind: "builtin",
+		status: roleSkillsFileStatus === "present" ? "active" : "error",
+		entryPath: isOwner ? roleSkillsPath : builtinExtensionPaths["role-skills"],
+		fileStatus: roleSkillsFileStatus,
+		scopeSummary: "内置岗位方法 Skill 包（支持终端 pi install）",
+		description: "提供产品、研发、测试与增长岗位的内置方法论 Skills，作为标准 Pi Package 加载。",
+		registeredTools: [],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: roleSkillsFileStatus === "missing" ? "未找到内置角色 Skill 包目录" : null,
 	};
 
 	const humanQuestionItem: RuntimeExtensionItem = {
@@ -452,6 +471,7 @@ export async function buildRuntimeOverview(options: {
 	const extensions: RuntimeExtensionItem[] = [
 		teamExtensionItem,
 		skillCatalogItem,
+		roleSkillsItem,
 		humanQuestionItem,
 		mcpExtensionItem,
 		webAccessExtensionItem,

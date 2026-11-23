@@ -188,7 +188,12 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(builtinTelemetry.status, "active");
 	assert.equal(builtinTelemetry.fileStatus, "builtin");
 
-	assert.equal(ownerPayload.summary.activeCount, 4);
+	const roleSkillsPkg = ownerPayload.extensions.find((ext) => ext.name === "role-skills");
+	assert.ok(roleSkillsPkg);
+	assert.equal(roleSkillsPkg.status, "active");
+	assert.equal(roleSkillsPkg.fileStatus, "present");
+
+	assert.equal(ownerPayload.summary.activeCount, 5);
 	assert.equal(
 		ownerPayload.summary.conditionalCount,
 		ownerPayload.extensions.filter((ext) => ext.status === "conditional").length,

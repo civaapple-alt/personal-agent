@@ -16,7 +16,7 @@ export const ROLE_DEMO_FILES: Record<string, string> = {
 };
 
 export const ARCHITECT_DEMO_PROMPT =
-	"这是隔离验证，明确要求新增而非复用一个专职「发布审阅员」，id 为 release-reviewer，英文 Release Reviewer。唯一工作是只读核对仓库的版本、发布说明与需求是否一致。禁止改文件、执行命令或对外发送。信息已充分，直接输出一个蓝图，不追问。workspaceScope 用 read_only_repo，skills 至少选择 repo-analysis 和 acceptance-verification，可加 technical-writing；不依赖外部 MCP。请给出具体 communicationStyle 与 verificationPlan，验证任务是读取 package.json、release.md、requirements.md 并指出相互矛盾。不要创建成员或发布正式成果，后续由既有提案入口处理。";
+	"这是隔离验证，明确要求新增而非复用一个专职「发布审阅员」，id 为 release-reviewer，英文 Release Reviewer。唯一工作是只读核对仓库的版本、发布说明与需求是否一致。禁止改文件、执行命令或对外发送。信息已充分，直接输出一个蓝图，不追问。workspaceScope 用 read_only_repo，skills 至少选择 repo-analysis 和 acceptance-verification，可加 deliverable-writing；不依赖外部 MCP。请给出具体 communicationStyle 与 verificationPlan，验证任务是读取 package.json、release.md、requirements.md 并指出相互矛盾。不要创建成员或发布正式成果，后续由既有提案入口处理。";
 
 export const ROLE_DEMO_TASKS = [
 	{

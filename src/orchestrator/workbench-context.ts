@@ -181,8 +181,8 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 					: `No startup record is available for ${label} in this workspace.`,
 			extensions.length
 				? chinese
-					? `从清单识别到的 PA 扩展：${codeList(extensions)}。`
-					: `PA-managed extensions identified from the list: ${codeList(extensions)}.`
+					? `从清单识别到的 PA 扩展：${codeList(extensions)}（另默认挂载内置岗位方法包 \`role-skills\` 与 Pi 内置 \`builtin:mcp\`，具体已注册斜杠命令以 \`list_pi_commands\` 返回的 \`source\` 为准）。`
+					: `PA-managed extensions identified from the list: ${codeList(extensions)} (built-in \`role-skills\` package and Pi \`builtin:mcp\` are also mounted; check \`list_pi_commands\` \`source\` for registered slash command origins).`
 				: null,
 			lastStartup
 				? chinese

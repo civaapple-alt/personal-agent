@@ -571,6 +571,7 @@ export async function executeWithWorkerPass(
 			: ["--no-extensions", "--no-approve"];
 		args.push("--extension", teamExtension.entry);
 		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
+		args.push("--extension", resolveBuiltinExtensionPath("role-skills"));
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
@@ -891,6 +892,7 @@ export async function executeWithWorkerPass(
 				discussionMode: isDiscussionMode,
 				skills: skillPaths,
 				resourcePolicy: inheritsLocalResources ? "local-pi" : "explicit",
+				skillDiscovery: "pi-packages-and-explicit",
 				model: state.model
 					? { provider: state.model.provider, model: state.model.id, thinkingLevel: state.thinkingLevel }
 					: selection,

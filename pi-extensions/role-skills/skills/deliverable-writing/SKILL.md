@@ -1,11 +1,11 @@
 ---
-name: technical-writing
+name: deliverable-writing
 description: Use when writing or revising a technical document or formal deliverable that needs a clear conclusion and traceable evidence.
 ---
 
 # Write technical documents and deliverables
 
-Adapted from [pstack technical-writing](https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing) for Personal Agent's deliverable fields and document structure. See the [third-party notices](../../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method) for attribution and the MIT license.
+Adapted from [pstack technical-writing](https://github.com/cursor/plugins/tree/main/pstack/skills/technical-writing) for Personal Agent's deliverable fields and document structure. See the [third-party notices](../../../../THIRD_PARTY_NOTICES.md#pstack-derived-writing-method) for attribution and the MIT license.
 
 Put the conclusion, important changes, and verification evidence where a reader can find them on the first pass.
 

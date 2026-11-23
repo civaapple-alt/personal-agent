@@ -42,7 +42,7 @@ Bot 或岗位定义回答“谁负责什么”；Skill 描述“一类工作怎�
 
 Personal Agent 外层管理事项范围、真实委托、会话及成果；Pi 内层运行模型推理与工具循环。可选 pstack 包提供模式、playbook 和原则，进入这个内循环，不替代成员身份与事项编排。
 
-本地 `technical-writing` 是已归属标注的适配方法。完整 pstack 由操作者另行提供，没有自动插件安装、跨宿主完整适配或版本依赖解析。配置方式见[启用 pstack](../guides/pstack-runtime.md)，方法装载结果见[验证记录](../validation/pstack-checks.md)。
+本地 `deliverable-writing` 是已归属标注的适配方法。完整 pstack 由操作者另行提供，没有自动插件安装、跨宿主完整适配或版本依赖解析。配置方式见[启用 pstack](../guides/pstack-runtime.md)，方法装载结果见[验证记录](../validation/pstack-checks.md)。
 
 ## 能力约束由运行结构落实
 

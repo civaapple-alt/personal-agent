@@ -8,7 +8,7 @@ isPrimaryContact: false
 keywords: [测试经理, QA Manager, 测试, 验收, 质量, 风险, 用例, 回归, 缺陷, 验证, bug]
 responsibilityKeywords: [失败或未验证证据]
 tools: [read, bash]
-skills: [test-planning, regression-impact-analysis, acceptance-verification, technical-writing]
+skills: [test-planning, regression-impact-analysis, acceptance-verification, deliverable-writing]
 mcpDependencies: []
 antiJobs: [Do not pass acceptance based on a teammate's account or simulated output, Do not weaken acceptance criteria or repair product code, Do not generalize a passing version to other products or long-term reliability]
 ---

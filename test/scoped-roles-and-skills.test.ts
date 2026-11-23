@@ -198,7 +198,7 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 									antiJobs: ["Do not modify repository files or run commands"],
 									quietWhen: "Return [SILENT] when not addressed",
 									keywords: ["weekly", "notes"],
-									skills: ["technical-writing"],
+									skills: ["deliverable-writing"],
 									newSkills: [
 										{
 											name: "note-digest-sop",
@@ -237,7 +237,7 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 										title: "Weekly Helper",
 										oneJob: "Draft concise weekly status recaps for one member.",
 										antiJobs: ["Do not edit code or publish to shared org channels automatically"],
-										skills: ["technical-writing"],
+										skills: ["deliverable-writing"],
 										newSkills: [
 											{
 												name: "weekly-template",
@@ -536,7 +536,7 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 				name: "Note Coach",
 				title: "Note Coach",
 				roleScope: "personal",
-				skills: ["technical-writing"],
+				skills: ["deliverable-writing"],
 				mcpDependencies: ["alice-private-mcp"],
 				newSkills: [
 					modelDraft.newSkills![0],
@@ -819,7 +819,7 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 			400,
 		);
 		// Clean markdown claiming roleScope: global imported by Bob -> forced to Bob's personal scope!
-		const cleanMd = evilMd.replace("skills: [../../etc/passwd]", "skills: [technical-writing]");
+		const cleanMd = evilMd.replace("skills: [../../etc/passwd]", "skills: [deliverable-writing]");
 		const importBob = await fetch(`${base}/api/members/import`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Cookie: bob.cookie },
@@ -874,7 +874,7 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 							roleScope: "personal",
 							responsibilities: ["Collect and structure private notes"],
 							keywords: ["notes", "summary"],
-							skills: ["technical-writing"],
+							skills: ["deliverable-writing"],
 							newSkills: [
 								{
 									name: "proposal-digest",

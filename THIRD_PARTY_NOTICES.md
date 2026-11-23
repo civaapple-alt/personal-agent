@@ -4,7 +4,7 @@ Personal Agent's original code, role definitions and documentation are licensed 
 
 ## pstack-derived writing method
 
-[skills/technical-writing/SKILL.md](skills/technical-writing/SKILL.md) adapts the writing method from [pstack](https://github.com/cursor/plugins/tree/main/pstack), including its concise writing and Diátaxis guidance, with project-specific deliverable conventions. Preserve the upstream MIT notice below when redistributing this adaptation.
+[pi-extensions/role-skills/skills/deliverable-writing/SKILL.md](pi-extensions/role-skills/skills/deliverable-writing/SKILL.md) adapts the writing method from [pstack](https://github.com/cursor/plugins/tree/main/pstack), including its concise writing and Diátaxis guidance, with project-specific deliverable conventions. Preserve the upstream MIT notice below when redistributing this adaptation.
 
 The optional Pi integration reads an operator-provided method pack, such as [backnotprop/pstack](https://github.com/backnotprop/pstack). Personal Agent does not bundle that external pack; its license and any additional notices remain with it.
 

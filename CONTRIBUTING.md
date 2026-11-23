@@ -22,7 +22,7 @@
 
 ## 贡献岗位与 Skill
 
-共享岗位定义位于 [roles](roles/README.md)，方法位于 [skills](skills/README.md)。如果从工作台导出岗位，提交前先检查说明、工具配置和文件路径，并移除私有业务背景。
+共享岗位定义位于 [roles](roles/README.md)，内置岗位方法包位于 [pi-extensions/role-skills](pi-extensions/role-skills/README.md)。如果从工作台导出岗位，提交前先检查说明、工具配置和文件路径，并移除私有业务背景。
 
 为岗位写清核心职责、职责边界、工具、协作方式与交付检查。为 Skill 写清可执行步骤及实际依赖。用合成任务说明期望结果，并附上验证记录。
 

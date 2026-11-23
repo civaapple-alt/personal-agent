@@ -48,7 +48,7 @@ npm run start:team:sandbox
 | 数据模式、历史记录、版本和经验范围 | [存储](../../src/storage/README.md) |
 | HTTP、SSE、邀请、文件/图片与预览 | [服务](../../src/server/README.md) |
 | 页面与 API 消费 | [网页](../../web/README.md) → [源码](../../web/src/README.md) |
-| 岗位及方法资产 | [roles](../../roles/README.md)、[skills](../../skills/README.md) |
+| 岗位及方法资产 | [roles](../../roles/README.md)、[role-skills](../../pi-extensions/role-skills/README.md) |
 | 定义解析、序列化与能力目录 | [角色解析](../../src/roles/README.md) |
 
 后端使用 TypeScript 和 Node.js 自带的 SQLite，前端用 React 和 esbuild 构建。修改源码后重新构建。`dist/` 和 `web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。

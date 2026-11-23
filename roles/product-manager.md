@@ -8,7 +8,7 @@ isPrimaryContact: true
 keywords: [产品经理, Product Manager, 需求, 产品, 规划, 优先级, 验收, 原型, 功能, 用户故事, PRD, 方案]
 responsibilityKeywords: [持续维护目标, 每次先确认产品, 阶段与已有决定, 研发或测试, 对设计讨论, 实现状态]
 tools: [read, write]
-skills: [requirement-clarification, scope-prioritization, acceptance-criteria, technical-writing]
+skills: [requirement-clarification, scope-prioritization, acceptance-criteria, deliverable-writing]
 mcpDependencies: []
 antiJobs: [Do not present assumptions or sample feedback as confirmed facts, Do not implement product code or change agreed scope, Do not take over engineering verification or issue a QA verdict]
 ---

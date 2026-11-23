@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Package built-in role methodology Skills as a standard Pi Package under `pi-extensions/role-skills` (`pa-role-skills`), mount it natively on Pi workers, and include `source` metadata in `skill-catalog` command and resource listings.
+
 - Add a dedicated Account page (`#/account`, opened from the bottom-left sidebar user button) with personal Access Token management supporting `read`/`full` scopes, optional organization and workspace scope restrictions (defaulting to the user's own access scope), and one-click revocation.
 
 - Add a read-only retrospective inspection script for `pa-matter-retrospective` supporting local loopback HTTP, authenticated email/password or Bearer token login, and automatic local SQLite read-only fallback.
@@ -592,7 +594,7 @@ First public MIT release. See the [0.6.0 release guide](docs/releases/v0.6.0.md)
 - Added `npm run demo:rsi`, an isolated real-Pi check for proposal tools, committed candidates, document files,
   version-specific feedback and tool-free reflection, plus regression tests for scope, failed-parent rollback,
   replacement invariants, feedback deltas and shutdown/cancellation.
-- Added [skills/technical-writing/SKILL.md](skills/technical-writing/SKILL.md) (wired into all four default role
+- Added `skills/technical-writing/SKILL.md` (wired into all four default role
   definitions in `roles/`, listed in `skills/README.md`, and reinforced in `TeamOrchestrator` &
   `publish_deliverable` schema) establishing the deliverable-writing standard:
   - **简练 · 有重点 · 有过程** (1–3 sentence `changeNote`, lead-with-conclusions structure, mode separation, and concise

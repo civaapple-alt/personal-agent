@@ -15,7 +15,7 @@ frontmatter 字段与依赖校验约定：
 
 - 模型配置独立于岗位定义，通过[系统、组织和事项设置](../docs/guides/user-guide.md#调整岗位模型)管理。旧版角色包可以导入，导出时只包含岗位定义。
 - `keywords` 用于新事项初始路由和立项评分，业务角色保留原中文岗位名作为路由别名。`responsibilityKeywords` 可为本地立项规则显式指定职责匹配词，省略时沿用正文匹配。
-- `skills` 对应[实际 Skill 文件](../skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。
+- `skills` 对应[内置岗位方法 Skill 包](../pi-extensions/role-skills/README.md)，`tools` 与 `mcpDependencies` 须通过运行工具清单核查。
 - 声明、导入、序列化成功都不是依赖已安装或工具已执行的证据。
 
 五段正文分别承载职责边界、方法、工具环境、协作约定及交付验证。保留“内部咨询返回主成员、正式阶段成果才发布”的协作语义，具体机制以[运行说明](../docs/reference/runtime-collaboration.md)为准。
