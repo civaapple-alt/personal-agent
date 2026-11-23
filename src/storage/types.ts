@@ -29,6 +29,7 @@ export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
 export type WorkspaceSourceType = "local" | "cloned";
 export type WorkspaceVisibility = "org" | "restricted";
 export type MatterVisibility = "org" | "private";
+export type AccessTokenScope = "read" | "full";
 
 export interface PlatformUser {
 	id: string;
@@ -54,6 +55,20 @@ export interface UserSessionRecord {
 	revokedAt: string | null;
 	ip: string;
 	userAgent: string;
+	createdAt: string;
+}
+
+export interface UserAccessTokenRecord {
+	id: string;
+	userId: string;
+	name: string;
+	tokenPrefix: string;
+	scope: AccessTokenScope;
+	allowedOrgIds: string[] | null;
+	allowedWorkspaceIds: string[] | null;
+	expiresAt: string | null;
+	lastUsedAt: string | null;
+	revokedAt: string | null;
 	createdAt: string;
 }
 

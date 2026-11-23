@@ -180,6 +180,17 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 			const requireAuth = Boolean(options.requireAuth);
 			const actor = resolveRequestActor(req, store, requireAuth);
 
+			if (
+				pathname.startsWith("/api/") &&
+				actor?.tokenScope === "read" &&
+				method !== "GET" &&
+				method !== "HEAD" &&
+				method !== "OPTIONS"
+			) {
+				sendError(res, 403, "该只读访问令牌不支持修改操作");
+				return;
+			}
+
 			if (await handleAdminAndAuthRoutes(routeCtx, req, res, method, pathname, actor, requireAuth)) {
 				return;
 			}

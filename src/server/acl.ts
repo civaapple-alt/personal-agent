@@ -16,6 +16,16 @@ import type {
 import { isSuperAdminActor, type RequestActor, requireActiveActor } from "./auth.ts";
 import { sendError } from "./http.ts";
 
+export function isTokenOrgAllowed(actor: RequestActor, orgId: string | null | undefined): boolean {
+	if (!actor.tokenAllowedOrgIds || actor.tokenAllowedOrgIds.length === 0) return true;
+	return Boolean(orgId && actor.tokenAllowedOrgIds.includes(orgId));
+}
+
+export function isTokenWorkspaceAllowed(actor: RequestActor, workspaceId: string | null | undefined): boolean {
+	if (!actor.tokenAllowedWorkspaceIds || actor.tokenAllowedWorkspaceIds.length === 0) return true;
+	return Boolean(workspaceId && actor.tokenAllowedWorkspaceIds.includes(workspaceId));
+}
+
 export function isGlobalUnscopedActor(actor: RequestActor): boolean {
 	if (actor.authKind === "loopback") return true;
 	return false;
@@ -26,6 +36,7 @@ export function getActorOrgRole(
 	actor: RequestActor,
 	orgId: string | null | undefined,
 ): OrgMemberRole | null {
+	if (!isTokenOrgAllowed(actor, orgId)) return null;
 	if (!orgId) {
 		return isGlobalUnscopedActor(actor) ? "org_owner" : null;
 	}
@@ -45,6 +56,7 @@ export function canAccessOrganization(
 ): boolean {
 	if (!actor) return false;
 	if (actor.user && actor.user.status !== "active") return false;
+	if (!isTokenOrgAllowed(actor, orgId)) return false;
 	if (isGlobalUnscopedActor(actor)) return true;
 	if (!orgId) return false;
 	return getActorOrgRole(store, actor, orgId) !== null;
@@ -195,6 +207,7 @@ export function canAccessWorkspace(
 ): boolean {
 	if (!actor || !ws) return false;
 	if (actor.user && actor.user.status !== "active") return false;
+	if (!isTokenWorkspaceAllowed(actor, ws.id)) return false;
 	if (isGlobalUnscopedActor(actor)) return true;
 	if (!canAccessOrganization(store, actor, ws.orgId)) return false;
 	if (ws.visibility !== "restricted") return true;
@@ -212,6 +225,8 @@ export function canAccessMatter(
 ): boolean {
 	if (!actor || !matter) return false;
 	if (actor.user && actor.user.status !== "active") return false;
+	if (!isTokenOrgAllowed(actor, matter.orgId)) return false;
+	if (!isTokenWorkspaceAllowed(actor, matter.workspaceId)) return false;
 	if (isGlobalUnscopedActor(actor)) return true;
 	if (matter.orgId && !canAccessOrganization(store, actor, matter.orgId)) return false;
 	if (!matter.orgId && actor.authKind === "session") {
@@ -407,6 +422,14 @@ export function canAccessSpace(
 		return false;
 	}
 
+	if (space.kind === "org" && !isTokenOrgAllowed(actor, space.orgId)) return false;
+	if (space.kind === "workspace") {
+		const workspace = space.workspaceId ? store.getWorkspace(space.workspaceId) : null;
+		if (!isTokenWorkspaceAllowed(actor, space.workspaceId)) return false;
+		if (!isTokenOrgAllowed(actor, workspace?.orgId ?? space.orgId)) return false;
+	}
+	if (space.orgId && !isTokenOrgAllowed(actor, space.orgId)) return false;
+
 	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
 
 	if (space.kind === "org") {
@@ -444,6 +467,14 @@ export function canWriteSpace(
 		}
 		return false;
 	}
+
+	if (space.kind === "org" && !isTokenOrgAllowed(actor, space.orgId)) return false;
+	if (space.kind === "workspace") {
+		const workspace = space.workspaceId ? store.getWorkspace(space.workspaceId) : null;
+		if (!isTokenWorkspaceAllowed(actor, space.workspaceId)) return false;
+		if (!isTokenOrgAllowed(actor, workspace?.orgId ?? space.orgId)) return false;
+	}
+	if (space.orgId && !isTokenOrgAllowed(actor, space.orgId)) return false;
 
 	if (isGlobalUnscopedActor(actor) || isSuperAdminActor(actor)) return true;
 

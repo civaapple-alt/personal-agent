@@ -180,7 +180,7 @@ export const Sidebar = memo(function Sidebar({
 				? `${currentUser.name} · 本机所有者`
 				: "Pi RPC";
 	const accountActionLabel = authKind === "loopback" ? "切换账号" : "退出登录";
-	const hasSecondaryTabActive = activeTab !== "chats";
+	const hasSecondaryTabActive = activeTab !== "chats" && activeTab !== "account";
 
 	const handleArchiveClick = async (matter: MatterDto) => {
 		if (!onToggleArchiveMatter || busyArchiveId) return;
@@ -587,9 +587,18 @@ export const Sidebar = memo(function Sidebar({
 					</div>
 				)}
 				<div className="sidebar-footer-bar">
-					<span className="sidebar-footer-user" title={userLabel}>
+					<button
+						type="button"
+						className={`sidebar-footer-user ${activeTab === "account" ? "active" : ""}`}
+						title={`${userLabel} · 点击进入个人账号`}
+						aria-current={activeTab === "account" ? "page" : undefined}
+						onClick={() => {
+							setFooterMenuOpen(false);
+							onNavigate({ tab: "account" });
+						}}
+					>
 						{userLabel}
-					</span>
+					</button>
 					<span
 						className={`pill ${sseConnected ? "live" : ""}`}
 						title={

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Collaborator, CollaboratorRole, PlatformUser } from "../storage/types.ts";
+import type { AccessTokenScope, Collaborator, CollaboratorRole, PlatformUser } from "../storage/types.ts";
 import { sendError } from "./http.ts";
 
 export const SESSION_COOKIE_NAME = "pa_session";
@@ -13,6 +13,10 @@ export interface RequestActor {
 	viaToken: boolean;
 	authKind: ActorAuthKind;
 	sessionTokenHash?: string;
+	accessTokenId?: string;
+	tokenScope?: AccessTokenScope;
+	tokenAllowedOrgIds?: string[] | null;
+	tokenAllowedWorkspaceIds?: string[] | null;
 }
 
 export class SlidingWindowRateLimiter {
@@ -131,6 +135,21 @@ export function resolveRequestActor(
 				authKind: "session",
 				sessionTokenHash: sessionHit.session.id,
 			};
+		}
+		if (headerToken) {
+			const patHit = store.getAccessTokenAndUserByToken(headerToken);
+			if (patHit) {
+				return {
+					collaborator: userToCollaboratorView(store, patHit.user),
+					user: patHit.user,
+					viaToken: true,
+					authKind: "session",
+					accessTokenId: patHit.token.id,
+					tokenScope: patHit.token.scope,
+					tokenAllowedOrgIds: patHit.token.allowedOrgIds,
+					tokenAllowedWorkspaceIds: patHit.token.allowedWorkspaceIds,
+				};
+			}
 		}
 		// Never silently elevate an invalidated/unknown session token to loopback owner.
 		return null;

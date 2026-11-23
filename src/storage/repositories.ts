@@ -303,6 +303,21 @@ export class PersonalAgentStore {
 	revokeAllUserSessions(userId: string) {
 		return this.userAuth.revokeAllUserSessions(userId);
 	}
+	createAccessToken(userId: string, input: Parameters<UserAuthRepo["createAccessToken"]>[1]) {
+		return this.userAuth.createAccessToken(userId, input);
+	}
+	listUserAccessTokens(userId: string) {
+		return this.userAuth.listUserAccessTokens(userId);
+	}
+	getAccessTokenAndUserByToken(rawToken: string) {
+		return this.userAuth.getAccessTokenAndUserByToken(rawToken);
+	}
+	revokeAccessToken(userId: string, tokenId: string) {
+		return this.userAuth.revokeAccessToken(userId, tokenId);
+	}
+	revokeAllUserAccessTokens(userId: string) {
+		return this.userAuth.revokeAllUserAccessTokens(userId);
+	}
 	getPlatformSettings(defaultWorkspacesRoot?: string) {
 		return this.userAuth.getPlatformSettings(defaultWorkspacesRoot);
 	}

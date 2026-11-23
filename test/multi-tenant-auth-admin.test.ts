@@ -1442,3 +1442,186 @@ test("Team sandbox script seeds multi-org RBAC & Space document scenarios and bo
 		rmSync(sandboxDir, { recursive: true, force: true });
 	}
 });
+
+test("Personal Access Tokens enforce read-only scope, narrowed org/workspace access, and immediate revocation", async () => {
+	const tmpDir = mkdtempSync(join(tmpdir(), "pa-pat-scope-"));
+	const repoA1 = join(tmpDir, "repo-a1");
+	const repoA2 = join(tmpDir, "repo-a2");
+	const repoB1 = join(tmpDir, "repo-b1");
+	mkdirSync(repoA1, { recursive: true });
+	mkdirSync(repoA2, { recursive: true });
+	mkdirSync(repoB1, { recursive: true });
+
+	const db = openPersonalAgentDatabase(join(tmpDir, "pa.db"));
+	const store = new PersonalAgentStore(db, { spacesDir: join(tmpDir, "spaces") });
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: tmpDir,
+		noSession: true,
+		workerFactory: (options) => new MultiTenantTestWorker(options),
+	});
+	const { server } = createPersonalAgentServer({
+		store,
+		orchestrator,
+		templates,
+		previewManager: new PreviewManager(),
+		dialogBroker: new DialogBroker(),
+		requireAuth: true,
+		dataDir: tmpDir,
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
+	const addr = server.address();
+	assert.ok(addr && typeof addr !== "string");
+	const base = `http://127.0.0.1:${addr.port}`;
+
+	try {
+		const setupRes = await fetch(`${base}/api/auth/setup-admin`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				email: "admin@pat.local",
+				password: "password123",
+				displayName: "Admin",
+			}),
+		});
+		assert.equal(setupRes.status, 201);
+		const adminCookie = extractSessionCookie(setupRes);
+		const adminUser = store.getUserByEmail("admin@pat.local")!;
+
+		const orgA = store.upsertOrganization({ name: "Org A", slug: "org-a", createdByUserId: adminUser.id });
+		const orgB = store.upsertOrganization({ name: "Org B", slug: "org-b", createdByUserId: adminUser.id });
+		store.upsertOrgMember({ orgId: orgA.id, userId: adminUser.id, orgRole: "org_owner" });
+		store.upsertOrgMember({ orgId: orgB.id, userId: adminUser.id, orgRole: "org_owner" });
+
+		const wsA1 = store.upsertWorkspace({ orgId: orgA.id, name: "ws-a1", repoPath: repoA1, sourceType: "local" });
+		const wsA2 = store.upsertWorkspace({ orgId: orgA.id, name: "ws-a2", repoPath: repoA2, sourceType: "local" });
+		const wsB1 = store.upsertWorkspace({ orgId: orgB.id, name: "ws-b1", repoPath: repoB1, sourceType: "local" });
+
+		const matterA1 = store.createMatter({
+			title: "Matter A1",
+			orgId: orgA.id,
+			workspaceId: wsA1.id,
+			leadMemberId: "product-manager",
+			createdByUserId: adminUser.id,
+		});
+		const matterA2 = store.createMatter({
+			title: "Matter A2",
+			orgId: orgA.id,
+			workspaceId: wsA2.id,
+			leadMemberId: "product-manager",
+			createdByUserId: adminUser.id,
+		});
+		const matterB1 = store.createMatter({
+			title: "Matter B1",
+			orgId: orgB.id,
+			workspaceId: wsB1.id,
+			leadMemberId: "product-manager",
+			createdByUserId: adminUser.id,
+		});
+
+		// 1. Default read-only token inherits user's own org & workspace scope.
+		const createDefaultRes = await fetch(`${base}/api/auth/tokens`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: adminCookie },
+			body: JSON.stringify({ name: "Default Read Token", scope: "read", expiresInDays: 30 }),
+		});
+		assert.equal(createDefaultRes.status, 201);
+		const defaultCreated = (await createDefaultRes.json()) as {
+			rawToken: string;
+			token: { id: string; allowedOrgIds: string[] | null; allowedWorkspaceIds: string[] | null };
+		};
+		assert.ok(defaultCreated.rawToken.startsWith("pat_"));
+		assert.equal(defaultCreated.token.allowedOrgIds, null);
+		assert.equal(defaultCreated.token.allowedWorkspaceIds, null);
+
+		const defaultBootstrap = (await (
+			await fetch(`${base}/api/bootstrap`, { headers: { Authorization: `Bearer ${defaultCreated.rawToken}` } })
+		).json()) as { matters: Array<{ id: string }> };
+		assert.equal(defaultBootstrap.matters.length, 3);
+
+		// Read-only token is blocked on mutating API calls.
+		const blockedPost = await fetch(`${base}/api/organizations`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${defaultCreated.rawToken}` },
+			body: JSON.stringify({ name: "Should Fail" }),
+		});
+		assert.equal(blockedPost.status, 403);
+
+		// 2. Reject workspace outside selected org.
+		const invalidScopeRes = await fetch(`${base}/api/auth/tokens`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: adminCookie },
+			body: JSON.stringify({
+				name: "Bad Scope",
+				scope: "read",
+				allowedOrgIds: [orgA.id],
+				allowedWorkspaceIds: [wsB1.id],
+			}),
+		});
+		assert.equal(invalidScopeRes.status, 400);
+
+		// 3. Narrowed org + workspace token only sees orgA / wsA1 / matterA1.
+		const createScopedRes = await fetch(`${base}/api/auth/tokens`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Cookie: adminCookie },
+			body: JSON.stringify({
+				name: "Scoped A1 Full",
+				scope: "full",
+				allowedOrgIds: [orgA.id],
+				allowedWorkspaceIds: [wsA1.id],
+			}),
+		});
+		assert.equal(createScopedRes.status, 201);
+		const scopedCreated = (await createScopedRes.json()) as {
+			rawToken: string;
+			token: { id: string; allowedOrgIds: string[] | null; allowedWorkspaceIds: string[] | null };
+		};
+		assert.deepEqual(scopedCreated.token.allowedOrgIds, [orgA.id]);
+		assert.deepEqual(scopedCreated.token.allowedWorkspaceIds, [wsA1.id]);
+
+		const scopedHeaders = { Authorization: `Bearer ${scopedCreated.rawToken}` };
+		const scopedBootstrap = (await (await fetch(`${base}/api/bootstrap`, { headers: scopedHeaders })).json()) as {
+			organizations: Array<{ id: string }>;
+			workspaces: Array<{ id: string }>;
+			matters: Array<{ id: string }>;
+		};
+		assert.deepEqual(
+			scopedBootstrap.organizations.map((o) => o.id),
+			[orgA.id],
+		);
+		assert.deepEqual(
+			scopedBootstrap.workspaces.map((w) => w.id),
+			[wsA1.id],
+		);
+		assert.deepEqual(
+			scopedBootstrap.matters.map((m) => m.id),
+			[matterA1.id],
+		);
+
+		assert.equal((await fetch(`${base}/api/matters/${matterA1.id}`, { headers: scopedHeaders })).status, 200);
+		assert.equal((await fetch(`${base}/api/matters/${matterA2.id}`, { headers: scopedHeaders })).status, 403);
+		assert.equal((await fetch(`${base}/api/matters/${matterB1.id}`, { headers: scopedHeaders })).status, 403);
+
+		// Even a full PAT cannot mint or revoke another PAT.
+		const mintFromPat = await fetch(`${base}/api/auth/tokens`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...scopedHeaders },
+			body: JSON.stringify({ name: "Nested PAT", scope: "read" }),
+		});
+		assert.equal(mintFromPat.status, 403);
+
+		// 4. Revoke token immediately invalidates it.
+		const revokeRes = await fetch(`${base}/api/auth/tokens/${scopedCreated.token.id}`, {
+			method: "DELETE",
+			headers: { Cookie: adminCookie },
+		});
+		assert.equal(revokeRes.status, 200);
+		assert.equal((await fetch(`${base}/api/matters/${matterA1.id}`, { headers: scopedHeaders })).status, 401);
+	} finally {
+		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+		db.close();
+		rmSync(tmpDir, { recursive: true, force: true });
+	}
+});

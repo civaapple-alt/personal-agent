@@ -104,3 +104,42 @@ export function logoutAuthSession(): Promise<{ ok: boolean }> {
 		body: "{}",
 	});
 }
+
+export type AccessTokenScope = "read" | "full";
+
+export interface AccessTokenDto {
+	id: string;
+	userId: string;
+	name: string;
+	tokenPrefix: string;
+	scope: AccessTokenScope;
+	allowedOrgIds: string[] | null;
+	allowedWorkspaceIds: string[] | null;
+	expiresAt: string | null;
+	lastUsedAt: string | null;
+	revokedAt: string | null;
+	createdAt: string;
+}
+
+export function listAccessTokens(): Promise<{ tokens: AccessTokenDto[] }> {
+	return requestJson("/api/auth/tokens");
+}
+
+export function createAccessToken(input: {
+	name: string;
+	scope: AccessTokenScope;
+	allowedOrgIds?: string[] | null;
+	allowedWorkspaceIds?: string[] | null;
+	expiresInDays?: number | null;
+}): Promise<{ token: AccessTokenDto; rawToken: string }> {
+	return requestJson("/api/auth/tokens", {
+		method: "POST",
+		body: JSON.stringify(input),
+	});
+}
+
+export function revokeAccessToken(tokenId: string): Promise<{ ok: boolean; id: string }> {
+	return requestJson(`/api/auth/tokens/${encodeURIComponent(tokenId)}`, {
+		method: "DELETE",
+	});
+}

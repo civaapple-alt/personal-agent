@@ -9,6 +9,14 @@ description: 复盘 Personal Agent（PA）的事项、聊天或 AI 团队执行�
 
 ## 1. 确定范围并收集证据
 
+- **优先用内置只读脚本快速拉取证据**：本 Skill 附带 [scripts/inspect-matter.mjs](scripts/inspect-matter.mjs)（仅依赖 Node 22.19+ 内置模块，严格只读，不修改数据库或触发任何 AI 任务），同时适配两种常见启动方式：
+  - **本机个人版**（如 `PORT=4310 npm run start:web`）：默认（`--source auto`）优先请求本机只读 HTTP 接口（`GET /api/matters/:id`、`GET /api/runtime`），若本地数据库存在则顺带只读补齐 `worker_sessions` 与工作区目录信息。
+  - **认证团队版**（如 `PA_REQUIRE_AUTH=1 PA_HOST=0.0.0.0 PORT=4310 npm run start:web`）：支持通过 `--token`（或 `PA_TOKEN`，推荐在工作台左下角「个人账号 → 访问令牌」生成只读 Access Token，走 `Authorization: Bearer`）或 `--email` / `--password`（`PA_EMAIL` / `PA_PASSWORD`，登录后查完自动登出清理临时会话）查询 HTTP 接口；若未提供凭据返回 `401`/`403` 或服务未启动，`--source auto` 会自动回退到本机 SQLite 只读模式（`readOnly: true`）并明示回退原因与未获取到的实时运行态缺口。
+  - 常用命令：
+    - 查询指定链接或事项：`node .agents/skills/pa-matter-retrospective/scripts/inspect-matter.mjs <事项链接或ID>`
+    - 附带读取关联 Pi 会话 JSONL（还原每轮注入上下文、工具参数与返回）：追加 `--sessions`（需要完整原文时加 `--full`，需机器可读输出加 `--json`）
+    - 列出最近事项：`node .agents/skills/pa-matter-retrospective/scripts/inspect-matter.mjs --recent 10`
+    - 指定数据目录或强制来源：支持 `--source auto|api|db`、`--base-url <url>`、`--db <path>`（或环境变量 `PA_DATA_DIR` / `PA_DB_PATH`）。
 - 识别事项 ID、用户目标、关键轮次和期望结果。链接指向本机工作台时，优先使用当前登录者有权访问的只读接口；按需核对事项消息、内部协作、运行通知、成果及关联会话。从当前路由实现核实可用接口，例如按需检查 `src/server/routes/matters.ts` 的事项详情；没有访问权限或证据缺失时说明缺口，不猜测。
 - 对时间、组织、工作区、角色和执行模式进行关联。追溯历史策略时核对事件时间、运行版本或构建及相关 Git 历史；无法确定实际部署版本时标为未知。核对切换前后的范围，不能把事项当前绑定或后一次运行配置套到历史轮次。需要读取本地数据库或会话文件时采用只读方式；不得为了复盘触发真实任务、修改业务仓库或用户数据。
 - 从用户输入、主责回复、内部委托、旁听、工具调用和结果、运行错误、交付物等证据重建关键时间线。记录有用的时间、消息或事件定位，以及与结论直接相关的简短证据；区分用户要求、角色陈述、工具返回和宿主实际行为。

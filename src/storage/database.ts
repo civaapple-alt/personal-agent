@@ -23,6 +23,25 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 				}
 				db.exec(SCHEMA_SQL);
 				db.exec(`PRAGMA application_id = ${DATABASE_APPLICATION_ID}`);
+			} else {
+				db.exec(`
+					CREATE TABLE IF NOT EXISTS user_access_tokens (
+						id TEXT PRIMARY KEY,
+						user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+						name TEXT NOT NULL,
+						token_hash TEXT NOT NULL UNIQUE,
+						token_prefix TEXT NOT NULL,
+						scope TEXT NOT NULL DEFAULT 'read' CHECK (scope IN ('read', 'full')),
+						allowed_org_ids_json TEXT,
+						allowed_workspace_ids_json TEXT,
+						expires_at TEXT,
+						last_used_at TEXT,
+						revoked_at TEXT,
+						created_at TEXT NOT NULL
+					);
+					CREATE INDEX IF NOT EXISTS idx_user_access_tokens_user ON user_access_tokens(user_id, created_at DESC);
+					CREATE INDEX IF NOT EXISTS idx_user_access_tokens_hash ON user_access_tokens(token_hash);
+				`);
 			}
 			db.exec("COMMIT");
 		} catch (error) {

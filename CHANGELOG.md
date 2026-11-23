@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Add a dedicated Account page (`#/account`, opened from the bottom-left sidebar user button) with personal Access Token management supporting `read`/`full` scopes, optional organization and workspace scope restrictions (defaulting to the user's own access scope), and one-click revocation.
+
+- Add a read-only retrospective inspection script for `pa-matter-retrospective` supporting local loopback HTTP, authenticated email/password or Bearer token login, and automatic local SQLite read-only fallback.
+
 - Present Pi Skill and extension command descriptions to AI roles and allow commands to be submitted with explicit unconfirmed outcome.
 
 - Show per-turn tool calls and actual Skill reads, including completion status, in execution progress.

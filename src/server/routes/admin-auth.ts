@@ -4,6 +4,7 @@ import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import { readDotEnvMap, resolveEnvFilePath } from "../../pa-extensions/env-credentials.ts";
 import { toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
+import { canAccessOrganization, canAccessWorkspace } from "../acl.ts";
 import {
 	extractClientIp,
 	extractHeaderToken,
@@ -340,6 +341,139 @@ export async function handleAdminAndAuthRoutes(
 			targetId: actor.user.id,
 		});
 		sendJson(res, 200, { ok: true });
+		return true;
+	}
+
+	if (method === "GET" && pathname === "/api/auth/tokens") {
+		if (!requireActiveActor(res, actor)) return true;
+		if (!actor.user) {
+			sendError(res, 400, "当前身份不支持管理访问令牌");
+			return true;
+		}
+		sendJson(res, 200, { tokens: store.listUserAccessTokens(actor.user.id) });
+		return true;
+	}
+
+	if (method === "POST" && pathname === "/api/auth/tokens") {
+		if (!requireActiveActor(res, actor)) return true;
+		if (!actor.user) {
+			sendError(res, 400, "当前身份不支持创建访问令牌");
+			return true;
+		}
+		if (actor.accessTokenId) {
+			sendError(res, 403, "不能使用访问令牌再创建新的访问令牌，请在网页会话中操作");
+			return true;
+		}
+		const body = await readJsonBody(req);
+		const name = typeof body.name === "string" ? body.name.trim() : "";
+		if (!name) {
+			sendError(res, 400, "请填写访问令牌名称");
+			return true;
+		}
+		const scope = body.scope === "full" ? "full" : "read";
+		const expiresInDays =
+			body.expiresInDays === null || body.expiresInDays === undefined || body.expiresInDays === ""
+				? null
+				: Number(body.expiresInDays);
+		if (expiresInDays !== null && (!Number.isFinite(expiresInDays) || expiresInDays < 0 || expiresInDays > 3650)) {
+			sendError(res, 400, "有效天数需为 1–3650 或留空（永不过期）");
+			return true;
+		}
+		let allowedOrgIds: string[] | null = null;
+		if (body.allowedOrgIds !== undefined && body.allowedOrgIds !== null) {
+			if (!Array.isArray(body.allowedOrgIds)) {
+				sendError(res, 400, "allowedOrgIds 必须为组织 ID 数组");
+				return true;
+			}
+			const ids = [
+				...new Set(
+					body.allowedOrgIds
+						.filter((v): v is string => typeof v === "string")
+						.map((v) => v.trim())
+						.filter(Boolean),
+				),
+			];
+			for (const orgId of ids) {
+				if (!store.getOrganization(orgId) || !canAccessOrganization(store, actor, orgId)) {
+					sendError(res, 403, `无权将组织 ${orgId} 加入访问令牌范围`);
+					return true;
+				}
+			}
+			allowedOrgIds = ids.length > 0 ? ids : null;
+		}
+		let allowedWorkspaceIds: string[] | null = null;
+		if (body.allowedWorkspaceIds !== undefined && body.allowedWorkspaceIds !== null) {
+			if (!Array.isArray(body.allowedWorkspaceIds)) {
+				sendError(res, 400, "allowedWorkspaceIds 必须为工作区 ID 数组");
+				return true;
+			}
+			const ids = [
+				...new Set(
+					body.allowedWorkspaceIds
+						.filter((v): v is string => typeof v === "string")
+						.map((v) => v.trim())
+						.filter(Boolean),
+				),
+			];
+			for (const workspaceId of ids) {
+				const ws = store.getWorkspace(workspaceId);
+				if (!ws || !canAccessWorkspace(store, actor, ws)) {
+					sendError(res, 403, `无权将工作区 ${workspaceId} 加入访问令牌范围`);
+					return true;
+				}
+				if (allowedOrgIds && (!ws.orgId || !allowedOrgIds.includes(ws.orgId))) {
+					sendError(res, 400, `所选工作区 ${ws.name} 不在已选组织范围内`);
+					return true;
+				}
+			}
+			allowedWorkspaceIds = ids.length > 0 ? ids : null;
+		}
+		const created = store.createAccessToken(actor.user.id, {
+			name,
+			scope,
+			allowedOrgIds,
+			allowedWorkspaceIds,
+			expiresInDays: expiresInDays && expiresInDays > 0 ? expiresInDays : null,
+		});
+		auditActorAction(ctx, req, actor, {
+			action: "auth.token.create",
+			targetType: "access_token",
+			targetId: created.token.id,
+			detail: {
+				name: created.token.name,
+				scope: created.token.scope,
+				allowedOrgIds: created.token.allowedOrgIds,
+				allowedWorkspaceIds: created.token.allowedWorkspaceIds,
+				expiresAt: created.token.expiresAt,
+			},
+		});
+		sendJson(res, 201, created);
+		return true;
+	}
+
+	const revokeTokenMatch = pathname.match(/^\/api\/auth\/tokens\/([^/]+)$/);
+	if (method === "DELETE" && revokeTokenMatch) {
+		if (!requireActiveActor(res, actor)) return true;
+		if (!actor.user) {
+			sendError(res, 400, "当前身份不支持吊销访问令牌");
+			return true;
+		}
+		if (actor.accessTokenId) {
+			sendError(res, 403, "不能使用访问令牌吊销访问令牌，请在网页会话中操作");
+			return true;
+		}
+		const tokenId = decodeURIComponent(revokeTokenMatch[1]!);
+		const revoked = store.revokeAccessToken(actor.user.id, tokenId);
+		if (!revoked) {
+			sendError(res, 404, "未找到该有效访问令牌");
+			return true;
+		}
+		auditActorAction(ctx, req, actor, {
+			action: "auth.token.revoke",
+			targetType: "access_token",
+			targetId: tokenId,
+		});
+		sendJson(res, 200, { ok: true, id: tokenId });
 		return true;
 	}
 

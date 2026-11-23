@@ -273,6 +273,21 @@ CREATE TABLE user_sessions (
 	created_at TEXT NOT NULL
 );
 
+CREATE TABLE user_access_tokens (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	token_hash TEXT NOT NULL UNIQUE,
+	token_prefix TEXT NOT NULL,
+	scope TEXT NOT NULL DEFAULT 'read' CHECK (scope IN ('read', 'full')),
+	allowed_org_ids_json TEXT,
+	allowed_workspace_ids_json TEXT,
+	expires_at TEXT,
+	last_used_at TEXT,
+	revoked_at TEXT,
+	created_at TEXT NOT NULL
+);
+
 CREATE TABLE users (
 	id TEXT PRIMARY KEY,
 	email TEXT NOT NULL UNIQUE COLLATE NOCASE,

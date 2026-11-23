@@ -11,6 +11,7 @@ import {
 	type MatterVisibility,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
+import { AccountView } from "./components/AccountView.tsx";
 import { AdminView } from "./components/AdminView.tsx";
 import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
@@ -591,15 +592,17 @@ export function App() {
 						? "工作区"
 						: activeTab === "admin"
 							? "超级管理员控制台"
-							: activeTab === "settings"
-								? settingsSection === "base"
-									? "设置 · Agent 底座"
-									: settingsSection === "extensions"
-										? "设置 · 扩展插件"
-										: settingsSection === "config"
-											? "设置 · 运行配置"
-											: "设置"
-								: matterDetail?.matter.title || "新事项对话";
+							: activeTab === "account"
+								? "个人账号"
+								: activeTab === "settings"
+									? settingsSection === "base"
+										? "设置 · Agent 底座"
+										: settingsSection === "extensions"
+											? "设置 · 扩展插件"
+											: settingsSection === "config"
+												? "设置 · 运行配置"
+												: "设置"
+									: matterDetail?.matter.title || "新事项对话";
 	const runtimeBadge = runtimeOverview
 		? runtimeOverview.base.available && runtimeOverview.base.version
 			? `Pi ${runtimeOverview.base.version}`
@@ -935,6 +938,22 @@ export function App() {
 						<AdminView
 							{...adminProps}
 							currentUserId={accountUser?.id ?? null}
+							onNotice={setNoticeBanner}
+							onError={setErrorBanner}
+						/>
+					</ViewFade>
+				)}
+
+				{activeTab === "account" && (
+					<ViewFade>
+						<AccountView
+							accountUser={accountUser}
+							currentUser={currentUser}
+							authKind={bootstrap?.authKind ?? authKind}
+							requireAuth={serverRequireAuth}
+							organizations={bootstrap?.organizations ?? []}
+							workspaces={bootstrap?.workspaces ?? []}
+							onSwitchOrLogout={handleSidebarSwitchOrLogout}
 							onNotice={setNoticeBanner}
 							onError={setErrorBanner}
 						/>

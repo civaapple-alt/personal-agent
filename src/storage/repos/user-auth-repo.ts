@@ -3,11 +3,13 @@ import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { readStoredModelSelection } from "../../rpc/model-selection.ts";
 import type {
+	AccessTokenScope,
 	AuditLogEntry,
 	PlatformRole,
 	PlatformSettings,
 	PlatformUser,
 	RegistrationMode,
+	UserAccessTokenRecord,
 	UserSessionRecord,
 	UserStatus,
 } from "../types.ts";
@@ -75,6 +77,36 @@ function mapSessionRow(row: Record<string, unknown>): UserSessionRecord {
 		revokedAt: row.revoked_at ? String(row.revoked_at) : null,
 		ip: typeof row.ip === "string" ? row.ip : "",
 		userAgent: typeof row.user_agent === "string" ? row.user_agent : "",
+		createdAt: String(row.created_at),
+	};
+}
+
+function parseOptionalIdList(raw: unknown): string[] | null {
+	if (typeof raw !== "string" || !raw.trim()) return null;
+	try {
+		const parsed = JSON.parse(raw) as unknown;
+		if (!Array.isArray(parsed)) return null;
+		const ids = [
+			...new Set(parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)),
+		];
+		return ids.length > 0 ? ids : null;
+	} catch {
+		return null;
+	}
+}
+
+function mapAccessTokenRow(row: Record<string, unknown>): UserAccessTokenRecord {
+	return {
+		id: String(row.id),
+		userId: String(row.user_id),
+		name: String(row.name),
+		tokenPrefix: String(row.token_prefix),
+		scope: row.scope === "full" ? "full" : "read",
+		allowedOrgIds: parseOptionalIdList(row.allowed_org_ids_json),
+		allowedWorkspaceIds: parseOptionalIdList(row.allowed_workspace_ids_json),
+		expiresAt: row.expires_at ? String(row.expires_at) : null,
+		lastUsedAt: row.last_used_at ? String(row.last_used_at) : null,
+		revokedAt: row.revoked_at ? String(row.revoked_at) : null,
 		createdAt: String(row.created_at),
 	};
 }
@@ -376,6 +408,102 @@ export class UserAuthRepo {
 	revokeAllUserSessions(userId: string): number {
 		const res = this.db
 			.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+			.run(nowIso(), userId);
+		return Number(res.changes ?? 0);
+	}
+
+	createAccessToken(
+		userId: string,
+		input: {
+			name: string;
+			scope?: AccessTokenScope;
+			allowedOrgIds?: string[] | null;
+			allowedWorkspaceIds?: string[] | null;
+			expiresInDays?: number | null;
+		},
+	): { rawToken: string; token: UserAccessTokenRecord } {
+		const name = input.name.trim().slice(0, 80);
+		if (!name) {
+			throw new Error("请填写访问令牌名称");
+		}
+		const scope: AccessTokenScope = input.scope === "full" ? "full" : "read";
+		const allowedOrgIds =
+			Array.isArray(input.allowedOrgIds) && input.allowedOrgIds.length > 0
+				? [...new Set(input.allowedOrgIds.map((id) => id.trim()).filter(Boolean))]
+				: null;
+		const allowedWorkspaceIds =
+			Array.isArray(input.allowedWorkspaceIds) && input.allowedWorkspaceIds.length > 0
+				? [...new Set(input.allowedWorkspaceIds.map((id) => id.trim()).filter(Boolean))]
+				: null;
+		let expiresAt: string | null = null;
+		if (input.expiresInDays !== undefined && input.expiresInDays !== null && input.expiresInDays > 0) {
+			const days = Math.min(3650, Math.max(1, Math.floor(input.expiresInDays)));
+			expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+		}
+		const id = `tok_${randomUUID()}`;
+		const rawToken = generateOpaqueToken("pat", 32);
+		const tokenHash = hashOpaqueToken(rawToken);
+		const tokenPrefix = rawToken.slice(0, 12);
+		const timestamp = nowIso();
+		this.db
+			.prepare(
+				`INSERT INTO user_access_tokens (
+					id, user_id, name, token_hash, token_prefix, scope,
+					allowed_org_ids_json, allowed_workspace_ids_json,
+					expires_at, last_used_at, revoked_at, created_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`,
+			)
+			.run(
+				id,
+				userId,
+				name,
+				tokenHash,
+				tokenPrefix,
+				scope,
+				allowedOrgIds ? JSON.stringify(allowedOrgIds) : null,
+				allowedWorkspaceIds ? JSON.stringify(allowedWorkspaceIds) : null,
+				expiresAt,
+				timestamp,
+			);
+		const row = this.db.prepare("SELECT * FROM user_access_tokens WHERE id = ?").get(id) as Record<string, unknown>;
+		return { rawToken, token: mapAccessTokenRow(row) };
+	}
+
+	listUserAccessTokens(userId: string): UserAccessTokenRecord[] {
+		const rows = this.db
+			.prepare("SELECT * FROM user_access_tokens WHERE user_id = ? ORDER BY created_at DESC, rowid DESC")
+			.all(userId) as Record<string, unknown>[];
+		return rows.map(mapAccessTokenRow);
+	}
+
+	getAccessTokenAndUserByToken(rawToken: string): { token: UserAccessTokenRecord; user: PlatformUser } | null {
+		const trimmed = rawToken.trim();
+		if (!trimmed) return null;
+		const tokenHash = hashOpaqueToken(trimmed);
+		const row = this.db.prepare("SELECT * FROM user_access_tokens WHERE token_hash = ?").get(tokenHash) as
+			| Record<string, unknown>
+			| undefined;
+		if (!row) return null;
+		const token = mapAccessTokenRow(row);
+		if (token.revokedAt) return null;
+		if (token.expiresAt && Date.parse(token.expiresAt) <= Date.now()) return null;
+		const user = this.getUserById(token.userId);
+		if (!user || user.status === "disabled") return null;
+		const usedAt = nowIso();
+		this.db.prepare("UPDATE user_access_tokens SET last_used_at = ? WHERE id = ?").run(usedAt, token.id);
+		return { token: { ...token, lastUsedAt: usedAt }, user };
+	}
+
+	revokeAccessToken(userId: string, tokenId: string): boolean {
+		const res = this.db
+			.prepare("UPDATE user_access_tokens SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL")
+			.run(nowIso(), tokenId, userId);
+		return Number(res.changes ?? 0) > 0;
+	}
+
+	revokeAllUserAccessTokens(userId: string): number {
+		const res = this.db
+			.prepare("UPDATE user_access_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
 			.run(nowIso(), userId);
 		return Number(res.changes ?? 0);
 	}
