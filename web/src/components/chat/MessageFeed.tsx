@@ -1,4 +1,4 @@
-import { type RefObject, type UIEvent, useState } from "react";
+import { type RefObject, type UIEvent, useMemo, useState } from "react";
 import {
 	isCurrentHumanDecision,
 	listCompletedHumanDecisions,
@@ -23,6 +23,7 @@ import {
 import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEMBER_ID } from "../../architectApi.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
 import type { MatterDelegations } from "../../utils/matterDelegations.ts";
+import { collectTurnToolCalls } from "../../utils/matterStream.ts";
 import {
 	formatByteSize,
 	formatClockTime,
@@ -186,6 +187,17 @@ export function MessageFeed({
 	const activeSpeakerId =
 		activeMatterProgress?.speakerMemberId ?? matterDetail?.matter.leadMemberId ?? headerContact?.id;
 	const activeTurnId = activeMatterProgress?.sourceUserMessageId;
+	const noticesByTurn = useMemo(() => {
+		const grouped = new Map<string, NonNullable<typeof matterDetail>["noticeMessages"]>();
+		for (const notice of matterDetail?.noticeMessages ?? []) {
+			const id = notice.metadata?.sourceUserMessageId;
+			if (typeof id !== "string") continue;
+			const entries = grouped.get(id) ?? [];
+			entries.push(notice);
+			grouped.set(id, entries);
+		}
+		return grouped;
+	}, [matterDetail?.noticeMessages]);
 
 	return (
 		<div ref={chatScrollRef} className="chat-stream-scroll" onScroll={onScroll}>
@@ -523,6 +535,11 @@ export function MessageFeed({
 									{progressSnapshot && (
 										<ProgressSnapshotCard
 											snapshot={progressSnapshot}
+											toolCalls={collectTurnToolCalls(
+												noticesByTurn.get(String(msg.metadata?.sourceUserMessageId ?? "")) ?? [],
+												msg,
+												progressSnapshot,
+											)}
 											expanded={
 												collapsedSnapshots[msg.id] !== undefined
 													? !collapsedSnapshots[msg.id]

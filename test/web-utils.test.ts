@@ -13,6 +13,7 @@ import {
 	applyPrimaryContactToMembers,
 	collectMatterMemories,
 	collectMatterParticipantIds,
+	collectTurnToolCalls,
 	formatByteSize,
 	formatElapsedDuration,
 	formatNoticeEventLine,
@@ -591,4 +592,107 @@ test("resolveEffectivePrimaryContactId and applyPrimaryContactToMembers respect 
 	assert.equal(engOverride?.gitName, "Beta Eng Author");
 	assert.equal(engOverride?.gitEmail, "eng@beta.example");
 	assert.equal(overridden.find((m) => m.id === "product-manager")?.gitName, "Product Manager");
+});
+
+test("execution records group tool starts and results by exact turn, member and scope", () => {
+	const meta = { sourceUserMessageId: "turn-1", orgId: "org-1", workspaceId: "ws-1" };
+	const reply: MatterMessageDto = {
+		id: "reply",
+		matterId: "m1",
+		channel: "user",
+		senderType: "member",
+		senderId: "pm",
+		content: "done",
+		createdAt: "2026-11-23T01:01:00.000Z",
+		metadata: meta,
+	};
+	const snapshot = {
+		outcome: "completed" as const,
+		stage: "finalizing" as const,
+		label: "done",
+		startedAt: "2026-11-23T01:00:00.000Z",
+		capturedAt: "2026-11-23T01:01:00.000Z",
+		elapsedSeconds: 60,
+	};
+	const event = (
+		id: string,
+		senderId: string,
+		data: object,
+		metadata = meta,
+		createdAt = "2026-11-23T01:00:30.000Z",
+	): MatterMessageDto => ({
+		id,
+		matterId: "m1",
+		channel: "notice",
+		senderType: "system",
+		senderId,
+		content: JSON.stringify(data),
+		createdAt,
+		metadata,
+	});
+	const notices = [
+		event("1", "pm", {
+			type: "tool_execution_start",
+			toolCallId: "1",
+			toolName: "load_available_skill",
+			args: { name: "how" },
+		}),
+		event("2", "qa", {
+			type: "tool_execution_start",
+			toolCallId: "1",
+			toolName: "read",
+			args: { path: "/skills/why/SKILL.md" },
+		}),
+		event("3", "pm", {
+			type: "tool_execution_end",
+			toolCallId: "1",
+			toolName: "load_available_skill",
+			isError: false,
+		}),
+		event("4", "qa", { type: "tool_execution_end", toolCallId: "1", toolName: "read", isError: true }),
+		event("5", "pm", {
+			type: "tool_execution_start",
+			toolCallId: "2",
+			toolName: "bash",
+			args: { command: "npm test" },
+		}),
+		event(
+			"6",
+			"pm",
+			{ type: "tool_execution_start", toolCallId: "3", toolName: "write" },
+			{ ...meta, orgId: "other" },
+		),
+		event(
+			"7",
+			"pm",
+			{ type: "tool_execution_start", toolCallId: "4", toolName: "edit" },
+			meta,
+			"2026-11-23T01:02:00.000Z",
+		),
+		event(
+			"8",
+			"pm",
+			{ type: "tool_execution_start", toolCallId: "5", toolName: "read" },
+			{ ...meta, sourceUserMessageId: "turn-2" },
+		),
+	];
+	notices.push(
+		event("9", "pm", {
+			type: "tool_execution_start",
+			toolCallId: "6",
+			toolName: "read",
+			args: { path: "/truncated", skillName: "architect" },
+		}),
+	);
+	const result = collectTurnToolCalls(notices, reply, snapshot);
+	assert.deepEqual(
+		result.map(({ memberId, toolName, skillName, status }) => ({ memberId, toolName, skillName, status })),
+		[
+			{ memberId: "pm", toolName: "load_available_skill", skillName: "how", status: "success" },
+			{ memberId: "qa", toolName: "read", skillName: "why", status: "error" },
+			{ memberId: "pm", toolName: "bash", skillName: undefined, status: "unknown" },
+			{ memberId: "pm", toolName: "read", skillName: "architect", status: "unknown" },
+		],
+	);
+	assert.deepEqual(collectTurnToolCalls(notices, { ...reply, metadata: {} }, snapshot), []);
 });

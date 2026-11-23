@@ -160,6 +160,10 @@ export interface ActiveDelegationDto {
 
 export interface ProgressActivityDto {
 	memberName: string;
+	memberId?: string;
+	toolCallId?: string;
+	toolName?: string;
+	toolStatus?: "running" | "success" | "error" | "unknown";
 	summary: string;
 	at: string;
 }

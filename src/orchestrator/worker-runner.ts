@@ -697,6 +697,18 @@ export async function executeWithWorkerPass(
 									? { resource: rawArgs.resource.slice(0, 240) }
 									: {}),
 								...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
+								...(toolName === "read" &&
+								typeof rawArgs.path === "string" &&
+								/(?:^|[\\/])SKILL\.md$/i.test(rawArgs.path)
+									? {
+											skillName: rawArgs.path
+												.replace(/\\/g, "/")
+												.split("/")
+												.filter(Boolean)
+												.at(-2)
+												?.slice(0, 128),
+										}
+									: {}),
 								...(typeof rawArgs.sourcePath === "string"
 									? { sourcePath: rawArgs.sourcePath.slice(0, 240) }
 									: {}),
@@ -771,7 +783,16 @@ export async function executeWithWorkerPass(
 						input.run,
 						input.member.displayName,
 						`${formatToolAction(toolName)}${toolSummary ? `：${toolSummary}` : ""}`,
+						{ memberId: input.member.id, toolCallId, toolName },
 					);
+				}
+				if (event.type === "tool_execution_end") {
+					const log = input.run.recentLogs.findLast(
+						(entry) => entry.memberId === input.member.id && entry.toolCallId === toolCallId,
+					);
+					if (log)
+						log.toolStatus =
+							typeof event.isError === "boolean" ? (event.isError ? "error" : "success") : "unknown";
 				}
 				if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
 					return;

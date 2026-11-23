@@ -2151,6 +2151,14 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 	appendReady(f.workspace.id, f.workspace.repoPath, "observer", "observer_marker");
 	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "了解团队能力" });
 	assert.equal(checked, true);
+	const snapshot = f.store.listMessages(matter.id, "user").findLast((message) => message.senderType === "member")
+		?.metadata?.progressSnapshot as {
+		recentLogs?: Array<{ toolName?: string; toolStatus?: string }>;
+	};
+	assert.ok(
+		snapshot.recentLogs?.some((entry) => entry.toolName === "load_available_skill" && entry.toolStatus === "success"),
+	);
+	assert.ok(snapshot.recentLogs?.some((entry) => entry.toolName === "web_search" && entry.toolStatus === "error"));
 });
 
 test("GitHub fetch events report evidence and temporary lifetime without exposing the host clone path", async (t) => {

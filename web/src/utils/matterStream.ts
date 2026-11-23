@@ -261,3 +261,98 @@ export function parseMessageFiles(metadata: Record<string, unknown> | null | und
 	}
 	return files;
 }
+
+export interface TurnToolCall {
+	id: string;
+	memberId: string;
+	toolName: string;
+	detail?: string;
+	skillName?: string;
+	status: "running" | "success" | "error" | "unknown";
+	at: string;
+}
+
+/** Reconstruct only tool events that belong to this reply's exact source turn and snapshot. */
+export function collectTurnToolCalls(
+	notices: MatterMessageDto[],
+	reply: MatterMessageDto,
+	snapshot: ProgressSnapshotDto,
+): TurnToolCall[] {
+	const turnId = reply.metadata?.sourceUserMessageId;
+	if (typeof turnId !== "string" || !turnId) return [];
+	const startedAt = Date.parse(snapshot.startedAt);
+	const capturedAt = Date.parse(snapshot.capturedAt);
+	const calls = new Map<string, TurnToolCall>();
+	for (const notice of notices) {
+		if (
+			notice.channel !== "notice" ||
+			notice.matterId !== reply.matterId ||
+			notice.metadata?.sourceUserMessageId !== turnId
+		)
+			continue;
+		if (
+			notice.metadata?.orgId !== reply.metadata?.orgId ||
+			notice.metadata?.workspaceId !== reply.metadata?.workspaceId
+		)
+			continue;
+		const time = Date.parse(notice.createdAt);
+		if ((Number.isFinite(startedAt) && time < startedAt) || (Number.isFinite(capturedAt) && time > capturedAt))
+			continue;
+		let event: unknown;
+		try {
+			event = JSON.parse(notice.content);
+		} catch {
+			continue;
+		}
+		if (
+			!event ||
+			typeof event !== "object" ||
+			!("type" in event) ||
+			!("toolCallId" in event) ||
+			!("toolName" in event)
+		)
+			continue;
+		if (
+			(event.type !== "tool_execution_start" && event.type !== "tool_execution_end") ||
+			typeof event.toolCallId !== "string" ||
+			typeof event.toolName !== "string"
+		)
+			continue;
+		const id = `${notice.senderId}:${event.toolCallId}`;
+		if (event.type === "tool_execution_start") {
+			const args = "args" in event && event.args && typeof event.args === "object" ? event.args : {};
+			const name = "name" in args && typeof args.name === "string" ? args.name : undefined;
+			const recordedSkill = "skillName" in args && typeof args.skillName === "string" ? args.skillName : undefined;
+			const path = "path" in args && typeof args.path === "string" ? args.path : undefined;
+			const command = "command" in args && typeof args.command === "string" ? args.command : undefined;
+			const title = "title" in args && typeof args.title === "string" ? args.title : undefined;
+			const pathParts = path?.replace(/\\/g, "/").split("/").filter(Boolean) ?? [];
+			const skillName =
+				recordedSkill ??
+				(event.toolName === "load_available_skill"
+					? name
+					: event.toolName === "read" && pathParts.at(-1)?.toLowerCase() === "skill.md"
+						? pathParts.at(-2)
+						: undefined);
+			calls.set(id, {
+				id,
+				memberId: notice.senderId,
+				toolName: event.toolName,
+				detail: name ?? path ?? command ?? title,
+				skillName,
+				status: "running",
+				at: notice.createdAt,
+			});
+		} else {
+			const previous = calls.get(id);
+			if (!previous || previous.toolName !== event.toolName) continue;
+			previous.status =
+				"isError" in event && typeof event.isError === "boolean"
+					? event.isError
+						? "error"
+						: "success"
+					: "unknown";
+		}
+	}
+	return [...calls.values()].map((call) => (call.status === "running" ? { ...call, status: "unknown" } : call));
+}

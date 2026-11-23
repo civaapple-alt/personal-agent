@@ -59,6 +59,10 @@ export type ActiveDelegationProgress = ActiveCollaborationMember &
 
 export interface ProgressActivityItem {
 	memberName: string;
+	memberId?: string;
+	toolCallId?: string;
+	toolName?: string;
+	toolStatus?: "running" | "success" | "error" | "unknown";
 	summary: string;
 	at: string;
 }
@@ -422,12 +426,22 @@ export function summarizeToolArgs(args: unknown): string {
 	return "";
 }
 
-export function pushRunLog(run: MatterRun, memberName: string, summary: string): void {
+export function pushRunLog(
+	run: MatterRun,
+	memberName: string,
+	summary: string,
+	tool?: { memberId: string; toolCallId: string; toolName: string },
+): void {
 	const cleaned = summary.trim();
 	if (!cleaned) return;
 	const prev = run.recentLogs.at(-1);
-	if (prev && prev.memberName === memberName && prev.summary === cleaned) return;
-	run.recentLogs.push({ memberName, summary: cleaned, at: new Date().toISOString() });
+	if (!tool && prev && prev.memberName === memberName && prev.summary === cleaned) return;
+	run.recentLogs.push({
+		memberName,
+		summary: cleaned,
+		at: new Date().toISOString(),
+		...(tool ? { ...tool, toolStatus: "running" as const } : {}),
+	});
 	if (run.recentLogs.length > 60) {
 		run.recentLogs.splice(0, run.recentLogs.length - 60);
 	}

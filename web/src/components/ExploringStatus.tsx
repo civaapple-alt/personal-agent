@@ -7,6 +7,7 @@ import type {
 	TeamMemberDto,
 } from "../api.ts";
 import { liveDelegationEdges } from "../utils/matterDelegations.ts";
+import type { TurnToolCall } from "../utils/matterStream.ts";
 import {
 	formatClockTime,
 	formatElapsedDuration,
@@ -20,7 +21,21 @@ import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { DelegationGraph } from "./chat/DelegationGraph.tsx";
 import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
+function toolStatusLabel(status: TurnToolCall["status"]): string {
+	switch (status) {
+		case "running":
+			return "进行中";
+		case "success":
+			return "完成";
+		case "error":
+			return "失败";
+		case "unknown":
+			return "结果未知";
+	}
+}
+
 interface ProgressDetailsProps {
+	toolCalls?: TurnToolCall[];
 	stage: MatterProgressDto["stage"];
 	activeDelegations?: ActiveDelegationDto[];
 	recentLogs?: ProgressActivityDto[];
@@ -32,6 +47,7 @@ interface ProgressDetailsProps {
 }
 
 function ProgressDetails({
+	toolCalls = [],
 	stage,
 	activeDelegations,
 	recentLogs,
@@ -43,7 +59,13 @@ function ProgressDetails({
 }: ProgressDetailsProps) {
 	const activeIndex = STAGE_ORDER.indexOf(stage);
 	const feedRef = useRef<HTMLDivElement | null>(null);
-	const logCount = recentLogs?.length ?? 0;
+	const displayLogs = recentLogs?.filter(
+		(entry) =>
+			!entry.toolCallId ||
+			!entry.memberId ||
+			!toolCalls.some((call) => call.id === `${entry.memberId}:${entry.toolCallId}`),
+	);
+	const logCount = displayLogs?.length ?? 0;
 
 	useEffect(() => {
 		const el = feedRef.current;
@@ -73,6 +95,33 @@ function ProgressDetails({
 				})}
 			</div>
 
+			{toolCalls.length > 0 && (
+				<section className="exploring-tool-records" aria-label="工具与 Skill 记录">
+					<div className="exploring-section-head">工具与 Skill 记录 · {toolCalls.length}</div>
+					<div className="exploring-tool-list">
+						{toolCalls.map((call) => (
+							<div key={call.id} className="exploring-tool-item">
+								<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
+								<strong>
+									{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
+								</strong>
+								{call.skillName && <span className="exploring-skill-badge">Skill · {call.skillName}</span>}
+								<code className="exploring-tool-name">{call.toolName}</code>
+								{call.detail && (
+									<span className="exploring-tool-detail" title={call.detail}>
+										{call.detail}
+									</span>
+								)}
+								<span className={`exploring-tool-status is-${call.status}`}>
+									{toolStatusLabel(call.status)}
+								</span>
+							</div>
+						))}
+					</div>
+					<p className="exploring-tool-hint">成功读取表示内容已返回，不代表方法已应用。</p>
+				</section>
+			)}
+
 			{activeDelegations && activeDelegations.length > 0 && (
 				<div className="exploring-delegations">
 					<div className="exploring-section-head delegation-live-heading">
@@ -92,9 +141,9 @@ function ProgressDetails({
 				</div>
 			)}
 
-			{recentLogs && recentLogs.length > 0 && (
+			{displayLogs && displayLogs.length > 0 && (
 				<div ref={feedRef} className="exploring-feed">
-					{recentLogs.map((entry, idx) => {
+					{displayLogs.map((entry, idx) => {
 						const logMember = members?.find((m) => m.displayName === entry.memberName);
 						const logColor = logMember ? getMemberThemeById(members, logMember.id).bg : getBotTheme(idx).bg;
 						return (
@@ -102,7 +151,15 @@ function ProgressDetails({
 								<span className="exploring-feed-dot" style={{ background: logColor }} />
 								<span className="exploring-feed-time">{formatClockTime(entry.at)}</span>
 								<strong>{entry.memberName}</strong>
-								<span className="exploring-feed-text">{entry.summary}</span>
+								<span className="exploring-feed-text" title={entry.summary}>
+									{entry.summary}
+								</span>
+								{entry.toolName && <code className="exploring-tool-name">{entry.toolName}</code>}
+								{entry.toolStatus && (
+									<span className={`exploring-tool-status is-${entry.toolStatus}`}>
+										{toolStatusLabel(entry.toolStatus)}
+									</span>
+								)}
 							</div>
 						);
 					})}
@@ -183,6 +240,7 @@ export function ExploringStatus({
 }
 
 interface ProgressSnapshotCardProps {
+	toolCalls?: TurnToolCall[];
 	snapshot: ProgressSnapshotDto;
 	expanded: boolean;
 	members?: TeamMemberDto[];
@@ -191,6 +249,7 @@ interface ProgressSnapshotCardProps {
 }
 
 export function ProgressSnapshotCard({
+	toolCalls = [],
 	snapshot,
 	expanded,
 	members,
@@ -235,6 +294,7 @@ export function ProgressSnapshotCard({
 					)}
 					<ProgressDetails
 						stage={snapshot.stage}
+						toolCalls={toolCalls}
 						activeDelegations={snapshot.activeDelegations}
 						recentLogs={snapshot.recentLogs}
 						members={members}
