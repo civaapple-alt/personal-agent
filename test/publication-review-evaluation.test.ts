@@ -37,11 +37,23 @@ const assess = (review: unknown, actualContent = content) =>
 	assessQuality({ content: actualContent, documentSha256: reviewHash(content), rubric, review });
 
 test("review options default to one autonomous pair and repetition order alternates in distinct directories", () => {
-	assert.deepEqual(parseReviewOptions([]), { kind: "run", scenarioIds: ["autonomous"], repeat: 1 });
+	assert.deepEqual(parseReviewOptions([]), {
+		kind: "run",
+		scenarioIds: ["autonomous"],
+		repeat: 1,
+		timeoutSeconds: 240,
+	});
 	assert.deepEqual(parseReviewOptions(["--scenario", "all", "--repeat", "2"]), {
 		kind: "run",
 		scenarioIds: ["autonomous", "required", "solo"],
 		repeat: 2,
+		timeoutSeconds: 240,
+	});
+	assert.deepEqual(parseReviewOptions(["--timeout-seconds", "480"]), {
+		kind: "run",
+		scenarioIds: ["autonomous"],
+		repeat: 1,
+		timeoutSeconds: 480,
 	});
 	const plan = reviewPlan(["solo", "required"], 2);
 	assert.equal(plan.length, 8);
@@ -51,6 +63,8 @@ test("review options default to one autonomous pair and repetition order alterna
 		["baseline", "current", "current", "baseline"],
 	);
 	for (const args of [
+		["--timeout-seconds", "59"],
+		["--timeout-seconds", "1201"],
 		["--repeat", "0"],
 		["--repeat", "11"],
 		["--repeat", "1.2"],

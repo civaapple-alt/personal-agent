@@ -32,6 +32,7 @@ async function run(input: {
 	templates: Templates;
 	configurationHash: string;
 	modelSelection: ModelSelection;
+	timeoutSeconds: number;
 }) {
 	const { item, scenario, templates } = input;
 	const directory = join(input.root, reviewDirectory(item));
@@ -129,7 +130,7 @@ async function run(input: {
 			result = await orchestrator.dispatchMatter({
 				matterId: matter.id,
 				prompt: scenario.prompt,
-				timeoutMs: 240_000,
+				timeoutMs: input.timeoutSeconds * 1000,
 			});
 		} catch (failure) {
 			error = failure instanceof Error ? failure.message : String(failure);
@@ -223,7 +224,7 @@ async function main() {
 	const options = parseReviewOptions(process.argv.slice(2));
 	if (options.kind === "help") {
 		console.log(
-			"demo:review [--scenario autonomous|required|solo|all] [--repeat 1..10]\ndemo:review --summarize <evidence-directory>\nDefault: one autonomous pair. Run mode calls real models; summarize/help do not.\nExit: 0 = all layers reviewed and passed; 1 = failure; 2 = incomplete quality review.",
+			"demo:review [--scenario autonomous|required|solo|all] [--repeat 1..10] [--timeout-seconds 60..1200]\ndemo:review --summarize <evidence-directory>\nDefault: one autonomous pair. Run mode calls real models; summarize/help do not.\nExit: 0 = all layers reviewed and passed; 1 = failure; 2 = incomplete quality review.",
 		);
 		return;
 	}
@@ -239,7 +240,12 @@ async function main() {
 	const scenarios = options.scenarioIds.map((id) => REVIEW_SCENARIOS[id]);
 	const configuration = templates.map(({ id }) => ({ id, ...modelSelection }));
 	const configurationHash = reviewHash(
-		JSON.stringify({ templates, modelSelection, guidance: PUBLICATION_REVIEW_GUIDANCE }),
+		JSON.stringify({
+			templates,
+			modelSelection,
+			timeoutSeconds: options.timeoutSeconds,
+			guidance: PUBLICATION_REVIEW_GUIDANCE,
+		}),
 	);
 	await writeFile(
 		join(root, "case.json"),
@@ -248,6 +254,7 @@ async function main() {
 				schemaVersion: 2,
 				createdAt: new Date().toISOString(),
 				repeat: options.repeat,
+				timeoutSeconds: options.timeoutSeconds,
 				configuration,
 				configurationHash,
 				scenarios: scenarios.map((scenario) => ({ ...scenario, inputHash: reviewHash(JSON.stringify(scenario)) })),
@@ -272,6 +279,7 @@ async function main() {
 			templates,
 			modelSelection,
 			configurationHash,
+			timeoutSeconds: options.timeoutSeconds,
 		});
 	await writeFile(
 		join(root, "review.md"),

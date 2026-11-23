@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Make the real-model review turn timeout configurable and record it in the comparison evidence.
+
 - Add an isolated real-model Space workflow covering account access, document history, feedback, conflicts and private preview; retain Space repositories inside demo evidence directories.
 
 - Remove the built-in feedback-box demo, its dedicated endpoint, workspace setup, guide and smoke command.

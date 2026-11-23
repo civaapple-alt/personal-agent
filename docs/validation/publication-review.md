@@ -12,10 +12,11 @@ npm run demo:review -- --scenario required
 npm run demo:review -- --scenario solo
 npm run demo:review -- --scenario all
 npm run demo:review -- --scenario autonomous --repeat 3
+npm run demo:review -- --timeout-seconds 480
 npm run demo:review -- --help
 ```
 
-默认只运行 `autonomous` 的一组基线/当前方法配对。`--repeat` 支持 1–10，每次使用全新的数据库、工作区和会话；同一场景相邻重复轮次交换两种方法的先后顺序。`all --repeat 3` 会执行三个场景的三次配对，即 18 轮主任务，额外同事调用按场景和模型决策发生。控制台在执行前打印主任务数量。
+默认只运行 `autonomous` 的一组基线/当前方法配对，每轮总限时 240 秒；`--timeout-seconds` 可调整为 60–1200 秒，并写入证据与配置哈希。`--repeat` 支持 1–10，每次使用全新的数据库、工作区和会话；同一场景相邻重复轮次交换两种方法的先后顺序。`all --repeat 3` 会执行三个场景的三次配对，即 18 轮主任务，额外同事调用按场景和模型决策发生。控制台在执行前打印主任务数量。
 
 | 场景 | 要回答的问题 | 专业协作要求 |
 | --- | --- | --- |
