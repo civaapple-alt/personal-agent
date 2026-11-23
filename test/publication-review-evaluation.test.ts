@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { REVIEW_SCENARIOS } from "../src/demo/publication-review-case.ts";
+import { promptForReviewDocument, REVIEW_SCENARIOS } from "../src/demo/publication-review-case.ts";
 import { assessCollaboration } from "../src/demo/publication-review-evidence.ts";
 import { parseReviewOptions, reviewDirectory, reviewPlan } from "../src/demo/publication-review-options.ts";
 import {
@@ -74,6 +74,14 @@ test("review options default to one autonomous pair and repetition order alterna
 		["--summarize", "/tmp", "--scenario", "solo"],
 	])
 		assert.throws(() => parseReviewOptions(args));
+});
+
+test("review prompts update each isolated seeded Space document", () => {
+	const prompt = promptForReviewDocument(REVIEW_SCENARIOS.autonomous, "doc_test", 2);
+	assert.match(prompt, /pageId=doc_test/);
+	assert.match(prompt, /revision=2/);
+	assert.match(prompt, /read_space/);
+	assert.match(prompt, /save_space_page/);
 });
 
 test("collaboration is required only for the explicit cross-role scenario; optional does not imply quality pass", () => {

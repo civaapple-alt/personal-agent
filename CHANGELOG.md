@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Update review scenarios to read and revise the seeded Space document by ID and revision.
+
 - Make the real-model review turn timeout configurable and record it in the comparison evidence.
 
 - Add an isolated real-model Space workflow covering account access, document history, feedback, conflicts and private preview; retain Space repositories inside demo evidence directories.

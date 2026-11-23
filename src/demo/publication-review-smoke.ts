@@ -12,7 +12,7 @@ import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { selectDemoModel } from "./model-selection.ts";
-import { REVIEW_SCENARIOS, type ReviewScenario } from "./publication-review-case.ts";
+import { promptForReviewDocument, REVIEW_SCENARIOS, type ReviewScenario } from "./publication-review-case.ts";
 import {
 	assessCollaboration,
 	type ReviewToolTrace,
@@ -123,13 +123,14 @@ async function run(input: {
 		});
 		if (!second) throw new Error("Failed to seed the second document revision");
 		const history = [initial, second];
+		const effectivePrompt = promptForReviewDocument(scenario, initial.id, second.revision);
 		let result: Awaited<ReturnType<TeamOrchestrator["dispatchMatter"]>> | undefined;
 		let error: string | null = null;
 		try {
 			console.log(`RUN ${scenario.id} repeat-${item.repetition} ${item.policy}`);
 			result = await orchestrator.dispatchMatter({
 				matterId: matter.id,
-				prompt: scenario.prompt,
+				prompt: effectivePrompt,
 				timeoutMs: input.timeoutSeconds * 1000,
 			});
 		} catch (failure) {
@@ -197,6 +198,7 @@ async function run(input: {
 				{
 					...item,
 					inputHash: reviewHash(JSON.stringify(scenario)),
+					effectivePrompt,
 					configurationHash: input.configurationHash,
 					error,
 					workerConfigurations,
