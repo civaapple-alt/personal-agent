@@ -681,12 +681,19 @@
 .exploring-tool-item {
 	display: flex;
 	align-items: center;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;
 	gap: 6px;
 	min-width: 0;
 	font-size: var(--text-micro);
+	line-height: 1.4;
+}
+.exploring-tool-member {
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .exploring-tool-name, .exploring-skill-badge {
+	flex-shrink: 0;
+	white-space: nowrap;
 	border-radius: 6px;
 	padding: 2px 6px;
 	background: var(--bg-sidebar);
@@ -694,8 +701,14 @@
 	font-size: var(--text-micro);
 }
 .exploring-skill-badge { color: var(--accent); }
-.exploring-tool-detail { min-width: 0; overflow-wrap: anywhere; color: var(--text-secondary); }
-.exploring-tool-status { flex-shrink: 0; color: var(--text-muted); font-size: var(--text-micro); }
+.exploring-tool-detail {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-secondary);
+}
+.exploring-tool-status { flex-shrink: 0; white-space: nowrap; color: var(--text-muted); font-size: var(--text-micro); }
 .exploring-tool-status.is-error { color: var(--danger, #b42318); }
 .exploring-tool-status.is-success { color: var(--accent); }
-.exploring-tool-hint { margin: 6px 0 0; color: var(--text-muted); font-size: var(--text-micro); }

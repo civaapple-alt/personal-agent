@@ -44,15 +44,15 @@ test("Pi skill catalogue includes manual skills and only reads a discovered, una
 		});
 		const event = { systemPrompt: "base", systemPromptOptions: { appendSystemPrompt: "existing" } };
 		assert.equal(beforeStart?.(event), undefined);
-		assert.match(event.systemPromptOptions.appendSystemPrompt, /skill:how/);
+		assert.match(event.systemPromptOptions.appendSystemPrompt, /"name":"how"/);
 		assert.match(event.systemPromptOptions.appendSystemPrompt, /other/);
 		assert.match(event.systemPromptOptions.appendSystemPrompt, /^existing/);
 		const catalog = renderAvailableResources(commands);
-		assert.match(catalog, /skill:how/);
+		assert.match(catalog, /"name":"how"/);
 		assert.match(catalog, /Explain code/);
 		assert.match(catalog, /Not a skill/);
 		const dedupedCatalog = renderAvailableResources(commands, new Set(["how"]));
-		assert.doesNotMatch(dedupedCatalog, /skill:how/);
+		assert.doesNotMatch(dedupedCatalog, /"name":"how"/);
 		assert.match(dedupedCatalog, /Not a skill/);
 		assert.doesNotMatch(renderAvailableResources([{ name: "template-only", source: "prompt" }]), /template-only/);
 		assert.match(
@@ -94,6 +94,8 @@ test("Pi skill catalogue includes manual skills and only reads a discovered, una
 			{ name: "how", description: "Explain code", path: first, scope: "user" },
 		]);
 		assert.match((await load.execute("2", { name: "how" })).content[0]!.text, /First method/);
+		assert.match((await load.execute("2b", { name: "/skill:how" })).content[0]!.text, /First method/);
+		assert.match((await load.execute("2c", { name: "skill:how" })).content[0]!.text, /First method/);
 		await assert.rejects(load.execute("3", { name: "how", path: second }), /not found/);
 		commands = [
 			...commands,

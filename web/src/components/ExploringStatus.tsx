@@ -100,26 +100,29 @@ function ProgressDetails({
 				<section className="exploring-tool-records" aria-label="工具与 Skill 记录">
 					<div className="exploring-section-head">工具与 Skill 记录 · {toolCalls.length}</div>
 					<div className="exploring-tool-list">
-						{toolCalls.map((call) => (
-							<div key={call.id} className="exploring-tool-item">
-								<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
-								<strong>
-									{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
-								</strong>
-								{call.skillName && <span className="exploring-skill-badge">Skill · {call.skillName}</span>}
-								<code className="exploring-tool-name">{call.toolName}</code>
-								{call.detail && (
-									<span className="exploring-tool-detail" title={call.detail}>
-										{call.detail}
+						{toolCalls.map((call) => {
+							const cleanSkillName = call.skillName?.replace(/^\/?skill:/u, "") ?? null;
+							const showDetail = Boolean(call.detail) && (!cleanSkillName || call.detail !== call.skillName);
+							return (
+								<div key={call.id} className="exploring-tool-item">
+									<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
+									<strong className="exploring-tool-member">
+										{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
+									</strong>
+									{cleanSkillName && <span className="exploring-skill-badge">Skill · {cleanSkillName}</span>}
+									<code className="exploring-tool-name">{call.toolName}</code>
+									{showDetail && (
+										<span className="exploring-tool-detail" title={call.detail}>
+											{call.detail}
+										</span>
+									)}
+									<span className={`exploring-tool-status is-${call.status}`}>
+										{toolStatusLabel(call.status, call.toolName)}
 									</span>
-								)}
-								<span className={`exploring-tool-status is-${call.status}`}>
-									{toolStatusLabel(call.status, call.toolName)}
-								</span>
-							</div>
-						))}
+								</div>
+							);
+						})}
 					</div>
-					<p className="exploring-tool-hint">读取成功不代表方法已应用；插件命令“已提交”不代表已执行成功。</p>
 				</section>
 			)}
 
