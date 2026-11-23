@@ -224,11 +224,8 @@ export async function executeWithWorkerPass(
 			: (template?.tools ?? ["read", "bash", "edit", "write"]).filter(
 					(tool) => tool !== "mcp" && !isPiWebAccessTool(tool),
 				);
-		const requestedTools = isVerifier
-			? baseTools.filter((tool) => tool === "read" || tool === "bash")
-			: sessionMode === "observer"
-				? baseTools.filter((tool) => tool !== "edit" && tool !== "write")
-				: baseTools;
+		const isReadOnlyPass = isVerifier || sessionMode === "observer";
+		const requestedTools = isReadOnlyPass ? baseTools.filter((tool) => tool === "read") : baseTools;
 		const webAccess = await prepareWebAccessForWorker({
 			store: deps.store,
 			member: input.member,
@@ -237,7 +234,7 @@ export async function executeWithWorkerPass(
 			envFilePath: resolve(deps.defaultCwd, ".env"),
 		});
 		if (webAccess) requestedTools.push(...webAccess.tools);
-		const mcpDependencies = isArchitect || isVerifier ? [] : (template?.mcpDependencies ?? []);
+		const mcpDependencies = isArchitect || isReadOnlyPass ? [] : (template?.mcpDependencies ?? []);
 		const requiredTools = [
 			...requestedTools,
 			...teamExtension.tools,
@@ -590,7 +587,7 @@ export async function executeWithWorkerPass(
 			: ["--no-extensions", "--no-skills"];
 		args.push("--extension", teamExtension.entry);
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
-		if (!isVerifier) for (const extension of deps.extensions) args.push("--extension", extension);
+		if (!isReadOnlyPass) for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
 		if (mcpDependencies.length === 0) args.push("--no-mcp");
 		else args.push("--extension", "builtin:mcp");

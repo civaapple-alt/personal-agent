@@ -204,7 +204,7 @@ export function SettingsView({
 										<div className="settings-kv-item">
 											<span className="settings-kv-label">会话模式</span>
 											<strong className="settings-kv-value">
-												{base.sessionMode === "persisted" ? "v2 作用域 (--session)" : "--no-session"}
+												{base.sessionMode === "persisted" ? "v2 作用域（可续接）" : "--no-session"}
 											</strong>
 										</div>
 										<div className="settings-kv-item">
@@ -232,7 +232,11 @@ export function SettingsView({
 									</div>
 
 									<details className="settings-details">
-										<summary>调用隔离策略（仅常规岗位加载 Extensions）</summary>
+										<summary>调用隔离策略</summary>
+										<p className="muted-hint">
+											以下为调用策略概览，实际能力随角色和执行模式变化。Pi
+											以服务账号权限运行，不是操作系统沙箱。
+										</p>
 										<div className="settings-isolation-list">
 											{base.isolationModes.map((mode) => (
 												<div key={mode.id} className="settings-isolation-row">

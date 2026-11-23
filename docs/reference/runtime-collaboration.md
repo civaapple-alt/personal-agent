@@ -84,7 +84,7 @@
 - `runtime_model_usage` 执行记录分别提供首个有有效统计的模型请求与该岗位本轮请求的 `input`、`cacheRead`、`cacheWrite`。命中比例为 `cacheRead / (input + cacheRead + cacheWrite)`。记录只覆盖 Pi 回传有效统计的请求。
 - **参与阵型与角色架构师隔离**：
   - 当事项处于单兵模式（`solo`，仅 1 位 AI 成员参与且无授权内部协同池）时，宿主从 `--tools` 移除 `delegate_to_member`，系统提示要求按当前名册和已启用工具推进；立项与运行期支持经 `observerMemberIds` 按人切换定向旁听。
-  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检。独立规划会话无工具，事项内规划和体检只开放 `read_pa_help`，两者均禁用 Skills 和 MCP。角色架构师生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议。经授权用户勾选确认后，PA 才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录。运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色仅供本人查看和执行。
+  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检。独立规划调用无业务工具和 MCP，显式加载角色 Skill；事项内架构师使用作用域会话与团队帮助，并可能加载配置的方法或操作员扩展，不开放角色基础业务工具与 MCP。角色架构师生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议。经授权用户勾选确认后，PA 才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录。运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色仅供本人查看和执行。
 
 增量交接背景策略如下：
 
@@ -142,7 +142,7 @@
 
 - 团队执行显式装配扩展与角色 Skills。仅监听回环地址的个人版允许本机所有者的常规岗位执行沿用 Pi 用户配置及受信任仓库的资源。具体范围见[启动与能力装配](configuration.md#cli-启动与能力装配)。
 - 主/内部角色 `tools` 加上委托、经验提案工具形成清单；直接负责用户交流的主成员还装配成果发布工具。
-- 旁听禁用团队委托、发布和提案；独立 RSI 复盘则不加载工具、扩展和 Skills。
+- 旁听与独立验收只保留已配置的 `read` 基础工具，不加载 MCP 和操作员自定义扩展；旁听还可使用工作台帮助与受控 pstack 方法。它们不能运行测试命令，且这些工具限制不构成操作系统沙箱。独立 RSI 复盘不加载工具、扩展和 Skills。
 - 内部成员不能直接发布用户成果，宿主也会拒绝伪造的发布请求。
 - `mcp` 只是历史声明分类；具体 MCP 需求由 `mcpDependencies` 的服务器名指定，使用现有 Pi 配置。
 

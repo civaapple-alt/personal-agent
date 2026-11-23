@@ -86,7 +86,7 @@ export interface RuntimeExtensionItem {
 }
 
 export interface RuntimeIsolationMode {
-	id: "worker" | "decision" | "architect" | "distill";
+	id: "worker" | "decision" | "architect-matter" | "architect-aux" | "distill";
 	label: string;
 	usage: string;
 	sessionStrategy: string;
@@ -259,34 +259,42 @@ const ISOLATION_MODES: RuntimeIsolationMode[] = [
 	{
 		id: "worker",
 		label: "常规岗位执行",
-		usage: "主责 / 内部委托 / 旁听",
-		sessionStrategy: "v2 作用域 --session",
-		extensionsPolicy: "显式挂载下方 Extensions",
-		toolsPolicy: "按角色与模式收窄",
+		usage: "主责 / 内部委托 / 旁听 / 独立验收",
+		sessionStrategy: "按事项、成员与作用域保存会话",
+		extensionsPolicy: "按岗位和运行模式装配",
+		toolsPolicy: "旁听与独立验收的基础工具仅保留 read",
 	},
 	{
 		id: "decision",
 		label: "类型化决策",
-		usage: "立项阵型 / 角色草案 (model)",
-		sessionStrategy: "--no-session",
-		extensionsPolicy: "--no-extensions --no-mcp",
-		toolsPolicy: '"" 或只读 read',
+		usage: "立项阵型 / 角色草案",
+		sessionStrategy: "无持久 Pi 会话",
+		extensionsPolicy: "禁用扩展、Skills 和 MCP",
+		toolsPolicy: "无工具；查仓时可使用 read",
 	},
 	{
-		id: "architect",
-		label: "角色架构师",
-		usage: "建队规划 / 团队体检",
-		sessionStrategy: "--no-session（应用层持久化）",
-		extensionsPolicy: "--no-extensions（仅 role-design）",
-		toolsPolicy: '""（零业务工具）',
+		id: "architect-matter",
+		label: "事项中的角色架构师",
+		usage: "事项内规划 / 诊断",
+		sessionStrategy: "事项作用域 Pi 会话",
+		extensionsPolicy: "团队帮助及已配置扩展 / Skills",
+		toolsPolicy: "无业务读写工具",
+	},
+	{
+		id: "architect-aux",
+		label: "独立角色架构师",
+		usage: "角色设计 / 团队体检接口",
+		sessionStrategy: "无持久 Pi 会话；传入对话内容",
+		extensionsPolicy: "禁用扩展和 MCP；显式加载角色 Skill",
+		toolsPolicy: "无业务工具",
 	},
 	{
 		id: "distill",
 		label: "AI 经验复盘",
-		usage: "只读提炼候选经验",
-		sessionStrategy: "--no-session",
-		extensionsPolicy: "--no-extensions --no-mcp",
-		toolsPolicy: '""（仅宿主证据）',
+		usage: "基于宿主提供的证据提炼候选经验",
+		sessionStrategy: "无持久 Pi 会话",
+		extensionsPolicy: "禁用扩展、Skills 和 MCP",
+		toolsPolicy: "无工具",
 	},
 ];
 
@@ -730,13 +738,17 @@ export async function buildRuntimeOverview(options: {
 				enabled: Boolean(config.systemOneEnabled),
 			},
 			isolationModes: ISOLATION_MODES.map((mode) =>
-				mode.id === "worker" && serverConfig?.inheritLocalPiResources
+				mode.id === "worker"
 					? {
 							...mode,
-							sessionStrategy: "v2 作用域，继承本机配置的执行使用独立会话",
-							extensionsPolicy: "本机业务执行沿用 Pi 已启用的 Skills 与扩展，其他流程显式装配",
+							...(config.noSession ? { sessionStrategy: "无持久 Pi 会话" } : {}),
+							extensionsPolicy: serverConfig?.inheritLocalPiResources
+								? "符合条件的本机业务执行可继承 Pi 资源"
+								: "业务执行仅显式装配扩展与 Skills",
 						}
-					: mode,
+					: mode.id === "architect-matter" && config.noSession
+						? { ...mode, sessionStrategy: "无持久 Pi 会话" }
+						: mode,
 			),
 			envFlags: {
 				turnTimeoutMs,

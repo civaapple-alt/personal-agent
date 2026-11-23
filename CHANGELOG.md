@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Restrict observer and independent verification workers to configured read tools, excluding shell, MCP and operator extensions; clarify runtime isolation and role architect modes in Settings.
+
 - Update review scenarios to read and revise the seeded Space document by ID and revision.
 
 - Make the real-model review turn timeout configurable and record it in the comparison evidence.

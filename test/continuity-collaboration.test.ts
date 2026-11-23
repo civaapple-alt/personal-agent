@@ -1543,7 +1543,9 @@ test("independent review links to a completed assignment and reviews the saved s
 			assert.match(prompt, /\[Acceptance criteria\]/);
 			assert.match(prompt, /\[Document snapshot\]/);
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]");
-			assert.ok(manifest.every((name: string) => ["read", "bash", "read_pa_help"].includes(name)));
+			assert.ok(manifest.every((name: string) => ["read", "read_pa_help"].includes(name)));
+			assert.ok(worker.options.args?.includes("--no-mcp"));
+			assert.ok(!worker.options.args?.includes("/tmp/operator-extension.ts"));
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("propose_experience"), false);
@@ -1580,7 +1582,16 @@ test("independent review links to a completed assignment and reviews the saved s
 		if (prompt.endsWith("Change after inspection")) await stage("Unreviewed different version");
 		return "Report ready";
 	});
-	const result = await f.orchestrator.dispatchMatter({
+	const orchestrator = new TeamOrchestrator({
+		...f.options,
+		extensions: ["/tmp/operator-extension.ts"],
+		templates: f.templates.map((template) =>
+			template.id === "qa-manager"
+				? { ...template, tools: ["read", "bash", "edit", "write"], mcpDependencies: ["untrusted"] }
+				: template,
+		),
+	});
+	const result = await orchestrator.dispatchMatter({
 		prompt: "Review and publish the exact report",
 		preferredMemberId: "product-manager",
 		workspaceId: f.workspace.id,
@@ -1599,7 +1610,7 @@ test("independent review links to a completed assignment and reviews the saved s
 	assert.ok(
 		records.some((entry) => entry.metadata?.requestMessageId === reviews[1]?.id && entry.content.includes(evidence)),
 	);
-	await f.orchestrator.dispatchMatter({ matterId: result.matter.id, prompt: "Change after inspection" });
+	await orchestrator.dispatchMatter({ matterId: result.matter.id, prompt: "Change after inspection" });
 	const latest = f.store.spaces.listDocuments({ matterId: result.matter.id });
 	assert.ok(
 		(await Promise.all(latest.map((entry) => f.store.spaces.getDocument(entry.id)))).some(
@@ -1875,6 +1886,10 @@ test("proactive observer chimes in with independent user bubble while silent obs
 			emPromptCount += 1;
 			assert.equal(worker.options.env?.PA_CAN_SAVE_SPACE, "false");
 			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
+			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]") as string[];
+			assert.ok(!manifest.some((name) => ["bash", "edit", "write"].includes(name) || name.startsWith("mcp__")));
+			assert.ok(worker.options.args?.includes("--no-mcp"));
+			assert.ok(!worker.options.args?.includes("/tmp/operator-extension.ts"));
 			assert.equal(worker.tools.has("save_space_page"), false);
 			assert.equal(worker.tools.has("delegate_to_member"), false);
 			assert.match(ctx, /## Observer participation/);
@@ -1889,12 +1904,26 @@ test("proactive observer chimes in with independent user bubble while silent obs
 		pmPromptCount += 1;
 		return "好的，我们方案将直接同步拉取全库 10 万条记录，先推进需求定义。";
 	});
-	const result = await f.orchestrator.dispatchMatter({
+	const orchestrator = new TeamOrchestrator({
+		...f.options,
+		extensions: ["/tmp/operator-extension.ts"],
+		templates: f.templates.map((template) =>
+			template.id === "engineering-manager"
+				? { ...template, tools: ["read", "bash", "edit", "write"], mcpDependencies: ["untrusted"] }
+				: template,
+		),
+	});
+	const result = await orchestrator.dispatchMatter({
 		prompt: "请评估书架首屏加载方案",
 		workspaceId: f.workspace.id,
 		preferredMemberId: "product-manager",
 		observerMemberIds: ["engineering-manager", "qa-manager"],
 	});
+	assert.ok(
+		f.workers
+			.find((worker) => worker.options.env?.PA_MEMBER_ID === "product-manager")
+			?.options.args?.includes("/tmp/operator-extension.ts"),
+	);
 	assert.equal(pmPromptCount, 1);
 	assert.equal(emPromptCount, 1);
 	assert.equal(qaPromptCount, 1);

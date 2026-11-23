@@ -162,7 +162,17 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(ownerPayload.base.pstack.version, "0.15.42");
 	assert.equal(ownerPayload.base.pstack.skillCount, 2);
 	assert.ok(ownerPayload.base.pstack.modeSha256);
-	assert.equal(ownerPayload.base.isolationModes.length, 4);
+	assert.equal(ownerPayload.base.isolationModes.length, 5);
+	assert.ok(
+		ownerPayload.base.isolationModes.some(
+			(mode) => mode.id === "architect-matter" && mode.sessionStrategy.includes("事项"),
+		),
+	);
+	assert.ok(
+		ownerPayload.base.isolationModes.some(
+			(mode) => mode.id === "architect-aux" && mode.extensionsPolicy.includes("Skill"),
+		),
+	);
 
 	const teamExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-team-extension");
 	assert.ok(teamExt);
@@ -286,11 +296,28 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 	assert.equal(payload.base.version, null);
 	assert.match(payload.base.probeError ?? "", /pi/);
 	assert.equal(payload.base.sessionMode, "no_session");
+	assert.equal(payload.base.isolationModes.find((mode) => mode.id === "worker")?.sessionStrategy, "无持久 Pi 会话");
+	assert.equal(
+		payload.base.isolationModes.find((mode) => mode.id === "architect-matter")?.sessionStrategy,
+		"无持久 Pi 会话",
+	);
 	assert.equal(payload.base.pstack.configured, true);
 	assert.equal(payload.base.pstack.available, false);
 	assert.ok(payload.base.pstack.error);
 	assert.equal(payload.base.envFlags.turnTimeoutMs, 0);
 	assert.equal(payload.base.envFlags.idleTimeoutMs, 900_000);
+	assert.match(payload.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "", /仅显式装配/);
+	const localResources = await buildRuntimeOverview({
+		config: orchestrator.getRuntimeConfig(),
+		serverConfig: { inheritLocalPiResources: true },
+		activeMembers: store.listMembers(),
+		isOwner: true,
+		probePiCli: async () => ({ available: false, executable: "pi", version: null, error: "not installed" }),
+	});
+	assert.match(
+		localResources.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "",
+		/可继承 Pi 资源/,
+	);
 
 	const pstackExt = payload.extensions.find((ext) => ext.id === "builtin-pstack-extension");
 	assert.equal(pstackExt?.status, "error");

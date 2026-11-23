@@ -31,6 +31,7 @@ interface WorkerRecord {
 	canSaveSpace: boolean;
 	canDelegate: boolean;
 	canExperience: boolean;
+	mcpDisabled: boolean;
 	resumedSessionFile?: string;
 }
 type WorkerOutcome = { workerId: string; prompt: string; finished: number } & (
@@ -61,7 +62,7 @@ export async function runObserverSmoke(input: {
 	await mkdir(workspace, { recursive: true });
 	await writeFile(join(workspace, "README.md"), seed, { flag: "wx" });
 	const db = openPersonalAgentDatabase(join(input.directory, "proof.db"));
-	const store = new PersonalAgentStore(db);
+	const store = new PersonalAgentStore(db, { spacesDir: join(input.directory, "spaces") });
 	if (!input.workerFactory)
 		store.updatePlatformSettings({
 			defaultModelSelection: await selectDemoModel(workspace, { thinkingLevel: "off" }),
@@ -73,7 +74,11 @@ export async function runObserverSmoke(input: {
 	let order = 0;
 	const orchestrator = new TeamOrchestrator({
 		store,
-		templates: input.templates.map((template) => ({ ...template, tools: ["read"] })),
+		templates: input.templates.map((template) =>
+			template.id === "qa-manager"
+				? { ...template, tools: ["read", "bash", "edit", "write"], mcpDependencies: ["isolation-fixture"] }
+				: { ...template, tools: ["read"] },
+		),
 		defaultCwd: workspace,
 		sessionDir: join(input.directory, "sessions"),
 		workerFactory: (options) => {
@@ -94,6 +99,7 @@ export async function runObserverSmoke(input: {
 				canSaveSpace: options.env?.PA_CAN_SAVE_SPACE === "true",
 				canDelegate: options.env?.PA_CAN_DELEGATE === "true",
 				canExperience: options.env?.PA_CAN_EXPERIENCE === "true",
+				mcpDisabled: options.args?.includes("--no-mcp") === true,
 				resumedSessionFile: options.sessionFile,
 			};
 			workers.push(record);
@@ -243,7 +249,8 @@ export async function runObserverSmoke(input: {
 						worker.tools.includes("read_pa_help") &&
 						!worker.canSaveSpace &&
 						!worker.canDelegate &&
-						!worker.canExperience,
+						!worker.canExperience &&
+						worker.mcpDisabled,
 				) &&
 				observerWorkers.every((worker) => {
 					const outcome = outcomes.find((row) => row.workerId === worker.id);
