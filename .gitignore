@@ -2,7 +2,8 @@ node_modules/
 dist/
 web/dist/
 .pi/
-.agents/skills/
+.agents/skills/*
+!.agents/skills/pa-matter-retrospective/
 .data/
 .notes/
 .releases/

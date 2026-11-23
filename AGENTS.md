@@ -15,6 +15,7 @@
 | 角色定义或 Skill | [roles/README.md](roles/README.md)、[skills/README.md](skills/README.md)；解析代码在 [src/roles/](src/roles/README.md) |
 | 测试、脚本或实机验证 | [test/README.md](test/README.md)、[scripts/README.md](scripts/README.md)、[demo](src/demo/README.md) |
 | 产品、架构或历史依据 | [docs/README.md](docs/README.md)，按问题进入当前说明或历史记录 |
+| 复盘事项、角色执行与 PA 架构 | [事项与架构复盘 Skill](.agents/skills/pa-matter-retrospective/SKILL.md) |
 
 ## 开发与验证
 

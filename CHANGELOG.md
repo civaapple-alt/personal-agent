@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Add a reusable project skill for reviewing matter evidence, runtime capabilities, and architectural improvements.
+
 - Share configured runtime tools and plugins across AI role execution modes; retain matter roster and collaboration ownership rules, and remove per-role web access controls.
 
 - Report GitHub fetch evidence and temporary clone lifetime, and guide resumed sessions when a prior clone path no longer exists.
