@@ -232,7 +232,8 @@ test("Native resource discovery separates sessions, includes observers, and isol
 		inheritLocalPiResources: true,
 	});
 	assert.ok(f.calls[6]?.options.args?.includes("--no-extensions"));
-	assert.ok(f.calls[6]?.options.args?.includes("--no-skills"));
+	assert.ok(!f.calls[6]?.options.args?.includes("--no-skills"));
+	assert.ok(f.calls[6]?.options.args?.includes("--no-approve"));
 
 	await f.orchestrator.dispatchMatter({
 		prompt: "Inspect the unbound fixture",

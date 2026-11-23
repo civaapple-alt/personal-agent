@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
 import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
@@ -423,7 +424,7 @@ export interface MetaArchitectDeps {
 
 export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"You are Personal Agent's Role Architect. Design, diagnose, split, or simplify AI roles and human–AI collaboration. Leave business work with the business roles.",
-	"Base proposals on the user's actual workflow, the decisions humans own, and the existing team.",
+	"Base proposals on the user's actual workflow, the decisions humans own, and the existing team. Discover available Skills and read relevant ones when useful.",
 	"Write user-facing prose in the user's language unless they request another language. Preserve JSON keys, enum values, IDs, and evidence references.",
 	"",
 	"## Design roles",
@@ -656,8 +657,9 @@ export async function runMetaArchitectChat(
 		args: [
 			"--no-approve",
 			"--no-extensions",
-			"--no-skills",
 			"--no-context-files",
+			"--extension",
+			resolveBuiltinExtensionPath("skill-catalog"),
 			...methodPaths.flatMap((path) => ["--skill", path]),
 			...(deps.extensions ?? []).flatMap((entry) => ["--extension", entry]),
 			...(webAccess ? ["--extension", webAccess.entry] : []),

@@ -119,24 +119,21 @@
 
 服务启动时运行 `pi --version`，在启动日志显示版本或检查失败原因。「设置 → Agent 底座」可查看同一次检查结果。安装 Pi CLI 或调整服务账号的 PATH 后，重启 PA 重新检查。
 
-岗位工作进程使用 `--mode rpc`，显式传入团队扩展、角色声明的 `--skill` 路径、`PA_PI_EXTENSIONS` 指定的扩展和角色的 `--tools` 清单。配置 pstack 时还会装配它的模式入口及方法工具。所选工作区作为 Pi 的当前目录。团队扩展按工作区范围过滤自动发现的上下文文件。
+岗位工作进程使用 `--mode rpc`，显式装配团队工具、角色 Skills 和配置的扩展，并由 Pi 发现服务账号已启用的用户级 Skills。`list_available_skills` 返回 Pi 当前 Skill 命令清单，包括仅供手动调用的项目；角色按任务选择并通过 `load_available_skill` 读取正文。角色声明是建议，不是运行工具限制。
 
 超级管理员可安装 `pi-web-access` 并设置搜索供应商。PA 通过 `pi list --no-approve` 找到服务账号安装的 npm 包，并为岗位运行加载入口；不再按岗位授权。 [网页检索设置](../guides/web-search.md)
 
-个人版仅监听回环地址时，本机免密所有者发起的业务主责与内部委托沿用 Pi 的原生资源发现：
+个人版回环免密所有者可选择继承完整的本机 Pi 资源，Pi 根据现有信任记录处理仓库资源。未选择继承时，PA 使用 `--no-extensions --no-approve`：扩展由 PA 显式装配，Pi 仍发现服务账号启用的用户级 Skills，但不会自动信任项目资源。托管克隆同样不自动信任项目；PA 配置的附加目录 Skills 仍按工作区配置显式装配。团队服务使用服务账号的用户级 Skills，应将它们视为供该服务岗位使用的共享资源。Pi 对已禁用资源的设置仍生效。
 
-- 已登记的本地仓库可使用仓库 `.agents/skills` 和 Pi 认可的 `.pi/` 设置与资源。Pi 读取现有的项目可信记录，设置合并与资源启停由 Pi 处理。
-- 用户级 `~/.agents/skills` 和 Pi 配置目录中已启用的扩展可继续使用。Pi 配置目录也可由 `PI_CODING_AGENT_DIR` 指定。未绑定仓库时只启用用户级资源发现。
-- 团队版、局域网监听和账号访问、托管克隆仓库、讨论和旁听继续通过 `--no-extensions --no-skills` 显式装配。独立决策、架构师和复盘使用各自的窄工具配置。
-- 角色的 `mcpDependencies` 仍决定 MCP 工具的启用及允许名单。启用原生资源发现时，Pi 关闭启动阶段的网络操作。
+启用 pstack 时，PA 还显式装配选定方法包与兼容读取工具；即使不启用该适配，Pi 已安装并启用的方法仍可通过通用 Skill 目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
 
 工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../src/orchestrator/execution-context.ts)
 
 ### 项目信任与文件访问
 
-主责、内部委托、旁听和讨论回复都在 Pi RPC 中运行。Pi 在启动时根据工作目录判断是否加载受项目信任保护的资源。RPC 跳过交互确认。没有命令行覆盖、扩展决定或已保存记录时，全局 `defaultProjectTrust` 为 `ask` 或 `never` 会跳过这些项目资源，为 `always` 会加载它们。显式装配的 `--no-extensions --no-skills` 关闭这两类资源的自动发现。项目可信时，项目提示模板等其他资源仍可加载。 [Pi 项目信任规则](https://docs.pi.dev/latest/security#understand-project-trust)
+主责、内部委托、旁听和讨论回复都在 Pi RPC 中运行。Pi 在启动时根据工作目录判断是否加载受项目信任保护的资源。RPC 跳过交互确认。没有命令行覆盖、扩展决定或已保存记录时，全局 `defaultProjectTrust` 为 `ask` 或 `never` 会跳过这些项目资源，为 `always` 会加载它们。`--no-extensions` 关闭扩展自动发现；`--no-approve` 跳过项目本地可信资源，但不关闭用户级 Skills。项目可信时，项目提示模板等其他资源仍可加载。 [Pi 项目信任规则](https://docs.pi.dev/latest/security#understand-project-trust)
 
-消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。当前统一输入框的讨论回复只装配读取类工具，旁听会排除 `edit` 和 `write`。 [岗位工具装配](../../src/orchestrator/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
+消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。讨论、旁听和验收共享运行工具，具体操作仍取决于任务、用户授权与宿主账号权限。 [岗位工具装配](../../src/orchestrator/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
 
 以文件为来源发布文档成果时，PA 另外校验文件的真实路径，要求它位于当前事项工作区。 [文件成果来源校验](../../src/orchestrator/execution-context.ts)
 

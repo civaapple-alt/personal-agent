@@ -96,6 +96,7 @@ test("Pi method tool supports catalogue, real principles and cancellation withou
 			result: bugfix,
 		};
 		assert.equal(hasPstackReadEvidence([record], expected), true);
+		assert.equal(hasPstackReadEvidence([{ ...record, toolName: "load_available_skill" }], expected), true);
 		assert.equal(hasPstackReadEvidence([{ ...record, isError: true }], expected), false);
 		assert.equal(hasPstackReadEvidence([{ ...record, result: undefined }], expected), false);
 		assert.equal(

@@ -309,13 +309,16 @@ export async function buildRuntimeOverview(options: {
 	const teamExtPath = resolveBuiltinExtensionPath("team-extension");
 	const pstackExtPath = resolveBuiltinExtensionPath("pstack-extension");
 	const humanQuestionPath = resolveBuiltinExtensionPath("human-question");
+	const skillCatalogPath = resolveBuiltinExtensionPath("skill-catalog");
 
-	const [piProbe, teamFileStatus, pstackExtFileStatus, humanQuestionFileStatus] = await Promise.all([
-		probePromise,
-		checkFileOrDir(teamExtPath),
-		checkFileOrDir(pstackExtPath),
-		checkFileOrDir(humanQuestionPath),
-	]);
+	const [piProbe, teamFileStatus, pstackExtFileStatus, humanQuestionFileStatus, skillCatalogFileStatus] =
+		await Promise.all([
+			probePromise,
+			checkFileOrDir(teamExtPath),
+			checkFileOrDir(pstackExtPath),
+			checkFileOrDir(humanQuestionPath),
+			checkFileOrDir(skillCatalogPath),
+		]);
 
 	const pstackEnvSet = Boolean(process.env.PA_PSTACK_DIR?.trim());
 	let pstackInfo: RuntimeBaseInfo["pstack"] = {
@@ -423,6 +426,22 @@ export async function buildRuntimeOverview(options: {
 		error: teamFileStatus === "missing" ? "未找到扩展入口文件" : null,
 	};
 
+	const skillCatalogItem: RuntimeExtensionItem = {
+		id: "builtin-skill-catalog",
+		name: "skill-catalog",
+		sourceKind: "builtin",
+		status: skillCatalogFileStatus === "present" ? "active" : "error",
+		entryPath: isOwner ? skillCatalogPath : builtinExtensionPaths["skill-catalog"],
+		fileStatus: skillCatalogFileStatus,
+		scopeSummary: "事项岗位与独立角色架构师",
+		description: "发现 Pi 当前可用的 Skills，按需读取完整方法。",
+		registeredTools: ["list_available_skills", "load_available_skill"],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: skillCatalogFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
 	const humanQuestionItem: RuntimeExtensionItem = {
 		id: "builtin-human-question",
 		name: "human-question",
@@ -525,6 +544,7 @@ export async function buildRuntimeOverview(options: {
 
 	const extensions: RuntimeExtensionItem[] = [
 		teamExtensionItem,
+		skillCatalogItem,
 		humanQuestionItem,
 		pstackExtensionItem,
 		mcpExtensionItem,
@@ -739,7 +759,7 @@ export async function buildRuntimeOverview(options: {
 							...(config.noSession ? { sessionStrategy: "无持久 Pi 会话" } : {}),
 							extensionsPolicy: serverConfig?.inheritLocalPiResources
 								? "符合条件的本机业务执行可继承 Pi 资源"
-								: "业务执行仅显式装配扩展与 Skills",
+								: "扩展显式装配；Skill 由 Pi 发现及按需读取",
 						}
 					: mode.id === "architect-matter" && config.noSession
 						? { ...mode, sessionStrategy: "无持久 Pi 会话" }

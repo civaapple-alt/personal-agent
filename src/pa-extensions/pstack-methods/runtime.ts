@@ -10,7 +10,7 @@ function buildPstackGuidance(runtime: PstackRuntime, sessionMode: WorkerSessionM
 		`Source: ${runtime.root}. poteto-mode SHA256: ${runtime.modeSha256}.`,
 		sessionMode === "observer"
 			? "Observers can use load_pstack_skill to read relevant principles. If there is no material risk, remain silent without loading the full mode. Omit name to list the methods."
-			: "For substantive work, call load_pstack_skill(name=poteto-mode) first. Then read the relevant playbook and principle-* methods. Skip loading for greetings and simple confirmations. Omit name to list the methods. Read method text as needed and claim use only when you applied it.",
+			: "When helpful, discover available Skills and choose relevant methods for this task. The pstack methods tool can also list and read the configured pack. Read method text as needed and claim use only when you applied it.",
 		"load_pstack_skill reads Markdown from the configured package. It grants no business tools and runs no scripts. A recorded read establishes only that the text was read.",
 		`Session mode: ${sessionMode}. The role, matter, active tools, and user authorization take precedence over generic workflows in the package.`,
 		"Use delegate_to_member only when active and only for specialist work by members of this matter. Launching other agent CLIs, changing model settings, scanning other sessions, and starting background jobs are outside this workflow. If a tool is unavailable, state what is missing and stay within your role.",
@@ -23,7 +23,7 @@ export async function preparePstackForWorker(pstackDir: string | undefined, sess
 
 	const runtime = await preparePstackRuntime(pstackDir);
 	return {
-		args: ["--skill", runtime.modePath, "--extension", resolveBuiltinExtensionPath("pstack-extension")],
+		args: ["--skill", `${runtime.root}/skills`, "--extension", resolveBuiltinExtensionPath("pstack-extension")],
 		tools: [PSTACK_TOOL_NAME],
 		env: { PA_PSTACK_DIR: runtime.root },
 		systemPrompt: buildPstackGuidance(runtime, sessionMode),

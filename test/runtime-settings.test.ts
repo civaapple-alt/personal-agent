@@ -222,7 +222,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(builtinTelemetry.status, "active");
 	assert.equal(builtinTelemetry.fileStatus, "builtin");
 
-	assert.equal(ownerPayload.summary.activeCount, 4);
+	assert.equal(ownerPayload.summary.activeCount, 5);
 	assert.equal(
 		ownerPayload.summary.conditionalCount,
 		ownerPayload.extensions.filter((ext) => ext.status === "conditional").length,
@@ -312,7 +312,10 @@ test("buildRuntimeOverview reports missing Pi CLI, unconfigured/invalid pstack, 
 	assert.ok(payload.base.pstack.error);
 	assert.equal(payload.base.envFlags.turnTimeoutMs, 0);
 	assert.equal(payload.base.envFlags.idleTimeoutMs, 900_000);
-	assert.match(payload.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "", /仅显式装配/);
+	assert.match(
+		payload.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "",
+		/Skill 由 Pi 发现/,
+	);
 	const localResources = await buildRuntimeOverview({
 		config: orchestrator.getRuntimeConfig(),
 		serverConfig: { inheritLocalPiResources: true },

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { classifyGithubFetches } from "../../pi-extensions/team-extension/web-fetch-evidence.js";
+import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { preparePstackForWorker } from "../pa-extensions/pstack-methods/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
@@ -217,6 +218,8 @@ export async function executeWithWorkerPass(
 		if (webAccess) requestedTools.push(...webAccess.tools);
 		const requiredTools = [
 			...requestedTools,
+			"list_available_skills",
+			"load_available_skill",
 			...teamExtension.tools,
 			...humanQuestion.tools,
 			...(pstack?.tools ?? []),
@@ -567,8 +570,9 @@ export async function executeWithWorkerPass(
 		// Use Pi's own resource and project trust rules. Without a workspace, load user resources only.
 		const args = inheritsLocalResources
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
-			: ["--no-extensions", "--no-skills"];
+			: ["--no-extensions", "--no-approve"];
 		args.push("--extension", teamExtension.entry);
+		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);

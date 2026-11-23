@@ -6,6 +6,7 @@
 
 | 扩展 | 用途 | 加载方式 |
 | --- | --- | --- |
+| [skill-catalog](skill-catalog/README.md) | 列出 Pi 已发现的 Skills 并按需读取完整方法 | PA 启动岗位和独立角色架构师时加载 |
 | [team-extension](team-extension/README.md) | 将团队工具调用转交 PA，注入岗位与事项上下文，核查工具清单 | PA 启动岗位时显式加载 |
 | [human-question](human-question/README.md) | 请求人工答复或向直接委托者提请澄清 | PA 按运行模式显式加载。终端 Pi 也可以单独加载 |
 | [pstack-methods](pstack-methods/README.md) | 从指定的 pstack 方法包读取方法正文 | PA 启用 pstack 后显式加载。终端 Pi 也可以单独加载 |

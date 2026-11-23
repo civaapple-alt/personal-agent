@@ -14,4 +14,4 @@ PA_PSTACK_DIR=/path/to/pstack pi -e ./pi-extensions/pstack-methods
 
 ## 在 PA 中使用
 
-PA 将选定的 pstack 方法包目录传给扩展，并在工具握手中核对 `load_pstack_skill`。岗位的文件、终端与协作工具由 PA 装配。 [编排入口](../../src/orchestrator/worker-runner.ts) · [方法工具参考](../../docs/reference/pstack-tools.md)
+PA 将选定的 pstack 方法包目录传给扩展，并在工具握手中核对 `load_pstack_skill`。岗位也可通过通用 Skill 目录自主发现和读取 Pi 已安装的方法；文件、终端与协作工具由 PA 装配。 [编排入口](../../src/orchestrator/worker-runner.ts) · [方法工具参考](../../docs/reference/pstack-tools.md)

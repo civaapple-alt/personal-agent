@@ -1,6 +1,6 @@
 # 启用 pstack 方法包
 
-在工作台启用 [backnotprop/pstack](https://github.com/backnotprop/pstack) 后，岗位可按需读取模式、playbook 和原则。Pi 负责包的安装和更新。
+在工作台启用 [backnotprop/pstack](https://github.com/backnotprop/pstack) 后，岗位可按需读取模式、playbook 和原则。已由 Pi 安装并启用的 Skill 也可通过通用方法目录发现，无须依赖 pstack 专用工具。Pi 负责包的安装和更新。
 
 ## 安装并在工作台启用
 

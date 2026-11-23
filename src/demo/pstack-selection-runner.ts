@@ -89,7 +89,7 @@ async function writeWorkspace(path: string) {
 
 function methodActions(tools: ToolExecutionRecord[]) {
 	return tools
-		.filter((tool) => tool.toolName === "load_pstack_skill")
+		.filter((tool) => ["load_pstack_skill", "load_available_skill"].includes(tool.toolName))
 		.map((tool) => ({ args: tool.args, succeeded: !tool.isError && tool.result !== undefined }));
 }
 
@@ -248,6 +248,7 @@ export async function runSelection(options: {
 				workerFactory: (config) =>
 					defaultWorkerFactory({
 						...config,
+						args: [...(config.args ?? []), "--no-skills"],
 						env: {
 							...config.env,
 							PA_FIXTURE_READ_ROOTS: JSON.stringify([workspace, sessions, pack, ...approvedRoleMethods]),

@@ -7,7 +7,7 @@ export function hasPstackReadEvidence(
 	expected: Pick<Awaited<ReturnType<typeof readPstackResource>>, "sha256" | "text">,
 ): boolean {
 	return tools.some((tool) => {
-		if (tool.toolName !== "load_pstack_skill" || tool.isError) return false;
+		if (!["load_pstack_skill", "load_available_skill"].includes(tool.toolName) || tool.isError) return false;
 		const result = tool.result;
 		if (!result || typeof result !== "object" || !("content" in result) || !Array.isArray(result.content))
 			return false;
