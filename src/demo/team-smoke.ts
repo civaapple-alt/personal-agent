@@ -34,7 +34,7 @@ if (!phase || !root) {
 } else {
 	const db = openPersonalAgentDatabase(join(root, "proof.db"));
 	try {
-		const store = new PersonalAgentStore(db);
+		const store = new PersonalAgentStore(db, { spacesDir: join(root, "spaces") });
 		store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, { thinkingLevel: "off" }) });
 		const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 			...template,

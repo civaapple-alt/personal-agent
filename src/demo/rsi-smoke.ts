@@ -13,7 +13,7 @@ import { selectDemoModel } from "./model-selection.ts";
 const directory = await mkdtemp(join(tmpdir(), "personal-agent-rsi-smoke-"));
 console.log(`Isolated RSI evidence directory: ${directory}`);
 const db = openPersonalAgentDatabase(join(directory, "proof.db"));
-const store = new PersonalAgentStore(db);
+const store = new PersonalAgentStore(db, { spacesDir: join(directory, "spaces") });
 store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(directory, { thinkingLevel: "off" }) });
 const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
 	...template,
