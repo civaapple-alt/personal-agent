@@ -164,11 +164,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const confidenceLabel =
 		assessment?.confidence === "high" ? "高把握" : assessment?.confidence === "low" ? "低把握" : "中把握";
 	const showAssessmentBar =
-		assessment ||
-		modelAssessing ||
-		modelAssessmentError ||
-		confirmModel ||
-		(hasPromptText && onRequestModelAssessment);
+		assessment || modelAssessing || modelAssessmentError || confirmModel || onRequestModelAssessment;
 
 	return (
 		<section className="initiation-panel" aria-label="新事项参与安排">
@@ -205,10 +201,29 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						</div>
 					) : (
 						<>
-							{!assessment && hasPromptText && !confirmModel && (
-								<button type="button" className="btn-inline" onClick={() => onRequestModelAssessment?.()}>
-									分析参与方式
-								</button>
+							{!assessment && (!confirmModel || !hasPromptText) && onRequestModelAssessment && (
+								<div className="initiation-recommendation-row">
+									<span className="initiation-assess-note">
+										{hasPromptText
+											? "可让 AI 根据需求推荐主责、委托与旁听安排。"
+											: "输入需求或添加文字附件后，可让 AI 推荐参与阵型。"}
+									</span>
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										disabled={!hasPromptText}
+										onClick={() => {
+											if (hasWorkspace) {
+												setReadRepoForDecision(false);
+												setConfirmModel(true);
+											} else {
+												onRequestModelAssessment();
+											}
+										}}
+									>
+										请 AI 决策阵型
+									</button>
+								</div>
 							)}
 							{assessment && (
 								<>

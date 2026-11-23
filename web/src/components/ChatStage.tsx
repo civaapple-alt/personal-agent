@@ -738,7 +738,9 @@ export function ChatStage({
 										isOwner={isOwner}
 										observersEnabled={observersEnabled}
 										hasWorkspace={Boolean(selectedWorkspaceId)}
-										hasPromptText={Boolean(composerText.trim() || pendingFiles.length > 0)}
+										hasPromptText={Boolean(
+											composerText.trim() || pendingFiles.some((file) => file.content.trim()),
+										)}
 										members={scopedMembers}
 										orgMembers={orgMembers}
 										initiatorId={accountUser?.id ?? currentUser?.id}

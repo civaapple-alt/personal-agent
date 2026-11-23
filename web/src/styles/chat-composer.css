@@ -862,6 +862,7 @@
 .initiation-assessment-bar { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--bg-sidebar); font-size: var(--text-xs); color: var(--text-secondary); }
 .initiation-assessment-bar.is-gap { background: var(--warn-bg); }
 .initiation-recommendation-row > button { flex-shrink: 0; }
+.initiation-assess-note { min-width: 0; }
 .initiation-recommend-text { min-width: 0; }
 .initiation-recommend-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .initiation-model-confirm {
@@ -947,6 +948,7 @@
  .initiation-role-rows { grid-template-columns: 1fr; }
  .initiation-role-row select { min-height: 30px; height: auto; padding: 5px 10px; }
  .initiation-current-row { align-items: flex-start; }
+ .initiation-recommendation-row { align-items: flex-start; flex-wrap: wrap; }
  .initiation-current-row > button, .initiation-recommendation-row > button { min-height: 36px; }
  .chat-stage.is-new-matter .welcome-hero { padding-top: 20px; }
  .chat-stage.is-new-matter .composer-card.is-new .composer-textarea { min-height: 68px; }

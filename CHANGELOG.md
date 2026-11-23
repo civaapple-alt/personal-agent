@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Make the new-matter AI formation recommendation visible before typing and consistently offer optional repository reading.
+
 - Identify team collaboration health checks under the independent Role Architect isolation policy.
 
 - Show workbench and administrator action notifications as a floating overlay without shifting page content.
