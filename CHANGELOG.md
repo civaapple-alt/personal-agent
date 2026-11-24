@@ -4,6 +4,12 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-24
+
+See the [0.8.0 release guide](docs/releases/v0.8.0.md) for downloads and upgrade instructions.
+
+- Close the native Pi Skill discovery loop: `worker-runner.ts` now mounts existing scoped Skill roots (`.data/skills/global`, `orgs/<orgId>`, `users/<userId>`) via `--skill` with strict tenant isolation so Skills approved via `propose_skill` are immediately discovered on subsequent turns.
+- Upgrade `pa-extensions/workflow` with a Pi-native `before_agent_start` routing hook (`pa-extensions/workflow/pi/index.ts`) and add the `pa-trust-capture` workflow Skill for Step 2 of the Four-Step Trust progression (`propose_skill` + `scripts/*`).
 - Unify model-facing reusable capture onto disk-persisted `propose_skill` (`SKILL.md` + optional executable `scripts/*` under `.data/skills/` or `<workspace>/.agents/skills/`, retiring the overlapping `propose_experience` tool without migrating historical `member_memories` rows) and stage `propose_skill` proposals abort-safely until clean turn completion.
 - Relocate PA host-bridge Pi entries out of portable `pi-extensions/` and split monolithic `team-extension` into 5 focused, on-demand `pa-extensions/*` packages (`worker-runtime`, `workbench-help`, `space`, `delegation`, `skill-capture`), each with isolated `pi/`, `server/`, and `web/` halves enforced by `check:boundaries`.
 - Add `toolRenderers` extension seam to `@pa/extension-api/web`, `@pa/extension-sdk/web`, `apps/web/src/extensions/registry.ts`, and `ExploringStatus.tsx`.
