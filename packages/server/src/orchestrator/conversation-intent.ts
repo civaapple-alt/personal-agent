@@ -1,4 +1,4 @@
-import { isWorkbenchTopic, WORKBENCH_TOPICS, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import { isWorkbenchTopic, WORKBENCH_TOPICS, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import { isExplicitRoleSetupRequest } from "../roles/role-setup-intent.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { MatterMessage, TeamMember } from "../storage/types.ts";

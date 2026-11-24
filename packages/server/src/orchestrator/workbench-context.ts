@@ -1,4 +1,4 @@
-import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";

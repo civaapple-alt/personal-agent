@@ -1,3 +1,4 @@
+export { resolveBuiltinExtensionPath } from "./extensions/builtin-paths.ts";
 export {
 	builtinServerExtensions,
 	findServerExtension,
@@ -78,7 +79,6 @@ export {
 	type TeamOrchestratorOptions,
 	type WorkerFactory,
 } from "./orchestrator/team-orchestrator.ts";
-export { resolveBuiltinExtensionPath } from "./pa-extensions/builtin-paths.ts";
 export {
 	applyRoleTemplatePatch,
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { Clarification } from "@pa/contracts/human-decision";
-import { isWorkbenchTopic, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import { isWorkbenchTopic, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
 import type { MemoryCategory } from "../storage/types.ts";

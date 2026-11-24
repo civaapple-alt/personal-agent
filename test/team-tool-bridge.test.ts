@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { resolveEffectiveWebSearchProvider } from "../packages/server/src/pa-extensions/web-access/runtime.ts";
+import { resolveEffectiveWebSearchProvider } from "../packages/server/src/extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
 import teamExtension, {
 	filterContextFilesForTargetWorkspace,

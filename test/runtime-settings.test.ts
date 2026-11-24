@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { findInstalledPiWebAccess } from "../packages/server/src/extensions/web-access/package.ts";
 import {
 	buildRuntimeOverview,
 	createPersonalAgentServer,
@@ -16,7 +17,6 @@ import {
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
 } from "../packages/server/src/index.ts";
-import { findInstalledPiWebAccess } from "../packages/server/src/pa-extensions/web-access/package.ts";
 
 test("pi-web-access discovery uses the user package manifest and confines its entry to the package", async (t) => {
 	const dir = mkdtempSync(join(tmpdir(), "pa-web-access-package-"));

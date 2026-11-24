@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { classifyGithubFetches } from "../../../../pi-extensions/team-extension/web-fetch-evidence.js";
-import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../pa-extensions/builtin-paths.ts";
-import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
-import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
-import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
-import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../pa-extensions/workbench-help/catalog.ts";
+import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../extensions/builtin-paths.ts";
+import { prepareHumanQuestion } from "../extensions/human-question/runtime.ts";
+import { prepareTeamExtension } from "../extensions/team-extension/runtime.ts";
+import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../extensions/web-access/runtime.ts";
+import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";

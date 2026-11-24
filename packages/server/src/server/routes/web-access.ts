@@ -1,5 +1,3 @@
-import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
-import { choice, createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import {
 	isManagedEnvKey,
 	type ManagedEnvKey,
@@ -7,11 +5,13 @@ import {
 	readWebAccessEnvFromDotEnv,
 	resolveEnvFilePath,
 	updateManagedDotEnv,
-} from "../../pa-extensions/env-credentials.ts";
+} from "../../extensions/env-credentials.ts";
 import {
 	isWebSearchProviderPreference,
 	resolveEffectiveWebSearchProvider,
-} from "../../pa-extensions/web-access/runtime.ts";
+} from "../../extensions/web-access/runtime.ts";
+import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
+import { choice, createSystemOneClassifier } from "../../orchestrator/system-one.ts";
 import type { RequestActor } from "../auth.ts";
 import { HttpRequestError, readJsonBody, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
-import { prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
+import { resolveBuiltinExtensionPath } from "../extensions/builtin-paths.ts";
+import { prepareWebAccessForWorker } from "../extensions/web-access/runtime.ts";
 import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
 import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,

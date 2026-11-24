@@ -6,19 +6,19 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { resolveBuiltinExtensionPath } from "../packages/server/src/extensions/builtin-paths.ts";
+import {
+	isGuideTopic,
+	isWorkbenchTopic,
+	readWorkbenchGuide,
+	WORKBENCH_TOPICS,
+} from "../packages/server/src/extensions/workbench-help/catalog.ts";
 import type { DecisionClassifier } from "../packages/server/src/orchestrator/system-one.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../packages/server/src/orchestrator/team-orchestrator.ts";
-import { resolveBuiltinExtensionPath } from "../packages/server/src/pa-extensions/builtin-paths.ts";
-import {
-	isGuideTopic,
-	isWorkbenchTopic,
-	readWorkbenchGuide,
-	WORKBENCH_TOPICS,
-} from "../packages/server/src/pa-extensions/workbench-help/catalog.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
 import type {
