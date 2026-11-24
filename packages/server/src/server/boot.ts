@@ -1,13 +1,14 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { networkInterfaces, tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { homedir, networkInterfaces, tmpdir } from "node:os";
+import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { parseEnv } from "node:util";
-import { PA_RUNTIME_ASSET_MANIFEST } from "../build-support.ts";
+import { PA_RUNTIME_ASSET_MANIFEST, resolveRepoRoot } from "../build-support.ts";
+import { listServerExtensionSummaries } from "../extensions/registry.ts";
 import { closeLogging, createLogger, initLogging } from "../log/index.ts";
 import { createSystemOneClassifier } from "../orchestrator/architect/system-one.ts";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution/execution-context.ts";
-import { probePiCli } from "../orchestrator/runtime/runtime-info.ts";
+import { type PiCliProbeResult, probePiCli } from "../orchestrator/runtime/runtime-info.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
@@ -33,26 +34,148 @@ export interface BootHostOptions {
 	adminName?: string;
 }
 
+export interface BootedHostSummary {
+	version: string | null;
+	requireAuth: boolean;
+	localPiResourcesInherited: boolean;
+	pi: PiCliProbeResult;
+	nodeVersion: string;
+	rootDir: string;
+	installRoot: string;
+	dbPath: string;
+	sessionDir: string;
+	workspaceNames: string[];
+	businessRoleIds: string[];
+	hasArchitectRole: boolean;
+	extensionNames: string[];
+	extraPiExtensions: string[];
+}
+
 export interface BootedHost {
 	host: string;
 	port: number;
 	localUrl: string;
 	lanUrls: string[];
+	summary: BootedHostSummary;
 	shutdown: () => Promise<void>;
 }
 
+/** Returns true for IPv4 addresses that are realistically reachable by LAN/mesh teammates (excludes loopback, APIPA, and RFC 2544 fake-IP TUN ranges like 198.18.0.0/15). */
+export function isUsableLanIpv4(address: string): boolean {
+	const parts = address.split(".").map((segment) => Number(segment));
+	if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+	const [a, b] = parts as [number, number, number, number];
+	if (a === 0 || a === 127) return false;
+	// Link-local APIPA (169.254.0.0/16)
+	if (a === 169 && b === 254) return false;
+	// RFC 2544 benchmark / Clash & Surge fake-IP TUN (198.18.0.0/15)
+	if (a === 198 && (b === 18 || b === 19)) return false;
+	return true;
+}
+
+function isRfc1918PrivateIpv4(address: string): boolean {
+	const [a, b] = address.split(".").map((segment) => Number(segment));
+	if (a === 192 && b === 168) return true;
+	if (a === 10) return true;
+	if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+	return false;
+}
+
 function listLanIpv4Addresses(): string[] {
-	const results: string[] = [];
+	const seen = new Set<string>();
 	const interfaces = networkInterfaces();
 	for (const entries of Object.values(interfaces)) {
 		if (!entries) continue;
 		for (const item of entries) {
-			if (item.family === "IPv4" && !item.internal) {
-				results.push(item.address);
+			if (item.family === "IPv4" && !item.internal && isUsableLanIpv4(item.address)) {
+				seen.add(item.address);
 			}
 		}
 	}
-	return results;
+	return [...seen].sort((left, right) => {
+		const leftPrivate = isRfc1918PrivateIpv4(left) ? 0 : 1;
+		const rightPrivate = isRfc1918PrivateIpv4(right) ? 0 : 1;
+		if (leftPrivate !== rightPrivate) return leftPrivate - rightPrivate;
+		return left.localeCompare(right);
+	});
+}
+
+function isLoopbackHost(host: string): boolean {
+	const normalized = host.trim().toLowerCase();
+	return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+function readPackageVersion(installRoot: string, rootDir: string): string | null {
+	for (const candidate of [resolve(installRoot, "package.json"), resolve(rootDir, "package.json")]) {
+		try {
+			const parsed = JSON.parse(readFileSync(candidate, "utf8")) as { version?: unknown };
+			if (typeof parsed.version === "string" && parsed.version.trim()) return parsed.version.trim();
+		} catch {
+			// Ignore missing or unreadable package.json in custom temp working directories.
+		}
+	}
+	return null;
+}
+
+function formatDisplayPath(targetPath: string, rootDir: string): string {
+	if (targetPath === ":memory:") return ":memory:";
+	const resolved = resolve(targetPath);
+	const rel = relative(rootDir, resolved);
+	if (rel && !rel.startsWith("..") && !rel.startsWith("/")) return rel;
+	const home = homedir();
+	if (home && (resolved === home || resolved.startsWith(`${home}/`))) {
+		return `~${resolved.slice(home.length)}`;
+	}
+	return resolved;
+}
+
+/** Formats a concise Pi-inspired startup banner with runtime, storage, role, and extension context. */
+export function formatStartupBanner(booted: Pick<BootedHost, "host" | "localUrl" | "lanUrls" | "summary">): string {
+	const { summary } = booted;
+	const versionLabel = summary.version ? ` v${summary.version}` : "";
+	const modeLabel = summary.requireAuth ? "team mode · auth required" : "personal mode · loopback owner";
+	const piLine = summary.pi.available
+		? `Pi CLI ${summary.pi.version} (${summary.pi.executable})`
+		: `Pi CLI startup check failed: ${summary.pi.error}`;
+	const localResourcesLabel = summary.localPiResourcesInherited ? "inherited" : "isolated";
+	const lines: string[] = [
+		`Personal Agent${versionLabel} (${modeLabel})`,
+		`Personal Agent workbench listening on ${booted.localUrl} (bind ${booted.host})`,
+	];
+	if (booted.lanUrls.length > 0) {
+		lines.push(`LAN URLs (auth required): ${booted.lanUrls.join(", ")}`);
+	}
+	lines.push("AI roles can inspect Pi and PA docs/examples. Ask any role how to use, troubleshoot, or extend PA.");
+	lines.push("");
+	lines.push("[Runtime]");
+	lines.push(`  ${piLine} · Node ${summary.nodeVersion} · Local Pi resources: ${localResourcesLabel}`);
+	lines.push(
+		`  Docs: ${formatDisplayPath(resolve(summary.installRoot, PA_RUNTIME_ASSET_MANIFEST.docsDir), summary.rootDir)} · Examples: ${formatDisplayPath(resolve(summary.installRoot, PA_RUNTIME_ASSET_MANIFEST.examplesDir), summary.rootDir)}`,
+	);
+	lines.push("");
+	lines.push("[Storage]");
+	lines.push(
+		`  DB: ${formatDisplayPath(summary.dbPath, summary.rootDir)} · Sessions: ${formatDisplayPath(summary.sessionDir, summary.rootDir)}`,
+	);
+	if (summary.workspaceNames.length > 0) {
+		const shown = summary.workspaceNames.slice(0, 6).join(", ");
+		const overflow = summary.workspaceNames.length > 6 ? `, +${summary.workspaceNames.length - 6} more` : "";
+		lines.push(`  Workspaces (${summary.workspaceNames.length}): ${shown}${overflow}`);
+	} else {
+		lines.push("  Workspaces (0): none registered");
+	}
+	lines.push("");
+	lines.push("[Roles]");
+	const roleList = summary.businessRoleIds.join(", ") || "none";
+	const archSuffix = summary.hasArchitectRole ? " (+ role-architect)" : "";
+	lines.push(`  ${summary.businessRoleIds.length} business roles: ${roleList}${archSuffix}`);
+	lines.push("");
+	lines.push("[Extensions]");
+	lines.push(`  ${summary.extensionNames.join(", ")}`);
+	if (summary.extraPiExtensions.length > 0) {
+		lines.push(`  PA_PI_EXTENSIONS: ${summary.extraPiExtensions.join(", ")}`);
+	}
+	return lines.join("\n");
 }
 
 /** Load only the PA classifier credential. Keep dotenv values out of subprocess environments. */
@@ -119,6 +242,13 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 
+	const extraPiExtensions =
+		options.piExtensions ?? process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean) ?? [];
+	const sessionDir = options.sessionDir
+		? resolve(options.sessionDir)
+		: process.env.PA_SESSION_DIR?.trim()
+			? resolve(process.env.PA_SESSION_DIR.trim())
+			: resolve(rootDir, ".data/pi-sessions");
 	const decisionKey = await readDecisionKey(rootDir);
 	const orchestrator = new TeamOrchestrator({
 		classifier: savedSettings.systemOneEnabled && decisionKey ? createSystemOneClassifier(decisionKey) : undefined,
@@ -126,12 +256,8 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		templates,
 		defaultCwd: rootDir,
 		noSession: false,
-		extensions: options.piExtensions ?? process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
-		sessionDir: options.sessionDir
-			? resolve(options.sessionDir)
-			: process.env.PA_SESSION_DIR?.trim()
-				? resolve(process.env.PA_SESSION_DIR.trim())
-				: resolve(rootDir, ".data/pi-sessions"),
+		extensions: extraPiExtensions.length > 0 ? extraPiExtensions : undefined,
+		sessionDir,
 		skillsDir: customSkillsDir,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
@@ -172,8 +298,10 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 	}
 
 	const pi = await piProbe;
-	if (pi.available) console.log(`Pi CLI ${pi.version} (${pi.executable})`);
-	else console.warn(`Pi CLI startup check failed: ${pi.error}`);
+	const inheritLocalPiResourcesOption =
+		options.inheritLocalPiResources ?? process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0";
+	const localPiResourcesInherited = !requireAuth && isLoopbackHost(host) && inheritLocalPiResourcesOption;
+	const installRoot = resolveRepoRoot(import.meta.url);
 
 	const webDistDir = options.webDistDir ? resolve(options.webDistDir) : resolveDefaultWebDistDir(rootDir);
 	const { server } = createPersonalAgentServer({
@@ -187,7 +315,7 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		skillsDir: customSkillsDir,
 		uploadsDir: resolve(dataDir, "uploads"),
 		requireAuth,
-		inheritLocalPiResources: options.inheritLocalPiResources ?? process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0",
+		inheritLocalPiResources: inheritLocalPiResourcesOption,
 		defaultWorkspacesRoot,
 		dataDir,
 		probePiCli: () => piProbe,
@@ -202,11 +330,32 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 	await new Promise<void>((resolveListen) => {
 		server.listen(port, host, () => resolveListen());
 	});
+	const boundAddress = server.address();
+	const listeningPort = typeof boundAddress === "object" && boundAddress ? boundAddress.port : port;
 
 	const localHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-	const localUrl = `http://${localHost}:${port}`;
+	const localUrl = `http://${localHost}:${listeningPort}`;
 	const lanUrls =
-		host === "0.0.0.0" || host === "::" ? listLanIpv4Addresses().map((ip) => `http://${ip}:${port}`) : [];
+		host === "0.0.0.0" || host === "::" ? listLanIpv4Addresses().map((ip) => `http://${ip}:${listeningPort}`) : [];
+	const businessRoleIds = templates
+		.filter((template) => template.id !== BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
+		.map((template) => template.id);
+	const summary: BootedHostSummary = {
+		version: readPackageVersion(installRoot, rootDir),
+		requireAuth,
+		localPiResourcesInherited,
+		pi,
+		nodeVersion: process.version,
+		rootDir,
+		installRoot,
+		dbPath,
+		sessionDir,
+		workspaceNames: store.listWorkspaces().map((ws) => ws.name),
+		businessRoleIds,
+		hasArchitectRole: templates.some((template) => template.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id),
+		extensionNames: listServerExtensionSummaries().map((ext) => ext.name),
+		extraPiExtensions,
+	};
 
 	let stopping = false;
 	const shutdown = async () => {
@@ -225,5 +374,5 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		closeLogging();
 	};
 
-	return { host, port, localUrl, lanUrls, shutdown };
+	return { host, port: listeningPort, localUrl, lanUrls, summary, shutdown };
 }

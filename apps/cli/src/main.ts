@@ -1,11 +1,8 @@
-import { bootHost } from "@pa/server/boot";
+import { bootHost, formatStartupBanner } from "@pa/server/boot";
 
 async function main(): Promise<void> {
 	const booted = await bootHost();
-	console.log(`Personal Agent V4 workbench listening on ${booted.localUrl} (bind ${booted.host})`);
-	if (booted.lanUrls.length > 0) {
-		console.log(`LAN collaboration URLs (invite link required): ${booted.lanUrls.join(", ")}`);
-	}
+	console.log(formatStartupBanner(booted));
 
 	const stop = async () => {
 		console.log("\nShutting down Personal Agent server...");
