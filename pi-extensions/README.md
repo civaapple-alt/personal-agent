@@ -10,6 +10,7 @@
 | [role-skills](role-skills/README.md) | 标准 Pi Package（`pa-role-skills`），封装内置岗位方法论 Skills，终端 Pi 也可直接 `pi install` | PA 启动岗位时原生挂载 |
 | [team-extension](team-extension/README.md) | 将团队工具调用转交 PA，注入岗位与事项上下文，核查工具清单 | PA 启动岗位时显式加载 |
 | [human-question](human-question/README.md) | 请求人工答复或向直接委托者提请澄清 | PA 按运行模式显式加载。终端 Pi 也可以单独加载 |
+| [visualize](visualize/README.md) | 注册 `visualize` 工具，输出 Mermaid 图表、方案对比卡片与文件预览（改编自 `@thinkrail/pi-visualize`） | PA 启动非架构师岗位时显式加载。终端 Pi 也可以单独加载 |
 
 [pi-web-access](../docs/guides/web-search.md) 由 Pi 从 npm 安装。[PA 扩展集成](../packages/server/src/extensions/README.md#web-access) 按岗位装配包入口，团队扩展通过现有握手核查搜索与结果读取工具。
 

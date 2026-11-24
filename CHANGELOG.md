@@ -4,6 +4,9 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Add `toolRenderers` extension seam to `@pa/extension-api/web`, `@pa/extension-sdk/web`, `apps/web/src/extensions/registry.ts`, and `ExploringStatus.tsx`.
+- Port and adapt `@thinkrail/pi-visualize` (Apache-2.0) into zero-dependency portable `pi-extensions/visualize` and dual-half `pa-extensions/visualize` (`VisualizationCard` for Mermaid diagrams, side-by-side option comparisons, and file previews).
+- Implement `propose_skill` end-to-end (shared `@pa/contracts/skill-proposal`, Pi team tool, bridge validation, scoped atomic `SKILL.md` + `scripts/*` disk writer, `POST /api/matters/:matterId/messages/:messageId/skill-proposals`, web `toolRenderers` preview, and interactive `SkillProposalCard` confirmation UI).
 - Parameterize `apps/web` HTTP/SSE host endpoint resolution (`getApiBaseUrl`, `setApiBaseUrl`, `resolveApiUrl` in `apps/web/src/api/client.ts`), add root and per-view `ErrorBoundary` isolation, extract business-agnostic UI primitives (`apps/web/src/primitives/`, including lightweight `SettingsKit`), organize top-level route pages into `apps/web/src/views/`, and enforce `apps/web` internal unidirectional boundaries in `check:boundaries`.
 - Enforce unidirectional internal module boundaries inside `packages/server/src` (`roles`/`storage`/`rpc`/`orchestrator`/`extensions` → `server/` composition root; leaf `subprocess/` & `log/`; isolated `demo/`), and add `@pa/server/build-support` as the single runtime asset manifest.
 - Add bounded child-process runner (`packages/server/src/subprocess/index.ts`) with timeout/AbortSignal process-group cleanup and lightweight rotating structured JSONL logger (`packages/server/src/log/index.ts`), wired into `git-clone.ts` and `boot.ts`.
