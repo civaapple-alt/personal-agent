@@ -10,6 +10,8 @@ export interface PaToolDisplaySpec {
 	readonly label: string;
 	/** Category badge used for compact execution rows. */
 	readonly category: "team" | "web" | "skill" | "decision" | "space";
+	/** Optional override for the success status badge (e.g. "已提交"). */
+	readonly successLabel?: string;
 	/** Optional formatter to refine the one-line summary from tool arguments or raw summary. */
 	readonly formatSummary?: (context: PaToolDisplayContext) => string | undefined;
 }

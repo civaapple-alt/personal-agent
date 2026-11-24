@@ -14,5 +14,5 @@
 		"skipLibCheck": true,
 		"noEmit": true
 	},
-	"include": ["src/**/*.ts", "src/**/*.tsx"]
+	"include": ["src/**/*.ts", "src/**/*.tsx", "../../pa-extensions/**/web/**/*.ts", "../../pa-extensions/**/web/**/*.tsx"]
 }

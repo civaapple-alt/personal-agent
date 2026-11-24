@@ -1,3 +1,9 @@
+export {
+	builtinServerExtensions,
+	findServerExtension,
+	listServerExtensionSummaries,
+	type ServerExtensionEntry,
+} from "./extensions/registry.ts";
 export { resolveRepoGitUserIdentity } from "./orchestrator/execution-context.ts";
 export {
 	assessMatterInitiation,

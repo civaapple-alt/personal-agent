@@ -14,8 +14,8 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "lint": "biome check apps packages test scripts pi-extensions",
-    "format": "biome check --write apps packages test scripts pi-extensions",
+    "lint": "biome check apps packages pa-extensions pi-extensions test scripts",
+    "format": "biome check --write apps packages pa-extensions pi-extensions test scripts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "check": "npm run lint && npm run typecheck",
     "build:cli": "node scripts/build-cli.mjs",

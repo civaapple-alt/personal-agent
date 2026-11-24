@@ -6,6 +6,7 @@ import type {
 	ProgressSnapshotDto,
 	TeamMemberDto,
 } from "../api.ts";
+import { getToolDisplay } from "../extensions/registry.ts";
 import { liveDelegationEdges } from "../utils/matterDelegations.ts";
 import type { TurnToolCall } from "../utils/matterStream.ts";
 import {
@@ -22,7 +23,10 @@ import { DelegationGraph } from "./chat/DelegationGraph.tsx";
 import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
 function toolStatusLabel(status: TurnToolCall["status"], toolName?: string): string {
-	if (toolName === "request_pi_command" && status === "success") return "已提交";
+	if (status === "success" && toolName) {
+		const custom = getToolDisplay(toolName)?.successLabel;
+		if (custom) return custom;
+	}
 	switch (status) {
 		case "running":
 			return "进行中";
@@ -110,7 +114,12 @@ function ProgressDetails({
 										{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
 									</strong>
 									{cleanSkillName && <span className="exploring-skill-badge">Skill · {cleanSkillName}</span>}
-									<code className="exploring-tool-name">{call.toolName}</code>
+									<code
+										className="exploring-tool-name"
+										title={getToolDisplay(call.toolName)?.label ?? call.toolName}
+									>
+										{call.toolName}
+									</code>
 									{showDetail && (
 										<span className="exploring-tool-detail" title={call.detail}>
 											{call.detail}
