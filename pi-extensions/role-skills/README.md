@@ -28,7 +28,7 @@ pi -e ./pi-extensions/role-skills
 ## 与 PA 角色及多租户 Skill 的关系
 
 - PA 启动岗位时会原生挂载 `pi-extensions/role-skills` 包，使内置岗位方法统一进入 Pi 的资源发现体系；同时[角色资产](../../roles/README.md)的 `skills` 字段继续支持方法名称或角色包内的相对引用 `skills/<name>/SKILL.md`。
-- 运行期自定义的多租户 Skill（`.data/skills/{global,orgs/<orgId>,users/<userId>}/` 与角色包私有 `skills/`）仍由宿主按用户与组织 ACL 校验后经 `--skill` 显式传入，不会混入全局包。见[名称解析](../../packages/server/src/roles/capabilities.ts)与[执行装配](../../packages/server/src/orchestrator/execution-context.ts)。
+- 运行期自定义的多租户 Skill（`.data/skills/{global,orgs/<orgId>,users/<userId>}/` 与角色包私有 `skills/`）仍由宿主按用户与组织 ACL 校验后经 `--skill` 显式传入，不会混入全局包。见[名称解析](../../packages/server/src/roles/capabilities.ts)与[执行装配](../../packages/server/src/orchestrator/execution/execution-context.ts)。
 - 模型根据可用 Skill 的 `name` 和 `description` 判断是否需要读取正文，内置 Skill 与 [Pi Skill 目录](../skill-catalog/README.md)沿用这两个发现字段。
 - 内置 Skill 的 `description` 和正文使用英文；用户交流与交付语言由本轮请求决定。
 

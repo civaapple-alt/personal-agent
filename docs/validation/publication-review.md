@@ -89,7 +89,7 @@ npm run demo:review -- --summarize <证据目录>
 
 ## 当前实现边界
 
-[负责人复核方法](../../packages/server/src/orchestrator/publication-review.ts) 只进入主负责人的系统上下文，不增加专用审批状态、强制固定岗位参与或语义自动验收。宿主现有的权限、文件校验与成功收尾规则继续生效。是否真正改进，需要上述运行与独立审阅证据。
+[负责人复核方法](../../packages/server/src/orchestrator/execution/publication-review.ts) 只进入主负责人的系统上下文，不增加专用审批状态、强制固定岗位参与或语义自动验收。宿主现有的权限、文件校验与成功收尾规则继续生效。是否真正改进，需要上述运行与独立审阅证据。
 
 验证输入和审阅标准在 [publication-review-case.ts](../../packages/server/src/demo/publication-review-case.ts)，真实执行入口在 [publication-review-smoke.ts](../../packages/server/src/demo/publication-review-smoke.ts)。参数与重复计划、审阅记录校验及离线汇总分别在 [options](../../packages/server/src/demo/publication-review-options.ts)、[quality](../../packages/server/src/demo/publication-review-quality.ts)、[report](../../packages/server/src/demo/publication-review-report.ts)。工具时序与完整评估反例见 [publication-review.test.ts](../../test/publication-review.test.ts)、[publication-review-evaluation.test.ts](../../test/publication-review-evaluation.test.ts)。
 

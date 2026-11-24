@@ -126,15 +126,15 @@
 
 pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
 
-工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../packages/server/src/orchestrator/execution-context.ts)
+工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../packages/server/src/orchestrator/execution/execution-context.ts)
 
 ### 项目信任与文件访问
 
 主责、内部委托、旁听和讨论回复都在 Pi RPC 中运行。Pi 在启动时根据工作目录判断是否加载受项目信任保护的资源。RPC 跳过交互确认。没有命令行覆盖、扩展决定或已保存记录时，全局 `defaultProjectTrust` 为 `ask` 或 `never` 会跳过这些项目资源，为 `always` 会加载它们。`--no-extensions` 关闭扩展自动发现；`--no-approve` 跳过项目本地可信资源，但不关闭用户级 Skills。项目可信时，项目提示模板等其他资源仍可加载。 [Pi 项目信任规则](https://docs.pi.dev/latest/security#understand-project-trust)
 
-消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。讨论、旁听和验收共享运行工具，具体操作仍取决于任务、用户授权与宿主账号权限。 [岗位工具装配](../../packages/server/src/orchestrator/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
+消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。讨论、旁听和验收共享运行工具，具体操作仍取决于任务、用户授权与宿主账号权限。 [岗位工具装配](../../packages/server/src/orchestrator/execution/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
 
-以文件为来源发布文档成果时，PA 另外校验文件的真实路径，要求它位于当前事项工作区。 [文件成果来源校验](../../packages/server/src/orchestrator/execution-context.ts)
+以文件为来源发布文档成果时，PA 另外校验文件的真实路径，要求它位于当前事项工作区。 [文件成果来源校验](../../packages/server/src/orchestrator/execution/execution-context.ts)
 
 ### 进程与传输超时配置（代码常量 / 可构造参数）
 

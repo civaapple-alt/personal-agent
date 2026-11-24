@@ -16,7 +16,7 @@
 
 ## 共用入口
 
-- 工作台速查的主题白名单和随版本发布的文档读取见 [workbench-help](workbench-help/README.md)。当前事项的实际数据由[编排模块](../orchestrator/workbench-context.ts)提供。
+- 工作台速查的主题白名单和随版本发布的文档读取见 [workbench-help](workbench-help/README.md)。当前事项的实际数据由[编排模块](../orchestrator/runtime/workbench-context.ts)提供。
 - 源码启动和预构建入口共用内置 Pi 扩展路径解析。 [builtin-paths.ts](builtin-paths.ts)
 - 扩展安装和检测复用 Pi 命令。团队工具经每次执行专用的本机桥接传输。 [Pi 包命令](../rpc/pi-packages.ts) [团队桥接](../rpc/team-tool-bridge.ts)
-- 岗位运行器合并工具清单，启动 Pi 后通过桥接核对实际可用工具。设置页从运行概览读取扩展状态。 [岗位运行器](../orchestrator/worker-runner.ts) [运行概览](../orchestrator/runtime-info.ts)
+- 岗位运行器合并工具清单，启动 Pi 后通过桥接核对实际可用工具。设置页从运行概览读取扩展状态。 [岗位运行器](../orchestrator/execution/worker-runner.ts) [运行概览](../orchestrator/runtime/runtime-info.ts)

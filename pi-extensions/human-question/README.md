@@ -14,4 +14,4 @@ pi -e ./pi-extensions/human-question/index.ts
 
 ## 在 PA 中使用
 
-PA 为正式执行的主责与内部委托显式加载此入口。扩展将问题通过现有团队桥接交回 PA。主责可生成「待你决定」卡片，协作者的问题回到直接委托者。 [PA 集成](../../packages/server/src/pa-extensions/README.md#human-question)
+PA 为正式执行的主责与内部委托显式加载此入口。扩展将问题通过现有团队桥接交回 PA。主责可生成「待你决定」卡片，协作者的问题回到直接委托者。 [PA 集成](../../packages/server/src/extensions/README.md#human-question)

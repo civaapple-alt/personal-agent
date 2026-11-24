@@ -14,7 +14,7 @@
 
 ## 启动与能力握手
 
-从 PA 启动岗位即可加载扩展。PA 通过 `--extension` 指定 `index.ts`，同时为当前执行提供 `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN` 和 `PA_REQUIRED_TOOLS`。源码启动和预构建包使用同一入口。 [岗位装配](../../packages/server/src/orchestrator/worker-runner.ts)
+从 PA 启动岗位即可加载扩展。PA 通过 `--extension` 指定 `index.ts`，同时为当前执行提供 `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN` 和 `PA_REQUIRED_TOOLS`。源码启动和预构建包使用同一入口。 [岗位装配](../../packages/server/src/orchestrator/execution/worker-runner.ts)
 
 Pi 触发 `session_start` 后，扩展等待 PA 所需的工具注册，最长等待 10 秒，启用已注册的运行工具并通过 `/ready` 回报结果。PA 检查必需工具，缺失时结束启动并报告工具名称。角色工具声明不再是权限清单；团队工具仍按事项协作规则装配和校验。 [扩展入口](index.ts) [扩展之间的依赖](../README.md#扩展之间的依赖)
 

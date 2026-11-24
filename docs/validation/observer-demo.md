@@ -61,7 +61,7 @@ npm run demo:observer -- --summarize <证据目录>
 - [observer-smoke.ts](../../packages/server/src/demo/observer-smoke.ts)：CLI 入口。
 - [observer-demo.test.ts](../../test/observer-demo.test.ts)：替换模型但保留编排、桥接、SQLite 和会话文件，检查接续、权限、静默与失败区分。
 
-生产旁听路径在 [observer-runner.ts](../../packages/server/src/orchestrator/observer-runner.ts)。本演示不覆盖浏览器气泡渲染、运行中变更旁听席的界面操作或长期旁听稳定性；这些需要各自的验证证据。
+生产旁听路径在 [observer-runner.ts](../../packages/server/src/orchestrator/execution/observer-runner.ts)。本演示不覆盖浏览器气泡渲染、运行中变更旁听席的界面操作或长期旁听稳定性；这些需要各自的验证证据。
 
 ## 2026-11-23：旁听工具收窄后复测
 
