@@ -112,7 +112,8 @@ export default function skillCaptureExtension(pi: SkillCaptureExtensionApi): voi
 
 			// Step 3 (confirm): ask the user natively via Pi extension UI (flows through DialogBroker in PA Web UI).
 			if (typeof ctx?.ui?.select === "function") {
-				const promptTitle = `允许运行 Skill「${matched.skillName}」的脚本 ${matched.scriptRelPath}？（${matched.scope}）`;
+				const cmdPreview = event.input.command.trim().replace(/\s+/g, " ").slice(0, 240);
+				const promptTitle = `允许运行 Skill「${matched.skillName}」的脚本 ${matched.scriptRelPath}？（${matched.scope}）\n命令：${cmdPreview}`;
 				const choice = await ctx.ui.select(promptTitle, [CHOICE_ALLOW_ONCE, CHOICE_TRUST_AUTONOMOUS, CHOICE_DENY]);
 				if (choice === CHOICE_TRUST_AUTONOMOUS) {
 					policies.set(matched.policyKey, "autonomous");

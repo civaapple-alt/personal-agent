@@ -1,11 +1,12 @@
 import {
+	type ManagedSkillDetailDto,
 	type ManagedSkillEntryDto,
 	SKILL_TRUST_LEVEL_LABELS,
 	type SkillTrustLevel,
 	type SkillTrustScope,
 } from "@pa/contracts/skill-trust";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchManagedSkills, updateSkillTrustPolicy } from "../api.ts";
+import { fetchManagedSkillDetail, fetchManagedSkills, updateSkillTrustPolicy } from "../api.ts";
 
 interface SkillsTrustPanelProps {
 	onNotice?: (message: string) => void;
@@ -25,6 +26,10 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [scopeFilter, setScopeFilter] = useState<"all" | SkillTrustScope>("all");
 	const [updatingKey, setUpdatingKey] = useState<string | null>(null);
+	const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+	const [detailsByKey, setDetailsByKey] = useState<Record<string, ManagedSkillDetailDto>>({});
+	const [loadingDetailKeys, setLoadingDetailKeys] = useState<Record<string, boolean>>({});
+	const [detailErrorByKey, setDetailErrorByKey] = useState<Record<string, string>>({});
 
 	const load = useCallback(async () => {
 		setLoading(true);
@@ -47,6 +52,32 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 		if (scopeFilter === "all") return skills;
 		return skills.filter((item) => item.scope === scopeFilter);
 	}, [skills, scopeFilter]);
+
+	const handleToggleDetail = async (skill: ManagedSkillEntryDto) => {
+		const key = `${skill.scope}:${skill.scopeId}:${skill.name}`;
+		const nextOpen = !expandedKeys[key];
+		setExpandedKeys((prev) => ({ ...prev, [key]: nextOpen }));
+		if (!nextOpen || detailsByKey[key] || loadingDetailKeys[key]) return;
+		setLoadingDetailKeys((prev) => ({ ...prev, [key]: true }));
+		setDetailErrorByKey((prev) => {
+			const next = { ...prev };
+			delete next[key];
+			return next;
+		});
+		try {
+			const { detail } = await fetchManagedSkillDetail({
+				scope: skill.scope,
+				scopeId: skill.scopeId,
+				skillName: skill.name,
+			});
+			setDetailsByKey((prev) => ({ ...prev, [key]: detail }));
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			setDetailErrorByKey((prev) => ({ ...prev, [key]: msg }));
+		} finally {
+			setLoadingDetailKeys((prev) => ({ ...prev, [key]: false }));
+		}
+	};
 
 	const handleSetTrust = async (skill: ManagedSkillEntryDto, trustLevel: SkillTrustLevel) => {
 		const key = `${skill.scope}:${skill.scopeId}:${skill.name}`;
@@ -122,6 +153,10 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 					{visibleSkills.map((skill) => {
 						const key = `${skill.scope}:${skill.scopeId}:${skill.name}`;
 						const busy = updatingKey === key;
+						const expanded = Boolean(expandedKeys[key]);
+						const detail = detailsByKey[key];
+						const detailLoading = Boolean(loadingDetailKeys[key]);
+						const detailError = detailErrorByKey[key];
 						return (
 							<div key={key} className="ui-card settings-ext-card">
 								<div className="banner-row">
@@ -148,37 +183,78 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 								<div className="muted-tiny" title={skill.filePath}>
 									路径：<code>{skill.filePath}</code>
 								</div>
-								{skill.canManage && (
-									<div className="actions-row compact">
-										{skill.trustLevel !== "autonomous" && (
-											<button
-												type="button"
-												className="btn-pill-dark btn-xs"
-												disabled={busy}
-												onClick={() => void handleSetTrust(skill, "autonomous")}
-											>
-												升级为自主执行
-											</button>
+								<div className="actions-row compact">
+									<button
+										type="button"
+										className="btn-pill-outline btn-xs"
+										onClick={() => void handleToggleDetail(skill)}
+									>
+										{expanded
+											? "收起内容"
+											: skill.scripts.length > 0
+												? `查看 SKILL.md 与 ${skill.scripts.length} 个脚本`
+												: "查看 SKILL.md"}
+									</button>
+									{skill.canManage && skill.trustLevel !== "autonomous" && (
+										<button
+											type="button"
+											className="btn-pill-dark btn-xs"
+											disabled={busy}
+											onClick={() => void handleSetTrust(skill, "autonomous")}
+										>
+											升级为自主执行
+										</button>
+									)}
+									{skill.canManage && skill.trustLevel !== "confirm" && (
+										<button
+											type="button"
+											className="btn-pill-outline btn-xs"
+											disabled={busy}
+											onClick={() => void handleSetTrust(skill, "confirm")}
+										>
+											设为执行前确认
+										</button>
+									)}
+									{skill.canManage && skill.trustLevel !== "disabled" && (
+										<button
+											type="button"
+											className="btn-inline"
+											disabled={busy}
+											onClick={() => void handleSetTrust(skill, "disabled")}
+										>
+											停用脚本
+										</button>
+									)}
+								</div>
+								{expanded && (
+									<div className="stack-gap-sm" style={{ marginTop: 8 }}>
+										{detailLoading && <p className="muted-tiny">正在读取 SKILL.md 与脚本内容…</p>}
+										{detailError && (
+											<p className="muted-tiny" style={{ color: "var(--danger, #b91c1c)" }}>
+												读取失败：{detailError}
+											</p>
 										)}
-										{skill.trustLevel !== "confirm" && (
-											<button
-												type="button"
-												className="btn-pill-outline btn-xs"
-												disabled={busy}
-												onClick={() => void handleSetTrust(skill, "confirm")}
-											>
-												设为执行前确认
-											</button>
-										)}
-										{skill.trustLevel !== "disabled" && (
-											<button
-												type="button"
-												className="btn-inline"
-												disabled={busy}
-												onClick={() => void handleSetTrust(skill, "disabled")}
-											>
-												停用脚本
-											</button>
+										{detail && (
+											<>
+												<div>
+													<div className="muted-xs" style={{ fontWeight: 600, marginBottom: 4 }}>
+														<code>SKILL.md</code>
+													</div>
+													<pre className="pa-viz-code">
+														<code>{detail.content}</code>
+													</pre>
+												</div>
+												{detail.scripts.map((script) => (
+													<div key={script.path}>
+														<div className="muted-xs" style={{ fontWeight: 600, marginBottom: 4 }}>
+															<code>{script.path}</code>
+														</div>
+														<pre className="pa-viz-code">
+															<code>{script.content}</code>
+														</pre>
+													</div>
+												))}
+											</>
 										)}
 									</div>
 								)}

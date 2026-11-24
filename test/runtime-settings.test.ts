@@ -134,10 +134,15 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(ownerPayload.base.sessionMode, "persisted");
 	assert.equal(ownerPayload.base.sessionDir, sessionDir);
 	assert.equal(ownerPayload.base.defaultCwd, tempDir);
-	assert.equal(ownerPayload.base.isolationModes.length, 5);
+	assert.equal(ownerPayload.base.isolationModes.length, 3);
+	assert.deepEqual(
+		ownerPayload.base.isolationModes.map((mode) => mode.id),
+		["worker", "decision", "architect-aux"],
+	);
 	assert.ok(
 		ownerPayload.base.isolationModes.some(
-			(mode) => mode.id === "architect-matter" && mode.sessionStrategy.includes("事项"),
+			(mode) =>
+				mode.id === "worker" && mode.usage.includes("事项内角色架构师") && mode.toolsPolicy.includes("信任四步"),
 		),
 	);
 	assert.ok(
@@ -145,7 +150,8 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 			(mode) =>
 				mode.id === "architect-aux" &&
 				mode.extensionsPolicy.includes("Skill") &&
-				mode.usage.includes("团队协作体检"),
+				mode.usage.includes("团队协作体检") &&
+				mode.toolsPolicy.includes("read, grep, find, ls"),
 		),
 	);
 
@@ -280,10 +286,6 @@ test("buildRuntimeOverview reports missing Pi CLI and reports MCP configuration 
 	assert.match(payload.base.probeError ?? "", /pi/);
 	assert.equal(payload.base.sessionMode, "no_session");
 	assert.equal(payload.base.isolationModes.find((mode) => mode.id === "worker")?.sessionStrategy, "无持久 Pi 会话");
-	assert.equal(
-		payload.base.isolationModes.find((mode) => mode.id === "architect-matter")?.sessionStrategy,
-		"无持久 Pi 会话",
-	);
 	assert.equal(payload.base.envFlags.turnTimeoutMs, 0);
 	assert.equal(payload.base.envFlags.idleTimeoutMs, 900_000);
 	assert.match(

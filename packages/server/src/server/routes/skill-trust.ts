@@ -1,10 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { SKILL_PROPOSAL_NAME_RE } from "@pa/contracts/skill-proposal";
 import {
 	isValidSkillTrustLevel,
 	isValidSkillTrustScope,
+	type ManagedSkillDetailDto,
 	type ManagedSkillEntryDto,
+	type ManagedSkillScriptDetailDto,
 	type SkillTrustPolicyRecord,
 	type SkillTrustScope,
 	skillTrustPolicyKey,
@@ -13,6 +15,19 @@ import { canAccessOrganization, canAccessWorkspace, canManageOrganization } from
 import { isSuperAdminActor, type RequestActor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
+
+const MAX_SKILL_PREVIEW_CHARS = 64 * 1024;
+
+function readBoundedUtf8(filePath: string): { content: string; truncated: boolean } {
+	const raw = readFileSync(filePath, "utf8");
+	if (raw.length <= MAX_SKILL_PREVIEW_CHARS) {
+		return { content: raw, truncated: false };
+	}
+	return {
+		content: `${raw.slice(0, MAX_SKILL_PREVIEW_CHARS)}\n\n…（内容超过 64KB，已截断预览）`,
+		truncated: true,
+	};
+}
 
 function parseSkillFrontmatter(filePath: string, fallbackName: string): { name: string; description: string } {
 	try {
@@ -122,16 +137,107 @@ function canManageSkillScope(
 	return false;
 }
 
-/** Handles `GET /api/skills/trust` and `PATCH /api/skills/trust` for Four-Step Trust skill management. */
+function canViewSkillScope(
+	ctx: ServerRouteContext,
+	actor: RequestActor | null,
+	scope: SkillTrustScope,
+	scopeId: string,
+): boolean {
+	if (!actor) return false;
+	if (scope === "global") return true;
+	if (scope === "personal") {
+		const actorUserId = actor.user?.id ?? actor.collaborator?.id ?? null;
+		return Boolean(actorUserId && actorUserId === scopeId);
+	}
+	if (scope === "org") {
+		return canAccessOrganization(ctx.store, actor, scopeId);
+	}
+	if (scope === "workspace") {
+		const ws = ctx.store.getWorkspace(scopeId);
+		return Boolean(ws && canAccessWorkspace(ctx.store, actor, ws));
+	}
+	return false;
+}
+
+function resolveSkillScopeRoot(ctx: ServerRouteContext, scope: SkillTrustScope, scopeId: string): string | null {
+	if (scope === "workspace") {
+		const ws = ctx.store.getWorkspace(scopeId);
+		return ws ? resolve(ws.repoPath, ".agents/skills") : null;
+	}
+	if (!ctx.skillsDir) return null;
+	if (scope === "global") return resolve(ctx.skillsDir, "global");
+	if (scope === "personal") return scopeId ? resolve(ctx.skillsDir, "users", scopeId) : null;
+	if (scope === "org") return scopeId ? resolve(ctx.skillsDir, "orgs", scopeId) : null;
+	return null;
+}
+
+/** Handles `GET /api/skills/trust`, `GET /api/skills/trust/detail`, and `PATCH /api/skills/trust` for Four-Step Trust skill management. */
 export async function handleSkillTrustRoutes(
 	ctx: ServerRouteContext,
 	{ req, res, method, pathname, actor }: RouteRequest,
 ) {
-	if (pathname !== "/api/skills/trust") return false;
+	if (pathname !== "/api/skills/trust" && pathname !== "/api/skills/trust/detail") return false;
 	if (!actor) {
 		sendError(res, 401, "未认证");
 		return true;
 	}
+
+	if (pathname === "/api/skills/trust/detail" && method === "GET") {
+		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
+		const scope = parsedUrl.searchParams.get("scope");
+		const scopeId = (parsedUrl.searchParams.get("scopeId") ?? "").trim();
+		const skillName = (parsedUrl.searchParams.get("skillName") ?? "").trim();
+		if (!isValidSkillTrustScope(scope)) {
+			sendError(res, 400, "scope 必须为 global、org、personal 或 workspace");
+			return true;
+		}
+		if (!skillName || !SKILL_PROPOSAL_NAME_RE.test(skillName)) {
+			sendError(res, 400, "skillName 格式无效");
+			return true;
+		}
+		if (!canViewSkillScope(ctx, actor, scope, scopeId)) {
+			sendError(res, 403, "无权查看该作用域下的 Skill 内容");
+			return true;
+		}
+		const rootDir = resolveSkillScopeRoot(ctx, scope, scopeId);
+		if (!rootDir) {
+			sendError(res, 404, "未找到对应的 Skill 根目录");
+			return true;
+		}
+		const skillDir = resolve(rootDir, skillName);
+		if (skillDir !== rootDir && !skillDir.startsWith(`${rootDir}${sep}`)) {
+			sendError(res, 400, "skillName 路径无效");
+			return true;
+		}
+		const skillMd = join(skillDir, "SKILL.md");
+		if (!existsSync(skillMd)) {
+			sendError(res, 404, "未找到该 Skill 的 SKILL.md");
+			return true;
+		}
+		const md = readBoundedUtf8(skillMd);
+		const scripts: ManagedSkillScriptDetailDto[] = listSkillScripts(skillDir).map((relPath) => {
+			const scriptFull = resolve(skillDir, relPath);
+			const read = readBoundedUtf8(scriptFull);
+			return {
+				path: relPath,
+				content: read.content,
+				...(read.truncated ? { truncated: true } : {}),
+			};
+		});
+		const detail: ManagedSkillDetailDto = {
+			scope,
+			scopeId,
+			name: skillName,
+			filePath: skillMd,
+			content: md.content,
+			...(md.truncated ? { truncated: true } : {}),
+			scripts,
+		};
+		sendJson(res, 200, { detail });
+		return true;
+	}
+
+	if (pathname !== "/api/skills/trust") return false;
 
 	if (method === "GET") {
 		const policiesByKey = new Map(

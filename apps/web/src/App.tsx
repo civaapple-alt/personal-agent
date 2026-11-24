@@ -592,7 +592,11 @@ export function App() {
 											? "设置 · 扩展插件"
 											: settingsSection === "config"
 												? "设置 · 运行配置"
-												: "设置"
+												: settingsSection === "skills"
+													? "设置 · 技能与信任"
+													: settingsSection === "insights"
+														? "设置 · 运行洞察"
+														: "设置"
 									: matterDetail?.matter.title || "新事项对话";
 	const runtimeBadge = runtimeOverview
 		? runtimeOverview.base.available && runtimeOverview.base.version
@@ -807,6 +811,7 @@ export function App() {
 								onNewMatter={startNewMatterFromCurrent}
 								onOpenDeliverables={(targetId) => navigateRoute({ tab: "deliverables", spacePageId: targetId })}
 								onOpenTeam={() => navigateRoute({ tab: "team" })}
+								onOpenSkillTrust={() => navigateRoute({ tab: "settings", settingsSection: "skills" })}
 								onToggleArchiveMatter={handleSidebarToggleArchiveMatter}
 								onRefresh={refreshBootstrap}
 								onNotice={(msg) => setNoticeBanner(msg)}
@@ -916,6 +921,12 @@ export function App() {
 								onNotice={(msg) => setNoticeBanner(msg)}
 								onError={(msg) => setErrorBanner(msg)}
 								onOpenTeam={() => navigateRoute({ tab: "team" })}
+								onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
+								onStartMatterWithPrompt={(prompt) => {
+									startNewMatter();
+									setComposerText(prompt);
+									requestAnimationFrame(() => composerRef.current?.focus());
+								}}
 							/>
 						</ViewFade>
 					)}

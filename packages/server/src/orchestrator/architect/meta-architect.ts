@@ -649,7 +649,7 @@ export async function runMetaArchitectChat(
 			"--extension",
 			"builtin:mcp",
 			"--tools",
-			"*",
+			"read,grep,find,ls",
 		],
 		env: { PA_META_ARCHITECT_SYSTEM: systemPrompt, ...webAccess?.env },
 	});

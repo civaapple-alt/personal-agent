@@ -31,7 +31,7 @@ export interface RuntimeExtensionDto {
 }
 
 export interface RuntimeIsolationModeDto {
-	id: "worker" | "decision" | "architect-matter" | "architect-aux" | "distill";
+	id: "worker" | "decision" | "architect-aux";
 	label: string;
 	usage: string;
 	sessionStrategy: string;

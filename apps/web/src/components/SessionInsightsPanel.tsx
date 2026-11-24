@@ -1,6 +1,19 @@
-import type { SessionInsightsReport } from "@pa/contracts/session-insights";
+import type { SessionInsightFinding, SessionInsightsReport } from "@pa/contracts/session-insights";
 import { useCallback, useEffect, useState } from "react";
 import { fetchRuntimeInsights } from "../api/runtime.ts";
+
+interface SessionInsightsPanelProps {
+	onStartMatterWithPrompt?: (prompt: string) => void;
+	onOpenMatter?: (matterId: string) => void;
+}
+
+function buildFindingPrompt(item: SessionInsightFinding): string {
+	const evidence = item.evidence?.length ? `\n相关证据：${item.evidence.join("；")}` : "";
+	if (item.suggestSkillCapture) {
+		return `运行洞察发现一条值得沉淀的模式：「${item.title}」。\n详情：${item.detail}${evidence}\n\n请帮我梳理成可复用的标准操作流程或脚本，并通过 propose_skill 提出 Skill 沉淀提案供我确认。`;
+	}
+	return `运行洞察发现异常/提醒：「${item.title}」。\n详情：${item.detail}${evidence}\n\n请帮我排查根因并给出具体修复建议；如果适合沉淀为长期约定或脚本，也请通过 propose_skill 提出。`;
+}
 
 function formatCompactNumber(n: number): string {
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -14,7 +27,7 @@ const SEVERITY_BADGE: Record<"error" | "warn" | "info", { label: string; classNa
 	info: { label: "洞察", className: "rsi-status-verified" },
 };
 
-export function SessionInsightsPanel() {
+export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: SessionInsightsPanelProps) {
 	const [report, setReport] = useState<SessionInsightsReport | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -89,11 +102,26 @@ export function SessionInsightsPanel() {
 									const badge = SEVERITY_BADGE[item.severity];
 									return (
 										<div key={item.id} className="ui-card compact">
-											<div className="row-wrap-gap">
-												<span className={`pill ${badge.className}`}>{badge.label}</span>
-												<strong>{item.title}</strong>
-												{item.suggestSkillCapture && (
-													<span className="tag-chip skill">建议沉淀为 Skill</span>
+											<div className="banner-row">
+												<div className="row-wrap-gap">
+													<span className={`pill ${badge.className}`}>{badge.label}</span>
+													<strong>{item.title}</strong>
+													{item.suggestSkillCapture && (
+														<span className="tag-chip skill">建议沉淀为 Skill</span>
+													)}
+												</div>
+												{onStartMatterWithPrompt && (
+													<button
+														type="button"
+														className={
+															item.suggestSkillCapture
+																? "btn-pill-dark btn-xs"
+																: "btn-pill-outline btn-xs"
+														}
+														onClick={() => onStartMatterWithPrompt(buildFindingPrompt(item))}
+													>
+														{item.suggestSkillCapture ? "去沉淀为 Skill →" : "发起排查 →"}
+													</button>
 												)}
 											</div>
 											<p className="muted-sm" style={{ margin: "6px 0 0" }}>
@@ -137,9 +165,20 @@ export function SessionInsightsPanel() {
 										</div>
 										<div className="settings-config-valcol">
 											<span className="mono-wrap">{session.title ?? "无标题"}</span>
-											<span className="muted-xs">
-												{session.turns} 轮 · {session.toolCalls} 工具 · ${session.costUsd.toFixed(3)}
-											</span>
+											<div className="row-wrap-gap" style={{ alignItems: "center" }}>
+												<span className="muted-xs">
+													{session.turns} 轮 · {session.toolCalls} 工具 · ${session.costUsd.toFixed(3)}
+												</span>
+												{session.matterId && onOpenMatter && (
+													<button
+														type="button"
+														className="btn-inline"
+														onClick={() => onOpenMatter(session.matterId!)}
+													>
+														打开事项 →
+													</button>
+												)}
+											</div>
 										</div>
 									</div>
 								))}

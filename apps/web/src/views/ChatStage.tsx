@@ -134,6 +134,7 @@ interface ChatStageProps {
 	onNewMatter: () => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
 	onOpenTeam: () => void;
+	onOpenSkillTrust?: () => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 }
@@ -193,6 +194,7 @@ export function ChatStage({
 	onNewMatter,
 	onOpenDeliverables,
 	onOpenTeam,
+	onOpenSkillTrust,
 	onRefresh,
 	onNotice,
 }: ChatStageProps) {
@@ -617,6 +619,9 @@ export function ChatStage({
 					}}
 					onOpenQuickCreator={() => initiation.onOpenArchitect()}
 					onLaunchWithNewRoles={onLaunchWithNewRoles}
+					onSkillProposalDone={() => void onRefresh()}
+					onOpenSkillTrust={onOpenSkillTrust}
+					onNotice={onNotice}
 					onAbortMatter={onAbortMatter}
 				/>
 

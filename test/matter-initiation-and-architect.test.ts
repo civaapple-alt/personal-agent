@@ -516,7 +516,7 @@ test("Meta-Bot Role Architect runs isolated multi-turn intake, proposes 1..N lea
 		assert.equal(turn1.followUpQuestions.length, 1);
 		assert.ok(observedPrompts[0]!.args.includes("--tools"));
 		const toolsVal = observedPrompts[0]!.args[observedPrompts[0]!.args.indexOf("--tools") + 1];
-		assert.equal(toolsVal, "*");
+		assert.equal(toolsVal, "read,grep,find,ls");
 		assert.ok(observedPrompts[0]!.prompt.includes("## Recent team health evidence"));
 		assert.equal(store.listMembers().length, initialCount);
 

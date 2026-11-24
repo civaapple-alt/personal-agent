@@ -1,10 +1,28 @@
-import type { ManagedSkillEntryDto, SkillTrustLevel, SkillTrustScope } from "@pa/contracts/skill-trust";
+import type {
+	ManagedSkillDetailDto,
+	ManagedSkillEntryDto,
+	SkillTrustLevel,
+	SkillTrustScope,
+} from "@pa/contracts/skill-trust";
 import { requestJson } from "./client.ts";
 
-export type { ManagedSkillEntryDto, SkillTrustLevel, SkillTrustScope };
+export type { ManagedSkillDetailDto, ManagedSkillEntryDto, SkillTrustLevel, SkillTrustScope };
 
 export function fetchManagedSkills(): Promise<{ skills: ManagedSkillEntryDto[] }> {
 	return requestJson<{ skills: ManagedSkillEntryDto[] }>("/api/skills/trust");
+}
+
+export function fetchManagedSkillDetail(params: {
+	scope: SkillTrustScope;
+	scopeId: string;
+	skillName: string;
+}): Promise<{ detail: ManagedSkillDetailDto }> {
+	const query = new URLSearchParams({
+		scope: params.scope,
+		scopeId: params.scopeId,
+		skillName: params.skillName,
+	});
+	return requestJson<{ detail: ManagedSkillDetailDto }>(`/api/skills/trust/detail?${query.toString()}`);
 }
 
 export function updateSkillTrustPolicy(payload: {

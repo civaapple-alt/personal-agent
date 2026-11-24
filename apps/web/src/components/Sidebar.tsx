@@ -557,6 +557,24 @@ export const Sidebar = memo(function Sidebar({
 							<span>设置</span>
 							<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
 						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className="footer-nav-btn"
+							onClick={() => navigateFromMenu({ tab: "settings", settingsSection: "skills" })}
+						>
+							<span>技能与信任</span>
+							<span className="pill">四步</span>
+						</button>
+						<button
+							type="button"
+							role="menuitem"
+							className="footer-nav-btn"
+							onClick={() => navigateFromMenu({ tab: "settings", settingsSection: "insights" })}
+						>
+							<span>运行洞察</span>
+							<span className="pill">本地</span>
+						</button>
 						{isSuperAdmin && (
 							<button
 								type="button"

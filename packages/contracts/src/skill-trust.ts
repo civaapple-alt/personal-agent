@@ -29,6 +29,22 @@ export interface ManagedSkillEntryDto {
 	canManage: boolean;
 }
 
+export interface ManagedSkillScriptDetailDto {
+	path: string;
+	content: string;
+	truncated?: boolean;
+}
+
+export interface ManagedSkillDetailDto {
+	scope: SkillTrustScope;
+	scopeId: string;
+	name: string;
+	filePath: string;
+	content: string;
+	truncated?: boolean;
+	scripts: ManagedSkillScriptDetailDto[];
+}
+
 export const SKILL_TRUST_LEVEL_LABELS: Record<SkillTrustLevel, string> = {
 	confirm: "步骤 3 · 执行前确认",
 	autonomous: "步骤 4 · 自主执行",

@@ -15,6 +15,7 @@ interface SkillProposalCardProps {
 	proposals: SkillProposalItem[];
 	hasWorkspace: boolean;
 	onDone?: () => void;
+	onOpenSkillTrust?: () => void;
 	onNotice?: (msg: string) => void;
 	onError?: (msg: string) => void;
 }
@@ -26,6 +27,7 @@ export function SkillProposalCard({
 	proposals,
 	hasWorkspace,
 	onDone,
+	onOpenSkillTrust,
 	onNotice,
 	onError,
 }: SkillProposalCardProps) {
@@ -153,9 +155,29 @@ export function SkillProposalCard({
 								</div>
 							))}
 						</details>
-						{proposal.status === "applied" && proposal.writtenPaths && proposal.writtenPaths.length > 0 && (
-							<div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
-								已写入：{proposal.writtenPaths.map((p) => p).join("、")}
+						{proposal.status === "applied" && (
+							<div
+								style={{
+									marginTop: 8,
+									fontSize: 12,
+									opacity: 0.9,
+									display: "flex",
+									flexWrap: "wrap",
+									alignItems: "center",
+									gap: 8,
+								}}
+							>
+								{proposal.writtenPaths && proposal.writtenPaths.length > 0 && (
+									<span>已写入：{proposal.writtenPaths.join("、")}</span>
+								)}
+								{proposal.scripts && proposal.scripts.length > 0 && (
+									<span className="pill rsi-status-candidate">默认步骤 3 · 执行前确认</span>
+								)}
+								{onOpenSkillTrust && (
+									<button type="button" className="btn-inline" onClick={onOpenSkillTrust}>
+										管理信任策略 →
+									</button>
+								)}
 							</div>
 						)}
 					</section>

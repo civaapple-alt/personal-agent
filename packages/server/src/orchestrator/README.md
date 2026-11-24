@@ -37,13 +37,13 @@
   - 主成员正常回复后，旁听成员在 `runObservers` 中并行评估。宿主按触发者和事项名册筛选旁听角色。发现关键问题时在 `user` 通道补充，标记 `observerIntervention: true`。
   - `consultMemberIds` 与 `observerMemberIds` 独立。前者为空数组时不允许主责委托，为 `null` 时沿用旧事项全部可用在组成员的行为。
   - 讨论轮次使用独立会话键。未点名时由当前可用的主责或在组角色回复，点名时按提及顺序回复。明确查询当前成员时，服务端按当前事项配置返回共享 AI 名册。每轮模型上下文也以运行时名册为准。讨论保留岗位工具用于查证，宿主关闭成果发布和经验提案。回复保留在事项历史，正式执行会回放同范围内新增的讨论消息。
-- `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
+- `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_skill`，旁听模式禁用）。
   - 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话；切回已有范围时可续接。详见[数据与会话边界](../../../../docs/reference/runtime-collaboration.md#数据与会话边界)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
   - 经 `resolveMemberForOrg` 合并组织级 `organization_ai_roles` 覆盖后，结合工作区 `Organization` 与 `resolveRepoGitUserIdentity(cwd)` 读取目标仓库当前有效 `user.name` / `user.email`。
   - [prompts.ts](execution/prompts.ts) 将岗位规则、工作区约束和运行模式保存在系统提示中。实时名册、适用经验、目录清单和身份信息通过 `PA_TURN_CONTEXT` 追加到 Pi 会话。角色架构师的业务名录、Skill 目录和体检证据也随轮更新。
   - 默认（`organization.useRoleGitIdentity !== true` 或独立无组织仓库）**不注入** `GIT_AUTHOR_*` / `GIT_COMMITTER_*`，保持 `git commit` 使用目标仓库目录自身的 Git 配置；仅当所属组织显式启用 `useRoleGitIdentity` 时，经 `resolveEffectiveGitIdentity` 向 `PiRpcWorker` 注入角色/组织覆盖 `GIT_AUTHOR_*` 与仓库真实用户 `GIT_COMMITTER_*`（未配置真实用户时回退至角色身份），同时注入 `PA_MEMBER_*` / `PA_ORG_*` 环境变量（不改写目标仓库 `.git/config`）。
-  - 在 `buildMemberPrompt` 中注入「角色与组织身份」、目标工作区作用域边界与顶层目录清单（并经 `PA_TARGET_WORKSPACE_ROOT` 在扩展内过滤掉宿主/父目录 `AGENTS.md`，同时在隔离辅助 pass `distiller.ts`/`meta-architect.ts`/`pi-decision.ts` 传入 `--no-context-files`），以及分三层组织的「岗位通用 / 组织记忆 / 仓库记忆」清单。
+  - 在 `buildMemberPrompt` 中注入「角色与组织身份」、目标工作区作用域边界与顶层目录清单（并经 `PA_TARGET_WORKSPACE_ROOT` 在扩展内过滤掉宿主/父目录 `AGENTS.md`，同时在隔离辅助 pass `meta-architect.ts`/`pi-decision.ts` 传入 `--no-context-files`，且 `meta-architect.ts` 仅开放只读工具 `read,grep,find,ls`）。
   - 工具事件（`tool_execution_start` / `tool_execution_end`）只写入精简合法 JSON（工具名、截断后关键参数、`isError`）到 `notice` 通道。执行进度快照保留最近活动的工具状态，页面按来源轮次和范围重建实际工具调用及 Skill 读取；已注册不等于已调用，读取不等于应用。
   - 成果草稿与 `propose_skill` 提案先暂存，主执行成功后再提交，失败或取消分支不保留候选。
 - 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../../../docs/reference/runtime-collaboration.md#等待人类决定)。

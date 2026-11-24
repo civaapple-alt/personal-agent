@@ -26,6 +26,8 @@ interface SettingsViewProps {
 	onNotice?: (message: string) => void;
 	onError?: (message: string) => void;
 	onOpenTeam: () => void;
+	onOpenMatter?: (matterId: string) => void;
+	onStartMatterWithPrompt?: (prompt: string) => void;
 }
 
 type ExtensionFilter = "all" | "active" | "operator";
@@ -78,6 +80,8 @@ export function SettingsView({
 	onNotice,
 	onError,
 	onOpenTeam,
+	onOpenMatter,
+	onStartMatterWithPrompt,
 }: SettingsViewProps) {
 	const [extFilter, setExtFilter] = useState<ExtensionFilter>("all");
 	const [configFilter, setConfigFilter] = useState<ConfigSectionFilter>("all");
@@ -446,12 +450,17 @@ export function SettingsView({
 							</section>
 						)}
 						{showSkills && <SkillsTrustPanel onNotice={onNotice} onError={onError} />}
-						{showInsights && <SessionInsightsPanel />}
+						{showInsights && (
+							<SessionInsightsPanel
+								onOpenMatter={onOpenMatter}
+								onStartMatterWithPrompt={onStartMatterWithPrompt}
+							/>
+						)}
 					</div>
 				) : showSkills ? (
 					<SkillsTrustPanel onNotice={onNotice} onError={onError} />
 				) : showInsights ? (
-					<SessionInsightsPanel />
+					<SessionInsightsPanel onOpenMatter={onOpenMatter} onStartMatterWithPrompt={onStartMatterWithPrompt} />
 				) : null}
 			</div>
 		</div>

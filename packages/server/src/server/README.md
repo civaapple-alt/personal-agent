@@ -18,6 +18,7 @@
 | 组织、工作区与预览服务 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
 | Git 资料空间与文档提交/Diff | [spaces.ts](routes/spaces.ts)（[acl.ts](acl.ts) 提供 `canAccessSpace` / `canWriteSpace`） |
 | 多目录工作区与 Rules/Skills 预算明细 | [workspace-folders.ts](routes/workspace-folders.ts) |
+| 信任四步 Skill 列表、只读预览与策略更新 | [skill-trust.ts](routes/skill-trust.ts)（`GET/PATCH /api/skills/trust`、`GET /api/skills/trust/detail`） |
 
 `GET /api/workspaces/directory-browser` 为工作区登记和附加目录提供服务器目录浏览。请求须指定目标组织或工作区；服务端检查管理权限，并对当前目录、父目录及每个子目录复用本地绑定策略。列表不包含隐藏目录和符号链接，手动输入仍由绑定接口校验。
 
@@ -46,7 +47,7 @@
   - 字段覆盖名称、Git 邮箱域名、`isDefault` 与简介；`POST /api/workspaces` 省略 `orgId` 自动归入默认组织
     （显式传 `null` 保留独立工作区）。工作区配置和受限成员名单在同一事务保存。已有事项、经验、执行历史或授权名单时，改变所属组织返回 409。工作区返回含 `repoGitUser`。
   - `POST /api/matters/:id/messages/:messageId/human-decision` 处理已保存的计划决定和角色澄清。指定答复人可提交一次，事项管理者可更换答复人，具备派发权限的答复人或管理者可续跑。服务端校验事项范围与记录版本。
-  - `POST /api/members/architect/chat`（对已激活非只读成员开放，无工具隔离、支持中断与按作用域筛选的团队摩擦体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图（含 `roleScope` 与可选 `newSkills` 草案，确认前不写盘）、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 同时支持即时 `mode: "rules"` 离线草案与显式 `mode: "model"`（`responseCancellation` + Pi 角色设计决策模型生成名称/英文头衔/已安装 Skills/可选 `newSkills` 草案/完整验证计划）；`POST /api/members`、`POST /api/members/batch` 与 `POST /api/members/import` 支持显式传入 `roleScope`（`global` 限超管、`org` 限对应 `org_owner`/`org_admin`/`super_admin`、`personal` 对活跃非 `org_viewer` 用户在 `maxPersonalRoles` 配额内开放）、`ownerOrgId`、已确认落盘的 `newSkills`（写入角色包 `<roleDir>/skills/<name>/SKILL.md` 或 `.data/skills/{global,orgs,users}/`）、`tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 同步删除对应角色包目录与仅本人私有库文件；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
+  - `POST /api/members/architect/chat`（对已激活非只读成员开放，仅开放只读工具 `read,grep,find,ls`、支持中断与按作用域筛选的团队体检摘要）提供多轮 Meta-Bot 角色与分工规划，返回待确认蓝图（含 `roleScope` 与可选 `newSkills` 草案，确认前不写盘）、结构化体检卡及已有角色调整提案；`POST /api/matters/:id/messages/:messageId/apply-role-proposals` 用于在持久化对话中一键确认/忽略架构师提案卡片，并支持将新建角色直接以协同/旁听/主责身份加入当前事项；`POST /api/members/adjustments/apply` 按勾选结果更新已有角色工具权责与不做清单；`POST /api/members/design` 同时支持即时 `mode: "rules"` 离线草案与显式 `mode: "model"`（`responseCancellation` + Pi 角色设计决策模型生成名称/英文头衔/已安装 Skills/可选 `newSkills` 草案/完整验证计划）；`POST /api/members`、`POST /api/members/batch` 与 `POST /api/members/import` 支持显式传入 `roleScope`（`global` 限超管、`org` 限对应 `org_owner`/`org_admin`/`super_admin`、`personal` 对活跃非 `org_viewer` 用户在 `maxPersonalRoles` 配额内开放）、`ownerOrgId`、已确认落盘的 `newSkills`（写入角色包 `<roleDir>/skills/<name>/SKILL.md` 或 `.data/skills/{global,orgs,users}/`）、`tools`、`antiJobs` 与分段职责；`DELETE /api/members/:id` 同步删除对应角色包目录与仅本人私有库文件；并按 `PATCH /api/members/:id` 维护成员私有 `gitName`、`gitEmail` 与 `identitySummary`。
   - 角色可见性与私有作用域隔离由 [acl.ts](acl.ts) 的 `canActorCreateRoleInScope`、`canActorUseMember` 与 `canActorManageMember` 强制校验：`personal` 角色、模板、`GET /api/runtime` 声明的 MCP 依赖、工具委派、`POST /api/memories` 与 `team_updated` SSE 仅对创建者自身可见与可用，其余用户及超管均不可读取或触发。
   - 私有身份字段不回写共享模板，`/api/members/:id/export` 始终保持脱敏。
   - 角色设计、创建和提案应用保留 `skills`、`mcpDependencies` 及正文中的沟通/验证约定；设计返回 `capabilityReport`，bootstrap 模板附带 MCP 声明。其状态不代替运行时能力核查，见[角色设计](../../../../docs/reference/role-design.md)。
@@ -61,11 +62,10 @@
   - 本机回环可在未启用强制认证时以所有者访问；携带无效会话凭证时不会回退到免密身份。团队成员通过正式账号和组织邀请加入，并按组织角色和账号派发权限参与事项。
   - 提请只允许从 `pending` 原子转为 `approved` 或 `dismissed`；重复处理/非提请返回 409。批准先校验来源组织与仓库、AI 成员和附件，失败保持待处理；附件缺失返回 410。
   - 图片上传完成后由 `dispatch-runner` 统一检查运行占用，冲突返回 409，不能覆盖原运行进度。运行中的仓库也不能经 PATCH 或同路径 upsert 改归属组织。
-- Phase 4 RSI 接口：
-  - `POST /api/spaces/documents/:id/feedback` 按文档提交和评价人记录反馈，只评价该提交关联的经验；`neutral` 撤回该评价人的计数。
-  - `POST /api/rsi/distill`（支持 `scopeMode` 与断连/`AbortSignal` 级联中止）及 `POST /api/rsi/distill/abort` 支持事项经验提炼与取消；组织 `org_owner`/`org_admin` 可为本组织可见事项触发复盘。
-  - `POST /api/memories`、`PATCH /api/memories/:id`、`POST /api/memories/:id/evaluate` 与 `GET /api/memories/:id/applications` 维护三层记忆生命周期；`org_owner`/`org_admin` 可管理所属组织的 `company_private`、`project_private` 及组织内 `org` 角色经验，全局平台角色 `role_general` 仍限超级管理员管理，`org_member`/`org_viewer` 禁止写改记忆。
-  - `PATCH /api/memories/:id` 支持 `memberId`、`category`、`scope`、`orgId`、`workspaceId`、`status`，并逐个广播 `memory_updated`。
+- 成果反馈、运行洞察与信任四步接口：
+  - `POST /api/spaces/documents/:id/feedback` 按文档提交和评价人记录反馈；`neutral` 撤回该评价人的计数。
+  - `GET /api/runtime/insights` 按事项/成员 ACL 只读扫描本机 Pi 会话并返回确定性规则发现与用量汇总（零模型调用）。
+  - `GET /api/skills/trust`、`GET /api/skills/trust/detail` 与 `PATCH /api/skills/trust` 按作用域 ACL 列出已落盘 Skill、只读预览 `SKILL.md` / `scripts/*` 并管理信任等级（`confirm` / `autonomous` / `disabled`）。
 - 运行态恢复与快照：
   - `GET /api/bootstrap` 返回 `activeRuns`、`GET /api/matters/:id` 返回 `activeRun`（含阶段、已流式正文与 `startedAt`），确保前端 F5 刷新恢复。
   - `GET /api/runtime` 返回当前 Agent 底座探测结果（Pi CLI 可用性与 `--version`、会话持久化策略与各执行路径隔离边界）、已加载的 Pi Extensions（内置 `team-extension`、`skill-catalog`、`builtin:mcp` 声明汇总及 `PA_PI_EXTENSIONS` 文件校验），以及按节分组的当前运行配置（环境变量与服务、目录与存储位置、Pi RPC 与桥接参数、编排与工作台边界）；非所有者协同成员请求时将本机路径收口为目录/文件名。

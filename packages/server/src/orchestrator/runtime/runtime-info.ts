@@ -79,7 +79,7 @@ export interface RuntimeExtensionItem {
 }
 
 export interface RuntimeIsolationMode {
-	id: "worker" | "decision" | "architect-matter" | "architect-aux" | "distill";
+	id: "worker" | "decision" | "architect-aux";
 	label: string;
 	usage: string;
 	sessionStrategy: string;
@@ -239,43 +239,27 @@ export async function probePiCli(executable = "pi"): Promise<PiCliProbeResult> {
 const ISOLATION_MODES: RuntimeIsolationMode[] = [
 	{
 		id: "worker",
-		label: "常规岗位执行",
-		usage: "主责 / 内部委托 / 旁听 / 独立验收",
-		sessionStrategy: "按事项、成员与作用域保存会话",
-		extensionsPolicy: "所有岗位使用已配置的运行扩展",
-		toolsPolicy: "所有岗位使用可用的运行工具",
+		label: "业务岗位执行",
+		usage: "主责 / 内部委托 / 旁听 / 独立验收 / 事项内角色架构师",
+		sessionStrategy: "按事项、成员与作用域持久化 Pi 会话（支持 session_compact 续接）",
+		extensionsPolicy: "--no-extensions 显式装配 PA 扩展；按租户作用域挂载 --skill",
+		toolsPolicy: "Pi 原生工具 + 扩展门禁（内部成员禁发布；受管 Skill 脚本按信任四步确认）",
 	},
 	{
 		id: "decision",
-		label: "类型化决策",
-		usage: "立项阵型 / 角色草案",
-		sessionStrategy: "无持久 Pi 会话",
-		extensionsPolicy: "禁用扩展、Skills 和 MCP",
-		toolsPolicy: "无工具；查仓时可使用 read",
-	},
-	{
-		id: "architect-matter",
-		label: "事项中的角色架构师",
-		usage: "事项内规划 / 诊断",
-		sessionStrategy: "事项作用域 Pi 会话",
-		extensionsPolicy: "已配置扩展 / Skills",
-		toolsPolicy: "所有岗位使用可用的运行工具",
+		label: "无状态结构化决策",
+		usage: "立项阵型评估 / 快速角色草案 / 意图路由",
+		sessionStrategy: "无持久 Pi 会话（--no-session）",
+		extensionsPolicy: "--no-extensions --no-skills --no-mcp --no-context-files",
+		toolsPolicy: '默认无工具（--tools ""）；查仓时仅开放 read',
 	},
 	{
 		id: "architect-aux",
-		label: "独立角色架构师",
+		label: "独立角色架构师弹窗",
 		usage: "团队协作体检 / 角色规划对话",
-		sessionStrategy: "无持久 Pi 会话；传入对话内容",
-		extensionsPolicy: "已配置扩展 / MCP；显式加载角色 Skill",
-		toolsPolicy: "共享运行工具；提案需用户确认",
-	},
-	{
-		id: "distill",
-		label: "AI 经验复盘",
-		usage: "基于宿主提供的证据提炼候选经验",
-		sessionStrategy: "无持久 Pi 会话",
-		extensionsPolicy: "禁用扩展、Skills 和 MCP",
-		toolsPolicy: "无工具",
+		sessionStrategy: "无持久 Pi 会话（--no-session）；传入对话上下文",
+		extensionsPolicy: "--no-extensions --no-context-files；显式加载角色 Skill 与 MCP",
+		toolsPolicy: "仅只读工具（read, grep, find, ls）；提案须经人类确认",
 	},
 ];
 
@@ -734,12 +718,10 @@ export async function buildRuntimeOverview(options: {
 							...mode,
 							...(config.noSession ? { sessionStrategy: "无持久 Pi 会话" } : {}),
 							extensionsPolicy: serverConfig?.inheritLocalPiResources
-								? "符合条件的本机业务执行可继承 Pi 资源"
-								: "扩展显式装配；Skill 由 Pi 发现及按需读取",
+								? "本机个人模式可继承 Pi 资源（--offline）；Skill 由 Pi 发现及按需读取"
+								: "--no-extensions 显式装配 PA 扩展；按租户作用域挂载 --skill（Skill 由 Pi 发现及按需读取）",
 						}
-					: mode.id === "architect-matter" && config.noSession
-						? { ...mode, sessionStrategy: "无持久 Pi 会话" }
-						: mode,
+					: mode,
 			),
 			envFlags: {
 				turnTimeoutMs,

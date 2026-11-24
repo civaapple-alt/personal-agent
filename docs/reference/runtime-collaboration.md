@@ -84,7 +84,7 @@
 - `runtime_model_usage` 执行记录分别提供首个有有效统计的模型请求与该岗位本轮请求的 `input`、`cacheRead`、`cacheWrite`。命中比例为 `cacheRead / (input + cacheRead + cacheWrite)`。记录只覆盖 Pi 回传有效统计的请求。
 - **参与阵型与角色架构师隔离**：
   - 当事项处于单兵模式（`solo`，仅 1 位 AI 成员参与且无授权内部协同池）时，宿主从 `--tools` 移除 `delegate_to_member`，系统提示要求按当前名册和已启用工具推进；立项与运行期支持经 `observerMemberIds` 按人切换定向旁听。
-  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检。独立规划调用共享运行工具和已配置扩展、MCP，显式加载角色 Skill；事项内架构师使用作用域会话与团队帮助，并可能加载配置的方法或操作员扩展，共享基础工具、已配置扩展与 MCP。角色架构师生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议。经授权用户勾选确认后，PA 才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录。运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色仅供本人查看和执行。
+  - 内置元角色 `role-architect`（`roleKind: "architect"`）与普通业务名录及自动旁听池隔离，专用于建队对话与团队协作体检。独立规划弹窗（`architect-aux`）仅开放只读工具（`read,grep,find,ls`）与已配置扩展、MCP，显式加载角色 Skill；事项内架构师走常规 `worker` 作用域会话与团队帮助，并可能加载配置的方法或操作员扩展。角色架构师生成结构化提案确认卡（含目标 `roleScope` 与可选 `newSkills` 草案）或体检调整建议。经授权用户勾选确认后，PA 才写回对应作用域档案（`.data/roles/` 及 `orgs/<orgId>/`、`users/<userId>/`、对应 `skills/` 目录）与成员记录。运行时 Skill 解析通过 `realpath` 校验落在对应作用域允许目录内，且 `personal` 角色仅供本人查看和执行。
 
 增量交接背景策略如下：
 

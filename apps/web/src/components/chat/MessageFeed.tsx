@@ -86,6 +86,9 @@ interface MessageFeedProps {
 	onFillComposer?: (text: string) => void;
 	onOpenQuickCreator?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
+	onSkillProposalDone?: () => void;
+	onOpenSkillTrust?: () => void;
+	onNotice?: (message: string) => void;
 	onAbortMatter: (matterId: string) => void;
 }
 
@@ -131,6 +134,9 @@ export function MessageFeed({
 	onFillComposer,
 	onOpenQuickCreator,
 	onLaunchWithNewRoles,
+	onSkillProposalDone,
+	onOpenSkillTrust,
+	onNotice,
 	onAbortMatter,
 }: MessageFeedProps) {
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
@@ -626,6 +632,9 @@ export function MessageFeed({
 											messageId={msg.id}
 											proposals={readSkillProposals(msg.metadata)}
 											hasWorkspace={Boolean(matterDetail.matter.workspaceId)}
+											onDone={onSkillProposalDone}
+											onOpenSkillTrust={onOpenSkillTrust}
+											onNotice={onNotice}
 										/>
 									)}
 									{Array.isArray(msg.metadata?.spaceDocuments) &&
@@ -656,73 +665,98 @@ export function MessageFeed({
 							);
 						})}
 
-						{activeDialogs.map((dlg) => (
-							<div key={dlg.id} className="inline-approval-card">
-								<div className="approval-eyebrow">需要你确认 · 来自【{dlg.memberName}】</div>
-								<h3>{dlg.request.title}</h3>
-								{dlg.request.message && <p>{dlg.request.message}</p>}
-								{!isOwner ? (
-									<p className="muted-hint compact">
-										当前处于协同成员受限模式，工具/操作确认弹窗仅可由团队所有者处理。
-									</p>
-								) : (
-									<>
-										{dlg.request.method === "confirm" && (
-											<div className="approval-actions">
-												<button
-													type="button"
-													className="btn-pill-dark"
-													onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
-												>
-													允许继续
-												</button>
-												<button
-													type="button"
-													className="btn-pill-outline"
-													onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
-												>
-													拒绝
-												</button>
-											</div>
-										)}
-										{dlg.request.method === "select" && dlg.request.options && (
-											<div className="approval-actions">
-												{dlg.request.options.map((opt) => (
+						{activeDialogs.map((dlg) => {
+							const titleLines = dlg.request.title.split("\n").filter((line) => line.trim().length > 0);
+							const heading = titleLines[0] ?? dlg.request.title;
+							const commandLine = titleLines.find((line) => line.startsWith("命令："));
+							const commandText = commandLine ? commandLine.slice("命令：".length).trim() : null;
+							const extraLines = titleLines.slice(1).filter((line) => line !== commandLine);
+							return (
+								<div key={dlg.id} className="inline-approval-card">
+									<div className="approval-eyebrow">需要你确认 · 来自【{dlg.memberName}】</div>
+									<h3>{heading}</h3>
+									{commandText && (
+										<pre className="pa-viz-code" style={{ margin: "6px 0 10px" }}>
+											<code>{commandText}</code>
+										</pre>
+									)}
+									{extraLines.map((line) => (
+										<p key={line}>{line}</p>
+									))}
+									{dlg.request.message && <p>{dlg.request.message}</p>}
+									{!isOwner ? (
+										<p className="muted-hint compact">
+											当前处于协同成员受限模式，工具/操作确认弹窗仅可由团队所有者处理。
+										</p>
+									) : (
+										<>
+											{dlg.request.method === "confirm" && (
+												<div className="approval-actions">
 													<button
-														key={opt}
+														type="button"
+														className="btn-pill-dark"
+														onClick={() => void respondToDialog(dlg.id, { confirmed: true })}
+													>
+														允许继续
+													</button>
+													<button
 														type="button"
 														className="btn-pill-outline"
-														onClick={() => void respondToDialog(dlg.id, { value: opt })}
+														onClick={() => void respondToDialog(dlg.id, { confirmed: false })}
 													>
-														{opt}
+														拒绝
 													</button>
-												))}
-											</div>
-										)}
-										{(dlg.request.method === "input" || dlg.request.method === "editor") && (
-											<div className="feedback-row">
-												<input
-													className="input-field"
-													value={dialogInput}
-													onChange={(e) => setDialogInput(e.target.value)}
-													placeholder={dlg.request.placeholder ?? "输入答复…"}
-												/>
-												<button
-													type="button"
-													className="btn-pill-dark"
-													onClick={() => {
-														void respondToDialog(dlg.id, { value: dialogInput });
-														setDialogInput("");
-													}}
-												>
-													提交
-												</button>
-											</div>
-										)}
-									</>
-								)}
-							</div>
-						))}
+												</div>
+											)}
+											{dlg.request.method === "select" && dlg.request.options && (
+												<div className="approval-actions">
+													{dlg.request.options.map((opt) => {
+														const isPrimary = opt.includes("信任") || opt.includes("自主执行");
+														const isDeny = opt.includes("拒绝") || opt.includes("取消");
+														const btnClass = isPrimary
+															? "btn-pill-dark"
+															: isDeny
+																? "btn-pill-ghost"
+																: "btn-pill-outline";
+														return (
+															<button
+																key={opt}
+																type="button"
+																className={btnClass}
+																style={isDeny ? { color: "var(--danger, #b91c1c)" } : undefined}
+																onClick={() => void respondToDialog(dlg.id, { value: opt })}
+															>
+																{opt}
+															</button>
+														);
+													})}
+												</div>
+											)}
+											{(dlg.request.method === "input" || dlg.request.method === "editor") && (
+												<div className="feedback-row">
+													<input
+														className="input-field"
+														value={dialogInput}
+														onChange={(e) => setDialogInput(e.target.value)}
+														placeholder={dlg.request.placeholder ?? "输入答复…"}
+													/>
+													<button
+														type="button"
+														className="btn-pill-dark"
+														onClick={() => {
+															void respondToDialog(dlg.id, { value: dialogInput });
+															setDialogInput("");
+														}}
+													>
+														提交
+													</button>
+												</div>
+											)}
+										</>
+									)}
+								</div>
+							);
+						})}
 
 						<DelegationSummaryCard
 							items={delegations.history.assignments}

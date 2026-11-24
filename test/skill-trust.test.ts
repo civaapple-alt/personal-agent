@@ -237,6 +237,36 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 			afterList.skills.find((s) => s.scope === "workspace" && s.name === "repo-preflight")?.trustLevel,
 			"autonomous",
 		);
+
+		// Read-only detail endpoint returns SKILL.md and scripts/*
+		const detailRes = await fetch(
+			`${baseUrl}/api/skills/trust/detail?scope=workspace&scopeId=${encodeURIComponent(ws.id)}&skillName=repo-preflight`,
+		);
+		assert.equal(detailRes.status, 200);
+		const detailJson = (await detailRes.json()) as {
+			detail: { name: string; content: string; scripts: Array<{ path: string; content: string }> };
+		};
+		assert.equal(detailJson.detail.name, "repo-preflight");
+		assert.match(detailJson.detail.content, /Run repo preflight/);
+		assert.equal(detailJson.detail.scripts.length, 1);
+		assert.equal(detailJson.detail.scripts[0]?.path, "scripts/preflight.mjs");
+		assert.match(detailJson.detail.scripts[0]?.content ?? "", /#!\/usr\/bin\/env node/);
+
+		// Invalid skill name or unauthorized personal scope is rejected
+		const badNameRes = await fetch(
+			`${baseUrl}/api/skills/trust/detail?scope=workspace&scopeId=${encodeURIComponent(ws.id)}&skillName=../evil`,
+		);
+		assert.equal(badNameRes.status, 400);
+
+		const forbiddenRes = await fetch(
+			`${baseUrl}/api/skills/trust/detail?scope=personal&scopeId=someone-else&skillName=my-digest`,
+		);
+		assert.equal(forbiddenRes.status, 403);
+
+		const missingRes = await fetch(
+			`${baseUrl}/api/skills/trust/detail?scope=workspace&scopeId=${encodeURIComponent(ws.id)}&skillName=not-found`,
+		);
+		assert.equal(missingRes.status, 404);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
