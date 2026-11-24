@@ -8,7 +8,8 @@
 | [team-smoke.ts](team-smoke.ts)，根命令 `npm run demo:team` | 创建临时工作区、数据库和会话；主成员真实委托同事，继续澄清不归档，再跨宿主进程接续并发布一个明确测试版本 |
 | [team-capabilities-smoke.ts](team-capabilities-smoke.ts)，根命令 `npm run demo:team:capabilities` | 使用合成的历史内部启动清单，询问真实主责对职责、边界与工具证据的判断；保留原文和事件，需独立审阅，脚本结束不代表语义质量通过 |
 | [space-smoke.ts](space-smoke.ts)，根命令 `npm run demo:space` | 在临时数据库、Git 资料空间与工作区中，通过账号登录和 HTTP 派发真实模型，检查同组织读取、跨组织拒绝、版本差异、旧版本反馈、编辑冲突及私密目录预览权限；保留 `evidence.json` |
-| [rsi-smoke.ts](rsi-smoke.ts)，根命令 `npm run demo:rsi` | 临时工作区/数据库/会话中验证真实经验提案、成功收尾提交、正式文件、版本改评和无工具复盘，保留 `evidence.json` |
+| [rsi-smoke.ts](rsi-smoke.ts)，根命令 `npm run demo:rsi`（别名 `npm run demo:trust`） | 临时工作区/数据库/会话中端到端验证「信任四步」：Turn 1 真实调用 `propose_skill`（含 `SKILL.md` + 可执行 `scripts/check.mjs`）与 `save_space_page` → 人工确认落盘 → Turn 2 触发步骤 3 `tool_call` 确认弹窗并升级步骤 4 `autonomous` → Turn 3 无弹窗自主执行 + `session-insights` 解析；保留 `evidence.json`，`--help` 不调用模型 |
+| [pi-native-smoke.ts](pi-native-smoke.ts)，根命令 `npm run demo:pi-native` | 隔离临时工作区中验证 0.8.0/0.8.1 Pi 原生能力（支持 `--case all\|docs\|ux`，`--help` 不调用模型）：`docs` 验证模型经 `<pa_docs>` 用原生 `read` 真实读取 PA 的 `examples/README.md` 并准确回答；`ux` 验证 `visualize` + `suggest_next_steps`（`metadata.nextSteps` 持久化）与 `session-insights` 真实会话解析；保留 `pi-native-report.json` |
 | [publication-review-smoke.ts](publication-review-smoke.ts)，根命令 `npm run demo:review` | 默认一次自主场景配对，支持 `--scenario required/solo/all`、`--repeat N`；分开报告发布、场景协作与正文质量，独立审阅后用 `--summarize <目录>` 离线汇总。未审阅返回 2，不算通过。详见[评估说明](../../../../docs/validation/publication-review.md) |
 | [observer-smoke.ts](observer-smoke.ts)，根命令 `npm run demo:observer` | 五轮真实任务覆盖点名旁听、后加入前情、风险提醒、意见回到负责人、独立事项静默与关闭；保留原始旁听回复及阶段成果，未审阅返回 2。`--summarize <目录>` 离线刷新，详见[旁听演示](../../../../docs/validation/observer-demo.md) |
 | [role-design-smoke.ts](role-design-smoke.ts)，`npm run demo:architect` | 两轮真实任务：架构师设计角色、沿已有提案 API 创建，再由新角色实际只读核查矛盾；保留验证计划、能力声明与实际文件/工具证据，独立语义审阅前返回 2 |
@@ -24,6 +25,5 @@
 
 `team-smoke` 保留临时证据目录，输出 `first.json`、`restart.json` 与数据库、空间仓库、会话的位置；样例是假设，不是业务需求确认，不访问已登记业务项目。模型和超时以脚本为准，不展示或索取密钥。
 
-- 构建后可在仓库根用 `node dist/demo/team-smoke.js` 验证编译后的扩展路径（先运行 `npm run build`）。
 - 隔离启动但不调用模型的方式见 [scripts](../../../../scripts/README.md)，离线验证选择见 [test](../../../../test/README.md)。
 - 已有有限实机证据见[运行说明](../../../../docs/reference/runtime-collaboration.md)。

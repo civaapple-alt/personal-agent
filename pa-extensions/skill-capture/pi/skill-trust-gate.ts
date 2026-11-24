@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 export type ManagedSkillScope = "global" | "org" | "personal" | "workspace";
@@ -23,6 +24,15 @@ function normalizeSlashes(value: string): string {
 	return value.replaceAll("\\", "/");
 }
 
+function canonicalizePath(target: string): string {
+	const resolved = resolve(target);
+	try {
+		return realpathSync(resolved);
+	} catch {
+		return resolved;
+	}
+}
+
 /**
  * Detects whether a `bash` command invokes a script located inside one of the managed PA Skill roots
  * (`<root>/<skillName>/scripts/<file>`). Pure & deterministic so it can run inside Pi's `tool_call` hook.
@@ -33,9 +43,10 @@ export function matchManagedSkillScriptCall(
 	cwd: string = process.cwd(),
 ): MatchedSkillScriptCall | null {
 	if (!command.trim() || managedRoots.length === 0) return null;
+	const canonicalCwd = canonicalizePath(cwd);
 	const normalizedRoots = managedRoots.map((entry) => ({
 		...entry,
-		resolvedRoot: resolve(entry.root),
+		resolvedRoot: canonicalizePath(entry.root),
 	}));
 
 	SCRIPT_TOKEN_RE.lastIndex = 0;
@@ -43,7 +54,7 @@ export function matchManagedSkillScriptCall(
 	while (match) {
 		const rawToken = match[1]?.trim();
 		if (rawToken) {
-			const candidatePath = isAbsolute(rawToken) ? resolve(rawToken) : resolve(cwd, rawToken);
+			const candidatePath = canonicalizePath(isAbsolute(rawToken) ? rawToken : resolve(canonicalCwd, rawToken));
 			for (const rootEntry of normalizedRoots) {
 				const rel = normalizeSlashes(relative(rootEntry.resolvedRoot, candidatePath));
 				if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel)) continue;

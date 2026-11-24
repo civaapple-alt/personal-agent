@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -44,6 +44,23 @@ test("matchManagedSkillScriptCall detects scripts under workspace/org/personal S
 	});
 
 	assert.equal(matchManagedSkillScriptCall("npm test && git status", roots, "/repo"), null);
+
+	// Real-path canonicalization handles macOS /var -> /private/var symlinked workspaces
+	const rawTmp = mkdtempSync(join(tmpdir(), "pa-symlink-trust-"));
+	try {
+		const scriptDir = join(rawTmp, ".agents/skills/demo-preflight/scripts");
+		mkdirSync(scriptDir, { recursive: true });
+		writeFileSync(join(scriptDir, "check.mjs"), "#!/usr/bin/env node\n");
+		const canonicalTmp = realpathSync(rawTmp);
+		const matched = matchManagedSkillScriptCall(
+			"node .agents/skills/demo-preflight/scripts/check.mjs",
+			[{ root: join(rawTmp, ".agents/skills"), scope: "workspace", scopeId: "ws-symlink" }],
+			canonicalTmp,
+		);
+		assert.equal(matched?.policyKey, "workspace:ws-symlink:demo-preflight");
+	} finally {
+		rmSync(rawTmp, { recursive: true, force: true });
+	}
 });
 
 test("skillCaptureExtension tool_call gate blocks disabled, confirms step 3, and allows autonomous step 4", async () => {

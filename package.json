@@ -34,6 +34,8 @@
     "check:opensource": "node scripts/check-open-source.mjs",
     "package:release": "node scripts/package-release.mjs",
     "demo:rsi": "node packages/server/src/demo/rsi-smoke.ts",
+    "demo:trust": "node packages/server/src/demo/rsi-smoke.ts",
+    "demo:pi-native": "node packages/server/src/demo/pi-native-smoke.ts",
     "demo:review": "node packages/server/src/demo/publication-review-smoke.ts",
     "demo:observer": "node packages/server/src/demo/observer-smoke.ts",
     "demo:architect": "node packages/server/src/demo/role-design-smoke.ts --scenario architect",

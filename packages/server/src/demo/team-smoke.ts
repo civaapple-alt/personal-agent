@@ -33,6 +33,7 @@ if (!phase || !root) {
 	);
 } else {
 	const db = openPersonalAgentDatabase(join(root, "proof.db"));
+	let orchestrator: TeamOrchestrator | undefined;
 	try {
 		const store = new PersonalAgentStore(db, { spacesDir: join(root, "spaces") });
 		store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, { thinkingLevel: "off" }) });
@@ -40,7 +41,7 @@ if (!phase || !root) {
 			...template,
 			tools: ["read"],
 		}));
-		const orchestrator = new TeamOrchestrator({
+		orchestrator = new TeamOrchestrator({
 			store,
 			templates,
 			defaultCwd: root,
@@ -137,6 +138,7 @@ if (!phase || !root) {
 			console.log("PASS second host: same Pi session ID, recalled both markers, archived actual document");
 		}
 	} finally {
+		await orchestrator?.shutdown();
 		db.close();
 	}
 }

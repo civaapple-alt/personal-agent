@@ -11,11 +11,12 @@ import { selectDemoModel } from "./model-selection.ts";
 const root = await mkdtemp(join(tmpdir(), "pa-team-capability-check-"));
 await writeFile(join(root, "README.md"), "# Isolated team capability check\n");
 const db = openPersonalAgentDatabase(join(root, "proof.db"));
+let orchestrator: TeamOrchestrator | undefined;
 try {
 	const store = new PersonalAgentStore(db, { spacesDir: join(root, "spaces") });
 	store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(root, { thinkingLevel: "off" }) });
 	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
-	const orchestrator = new TeamOrchestrator({
+	orchestrator = new TeamOrchestrator({
 		store,
 		templates,
 		defaultCwd: root,
@@ -60,5 +61,6 @@ try {
 		`Internal messages: ${internal.length}. Review result.json against the actual runtime notices; completion alone is not a quality pass.`,
 	);
 } finally {
+	await orchestrator?.shutdown();
 	db.close();
 }
