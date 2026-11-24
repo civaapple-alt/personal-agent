@@ -67,7 +67,43 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 		return null;
 	}
 
-	// 2. packages/extension-api: strict ./server vs ./web split
+	// 2. packages/pi-rpc: pure Pi RPC session primitives (zero PA server/business imports)
+	if (fileRel.startsWith("packages/pi-rpc/")) {
+		if (specifier === "react" || specifier.startsWith("react/")) return "packages/pi-rpc must not import react";
+		if (specifier.startsWith("@pa/") && specifier !== "@pa/contracts" && !specifier.startsWith("@pa/contracts/")) {
+			return `packages/pi-rpc may only depend on @pa/contracts (cannot import ${specifier})`;
+		}
+		if (target && !target.startsWith("packages/pi-rpc/")) {
+			return `packages/pi-rpc must not reach outside itself (${target})`;
+		}
+		return null;
+	}
+
+	// 2b. packages/extension-sdk: curated external SDK (zero server/host/node imports)
+	if (fileRel.startsWith("packages/extension-sdk/")) {
+		if (isNodeBuiltin) return "packages/extension-sdk must stay runtime-neutral (no node:* imports)";
+		if (
+			specifier.startsWith("@pa/") &&
+			specifier !== "@pa/contracts" &&
+			!specifier.startsWith("@pa/contracts/") &&
+			specifier !== "@pa/extension-api/server" &&
+			specifier !== "@pa/extension-api/web"
+		) {
+			return `packages/extension-sdk may only depend on @pa/contracts or @pa/extension-api (${specifier})`;
+		}
+		if (fileRel.endsWith("/web.ts") && specifier.includes("server")) {
+			return `packages/extension-sdk/web must not import server module (${specifier})`;
+		}
+		if (fileRel.endsWith("/server.ts") && specifier.includes("/web")) {
+			return `packages/extension-sdk/server must not import web module (${specifier})`;
+		}
+		if (target && !target.startsWith("packages/extension-sdk/")) {
+			return `packages/extension-sdk must not reach outside itself (${target})`;
+		}
+		return null;
+	}
+
+	// 2c. packages/extension-api: strict ./server vs ./web split
 	if (fileRel === "packages/extension-api/src/web.ts") {
 		if (isNodeBuiltin) return "packages/extension-api/web must not import node:*";
 		if (specifier.includes("server"))

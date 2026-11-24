@@ -38,9 +38,11 @@ personal-agent/
 │   └── web/        # React 网页工作台（UI Client 环，esbuild 构建至 apps/web/dist/）
 ├── packages/
 │   ├── contracts/      # Wire 共享契约环（纯 DTO 与运行时校验，零 Node/宿主依赖）
-│   ├── extension-api/  # 扩展 SDK（严格分离 ./server 与 ./web 两个子路径）
-│   └── server/         # Engine Host 引擎宿主（编排核、Pi RPC、SQLite/Git 空间、HTTP/SSE）
-├── pa-extensions/  # PA 宿主扩展（每个扩展分 ./server 与 ./web 两半，双端静态注册表装配）
+│   ├── pi-rpc/         # 纯 Pi RPC 子进程会话原语底座（零业务/数据库耦合）
+│   ├── extension-api/  # 内部扩展全量契约（严格分离 ./server 与 ./web）
+│   ├── extension-sdk/  # 对外精选稳定扩展 SDK（隐藏宿主内部保留字段）
+│   └── server/         # Engine Host 引擎宿主（编排核、SQLite/Git 空间、HTTP/SSE）
+├── pa-extensions/  # PA 宿主扩展（双半边 ./server + ./web，含宿主专有 workflow 技能包）
 ├── pi-extensions/  # 便携 Pi 扩展与标准 Pi 包（role-skills、skill-catalog、human-question、team-extension）
 ├── roles/          # 内置可分享 AI 岗位角色定义（Markdown）
 ├── docs/           # 使用教程、部署指南、配置与架构参考（入口见 docs/README.md）

@@ -4,6 +4,9 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Extract pure Pi RPC subprocess session primitives into `@pa/pi-rpc` (`packages/pi-rpc`), cleanly separating session lifecycle primitives from PA business orchestration and team tools.
+- Introduce curated external extension SDK `@pa/extension-sdk` (`packages/extension-sdk`, API `1.0`) alongside internal `@pa/extension-api`, explicitly isolating host-internal fields (`builtinPiEntry`, `workflowRule`, `supersedesPackages`).
+- Add PA-specific host workflow package `pa-extensions/workflow` (`pa-team-collaboration`, `pa-space-deliverables`, `pa-external-repo-evidence` on-demand Skills + thin 3-line routing rule) and slim `packages/server/src/orchestrator/prompts.ts` following "Influence by feeding, never by assembling".
 - Refactor repository into a Three-Ring multi-package npm workspace layout (`packages/contracts`, `packages/extension-api`, `packages/server`, `apps/web`, thin launcher `apps/cli`) while preserving Pi RPC subprocess execution, "Influence by feeding, never by assembling", and native Pi package reuse.
 - Extract dual-half PA host extensions under `pa-extensions/*` (`human-question`, `web-access`, `team-extension`, `skill-catalog`), each split into strictly isolated `./server` and `./web` entrypoints composed via static registries (`packages/server/src/extensions/registry.ts` and `apps/web/src/extensions/registry.ts`).
 - Add automated module boundary gate (`scripts/check-module-boundaries.mjs` / `npm run check:boundaries`, included in `npm run check`) and unit tests enforcing Three-Ring, dual-half extension, and portable `pi-extensions/*` isolation.

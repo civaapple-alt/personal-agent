@@ -22,8 +22,13 @@ test("boundary checker rejects forbidden cross-ring and cross-half edges", () =>
 	assert.ok(checkImportEdge(rootDir, "pa-extensions/web-access/web/index.ts", "../server/index.ts"));
 	assert.ok(checkImportEdge(rootDir, "pa-extensions/web-access/server/index.ts", "../web/index.ts"));
 	assert.ok(checkImportEdge(rootDir, "pi-extensions/human-question/index.ts", "@pa/contracts"));
+	assert.ok(checkImportEdge(rootDir, "packages/pi-rpc/src/pi-rpc-worker.ts", "@pa/server"));
+	assert.ok(checkImportEdge(rootDir, "packages/extension-sdk/src/web.ts", "node:fs"));
+	assert.ok(checkImportEdge(rootDir, "packages/extension-sdk/src/web.ts", "@pa/extension-api/server"));
 
 	// Allowed edges pass cleanly
+	assert.equal(checkImportEdge(rootDir, "packages/pi-rpc/src/pi-rpc-worker.ts", "@pa/contracts/human-decision"), null);
+	assert.equal(checkImportEdge(rootDir, "packages/extension-sdk/src/server.ts", "@pa/extension-api/server"), null);
 	assert.equal(checkImportEdge(rootDir, "apps/web/src/App.tsx", "@pa/contracts/human-decision"), null);
 	assert.equal(checkImportEdge(rootDir, "apps/web/src/extensions/registry.ts", "@pa/ext-web-access/web"), null);
 	assert.equal(

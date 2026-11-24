@@ -28,7 +28,9 @@ Personal Agent 采用**三环硬边界多包架构**（由 [check-module-boundar
 
 - **三环解耦与薄入口（`apps/` + `packages/`）**：
   - **Engine Host（[`packages/server`](../../packages/server/src/README.md)）**：可嵌入的引擎宿主库，导出 `bootHost()` 与全部后端能力；
+  - **Pi RPC 会话原语底座（[`packages/pi-rpc`](../../packages/pi-rpc/README.md)）**：纯 Pi RPC 子进程生命周期与 JSONL 协议原语，与上层团队工具和业务编排解耦；
   - **The Wire（[`packages/contracts`](../../packages/contracts/README.md)）**：零 `node:*` / React 依赖的共享契约层，是前后端之间唯一允许共享的协议边；
+  - **内部契约与外部 SDK 分层（[`packages/extension-api`](../../packages/extension-api/README.md) / [`packages/extension-sdk`](../../packages/extension-sdk/README.md)）**：内部全量契约供内置扩展使用，对外 SDK 仅暴露精选稳定安全子集并校验版本；
   - **UI Client（[`apps/web`](../../apps/web/README.md)）**：纯浏览器端 React 工作台，只依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`；
   - **薄启动器（[`apps/cli`](../../apps/cli/README.md)）**：仅做参数/信号处理并调用 `@pa/server/boot`，构建为无 `node_modules` 依赖的自包含 `apps/cli/dist/main.js`，为后续多入口（桌面壳、远程端、IM 网关）保持同一宿主路径。
 - **双半边扩展与原生 Pi 复用（`pi-extensions/` + `pa-extensions/`）**：

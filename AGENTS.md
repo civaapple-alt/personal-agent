@@ -10,8 +10,8 @@
 
 | 任务 | 从这里开始 |
 | --- | --- |
-| 后端引擎与跨模块改动 | [packages/server/src/README.md](packages/server/src/README.md)，再选对应子模块 |
-| 共享 Wire 契约与扩展 SDK | [packages/contracts/README.md](packages/contracts/README.md)、[packages/extension-api/README.md](packages/extension-api/README.md) |
+| 后端引擎与跨模块改动 | [packages/server/src/README.md](packages/server/src/README.md)、[packages/pi-rpc/README.md](packages/pi-rpc/README.md) |
+| 共享 Wire 契约与扩展 SDK | [packages/contracts/README.md](packages/contracts/README.md)、[packages/extension-api/README.md](packages/extension-api/README.md)、[packages/extension-sdk/README.md](packages/extension-sdk/README.md) |
 | 网页工作台交互与展示 | [apps/web/README.md](apps/web/README.md) → [前端源码](apps/web/src/README.md) |
 | CLI 薄启动器 | [apps/cli/README.md](apps/cli/README.md) |
 | 宿主扩展与便携 Pi 扩展 | [pa-extensions/README.md](pa-extensions/README.md)、[pi-extensions/README.md](pi-extensions/README.md) |
