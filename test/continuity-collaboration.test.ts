@@ -361,37 +361,6 @@ test("space tools do not expose another matter's private documents", async (t) =
 	assert.equal((await f.store.spaces.getDocument(privateId))?.content, "private content");
 });
 
-test("space feedback evaluates memories applied to the saved document version", async (t) => {
-	let documentId = "";
-	const f = await fixture(t, async (worker) => {
-		const saved = await worker.call("save_space_page", { title: "Plan", content: "First version" });
-		documentId = (saved.details as { result: { page: { id: string } } }).result.page.id;
-		return "Plan saved";
-	});
-	const memory = f.store.addMemory({
-		memberId: "product-manager",
-		scope: "role_general",
-		content: "Include concrete acceptance criteria",
-	});
-	const result = await f.orchestrator.dispatchMatter({
-		prompt: "Prepare the plan",
-		preferredMemberId: "product-manager",
-		workspaceId: f.workspace.id,
-	});
-	const document = await f.store.spaces.getDocument(documentId);
-	assert.ok(document);
-	assert.equal(document.matterId, result.matter.id);
-	await f.store.spaces.saveDocumentFeedback({
-		documentId,
-		commitHash: document.headCommit,
-		actorId: "reviewer",
-		actorName: "Reviewer",
-		feedback: "Criteria are clear",
-		rating: "positive",
-	});
-	assert.equal(f.store.getMemory(memory.id)?.positiveCount, 1);
-});
-
 test("team discussion is opt-in, preserves the roster, and uses separate Pi sessions", async (t) => {
 	const failingPrompt = "@engineering-manager @qa-manager Confirm the second discussion reply";
 	const f = await fixture(t, async (worker, prompt) => {
@@ -1121,23 +1090,14 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 	const otherPath = join(f.root, "B");
 	await mkdir(otherPath);
 	const other = f.store.upsertWorkspace({ name: "B", repoPath: otherPath });
-	f.store.addMemory({
-		memberId: "product-manager",
-		scope: "company_private",
-		workspaceId: f.workspace.id,
-		content: "PRIVATE_COMPANY_A",
-	});
-	f.store.addMemory({ memberId: "product-manager", scope: "company_private", content: "UNSCOPED_COMPANY" });
 	f.store.updateMatterWorkspace(first.matter.id, other.id);
 	await restarted.dispatchMatter({ matterId: first.matter.id, prompt: "SECOND_PRIVATE_B" });
 	assert.equal(f.workers[2]?.options.sessionFile, undefined);
 	assert.doesNotMatch(f.workers[2]?.prompt ?? "", /FIRST_PRIVATE_A/);
-	assert.doesNotMatch(f.workers[2]?.options.env?.PA_TURN_CONTEXT ?? "", /PRIVATE_COMPANY_A|UNSCOPED_COMPANY/);
 	f.store.updateMatterWorkspace(first.matter.id, f.workspace.id);
 	await restarted.dispatchMatter({ matterId: first.matter.id, prompt: "返回 A" });
 	assert.equal(f.workers[3]?.options.sessionFile, f.workers[0]?.sessionFile);
 	assert.doesNotMatch(f.workers[3]?.prompt ?? "", /SECOND_PRIVATE_B/);
-	assert.match(f.workers[3]?.options.env?.PA_TURN_CONTEXT ?? "", /PRIVATE_COMPANY_A/);
 	await restarted.dispatchMatter({
 		prompt: "独立事项",
 		workspaceId: f.workspace.id,
@@ -1155,7 +1115,7 @@ test("reopens exact scoped sessions after orchestrator restart, keeps lead/cwd, 
 	);
 });
 
-test("resumed turns append current roster, memories, and files without changing role instructions", async (t) => {
+test("resumed turns append current roster and files without changing role instructions", async (t) => {
 	const f = await fixture(t, async () => "Done");
 	const first = await f.orchestrator.dispatchMatter({
 		prompt: "Plan the next step",
@@ -1165,7 +1125,6 @@ test("resumed turns append current roster, memories, and files without changing 
 		consultMemberIds: ["engineering-manager"],
 		observersEnabled: false,
 	});
-	assert.match(f.workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /No scoped memories/);
 	assert.doesNotMatch(f.workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /ux-designer|design\.md/);
 
 	const specialist = f.templates.find(({ id }) => id === "qa-manager")!;
@@ -1179,12 +1138,6 @@ test("resumed turns append current roster, memories, and files without changing 
 
 	f.store.updateMatterAiMembers(first.matter.id, ["product-manager", "engineering-manager", "ux-designer"]);
 	f.store.updateMatterConsultMembers(first.matter.id, ["engineering-manager", "ux-designer"]);
-	f.store.addMemory({
-		memberId: "product-manager",
-		workspaceId: f.workspace.id,
-		scope: "project_private",
-		content: "UX_REVIEW_REQUIRED",
-	});
 	await writeFile(join(f.root, "design.md"), "# Design\n");
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "Review the updated plan" });
 
@@ -1194,9 +1147,8 @@ test("resumed turns append current roster, memories, and files without changing 
 	assert.deepEqual(resumed?.options.args, f.workers[0]?.options.args);
 	const snapshot = resumed?.options.env?.PA_TURN_CONTEXT ?? "";
 	assert.match(snapshot, /ux-designer: UX & Visual Designer.*\[consultable\]/);
-	assert.match(snapshot, /UX_REVIEW_REQUIRED/);
 	assert.match(snapshot, /Top-level entries: .*design\.md/);
-	assert.doesNotMatch(resumed?.options.env?.PA_MEMBER_CONTEXT ?? "", /ux-designer|UX_REVIEW_REQUIRED|design\.md/);
+	assert.doesNotMatch(resumed?.options.env?.PA_MEMBER_CONTEXT ?? "", /ux-designer|design\.md/);
 });
 
 test("resumed workers keep personal role snapshots scoped to the triggering user", async (t) => {

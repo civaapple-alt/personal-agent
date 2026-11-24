@@ -15,7 +15,6 @@
 | 事项工作区、访问范围、协作配置与角色校验 | [matter-settings.ts](routes/matter-settings.ts)、[matter-roster.ts](routes/matter-roster.ts) |
 | 成员管理、角色包导入和应用角色提案 | [team.ts](routes/team.ts)、[role-packages.ts](routes/role-packages.ts) |
 | 角色设计、架构师对话及请求取消 | [role-design.ts](routes/role-design.ts) |
-| 经验可见性、来源、审核和提炼 | [memories.ts](routes/memories.ts) |
 | 组织、工作区与预览服务 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
 | Git 资料空间与文档提交/Diff | [spaces.ts](routes/spaces.ts)（[acl.ts](acl.ts) 提供 `canAccessSpace` / `canWriteSpace`） |
 | 多目录工作区与 Rules/Skills 预算明细 | [workspace-folders.ts](routes/workspace-folders.ts) |

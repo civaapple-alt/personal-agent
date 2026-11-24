@@ -12,7 +12,6 @@ import { buildMatterDelegations, liveDelegationEdges } from "../apps/web/src/uti
 import {
 	applyOrgAiRoleOverrides,
 	applyPrimaryContactToMembers,
-	collectMatterMemories,
 	collectMatterParticipantIds,
 	collectTurnToolCalls,
 	formatByteSize,
@@ -21,7 +20,6 @@ import {
 	getMemberThemeById,
 	inferDelegationMood,
 	isKeyNoticeEvent,
-	MEMORY_CATEGORY_LABELS,
 	parseMessageFiles,
 	parseMessageImages,
 	parseProgressSnapshot,
@@ -270,72 +268,7 @@ test("formatElapsedDuration and parseProgressSnapshot safely handle snapshot met
 	assert.equal(parsed.recentLogs?.length, 1);
 });
 
-test("collectMatterMemories and collectMatterParticipantIds aggregate multi-role experiences", () => {
-	assert.equal(MEMORY_CATEGORY_LABELS.efficiency, "提效方法");
-	assert.equal(MEMORY_CATEGORY_LABELS.troubleshooting, "问题排障");
-
-	const sorted = collectMatterMemories(
-		{
-			"product-manager": [
-				{
-					id: "m1",
-					memberId: "product-manager",
-					scope: "role_general",
-					category: "collaboration",
-					orgId: null,
-					workspaceId: null,
-					content: "verified pm rule",
-					sourceMatterId: "mat-1",
-					status: "verified",
-					verified: true,
-					appliedCount: 0,
-					positiveCount: 0,
-					negativeCount: 0,
-					createdAt: "2026-11-15T10:00:00.000Z",
-				},
-			],
-			"engineering-manager": [
-				{
-					id: "m2",
-					memberId: "engineering-manager",
-					scope: "role_general",
-					category: "troubleshooting",
-					orgId: null,
-					workspaceId: null,
-					content: "candidate eng rule",
-					sourceMatterId: "mat-1",
-					status: "candidate",
-					verified: false,
-					appliedCount: 0,
-					positiveCount: 0,
-					negativeCount: 0,
-					createdAt: "2026-11-15T09:00:00.000Z",
-				},
-				{
-					id: "m3",
-					memberId: "engineering-manager",
-					scope: "role_general",
-					category: "general",
-					orgId: null,
-					workspaceId: null,
-					content: "other matter rule",
-					sourceMatterId: "mat-other",
-					status: "candidate",
-					verified: false,
-					appliedCount: 0,
-					positiveCount: 0,
-					negativeCount: 0,
-					createdAt: "2026-11-15T11:00:00.000Z",
-				},
-			],
-		},
-		"mat-1",
-	);
-	assert.deepEqual(
-		sorted.map((m) => m.id),
-		["m2", "m1"],
-	);
-
+test("collectMatterParticipantIds aggregates multi-role participants", () => {
 	const participants = collectMatterParticipantIds({
 		matter: {
 			id: "mat-1",

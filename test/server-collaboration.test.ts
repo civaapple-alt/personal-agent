@@ -3,12 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import {
-	countMemberMemoriesByScope,
-	formatMemberGitIdentity,
-	MEMORY_SCOPE_LABELS,
-	MEMORY_SCOPE_SHORT_LABELS,
-} from "../apps/web/src/utils.ts";
+import { formatMemberGitIdentity } from "../apps/web/src/utils.ts";
 import {
 	createPersonalAgentServer,
 	DialogBroker,
@@ -22,11 +17,6 @@ import {
 import { reportReady } from "./worker-helpers.ts";
 
 test("organization CRUD, workspace binding, member identity updates & sanitized export, and frontend identity helpers", async () => {
-	assert.equal(MEMORY_SCOPE_SHORT_LABELS.role_general, "岗位通用");
-	assert.equal(MEMORY_SCOPE_SHORT_LABELS.company_private, "组织记忆");
-	assert.equal(MEMORY_SCOPE_SHORT_LABELS.project_private, "仓库记忆");
-	assert.match(MEMORY_SCOPE_LABELS.company_private ?? "", /组织/);
-
 	const gitDefault = formatMemberGitIdentity(
 		{ id: "pm", displayName: "产品经理", roleTitle: "Product Manager", gitName: "", gitEmail: "pm@team.local" },
 		{ gitEmailDomain: "@acme.dev" },
@@ -38,76 +28,6 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		{ gitEmailDomain: "acme.dev" },
 	);
 	assert.equal(gitCustom.formatted, "Alice <alice@custom.io>");
-
-	const scopeCounts = countMemberMemoriesByScope([
-		{
-			id: "m1",
-			memberId: "pm",
-			scope: "role_general",
-			category: "general",
-			orgId: null,
-			workspaceId: null,
-			content: "a",
-			status: "verified",
-			verified: true,
-			appliedCount: 0,
-			positiveCount: 0,
-			negativeCount: 0,
-			createdAt: "2026-11-15T00:00:00Z",
-		},
-		{
-			id: "m2",
-			memberId: "pm",
-			scope: "company_private",
-			category: "collaboration",
-			orgId: "org1",
-			workspaceId: null,
-			content: "b",
-			status: "candidate",
-			verified: false,
-			appliedCount: 0,
-			positiveCount: 0,
-			negativeCount: 0,
-			createdAt: "2026-11-15T00:00:00Z",
-		},
-		{
-			id: "m3",
-			memberId: "pm",
-			scope: "project_private",
-			category: "domain_constraint",
-			orgId: null,
-			workspaceId: "ws1",
-			content: "c",
-			status: "verified",
-			verified: true,
-			appliedCount: 0,
-			positiveCount: 0,
-			negativeCount: 0,
-			createdAt: "2026-11-15T00:00:00Z",
-		},
-		{
-			id: "m4",
-			memberId: "pm",
-			scope: "project_private",
-			category: "general",
-			orgId: null,
-			workspaceId: "ws1",
-			content: "ignored",
-			status: "rejected",
-			verified: false,
-			appliedCount: 0,
-			positiveCount: 0,
-			negativeCount: 0,
-			createdAt: "2026-11-15T00:00:00Z",
-		},
-	]);
-	assert.deepEqual(scopeCounts, {
-		totalActive: 3,
-		roleGeneral: 1,
-		companyPrivate: 1,
-		projectPrivate: 1,
-		pendingReview: 1,
-	});
 
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -298,40 +218,6 @@ test("organization CRUD, workspace binding, member identity updates & sanitized 
 		assert.doesNotMatch(exported.markdown, /secret-pm@acme\.dev/);
 		assert.doesNotMatch(exported.markdown, /Private internal company background/);
 		assert.doesNotMatch(exported.markdown, /Acme Corp/);
-
-		// Memory CRUD with orgId
-		const memRes = await fetch(`${baseUrl}/api/memories`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				memberId: "product-manager",
-				scope: "company_private",
-				orgId: organization.id,
-				content: "All Acme PRs require tests",
-			}),
-		});
-		assert.equal(memRes.status, 201);
-		const { memory } = (await memRes.json()) as {
-			memory: { id: string; orgId: string | null; workspaceId: string | null };
-		};
-		assert.equal(memory.orgId, organization.id);
-		assert.equal(memory.workspaceId, null);
-
-		const memSwitchRes = await fetch(`${baseUrl}/api/memories/${memory.id}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				scope: "project_private",
-				workspaceId: workspace.id,
-			}),
-		});
-		assert.equal(memSwitchRes.status, 200);
-		const switched = (await memSwitchRes.json()) as {
-			memory: { scope: string; orgId: string | null; workspaceId: string | null };
-		};
-		assert.equal(switched.memory.scope, "project_private");
-		assert.equal(switched.memory.orgId, null);
-		assert.equal(switched.memory.workspaceId, workspace.id);
 
 		const bootstrapRes = await fetch(`${baseUrl}/api/bootstrap`);
 		const bootstrapBody = (await bootstrapRes.json()) as {
@@ -609,14 +495,6 @@ test("Account collaboration: discussion and AI request require authorized approv
 		});
 		assert.match(capturedPrompts[0] ?? "", /\[Team discussion\] 李四 \(后端研发\): 大家先讨论一下接口协议字段名/);
 		assert.match(capturedPrompts[0] ?? "", /Owner 已确认同事 李四 的 AI 提请并安排执行/);
-
-		// A collaborator cannot trigger administrator-only experience distillation.
-		const forbiddenDistill = await fetch(`${baseUrl}/api/rsi/distill`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Cookie: collabCookie },
-			body: JSON.stringify({ matterId: matter.id }),
-		});
-		assert.equal(forbiddenDistill.status, 403);
 
 		// Dismiss flow and session revocation
 		const secondReqRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages`, {

@@ -4,7 +4,7 @@ import { type InstalledPiWebAccess, installPiWebAccess } from "../extensions/web
 import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
-import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
+import { type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
 import { canActorAccessUpload } from "./acl.ts";
 import { isLoopbackAddress, requireActiveActor, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
@@ -19,7 +19,6 @@ import { handleHumanDecisionRoutes } from "./routes/human-decisions.ts";
 import { handleMatterMessageRoutes } from "./routes/matter-messages.ts";
 import { handleMatterSettingsRoutes } from "./routes/matter-settings.ts";
 import { handleMatterRoutes } from "./routes/matters.ts";
-import { handleMemoryRoutes } from "./routes/memories.ts";
 import { handleModelSettingsRoutes } from "./routes/model-settings.ts";
 import { handleRoleDesignRoutes } from "./routes/role-design.ts";
 import { handleSpaceRoutes } from "./routes/spaces.ts";
@@ -164,7 +163,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		handleDeliverableOrgPreviewRoutes,
 		handleRoleDesignRoutes,
 		handleTeamRoutes,
-		handleMemoryRoutes,
 	];
 
 	const server = createServer(async (req, res) => {
@@ -232,11 +230,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			const statusCode =
-				error instanceof HttpRequestError || error instanceof WorkspaceMutationError
-					? error.statusCode
-					: error instanceof MemoryValidationError
-						? 400
-						: 500;
+				error instanceof HttpRequestError || error instanceof WorkspaceMutationError ? error.statusCode : 500;
 			sendError(res, statusCode, message);
 		}
 	});

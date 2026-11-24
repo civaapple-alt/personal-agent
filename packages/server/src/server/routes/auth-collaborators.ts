@@ -15,13 +15,7 @@ import {
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
 import { readJsonBody, sendError, sendJson } from "../http.ts";
-import {
-	auditActorAction,
-	formatScopedMemoryMap,
-	formatWorkspaceForActor,
-	type RouteRequest,
-	type ServerRouteContext,
-} from "./context.ts";
+import { auditActorAction, formatWorkspaceForActor, type RouteRequest, type ServerRouteContext } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
 function parseOrgMemberRole(raw: unknown): OrgMemberRole | null {
@@ -126,7 +120,6 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			matters: scopedMatters,
 			pendingDialogs: scopedPendingDialogs,
 			previews: scopedPreviews,
-			memoriesByMember: formatScopedMemoryMap(store, actor),
 			activeRuns: scopedActiveRuns,
 		});
 		return true;

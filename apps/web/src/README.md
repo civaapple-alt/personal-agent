@@ -6,7 +6,7 @@
 
 | 修改目标 | 入口 |
 | --- | --- |
-| HTTP DTO 和请求 | [api.ts](api.ts) 集中导出。[client.ts](api/client.ts) 处理请求错误和会话吊销。[matters.ts](api/matters.ts)、[team.ts](api/team.ts)、[organizations.ts](api/organizations.ts)、[deliverables.ts](api/deliverables.ts)、[experiences.ts](api/experiences.ts) 按业务维护契约，与各自服务响应一起核对 |
+| HTTP DTO 和请求 | [api.ts](api.ts) 集中导出。[client.ts](api/client.ts) 处理请求错误和会话吊销。[matters.ts](api/matters.ts)、[team.ts](api/team.ts)、[organizations.ts](api/organizations.ts)、[deliverables.ts](api/deliverables.ts) 按业务维护契约，与各自服务响应一起核对 |
 | 会话、注册和邀请 | [useAuthSession](hooks/useAuthSession.ts)、[OrgInviteModal](components/OrgInviteModal.tsx) |
 | 当前事项有效工作区、组织与成员 | [useMatterScope](hooks/useMatterScope.ts) |
 | 设置及超管页面加载与刷新 | [useWorkbenchPanels](hooks/useWorkbenchPanels.ts) |
@@ -16,7 +16,7 @@
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](primitives/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](views/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护，右侧分屏文档由 [useMatterSideDocs](hooks/useMatterSideDocs.ts) 与 [MatterDocSidePane](components/chat/MatterDocSidePane.tsx) 维护，底部吸附澄清由 [useActiveClarification](hooks/useActiveClarification.ts) 与 [FloatingClarificationDock](components/chat/FloatingClarificationDock.tsx) 维护，对话空间文档卡位于 [SpaceDocumentCard](components/chat/SpaceDocumentCard.tsx)）、[ExploringStatus](components/ExploringStatus.tsx) |
 | 资料空间（五类 Git 空间、五类内容类型筛选、单文件/目录条目与静态预览、跨空间最近修改、关联仓库路径与 Diff） | [DeliverablesView](views/DeliverablesView.tsx)、[SpacePages](views/SpacePages.tsx)、[SpaceFolderFilesPanel](components/SpaceFolderFilesPanel.tsx)、[space API](api/space.ts) |
-| AI 团队、组织、工作区及头像 | [TeamView](views/TeamView.tsx)（专注 AI 角色名录、经验核验、角色包与协作体检）、[OrganizationsView](views/OrganizationsView.tsx) + [OrganizationDetailPanel](components/OrganizationDetailPanel.tsx)（独立「组织」两栏页，管理人类成员与邀请、组织启用的 AI 角色与主联系人、关联工作区）、[ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)、[MaterialsView](views/MaterialsView.tsx)（左侧按组织分组的工作区导航 + 右侧内联 [WorkspaceDetailPanel](components/WorkspaceDetailPanel.tsx) 展示多目录、Rules/Skills 预算明细与事项/资料动态，接口位于 [workspaceFolders API](api/workspaceFolders.ts)）、[BotFaceIcon](primitives/BotFaceIcon.tsx) |
+| AI 团队、组织、工作区及头像 | [TeamView](views/TeamView.tsx)（专注 AI 角色名录、角色包与协作体检）、[OrganizationsView](views/OrganizationsView.tsx) + [OrganizationDetailPanel](components/OrganizationDetailPanel.tsx)（独立「组织」两栏页，管理人类成员与邀请、组织启用的 AI 角色与主联系人、关联工作区）、[MaterialsView](views/MaterialsView.tsx)（左侧按组织分组的工作区导航 + 右侧内联 [WorkspaceDetailPanel](components/WorkspaceDetailPanel.tsx) 展示多目录、Rules/Skills 预算明细与事项/资料动态，接口位于 [workspaceFolders API](api/workspaceFolders.ts)）、[BotFaceIcon](primitives/BotFaceIcon.tsx) |
 | 设置、Agent 底座与扩展视图 | [SettingsView](views/SettingsView.tsx) 展示 Pi 底座、扩展及运行配置；[WebAccessSettings](components/WebAccessSettings.tsx)（内嵌搜索密钥与在线测试搜索）与 [SystemOneSettings](components/SystemOneSettings.tsx)（内嵌 TypeSafe 密钥、启停开关与连通性测试）分别管理各自扩展 |
 | 账号门禁与超级管理员控制台 | [AuthGateView](views/AuthGateView.tsx)（超管首次初始化、邮箱密码登录/开放注册、待审核提示及 `?invite=` / `orginv_` 加入组织）、[AdminView](views/AdminView.tsx)（对应 `#/admin`，管理用户审核/配额含 `maxPersonalRoles`/`defaultMaxPersonalRoles`、注册策略、克隆主目录、运行任务紧急中止与审计日志） |
 
@@ -34,7 +34,7 @@
 - 运行耗时只向下传递开始时间 `progressStartedAt`，不要在 `App` 或 `ChatStage` 重新引入每秒更新的状态。
 - `matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。
 - `fetchBootstrap` 与 `fetchMatterDetail` 消费服务端返回的 `organizations` 与 `activeRuns` / `activeRun`，保证页面刷新（F5）后立即恢复进行中进度、计时与停止按钮。
-- 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`memory_updated`、`matter_message`、
+- 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`matter_message`、
   `collaborator_updated` 等 SSE 事件完成实时同步。
 - `matter_progress` 附带 `collabUpdated` 时刷新事项详情（主负责人回复或旁听同事主动插话后即时同步）；`matter_updated` 同步旁听成员列表。
 - 工作区或旁听变更失败/409 需呈现错误，不能只乐观改变选项而忽略后端状态；取消、错误和等待用户状态都要有对应刷新路径。
@@ -71,12 +71,6 @@
   - 支持默认组织徽标与「设为默认」切换、组织创建/编辑、新仓库默认选定默认组织（可选独立无组织）、
     仓库 `Git Committer` 真实用户展示、成员 `Git Author（角色）` vs `Git Committer（真实用户）` 与三层记忆筛选；
     经验表单与卡片亦优先预选默认组织。
-- 团队复盘共用组件 [ExperienceReviewPanel](components/ExperienceReviewPanel.tsx)：
-  - 供 [ChatStage](views/ChatStage.tsx) 与 [TeamView](views/TeamView.tsx) 调用。
-  - 导出 `InlineExperienceReviewSection`、`ExperienceItemCard`、`ManualExperienceForm` 等组件。
-  - 支持在同一协作上下文按岗位和经验维度（提效/排障/协同/用户纠偏/项目规范）直接提炼，进行中支持「取消提炼」同步中止请求与后台 reflection worker。
-  - 支持核验通过、批量通过、编辑改属与溯源跳转；为 `company_private` 提供组织（或退化单仓库）选择器，切换到仓库范围时通过 `pickDefaultWorkspaceId` 优先默认当前/来源事项所属仓库（仍可手动切换）。
-  - 「待核验」卡片聚焦核验/编辑/忽略并隐藏零值计数；核验通过后再开放 `+1/-1` 效用评价。支持 `canManage` 权限收口，当非管理员或只读 `org_viewer` 查阅时隐藏「全部核验通过」「核验通过」「+1/-1」「编辑」「忽略」等写操作按钮。
 - [DeliverablesView](views/DeliverablesView.tsx) 在 `#/deliverables` 显示资料空间。文档可编辑、查看 Git 版本与提交差异，并对具体提交记录反馈。
 
 从仓库根运行 `npm run check`、`npm run build:web`。

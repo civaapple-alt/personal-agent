@@ -1,4 +1,4 @@
-import type { MemberMemoryDto, OrganizationAiRoleConfigDto, OrganizationDto, TeamMemberDto } from "../api.ts";
+import type { OrganizationAiRoleConfigDto, OrganizationDto, TeamMemberDto } from "../api.ts";
 
 // UI projection helpers mirroring backend organization roster & Git identity rules
 // (authoritative server logic lives in src/storage/repos/org-rbac-repo.ts and src/storage/repos/member-repo.ts).
@@ -23,33 +23,6 @@ export function formatMemberGitIdentity(
 	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;
 	const gitEmail = isDefaultEmail && domain ? `${member.id}@${domain}` : rawEmail || `${member.id}@team.local`;
 	return { gitName, gitEmail, formatted: `${gitName} <${gitEmail}>` };
-}
-
-export function countMemberMemoriesByScope(memories: MemberMemoryDto[]): {
-	totalActive: number;
-	roleGeneral: number;
-	companyPrivate: number;
-	projectPrivate: number;
-	pendingReview: number;
-} {
-	let roleGeneral = 0;
-	let companyPrivate = 0;
-	let projectPrivate = 0;
-	let pendingReview = 0;
-	for (const memory of memories) {
-		if (memory.status === "rejected" || memory.status === "superseded") continue;
-		if (memory.status === "candidate") pendingReview += 1;
-		if (memory.scope === "role_general") roleGeneral += 1;
-		else if (memory.scope === "company_private") companyPrivate += 1;
-		else if (memory.scope === "project_private") projectPrivate += 1;
-	}
-	return {
-		totalActive: roleGeneral + companyPrivate + projectPrivate,
-		roleGeneral,
-		companyPrivate,
-		projectPrivate,
-		pendingReview,
-	};
 }
 
 /** Picks the first valid workspace id from ordered candidates, falling back to the first workspace. */

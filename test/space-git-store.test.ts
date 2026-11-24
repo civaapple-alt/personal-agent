@@ -209,16 +209,6 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 		assert.equal(linkedDoc.linkedFilePath, "README.md");
 		const reloadedLinked = await store.spaces.getDocument(linkedDoc.id);
 		assert.equal(reloadedLinked?.linkedFilePath, "README.md");
-		const memory = store.addMemory({
-			memberId: "product-manager",
-			scope: "role_general",
-			content: "Use clear examples",
-		});
-		const applicationIds = store.recordMemoryApplications({
-			memoryIds: [memory.id],
-			matterId: matter.id,
-			memberId: "product-manager",
-		});
 		const review = {
 			documentId: linkedDoc.id,
 			commitHash: linkedDoc.headCommit,
@@ -228,32 +218,13 @@ test("SpaceRepo initializes 5 space kinds, routes private matters to user space,
 			rating: "positive" as const,
 		};
 		await store.spaces.saveDocumentFeedback(review);
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
-		store.recordTurnOutcome({
-			candidates: [],
-			applicationIds,
-			spaceDocuments: [{ id: linkedDoc.id, headCommit: linkedDoc.headCommit }],
-		});
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
-		await store.spaces.saveDocumentFeedback(review);
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
+		assert.equal(store.spaces.listDocumentFeedback(linkedDoc.id)[0]?.rating, "positive");
 		await store.spaces.saveDocumentFeedback({ ...review, rating: "negative" });
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
-		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
+		assert.equal(store.spaces.listDocumentFeedback(linkedDoc.id)[0]?.rating, "negative");
 		await store.spaces.saveDocumentFeedback({ ...review, rating: "neutral" });
-		assert.equal(store.getMemory(memory.id)?.negativeCount, 0);
-		await store.spaces.saveDocumentFeedback({ ...review, rating: "negative" });
-		await store.spaces.saveDocumentFeedback({ ...review, actorId: "another-reviewer", rating: "positive" });
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 1);
-		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
-		db.prepare("DELETE FROM space_document_feedback WHERE document_id = ? AND actor_id = ?").run(
-			linkedDoc.id,
-			"another-reviewer",
-		);
-		assert.equal(store.getMemory(memory.id)?.positiveCount, 0);
-		assert.equal(store.getMemory(memory.id)?.negativeCount, 1);
+		assert.equal(store.spaces.listDocumentFeedback(linkedDoc.id)[0]?.rating, "neutral");
 		await store.spaces.saveDocumentFeedback({ ...review, rating: null });
-		assert.equal(store.getMemory(memory.id)?.negativeCount, 0);
+		assert.equal(store.spaces.listDocumentFeedback(linkedDoc.id)[0]?.rating, null);
 		const unrelated = await store.spaces.createDocument({
 			spaceId: custom.id,
 			title: "Another document",

@@ -1,63 +1,30 @@
 import { type ReactNode, type RefObject, useEffect, useMemo, useState } from "react";
-import type { MatterDetailPayload, MemberMemoryDto, OrganizationDto, TeamMemberDto, WorkspaceDto } from "../../api.ts";
+import type { MatterDetailPayload } from "../../api.ts";
 import { formatClockTime, formatNoticeEventLine, isKeyNoticeEvent } from "../../utils.ts";
-import { InlineExperienceReviewSection } from "../ExperienceReviewPanel.tsx";
 
-export type MatterCollabTab = "delegations" | "events" | "experiences" | "deliverables";
+export type MatterCollabTab = "delegations" | "events" | "deliverables";
 
 interface MatterCollabDrawerProps {
 	panelRef: RefObject<HTMLDivElement | null>;
 	collabTab: MatterCollabTab;
 	matterDetail: MatterDetailPayload;
-	selectedMemberId: string;
 	delegationPanel: ReactNode;
-	matterMemories: MemberMemoryDto[];
-	matterParticipantIds: string[];
-	members: TeamMemberDto[];
-	workspaces: WorkspaceDto[];
-	organizations: OrganizationDto[];
-	distillingMatter: boolean;
-	distillNote: string | null;
 	memberName: (id: string) => string;
-	workspaceName: (id: string | null) => string | null;
-	organizationName: (id: string | null) => string | null;
 	onSelectTab: (tab: MatterCollabTab) => void;
 	onOpenDeliverable: (id?: string) => void;
 	onClose: () => void;
-	onDistill: () => void;
-	onCancelDistill?: () => void;
-	onOpenTeam: () => void;
-	onRefresh: () => Promise<void>;
-	onNotice: (message: string) => void;
-	onError: (message: string) => void;
 }
 
-/** Top dock panel housing internal delegations, tool/process notice logs, matter experience distillation, and deliverables. */
+/** Top dock panel housing internal delegations, tool/process notice logs, and deliverables. */
 export function MatterCollabDrawer({
 	panelRef,
 	collabTab,
 	matterDetail,
-	selectedMemberId,
 	delegationPanel,
-	matterMemories,
-	matterParticipantIds,
-	members,
-	workspaces,
-	organizations,
-	distillingMatter,
-	distillNote,
 	memberName,
-	workspaceName,
-	organizationName,
 	onSelectTab,
 	onOpenDeliverable,
 	onClose,
-	onDistill,
-	onCancelDistill,
-	onOpenTeam,
-	onRefresh,
-	onNotice,
-	onError,
 }: MatterCollabDrawerProps) {
 	const [eventsKeyOnly, setEventsKeyOnly] = useState(false);
 	const [showAllEvents, setShowAllEvents] = useState(false);
@@ -98,14 +65,6 @@ export function MatterCollabDrawer({
 						</button>
 						<button
 							type="button"
-							className={`collab-tab-btn ${collabTab === "experiences" ? "active" : ""}`}
-							aria-pressed={collabTab === "experiences"}
-							onClick={() => onSelectTab("experiences")}
-						>
-							经验复盘 ({matterMemories.length})
-						</button>
-						<button
-							type="button"
 							className={`collab-tab-btn ${collabTab === "deliverables" ? "active" : ""}`}
 							aria-pressed={collabTab === "deliverables"}
 							onClick={() => onSelectTab("deliverables")}
@@ -118,30 +77,7 @@ export function MatterCollabDrawer({
 					</button>
 				</div>
 				<div className="collab-log">
-					{collabTab === "experiences" ? (
-						<InlineExperienceReviewSection
-							matterId={matterDetail.matter.id}
-							defaultMemberId={matterDetail.matter.leadMemberId ?? selectedMemberId}
-							workspaceId={matterDetail.matter.workspaceId}
-							participantIds={matterParticipantIds}
-							memories={matterMemories}
-							members={members}
-							workspaces={workspaces}
-							organizations={organizations}
-							memberName={memberName}
-							workspaceName={workspaceName}
-							organizationName={organizationName}
-							title="本事项团队经验复盘"
-							lastDistillNote={distillNote}
-							distilling={distillingMatter}
-							onDistill={onDistill}
-							onCancelDistill={onCancelDistill}
-							onOpenTeam={onOpenTeam}
-							onRefresh={onRefresh}
-							onNotice={onNotice}
-							onError={onError}
-						/>
-					) : collabTab === "delegations" ? (
+					{collabTab === "delegations" ? (
 						delegationPanel
 					) : collabTab === "deliverables" ? (
 						<div className="collab-section">

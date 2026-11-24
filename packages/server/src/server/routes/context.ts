@@ -5,22 +5,13 @@ import { resolveRepoGitUserIdentity } from "../../orchestrator/execution/executi
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime/runtime-info.ts";
 import type { TeamOrchestrator } from "../../orchestrator/team-orchestrator.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
-import type { MemberMemory, MemoryCategory, WorkspaceLink } from "../../storage/types.ts";
-import { canActorAccessMemory, canActorUseMember, canManageOrganization } from "../acl.ts";
+import type { WorkspaceLink } from "../../storage/types.ts";
+import { canManageOrganization } from "../acl.ts";
 import { extractClientIp, isSuperAdminActor, type RequestActor } from "../auth.ts";
 import type { DialogBroker } from "../dialog-broker.ts";
 import type { ActiveRunState, BackgroundDispatchInput } from "../dispatch-runner.ts";
 import type { PreviewManager } from "../preview-manager.ts";
 import type { SseBroadcastScope } from "../sse.ts";
-
-export const MEMORY_CATEGORIES = new Set<MemoryCategory>([
-	"general",
-	"efficiency",
-	"troubleshooting",
-	"collaboration",
-	"user_correction",
-	"domain_constraint",
-]);
 
 export interface ServerRouteContext {
 	store: PersonalAgentStore;
@@ -80,27 +71,6 @@ export function formatWorkspaceForActor(
 	};
 }
 
-export function formatScopedMemoryMap(store: PersonalAgentStore, actor: RequestActor): Record<string, unknown[]> {
-	const result: Record<string, unknown[]> = {};
-	for (const member of store.listMembers()) {
-		if (!canActorUseMember(store, actor, member)) {
-			continue;
-		}
-		result[member.id] = store
-			.listMemberMemories(member.id)
-			.filter((memory) => canActorAccessMemory(store, actor, memory, member));
-	}
-	return result;
-}
-
-export function formatMemoryMap(store: PersonalAgentStore): Record<string, unknown[]> {
-	const result: Record<string, unknown[]> = {};
-	for (const member of store.listMembers()) {
-		result[member.id] = store.listMemberMemories(member.id);
-	}
-	return result;
-}
-
 export function auditActorAction(
 	ctx: ServerRouteContext,
 	req: IncomingMessage,
@@ -124,12 +94,6 @@ export function auditActorAction(
 		detail: input.detail ?? null,
 		ip: extractClientIp(req),
 	});
-}
-
-export function broadcastMemoryUpdates(broadcast: ServerRouteContext["broadcast"], memories: MemberMemory[]): void {
-	for (const memory of memories) {
-		broadcast("memory_updated", { memberId: memory.memberId, memory }, { memory });
-	}
 }
 
 export function parseObserverMemberIds(raw: unknown, store: PersonalAgentStore): string[] | undefined {

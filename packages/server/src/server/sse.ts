@@ -1,7 +1,6 @@
 import type { ServerResponse } from "node:http";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { MemberMemory } from "../storage/types.ts";
-import { canAccessMatter, canAccessOrganization, canAccessWorkspace, canActorAccessMemory } from "./acl.ts";
+import { canAccessMatter, canAccessOrganization, canAccessWorkspace } from "./acl.ts";
 import { isSuperAdminActor, type RequestActor } from "./auth.ts";
 
 export interface SseBroadcastScope {
@@ -10,7 +9,6 @@ export interface SseBroadcastScope {
 	workspaceId?: string | null;
 	userId?: string | null;
 	adminOnly?: boolean;
-	memory?: MemberMemory;
 }
 
 interface SseClientMeta {
@@ -37,7 +35,6 @@ export function createSseHub(store?: PersonalAgentStore) {
 		if (scope.adminOnly) {
 			return isSuperAdminActor(actor);
 		}
-		if (scope.memory) return canActorAccessMemory(store, actor, scope.memory);
 		if (scope.userId) {
 			return Boolean(actor.user && actor.user.id === scope.userId);
 		}

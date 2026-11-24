@@ -127,7 +127,7 @@ test("HTTP API persists observerMemberIds and broadcasts proactive observer mess
 	}
 });
 
-test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memory lifecycle API", async () => {
+test("Server supports space document feedback evaluation", async () => {
 	const tempRoot = mkdtempSync(join(tmpdir(), "pa-server-rsi-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -154,28 +154,6 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 			},
 			setDialogHandler() {},
 			async runPromptAndWait() {
-				if (!options.env?.PA_TEAM_BRIDGE_URL) {
-					return {
-						disposition: "started",
-						aborted: false,
-						assistantText: JSON.stringify({
-							summary: "总结了一条新的工程发布规范",
-							candidates: [
-								{
-									scope: "role_general",
-									content: "接口变更需同时说明兼容与回滚方案",
-									rationale: "线上验收关注可回滚性",
-								},
-							],
-						}),
-						assistantMessages: [],
-						toolExecutions: [],
-						notices: [],
-						dialogs: [],
-						events: [],
-					};
-				}
-
 				await invokeTool(options, "save_space_page", {
 					type: "document",
 					title: "服务重构方案",
@@ -196,15 +174,6 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 			},
 			async stop() {},
 		}),
-	});
-
-	const seedMemory = store.addMemory({
-		memberId: "engineering-manager",
-		scope: "project_private",
-		workspaceId: workspace.id,
-		content: "交付工程设计前必须附上可运行验证命令",
-		verified: true,
-		status: "verified",
 	});
 
 	const { server } = createPersonalAgentServer({
@@ -246,7 +215,6 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		}
 		assert.ok(document);
 
-		// Submit positive acceptance rating -> links to applied seedMemory
 		const fbRes = await fetch(`${baseUrl}/api/spaces/documents/${document.id}/feedback`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -260,19 +228,6 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 		const fbJson = (await fbRes.json()) as { feedback: { rating: string } };
 		assert.equal(fbJson.feedback.rating, "positive");
 
-		// Check memory applications telemetry
-		const appsRes = await fetch(`${baseUrl}/api/memories/${seedMemory.id}/applications`);
-		assert.equal(appsRes.status, 200);
-		const appsJson = (await appsRes.json()) as {
-			memory: { appliedCount: number; positiveCount: number };
-			applications: Array<{ outcome: string }>;
-		};
-		assert.equal(appsJson.memory.appliedCount, 1);
-		assert.equal(appsJson.memory.positiveCount, 1);
-		assert.ok(appsJson.applications.some((a) => a.outcome === "applied"));
-		assert.ok(appsJson.applications.some((a) => a.outcome === "feedback_positive"));
-
-		// A rating is one current vote for this version; neutral retracts it.
 		for (const rating of ["negative", "positive", "neutral", "positive"]) {
 			const vote = await fetch(`${baseUrl}/api/spaces/documents/${document.id}/feedback`, {
 				method: "POST",
@@ -280,130 +235,9 @@ test("Server supports Phase 4 RSI feedback evaluation, AI distillation, and memo
 				body: JSON.stringify({ commitHash: document.headCommit, rating }),
 			});
 			assert.equal(vote.status, 200);
-			assert.equal(store.getMemory(seedMemory.id)?.positiveCount, rating === "positive" ? 1 : 0);
-			assert.equal(store.getMemory(seedMemory.id)?.negativeCount, rating === "negative" ? 1 : 0);
+			const voteJson = (await vote.json()) as { feedback: { rating: string } };
+			assert.equal(voteJson.feedback.rating, rating);
 		}
-		const badReplacement = await fetch(`${baseUrl}/api/memories`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				memberId: "qa-manager",
-				scope: "role_general",
-				content: "foreign replacement",
-				supersedesMemoryId: seedMemory.id,
-				status: "verified",
-			}),
-		});
-		assert.equal(badReplacement.status, 400);
-		assert.equal(store.getMemory(seedMemory.id)?.status, "verified");
-
-		// Trigger AI experience distillation via HTTP API
-		const distillRes = await fetch(`${baseUrl}/api/rsi/distill`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				matterId: created.matter.id,
-				feedback: "需要同时考虑回滚",
-				rating: "positive",
-			}),
-		});
-		assert.equal(distillRes.status, 200);
-		const distillJson = (await distillRes.json()) as {
-			ok: boolean;
-			createdMemories: Array<{ id: string; status: string; verified: boolean }>;
-		};
-		assert.equal(distillJson.ok, true);
-		assert.equal(distillJson.createdMemories.length, 1);
-		const candidateId = distillJson.createdMemories[0]!.id;
-		assert.equal(distillJson.createdMemories[0]!.status, "candidate");
-		assert.equal(distillJson.createdMemories[0]!.verified, false);
-
-		// Verify candidate -> verified, and evaluate manually
-		const patchRes = await fetch(`${baseUrl}/api/memories/${candidateId}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ status: "verified" }),
-		});
-		assert.equal(patchRes.status, 200);
-		const patchJson = (await patchRes.json()) as { memory: { status: string; verified: boolean } };
-		assert.equal(patchJson.memory.status, "verified");
-		assert.equal(patchJson.memory.verified, true);
-
-		const evalRes = await fetch(`${baseUrl}/api/memories/${candidateId}/evaluate`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ outcome: "negative", note: "补充更多案例" }),
-		});
-		assert.equal(evalRes.status, 200);
-		const evalJson = (await evalRes.json()) as { memory: { negativeCount: number } };
-		assert.equal(evalJson.memory.negativeCount, 1);
-
-		// Create categorized memory + reassign memberId via PATCH + validate rejection of bad category/memberId
-		const manualCatRes = await fetch(`${baseUrl}/api/memories`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				memberId: "engineering-manager",
-				scope: "role_general",
-				category: "troubleshooting",
-				content: "先 check 日志 tail 再重跑",
-				rationale: "定位问题更快",
-				sourceMatterId: created.matter.id,
-				status: "candidate",
-			}),
-		});
-		assert.equal(manualCatRes.status, 201);
-		const manualCatJson = (await manualCatRes.json()) as {
-			memory: { id: string; memberId: string; category: string };
-		};
-		assert.equal(manualCatJson.memory.category, "troubleshooting");
-
-		const reassignRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				memberId: "qa-manager",
-				category: "efficiency",
-				status: "verified",
-			}),
-		});
-		assert.equal(reassignRes.status, 200);
-		const reassignJson = (await reassignRes.json()) as {
-			memory: { memberId: string; category: string; verified: boolean };
-		};
-		assert.equal(reassignJson.memory.memberId, "qa-manager");
-		assert.equal(reassignJson.memory.category, "efficiency");
-		assert.equal(reassignJson.memory.verified, true);
-
-		const badCatRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ category: "invalid_category" }),
-		});
-		assert.equal(badCatRes.status, 400);
-
-		const missingMemberRes = await fetch(`${baseUrl}/api/memories/${manualCatJson.memory.id}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ memberId: "non-existent-role" }),
-		});
-		assert.equal(missingMemberRes.status, 404);
-
-		// Abort distillation endpoint returns aborted: false when idle and validates matterId
-		const idleAbortRes = await fetch(`${baseUrl}/api/rsi/distill/abort`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ matterId: created.matter.id }),
-		});
-		assert.equal(idleAbortRes.status, 200);
-		assert.deepEqual(await idleAbortRes.json(), { ok: true, aborted: false });
-
-		const badAbortRes = await fetch(`${baseUrl}/api/rsi/distill/abort`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({}),
-		});
-		assert.equal(badAbortRes.status, 400);
 	} finally {
 		await previewManager.stopAll();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

@@ -31,8 +31,6 @@ interface ChatStageHeaderProps {
 	collabOpen: boolean;
 	collabTab: MatterCollabTab;
 	moreMenuOpen: boolean;
-	pendingMatterMemoriesCount: number;
-	matterMemoriesCount: number;
 	deliverablesCount: number;
 	headerHumansBtnRef: RefObject<HTMLButtonElement | null>;
 	moreMenuWrapRef: RefObject<HTMLDivElement | null>;
@@ -62,8 +60,6 @@ export function ChatStageHeader({
 	collabOpen,
 	collabTab,
 	moreMenuOpen,
-	pendingMatterMemoriesCount,
-	matterMemoriesCount,
 	deliverablesCount,
 	headerHumansBtnRef,
 	moreMenuWrapRef,
@@ -164,23 +160,14 @@ export function ChatStageHeader({
 					<div ref={moreMenuWrapRef} className="header-more-wrap">
 						<button
 							type="button"
-							aria-label={
-								pendingMatterMemoriesCount > 0
-									? `更多功能（${pendingMatterMemoriesCount} 条待核验经验）`
-									: "更多功能"
-							}
+							aria-label="更多功能"
 							aria-haspopup="menu"
 							aria-expanded={moreMenuOpen}
 							className={`btn-pill-outline btn-xs header-more-btn ${moreMenuOpen || collabOpen ? "active" : ""}`}
-							title={
-								pendingMatterMemoriesCount > 0
-									? `团队委托、经验复盘（${pendingMatterMemoriesCount} 待核验）与资料空间`
-									: "团队委托、经验复盘与资料空间"
-							}
+							title="团队委托与资料空间"
 							onClick={onToggleMoreMenu}
 						>
 							<span aria-hidden="true">···</span>
-							{pendingMatterMemoriesCount > 0 && <span className="header-more-dot" aria-hidden="true" />}
 						</button>
 						{moreMenuOpen && (
 							<div role="menu" aria-label="更多功能" className="header-more-menu">
@@ -191,20 +178,6 @@ export function ChatStageHeader({
 									onClick={() => onSelectMorePanel("delegations")}
 								>
 									<span className="header-more-label">团队委托与事件</span>
-								</button>
-								<button
-									type="button"
-									role="menuitem"
-									className={`header-more-item ${collabOpen && collabTab === "experiences" ? "active" : ""}`}
-									onClick={() => onSelectMorePanel("experiences")}
-								>
-									<span className="header-more-label">经验复盘</span>
-									<span className="header-more-meta">
-										{matterMemoriesCount}
-										{pendingMatterMemoriesCount > 0 && (
-											<span className="header-more-pending">· {pendingMatterMemoriesCount} 待核验</span>
-										)}
-									</span>
 								</button>
 								<button
 									type="button"

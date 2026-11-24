@@ -5,7 +5,6 @@ import {
 	type CollaboratorDto,
 	exportMemberPackage,
 	type MatterDto,
-	type MemberMemoryDto,
 	type OrganizationAiRoleConfigDto,
 	type OrganizationDto,
 	type RoleTemplateDto,
@@ -35,10 +34,8 @@ interface TeamViewProps {
 	matters?: MatterDto[];
 	selectedOrgId?: string | null;
 	defaultWorkspaceId?: string | null;
-	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	memberName: (id: string) => string;
-	workspaceName: (id: string | null) => string | null;
 	organizationName?: (id: string | null) => string | null;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
@@ -46,11 +43,10 @@ interface TeamViewProps {
 	onAssignTask: (memberId: string) => void;
 	onOpenArchitect?: () => void;
 	onOpenArchitectMatter?: () => void;
-	onOpenMatter?: (matterId: string) => void;
 	onOpenOrganizations?: () => void;
 }
 
-/** Focused AI team workbench: role directory, experience curation, role packages, and team healthcheck. */
+/** Focused AI team workbench: role directory, role packages, and team healthcheck. */
 export function TeamView({
 	currentUser,
 	accountUser = null,
@@ -62,10 +58,8 @@ export function TeamView({
 	matters = [],
 	selectedOrgId = null,
 	defaultWorkspaceId = null,
-	memoriesByMember,
 	templateByRoleId,
 	memberName,
-	workspaceName,
 	organizationName,
 	onRefresh,
 	onNotice,
@@ -73,7 +67,6 @@ export function TeamView({
 	onAssignTask,
 	onOpenArchitect,
 	onOpenArchitectMatter,
-	onOpenMatter,
 	onOpenOrganizations,
 }: TeamViewProps) {
 	const isOwner = isSuperAdmin || (!accountUser && currentUser?.permissionRole !== "collaborator");
@@ -98,7 +91,7 @@ export function TeamView({
 		markdown: string;
 	} | null>(null);
 	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
-	const [inspectState, setInspectState] = useState<{ memberId: string; tab: "identity" | "memories" } | null>(null);
+	const [inspectedMemberId, setInspectedMemberId] = useState<string | null>(null);
 	const [savingPrimary, setSavingPrimary] = useState(false);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
 	const visibleBusinessMembers = useMemo(() => {
@@ -118,8 +111,8 @@ export function TeamView({
 		return { global, org, personal };
 	}, [businessMembers]);
 	const inspectedMember = useMemo(
-		() => (inspectState ? (members.find((m) => m.id === inspectState.memberId) ?? null) : null),
-		[inspectState, members],
+		() => (inspectedMemberId ? (members.find((m) => m.id === inspectedMemberId) ?? null) : null),
+		[inspectedMemberId, members],
 	);
 	const inspectedIndex = inspectedMember ? businessMembers.findIndex((m) => m.id === inspectedMember.id) : -1;
 	const inspectedCanManage = useMemo(
@@ -127,10 +120,6 @@ export function TeamView({
 		[inspectedMember, isSuperAdmin, accountUser, currentUser, organizations],
 	);
 
-	const matterWorkspaceById = useMemo(
-		() => new Map(matters.map((matter) => [matter.id, matter.workspaceId])),
-		[matters],
-	);
 	const activeWorkspace = useMemo(
 		() => workspaces.find((ws) => ws.id === defaultWorkspaceId) ?? null,
 		[workspaces, defaultWorkspaceId],
@@ -238,7 +227,7 @@ export function TeamView({
 				<div className="pane-header-row">
 					<div className="pane-header">
 						<h1>AI 团队</h1>
-						<p>专注 AI 岗位分工、经验核验与能力包管理；组织成员与主联系人配置请前往「组织」页。</p>
+						<p>专注 AI 岗位分工与能力包管理；组织成员与主联系人配置请前往「组织」页。</p>
 					</div>
 					{canCreateAnyRole && (
 						<div className="actions-row compact">
@@ -293,7 +282,7 @@ export function TeamView({
 										</span>
 									)}
 								</h2>
-								<p className="ui-section-desc">点开「详情与经验」可查看 Git 署名、禁用边界与三层记忆</p>
+								<p className="ui-section-desc">点开「身份与详情」可查看 Git 署名、核心职责与不做边界</p>
 							</div>
 							<div className="actions-row compact">
 								{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (
@@ -346,7 +335,6 @@ export function TeamView({
 									member={member}
 									index={idx}
 									template={templateByRoleId.get(member.templateId)}
-									memories={memoriesByMember[member.id] ?? []}
 									activeWorkspace={activeWorkspace}
 									activeOrg={primaryTargetOrg ?? activeOrg}
 									organizationName={organizationName}
@@ -365,7 +353,7 @@ export function TeamView({
 									onAssignTask={onAssignTask}
 									onSetPrimary={handleSetPrimary}
 									onExportMember={handleExportMember}
-									onInspectMember={(memberId, tab) => setInspectState({ memberId, tab })}
+									onInspectMember={(memberId) => setInspectedMemberId(memberId)}
 									onRefresh={onRefresh}
 									onNotice={onNotice}
 									onError={onError}
@@ -391,26 +379,13 @@ export function TeamView({
 				member={inspectedMember}
 				memberIndex={inspectedIndex}
 				template={inspectedMember ? templateByRoleId.get(inspectedMember.templateId) : undefined}
-				memories={inspectedMember ? (memoriesByMember[inspectedMember.id] ?? []) : []}
-				initialTab={inspectState?.tab ?? "identity"}
 				canEditIdentity={inspectedCanManage}
-				canCurateMemories={
-					isOwner || Boolean(inspectedMember && inspectedMember.roleScope === "personal" && inspectedCanManage)
-				}
 				isPrimary={inspectedMember ? inspectedMember.id === effectivePrimaryId : undefined}
 				effectiveGitOverride={inspectedEffectiveGitConfig}
-				members={members}
-				workspaces={workspaces}
-				organizations={organizations}
 				activeWorkspace={activeWorkspace}
 				activeOrg={primaryTargetOrg ?? activeOrg}
-				defaultWorkspaceId={defaultWorkspaceId}
-				matterWorkspaceById={matterWorkspaceById}
-				memberName={memberName}
-				workspaceName={workspaceName}
 				organizationName={organizationName}
-				onClose={() => setInspectState(null)}
-				onOpenMatter={onOpenMatter}
+				onClose={() => setInspectedMemberId(null)}
 				onRefresh={onRefresh}
 				onNotice={onNotice}
 				onError={onError}

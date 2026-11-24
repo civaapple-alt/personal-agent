@@ -8,9 +8,6 @@ import { collectTeamFrictionDigest } from "../packages/server/src/orchestrator/a
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";
-import { canActorAccessMemory } from "../packages/server/src/server/acl.ts";
-import type { RequestActor } from "../packages/server/src/server/auth.ts";
-import { userToCollaboratorView } from "../packages/server/src/server/auth.ts";
 import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
 import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { reportReady } from "./worker-helpers.ts";
@@ -90,49 +87,7 @@ test("workspace-less organization switches isolate native sessions and bounded h
 	assert.equal(f.calls[2]?.options.sessionFile, f.calls[0]?.file);
 });
 
-test("organization reflection includes its memories and excludes evidence from another organization", async (t) => {
-	let prompt = "";
-	const f = await fixture(t, async (value) => {
-		prompt = value;
-		return '{"candidates":[]}';
-	});
-	const matter = f.store.createMatter({ title: "reflection", orgId: f.a.id, leadMemberId: "product-manager" });
-	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "PRIVATE_ORG_A" });
-	f.store.updateMatterOrganization(matter.id, f.b.id);
-	f.store.addMemory({
-		memberId: "product-manager",
-		scope: "company_private",
-		orgId: f.b.id,
-		content: "ORG_B_EXISTING_RULE",
-	});
-	await f.orchestrator.dispatchMatter({ matterId: matter.id, prompt: "ORG_B_EVIDENCE" });
-	await f.orchestrator.distillExperiences({ matterId: matter.id });
-	assert.doesNotMatch(prompt, /PRIVATE_ORG_A/);
-	assert.match(prompt, /ORG_B_EXISTING_RULE/);
-	assert.match(prompt, /ORG_B_EVIDENCE/);
-});
-
-test("an organization change during reflection invalidates its candidate instead of saving under the old org", async (t) => {
-	const entered = Promise.withResolvers<void>();
-	const finish = Promise.withResolvers<string>();
-	const f = await fixture(t, async () => {
-		entered.resolve();
-		return finish.promise;
-	});
-	const matter = f.store.createMatter({
-		title: "change during reflection",
-		orgId: f.a.id,
-		leadMemberId: "product-manager",
-	});
-	const pending = f.orchestrator.distillExperiences({ matterId: matter.id });
-	await entered.promise;
-	f.store.updateMatterOrganization(matter.id, f.b.id);
-	finish.resolve('{"candidates":[{"scope":"company_private","content":"STALE_A_RULE"}]}');
-	await assert.rejects(pending, /[Oo]rganization.*changed/);
-	assert.equal(f.store.listMemberMemories("product-manager").length, 0);
-});
-
-test("legacy workspace reassignment isolates sessions and workspace-private memory", async (t) => {
+test("legacy workspace reassignment isolates sessions", async (t) => {
 	const f = await fixture(t);
 	const workspace = f.store.upsertWorkspace({ name: "reassigned", repoPath: f.root, orgId: f.a.id });
 	const first = await f.orchestrator.dispatchMatter({
@@ -141,33 +96,14 @@ test("legacy workspace reassignment isolates sessions and workspace-private memo
 		preferredMemberId: "product-manager",
 		observerMemberIds: ["engineering-manager"],
 	});
-	const memory = f.store.addMemory({
-		memberId: "product-manager",
-		scope: "project_private",
-		workspaceId: workspace.id,
-		content: "PRIVATE_WORKSPACE_A_MEMORY",
-		category: "user_correction",
-		verified: true,
-	});
-	const localOwner: RequestActor = {
-		authKind: "loopback",
-		collaborator: userToCollaboratorView(f.store, f.store.ensureLocalBootstrapAdmin("Fixture owner")),
-		user: null,
-		viaToken: false,
-	};
-	assert.ok(canActorAccessMemory(f.store, localOwner, memory));
-	assert.ok(f.store.listRelevantMemories("product-manager", workspace.id).some((item) => item.id === memory.id));
 	assert.throws(() => f.store.updateWorkspace(workspace.id, { orgId: f.b.id }), /无法更改所属组织/);
 	assert.equal(f.store.getWorkspace(workspace.id)?.orgId, f.a.id);
 
 	// Emulate a reassignment already stored by an older version.
 	f.db.prepare("UPDATE workspace_links SET org_id = ? WHERE id = ?").run(f.b.id, workspace.id);
 	assert.equal(f.store.hasWorkspaceScopeConflict(workspace.id), true);
-	assert.equal(canActorAccessMemory(f.store, localOwner, memory), false);
-	assert.equal(f.store.getMemory(memory.id)?.content, "PRIVATE_WORKSPACE_A_MEMORY");
-	assert.ok(!f.store.listRelevantMemories("product-manager", workspace.id).some((item) => item.id === memory.id));
 	const teamDigest = collectTeamFrictionDigest(f.store, new Map(), { orgId: f.b.id });
-	assert.doesNotMatch(teamDigest, /PRIVATE_WORKSPACE_A_MEMORY/);
+	assert.doesNotMatch(teamDigest, /PRIVATE_WORKSPACE_A/);
 	await f.orchestrator.dispatchMatter({ matterId: first.matter.id, prompt: "CURRENT_WORKSPACE_B" });
 	assert.equal(f.calls.length, 4);
 	for (const call of f.calls.slice(2)) {

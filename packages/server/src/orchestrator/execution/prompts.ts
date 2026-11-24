@@ -2,21 +2,9 @@ import { PA_WORKFLOW_ROUTING_RULE } from "@pa/ext-workflow/server";
 import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
-import type {
-	Matter,
-	MatterMessage,
-	MemberMemory,
-	Organization,
-	TeamMember,
-	WorkspaceLink,
-} from "../../storage/types.ts";
+import type { Matter, MatterMessage, Organization, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import { messageMatchesContext, selectMatterContext } from "../runtime/matter-context.ts";
-import {
-	MEMORY_CATEGORY_PROMPT_LABELS,
-	OBSERVER_SILENT_SENTINEL,
-	type ProgressSnapshot,
-	truncateInline,
-} from "../types.ts";
+import { OBSERVER_SILENT_SENTINEL, type ProgressSnapshot, truncateInline } from "../types.ts";
 import { PUBLICATION_REVIEW_GUIDANCE } from "./publication-review.ts";
 
 export function parseSnapshotFromMetadata(metadata: Record<string, unknown> | null): ProgressSnapshot | null {
@@ -302,7 +290,6 @@ export function buildObserverContextDigest(input: {
 export function buildMemberPrompts(input: {
 	member: TeamMember;
 	template?: RoleTemplate;
-	memories: MemberMemory[];
 	workspace: WorkspaceLink | null;
 	workspaceTopLevelEntries?: string[];
 	organization?: Organization | null;
@@ -368,46 +355,6 @@ export function buildMemberPrompts(input: {
 		if (input.template.sections.deliveryAndVerification) {
 			sections.push(`## Delivery and verification\n${input.template.sections.deliveryAndVerification}`);
 		}
-	}
-
-	if (input.memories.length > 0) {
-		const formatMemoryLine = (m: MemberMemory): string => {
-			const tag = m.status === "verified" ? `verified · ${m.scope}` : `unverified · ${m.scope}`;
-			const catPrefix =
-				m.category && m.category !== "general"
-					? `[${MEMORY_CATEGORY_PROMPT_LABELS[m.category] ?? m.category}] `
-					: "";
-			const suffix =
-				m.status === "candidate"
-					? " (Unverified historical memory. If current work proves a reusable workflow or rule, use propose_skill to save a SKILL.md for confirmation.)"
-					: "";
-			return `- [${m.id} | ${tag}] ${catPrefix}${m.content}${suffix}`;
-		};
-		const groups: Array<{ title: string; items: MemberMemory[] }> = [
-			{
-				title: "### Role-wide experience (role_general, shared across organizations and repositories)",
-				items: input.memories.filter((m) => m.scope === "role_general"),
-			},
-			{
-				title: organization
-					? `### Organization experience (company_private · ${organization.name}, shared across its repositories)`
-					: "### Organization or team experience (company_private)",
-				items: input.memories.filter((m) => m.scope === "company_private"),
-			},
-			{
-				title: input.workspace
-					? `### Current repository experience (project_private · ${input.workspace.name})`
-					: "### Current repository experience (project_private)",
-				items: input.memories.filter((m) => m.scope === "project_private"),
-			},
-		];
-		const memoryBlocks = groups
-			.filter((group) => group.items.length > 0)
-			.map((group) => `${group.title}\n${group.items.map(formatMemoryLine).join("\n")}`)
-			.join("\n\n");
-		turnSections.push(`## Scoped memories\n${memoryBlocks}`);
-	} else {
-		turnSections.push("## Scoped memories\nNo scoped memories are active for this turn.");
 	}
 
 	if (input.workspace) {

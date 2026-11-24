@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
 	deleteMember,
-	type MemberMemoryDto,
 	type OrganizationDto,
 	type RoleTemplateDto,
 	type TeamMemberDto,
@@ -15,7 +14,6 @@ interface MemberCardProps {
 	member: TeamMemberDto;
 	index: number;
 	template?: RoleTemplateDto;
-	memories: MemberMemoryDto[];
 	activeWorkspace: WorkspaceDto | null;
 	activeOrg: OrganizationDto | null;
 	organizationName?: (id: string | null) => string | null;
@@ -27,18 +25,17 @@ interface MemberCardProps {
 	onAssignTask: (memberId: string) => void;
 	onSetPrimary: (memberId: string) => Promise<void>;
 	onExportMember: (memberId: string) => Promise<void>;
-	onInspectMember: (memberId: string, tab: "identity" | "memories") => void;
+	onInspectMember: (memberId: string) => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
 }
 
-/** Light, scannable AI role card; Git identity, skills, and memory curation open in MemberInspectorModal. */
+/** Light, scannable AI role card; Git identity and role details open in MemberInspectorModal. */
 export function MemberCard({
 	member,
 	index,
 	template,
-	memories,
 	activeOrg,
 	organizationName,
 	canManage = true,
@@ -121,8 +118,6 @@ export function MemberCard({
 
 	const theme = getBotTheme(index);
 	const gitIdentity = formatMemberGitIdentity(member, activeOrg);
-	const verifiedCount = memories.filter((m) => m.status === "verified" || (!m.status && m.verified)).length;
-	const candidateCount = memories.filter((m) => m.status === "candidate" || (!m.status && !m.verified)).length;
 
 	const cleanResponsibility = template?.responsibilities
 		? stripMarkdownFormatting(template.responsibilities.split("\n")[0] ?? "")
@@ -167,9 +162,6 @@ export function MemberCard({
 						<span>{antiJobsCount} 条边界</span>
 					</>
 				)}
-				{candidateCount > 0 && <span className="rsi-badge rsi-status-candidate">{candidateCount} 待核验</span>}
-				{verifiedCount > 0 && <span className="pill">{verifiedCount} 经验</span>}
-				<span aria-hidden="true">·</span>
 			</div>
 
 			<div className="member-card-footer">
@@ -179,12 +171,8 @@ export function MemberCard({
 							向 TA 派活
 						</button>
 					)}
-					<button
-						type="button"
-						className="btn-pill-outline btn-xs"
-						onClick={() => onInspectMember(member.id, memories.length > 0 ? "memories" : "identity")}
-					>
-						详情与经验{memories.length > 0 ? ` (${memories.length})` : ""}
+					<button type="button" className="btn-pill-outline btn-xs" onClick={() => onInspectMember(member.id)}>
+						身份与详情
 					</button>
 				</div>
 				<div className="member-more-wrap" ref={menuRef}>
@@ -224,7 +212,7 @@ export function MemberCard({
 								role="menuitem"
 								onClick={() => {
 									closeMenu();
-									onInspectMember(member.id, "identity");
+									onInspectMember(member.id);
 								}}
 							>
 								身份与 Git 署名

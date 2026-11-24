@@ -3,7 +3,6 @@ import type {
 	MatterDto,
 	MatterMessageDto,
 	MatterProgressDto,
-	MemberMemoryDto,
 	MessageFileDto,
 	MessageImageDto,
 	ProgressActivityDto,
@@ -163,33 +162,6 @@ export function formatNoticeEventLine(rawContent: string): string {
 		}
 	}
 	return rawContent.length > 240 ? `${rawContent.slice(0, 240)}…` : rawContent;
-}
-
-const MEMORY_STATUS_SORT_ORDER: Record<string, number> = {
-	candidate: 0,
-	verified: 1,
-	superseded: 2,
-	rejected: 3,
-};
-
-export function collectMatterMemories(
-	memoriesByMember: Record<string, MemberMemoryDto[]>,
-	matterId: string,
-): MemberMemoryDto[] {
-	const items: MemberMemoryDto[] = [];
-	for (const list of Object.values(memoriesByMember)) {
-		for (const memory of list) {
-			if (memory.sourceMatterId === matterId) {
-				items.push(memory);
-			}
-		}
-	}
-	return items.sort((a, b) => {
-		const aRank = MEMORY_STATUS_SORT_ORDER[a.status] ?? 9;
-		const bRank = MEMORY_STATUS_SORT_ORDER[b.status] ?? 9;
-		if (aRank !== bRank) return aRank - bRank;
-		return b.createdAt.localeCompare(a.createdAt);
-	});
 }
 
 export function collectMatterParticipantIds(params: {

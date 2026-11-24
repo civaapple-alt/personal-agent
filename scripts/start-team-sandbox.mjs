@@ -303,34 +303,12 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			rating: "positive",
 		});
 
-		const verifiedOrgMem = store.addMemory({
-			memberId: "product-manager",
-			scope: "company_private",
-			category: "domain_constraint",
-			orgId: alphaOrg.id,
-			content: "Alpha Studio 所有发布方案必须附带灰度放量比例、监控阈值与一键回滚开关。",
-			rationale: "来自历史发布复盘沉淀",
-			sourceMatterId: mAlphaShared.id,
-			status: "verified",
-			verified: true,
-		});
-		const appIds = store.recordMemoryApplications({
-			memoryIds: [verifiedOrgMem.id],
-			matterId: mAlphaShared.id,
-			memberId: "product-manager",
-			note: "修订 V2 发布方案时自动注入组织发布约束",
-		});
 		const alphaDocumentV2 = await store.spaces.updateDocument(alphaDocumentV1.id, {
 			revision: alphaDocumentV1.revision,
 			title: "Q4 发布计划与架构方案",
 			content: "# Q4 发布计划（V2）\n\n按 5% → 25% → 100% 灰度放量，错误率超阈值时回滚。",
 			actorId: ownerAlpha.id,
 			actorName: ownerAlpha.displayName,
-		});
-		store.recordTurnOutcome({
-			candidates: [],
-			applicationIds: appIds,
-			spaceDocuments: [{ id: alphaDocumentV2.id, headCommit: alphaDocumentV2.headCommit }],
 		});
 		store.appendMessage({
 			matterId: mAlphaShared.id,
@@ -340,17 +318,6 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			senderName: "Product Manager",
 			content: "已依据 V1 反馈发布《Q4 发布计划与架构方案》V2，补充灰度比例与回滚阈值。",
 			metadata: { spaceDocuments: [alphaDocumentV2] },
-		});
-		store.addMemory({
-			memberId: "qa-manager",
-			scope: "company_private",
-			category: "efficiency",
-			orgId: alphaOrg.id,
-			content: "发布检查清单应先执行离线启动检查再进入灰度验证。",
-			rationale: "来自 Q4 发布方案 V2 复盘候选",
-			sourceMatterId: mAlphaShared.id,
-			status: "candidate",
-			verified: false,
 		});
 
 		const mAlphaPrivate = store.createMatter({
@@ -397,17 +364,6 @@ export async function seedTeamSandbox({ sandboxRoot, password = DEFAULT_SANDBOX_
 			content: "# 核心密钥轮换与审计清单\n\n每 90 天双密钥平滑切换，核查仓库访问权限。",
 			actorId: ownerAlpha.id,
 			actorName: ownerAlpha.displayName,
-		});
-		store.addMemory({
-			memberId: "engineering-manager",
-			scope: "project_private",
-			category: "domain_constraint",
-			workspaceId: wsAlphaSecret.id,
-			content: "Alpha Secret 仓库任何配置变更须采用双密钥滚动过渡，禁止原地覆盖。",
-			rationale: "受限仓库专属约束",
-			sourceMatterId: mAlphaSecret.id,
-			status: "verified",
-			verified: true,
 		});
 
 		const mBetaShared = store.createMatter({

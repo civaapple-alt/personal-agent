@@ -6,10 +6,8 @@ import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
 	CollaboratorDto,
-	DistillRsiResult,
 	MatterDetailPayload,
 	MatterProgressDto,
-	MemberMemoryDto,
 	OrganizationDto,
 	OrganizationMemberDto,
 	PendingDialogDto,
@@ -38,7 +36,6 @@ import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
 import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
 import { ViewFade } from "../primitives/ViewTransitions.tsx";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
-import { collectMatterMemories, collectMatterParticipantIds } from "../utils/matterStream.ts";
 import { transitionView } from "../viewTransitions.ts";
 
 type ComposerDraftProps = Pick<
@@ -105,10 +102,7 @@ interface ChatStageProps {
 	streamingDelta: string;
 	submitting: boolean;
 	templateByRoleId: Map<string, RoleTemplateDto>;
-	memoriesByMember: Record<string, MemberMemoryDto[]>;
 	memberName: (id: string) => string;
-	workspaceName: (id: string | null) => string | null;
-	organizationName: (id: string | null) => string | null;
 	onSelectOrganization: (orgId: string) => void;
 	onSelectWorkspace: (workspaceId: string) => void;
 	matterAiMemberIds: string[];
@@ -139,11 +133,8 @@ interface ChatStageProps {
 	onNewMatter: () => void;
 	onOpenDeliverables: (deliverableId?: string) => void;
 	onOpenTeam: () => void;
-	onDistillMatter: (matterId: string) => Promise<DistillRsiResult | undefined>;
-	onCancelDistillMatter?: (matterId: string) => void;
 	onRefresh: () => Promise<void>;
 	onNotice: (message: string) => void;
-	onError: (message: string) => void;
 }
 
 /** Coordinates the active matter workspace: header bar, participant/collab popovers, scrollable stream, and composer. */
@@ -174,10 +165,7 @@ export function ChatStage({
 	streamingDelta,
 	submitting,
 	templateByRoleId,
-	memoriesByMember,
 	memberName,
-	workspaceName,
-	organizationName,
 	onSelectOrganization,
 	onSelectWorkspace,
 	matterAiMemberIds,
@@ -204,11 +192,8 @@ export function ChatStage({
 	onNewMatter,
 	onOpenDeliverables,
 	onOpenTeam,
-	onDistillMatter,
-	onCancelDistillMatter,
 	onRefresh,
 	onNotice,
-	onError,
 }: ChatStageProps) {
 	const { onExpandPastedFile, ...dockDraft } = composerDraft;
 	const { composerText, pendingFiles } = dockDraft;
@@ -217,8 +202,6 @@ export function ChatStage({
 	const [collabTab, setCollabTab] = useState<MatterCollabTab>("delegations");
 	const [delegationScope, setDelegationScope] = useState<DelegationScope>("latest");
 	const [delegationView, setDelegationView] = useState<DelegationView>("board");
-	const [distillingMatter, setDistillingMatter] = useState(false);
-	const [distillNoteByMatter, setDistillNoteByMatter] = useState<Record<string, string>>({});
 	const [rosterOpen, setRosterOpen] = useState(false);
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
@@ -326,47 +309,6 @@ export function ChatStage({
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [closeCollab, collabOpen, rosterOpen, moreMenuOpen, resetRoster]);
-
-	const matterMemories = useMemo(
-		() => (matterDetail ? collectMatterMemories(memoriesByMember, matterDetail.matter.id) : []),
-		[memoriesByMember, matterDetail],
-	);
-	const pendingMatterMemoriesCount = useMemo(
-		() => matterMemories.filter((m) => (m.status ?? (m.verified ? "verified" : "candidate")) === "candidate").length,
-		[matterMemories],
-	);
-	const matterParticipantIds = useMemo(
-		() =>
-			matterDetail
-				? collectMatterParticipantIds({
-						matter: matterDetail.matter,
-						userMessages: matterDetail.userMessages,
-						internalCollabMessages: matterDetail.internalCollabMessages,
-					})
-				: [],
-		[matterDetail],
-	);
-
-	const handleDistillCurrentMatter = async () => {
-		if (!matterDetail) return;
-		const targetMatterId = matterDetail.matter.id;
-		setDistillingMatter(true);
-		try {
-			const res = await onDistillMatter(targetMatterId);
-			if (res) {
-				const note = res.aborted
-					? "已取消本次 AI 经验复盘。"
-					: res.createdMemories.length > 0
-						? `AI 复盘完成：已从协同轨迹为 ${Array.from(new Set(res.createdMemories.map((m) => memberName(m.memberId)))).join("、")} 提炼 ${res.createdMemories.length} 条经验。`
-						: res.skippedDuplicates > 0
-							? `AI 复盘完成：未新增重复条目（跳过 ${res.skippedDuplicates} 条相似经验）。`
-							: `AI 复盘完成：${res.summary}`;
-				setDistillNoteByMatter((prev) => ({ ...prev, [targetMatterId]: note }));
-			}
-		} finally {
-			setDistillingMatter(false);
-		}
-	};
 
 	const isTurnRunning = Boolean(selectedMatterId && activeMatterProgress);
 	const loadedMatterId = matterDetail?.matter.id ?? null;
@@ -511,8 +453,6 @@ export function ChatStage({
 					collabOpen={collabOpen}
 					collabTab={collabTab}
 					moreMenuOpen={moreMenuOpen}
-					pendingMatterMemoriesCount={pendingMatterMemoriesCount}
-					matterMemoriesCount={matterMemories.length}
 					deliverablesCount={matterDetail?.spaceDocuments?.length ?? 0}
 					headerHumansBtnRef={headerHumansBtnRef}
 					moreMenuWrapRef={moreMenuWrapRef}
@@ -581,7 +521,6 @@ export function ChatStage({
 									onOpenDeliverables(targetId);
 								}
 							}}
-							selectedMemberId={selectedMemberId}
 							delegationPanel={
 								<MatterDelegationPanel
 									delegations={delegations}
@@ -603,26 +542,9 @@ export function ChatStage({
 									}}
 								/>
 							}
-							matterMemories={matterMemories}
-							matterParticipantIds={matterParticipantIds}
-							members={members}
-							workspaces={workspaces}
-							organizations={organizations}
-							distillingMatter={distillingMatter}
-							distillNote={distillNoteByMatter[matterDetail.matter.id] ?? null}
 							memberName={memberName}
-							workspaceName={workspaceName}
-							organizationName={organizationName}
 							onSelectTab={setCollabTab}
 							onClose={() => transitionView("panel", closeCollab)}
-							onDistill={() => void handleDistillCurrentMatter()}
-							onCancelDistill={
-								onCancelDistillMatter ? () => onCancelDistillMatter(matterDetail.matter.id) : undefined
-							}
-							onOpenTeam={onOpenTeam}
-							onRefresh={onRefresh}
-							onNotice={onNotice}
-							onError={onError}
 						/>
 					</ViewFade>
 				)}

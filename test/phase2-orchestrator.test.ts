@@ -128,49 +128,6 @@ test("loads 4 shareable role templates alongside README and serializes without p
 	assert.deepEqual(parsed.sections, pm.sections);
 });
 
-test("isolates project-private memories across workspaces while preserving shared role/company memories", async () => {
-	const db = openPersonalAgentDatabase(":memory:");
-	const store = new PersonalAgentStore(db);
-	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
-	new TeamOrchestrator({ store, templates });
-
-	const wsA = store.upsertWorkspace({ name: "订单系统", repoPath: "/tmp/repo-orders" });
-	const wsB = store.upsertWorkspace({ name: "客户管理", repoPath: "/tmp/repo-crm" });
-
-	store.addMemory({
-		memberId: "engineering-manager",
-		scope: "role_general",
-		content: "改动前先跑 typecheck",
-		verified: true,
-	});
-	store.addMemory({
-		memberId: "engineering-manager",
-		scope: "company_private",
-		workspaceId: wsA.id,
-		content: "公司默认采用 Node 22+",
-		verified: true,
-	});
-	store.addMemory({
-		memberId: "engineering-manager",
-		scope: "project_private",
-		workspaceId: wsA.id,
-		content: "订单表金额字段为分",
-	});
-	store.addMemory({
-		memberId: "engineering-manager",
-		scope: "project_private",
-		workspaceId: wsB.id,
-		content: "CRM 导出有字段脱敏",
-	});
-
-	const forA = store.listRelevantMemories("engineering-manager", wsA.id).map((m) => m.content);
-	assert.deepEqual(forA, ["改动前先跑 typecheck", "公司默认采用 Node 22+", "订单表金额字段为分"]);
-
-	const forB = store.listRelevantMemories("engineering-manager", wsB.id).map((m) => m.content);
-	assert.deepEqual(forB, ["改动前先跑 typecheck", "CRM 导出有字段脱敏"]);
-	db.close();
-});
-
 test("routes tasks by role, keeps internal_collab & notices separate, and handles waiting_user", async () => {
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -338,7 +295,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			description: "Core engineering org",
 		});
 		assert.equal(orgAcme.useRoleGitIdentity, false);
-		const orgBeta = store.upsertOrganization({
+		store.upsertOrganization({
 			id: "org-beta",
 			name: "Beta Labs",
 			gitEmailDomain: "beta.io",
@@ -367,42 +324,6 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.equal(syncedPm.gitName, "PM Alice");
 		assert.equal(syncedPm.gitEmail, "product-manager@team.local");
 		assert.equal(syncedPm.identitySummary, "Owns checkout product metrics across Acme");
-
-		// Seed 3-tier memories
-		store.addMemory({
-			memberId: "product-manager",
-			scope: "role_general",
-			verified: true,
-			content: "GLOBAL_RULE: Always list clear acceptance criteria",
-		});
-		store.addMemory({
-			memberId: "product-manager",
-			scope: "company_private",
-			orgId: orgAcme.id,
-			verified: true,
-			content: "ACME_ORG_MEM: All Acme services release on Thursdays",
-		});
-		store.addMemory({
-			memberId: "product-manager",
-			scope: "company_private",
-			orgId: orgBeta.id,
-			verified: true,
-			content: "BETA_ORG_MEM: Beta internal rule must never leak to Acme",
-		});
-		store.addMemory({
-			memberId: "product-manager",
-			scope: "project_private",
-			workspaceId: wsA.id,
-			verified: true,
-			content: "REPO_A_MEM: repo-a uses Postgres 16",
-		});
-		store.addMemory({
-			memberId: "product-manager",
-			scope: "project_private",
-			workspaceId: wsB.id,
-			verified: true,
-			content: "REPO_B_MEM: repo-b uses SQLite",
-		});
 
 		// Default behavior (useRoleGitIdentity = false): do NOT inject AI role Git env; commit using repository's own Git user
 		await orchestrator.dispatchMatter({
@@ -448,11 +369,6 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.match(ctxA, /PM Alice <product-manager@acme\.dev>/);
 		assert.match(ctxA, /Git committer \(repository user\): Real Repo Owner <owner@company\.com>/);
 		assert.match(ctxA, /Owns checkout product metrics across Acme/);
-		assert.match(ctxA, /GLOBAL_RULE/);
-		assert.match(ctxA, /ACME_ORG_MEM/);
-		assert.match(ctxA, /REPO_A_MEM/);
-		assert.doesNotMatch(ctxA, /REPO_B_MEM/);
-		assert.doesNotMatch(ctxA, /BETA_ORG_MEM/);
 
 		// Dispatch PM in wsB (same Acme org, different repo!)
 		await orchestrator.dispatchMatter({
@@ -460,12 +376,7 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 			preferredMemberId: "product-manager",
 			workspaceId: wsB.id,
 		});
-		const ctxB = workers[2]?.options.env?.PA_TURN_CONTEXT ?? "";
-		assert.match(ctxB, /GLOBAL_RULE/);
-		assert.match(ctxB, /ACME_ORG_MEM/);
-		assert.match(ctxB, /REPO_B_MEM/);
-		assert.doesNotMatch(ctxB, /REPO_A_MEM/);
-		assert.doesNotMatch(ctxB, /BETA_ORG_MEM/);
+		assert.equal(workers[2]?.options.env?.PA_ORG_ID, "org-acme");
 
 		// Dispatch PM in wsC (standalone workspace without org -> always keeps repo default Git user)
 		await orchestrator.dispatchMatter({
@@ -477,10 +388,6 @@ test("organization identity, 3-tier memory scope sharing/isolation, and real Git
 		assert.equal(workers[3]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
 		assert.equal(workers[3]?.options.env?.GIT_COMMITTER_EMAIL, undefined);
 		assert.match(ctxC, /Git identity \(repository default\): Real Repo Owner <owner@company\.com>/);
-		assert.match(ctxC, /GLOBAL_RULE/);
-		assert.doesNotMatch(ctxC, /ACME_ORG_MEM/);
-		assert.doesNotMatch(ctxC, /BETA_ORG_MEM/);
-		assert.doesNotMatch(ctxC, /REPO_A_MEM/);
 
 		// Dispatch engineering-manager in wsA: executes real git commit and proves role Author + real user Committer
 		await orchestrator.dispatchMatter({
@@ -588,18 +495,11 @@ test("default gitName uses English roleTitle/id and preserves explicitly saved U
 		const store = new PersonalAgentStore(reopened);
 		assert.equal(store.getMember("architect-lead")?.gitName, "系统架构师");
 
-		// Workspace-less matter under an explicit org injects org context & company_private memories
+		// Workspace-less matter under an explicit org injects org context
 		const org = store.upsertOrganization({
 			id: "org-test",
 			name: "test-org",
 			gitEmailDomain: "test-team.local",
-		});
-		store.addMemory({
-			memberId: "architect-lead",
-			scope: "company_private",
-			orgId: org.id,
-			verified: true,
-			content: "TEST_ORG_ONLY: Follow test-org RFC format",
 		});
 		const matter = store.createMatter({
 			title: "Org-level design",
@@ -631,7 +531,6 @@ test("default gitName uses English roleTitle/id and preserves explicitly saved U
 		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_NAME, undefined);
 		assert.equal(workers[0]?.options.env?.GIT_AUTHOR_EMAIL, undefined);
 		assert.equal(workers[0]?.options.env?.PA_ORG_ID, org.id);
-		assert.match(workers[0]?.options.env?.PA_TURN_CONTEXT ?? "", /TEST_ORG_ONLY/);
 
 		store.updateOrganization(org.id, { useRoleGitIdentity: true });
 		await orchestrator.dispatchMatter({

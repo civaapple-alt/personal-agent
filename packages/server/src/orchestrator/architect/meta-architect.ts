@@ -24,7 +24,6 @@ import {
 	collectTeamHealthFeedback,
 	filterTeamMembersForScope,
 	formatTeamHealthEvidence,
-	isTeamHealthMemoryInScope,
 	type TeamHealthEvidence,
 	type TeamHealthScopeFilter,
 } from "../rsi/team-health.ts";
@@ -137,7 +136,6 @@ export function collectTeamFrictionDigest(
 	scope?: TeamHealthScopeFilter,
 ): string {
 	const members = listBusinessMembers(store, templatesById, scope);
-	const memberIds = new Set(members.map((m) => m.id));
 	const matters = store
 		.listMatters()
 		.filter((matter) => {
@@ -158,15 +156,6 @@ export function collectTeamFrictionDigest(
 			if (msg.metadata?.observerIntervention === true) observerNotes += 1;
 		}
 	}
-	const candidateMemories = members
-		.flatMap((m) => store.listMemberMemories(m.id))
-		.filter((mem) => {
-			if (!memberIds.has(mem.memberId) || !isTeamHealthMemoryInScope(mem, scope)) return false;
-			return mem.status === "candidate" || mem.category === "user_correction" || mem.category === "collaboration";
-		})
-		.slice(-8)
-		.map((mem) => `- [${mem.memberId} · ${mem.category}] ${truncateInline(mem.content, 120)}`);
-
 	return [
 		`- Current AI roles (${members.length}): ${members
 			.map((m) => {
@@ -177,9 +166,6 @@ export function collectTeamFrictionDigest(
 			})
 			.join(", ")}`,
 		`- Across the latest ${matters.length} matters: ${failedCount} failures, ${abortedCount} cancellations, and ${observerNotes} observer comments. Across organization-visible Space documents: ${negativeFeedback} negative ratings. Treat counts as leads.`,
-		candidateMemories.length > 0
-			? `- Recent correction and collaboration signals:\n${candidateMemories.join("\n")}`
-			: "",
 		`- Citable cases and configuration. The records establish what was observed:\n${formatTeamHealthEvidence(collectTeamHealthEvidence(store, templatesById, scope))}`,
 	]
 		.filter(Boolean)

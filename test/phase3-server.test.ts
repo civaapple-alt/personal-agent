@@ -455,24 +455,12 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 		const primaryJson = (await primaryRes.json()) as { member: { isPrimaryContact: boolean } };
 		assert.equal(primaryJson.member.isPrimaryContact, true);
 
-		// 5. Save private & general memories, then export package -> private memories stay excluded
-		const memRes = await fetch(`${baseUrl}/api/memories`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				memberId: newMemberPayload.member.id,
-				scope: "company_private",
-				content: "内部秘密代号 PROJECT_OMEGA",
-			}),
-		});
-		assert.equal(memRes.status, 201);
-
+		// 5. Export role package
 		const exportRes = await fetch(`${baseUrl}/api/members/${newMemberPayload.member.id}/export`);
 		assert.equal(exportRes.status, 200);
 		const exported = (await exportRes.json()) as { filename: string; markdown: string };
 		assert.match(exported.filename, /\.md$/);
 		assert.match(exported.markdown, /架构师/);
-		assert.doesNotMatch(exported.markdown, /PROJECT_OMEGA/);
 
 		// 6. Import role package as a separate role template
 		const importMarkdown = exported.markdown

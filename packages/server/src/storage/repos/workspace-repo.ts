@@ -7,7 +7,6 @@ import type { OrganizationRepo } from "./organization-repo.ts";
 
 const WORKSPACE_HAS_HISTORY_OR_GRANTS = `
 	EXISTS (SELECT 1 FROM matters WHERE workspace_id = w.id)
-	OR EXISTS (SELECT 1 FROM member_memories WHERE workspace_id = w.id)
 	OR EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = w.id)
 	OR EXISTS (SELECT 1 FROM worker_sessions WHERE workspace_id = w.id)
 	OR EXISTS (SELECT 1 FROM matter_messages WHERE ${MESSAGE_WORKSPACE_ID_SQL} = w.id)

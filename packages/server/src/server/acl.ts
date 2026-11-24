@@ -5,14 +5,7 @@ import { ROLE_ARCHITECT_MEMBER_ID } from "../roles/role-architect.ts";
 import type { RoleScope } from "../roles/types.ts";
 import type { SpaceRecord } from "../storage/repos/space-repo.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type {
-	Matter,
-	MemberMemory,
-	OrgMemberRole,
-	PlatformSettings,
-	TeamMember,
-	WorkspaceLink,
-} from "../storage/types.ts";
+import type { Matter, OrgMemberRole, PlatformSettings, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import { isSuperAdminActor, type RequestActor, requireActiveActor } from "./auth.ts";
 import { sendError } from "./http.ts";
 
@@ -180,24 +173,6 @@ export function canActorManageMember(
 		);
 	}
 	return isSuperAdminActor(actor);
-}
-
-export function canActorAccessMemory(
-	store: PersonalAgentStore,
-	actor: RequestActor | null,
-	memory: Pick<MemberMemory, "memberId" | "scope" | "orgId" | "workspaceId">,
-	member = store.getMember(memory.memberId),
-): boolean {
-	if (!canActorUseMember(store, actor, member)) return false;
-	if (memory.scope === "role_general") return true;
-	if (memory.scope === "company_private" && memory.orgId) {
-		return canAccessOrganization(store, actor, memory.orgId);
-	}
-	return Boolean(
-		memory.workspaceId &&
-			canAccessWorkspace(store, actor, store.getWorkspace(memory.workspaceId)) &&
-			!store.hasWorkspaceScopeConflict(memory.workspaceId),
-	);
 }
 
 export function canAccessWorkspace(

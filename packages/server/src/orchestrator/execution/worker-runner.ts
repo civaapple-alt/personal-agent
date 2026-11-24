@@ -571,9 +571,6 @@ export async function executeWithWorkerPass(
 		const workspaceTopLevelEntries = input.workspace ? listWorkspaceTopLevelEntries(cwd) : undefined;
 		const committerName = repoGitUser?.name || gitIdentity.gitName;
 		const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
-		const relevantMemories = deps.store.listRelevantMemories(effectiveMember.id, input.workspace?.id ?? null, {
-			orgId: activeOrgId,
-		});
 		const matterModel =
 			sessionMode === "lead" &&
 			(!(isArchitect || isDiscussionMode || input.run.keepMatterLead) || input.member.id === matter?.leadMemberId)
@@ -593,7 +590,6 @@ export async function executeWithWorkerPass(
 		const { systemPrompt, turnContext } = buildMemberPrompts({
 			member: effectiveMember,
 			template,
-			memories: relevantMemories,
 			workspace: input.workspace,
 			workspaceTopLevelEntries,
 			organization,
@@ -1056,15 +1052,6 @@ export async function executeWithWorkerPass(
 			contextKey,
 			messageCursor: messages.at(-1)?.id,
 		});
-		if (relevantMemories.length > 0) {
-			effects.applicationIds.push(
-				...deps.store.recordMemoryApplications({
-					memoryIds: relevantMemories.map((memory) => memory.id),
-					matterId: input.matterId,
-					memberId: input.member.id,
-				}),
-			);
-		}
 		const remainingTimeoutMs =
 			input.run.deadlineAt !== null
 				? Math.max(1, Math.min(input.run.timeoutMs, input.run.deadlineAt - Date.now()))

@@ -498,36 +498,6 @@ export async function dispatchMatterTurn(
 				rawReply ||
 				(decision ? "等待你在卡片里提交决定。" : "本轮未返回正文，请继续追问；执行记录保留在协作过程中。");
 		const savedDocuments = !aborted && !isDiscussionTurn ? run.effects.savedDocuments : [];
-		if (
-			!aborted &&
-			!isDiscussionTurn &&
-			(run.effects.experiences.length > 0 || run.effects.applicationIds.length > 0)
-		) {
-			run.controller.signal.throwIfAborted();
-			const outcome = deps.store.recordTurnOutcome({
-				candidates: run.effects.experiences,
-				applicationIds: run.effects.applicationIds,
-				spaceDocuments: savedDocuments,
-			});
-			for (const memory of outcome.memories)
-				deps.store.appendMessage({
-					matterId: matter.id,
-					channel: "notice",
-					senderType: "system",
-					senderId: memory.memberId,
-					content: JSON.stringify({
-						method: "rsi_candidate_proposed",
-						memoryId: memory.id,
-						scope: memory.scope,
-						category: memory.category,
-						content: memory.content,
-					}),
-					metadata: {
-						workspaceId: workspace?.id ?? null,
-						repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
-					},
-				});
-		}
 		const leadMessage = deps.store.appendMessage({
 			matterId: matter.id,
 			channel: "user",

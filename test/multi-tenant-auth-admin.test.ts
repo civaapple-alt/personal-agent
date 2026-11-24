@@ -753,18 +753,6 @@ test("Team event streams share the resource ACL and logout closes only the curre
 		assert.equal((await post("/api/auth/logout", ownerCookie, {})).status, 200);
 		assert.match(await signedOutStream.text(), /event: connected/);
 
-		const privateMemory = await post("/api/memories", otherOwnerCookie, {
-			memberId,
-			scope: "project_private",
-			workspaceId: workspace.id,
-			content: "RESTRICTED_PROJECT_MEMORY",
-		});
-		assert.equal(privateMemory.status, 201);
-		const { memory } = (await privateMemory.json()) as { memory: { id: string } };
-		const applicationsUrl = `${baseUrl}/api/memories/${memory.id}/applications`;
-		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: otherOwnerCookie } })).status, 200);
-		assert.equal((await fetch(applicationsUrl, { headers: { Cookie: teammateCookie } })).status, 403);
-
 		const previewResponse = await post("/api/previews", otherOwnerCookie, {
 			title: "RESTRICTED_PREVIEW",
 			url: "https://preview.example.test/",
@@ -800,17 +788,18 @@ test("Team event streams share the resource ACL and logout closes only the curre
 			).status,
 			404,
 		);
-		assert.equal(
-			(await post("/api/memories", otherOwnerCookie, { memberId, content: "VISIBLE_MEMORY_SIGNAL" })).status,
-			201,
-		);
+		const orgSignal = await fetch(`${baseUrl}/api/organizations/${org.id}`, {
+			method: "PATCH",
+			headers: { Cookie: otherOwnerCookie, "Content-Type": "application/json" },
+			body: JSON.stringify({ description: "VISIBLE_ORG_SIGNAL" }),
+		});
+		assert.equal(orgSignal.status, 200);
 		const [ownerEvents, teammateEvents] = await Promise.all([
-			readThrough(ownerStream, "VISIBLE_MEMORY_SIGNAL"),
-			readThrough(teammateStream, "VISIBLE_MEMORY_SIGNAL"),
+			readThrough(ownerStream, "VISIBLE_ORG_SIGNAL"),
+			readThrough(teammateStream, "VISIBLE_ORG_SIGNAL"),
 		]);
-		assert.match(ownerEvents, /RESTRICTED_PROJECT_MEMORY/);
 		assert.match(ownerEvents, /RESTRICTED_PREVIEW/);
-		assert.doesNotMatch(teammateEvents, /RESTRICTED_PROJECT_MEMORY|RESTRICTED_PREVIEW/);
+		assert.doesNotMatch(teammateEvents, /RESTRICTED_PREVIEW/);
 	} finally {
 		controller.abort();
 		await new Promise<void>((close) => server.close(() => close()));
@@ -1233,77 +1222,6 @@ test("Space documents enforce org, restricted workspace, private visibility, org
 				})
 			).status,
 			200,
-		);
-
-		// 4. org_viewer cannot change matter visibility or trigger distillation.
-		assert.equal(
-			(
-				await fetch(`${base}/api/rsi/distill`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: viewerACookie },
-					body: JSON.stringify({ matterId: mAOpen.id }),
-				})
-			).status,
-			403,
-		);
-
-		// 5. org_member cannot trigger RSI distillation; org_owner can trigger RSI distillation for its own matter
-		assert.equal(
-			(
-				await fetch(`${base}/api/rsi/distill`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: memberACookie },
-					body: JSON.stringify({ matterId: mAOpen.id }),
-				})
-			).status,
-			403,
-		);
-		// OrgA owner CAN distill on an orgA matter & save company_private memory, but CANNOT mutate global role_general memory
-		const ownerADistill = await fetch(`${base}/api/rsi/distill`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Cookie: ownerACookie },
-			body: JSON.stringify({ matterId: mAOpen.id }),
-		});
-		assert.equal(ownerADistill.status, 200);
-		assert.equal(
-			(
-				await fetch(`${base}/api/memories`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
-					body: JSON.stringify({
-						memberId: "product-manager",
-						scope: "role_general",
-						content: "Cross-org hijack",
-					}),
-				})
-			).status,
-			403,
-		);
-		assert.equal(
-			(
-				await fetch(`${base}/api/memories`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: ownerACookie },
-					body: JSON.stringify({
-						memberId: "product-manager",
-						scope: "company_private",
-						orgId: orgA.id,
-						content: "Alpha org deliverable checklist",
-					}),
-				})
-			).status,
-			201,
-		);
-		// OrgB owner cannot touch orgA deliverables
-		assert.equal(
-			(
-				await fetch(`${base}/api/rsi/distill`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json", Cookie: ownerBCookie },
-					body: JSON.stringify({ matterId: mAOpen.id }),
-				})
-			).status,
-			403,
 		);
 	} finally {
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

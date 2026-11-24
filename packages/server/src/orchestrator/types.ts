@@ -10,16 +10,7 @@ import type {
 	ThinkingLevel,
 } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type {
-	CollaboratorRole,
-	FeedbackRating,
-	Matter,
-	MatterMessage,
-	MemberMemory,
-	MemoryCategory,
-	TeamMember,
-	WorkspaceLink,
-} from "../storage/types.ts";
+import type { CollaboratorRole, Matter, MatterMessage, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import type { DecisionClassifier } from "./architect/system-one.ts";
 import type { DraftVerification } from "./execution/independent-verification.ts";
 import type { StalledMember, TurnMonitor } from "./execution/turn-monitor.ts";
@@ -260,29 +251,6 @@ export interface DelegateResult {
 	verification?: VerificationOutcome;
 }
 
-export interface DistillExperiencesInput {
-	matterId: string;
-	memberId?: string;
-	scopeMode?: "team" | "single";
-	feedback?: string;
-	rating?: FeedbackRating | null;
-	timeoutMs?: number;
-	signal?: AbortSignal;
-	canReviewMember?: (member: TeamMember) => boolean;
-	canReadSpace?: (spaceId: string) => boolean;
-}
-
-export interface DistillExperiencesResult {
-	matter: Matter;
-	member: TeamMember;
-	createdMemories: MemberMemory[];
-	skippedDuplicates: number;
-	summary: string;
-	participatingMemberIds: string[];
-}
-
-export type ExperienceDraft = Parameters<PersonalAgentStore["addMemory"]>[0];
-
 export interface SavedSpaceDocumentEffect {
 	id: string;
 	spaceId: string;
@@ -296,13 +264,11 @@ export interface SavedSpaceDocumentEffect {
 
 export interface ExecutionEffects {
 	savedDocuments: SavedSpaceDocumentEffect[];
-	experiences: ExperienceDraft[];
 	skillProposals: SkillProposalItem[];
-	applicationIds: string[];
 }
 
 export function emptyEffects(): ExecutionEffects {
-	return { savedDocuments: [], experiences: [], skillProposals: [], applicationIds: [] };
+	return { savedDocuments: [], skillProposals: [] };
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
@@ -311,13 +277,11 @@ export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects)
 		if (idx < 0) target.savedDocuments.push(doc);
 		else target.savedDocuments[idx] = doc;
 	}
-	target.experiences.push(...source.experiences);
 	for (const proposal of source.skillProposals) {
 		const idx = target.skillProposals.findIndex((existing) => existing.name === proposal.name);
 		if (idx < 0) target.skillProposals.push(proposal);
 		else target.skillProposals[idx] = proposal;
 	}
-	target.applicationIds.push(...source.applicationIds);
 }
 
 export interface MatterRun {
@@ -352,15 +316,6 @@ export interface DelegationContext {
 	parentRequestMessageId?: string;
 	verification?: VerificationRequest;
 }
-
-export const MEMORY_CATEGORY_PROMPT_LABELS: Record<MemoryCategory, string> = {
-	general: "General",
-	efficiency: "Efficiency",
-	troubleshooting: "Troubleshooting",
-	collaboration: "Collaboration",
-	user_correction: "User correction",
-	domain_constraint: "Project constraint",
-};
 
 const TOOL_LABELS: Record<string, string> = {
 	read: "读取文件",

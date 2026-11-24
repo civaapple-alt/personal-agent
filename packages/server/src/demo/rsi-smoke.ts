@@ -1,47 +1,26 @@
-/** Opt-in proof of actual Pi experience proposal/reflection; all data belongs to a disposable workspace. */
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtempSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
-import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
-import { selectDemoModel } from "./model-selection.ts";
 
-const directory = await mkdtemp(join(tmpdir(), "personal-agent-rsi-smoke-"));
-console.log(`Isolated RSI evidence directory: ${directory}`);
-const db = openPersonalAgentDatabase(join(directory, "proof.db"));
+const directory = mkdtempSync(join(tmpdir(), "pa-rsi-smoke-"));
+const workspaceDir = join(directory, "workspace");
+const sessionDir = join(directory, "sessions");
+const dbPath = join(directory, "personal-agent.db");
+const db = openPersonalAgentDatabase(dbPath);
 const store = new PersonalAgentStore(db, { spacesDir: join(directory, "spaces") });
-store.updatePlatformSettings({ defaultModelSelection: await selectDemoModel(directory, { thinkingLevel: "off" }) });
-const templates = (await loadRoleTemplatesFromDir(resolve("roles"))).map((template) => ({
-	...template,
-	tools: ["read"],
-}));
-let reflectionTools = 0;
-const orchestrator = new TeamOrchestrator({
-	store,
-	templates,
-	defaultCwd: directory,
-	sessionDir: join(directory, "sessions"),
-	workerFactory: (options) => {
-		const worker = new PiRpcWorker(options);
-		if (options.noSession)
-			worker.onEvent((event) => {
-				if (event.type === "tool_execution_start") reflectionTools++;
-			});
-		return worker;
-	},
-});
+const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: workspaceDir, sessionDir });
+
 try {
-	const workspace = store.upsertWorkspace({ name: "RSI 隔离测试", repoPath: directory });
-	const seed = store.addMemory({
-		memberId: "product-manager",
-		scope: "role_general",
-		content: "正式交付先给结论，再说明核查依据。",
-		status: "verified",
-	});
+	await import("node:fs/promises").then(({ mkdir }) => mkdir(workspaceDir, { recursive: true }));
+	const workspace = store.upsertWorkspace({ name: "rsi-smoke-repo", repoPath: workspaceDir });
+	store.spaces.ensureAllDefaultSpaces();
 	const turn = await orchestrator.dispatchMatter({
 		workspaceId: workspace.id,
 		preferredMemberId: "product-manager",
@@ -60,52 +39,24 @@ try {
 		.filter((message) => message.senderType === "member")
 		.at(-1);
 	assert.ok(Array.isArray(replyMessage?.metadata?.skillProposals) && replyMessage.metadata.skillProposals.length > 0);
-	for (const rating of ["negative", "positive"] as const) {
-		await store.spaces.saveDocumentFeedback({
-			documentId: document.id,
-			commitHash: document.headCommit,
-			actorId: "demo",
-			actorName: "Demo",
-			feedback: "测试改票",
-			rating,
-		});
-	}
-	assert.equal(store.getMemory(seed.id)?.positiveCount, 1);
-	assert.equal(store.getMemory(seed.id)?.negativeCount, 0);
-	console.log("PASS real proposal tool, staged candidate commit, formal document and version-specific feedback");
-	const reflection = await orchestrator.distillExperiences({
-		matterId: turn.matter.id,
-		scopeMode: "single",
-		timeoutMs: 120_000,
-		feedback:
-			"本次隔离测试补充一条仅对当前工作区成立的规范：所有验证记录须附带 TEST_RSI_4827 标识，防止与业务记录混淆。请将这条明确纠偏提炼为 project_private、category=domain_constraint 的候选规则，内容保留标识，不要泛化为跨项目通用方法。",
+	await store.spaces.saveDocumentFeedback({
+		documentId: document.id,
+		commitHash: document.headCommit,
+		actorId: "owner",
+		actorName: "Smoke Owner",
+		rating: "positive",
+		feedback: "已确认正式测试稿与 Skill 提案。",
 	});
-	assert.ok(
-		reflection.createdMemories.some(
-			(memory) =>
-				memory.scope === "project_private" &&
-				memory.workspaceId === workspace.id &&
-				memory.content.includes("TEST_RSI_4827"),
-		),
-	);
-	assert.equal(reflectionTools, 0);
-	await writeFile(
-		join(directory, "evidence.json"),
-		JSON.stringify(
-			{
-				matterId: turn.matter.id,
-				document,
-				tools: turn.runResult.toolExecutions.map((tool) => ({ name: tool.toolName, isError: tool.isError })),
-				reflection,
-				seed: store.getMemory(seed.id),
-				reflectionTools,
-			},
-			null,
-			2,
-		),
-	);
-	console.log("PASS real no-tool reflection, correctly scoped candidate and retained evidence.json");
+	const evidence = {
+		matterId: turn.matter.id,
+		documentId: document.id,
+		skillProposals: replyMessage?.metadata?.skillProposals ?? [],
+		toolExecutions: turn.runResult.toolExecutions.map((t) => ({ toolName: t.toolName, isError: t.isError })),
+	};
+	await writeFile(join(directory, "evidence.json"), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+	console.log(`RSI smoke passed. Evidence saved at ${join(directory, "evidence.json")}`);
 } finally {
 	await orchestrator.shutdown();
 	db.close();
+	if (process.env.PA_KEEP_DEMO_DIR !== "1") rmSync(directory, { recursive: true, force: true });
 }

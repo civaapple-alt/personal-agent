@@ -1,12 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { MatterRepo } from "./repos/matter-repo.ts";
 import { MemberRepo } from "./repos/member-repo.ts";
-import { type AddMemoryInput, MemoryRepo } from "./repos/memory-repo.ts";
 import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
 import { SpaceRepo } from "./repos/space-repo.ts";
-import { TurnOutcomeRepo } from "./repos/turn-outcome-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 import { WorkspaceFolderRepo } from "./repos/workspace-folder-repo.ts";
 import { WorkspaceRepo } from "./repos/workspace-repo.ts";
@@ -17,8 +15,6 @@ export {
 	DEFAULT_ORGANIZATION_ID,
 	DEFAULT_ORGANIZATION_NAME,
 	defaultMemberGitName,
-	MemoryValidationError,
-	normalizeMemoryCategory,
 	resolveEffectiveGitIdentity,
 	slugifyOrganizationName,
 	toPublicUser,
@@ -30,8 +26,6 @@ export class PersonalAgentStore {
 	private readonly members: MemberRepo;
 	private readonly orgs: OrganizationRepo;
 	private readonly workspaces: WorkspaceRepo;
-	private readonly memories: MemoryRepo;
-	private readonly turnOutcomes: TurnOutcomeRepo;
 	private readonly matters: MatterRepo;
 	private readonly sessions: SessionRepo;
 	private readonly userAuth: UserAuthRepo;
@@ -45,12 +39,6 @@ export class PersonalAgentStore {
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);
-		this.memories = new MemoryRepo({
-			db,
-			memberRepo: this.members,
-			workspaceRepo: this.workspaces,
-		});
-		this.turnOutcomes = new TurnOutcomeRepo(db, this.memories);
 		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
 		this.sessions = new SessionRepo(db);
 		this.userAuth = new UserAuthRepo(db);
@@ -84,51 +72,6 @@ export class PersonalAgentStore {
 	}
 	isRoleTemplateRemoved(templateId: string) {
 		return this.members.isRoleTemplateRemoved(templateId);
-	}
-
-	// ---- Memories ----
-	addMemory(input: AddMemoryInput) {
-		return this.memories.addMemory(input);
-	}
-	getMemory(id: string) {
-		return this.memories.getMemory(id);
-	}
-	findActiveDuplicateMemory(
-		memberId: string,
-		scope: Parameters<MemoryRepo["findActiveDuplicateMemory"]>[1],
-		workspaceId: string | null,
-		content: string,
-		orgId: string | null = null,
-	) {
-		return this.memories.findActiveDuplicateMemory(memberId, scope, workspaceId, content, orgId);
-	}
-	updateMemory(id: string, patch: Parameters<MemoryRepo["updateMemory"]>[1]) {
-		return this.memories.updateMemory(id, patch);
-	}
-	validateMemoryReplacement(
-		replacement: Parameters<MemoryRepo["validateMemoryReplacement"]>[0],
-		targetId: string | null,
-	) {
-		return this.memories.validateMemoryReplacement(replacement, targetId);
-	}
-	listRelevantMemories(
-		memberId: string,
-		workspaceId: string | null,
-		options?: Parameters<MemoryRepo["listRelevantMemories"]>[2],
-	) {
-		return this.memories.listRelevantMemories(memberId, workspaceId, options);
-	}
-	listMemberMemories(memberId: string) {
-		return this.memories.listMemberMemories(memberId);
-	}
-	recordMemoryApplications(input: Parameters<MemoryRepo["recordMemoryApplications"]>[0]) {
-		return this.memories.recordMemoryApplications(input);
-	}
-	evaluateMemory(input: Parameters<MemoryRepo["evaluateMemory"]>[0]) {
-		return this.memories.evaluateMemory(input);
-	}
-	listMemoryApplications(memoryId: string, limit?: number) {
-		return this.memories.listMemoryApplications(memoryId, limit);
 	}
 
 	// ---- Organizations & Workspaces ----
@@ -233,11 +176,6 @@ export class PersonalAgentStore {
 	}
 	listMessages(matterId: string, channel?: Parameters<MatterRepo["listMessages"]>[1]) {
 		return this.matters.listMessages(matterId, channel);
-	}
-
-	// ---- Turn outcomes ----
-	recordTurnOutcome(input: Parameters<TurnOutcomeRepo["recordTurnOutcome"]>[0]) {
-		return this.turnOutcomes.recordTurnOutcome(input);
 	}
 
 	// ---- Worker Sessions & Leases ----

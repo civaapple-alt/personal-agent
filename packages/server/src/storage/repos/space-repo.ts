@@ -8,7 +8,6 @@ import {
 	SpaceGitStore,
 } from "../space-git-store.ts";
 import { DEFAULT_LOCAL_ADMIN_USER_ID, DEFAULT_ORGANIZATION_ID, nowIso } from "./helpers.ts";
-import { syncSpaceFeedbackVotes } from "./space-feedback-votes.ts";
 
 export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
 export type SpaceVisibility = "org" | "private";
@@ -1021,7 +1020,6 @@ export class SpaceRepo {
 				actor_name = excluded.actor_name, feedback = excluded.feedback,
 				rating = excluded.rating, updated_at = excluded.updated_at`)
 				.run(input.documentId, hash, input.actorId, input.actorName, input.feedback, input.rating, now, now);
-			syncSpaceFeedbackVotes(this.db, { ...input, commitHash: hash });
 			this.db.exec("COMMIT");
 		} catch (error) {
 			this.db.exec("ROLLBACK");

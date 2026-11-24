@@ -55,41 +55,6 @@ CREATE TABLE matters (
 	model_selection_json TEXT
 );
 
-CREATE TABLE member_memories (
-	id TEXT PRIMARY KEY,
-	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
-	scope TEXT NOT NULL,
-	category TEXT NOT NULL DEFAULT 'general',
-	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
-	workspace_id TEXT REFERENCES workspace_links(id) ON DELETE CASCADE,
-	content TEXT NOT NULL,
-	rationale TEXT NOT NULL DEFAULT '',
-	source_matter_id TEXT REFERENCES matters(id) ON DELETE SET NULL,
-	status TEXT NOT NULL DEFAULT 'candidate',
-	verified INTEGER NOT NULL DEFAULT 0,
-	superseded_by TEXT,
-	supersedes_memory_id TEXT,
-	applied_count INTEGER NOT NULL DEFAULT 0,
-	positive_count INTEGER NOT NULL DEFAULT 0,
-	negative_count INTEGER NOT NULL DEFAULT 0,
-	last_applied_at TEXT,
-	created_at TEXT NOT NULL,
-	updated_at TEXT
-);
-
-CREATE TABLE memory_applications (
-	id TEXT PRIMARY KEY,
-	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
-	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
-	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
-	document_id TEXT REFERENCES space_documents(id) ON DELETE SET NULL,
-	commit_hash TEXT,
-	actor_id TEXT,
-	outcome TEXT NOT NULL DEFAULT 'applied',
-	note TEXT NOT NULL DEFAULT '',
-	created_at TEXT NOT NULL
-);
-
 CREATE TABLE organization_ai_roles (
 	org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 	member_id TEXT NOT NULL REFERENCES team_members(id) ON DELETE CASCADE,
@@ -185,41 +150,6 @@ CREATE TABLE space_document_feedback (
 	updated_at TEXT NOT NULL,
 	PRIMARY KEY (document_id, commit_hash, actor_id)
 );
-
-CREATE TABLE space_document_memory_applications (
-	document_id TEXT NOT NULL REFERENCES space_documents(id) ON DELETE CASCADE,
-	commit_hash TEXT NOT NULL,
-	application_id TEXT NOT NULL REFERENCES memory_applications(id) ON DELETE CASCADE,
-	PRIMARY KEY (document_id, commit_hash, application_id)
-);
-
-CREATE TABLE space_document_memory_votes (
-	document_id TEXT NOT NULL,
-	commit_hash TEXT NOT NULL,
-	actor_id TEXT NOT NULL,
-	memory_id TEXT NOT NULL REFERENCES member_memories(id) ON DELETE CASCADE,
-	rating TEXT NOT NULL CHECK (rating IN ('positive', 'negative')),
-	PRIMARY KEY (document_id, commit_hash, actor_id, memory_id),
-	FOREIGN KEY (document_id, commit_hash, actor_id) REFERENCES space_document_feedback(document_id, commit_hash, actor_id) ON DELETE CASCADE
-);
-
-CREATE TRIGGER space_memory_vote_insert AFTER INSERT ON space_document_memory_votes BEGIN
-	UPDATE member_memories SET positive_count = positive_count + (NEW.rating = 'positive'),
-		negative_count = negative_count + (NEW.rating = 'negative'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		WHERE id = NEW.memory_id;
-END;
-
-CREATE TRIGGER space_memory_vote_update AFTER UPDATE OF rating ON space_document_memory_votes BEGIN
-	UPDATE member_memories SET positive_count = positive_count + (NEW.rating = 'positive') - (OLD.rating = 'positive'),
-		negative_count = negative_count + (NEW.rating = 'negative') - (OLD.rating = 'negative'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		WHERE id = NEW.memory_id;
-END;
-
-CREATE TRIGGER space_memory_vote_delete AFTER DELETE ON space_document_memory_votes BEGIN
-	UPDATE member_memories SET positive_count = positive_count - (OLD.rating = 'positive'),
-		negative_count = negative_count - (OLD.rating = 'negative'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		WHERE id = OLD.memory_id;
-END;
 
 CREATE TABLE spaces (
 	id TEXT PRIMARY KEY,
@@ -359,16 +289,6 @@ CREATE INDEX idx_matter_messages_matter ON matter_messages(matter_id, channel, c
 CREATE INDEX idx_matter_messages_workspace ON matter_messages(CASE WHEN json_valid(metadata_json) THEN json_extract(metadata_json, '$.workspaceId') END);
 
 CREATE INDEX idx_matters_workspace ON matters(workspace_id);
-
-CREATE INDEX idx_member_memories_lookup ON member_memories(member_id, scope, workspace_id);
-
-CREATE INDEX idx_member_memories_org ON member_memories(member_id, org_id);
-
-CREATE INDEX idx_memories_workspace ON member_memories(workspace_id);
-
-CREATE INDEX idx_memory_applications_lookup ON memory_applications(memory_id, created_at);
-
-CREATE INDEX idx_memory_applications_matter ON memory_applications(matter_id, member_id);
 
 CREATE INDEX idx_org_members_user ON organization_members(user_id, org_id);
 

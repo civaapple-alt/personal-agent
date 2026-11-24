@@ -119,7 +119,6 @@ export function useMatterEventSync({
 			"organization_updated",
 			"preview_updated",
 			"team_updated",
-			"memory_updated",
 		]) {
 			es.addEventListener(evtName, handleSync);
 		}

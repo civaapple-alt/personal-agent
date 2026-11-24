@@ -1,11 +1,10 @@
 import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
-import type { MemberMemory } from "../../storage/types.ts";
 
 export interface TeamHealthEvidence {
 	id: string;
-	kind: "role" | "message" | "feedback" | "memory";
+	kind: "role" | "message" | "feedback";
 	sourceId: string;
 	matterId?: string;
 	label: string;
@@ -35,14 +34,6 @@ export function filterTeamMembersForScope<
 		}
 		return true;
 	});
-}
-
-export function isTeamHealthMemoryInScope(memory: MemberMemory, scope?: TeamHealthScopeFilter): boolean {
-	// Team health summaries have no workspace ACL. Keep workspace-bound experience in worker context.
-	if (memory.workspaceId || memory.status === "rejected" || memory.status === "superseded") return false;
-	if (!memory.orgId) return memory.scope === "role_general";
-	if (scope?.orgId && memory.orgId !== scope.orgId) return false;
-	return !scope?.allowedOrgIds || scope.allowedOrgIds.has(memory.orgId);
 }
 
 /** Team health has no per-workspace ACL, so only include organization-visible material. */
@@ -121,21 +112,6 @@ export function collectTeamHealthEvidence(
 			label: `${document.title} · ${feedback.commitHash.slice(0, 7)} 负反馈`,
 			excerpt: (feedback.feedback || "记录了负反馈，缺少文字原因").slice(0, 360),
 		});
-	}
-	for (const member of members) {
-		const corrections = store
-			.listMemberMemories(member.id)
-			.filter((memory) => memory.category === "user_correction" && isTeamHealthMemoryInScope(memory, scope))
-			.slice(0, 1);
-		for (const memory of corrections)
-			sources.push({
-				id: `memory:${memory.id}`,
-				kind: "memory",
-				sourceId: memory.id,
-				...(memory.sourceMatterId ? { matterId: memory.sourceMatterId } : {}),
-				label: `${member.displayName} 纠偏经验（${memory.status}）`,
-				excerpt: memory.content.slice(0, 300),
-			});
 	}
 	return sources.slice(0, 40);
 }

@@ -6,10 +6,6 @@ import type {
 	MatterMessageSenderType,
 	MatterStatus,
 	MatterVisibility,
-	MemberMemory,
-	MemoryCategory,
-	MemoryScope,
-	MemoryStatus,
 	Organization,
 	PlatformUser,
 	PublicPlatformUser,
@@ -24,9 +20,6 @@ export const DEFAULT_ORGANIZATION_NAME = "默认组织";
 export const DEFAULT_LOCAL_ADMIN_USER_ID = "usr_local_owner";
 
 const ASCII_PRINTABLE_RE = /^[\x20-\x7E]+$/;
-
-/** Thrown when a memory replacement link violates immutability, scope alignment, or acyclicity rules. */
-export class MemoryValidationError extends Error {}
 
 export function nowIso(): string {
 	return new Date().toISOString();
@@ -65,20 +58,6 @@ export function resolveEffectiveGitIdentity(
 	const isDefaultEmail = !rawEmail || rawEmail === `${member.id}@team.local`;
 	const gitEmail = isDefaultEmail && domain ? `${member.id}@${domain}` : rawEmail || `${member.id}@team.local`;
 	return { gitName, gitEmail };
-}
-
-export function normalizeMemoryCategory(raw: unknown): MemoryCategory {
-	if (
-		raw === "efficiency" ||
-		raw === "troubleshooting" ||
-		raw === "collaboration" ||
-		raw === "user_correction" ||
-		raw === "domain_constraint" ||
-		raw === "general"
-	) {
-		return raw;
-	}
-	return "general";
 }
 
 export function normalizeUniqueIds(ids?: string[]): string[] {
@@ -179,37 +158,6 @@ export function mapWorkspaceRow(row: Record<string, unknown>): WorkspaceLink {
 		...(cloneUrl ? { cloneUrl } : {}),
 		...(visibility ? { visibility } : {}),
 		createdAt: String(row.created_at),
-	};
-}
-
-export function mapMemoryRow(row: Record<string, unknown>): MemberMemory {
-	const rawStatus = typeof row.status === "string" && row.status ? row.status : null;
-	const status: MemoryStatus =
-		rawStatus === "candidate" || rawStatus === "verified" || rawStatus === "rejected" || rawStatus === "superseded"
-			? rawStatus
-			: row.verified
-				? "verified"
-				: "candidate";
-	return {
-		id: String(row.id),
-		memberId: String(row.member_id),
-		scope: row.scope as MemoryScope,
-		category: normalizeMemoryCategory(row.category),
-		orgId: row.org_id ? String(row.org_id) : null,
-		workspaceId: row.workspace_id ? String(row.workspace_id) : null,
-		content: String(row.content),
-		rationale: typeof row.rationale === "string" ? row.rationale : "",
-		sourceMatterId: row.source_matter_id ? String(row.source_matter_id) : null,
-		status,
-		verified: status === "verified",
-		supersededBy: row.superseded_by ? String(row.superseded_by) : null,
-		supersedesMemoryId: row.supersedes_memory_id ? String(row.supersedes_memory_id) : null,
-		appliedCount: Number(row.applied_count ?? 0),
-		positiveCount: Number(row.positive_count ?? 0),
-		negativeCount: Number(row.negative_count ?? 0),
-		lastAppliedAt: row.last_applied_at ? String(row.last_applied_at) : null,
-		createdAt: String(row.created_at),
-		updatedAt: row.updated_at ? String(row.updated_at) : String(row.created_at),
 	};
 }
 

@@ -23,7 +23,10 @@ test("a fresh database can be reopened with its data and complete schema", () =>
 			.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
 			.all()
 			.map((row) => row.name);
-		assert.ok(tables.includes("space_document_memory_votes"));
+		assert.ok(!tables.includes("member_memories"));
+		assert.ok(!tables.includes("memory_applications"));
+		assert.ok(!tables.includes("space_document_memory_applications"));
+		assert.ok(!tables.includes("space_document_memory_votes"));
 		assert.ok(!tables.includes("deliverables"));
 		assert.ok(!tables.includes("collaborators"));
 		assert.throws(

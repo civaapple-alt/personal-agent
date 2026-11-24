@@ -9,7 +9,7 @@ import { readPiModelCatalog } from "../rpc/model-catalog.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import type { Matter, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
 import { decideConversationIntent } from "./architect/conversation-intent.ts";
 import {
 	assessMatterInitiation,
@@ -28,7 +28,6 @@ import { listWorkspaceTopLevelEntries } from "./execution/execution-context.ts";
 import { dispatchMatterTurn } from "./execution/matter-dispatch.ts";
 import { buildMemberPrompts } from "./execution/prompts.ts";
 import { type ExecuteWorkerInput, executeWithWorkerPass } from "./execution/worker-runner.ts";
-import { performDistillationPass } from "./rsi/distiller.ts";
 import { filterTeamMembersForScope } from "./rsi/team-health.ts";
 import { type ReadPiModels, resolveConfiguredModel } from "./runtime/model-selection.ts";
 import type { OrchestratorRuntimeConfig } from "./runtime/runtime-info.ts";
@@ -39,8 +38,6 @@ import {
 	type DispatchMatterInput,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
-	type DistillExperiencesInput,
-	type DistillExperiencesResult,
 	defaultWorkerFactory,
 	type ExecutionEffects,
 	emptyEffects,
@@ -60,8 +57,6 @@ export {
 	type DispatchMatterInput,
 	type DispatchMatterResult,
 	type DispatchProgressEvent,
-	type DistillExperiencesInput,
-	type DistillExperiencesResult,
 	isObserverSilentReply,
 	OBSERVER_SILENT_SENTINEL,
 	type OrchestratorDialogHandler,
@@ -91,8 +86,6 @@ export class TeamOrchestrator {
 	private readonly piModelProbes = new Map<string, ReturnType<ReadPiModels>>();
 	private dialogHandler: OrchestratorDialogHandler | undefined;
 	private readonly runs = new Map<string, MatterRun>();
-	private readonly distillations = new Map<string, Set<AbortController>>();
-	private readonly distillationTasks = new Set<Promise<void>>();
 	private readonly architectControllers = new Set<AbortController>();
 	private readonly architectTasks = new Set<Promise<void>>();
 	private shuttingDown = false;
@@ -397,7 +390,6 @@ export class TeamOrchestrator {
 	buildMemberPrompt(input: {
 		member: TeamMember;
 		template?: RoleTemplate;
-		memories: MemberMemory[];
 		workspace: WorkspaceLink | null;
 		organization?: Organization | null;
 		repoGitUser?: { name: string; email: string } | null;
@@ -488,28 +480,12 @@ export class TeamOrchestrator {
 
 	async shutdown(): Promise<void> {
 		this.shuttingDown = true;
-		for (const matterId of this.distillations.keys()) {
-			this.abortDistillation(matterId);
-		}
 		for (const controller of this.architectControllers) {
 			controller.abort(new Error("Role architect session was aborted"));
 		}
 		const runs = [...this.runs.entries()];
-		await Promise.allSettled([
-			...this.distillationTasks,
-			...this.architectTasks,
-			...runs.map(([id]) => this.abortMatter(id, "shutdown")),
-		]);
+		await Promise.allSettled([...this.architectTasks, ...runs.map(([id]) => this.abortMatter(id, "shutdown"))]);
 		await Promise.allSettled(runs.map(([, run]) => run.settled));
-	}
-
-	abortDistillation(matterId: string): boolean {
-		const controllers = this.distillations.get(matterId);
-		if (!controllers || controllers.size === 0) return false;
-		for (const controller of controllers) {
-			controller.abort(new Error("Experience distillation was aborted"));
-		}
-		return true;
 	}
 
 	async abortMatter(matterId: string, reason: "user" | "shutdown" = "user"): Promise<boolean> {
@@ -635,49 +611,6 @@ export class TeamOrchestrator {
 		const matter = this.store.getMatter(matterId);
 		if (!matter) throw new Error(`Matter not found: ${matterId}`);
 		return matter;
-	}
-
-	/**
-	 * Run an isolated RSI reflection pass over a matter / deliverable / feedback
-	 * to extract bounded candidate experiences separated by scope.
-	 */
-	async distillExperiences(input: DistillExperiencesInput): Promise<DistillExperiencesResult> {
-		if (this.shuttingDown) throw new Error("Orchestrator is shutting down");
-		const controller = new AbortController();
-		const completion = Promise.withResolvers<void>();
-		const onCallerAbort = () => controller.abort(new Error("Experience distillation was aborted"));
-		input.signal?.throwIfAborted();
-		input.signal?.addEventListener("abort", onCallerAbort, { once: true });
-		const controllers = this.distillations.get(input.matterId) ?? new Set<AbortController>();
-		this.distillations.set(input.matterId, controllers);
-		controllers.add(controller);
-		this.distillationTasks.add(completion.promise);
-		try {
-			return await performDistillationPass(
-				{
-					store: this.store,
-					defaultCwd: this.defaultCwd,
-					workerFactory: this.workerFactory,
-					requireMatter: (matterId) => this.requireMatter(matterId),
-					routeMemberForRequest: (prompt, preferredMemberId) => {
-						const m = this.store.getMatter(input.matterId);
-						return this.routeMemberForRequest(prompt, preferredMemberId, m?.aiMemberIds, m?.orgId, {
-							actorUserId: m?.createdByUserId ?? null,
-						});
-					},
-				},
-				{ ...input, signal: controller.signal },
-			);
-		} catch (error) {
-			if (controller.signal.aborted) throw new Error("Experience distillation was aborted", { cause: error });
-			throw error;
-		} finally {
-			input.signal?.removeEventListener("abort", onCallerAbort);
-			controllers.delete(controller);
-			if (!controllers.size) this.distillations.delete(input.matterId);
-			this.distillationTasks.delete(completion.promise);
-			completion.resolve();
-		}
 	}
 
 	private async runTrackedAuxTask<T>(

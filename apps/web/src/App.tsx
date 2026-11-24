@@ -24,7 +24,6 @@ import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
 import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useMatterScope } from "./hooks/useMatterScope.ts";
-import { useRsiDistill } from "./hooks/useRsiDistill.ts";
 import { useStableCallback } from "./hooks/useStableCallback.ts";
 import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
 import { ErrorBoundary } from "./primitives/ErrorBoundary.tsx";
@@ -496,15 +495,6 @@ export function App() {
 		refreshDetail,
 	});
 
-	const { cancelRsiDistill, runRsiDistill } = useRsiDistill({
-		selectedMatterId,
-		memberName,
-		refreshBootstrap,
-		refreshDetail,
-		setNoticeBanner,
-		setErrorBanner,
-	});
-
 	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
 	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
 	const activeProgressStartedAt = selectedMatterId ? (progressStartedAt[selectedMatterId] ?? null) : null;
@@ -759,10 +749,7 @@ export function App() {
 								streamingDelta={streamingDelta}
 								submitting={submitting}
 								templateByRoleId={templateByRoleId}
-								memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 								memberName={memberName}
-								workspaceName={workspaceName}
-								organizationName={organizationName}
 								onSelectOrganization={actions.handleSelectOrganization}
 								onSelectWorkspace={actions.handleSelectWorkspace}
 								matterAiMemberIds={matterAiMemberIds}
@@ -821,11 +808,8 @@ export function App() {
 								onOpenDeliverables={(targetId) => navigateRoute({ tab: "deliverables", spacePageId: targetId })}
 								onOpenTeam={() => navigateRoute({ tab: "team" })}
 								onToggleArchiveMatter={handleSidebarToggleArchiveMatter}
-								onDistillMatter={(matterId) => runRsiDistill({ matterId })}
-								onCancelDistillMatter={cancelRsiDistill}
 								onRefresh={refreshBootstrap}
 								onNotice={(msg) => setNoticeBanner(msg)}
-								onError={(msg) => setErrorBanner(msg)}
 							/>
 						</ViewFade>
 					)}
@@ -854,10 +838,8 @@ export function App() {
 								matters={bootstrap?.matters ?? []}
 								selectedOrgId={effectiveOrgIdForScope}
 								defaultWorkspaceId={matterDetail?.matter.workspaceId ?? (selectedWorkspaceId || null)}
-								memoriesByMember={bootstrap?.memoriesByMember ?? {}}
 								templateByRoleId={templateByRoleId}
 								memberName={memberName}
-								workspaceName={workspaceName}
 								organizationName={organizationName}
 								onRefresh={refreshBootstrap}
 								onNotice={(msg) => setNoticeBanner(msg)}
@@ -872,7 +854,6 @@ export function App() {
 								}}
 								onOpenArchitect={() => initiation.openArchitectForGap()}
 								onOpenArchitectMatter={() => startArchitectMatter()}
-								onOpenMatter={(matterId) => navigateRoute({ tab: "chats", matterId })}
 								onOpenOrganizations={() => navigateRoute({ tab: "organizations" })}
 							/>
 						</ViewFade>

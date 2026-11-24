@@ -8,7 +8,7 @@ Follow the Three-Ring + Dual-Half layout from outermost symptom to exact owning 
 - **`packages/extension-api/` & `packages/extension-sdk/`**: Internal full extension contract (`@pa/extension-api`) and curated external author SDK (`@pa/extension-sdk`, API `1.0`).
 - **`packages/server/`**: Engine Host (SQLite repos, Git Space repo, Role loader, Pi RPC orchestrator, HTTP/SSE server).
   - `src/roles/` — role templates, capability resolution, atomic `SKILL.md` + `scripts/*` disk writer (`role-package-store.ts`).
-  - `src/storage/` — SQLite schema & repos (`matters`, `messages`, `spaces`, `worker_sessions`, `member_memories`, `organizations`).
+  - `src/storage/` — SQLite schema & repos (`matters`, `messages`, `spaces`, `worker_sessions`, `organizations`).
   - `src/rpc/` — `team-tool-bridge.ts` (loopback HTTP trust boundary & argument validation).
   - `src/extensions/` — server extension registry (`registry.ts`) and host runtime assembly (`team-extension/runtime.ts`, `human-question`, `web-access`, `workbench-help`).
   - `src/orchestrator/execution/` — `worker-runner.ts` (Pi RPC spawning, `--extension` / `--skill` mounting, tool dispatch), `matter-dispatch.ts`, `execution-context.ts` (scoped skill discovery).

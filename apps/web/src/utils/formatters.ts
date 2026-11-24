@@ -1,4 +1,4 @@
-import type { MatterProgressDto, MemoryCategory, TeamMemberDto } from "../api.ts";
+import type { MatterProgressDto, TeamMemberDto } from "../api.ts";
 
 export const STATUS_LABELS: Record<string, string> = {
 	open: "推进中",
@@ -22,43 +22,6 @@ export const SHORT_STAGE_LABELS: Record<MatterProgressDto["stage"], string> = {
 	tool: "执行",
 	waiting_user: "确认",
 	finalizing: "整理",
-};
-
-export const MEMORY_SCOPE_LABELS: Record<string, string> = {
-	role_general: "岗位通用（所有组织与仓库可用）",
-	company_private: "组织经验与记忆（同组织跨仓库共享）",
-	project_private: "仓库经验与规范（仅当前仓库生效）",
-};
-
-export const MEMORY_SCOPE_SHORT_LABELS: Record<string, string> = {
-	role_general: "岗位通用",
-	company_private: "组织记忆",
-	project_private: "仓库记忆",
-};
-
-export const MEMORY_CATEGORY_VALUES: MemoryCategory[] = [
-	"efficiency",
-	"troubleshooting",
-	"collaboration",
-	"user_correction",
-	"domain_constraint",
-	"general",
-];
-
-export const MEMORY_CATEGORY_LABELS: Record<MemoryCategory, string> = {
-	efficiency: "提效方法",
-	troubleshooting: "问题排障",
-	collaboration: "高效协同",
-	user_correction: "用户纠偏",
-	domain_constraint: "项目规范",
-	general: "通用经验",
-};
-
-export const MEMORY_STATUS_LABELS: Record<string, string> = {
-	candidate: "待核验",
-	verified: "已验证",
-	superseded: "已替代",
-	rejected: "已忽略",
 };
 
 export const FEEDBACK_RATING_LABELS: Record<string, string> = {

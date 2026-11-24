@@ -2,22 +2,7 @@ import type { RoleScope } from "../roles/types.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
 
-export type MemoryScope = "role_general" | "company_private" | "project_private";
-export type MemoryStatus = "candidate" | "verified" | "rejected" | "superseded";
-export type MemoryCategory =
-	| "general"
-	| "efficiency"
-	| "troubleshooting"
-	| "collaboration"
-	| "user_correction"
-	| "domain_constraint";
 export type FeedbackRating = "positive" | "negative" | "neutral";
-export type MemoryApplicationOutcome =
-	| "applied"
-	| "turn_succeeded"
-	| "turn_failed"
-	| "feedback_positive"
-	| "feedback_negative";
 export type MatterStatus = "open" | "waiting_user" | "archived";
 export type MatterMessageChannel = "user" | "internal_collab" | "notice";
 export type MatterMessageSenderType = "user" | "member" | "system";
@@ -190,41 +175,6 @@ export interface TeamMember {
 	ownerUserId?: string | null;
 	createdAt: string;
 	updatedAt: string;
-}
-
-export interface MemberMemory {
-	id: string;
-	memberId: string;
-	scope: MemoryScope;
-	category: MemoryCategory;
-	orgId: string | null;
-	workspaceId: string | null;
-	content: string;
-	rationale: string;
-	sourceMatterId: string | null;
-	status: MemoryStatus;
-	verified: boolean;
-	supersededBy: string | null;
-	supersedesMemoryId: string | null;
-	appliedCount: number;
-	positiveCount: number;
-	negativeCount: number;
-	lastAppliedAt: string | null;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface MemoryApplicationRecord {
-	id: string;
-	memoryId: string;
-	matterId: string;
-	memberId: string;
-	documentId: string | null;
-	commitHash: string | null;
-	actorId: string | null;
-	outcome: MemoryApplicationOutcome;
-	note: string;
-	createdAt: string;
 }
 
 export interface WorkspaceLink {

@@ -3,8 +3,7 @@
 职责分工：
 
 - [team-orchestrator.ts](team-orchestrator.ts) 组织事项、角色和处理器，对外提供派发、中止和关闭入口。[matter-dispatch.ts](execution/matter-dispatch.ts) 执行单轮交流，从运行占用、消息入库到成果收尾，并由 [types.ts](types.ts)、[prompts.ts](execution/prompts.ts)、
-  [matter-initiation.ts](architect/matter-initiation.ts)、[worker-runner.ts](execution/worker-runner.ts)、[delegation-runner.ts](execution/delegation-runner.ts)、
-  [observer-runner.ts](execution/observer-runner.ts) 与 [distiller.ts](rsi/distiller.ts) 分担立项适配诊断、提示词装配、Worker 执行、内部委托、旁听与复盘。
+  [matter-initiation.ts](architect/matter-initiation.ts)、[worker-runner.ts](execution/worker-runner.ts)、[delegation-runner.ts](execution/delegation-runner.ts) 与 [observer-runner.ts](execution/observer-runner.ts) 分担立项适配诊断、提示词装配、Worker 执行、内部委托与旁听。
   - `assessInitiation`（[matter-initiation.ts](architect/matter-initiation.ts)）提供实时本地文字规则预判，并由 `assessInitiationWithModel` 通过 [pi-decision.ts](architect/pi-decision.ts)（`runTypedPiDecision`，类型化 JSON 契约校验 + 成员名录白名单约束 + 可选 `["read"]` 只读仓库核查 + `AbortSignal` 中止）发起按需 Pi LLM 决策，推荐参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及角色缺口；`role-architect` 元角色可通过正常 `dispatchMatter` 发起持久化对话或被中途请入业务事项（使用共享运行工具，按配置装配工作台帮助与方法扩展，并自动注入业务名录与运行体检摘要，结果解析为消息 `metadata.roleProposals` 供用户勾选生效，且不接管普通业务事项的自动路由与自动旁听）；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](execution/worker-runner.ts) 与 [prompts.ts](execution/prompts.ts) 在运行时关闭 `delegate_to_member`。岗位的 `antiJobs` 边界保留在系统提示中。
 - [execution-context.ts](execution/execution-context.ts) 负责 Skill 路径（通过 `realpath` 校验所解析 `SKILL.md` 必须落在内建 `skills/` 及该角色作用域允许的 `resolveAllowedSkillRoots` 目录内，阻止跨租户或工作区外路径穿越）、按原生 Pi 规则编码会话目录 `resolveScopedPiSessionDir`、工作区顶层目录摘要 `listWorkspaceTopLevelEntries`（供无 `bash`/`ls` 的角色直接定位目标仓库文件）、保存会话身份与成果文件/URL 校验。[workspace-customizations.ts](runtime/workspace-customizations.ts) 统一扫描多目录工作区的 `AGENTS.md`/`CLAUDE.md` 与 `.agents/skills`/`.pi/skills`，按 Token 预算（默认 20,000 tokens）统计并自动将超限附加规则降级为路径指针，在 [worker-runner.ts](execution/worker-runner.ts) 中经 `--skill` 与 `team-extension` 的 `before_agent_start` `contextFiles` 注入。
 - [team-health.ts](rsi/team-health.ts) 收集有 ID 的有限配置与协作案例供架构师体检引用，并支持按用户/组织过滤可见成员与最近案例，解析时过滤不存在的来源。`role-design` 方法全文由宿主提供给无业务工具的架构师；技能目录、能力状态和具体边界见[角色设计](../../../../docs/reference/role-design.md)。
@@ -46,17 +45,14 @@
   - 默认（`organization.useRoleGitIdentity !== true` 或独立无组织仓库）**不注入** `GIT_AUTHOR_*` / `GIT_COMMITTER_*`，保持 `git commit` 使用目标仓库目录自身的 Git 配置；仅当所属组织显式启用 `useRoleGitIdentity` 时，经 `resolveEffectiveGitIdentity` 向 `PiRpcWorker` 注入角色/组织覆盖 `GIT_AUTHOR_*` 与仓库真实用户 `GIT_COMMITTER_*`（未配置真实用户时回退至角色身份），同时注入 `PA_MEMBER_*` / `PA_ORG_*` 环境变量（不改写目标仓库 `.git/config`）。
   - 在 `buildMemberPrompt` 中注入「角色与组织身份」、目标工作区作用域边界与顶层目录清单（并经 `PA_TARGET_WORKSPACE_ROOT` 在扩展内过滤掉宿主/父目录 `AGENTS.md`，同时在隔离辅助 pass `distiller.ts`/`meta-architect.ts`/`pi-decision.ts` 传入 `--no-context-files`），以及分三层组织的「岗位通用 / 组织记忆 / 仓库记忆」清单。
   - 工具事件（`tool_execution_start` / `tool_execution_end`）只写入精简合法 JSON（工具名、截断后关键参数、`isError`）到 `notice` 通道。执行进度快照保留最近活动的工具状态，页面按来源轮次和范围重建实际工具调用及 Skill 读取；已注册不等于已调用，读取不等于应用。
-  - 注入的经验记入 `memory_applications`；成果草稿、经验提案（工作区属组织时 `company_private` 自动归入对应 `orgId`）与应用 ID 先暂存，主执行成功后再事务提交，失败或取消分支不保留候选。
-- `distillExperiences`：使用无状态、无工具/扩展/Skills 的只读 reflection pass，按当前工作区筛选用户纠偏、内部委托、异常、中断快照、反馈，并直接读取当前事项的空间文档摘录（`space_documents`）作为上下文（工作区属组织时 `company_private` 归入 `orgId`）。
-  - 指定成果时证据截止其发布回复；候选仅可归属实际参与成员或明确指定成员，写入前再次检查工作区与取消状态，且仅允许同成员、同 scope、同 org、同 workspace 的无环替代关系。
+  - 成果草稿与 `propose_skill` 提案先暂存，主执行成功后再提交，失败或取消分支不保留候选。
 - 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../../../docs/reference/runtime-collaboration.md#等待人类决定)。
 - `delegate`：由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者。
   - 桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
   - [独立验收](execution/independent-verification.ts) 解析具体提交、文件或文档草稿，绑定版本和来源委托。验收专用会话使用共享运行工具。送审文档在 [单轮派发](execution/matter-dispatch.ts) 中按最终摘要重验归档条件。
 - [运行巡检](execution/turn-monitor.ts) 追踪当轮 Worker 的活动、工具和等待状态。计时器由单轮派发清理，停滞提醒通过现有进度流和事项事件传播。
-- `abortMatter`、`abortDistillation`、`shutdown`：传播取消并等待执行树与全部复盘清理后返回。
+- `abortMatter`、`shutdown`：传播取消并等待执行树清理后返回。
   - 正常完成、中止与失败路径均通过 `buildProgressSnapshot` 写入 `metadata.progressSnapshot`（`outcome`: `"completed" | "aborted" | "failed"`），保留阶段、耗时、`activeDelegations` 与最多 60 条 `recentLogs` 活动轨迹；其中只有 `aborted`/`failed` 快照会在同事项工作区续跑时为主负责人注入「上次中断状态简报」。讨论中点名多位成员时，失败快照记录报错时正在执行的角色。
-  - `abortDistillation(matterId)` 会立即中止进行中的 `distillExperiences` Worker 并丢弃未完成候选。
 
 - 内部委托成员与旁听成员不能通过 `save_space_page` 直接修改事项资料。主责、内部成员、旁听和独立验收共享可用的基础工具、已配置扩展及 MCP；实际能力以启动握手为准。Pi 以服务账号权限运行，不是操作系统沙箱。
 - 主成员可通过 `save_space_page` 将计划、过程资料直接提交到当前事项默认空间的独立 Git 仓库（私密事项自动路由至发起人的个人空间 `spc_usr_<userId>`，非私密事项按仓库空间优先、其次组织空间）；传入 `sourcePath` 时同步记录 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联，并在本轮回复消息的 `metadata.spaceDocuments` 中精确绑定记录。业务代码仓的 `write` / `edit` 修改保留在业务仓库本身。

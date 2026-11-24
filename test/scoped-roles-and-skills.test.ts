@@ -719,14 +719,6 @@ test("Multi-tenant Role Architect, confirmed-only New Skills disk creation, pers
 		const argsJoined = capturedSkillArgs[0]!.join(" ");
 		assert.ok(argsJoined.includes("note-digest-sop/SKILL.md"));
 		assert.ok(argsJoined.includes("alice-personal-lib/SKILL.md"));
-		const workerCount = capturedSkillArgs.length;
-		const distillation = await fetch(`${base}/api/rsi/distill`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Cookie: adminCookie },
-			body: JSON.stringify({ matterId: aliceMatterId }),
-		});
-		assert.equal(distillation.status, 403);
-		assert.equal(capturedSkillArgs.length, workerCount, "Personal role review must stop before worker creation");
 		const aliceRt = (await (await fetch(`${base}/api/runtime`, { headers: { Cookie: alice.cookie } })).json()) as {
 			extensions: Array<{ id: string; declaredByRoles?: string[]; mcpServers?: string[] }>;
 		};

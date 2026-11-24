@@ -16,23 +16,13 @@
   会话范围键包含组织、工作区、事项、角色和触发用户。
 - `matter_execution_leases` 保存单机宿主 PID 与占用者；不是分布式租约，也不是外部动作 exactly-once 保证。
 - `removed_role_templates` 在成员删除事务中记录模板 ID，启动同步跳过已移除模板，显式重新创建或导入时清除标记。该表属于当前数据库结构。
-- `recordTurnOutcome` 在同一事务中写入候选经验，并将本轮经验应用关联到空间文档的 Git 提交。空间文档本身即时保存；回复与事项状态在事务之后记录，外部执行不能整体回滚。
 - 组织与成员私有身份：
   - `organizations`、`team_members` 与 `workspace_links` 维护组织名、`git_email_domain`、`use_role_git_identity`（默认 `0`，即默认使用目标仓库目录自身的 Git `user.name` / `user.email`，显式开启后才注入角色 Git Author 署名）、简介、`is_default` 与 `workspace_links.org_id`。
   - 启动时确保默认组织存在。首次建组织时，只有无历史、无授权的独立工作区可以自动归入默认组织。登记时显式传 `null` 可保留独立仓库。
-  - 工作区归属变更检查事项、工作区经验、执行会话、带工作区标记的消息与授权名单。有任一引用时保留原归属。工作区配置、可见性和成员名单在同一事务提交。
+  - 工作区归属变更检查事项、执行会话、带工作区标记的消息与授权名单。有任一引用时保留原归属。工作区配置、可见性和成员名单在同一事务提交。
   - 同时保存成员私有 `git_name`、`git_email`、`identity_summary`。
   - 成员 Git 名称优先用英文显示名或岗位名，其次用成员 ID。由 `resolveEffectiveGitIdentity(member, organization)` 计算最终 Git Author 署名。
-- 三层记忆查询与替代边界：
-  - `listRelevantMemories` 按 `verified` 优先于 `candidate`、排除 `rejected` 与 `superseded` 的顺序注入：
-    - `role_general`：跨组织跨仓库通用。
-    - `company_private`：属组织时按 `org_id` 跨同组织仓库共享，未归属组织的工作区按单工作区匹配。
-    - `project_private`：严格绑定当前 `workspace_id`。
-  - 经验生命周期与替代关系由 `addMemory`、`updateMemory` 共同校验，核验替代候选后将旧经验标为 `superseded`：
-    - 替代双方须同成员、同范围、同组织、同工作区且无环。旧经验只能接受一个替代项。核验候选与标记旧经验在同一事务完成，只有通过核验的替代项才能注入岗位执行。
-- 经验应用与版本反馈记录：
-  - `memory_applications` 记录实际注入，不能证明模型采用；`space_document_memory_applications` 将本轮应用关联到文档的 Git 提交。
-  - `space_document_memory_votes` 按文档提交、评价人和经验保存当前评价，改评按差值回写，`neutral` 撤回该票；独立手动评价仍累加。
+- 复用规范沉淀通过 `propose_skill` 确认后直接落盘为标准 `SKILL.md`（及可选 `scripts/*`）至 `.data/skills/` 或 `<workspace>/.agents/skills/`，不再在 SQLite 维护 `member_memories` / `memory_applications` 表；文档提交反馈保存在 `space_document_feedback`。
 - `matters.ai_member_ids_json`（`NULL` 表示默认全部 AI 角色参与，数组表示当前保留的 AI 成员）、`matters.observers_enabled`
   （事项全局 AI 旁听开关）与 `matters.observer_ids_json` 协同维护事项内 AI 参与范围、负责人切换及旁听名单。关闭开关时保留旁听名单，主责的委托名单单独保存。
   由事项仓储维护。删除角色时同步从参与、请教与旁听名单移除它，删掉最后一个已配置旁听者时关闭该事项的旁听。

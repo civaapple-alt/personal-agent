@@ -240,9 +240,7 @@ export class MemberRepo {
 				);
 			}
 
-			this.db.prepare("DELETE FROM memory_applications WHERE member_id = ?").run(memberId);
 			this.db.prepare("DELETE FROM worker_sessions WHERE member_id = ?").run(memberId);
-			this.db.prepare("DELETE FROM member_memories WHERE member_id = ?").run(memberId);
 			this.db.prepare("DELETE FROM team_members WHERE id = ?").run(memberId);
 			this.db
 				.prepare("INSERT OR REPLACE INTO removed_role_templates (template_id, removed_at) VALUES (?, ?)")
