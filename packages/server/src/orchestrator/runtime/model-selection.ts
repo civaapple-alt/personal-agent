@@ -1,6 +1,6 @@
-import { type ModelSelection, type PiModelCatalog, readStoredModelSelection } from "../rpc/model-selection.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { RpcWorkerLike } from "./types.ts";
+import { type ModelSelection, type PiModelCatalog, readStoredModelSelection } from "../../rpc/model-selection.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { RpcWorkerLike } from "../types.ts";
 
 export type ReadPiModels = (selection?: ModelSelection) => Promise<PiModelCatalog>;
 

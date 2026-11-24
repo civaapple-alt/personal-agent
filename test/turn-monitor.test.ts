@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTurnMonitor } from "../packages/server/src/orchestrator/turn-monitor.ts";
+import { createTurnMonitor } from "../packages/server/src/orchestrator/execution/turn-monitor.ts";
 
 test("turn monitor reports a stalled leaf once, skips tool and human waits, and clears on recovery", (t) => {
 	let now = 0;

@@ -1,17 +1,17 @@
 import { resolve } from "node:path";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import { normalizeMemoryCategory, type PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MemoryCategory, MemoryScope, TeamMember } from "../storage/types.ts";
-import { selectMatterContext } from "./matter-context.ts";
-import { applyWorkerModel, resolveConfiguredModel } from "./model-selection.ts";
-import { parseSnapshotFromMetadata } from "./prompts.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import { normalizeMemoryCategory, type PersonalAgentStore } from "../../storage/repositories.ts";
+import type { Matter, MemoryCategory, MemoryScope, TeamMember } from "../../storage/types.ts";
+import { parseSnapshotFromMetadata } from "../execution/prompts.ts";
+import { selectMatterContext } from "../runtime/matter-context.ts";
+import { applyWorkerModel, resolveConfiguredModel } from "../runtime/model-selection.ts";
 import {
 	type DistillExperiencesInput,
 	type DistillExperiencesResult,
 	type ExperienceDraft,
 	truncateInline,
 	type WorkerFactory,
-} from "./types.ts";
+} from "../types.ts";
 
 interface ParsedDistillationPayload {
 	summary: string;

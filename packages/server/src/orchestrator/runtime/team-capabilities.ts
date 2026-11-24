@@ -1,5 +1,5 @@
-import type { RoleTemplate } from "../roles/types.ts";
-import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { Matter, MatterMessage, TeamMember } from "../../storage/types.ts";
 import { selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
 
 interface RuntimeSnapshot {

@@ -142,7 +142,7 @@ export async function runRoleDesignDemo(input: {
 				.listMessages(designed.matter.id, "user")
 				.findLast((message) => message.senderId === "role-architect" && message.metadata?.roleProposals);
 			if (!reply) throw new Error("No persisted proposal message");
-			const parsed = await import("../orchestrator/meta-architect.ts");
+			const parsed = await import("../orchestrator/architect/meta-architect.ts");
 			const original = await parsed.buildArchitectMessageProposals(
 				designed.runResult.assistantText,
 				store,

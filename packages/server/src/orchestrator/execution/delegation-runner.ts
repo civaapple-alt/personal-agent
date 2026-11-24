@@ -1,8 +1,7 @@
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import type { VerificationOutcome } from "../rpc/team-verification.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { WorkspaceLink } from "../storage/types.ts";
-import { prepareVerification, readVerificationOutcome, verificationPrompt } from "./independent-verification.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import type { VerificationOutcome } from "../../rpc/team-verification.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { WorkspaceLink } from "../../storage/types.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -16,7 +15,8 @@ import {
 	pushRunLog,
 	summarizeActiveDelegations,
 	truncateInline,
-} from "./types.ts";
+} from "../types.ts";
+import { prepareVerification, readVerificationOutcome, verificationPrompt } from "./independent-verification.ts";
 import type { ExecuteWorkerInput } from "./worker-runner.ts";
 
 export interface DelegationRunnerDeps {

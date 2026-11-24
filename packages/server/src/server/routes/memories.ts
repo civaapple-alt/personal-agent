@@ -1,4 +1,4 @@
-import { DistillationMemberAccessError } from "../../orchestrator/distiller.ts";
+import { DistillationMemberAccessError } from "../../orchestrator/rsi/distiller.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
 import { normalizeMemoryCategory } from "../../storage/repositories.ts";
 import type { FeedbackRating, MemoryCategory, MemoryScope, MemoryStatus, TeamMember } from "../../storage/types.ts";

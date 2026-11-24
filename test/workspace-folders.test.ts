@@ -8,7 +8,7 @@ import {
 	buildAttachedFolderContextFiles,
 	buildWorkspaceCustomizations,
 	extractAttachedSkillPaths,
-} from "../packages/server/src/orchestrator/workspace-customizations.ts";
+} from "../packages/server/src/orchestrator/runtime/workspace-customizations.ts";
 import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
 import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 

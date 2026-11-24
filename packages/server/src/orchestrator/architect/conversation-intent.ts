@@ -1,12 +1,12 @@
-import { isWorkbenchTopic, WORKBENCH_TOPICS, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
-import { isExplicitRoleSetupRequest } from "../roles/role-setup-intent.ts";
-import type { ModelSelection } from "../rpc/model-selection.ts";
-import type { MatterMessage, TeamMember } from "../storage/types.ts";
-import { messageMatchesContext } from "./matter-context.ts";
-import { looksLikeRosterQuestion } from "./matter-roster-query.ts";
+import { isWorkbenchTopic, WORKBENCH_TOPICS, type WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
+import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
+import type { ModelSelection } from "../../rpc/model-selection.ts";
+import type { MatterMessage, TeamMember } from "../../storage/types.ts";
+import { messageMatchesContext } from "../runtime/matter-context.ts";
+import { looksLikeRosterQuestion } from "../runtime/matter-roster-query.ts";
+import type { WorkerFactory } from "../types.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
 import { choice, type DecisionClassifier, noul } from "./system-one.ts";
-import type { WorkerFactory } from "./types.ts";
 
 export type ConversationIntent = "respond" | "roster" | "workbench_help";
 

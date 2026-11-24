@@ -16,7 +16,7 @@ import {
 	type RpcWorkerLike,
 	TeamOrchestrator,
 } from "../packages/server/src/index.ts";
-import { formatMessageHistoryContent } from "../packages/server/src/orchestrator/prompts.ts";
+import { formatMessageHistoryContent } from "../packages/server/src/orchestrator/execution/prompts.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 test("HTTP API persists observerMemberIds and broadcasts proactive observer messages", async () => {

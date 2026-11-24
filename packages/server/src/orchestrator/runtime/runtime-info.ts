@@ -2,26 +2,26 @@ import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
-import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../extensions/builtin-paths.ts";
+import { builtinExtensionPaths, resolveBuiltinExtensionPath } from "../../extensions/builtin-paths.ts";
 import {
 	listManagedEnvStatus,
 	type ManagedEnvStatus,
 	readWebAccessEnvFromDotEnv,
 	resolveEnvFilePath,
-} from "../extensions/env-credentials.ts";
-import { HUMAN_QUESTION_TOOL } from "../extensions/human-question/runtime.ts";
-import { TEAM_EXTENSION_TOOLS } from "../extensions/team-extension/runtime.ts";
-import { findInstalledPiWebAccess } from "../extensions/web-access/package.ts";
+} from "../../extensions/env-credentials.ts";
+import { HUMAN_QUESTION_TOOL } from "../../extensions/human-question/runtime.ts";
+import { TEAM_EXTENSION_TOOLS } from "../../extensions/team-extension/runtime.ts";
+import { findInstalledPiWebAccess } from "../../extensions/web-access/package.ts";
 import {
 	PI_WEB_SEARCH_TOOLS,
 	type ResolvedWebSearchProvider,
 	resolveEffectiveWebSearchProvider,
 	type WebSearchProviderPreference,
-} from "../extensions/web-access/runtime.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import { listPiPackages } from "../rpc/pi-packages.ts";
-import type { TeamMember } from "../storage/types.ts";
-import { resolveTurnTimeoutMs } from "./types.ts";
+} from "../../extensions/web-access/runtime.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import { listPiPackages } from "../../rpc/pi-packages.ts";
+import type { TeamMember } from "../../storage/types.ts";
+import { resolveTurnTimeoutMs } from "../types.ts";
 
 const execFileAsync = promisify(execFile);
 

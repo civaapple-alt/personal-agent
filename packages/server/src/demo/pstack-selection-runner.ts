@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveRoleSkills } from "../orchestrator/execution-context.ts";
+import { resolveRoleSkills } from "../orchestrator/execution/execution-context.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { defaultWorkerFactory } from "../orchestrator/types.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";

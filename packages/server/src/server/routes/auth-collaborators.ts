@@ -1,4 +1,4 @@
-import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
+import { buildRuntimeOverview } from "../../orchestrator/runtime/runtime-info.ts";
 import { isThinkingLevel } from "../../rpc/model-selection.ts";
 import { toPublicUser } from "../../storage/repositories.ts";
 import type { OrgMemberRole } from "../../storage/types.ts";

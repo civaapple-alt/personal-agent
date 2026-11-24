@@ -1,16 +1,23 @@
 import { PA_WORKFLOW_ROUTING_RULE } from "@pa/ext-workflow/server";
-import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
-import type { Matter, MatterMessage, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
-import { messageMatchesContext, selectMatterContext } from "./matter-context.ts";
-import { PUBLICATION_REVIEW_GUIDANCE } from "./publication-review.ts";
+import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
+import type {
+	Matter,
+	MatterMessage,
+	MemberMemory,
+	Organization,
+	TeamMember,
+	WorkspaceLink,
+} from "../../storage/types.ts";
+import { messageMatchesContext, selectMatterContext } from "../runtime/matter-context.ts";
 import {
 	MEMORY_CATEGORY_PROMPT_LABELS,
 	OBSERVER_SILENT_SENTINEL,
 	type ProgressSnapshot,
 	truncateInline,
-} from "./types.ts";
+} from "../types.ts";
+import { PUBLICATION_REVIEW_GUIDANCE } from "./publication-review.ts";
 
 export function parseSnapshotFromMetadata(metadata: Record<string, unknown> | null): ProgressSnapshot | null {
 	const raw = metadata?.progressSnapshot;

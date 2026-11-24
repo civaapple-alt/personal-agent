@@ -13,7 +13,7 @@ import {
 	readWorkbenchGuide,
 	WORKBENCH_TOPICS,
 } from "../packages/server/src/extensions/workbench-help/catalog.ts";
-import type { DecisionClassifier } from "../packages/server/src/orchestrator/system-one.ts";
+import type { DecisionClassifier } from "../packages/server/src/orchestrator/architect/system-one.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,

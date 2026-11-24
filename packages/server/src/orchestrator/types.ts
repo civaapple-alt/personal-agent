@@ -19,11 +19,11 @@ import type {
 	TeamMember,
 	WorkspaceLink,
 } from "../storage/types.ts";
+import type { DecisionClassifier } from "./architect/system-one.ts";
+import type { DraftVerification } from "./execution/independent-verification.ts";
+import type { StalledMember, TurnMonitor } from "./execution/turn-monitor.ts";
 import type { Clarification, DecisionResponse, DecisionSource } from "./human-decision.ts";
-import type { DraftVerification } from "./independent-verification.ts";
-import type { ReadPiModels } from "./model-selection.ts";
-import type { DecisionClassifier } from "./system-one.ts";
-import type { StalledMember, TurnMonitor } from "./turn-monitor.ts";
+import type { ReadPiModels } from "./runtime/model-selection.ts";
 
 export type WorkerSessionMode = "lead" | "internal" | "observer" | "verifier";
 

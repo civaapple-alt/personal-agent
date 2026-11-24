@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { resolveBuiltinExtensionPath } from "../extensions/builtin-paths.ts";
-import { prepareWebAccessForWorker } from "../extensions/web-access/runtime.ts";
-import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
+import { resolveBuiltinExtensionPath } from "../../extensions/builtin-paths.ts";
+import { prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
+import { assessRoleCapabilities, listScopedSkillCatalog } from "../../roles/capabilities.ts";
 import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
@@ -12,16 +12,13 @@ import {
 	type RoleArchitectDraft,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
-} from "../roles/role-architect.ts";
-import { allowedSkillScopesForRole, validateNewSkillDrafts } from "../roles/role-package-store.ts";
-import type { RoleScope, RoleTemplate } from "../roles/types.ts";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { TeamMember } from "../storage/types.ts";
-import { resolveRoleSkills } from "./execution-context.ts";
-import type { CollaborationPresetMode } from "./matter-initiation.ts";
-import { applyWorkerModel, resolveConfiguredModel } from "./model-selection.ts";
-import { extractJsonObject } from "./pi-decision.ts";
+} from "../../roles/role-architect.ts";
+import { allowedSkillScopesForRole, validateNewSkillDrafts } from "../../roles/role-package-store.ts";
+import type { RoleScope, RoleTemplate } from "../../roles/types.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { TeamMember } from "../../storage/types.ts";
+import { resolveRoleSkills } from "../execution/execution-context.ts";
 import {
 	collectTeamHealthEvidence,
 	collectTeamHealthFeedback,
@@ -30,8 +27,11 @@ import {
 	isTeamHealthMemoryInScope,
 	type TeamHealthEvidence,
 	type TeamHealthScopeFilter,
-} from "./team-health.ts";
-import { truncateInline, type WorkerFactory } from "./types.ts";
+} from "../rsi/team-health.ts";
+import { applyWorkerModel, resolveConfiguredModel } from "../runtime/model-selection.ts";
+import { truncateInline, type WorkerFactory } from "../types.ts";
+import type { CollaborationPresetMode } from "./matter-initiation.ts";
+import { extractJsonObject } from "./pi-decision.ts";
 
 export interface MetaArchitectMessage {
 	role: "user" | "assistant";

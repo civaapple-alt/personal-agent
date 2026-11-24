@@ -10,23 +10,28 @@ import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { Matter, MemberMemory, Organization, TeamMember, WorkspaceLink } from "../storage/types.ts";
-import { decideConversationIntent } from "./conversation-intent.ts";
-import { delegateBetweenMembers } from "./delegation-runner.ts";
-import { performDistillationPass } from "./distiller.ts";
-import { listWorkspaceTopLevelEntries } from "./execution-context.ts";
-import { dispatchMatterTurn } from "./matter-dispatch.ts";
+import { decideConversationIntent } from "./architect/conversation-intent.ts";
 import {
 	assessMatterInitiation,
 	assessMatterInitiationWithModel,
 	type MatterInitiationAssessment,
-} from "./matter-initiation.ts";
-import { type MetaArchitectChatInput, type MetaArchitectChatResult, runMetaArchitectChat } from "./meta-architect.ts";
-import { type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
-import { buildMemberPrompts } from "./prompts.ts";
-import { designRoleDraftWithModel } from "./role-design-decision.ts";
-import type { OrchestratorRuntimeConfig } from "./runtime-info.ts";
-import type { DecisionClassifier } from "./system-one.ts";
-import { filterTeamMembersForScope } from "./team-health.ts";
+} from "./architect/matter-initiation.ts";
+import {
+	type MetaArchitectChatInput,
+	type MetaArchitectChatResult,
+	runMetaArchitectChat,
+} from "./architect/meta-architect.ts";
+import { designRoleDraftWithModel } from "./architect/role-design-decision.ts";
+import type { DecisionClassifier } from "./architect/system-one.ts";
+import { delegateBetweenMembers } from "./execution/delegation-runner.ts";
+import { listWorkspaceTopLevelEntries } from "./execution/execution-context.ts";
+import { dispatchMatterTurn } from "./execution/matter-dispatch.ts";
+import { buildMemberPrompts } from "./execution/prompts.ts";
+import { type ExecuteWorkerInput, executeWithWorkerPass } from "./execution/worker-runner.ts";
+import { performDistillationPass } from "./rsi/distiller.ts";
+import { filterTeamMembersForScope } from "./rsi/team-health.ts";
+import { type ReadPiModels, resolveConfiguredModel } from "./runtime/model-selection.ts";
+import type { OrchestratorRuntimeConfig } from "./runtime/runtime-info.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -45,7 +50,6 @@ import {
 	type TeamOrchestratorOptions,
 	type WorkerFactory,
 } from "./types.ts";
-import { type ExecuteWorkerInput, executeWithWorkerPass } from "./worker-runner.ts";
 
 export {
 	type ActiveDelegationProgress,

@@ -1,5 +1,5 @@
-import type { MetaArchitectMessage } from "../../orchestrator/meta-architect.ts";
-import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
+import type { MetaArchitectMessage } from "../../orchestrator/architect/meta-architect.ts";
+import { PiDecisionError } from "../../orchestrator/architect/pi-decision.ts";
 import { assessRoleCapabilities, validateSkillReference } from "../../roles/capabilities.ts";
 import {
 	buildRoleDesignDraft,

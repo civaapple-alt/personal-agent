@@ -1,4 +1,4 @@
-import type { TeamMember } from "../storage/types.ts";
+import type { TeamMember } from "../../storage/types.ts";
 import { type ChoiceQuestion, choice, type DecisionClassifier } from "./system-one.ts";
 
 const PARTICIPATION = {

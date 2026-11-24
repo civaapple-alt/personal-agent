@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { PUBLICATION_REVIEW_GUIDANCE } from "../orchestrator/publication-review.ts";
+import { PUBLICATION_REVIEW_GUIDANCE } from "../orchestrator/execution/publication-review.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";

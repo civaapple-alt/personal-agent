@@ -1,20 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { ROLE_ARCHITECT_MEMBER_ID } from "../roles/role-architect.ts";
-import { isExplicitRoleSetupRequest } from "../roles/role-setup-intent.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import type { ImageContent } from "../rpc/types.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
-import type { ConversationDecision, ConversationIntent } from "./conversation-intent.ts";
-import type { Clarification, HumanDecision } from "./human-decision.ts";
-import { messageMatchesContext } from "./matter-context.ts";
-import { recordRosterReply } from "./matter-roster-query.ts";
-import { buildArchitectMessageProposals } from "./meta-architect.ts";
-import { runObserversPass } from "./observer-runner.ts";
-import { resolveDiscussionMentionTargets } from "./prompts.ts";
-import { createTurnMonitor, type StalledMember } from "./turn-monitor.ts";
+import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import type { ImageContent } from "../../rpc/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { Matter, MatterMessage, TeamMember } from "../../storage/types.ts";
+import type { ConversationDecision, ConversationIntent } from "../architect/conversation-intent.ts";
+import { buildArchitectMessageProposals } from "../architect/meta-architect.ts";
+import type { Clarification, HumanDecision } from "../human-decision.ts";
+import { messageMatchesContext } from "../runtime/matter-context.ts";
+import { recordRosterReply } from "../runtime/matter-roster-query.ts";
 import {
 	buildProgressSnapshot,
 	type DispatchMatterInput,
@@ -25,7 +22,10 @@ import {
 	formatAbortedReply,
 	type MatterRun,
 	resolveTurnTimeoutMs,
-} from "./types.ts";
+} from "../types.ts";
+import { runObserversPass } from "./observer-runner.ts";
+import { resolveDiscussionMentionTargets } from "./prompts.ts";
+import { createTurnMonitor, type StalledMember } from "./turn-monitor.ts";
 import type { ExecuteWorkerInput } from "./worker-runner.ts";
 
 interface MatterDispatchDeps {

@@ -4,14 +4,14 @@ import {
 	isArchitectRoleTemplate,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
-} from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { ModelSelection } from "../rpc/model-selection.ts";
-import type { TeamMember } from "../storage/types.ts";
+} from "../../roles/role-architect.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { ModelSelection } from "../../rpc/model-selection.ts";
+import type { TeamMember } from "../../storage/types.ts";
+import { truncateInline, type WorkerFactory } from "../types.ts";
 import { classifyInitiation } from "./initiation-classifier.ts";
 import { type PiDecisionResult, runTypedPiDecision } from "./pi-decision.ts";
 import type { DecisionClassifier } from "./system-one.ts";
-import { truncateInline, type WorkerFactory } from "./types.ts";
 
 export type CollaborationPresetMode = "solo" | "lead_consult" | "lead_review" | "human_first";
 export type RoleFitStatus = "matched" | "ambiguous" | "gap_detected";

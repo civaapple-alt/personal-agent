@@ -1,4 +1,4 @@
-import { assessRoleCapabilities, listScopedSkillCatalog } from "../roles/capabilities.ts";
+import { assessRoleCapabilities, listScopedSkillCatalog } from "../../roles/capabilities.ts";
 import {
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
@@ -9,13 +9,17 @@ import {
 	type RoleVerificationPlan,
 	type RoleWorkspaceScope,
 	slugifyRoleId,
-} from "../roles/role-architect.ts";
-import { allowedSkillScopesForRole, buildScopedRoleId, validateNewSkillDrafts } from "../roles/role-package-store.ts";
-import type { NewSkillDraft, RoleScope, RoleTemplate } from "../roles/types.ts";
-import type { ModelSelection } from "../rpc/model-selection.ts";
-import type { TeamMember } from "../storage/types.ts";
+} from "../../roles/role-architect.ts";
+import {
+	allowedSkillScopesForRole,
+	buildScopedRoleId,
+	validateNewSkillDrafts,
+} from "../../roles/role-package-store.ts";
+import type { NewSkillDraft, RoleScope, RoleTemplate } from "../../roles/types.ts";
+import type { ModelSelection } from "../../rpc/model-selection.ts";
+import type { TeamMember } from "../../storage/types.ts";
+import { truncateInline, type WorkerFactory } from "../types.ts";
 import { runTypedPiDecision } from "./pi-decision.ts";
-import { truncateInline, type WorkerFactory } from "./types.ts";
 
 const VALID_STYLES = new Set<RoleInteractionStyle>(["lead_direct", "consult_specialist", "risk_observer", "mixed"]);
 const VALID_SCOPES = new Set<RoleWorkspaceScope>(["no_repo_docs", "read_only_repo", "read_write_code"]);

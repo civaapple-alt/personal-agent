@@ -1,9 +1,8 @@
 import { resolve } from "node:path";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import type { ImageContent } from "../rpc/types.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MatterMessage, TeamMember, WorkspaceLink } from "../storage/types.ts";
-import { buildObserverTaskPrompt } from "./prompts.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import type { ImageContent } from "../../rpc/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { Matter, MatterMessage, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import {
 	type DispatchProgressEvent,
 	type ExecutionEffects,
@@ -14,7 +13,8 @@ import {
 	pushRunLog,
 	summarizeObserverProgress,
 	truncateInline,
-} from "./types.ts";
+} from "../types.ts";
+import { buildObserverTaskPrompt } from "./prompts.ts";
 
 export interface ObserverExecuteWorkerInput {
 	matterId: string;

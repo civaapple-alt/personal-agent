@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 import { type InstalledPiWebAccess, installPiWebAccess } from "../extensions/web-access/package.ts";
-import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime-info.ts";
+import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { MemoryValidationError, type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";

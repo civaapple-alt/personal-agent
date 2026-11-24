@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { collectTeamFrictionDigest } from "../packages/server/src/orchestrator/meta-architect.ts";
+import { collectTeamFrictionDigest } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";

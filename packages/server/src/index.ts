@@ -5,7 +5,6 @@ export {
 	listServerExtensionSummaries,
 	type ServerExtensionEntry,
 } from "./extensions/registry.ts";
-export { resolveRepoGitUserIdentity } from "./orchestrator/execution-context.ts";
 export {
 	assessMatterInitiation,
 	assessMatterInitiationWithModel,
@@ -17,7 +16,7 @@ export {
 	type RoleFitStatus,
 	type RoleGapSuggestion,
 	validateInitiationModelDecision,
-} from "./orchestrator/matter-initiation.ts";
+} from "./orchestrator/architect/matter-initiation.ts";
 export {
 	collectTeamFrictionDigest,
 	type MetaArchitectBlueprintProposal,
@@ -30,7 +29,7 @@ export {
 	parseMetaArchitectResponse,
 	type RoleProposalPayload,
 	runMetaArchitectChat,
-} from "./orchestrator/meta-architect.ts";
+} from "./orchestrator/architect/meta-architect.ts";
 export {
 	extractJsonObject,
 	PiDecisionError,
@@ -38,12 +37,13 @@ export {
 	type PiDecisionResult,
 	type PiDecisionSpec,
 	runTypedPiDecision,
-} from "./orchestrator/pi-decision.ts";
+} from "./orchestrator/architect/pi-decision.ts";
 export {
 	designRoleDraftWithModel,
 	type RoleDesignDecisionPayload,
 	validateRoleDesignDecision,
-} from "./orchestrator/role-design-decision.ts";
+} from "./orchestrator/architect/role-design-decision.ts";
+export { resolveRepoGitUserIdentity } from "./orchestrator/execution/execution-context.ts";
 export {
 	buildRuntimeOverview,
 	type OrchestratorRuntimeConfig,
@@ -59,7 +59,7 @@ export {
 	type RuntimeIsolationMode,
 	type RuntimeOverviewPayload,
 	type ServerRuntimeConfig,
-} from "./orchestrator/runtime-info.ts";
+} from "./orchestrator/runtime/runtime-info.ts";
 export {
 	buildProgressSnapshot,
 	type DelegateInput,

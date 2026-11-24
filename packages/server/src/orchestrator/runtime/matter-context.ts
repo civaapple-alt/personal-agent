@@ -1,4 +1,4 @@
-import type { MatterMessage } from "../storage/types.ts";
+import type { MatterMessage } from "../../storage/types.ts";
 
 export interface WorkspaceContext {
 	workspaceId: string | null;

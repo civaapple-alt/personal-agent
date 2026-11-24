@@ -10,8 +10,8 @@ import {
 	isWebSearchProviderPreference,
 	resolveEffectiveWebSearchProvider,
 } from "../../extensions/web-access/runtime.ts";
-import { buildRuntimeOverview } from "../../orchestrator/runtime-info.ts";
-import { choice, createSystemOneClassifier } from "../../orchestrator/system-one.ts";
+import { choice, createSystemOneClassifier } from "../../orchestrator/architect/system-one.ts";
+import { buildRuntimeOverview } from "../../orchestrator/runtime/runtime-info.ts";
 import type { RequestActor } from "../auth.ts";
 import { HttpRequestError, readJsonBody, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";

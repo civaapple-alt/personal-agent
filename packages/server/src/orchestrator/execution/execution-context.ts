@@ -3,9 +3,13 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { resolveAllowedSkillRoots, resolveRoleSkillPath, type SkillResolutionOptions } from "../roles/capabilities.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { WorkerSessionRecord } from "../storage/types.ts";
+import {
+	resolveAllowedSkillRoots,
+	resolveRoleSkillPath,
+	type SkillResolutionOptions,
+} from "../../roles/capabilities.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { WorkerSessionRecord } from "../../storage/types.ts";
 
 function isInsideRootDir(rootDir: string, realTarget: string): boolean {
 	const rel = relative(rootDir, realTarget);

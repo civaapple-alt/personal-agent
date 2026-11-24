@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import { buildWorkspaceCustomizations } from "../../orchestrator/workspace-customizations.ts";
+import { buildWorkspaceCustomizations } from "../../orchestrator/runtime/workspace-customizations.ts";
 import {
 	canAccessWorkspace,
 	canManageOrganization,

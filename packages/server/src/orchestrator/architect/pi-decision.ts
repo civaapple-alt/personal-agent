@@ -1,8 +1,8 @@
-import type { ModelSelection } from "../rpc/model-selection.ts";
-import type { PromptRunResult, ToolExecutionRecord } from "../rpc/pi-rpc-worker.ts";
-import type { ThinkingLevel } from "../rpc/types.ts";
-import { applyWorkerModel } from "./model-selection.ts";
-import type { WorkerFactory } from "./types.ts";
+import type { ModelSelection } from "../../rpc/model-selection.ts";
+import type { PromptRunResult, ToolExecutionRecord } from "../../rpc/pi-rpc-worker.ts";
+import type { ThinkingLevel } from "../../rpc/types.ts";
+import { applyWorkerModel } from "../runtime/model-selection.ts";
+import type { WorkerFactory } from "../types.ts";
 
 export type PiDecisionErrorKind = "aborted" | "parse_error" | "validation_error" | "worker_error";
 

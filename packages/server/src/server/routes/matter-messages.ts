@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
-import { looksLikeWorkRequest } from "../../orchestrator/conversation-intent.ts";
-import { messageMatchesContext } from "../../orchestrator/matter-context.ts";
-import { PiDecisionError } from "../../orchestrator/pi-decision.ts";
-import { resolveDiscussionMentionTargets } from "../../orchestrator/prompts.ts";
+import { looksLikeWorkRequest } from "../../orchestrator/architect/conversation-intent.ts";
+import { PiDecisionError } from "../../orchestrator/architect/pi-decision.ts";
+import { resolveDiscussionMentionTargets } from "../../orchestrator/execution/prompts.ts";
+import { messageMatchesContext } from "../../orchestrator/runtime/matter-context.ts";
 import type { PromptFileAttachment, PromptImageAttachment } from "../../orchestrator/team-orchestrator.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";

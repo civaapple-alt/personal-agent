@@ -1,5 +1,5 @@
 import type { ServerResponse } from "node:http";
-import { looksLikeRosterQuestion, recordRosterReply } from "../../orchestrator/matter-roster-query.ts";
+import { looksLikeRosterQuestion, recordRosterReply } from "../../orchestrator/runtime/matter-roster-query.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { Matter, MatterMessage } from "../../storage/types.ts";
 import { canActorUseMember } from "../acl.ts";

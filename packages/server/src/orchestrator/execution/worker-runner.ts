@@ -1,38 +1,29 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { classifyGithubFetches } from "../../../../pi-extensions/team-extension/web-fetch-evidence.js";
-import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../extensions/builtin-paths.ts";
-import { prepareHumanQuestion } from "../extensions/human-question/runtime.ts";
-import { prepareTeamExtension } from "../extensions/team-extension/runtime.ts";
-import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../extensions/web-access/runtime.ts";
-import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
-import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
-import { summarizePromptUsage } from "../rpc/prompt-usage.ts";
-import { abortable, createTeamToolBridge, type TeamToolCall } from "../rpc/team-tool-bridge.ts";
-import type { ImageContent } from "../rpc/types.ts";
-import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../storage/repositories.ts";
-import type { Matter, MemoryCategory, MemoryScope, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import { classifyGithubFetches } from "../../../../../pi-extensions/team-extension/web-fetch-evidence.js";
+import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../../extensions/builtin-paths.ts";
+import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
+import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
+import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
+import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
+import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
+import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
+import { abortable, createTeamToolBridge, type TeamToolCall } from "../../rpc/team-tool-bridge.ts";
+import type { ImageContent } from "../../rpc/types.ts";
+import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
+import type { Matter, MemoryCategory, MemoryScope, TeamMember, WorkspaceLink } from "../../storage/types.ts";
+import { buildArchitectMatterContext } from "../architect/meta-architect.ts";
+import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
+import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
+import { buildTeamCapabilities } from "../runtime/team-capabilities.ts";
+import { readWorkbenchTopic } from "../runtime/workbench-context.ts";
 import {
-	listWorkspaceTopLevelEntries,
-	prepareDelivery,
-	resolveRepoGitUserIdentity,
-	resolveRoleSkills,
-	resolveScopedPiSessionDir,
-	validateSavedSession,
-} from "./execution-context.ts";
-import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "./matter-context.ts";
-import { buildArchitectMatterContext } from "./meta-architect.ts";
-import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "./model-selection.ts";
-import {
-	buildInterruptionResumeBrief,
-	buildMemberPrompts,
-	buildObserverContextDigest,
-	formatMessageHistoryContent,
-	formatMessageHistorySpeaker,
-} from "./prompts.ts";
-import { buildTeamCapabilities } from "./team-capabilities.ts";
+	buildAttachedFolderContextFiles,
+	buildWorkspaceCustomizations,
+	extractAttachedSkillPaths,
+} from "../runtime/workspace-customizations.ts";
 import {
 	type DelegateInput,
 	type DelegateResult,
@@ -49,13 +40,22 @@ import {
 	summarizeToolArgs,
 	type WorkerFactory,
 	type WorkerSessionMode,
-} from "./types.ts";
-import { readWorkbenchTopic } from "./workbench-context.ts";
+} from "../types.ts";
 import {
-	buildAttachedFolderContextFiles,
-	buildWorkspaceCustomizations,
-	extractAttachedSkillPaths,
-} from "./workspace-customizations.ts";
+	listWorkspaceTopLevelEntries,
+	prepareDelivery,
+	resolveRepoGitUserIdentity,
+	resolveRoleSkills,
+	resolveScopedPiSessionDir,
+	validateSavedSession,
+} from "./execution-context.ts";
+import {
+	buildInterruptionResumeBrief,
+	buildMemberPrompts,
+	buildObserverContextDigest,
+	formatMessageHistoryContent,
+	formatMessageHistorySpeaker,
+} from "./prompts.ts";
 
 export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;

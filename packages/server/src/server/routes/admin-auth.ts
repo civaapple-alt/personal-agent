@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { readDotEnvMap, resolveEnvFilePath } from "../../extensions/env-credentials.ts";
-import { createSystemOneClassifier } from "../../orchestrator/system-one.ts";
+import { createSystemOneClassifier } from "../../orchestrator/architect/system-one.ts";
 import { toPublicUser } from "../../storage/repositories.ts";
 import type { PlatformRole, RegistrationMode, UserStatus } from "../../storage/types.ts";
 import { canAccessOrganization, canAccessWorkspace } from "../acl.ts";

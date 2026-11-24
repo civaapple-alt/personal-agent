@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import type { WorkspaceFolder } from "../storage/repos/workspace-folder-repo.ts";
+import type { WorkspaceFolder } from "../../storage/repos/workspace-folder-repo.ts";
 
 export const DEFAULT_RULES_BUDGET_TOKENS = 20_000;
 export const DEFAULT_SKILLS_BUDGET_TOKENS = 20_000;

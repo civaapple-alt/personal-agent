@@ -1,7 +1,7 @@
-import { isArchitectRoleTemplate } from "../roles/role-architect.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { MemberMemory } from "../storage/types.ts";
+import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { MemberMemory } from "../../storage/types.ts";
 
 export interface TeamHealthEvidence {
 	id: string;

@@ -1,16 +1,16 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
-import type { PromptRunResult } from "../rpc/pi-rpc-worker.ts";
+import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
 import {
 	isVerificationVerdict,
 	type VerificationOutcome,
 	type VerificationRequest,
 	type VerificationVerdict,
-} from "../rpc/team-verification.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
+} from "../../rpc/team-verification.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { ExecutionEffects, MatterRun } from "../types.ts";
 import { readWorkspaceDocument } from "./execution-context.ts";
-import type { ExecutionEffects, MatterRun } from "./types.ts";
 
 const git = promisify(execFile);
 

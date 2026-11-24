@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { reviewObject } from "../packages/server/src/demo/publication-review-quality.ts";
-import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution-context.ts";
-import { parseMetaArchitectResponse } from "../packages/server/src/orchestrator/meta-architect.ts";
-import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/team-health.ts";
+import { parseMetaArchitectResponse } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
+import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution/execution-context.ts";
+import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/rsi/team-health.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { assessRoleCapabilities, listRoleSkillCatalog } from "../packages/server/src/roles/capabilities.ts";
 import {

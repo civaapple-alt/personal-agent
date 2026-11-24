@@ -1,5 +1,5 @@
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { Matter, MatterMessage, TeamMember } from "../../storage/types.ts";
 
 export function looksLikeRosterQuestion(content: string): boolean {
 	const wording = content

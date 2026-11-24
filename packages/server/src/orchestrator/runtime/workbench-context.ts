@@ -1,8 +1,8 @@
-import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
-import type { RoleTemplate } from "../roles/types.ts";
-import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { Matter, MatterMessage, TeamMember } from "../storage/types.ts";
-import { isCurrentHumanDecision, readHumanDecision } from "./human-decision.ts";
+import { isGuideTopic, readWorkbenchGuide, type WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
+import type { PersonalAgentStore } from "../../storage/repositories.ts";
+import type { Matter, MatterMessage, TeamMember } from "../../storage/types.ts";
+import { isCurrentHumanDecision, readHumanDecision } from "../human-decision.ts";
 import { scopedSpaceDocumentIds, selectMatterContext, type WorkspaceContext } from "./matter-context.ts";
 import { buildTeamCapabilities } from "./team-capabilities.ts";
 

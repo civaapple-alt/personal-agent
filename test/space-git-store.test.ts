@@ -7,7 +7,7 @@ import test from "node:test";
 import {
 	encodePiSessionCwdDir,
 	resolveScopedPiSessionDir,
-} from "../packages/server/src/orchestrator/execution-context.ts";
+} from "../packages/server/src/orchestrator/execution/execution-context.ts";
 import { canAccessSpace, canWriteSpace } from "../packages/server/src/server/acl.ts";
 import { userToCollaboratorView } from "../packages/server/src/server/auth.ts";
 import { persistUploadedFiles, resolveUploadMonthBucket } from "../packages/server/src/server/uploads.ts";

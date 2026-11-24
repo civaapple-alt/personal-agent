@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution-context.ts";
+import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution/execution-context.ts";
 import { type RpcWorkerLike, TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import {
 	assessRoleCapabilities,
