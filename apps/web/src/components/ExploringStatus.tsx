@@ -6,7 +6,7 @@ import type {
 	ProgressSnapshotDto,
 	TeamMemberDto,
 } from "../api.ts";
-import { getToolDisplay } from "../extensions/registry.ts";
+import { getToolDisplay, getToolRenderer } from "../extensions/registry.ts";
 import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
 import { ElapsedTimer } from "../primitives/ElapsedTimer.tsx";
 import { liveDelegationEdges } from "../utils/matterDelegations.ts";
@@ -106,28 +106,48 @@ function ProgressDetails({
 					<div className="exploring-tool-list">
 						{toolCalls.map((call) => {
 							const cleanSkillName = call.skillName?.replace(/^\/?skill:/u, "") ?? null;
-							const showDetail = Boolean(call.detail) && (!cleanSkillName || call.detail !== call.skillName);
+							const toolDisplay = getToolDisplay(call.toolName);
+							const formattedDetail =
+								toolDisplay?.formatSummary?.({
+									toolName: call.toolName,
+									summary: call.detail,
+									args: call.args,
+								}) ?? call.detail;
+							const showDetail =
+								Boolean(formattedDetail) && (!cleanSkillName || formattedDetail !== call.skillName);
+							const rendererReg = call.args ? getToolRenderer(call.toolName) : undefined;
+							const renderedCard = rendererReg
+								? rendererReg.renderer({
+										toolCallId: call.id,
+										toolName: call.toolName,
+										args: call.args ?? {},
+										status: call.status,
+										detail: formattedDetail,
+									})
+								: null;
 							return (
-								<div key={call.id} className="exploring-tool-item">
-									<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
-									<strong className="exploring-tool-member">
-										{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
-									</strong>
-									{cleanSkillName && <span className="exploring-skill-badge">Skill · {cleanSkillName}</span>}
-									<code
-										className="exploring-tool-name"
-										title={getToolDisplay(call.toolName)?.label ?? call.toolName}
-									>
-										{call.toolName}
-									</code>
-									{showDetail && (
-										<span className="exploring-tool-detail" title={call.detail}>
-											{call.detail}
+								<div key={call.id} className="exploring-tool-entry">
+									<div className="exploring-tool-item">
+										<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
+										<strong className="exploring-tool-member">
+											{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
+										</strong>
+										{cleanSkillName && (
+											<span className="exploring-skill-badge">Skill · {cleanSkillName}</span>
+										)}
+										<code className="exploring-tool-name" title={toolDisplay?.label ?? call.toolName}>
+											{call.toolName}
+										</code>
+										{showDetail && (
+											<span className="exploring-tool-detail" title={formattedDetail}>
+												{formattedDetail}
+											</span>
+										)}
+										<span className={`exploring-tool-status is-${call.status}`}>
+											{toolStatusLabel(call.status, call.toolName)}
 										</span>
-									)}
-									<span className={`exploring-tool-status is-${call.status}`}>
-										{toolStatusLabel(call.status, call.toolName)}
-									</span>
+									</div>
+									{renderedCard && <div className="exploring-tool-card">{renderedCard}</div>}
 								</div>
 							);
 						})}

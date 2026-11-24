@@ -268,6 +268,7 @@ export interface TurnToolCall {
 	toolName: string;
 	detail?: string;
 	skillName?: string;
+	args?: Record<string, unknown>;
 	status: "running" | "success" | "error" | "unknown";
 	at: string;
 }
@@ -320,7 +321,11 @@ export function collectTurnToolCalls(
 			continue;
 		const id = `${notice.senderId}:${event.toolCallId}`;
 		if (event.type === "tool_execution_start") {
-			const args = "args" in event && event.args && typeof event.args === "object" ? event.args : {};
+			const argsRecord =
+				"args" in event && event.args && typeof event.args === "object" && !Array.isArray(event.args)
+					? (event.args as Record<string, unknown>)
+					: undefined;
+			const args = argsRecord ?? {};
 			const name = "name" in args && typeof args.name === "string" ? args.name : undefined;
 			const recordedSkill = "skillName" in args && typeof args.skillName === "string" ? args.skillName : undefined;
 			const path = "path" in args && typeof args.path === "string" ? args.path : undefined;
@@ -340,6 +345,7 @@ export function collectTurnToolCalls(
 				toolName: event.toolName,
 				detail: name ?? path ?? command ?? title,
 				skillName,
+				...(argsRecord && Object.keys(argsRecord).length > 0 ? { args: argsRecord } : {}),
 				status: "running",
 				at: notice.createdAt,
 			});
