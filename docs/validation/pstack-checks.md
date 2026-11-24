@@ -17,7 +17,7 @@ npm run demo:pstack -- --source /path/to/pstack
 
 证据目录保留 `report.json`、`proof.db`、Pi 会话、合成项目和方法副本。通过表示指定装载链路与确定性任务结果满足检查，不表示各岗位的语义质量、长期可靠性或方法带来的因果收益已得到证明。需要评估质量改善时仍须固定同题输入，重复运行并独立审阅。
 
-离线回归见 [pstack-runtime.test.ts](../../test/pstack-runtime.test.ts)：演示中方法资源的路径与大小边界；通用 Skill 目录和取消另见 [skill-catalog.test.ts](../../test/skill-catalog.test.ts)。它不调用真实模型。[证据判定](../../src/demo/pstack-evidence.ts)要求成功完成的方法工具结果同时含目标原文与对应哈希，仅提及名称、只有哈希、失败或未完成均不通过。
+离线回归见 [pstack-runtime.test.ts](../../test/pstack-runtime.test.ts)：演示中方法资源的路径与大小边界；通用 Skill 目录和取消另见 [skill-catalog.test.ts](../../test/skill-catalog.test.ts)。它不调用真实模型。[证据判定](../../packages/server/src/demo/pstack-evidence.ts)要求成功完成的方法工具结果同时含目标原文与对应哈希，仅提及名称、只有哈希、失败或未完成均不通过。
 
 ## 实机结果记录
 

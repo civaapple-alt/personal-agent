@@ -31,7 +31,7 @@ git --version
 ```bash
 tar -xzf personal-agent-0.7.1-prebuilt.tar.gz
 cd personal-agent-0.7.1
-node dist/server/main.js
+node apps/cli/dist/main.js
 ```
 
 ### 从源码启动

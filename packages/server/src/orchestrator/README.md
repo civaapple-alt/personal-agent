@@ -7,11 +7,11 @@
   [observer-runner.ts](observer-runner.ts) 与 [distiller.ts](distiller.ts) 分担立项适配诊断、提示词装配、Worker 执行、内部委托、旁听与复盘。
   - `assessInitiation`（[matter-initiation.ts](matter-initiation.ts)）提供实时本地文字规则预判，并由 `assessInitiationWithModel` 通过 [pi-decision.ts](pi-decision.ts)（`runTypedPiDecision`，类型化 JSON 契约校验 + 成员名录白名单约束 + 可选 `["read"]` 只读仓库核查 + `AbortSignal` 中止）发起按需 Pi LLM 决策，推荐参与人数/协作模式（`solo` / `lead_consult` / `lead_review` / `human_first`）及角色缺口；`role-architect` 元角色可通过正常 `dispatchMatter` 发起持久化对话或被中途请入业务事项（使用共享运行工具，按配置装配工作台帮助与方法扩展，并自动注入业务名录与运行体检摘要，结果解析为消息 `metadata.roleProposals` 供用户勾选生效，且不接管普通业务事项的自动路由与自动旁听）；当事项收窄为单兵模式（`aiMemberIds.length === 1`）时，[worker-runner.ts](worker-runner.ts) 与 [prompts.ts](prompts.ts) 在运行时关闭 `delegate_to_member`。岗位的 `antiJobs` 边界保留在系统提示中。
 - [execution-context.ts](execution-context.ts) 负责 Skill 路径（通过 `realpath` 校验所解析 `SKILL.md` 必须落在内建 `skills/` 及该角色作用域允许的 `resolveAllowedSkillRoots` 目录内，阻止跨租户或工作区外路径穿越）、按原生 Pi 规则编码会话目录 `resolveScopedPiSessionDir`、工作区顶层目录摘要 `listWorkspaceTopLevelEntries`（供无 `bash`/`ls` 的角色直接定位目标仓库文件）、保存会话身份与成果文件/URL 校验。[workspace-customizations.ts](workspace-customizations.ts) 统一扫描多目录工作区的 `AGENTS.md`/`CLAUDE.md` 与 `.agents/skills`/`.pi/skills`，按 Token 预算（默认 20,000 tokens）统计并自动将超限附加规则降级为路径指针，在 [worker-runner.ts](worker-runner.ts) 中经 `--skill` 与 `team-extension` 的 `before_agent_start` `contextFiles` 注入。
-- [team-health.ts](team-health.ts) 收集有 ID 的有限配置与协作案例供架构师体检引用，并支持按用户/组织过滤可见成员与最近案例，解析时过滤不存在的来源。`role-design` 方法全文由宿主提供给无业务工具的架构师；技能目录、能力状态和具体边界见[角色设计](../../docs/reference/role-design.md)。
+- [team-health.ts](team-health.ts) 收集有 ID 的有限配置与协作案例供架构师体检引用，并支持按用户/组织过滤可见成员与最近案例，解析时过滤不存在的来源。`role-design` 方法全文由宿主提供给无业务工具的架构师；技能目录、能力状态和具体边界见[角色设计](../../../../docs/reference/role-design.md)。
 - [matter-context.ts](matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
   筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。
 - [team-capabilities.ts](team-capabilities.ts) 给主责提供当前可见事项成员的角色声明、委托状态和同事项同工作区最近一次内部协作启动清单，标注来源时间、轮次及模式。启动清单是历史证据，不预测下一次运行；`read_pa_help` 的 `team_capabilities` 提供同一视图。
-- 独立合成场景的真实模型检查使用 `npm run demo:team:capabilities`，保留启动事件、回复和内部消息，仍需人工审阅；详见[运行验证](../../docs/validation/runtime-checks.md)。
+- 独立合成场景的真实模型检查使用 `npm run demo:team:capabilities`，保留启动事件、回复和内部消息，仍需人工审阅；详见[运行验证](../../../../docs/validation/runtime-checks.md)。
 - GitHub `fetch_content` 结束后，岗位运行器在事项事件中记录工具明确报告的获取方式、去除参数的来源和截断标记；不把临时路径当作持久工作区。续接时团队扩展对已知失效的临时路径补充提示。
 
 - [conversation-intent.ts](conversation-intent.ts) 通过 [system-one.ts](system-one.ts) 调用 Jev，也可降级到隔离 Pi 决策和本地规则。编排核保留事项占用、授权证据和成员范围校验。[matter-roster-query.ts](matter-roster-query.ts) 直接从当前事项配置生成名单。
@@ -22,7 +22,7 @@
 - [prompts.ts](prompts.ts) 使用英文组装岗位指令、对话回放、旁听和续接提示。回复与成果默认跟随用户请求的语言，并保留标识符、命令、路径和固定输出格式。[meta-architect.ts](meta-architect.ts) 对架构师的 JSON 回复采用相同语言约定，并支持按目标 `roleScope`/`ownerOrgId`/`ownerUserId` 筛选可读成员与推荐可选 `newSkills` 草案。
 - [matter-initiation.ts](matter-initiation.ts) 优先用角色的 `responsibilityKeywords` 作为本地规则的职责信号。内置岗位通过该字段保留旧的中文匹配词，缺省字段的模板仍从原有正向职责正文推导。
 
-- 角色可在 Pi 资源目录中查看 Skill 与已加载扩展命令的名称和用途，按需读取方法或提交插件命令；命令提交不证明执行成功。独立 JSON 决策和反思沿用各自的隔离配置。 [Skill 配置](../../docs/guides/pstack-runtime.md)
+- 角色可在 Pi 资源目录中查看 Skill 与已加载扩展命令的名称和用途，按需读取方法或提交插件命令；命令提交不证明执行成功。独立 JSON 决策和反思沿用各自的隔离配置。 [Skill 配置](../../../../docs/guides/pstack-runtime.md)
 - [团队扩展集成](../pa-extensions/README.md#团队扩展) 给岗位提供本轮工具清单和启动环境。编排器使用同一组能力判断校验桥接调用。
 - 安装网页检索扩展后，所有事项岗位执行均可用；历史 `webAccessDeniedRoles` 停用名单不再生效。[PA 扩展集成](../pa-extensions/README.md#web-access) 为主责、内部成员、旁听与验收解析已安装的扩展入口及工具清单。
 - [role-design-decision.ts](role-design-decision.ts) 将用户指定的 ID、验证计划、约束、Anti-Jobs 与依赖保留到模型角色草案，同时按目标作用域校验并输出可选 `newSkills` 草案（`role_local` / 目标库位置，确认前不写盘）；已有缺失依赖仍须显示 `missing`。规则和模型设计都同时保留验证计划与额外约束。
@@ -39,7 +39,7 @@
   - `consultMemberIds` 与 `observerMemberIds` 独立。前者为空数组时不允许主责委托，为 `null` 时沿用旧事项全部可用在组成员的行为。
   - 讨论轮次使用独立会话键。未点名时由当前可用的主责或在组角色回复，点名时按提及顺序回复。明确查询当前成员时，服务端按当前事项配置返回共享 AI 名册。每轮模型上下文也以运行时名册为准。讨论保留岗位工具用于查证，宿主关闭成果发布和经验提案。回复保留在事项历史，正式执行会回放同范围内新增的讨论消息。
 - `executeWithWorker`：按事项、成员、工作区 ID/路径及用户/内部/旁听模式恢复确切会话（不用最近会话或无限历史拼接替代恢复），并装配实际能力（含面向主/内部成员的 `propose_experience`，旁听模式禁用）。
-  - 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话；切回已有范围时可续接。详见[数据与会话边界](../../docs/reference/runtime-collaboration.md#数据与会话边界)。
+  - 会话键包含有效组织 ID。含个人角色上下文时，再按触发用户隔离 Pi 会话；切回已有范围时可续接。详见[数据与会话边界](../../../../docs/reference/runtime-collaboration.md#数据与会话边界)。
   - 旁听模式首次接入事项时仅注入精简阶段摘要、已归档成果标题与最近对话摘录，不回放其他角色完整过程记录或 `internal_collab` 细节。
   - 经 `resolveMemberForOrg` 合并组织级 `organization_ai_roles` 覆盖后，结合工作区 `Organization` 与 `resolveRepoGitUserIdentity(cwd)` 读取目标仓库当前有效 `user.name` / `user.email`。
   - [prompts.ts](prompts.ts) 将岗位规则、工作区约束和运行模式保存在系统提示中。实时名册、适用经验、目录清单和身份信息通过 `PA_TURN_CONTEXT` 追加到 Pi 会话。角色架构师的业务名录、Skill 目录和体检证据也随轮更新。
@@ -49,7 +49,7 @@
   - 注入的经验记入 `memory_applications`；成果草稿、经验提案（工作区属组织时 `company_private` 自动归入对应 `orgId`）与应用 ID 先暂存，主执行成功后再事务提交，失败或取消分支不保留候选。
 - `distillExperiences`：使用无状态、无工具/扩展/Skills 的只读 reflection pass，按当前工作区筛选用户纠偏、内部委托、异常、中断快照、反馈，并直接读取当前事项的空间文档摘录（`space_documents`）作为上下文（工作区属组织时 `company_private` 归入 `orgId`）。
   - 指定成果时证据截止其发布回复；候选仅可归属实际参与成员或明确指定成员，写入前再次检查工作区与取消状态，且仅允许同成员、同 scope、同 org、同 workspace 的无环替代关系。
-- 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../docs/reference/runtime-collaboration.md#等待人类决定)。
+- 持久化澄清由 [human-decision.ts](human-decision.ts) 定义。主责在正式执行中提请人类决定，协作者将问题回交委托者。具体状态和分工见[运行说明](../../../../docs/reference/runtime-collaboration.md#等待人类决定)。
 - `delegate`：由真实 `delegate_to_member` 工具触发，校验目标、调用链、重复执行和数量边界，将内部答案/错误返回调用者。
   - 桥接等待期间暂停父 worker 空闲看门狗，并向 `onProgress` 转发同事工具阶段与 `collabUpdated`。
   - [独立验收](independent-verification.ts) 解析具体提交、文件或文档草稿，绑定版本和来源委托。验收专用会话使用共享运行工具。送审文档在 [单轮派发](matter-dispatch.ts) 中按最终摘要重验归档条件。
@@ -60,11 +60,11 @@
 
 - 内部委托成员与旁听成员不能通过 `save_space_page` 直接修改事项资料。主责、内部成员、旁听和独立验收共享可用的基础工具、已配置扩展及 MCP；实际能力以启动握手为准。Pi 以服务账号权限运行，不是操作系统沙箱。
 - 主成员可通过 `save_space_page` 将计划、过程资料直接提交到当前事项默认空间的独立 Git 仓库（私密事项自动路由至发起人的个人空间 `spc_usr_<userId>`，非私密事项按仓库空间优先、其次组织空间）；传入 `sourcePath` 时同步记录 `linked_org_id`、`linked_workspace_id`、`linked_file_path` 关联，并在本轮回复消息的 `metadata.spaceDocuments` 中精确绑定记录。业务代码仓的 `write` / `edit` 修改保留在业务仓库本身。
-  - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../docs/validation/publication-review.md)检查。
+  - [publication-review.ts](publication-review.ts) 向主负责人提供发布前的事实、跨章节规则与验收一致性复核方法，要求发现专业矛盾后实际咨询并修订；这是工作方法，不是宿主语义验收门禁。实际效果通过[对照验证](../../../../docs/validation/publication-review.md)检查。
 
 会话记录和占用由 [storage](../storage/README.md) 保存；工具注册与传输由 [rpc](../rpc/README.md) 实现；HTTP 状态与 SSE 消费见 [server](../server/README.md)。
 
 从仓库根运行 `node --test test/continuity-collaboration.test.ts test/rsi-boundaries.test.ts` 验证接续、范围隔离、委托、失败、取消和阶段交付。
-精确边界见[运行说明](../../docs/reference/runtime-collaboration.md)。
+精确边界见[运行说明](../../../../docs/reference/runtime-collaboration.md)。
 
 模型选择在[编排层](model-selection.ts)按事项、组织和平台配置解析，再由 Pi 决定缺省值。主负责人在同一个 Pi 会话中切换，内部委托和旁听分别读取自己的组织岗位配置。运行就绪记录包含实际供应商、模型和思考等级。

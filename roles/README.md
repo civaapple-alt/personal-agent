@@ -1,6 +1,6 @@
 # 可分享的岗位定义
 
-这里存放角色 Markdown 资产；解析代码在 [src/roles](../src/roles/README.md)，具体执行在 [orchestrator](../src/orchestrator/README.md)。`README.md` 只是导航，不是角色。
+这里存放角色 Markdown 资产；解析代码在 [src/roles](../packages/server/src/roles/README.md)，具体执行在 [orchestrator](../packages/server/src/orchestrator/README.md)。`README.md` 只是导航，不是角色。
 
 | 初始资产 | 主要职责 |
 | --- | --- |

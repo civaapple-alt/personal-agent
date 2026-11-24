@@ -14,19 +14,19 @@
 
 | 变量名 | 默认值 | 生效位置 | 说明 |
 | --- | --- | --- | --- |
-| `TYPESAFE_API_KEY` | 未设置 | [服务入口](../../src/server/main.ts) | 启用 Jev System One 分类器。优先读取服务环境变量，也可在启动目录的 `.env` 中配置。服务只从该文件读取此凭据。 |
-| `PORT` | `4310` | [服务入口](../../src/server/main.ts) | Web 工作台 HTTP/SSE 监听端口 |
-| `PA_HOST` | `127.0.0.1` | [服务入口](../../src/server/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
-| `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../../src/server/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
-| `PA_SESSION_DIR` | `<cwd>/.data/pi-sessions` | [服务入口](../../src/server/main.ts) | Pi CLI 会话文件持久化根目录；隔离脚本（如 [start-team-sandbox.mjs](../../scripts/start-team-sandbox.mjs)）可单独重定向以避免写入 `.data/pi-sessions` |
-| `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../../src/server/main.ts) → [HTTP 鉴权](../../src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
-| `PA_WORKSPACES_ROOT` | `<dataDir>/team-workspaces` | [服务入口](../../src/server/main.ts) → [Git 克隆](../../src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
-| `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../../src/server/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
-| `PA_LOCAL_PI_RESOURCES` | 个人版回环监听下启用 | [服务入口](../../src/server/main.ts) | 设为 `0` 时恢复显式装配。本机所有者在个人版回环监听下启动的业务主责与内部委托可使用 Pi 原生资源发现 |
-| `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../../src/server/main.ts) → [编排核](../../src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
-| `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../../src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
-| `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) / [编排核](../../src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
-| `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../../src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / 对话框等待期间自动暂停 |
+| `TYPESAFE_API_KEY` | 未设置 | [服务入口](../../apps/cli/src/main.ts) | 启用 Jev System One 分类器。优先读取服务环境变量，也可在启动目录的 `.env` 中配置。服务只从该文件读取此凭据。 |
+| `PORT` | `4310` | [服务入口](../../apps/cli/src/main.ts) | Web 工作台 HTTP/SSE 监听端口 |
+| `PA_HOST` | `127.0.0.1` | [服务入口](../../apps/cli/src/main.ts) | HTTP 服务绑定地址；设为 `0.0.0.0` 时开放局域网协作并在控制台打印可用局域网地址 |
+| `PA_DB_PATH` | `<cwd>/.data/personal-agent.db` | [服务入口](../../apps/cli/src/main.ts) | SQLite 数据库文件路径（离线测试可传 `:memory:`）；`npm run check:startup` 会自动覆盖为临时库 |
+| `PA_SESSION_DIR` | `<cwd>/.data/pi-sessions` | [服务入口](../../apps/cli/src/main.ts) | Pi CLI 会话文件持久化根目录；隔离脚本（如 [start-team-sandbox.mjs](../../scripts/start-team-sandbox.mjs)）可单独重定向以避免写入 `.data/pi-sessions` |
+| `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../../apps/cli/src/main.ts) → [HTTP 鉴权](../../packages/server/src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
+| `PA_WORKSPACES_ROOT` | `<dataDir>/team-workspaces` | [服务入口](../../apps/cli/src/main.ts) → [Git 克隆](../../packages/server/src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
+| `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
+| `PA_LOCAL_PI_RESOURCES` | 个人版回环监听下启用 | [服务入口](../../apps/cli/src/main.ts) | 设为 `0` 时恢复显式装配。本机所有者在个人版回环监听下启动的业务主责与内部委托可使用 Pi 原生资源发现 |
+| `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) → [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
+| `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
+| `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../../packages/server/src/rpc/pi-rpc-worker.ts) / [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |
+| `PA_IDLE_TIMEOUT_MS` | `900000`（15 分钟） | [PiRpcWorker](../../packages/server/src/rpc/pi-rpc-worker.ts) | 单个 Pi worker 连续无任何 RPC 事件或 notice 时的静默看门狗上限（毫秒，`0` 表示关闭）；在 `delegate_to_member` / 对话框等待期间自动暂停 |
 | `NODE_ENV` | 未设置 | [前端构建脚本](../../scripts/build-web.mjs) | 设为 `production` 时，`npm run build:web` 启用 esbuild 代码压缩 |
 
 > **说明**：模型厂商凭证（如 `kimi-coding` 等 provider 的认证配置）不保存在本仓库变量中，直接复用本机 Pi CLI 环境配置；请勿将密钥写入代码或 `roles/*.md`。
@@ -35,16 +35,16 @@
 
 以下变量由编排核或预览管理器在拉起子进程时自动注入，用于工具桥接鉴权与端口隔离：
 
-- **Pi 子进程注入**（见[编排核](../../src/orchestrator/team-orchestrator.ts)与[工具桥接](../../src/rpc/team-tool-bridge.ts) / [团队扩展](../../pi-extensions/team-extension/index.ts)）：
+- **Pi 子进程注入**（见[编排核](../../packages/server/src/orchestrator/team-orchestrator.ts)与[工具桥接](../../packages/server/src/rpc/team-tool-bridge.ts) / [团队扩展](../../pi-extensions/team-extension/index.ts)）：
   - `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_SAVE_SPACE`
   - `PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
-- **本地预览子进程注入**（[PreviewManager](../../src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
+- **本地预览子进程注入**（[PreviewManager](../../packages/server/src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
 
 ---
 
 ## 2. 目录结构与默认存储位置
 
-以下默认路径相对于启动服务的目录。`<dataDir>` 是数据库所在目录，默认是 `.data/`。来源见[服务入口](../../src/server/main.ts)。
+以下默认路径相对于启动服务的目录。`<dataDir>` 是数据库所在目录，默认是 `.data/`。来源见[服务入口](../../apps/cli/src/main.ts)。
 
 ```text
 .data/
@@ -104,7 +104,7 @@
 
 启动初始化规则：
 - 若数据库中 `workspace_links` 表为空，启动时自动登记当前仓库（名称 `personal-agent`，默认分支 `main`）。
-- [database.ts](../../src/storage/database.ts) 在空数据库创建当前表结构。其他格式的数据库会被拒绝，不会被修改；请为 0.7.0 指定新的数据目录。
+- [database.ts](../../packages/server/src/storage/database.ts) 在空数据库创建当前表结构。其他格式的数据库会被拒绝，不会被修改；请为 0.7.0 指定新的数据目录。
 
 ---
 
@@ -126,15 +126,15 @@
 
 pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
 
-工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../src/orchestrator/execution-context.ts)
+工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../packages/server/src/orchestrator/execution-context.ts)
 
 ### 项目信任与文件访问
 
 主责、内部委托、旁听和讨论回复都在 Pi RPC 中运行。Pi 在启动时根据工作目录判断是否加载受项目信任保护的资源。RPC 跳过交互确认。没有命令行覆盖、扩展决定或已保存记录时，全局 `defaultProjectTrust` 为 `ask` 或 `never` 会跳过这些项目资源，为 `always` 会加载它们。`--no-extensions` 关闭扩展自动发现；`--no-approve` 跳过项目本地可信资源，但不关闭用户级 Skills。项目可信时，项目提示模板等其他资源仍可加载。 [Pi 项目信任规则](https://docs.pi.dev/latest/security#understand-project-trust)
 
-消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。讨论、旁听和验收共享运行工具，具体操作仍取决于任务、用户授权与宿主账号权限。 [岗位工具装配](../../src/orchestrator/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
+消息里提到的参考路径不会改变 Pi 的当前目录。内置文件工具接受绝对路径，访问范围取决于本轮装配的工具、运行工作台的系统账号和执行环境。即使参考仓库的项目可信记录为拒绝，具备相应系统权限的 `read`、`edit` 或 `write` 仍可访问其文件。讨论、旁听和验收共享运行工具，具体操作仍取决于任务、用户授权与宿主账号权限。 [岗位工具装配](../../packages/server/src/orchestrator/worker-runner.ts) · [本机执行与数据流](../../SECURITY.md#本机执行与数据流)
 
-以文件为来源发布文档成果时，PA 另外校验文件的真实路径，要求它位于当前事项工作区。 [文件成果来源校验](../../src/orchestrator/execution-context.ts)
+以文件为来源发布文档成果时，PA 另外校验文件的真实路径，要求它位于当前事项工作区。 [文件成果来源校验](../../packages/server/src/orchestrator/execution-context.ts)
 
 ### 进程与传输超时配置（代码常量 / 可构造参数）
 
@@ -145,16 +145,16 @@ pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通�
 | `shutdownGraceMs` | `2000`（2s） | `PiRpcWorkerOptions` | `stop()` 优雅关闭等待时长，超时后发送 `SIGTERM` / `SIGKILL` |
 | `idleTimeoutMs` | `900000`（15 分钟，可由 `PA_IDLE_TIMEOUT_MS` 覆写） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗（有正的 `timeoutMs` 时不超过 `timeoutMs`，设为 `0` 关闭）；在宿主执行 `delegate_to_member` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
 | 动态工具等待上限 | `10000`（10s） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) | `session_start` 后轮询 `pi.getAllTools()` 等待异步扩展或 MCP 注册完成的最长时间 |
-| 桥接 `/ready` 握手超时 | `30000`（30s） | [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts) | 宿主等待子扩展回报实际激活工具清单的最长时间 |
-| 桥接 HTTP 传输超时 | `0`（禁用） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) / [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |
-| 桥接单次请求体积上限 | `262144` 字节（256 KiB） | [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts) | 工具请求 JSON 上限 |
-| 取消停止等待上限 | `1000`（1s） | [team-orchestrator.ts](../../src/orchestrator/team-orchestrator.ts) | `abortMatter()` 等待每个 worker 响应 `abort` 的上限，随后强制 `stop()` |
+| 桥接 `/ready` 握手超时 | `30000`（30s） | [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 宿主等待子扩展回报实际激活工具清单的最长时间 |
+| 桥接 HTTP 传输超时 | `0`（禁用） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) / [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |
+| 桥接单次请求体积上限 | `262144` 字节（256 KiB） | [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 工具请求 JSON 上限 |
+| 取消停止等待上限 | `1000`（1s） | [team-orchestrator.ts](../../packages/server/src/orchestrator/team-orchestrator.ts) | `abortMatter()` 等待每个 worker 响应 `abort` 的上限，随后强制 `stop()` |
 
 ---
 
 ## 4. 岗位模板配置（`roles/*.md`）
 
-角色模板由 [template-loader.ts](../../src/roles/template-loader.ts) 解析，详细资产约定另见 [roles/README.md](../../roles/README.md)。
+角色模板由 [template-loader.ts](../../packages/server/src/roles/template-loader.ts) 解析，详细资产约定另见 [roles/README.md](../../roles/README.md)。
 
 ### Frontmatter 字段说明
 
@@ -190,8 +190,8 @@ pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通�
 
 以下规则目前内置在以下源码模块中，作为系统运行边界：
 
-- [team-orchestrator.ts](../../src/orchestrator/team-orchestrator.ts) 与 [team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts)
-- [repositories.ts](../../src/storage/repositories.ts)、[app.ts](../../src/server/app.ts) 与 [preview-manager.ts](../../src/server/preview-manager.ts)
+- [team-orchestrator.ts](../../packages/server/src/orchestrator/team-orchestrator.ts) 与 [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts)
+- [repositories.ts](../../packages/server/src/storage/repositories.ts)、[app.ts](../../packages/server/src/server/app.ts) 与 [preview-manager.ts](../../packages/server/src/server/preview-manager.ts)
 
 ### 协作与会话边界
 
@@ -235,11 +235,11 @@ pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通�
 
 ### 工具载荷、日志、SSE 与预览管理限制
 
-- **桥接参数长度限制**（[team-tool-bridge.ts](../../src/rpc/team-tool-bridge.ts)）：
+- **桥接参数长度限制**（[team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts)）：
   - `callId` ≤ 256、`memberId` ≤ 256、`task` ≤ 16000、`title` ≤ 200、`changeNote` ≤ 2000、`summary` ≤ 1000（默认通用非空文本 ≤ 64000 字符）。
 - **过程记录截断**：`notice` 单条工具事件截取 `16000` 字符；进度面板 `recentLogs` 最多保留最近 `6` 条活动。
-- **SSE 心跳**（[app.ts](../../src/server/app.ts)）：`/api/events` 每 `15000` ms 发送一次 `: ping` 保活帧。
-- **本地预览管理**（[preview-manager.ts](../../src/server/preview-manager.ts)）：
+- **SSE 心跳**（[app.ts](../../packages/server/src/server/app.ts)）：`/api/events` 每 `15000` ms 发送一次 `: ping` 保活帧。
+- **本地预览管理**（[preview-manager.ts](../../packages/server/src/server/preview-manager.ts)）：
   - 命令预览默认端口监听超时 `startupTimeoutMs = 5000` ms，内存中最多保留 `200` 行日志，停止时等待 `SIGTERM` 宽限 `1500` ms 后强杀 `SIGKILL`。
   - 未传入 `port` 时自动分配 `127.0.0.1` 临时空闲端口。
 

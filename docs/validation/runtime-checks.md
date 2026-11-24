@@ -93,7 +93,7 @@ npm run demo:space
 - 版本反馈从负改正后，种子经验仅保留一票正向贡献：
   - 证据位于 `/var/folders/nq/4dbss1_n7n5g160x6_x9_gn40000gn/T/personal-agent-rsi-smoke-ymEJHj/evidence.json` 及同目录 `proof.db`，不包含用户业务数据。
 - 这只验证一次有限的真实工具/复盘链路，没有用真实模型复测全部旁听、超时、崩溃或长期学习场景；这些边界分别由离线回归或后续专项验证负责。
-- 临时证据可能被系统清理，长期复现入口是 [rsi-smoke.ts](../../src/demo/rsi-smoke.ts)。
+- 临时证据可能被系统清理，长期复现入口是 [rsi-smoke.ts](../../packages/server/src/demo/rsi-smoke.ts)。
 
 ### 2026-11-16 发布前复核对照
 

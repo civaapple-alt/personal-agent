@@ -73,7 +73,7 @@ npm run demo:architect -- --summarize <证据目录>
 
 这是每条场景各一组同题前后观察，没有重复统计或随机分组，不证明因果改善、所有 Skill 已被采用、持续学习或长期自主稳定性。上述业务判断问题仍需后续有界任务验证；本轮没有增加生产自动语义门禁。
 
-实现入口见 [case](../../src/demo/role-design-case.ts)、[runner](../../src/demo/role-design-runner.ts)、[report](../../src/demo/role-design-report.ts)、[CLI](../../src/demo/role-design-smoke.ts)，离线边界见[测试](../../test/role-design-demo.test.ts)。岗位设计说明见[内置角色设计](../reference/role-design.md)。
+实现入口见 [case](../../packages/server/src/demo/role-design-case.ts)、[runner](../../packages/server/src/demo/role-design-runner.ts)、[report](../../packages/server/src/demo/role-design-report.ts)、[CLI](../../packages/server/src/demo/role-design-smoke.ts)，离线边界见[测试](../../test/role-design-demo.test.ts)。岗位设计说明见[内置角色设计](../reference/role-design.md)。
 
 ## 角色配置与能力装配回归
 

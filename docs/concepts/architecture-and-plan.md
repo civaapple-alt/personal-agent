@@ -24,9 +24,24 @@
 
 ## 2. 当前技术栈与进程结构
 
+Personal Agent 采用**三环硬边界多包架构**（由 [check-module-boundaries.mjs](../../scripts/check-module-boundaries.mjs) 在 `npm run check` 中强制校验）与**双半边扩展体系**：
+
+- **三环解耦与薄入口（`apps/` + `packages/`）**：
+  - **Engine Host（[`packages/server`](../../packages/server/src/README.md)）**：可嵌入的引擎宿主库，导出 `bootHost()` 与全部后端能力；
+  - **The Wire（[`packages/contracts`](../../packages/contracts/README.md)）**：零 `node:*` / React 依赖的共享契约层，是前后端之间唯一允许共享的协议边；
+  - **UI Client（[`apps/web`](../../apps/web/README.md)）**：纯浏览器端 React 工作台，只依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`；
+  - **薄启动器（[`apps/cli`](../../apps/cli/README.md)）**：仅做参数/信号处理并调用 `@pa/server/boot`，构建为无 `node_modules` 依赖的自包含 `apps/cli/dist/main.js`，为后续多入口（桌面壳、远程端、IM 网关）保持同一宿主路径。
+- **双半边扩展与原生 Pi 复用（`pi-extensions/` + `pa-extensions/`）**：
+  - **[`pi-extensions/`](../../pi-extensions/README.md)**：便携 Pi 扩展与标准 Pi 包（如 `role-skills`、`skill-catalog`、`human-question`），不依赖 `@pa/*` 宿主包，可在原生 `pi` 终端独立使用；
+  - **[`pa-extensions/`](../../pa-extensions/README.md)**：PA 宿主扩展包（`@pa/ext-*`），每个包严格分为互不导入的 `./server`（通过 `@pa/extension-api/server` 组合内置 Pi 扩展或原生第三方 Pi 包如 `pi-web-access`）与 `./web`（通过 `@pa/extension-api/web` 注册前端工具展示元数据），分别由 [server/extensions/registry.ts](../../packages/server/src/extensions/registry.ts) 与 [web/src/extensions/registry.ts](../../apps/web/src/extensions/registry.ts) 静态装配。
+- **三条运行铁律**：
+  1. **坚持 Pi RPC 子进程**：所有岗位、内部协作者、旁听与经验复盘均通过独立 `pi --mode rpc` 子进程执行，保留多租户与并发隔离，不耦合 Pi 私有内部符号；
+  2. **喂养而不自造（Influence by feeding, never by assembling）**：模型目录、认证、Compaction、Skill 发现与加载、Session JSONL 均交由原生 Pi 托管，PA 只做岗位权限裁剪、组织/工作区边界与跨岗编排；
+  3. **直接复用原生 Pi 生态包**：如 `pi-web-access` 直接以标准 Pi 包接入，由 PA 宿主扩展薄包装治理凭据与展示，不重复造轮子。
+
 | 层级 | 当前实现 | 明确范围 |
 | --- | --- | --- |
-| 运行与语言 | Node.js ≥ 22.19、严格 TypeScript | `src/` 可由 Node 原生运行，也可通过 `tsc` 编译到 `dist/` |
+| 运行与语言 | Node.js ≥ 22.19、严格 TypeScript、npm workspaces | `apps/cli/src/main.ts` 可由 Node 原生运行，也可通过 `npm run build:cli` 打包为自包含 `apps/cli/dist/main.js` |
 | 前端 | React、esbuild、原生 CSS | 双栏工作台，使用 `HashRouter`、`MarkdownView`；含「团队委托 / 过程事件 / 经验复盘」浮层、进度快照卡片与「本版重点 + 过程脉络」精简成果视图；未集成早期设想的 Pi UI 组件或 Mermaid 消息渲染 |
 | 用户通信 | Node HTTP API 与 SSE | HTTP 发起消息、停止（含运行停止与提炼取消）、旁听调整和配置操作；SSE 推送文本、进度、对话卡片、旁听插话与收尾事件；`GET /api/bootstrap` 与 `/api/matters/:id` 附带进行中运行快照以支持刷新恢复；没有 WebSocket |
 | 编排 | `TeamOrchestrator` | 负责事项范围、成员选择、执行所有权、委托树、会议旁听评估、只读经验复盘及成果收尾 |
@@ -117,19 +132,19 @@ flowchart TB
 
 | 源码入口 | 负责的事实与行为 |
 | --- | --- |
-| [`src/server/app.ts`](../../src/server/app.ts)、[`main.ts`](../../src/server/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../../src/server/auth.ts)、[sse](../../src/server/sse.ts)、[uploads](../../src/server/uploads.ts)、[dispatch-runner](../../src/server/dispatch-runner.ts) 与 [业务路由](../../src/server/README.md#业务路由) 维护 |
-| [`team-orchestrator.ts`](../../src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../../src/orchestrator/worker-runner.ts)、[delegation-runner](../../src/orchestrator/delegation-runner.ts)、[observer-runner](../../src/orchestrator/observer-runner.ts)、[distiller](../../src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
-| [`matter-initiation.ts`](../../src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../../src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../../src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../../src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
-| [`execution-context.ts`](../../src/orchestrator/execution-context.ts)、[`matter-context.ts`](../../src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
+| [`src/server/app.ts`](../../packages/server/src/server/app.ts)、[`main.ts`](../../apps/cli/src/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../../packages/server/src/server/auth.ts)、[sse](../../packages/server/src/server/sse.ts)、[uploads](../../packages/server/src/server/uploads.ts)、[dispatch-runner](../../packages/server/src/server/dispatch-runner.ts) 与 [业务路由](../../packages/server/src/server/README.md#业务路由) 维护 |
+| [`team-orchestrator.ts`](../../packages/server/src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../packages/server/src/orchestrator/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../../packages/server/src/orchestrator/worker-runner.ts)、[delegation-runner](../../packages/server/src/orchestrator/delegation-runner.ts)、[observer-runner](../../packages/server/src/orchestrator/observer-runner.ts)、[distiller](../../packages/server/src/orchestrator/distiller.ts) 分别拥有执行、委托、旁听与复盘路径 |
+| [`matter-initiation.ts`](../../packages/server/src/orchestrator/matter-initiation.ts)、[`pi-decision.ts`](../../packages/server/src/orchestrator/pi-decision.ts)、[`meta-architect.ts`](../../packages/server/src/orchestrator/meta-architect.ts)、[`role-architect.ts`](../../packages/server/src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
+| [`execution-context.ts`](../../packages/server/src/orchestrator/execution-context.ts)、[`matter-context.ts`](../../packages/server/src/orchestrator/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
 | [`team-extension.ts`](../../pi-extensions/team-extension/index.ts) | Pi 内团队工具注册、实际工具清单装配、当前岗位系统上下文 |
-| [`team-tool-bridge.ts`](../../src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
-| [`pi-rpc-worker.ts`](../../src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../../src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
-| [`storage/`](../../src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
-| [`dialog-broker.ts`](../../src/server/dialog-broker.ts)、[`preview-manager.ts`](../../src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
+| [`team-tool-bridge.ts`](../../packages/server/src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
+| [`pi-rpc-worker.ts`](../../packages/server/src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../../packages/server/src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
+| [`storage/`](../../packages/server/src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../packages/server/src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
+| [`dialog-broker.ts`](../../packages/server/src/server/dialog-broker.ts)、[`preview-manager.ts`](../../packages/server/src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
 
 ### 目录组织与源文件行数
 
-后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../../src/README.md)和[前端状态与组件](../../web/src/README.md)。
+后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../../packages/server/src/README.md)和[前端状态与组件](../../apps/web/src/README.md)。
 
 统计范围为 `src/` 和 `web/` 的 TypeScript、JavaScript、CSS 和 HTML 源文件。计入注释与空行，排除文档、依赖和构建产物。下表比较重构前的 `ab40a07` 与重构完成时的 `1a0c04d`。
 
@@ -141,15 +156,15 @@ flowchart TB
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |
-| 网页根组件 | 1,659 | [App.tsx](../../web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
-| 网页 API | 1,570 | [api.ts](../../web/src/api.ts) 11 行，业务模块最大 402 行 |
-| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../../web/src/styles/role-architect.css) 551 行 |
-| 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../../src/server/routes/role-packages.ts) 442 行 |
-| 团队编排 | 1,205 | [team-orchestrator.ts](../../src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../../src/orchestrator/matter-dispatch.ts) 542 行 |
-| 事项路由 | 1,133 | [matters.ts](../../src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../src/server/routes/matter-messages.ts) 743 行 |
-| 对话流样式 | 1,014 | [chat-stream.css](../../web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../web/src/styles/chat-cards.css) 269 行 |
+| 网页根组件 | 1,659 | [App.tsx](../../apps/web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
+| 网页 API | 1,570 | [api.ts](../../apps/web/src/api.ts) 11 行，业务模块最大 402 行 |
+| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../../apps/web/src/styles/role-architect.css) 551 行 |
+| 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../../packages/server/src/server/routes/role-packages.ts) 442 行 |
+| 团队编排 | 1,205 | [team-orchestrator.ts](../../packages/server/src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../../packages/server/src/orchestrator/matter-dispatch.ts) 542 行 |
+| 事项路由 | 1,133 | [matters.ts](../../packages/server/src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../packages/server/src/server/routes/matter-messages.ts) 743 行 |
+| 对话流样式 | 1,014 | [chat-stream.css](../../apps/web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../apps/web/src/styles/chat-cards.css) 269 行 |
 
-行数用于定位阅读和修改成本。[ChatStage.tsx](../../web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../web/src/utils/formatters.ts)、[matterStream.ts](../../web/src/utils/matterStream.ts)、[orgRoster.ts](../../web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../../apps/web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../apps/web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../apps/web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../apps/web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../apps/web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../apps/web/src/utils/formatters.ts)、[matterStream.ts](../../apps/web/src/utils/matterStream.ts)、[orgRoster.ts](../../apps/web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../apps/web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../packages/server/src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 
@@ -321,7 +336,7 @@ sequenceDiagram
 
 | 工作面 | 已有基础 | 验证边界 |
 | --- | --- | --- |
-| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
+| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../apps/web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
 | 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、单兵 `solo`/定向旁听运行时收窄、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
 | 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、多角色经验复盘/取消、上下文直接核验替代与效果回写 | 连续过程交流不新增交付、多角色 AI 提炼、取消与评估 API 均有离线测试覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
 | 角色复用与建队 | Markdown 导入导出、`.data/roles/` 运行时隔离、不同角色 ID 组建与安全删除、内置 Meta-Bot「角色架构师」（对话建队、团队协作体检与事项中途介入补人）、实际 Skill 装载（含 `deliverable-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |

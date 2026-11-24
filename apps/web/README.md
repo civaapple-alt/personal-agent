@@ -24,10 +24,10 @@ npm run build:web
 npm run start:web
 ```
 
-`start:web` 会重新构建网页并启动 [服务入口](../src/server/README.md)，默认使用已有 `.data/` 数据库；需要验证团队版多组织权限与资料空间版本交互、且避免改动真实数据时，可用 `npm run start:team:sandbox` 启动带预设样本数据的隔离沙盒（说明见[开发指南](../docs/guides/development.md#团队版一键验证沙盒)）。只验证启动时使用 `npm run build` 后的 `npm run check:startup`，不要用用户事项执行试验任务。
+`start:web` 会重新构建网页并启动 [服务入口](../../packages/server/src/server/README.md)，默认使用已有 `.data/` 数据库；需要验证团队版多组织权限与资料空间版本交互、且避免改动真实数据时，可用 `npm run start:team:sandbox` 启动带预设样本数据的隔离沙盒（说明见[开发指南](../../docs/guides/development.md#团队版一键验证沙盒)）。只验证启动时使用 `npm run build` 后的 `npm run check:startup`，不要用用户事项执行试验任务。
 
 - 改页面、路由或事件处理先读 [src/README.md](src/README.md)。
-- 涉及接口时同时检查 [server](../src/server/README.md)；涉及工作区、运行状态或成果判断时再读 [orchestrator](../src/orchestrator/README.md)，不在网页复制这些执行策略。
+- 涉及接口时同时检查 [server](../../packages/server/src/server/README.md)；涉及工作区、运行状态或成果判断时再读 [orchestrator](../../packages/server/src/orchestrator/README.md)，不在网页复制这些执行策略。
 
 - `npm run check` 包含前后端类型与规范检查，`npm run build:web` 验证资源构建。
 - 网页呈现变化还需实际查看相应页面；离线服务测试不代表视觉体验已验证。

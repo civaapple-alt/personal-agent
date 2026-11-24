@@ -43,13 +43,13 @@ npm run start:team:sandbox
 
 | 要修改的行为 | 首先阅读 |
 | --- | --- |
-| 事项主责、委托、上下文、取消与成果收尾 | [编排核](../../src/orchestrator/README.md) |
-| Pi RPC、事件、扩展桥接与工具能力 | [RPC](../../src/rpc/README.md) |
-| 数据模式、历史记录、版本和经验范围 | [存储](../../src/storage/README.md) |
-| HTTP、SSE、邀请、文件/图片与预览 | [服务](../../src/server/README.md) |
-| 页面与 API 消费 | [网页](../../web/README.md) → [源码](../../web/src/README.md) |
+| 事项主责、委托、上下文、取消与成果收尾 | [编排核](../../packages/server/src/orchestrator/README.md) |
+| Pi RPC、事件、扩展桥接与工具能力 | [RPC](../../packages/server/src/rpc/README.md) |
+| 数据模式、历史记录、版本和经验范围 | [存储](../../packages/server/src/storage/README.md) |
+| HTTP、SSE、邀请、文件/图片与预览 | [服务](../../packages/server/src/server/README.md) |
+| 页面与 API 消费 | [网页](../../apps/web/README.md) → [源码](../../apps/web/src/README.md) |
 | 岗位及方法资产 | [roles](../../roles/README.md)、[role-skills](../../pi-extensions/role-skills/README.md) |
-| 定义解析、序列化与能力目录 | [角色解析](../../src/roles/README.md) |
+| 定义解析、序列化与能力目录 | [角色解析](../../packages/server/src/roles/README.md) |
 
 后端使用 TypeScript 和 Node.js 自带的 SQLite，前端用 React 和 esbuild 构建。修改源码后重新构建。`dist/` 和 `web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。
 
@@ -77,7 +77,7 @@ node --test test/continuity-collaboration.test.ts
 
 ## 按需运行真实模型验证
 
-安装本机 Pi CLI 并配置任务所用岗位的模型后，从[演示命令](../../src/demo/README.md)中选择与改动对应的场景。以下命令验证真实委托、服务重启后接续会话及成果发布。
+安装本机 Pi CLI 并配置任务所用岗位的模型后，从[演示命令](../../packages/server/src/demo/README.md)中选择与改动对应的场景。以下命令验证真实委托、服务重启后接续会话及成果发布。
 
 ```bash
 npm run demo:team

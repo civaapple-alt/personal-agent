@@ -49,4 +49,4 @@ node --test test/continuity-collaboration.test.ts
 
 数据与会话使用内存或临时目录；服务绑定临时端口，并在结束/失败时清理。新增取消、失败或恢复用例时验证实际状态与成果记录，不能只检查“方法被调用”。不要缩短调度余量来制造不稳定的空闲超时测试。
 
-真实模型只在需要验证集成时显式选用 [demo](../src/demo/README.md)；纯文档改动使用 [check:docs](../scripts/README.md)，不重跑整套应用测试。
+真实模型只在需要验证集成时显式选用 [demo](../packages/server/src/demo/README.md)；纯文档改动使用 [check:docs](../scripts/README.md)，不重跑整套应用测试。

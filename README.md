@@ -33,13 +33,19 @@ Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件�
 
 ```text
 personal-agent/
-├── src/            # 后端源码（编排核、Pi RPC、PA 扩展集成、SQLite/Git 空间存储、HTTP/SSE 服务）
-├── web/            # 本地 React 网页工作台（同源 HTTP/SSE，esbuild 构建至 web/dist/）
+├── apps/
+│   ├── cli/        # 薄启动器（调用 @pa/server/boot，构建自包含 apps/cli/dist/main.js）
+│   └── web/        # React 网页工作台（UI Client 环，esbuild 构建至 apps/web/dist/）
+├── packages/
+│   ├── contracts/      # Wire 共享契约环（纯 DTO 与运行时校验，零 Node/宿主依赖）
+│   ├── extension-api/  # 扩展 SDK（严格分离 ./server 与 ./web 两个子路径）
+│   └── server/         # Engine Host 引擎宿主（编排核、Pi RPC、SQLite/Git 空间、HTTP/SSE）
+├── pa-extensions/  # PA 宿主扩展（每个扩展分 ./server 与 ./web 两半，双端静态注册表装配）
+├── pi-extensions/  # 便携 Pi 扩展与标准 Pi 包（role-skills、skill-catalog、human-question、team-extension）
 ├── roles/          # 内置可分享 AI 岗位角色定义（Markdown）
-├── pi-extensions/  # 运行在 Pi 进程内的扩展与标准 Pi 包（team-extension、skill-catalog、role-skills、human-question）
 ├── docs/           # 使用教程、部署指南、配置与架构参考（入口见 docs/README.md）
-├── test/           # 离线单元测试与集成测试
-├── scripts/        # 构建、打包、文档校验与隔离团队沙盒启动脚本
+├── test/           # 离线单元测试、边界门禁测试与集成测试
+├── scripts/        # 构建、打包、三环边界校验、文档校验与隔离团队沙盒启动脚本
 └── .data/          # 运行期私有数据（不入库：SQLite、spaces/ Git 仓库、会话、自定义角色与附件）
 ```
 

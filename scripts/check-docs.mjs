@@ -53,9 +53,11 @@ for (const path of files) {
 			.split(/\s+/)
 			.filter((arg) => /\.(?:ts|mjs|js)$/.test(arg))) {
 			// All commands run from the root. Dist paths are checked against the source without requiring a build.
-			const entry = argument.startsWith("dist/")
-				? argument.replace(/^dist\//, "src/").replace(/\.js$/, ".ts")
-				: argument;
+			const entry = argument.startsWith("apps/cli/dist/")
+				? argument.replace(/^apps\/cli\/dist\//, "apps/cli/src/").replace(/\.js$/, ".ts")
+				: argument.startsWith("dist/")
+					? argument.replace(/^dist\//, "packages/server/src/").replace(/\.js$/, ".ts")
+					: argument;
 			assert.ok((await stat(resolve(root, entry))).isFile(), `${path}: missing Node entry ${entry}`);
 			commands++;
 		}

@@ -1,6 +1,6 @@
 # 角色定义的解析代码
 
-本目录是解析器，不存放团队角色内容。可分享的角色资产在顶层 [roles/](../../roles/README.md)，运行经验在 [storage](../storage/README.md)。
+本目录是解析器，不存放团队角色内容。可分享的角色资产在顶层 [roles/](../../../../roles/README.md)，运行经验在 [storage](../storage/README.md)。
 
 [types.ts](types.ts) 定义 `RoleTemplate`（含 `roleKind`、`antiJobs` 及多租户作用域字段 `roleScope` / `ownerOrgId` / `ownerUserId`、`SkillStorageScope`、`NewSkillDraft`）与五个正文段落；[template-loader.ts](template-loader.ts) 提供解析、目录加载（同时支持 `<id>.md` 单文件与 `<id>/<id>.md` 角色包目录，且由目录归属覆盖 frontmatter 的 `roleScope`/`ownerOrgId`/`ownerUserId` 以防止越权伪造，并阻止非 `global` 角色覆盖全局模板或成为主联系人）、`loadRoleTemplatesWithCustomDir`（将仓库内建 `roles/` 与运行期自定义目录 `.data/roles/` 根、`orgs/<orgId>/`、`users/<userId>/` 合并）和 Markdown 序列化；[role-package-store.ts](role-package-store.ts) 维护作用域目录映射（`global` 写入 `<rolesDir>` 根，`org`/`personal` 分别写入 `orgs/<orgId>/` 与 `users/<userId>/` 且生成 `org-<8hex>-` / `usr-<8hex>-` 命名空间 ID）、`newSkills` 草案校验（大小/作用域限制）与随角色包落盘的 `<roleDir>/skills/<skillName>/SKILL.md` 及 `.data/skills/{global,orgs,users}/` 原子读写与清理；[role-architect.ts](role-architect.ts) 基于单一核心职责（One Job）、显式 Anti-Jobs 与最小工具权责按需生成角色草案及可选 `newSkills` 建议（仅作草案预览，确认前不落盘），并导出内置元角色模板 `BUILTIN_ROLE_ARCHITECT_TEMPLATE` 与辅助判定。
 

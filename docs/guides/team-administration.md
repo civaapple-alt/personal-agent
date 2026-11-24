@@ -13,7 +13,7 @@
 在 macOS 或 Linux 的终端运行以下命令。
 
 ```bash
-PA_REQUIRE_AUTH=1 PA_HOST=127.0.0.1 PORT=4310 node dist/server/main.js
+PA_REQUIRE_AUTH=1 PA_HOST=127.0.0.1 PORT=4310 node apps/cli/dist/main.js
 ```
 
 在 Windows PowerShell 中设置变量并启动。
@@ -22,7 +22,7 @@ PA_REQUIRE_AUTH=1 PA_HOST=127.0.0.1 PORT=4310 node dist/server/main.js
 $env:PA_REQUIRE_AUTH = "1"
 $env:PA_HOST = "127.0.0.1"
 $env:PORT = "4310"
-node dist/server/main.js
+node apps/cli/dist/main.js
 ```
 
 从源码部署时，在仓库根执行 `npm ci`。在 macOS 或 Linux 上，运行以下启动命令。

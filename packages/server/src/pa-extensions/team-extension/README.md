@@ -11,7 +11,7 @@ PA 启动岗位时加载 `team-extension`。[runtime.ts](runtime.ts) 根据岗�
 
 角色架构师、旁听和独立验收使用各自的工具清单。人工提问由 Human Question 装配。 [工具选择](runtime.ts) [Human Question](../human-question/README.md)
 
-运行模块把本轮桥接地址和令牌、工具清单、目标工作区与上下文传给 Pi。Pi 报告实际启用的工具。桥接传输管理请求校验、去重与取消，事项编排负责委托、确认与归档。 [Pi 团队扩展](../../../pi-extensions/team-extension/README.md) [桥接传输](../../rpc/team-tool-bridge.ts) [事项编排](../../orchestrator/README.md)
+运行模块把本轮桥接地址和令牌、工具清单、目标工作区与上下文传给 Pi。Pi 报告实际启用的工具。桥接传输管理请求校验、去重与取消，事项编排负责委托、确认与归档。 [Pi 团队扩展](../../../../../pi-extensions/team-extension/README.md) [桥接传输](../../rpc/team-tool-bridge.ts) [事项编排](../../orchestrator/README.md)
 
 ## 验证
 
