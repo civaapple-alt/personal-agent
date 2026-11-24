@@ -8,12 +8,10 @@ import {
 	type SkillScriptFile,
 	type SkillStorageTarget,
 } from "@pa/contracts/skill-proposal";
-import { isWorkbenchTopic, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
-	| { tool: "read_pa_help"; callId: string; topics: WorkbenchTopic[]; language?: "zh" | "en" }
 	| { tool: "read_space"; callId: string; pageId?: string; docType?: SpaceDocumentType; subPath?: string }
 	| ({
 			tool: "save_space_page";
@@ -168,19 +166,6 @@ function parseCall(value: unknown): TeamToolCall {
 			return { ...base, content: requiredString(args.content, "content", 64_000) };
 		}
 		return { ...base, files: files! };
-	}
-	if (value.tool === "read_pa_help" && "topics" in args) {
-		if (Object.keys(args).some((key) => key !== "topics" && key !== "language")) {
-			throw new Error("PA help accepts only topics and language");
-		}
-		const topics: unknown = args.topics;
-		const language = "language" in args ? args.language : undefined;
-		if (!Array.isArray(topics) || !topics.length || topics.length > 3 || !topics.every(isWorkbenchTopic)) {
-			throw new Error("Select one to three topics from the PA help index");
-		}
-		if (language !== undefined && language !== "zh" && language !== "en")
-			throw new Error("Unsupported help language");
-		return { tool: value.tool, callId, topics: [...new Set(topics)], language };
 	}
 	if (value.tool === "delegate_to_member" && "memberId" in args && "task" in args) {
 		return {

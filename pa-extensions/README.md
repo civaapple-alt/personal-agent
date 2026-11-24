@@ -7,8 +7,7 @@
 
 | 扩展 | 组合的 Pi 能力 | 职责 |
 | --- | --- | --- |
-| `worker-runtime` | [pa-extensions/worker-runtime/pi/index.ts](worker-runtime/pi/index.ts) | PA 宿主运行时护栏：目标工作区 `AGENTS.md` 隔离、成员/轮次上下文注入、能力握手与外部检索证据标注 |
-| `workbench-help` | [pa-extensions/workbench-help/pi/index.ts](workbench-help/pi/index.ts) | 只读 `read_pa_help` 工作台指南与事项运行事实速查 |
+| `worker-runtime` | [pa-extensions/worker-runtime/pi/index.ts](worker-runtime/pi/index.ts) | PA 宿主运行时护栏：目标工作区 `AGENTS.md` 隔离、`<pa_docs>` 双文档指针、成员/轮次上下文注入、能力握手与外部检索证据标注 |
 | `space` | [pa-extensions/space/pi/index.ts](space/pi/index.ts) | `read_space` / `save_space_page` Git 资料空间读写（按运行模式挂载） |
 | `delegation` | [pa-extensions/delegation/pi/index.ts](delegation/pi/index.ts) | `delegate_to_member` 团队跨岗委托与独立验收（按权限挂载） |
 | `skill-capture` | [pa-extensions/skill-capture/pi/index.ts](skill-capture/pi/index.ts) | 统一 `propose_skill` 沉淀入口（对应信任四步第二步：经人工确认后将 `SKILL.md` + 可选 `scripts/*` 原子落盘到磁盘 Skill 目录） |

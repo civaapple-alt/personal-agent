@@ -7,7 +7,7 @@ import { resolveBuiltinExtensionPath, resolveRepoAssetPath, resolveRepoRoot } fr
 import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
-import { WORKBENCH_HELP_PROMPT, type WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
+import type { WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
 import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
@@ -17,6 +17,7 @@ import type { ImageContent } from "../../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
 import type { Matter, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import { buildArchitectMatterContext } from "../architect/meta-architect.ts";
+import { readHumanDecision } from "../human-decision.ts";
 import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
 import { buildTeamCapabilities } from "../runtime/team-capabilities.ts";
@@ -260,15 +261,6 @@ export async function executeWithWorkerPass(
 				if (!document.matterId || document.matterId === input.matterId) return true;
 				return deps.store.getMatter(document.matterId)?.visibility === "org";
 			};
-			if (call.tool === "read_pa_help") {
-				const context = workbenchContext();
-				const chinese = call.language ? call.language === "zh" : /\p{Script=Han}/u.test(input.taskPrompt);
-				const topics = await Promise.all(
-					call.topics.map((topic) => readWorkbenchTopic(deps.store, context, topic, chinese)),
-				);
-				toolSignal.throwIfAborted();
-				return { topics };
-			}
 			if (isArchitect) throw new Error("Role architect cannot execute team tools");
 			if (call.tool === "read_space") {
 				if (sessionMode !== "lead" && sessionMode !== "internal")
@@ -636,6 +628,22 @@ export async function executeWithWorkerPass(
 						},
 					)
 				: undefined;
+		const pendingDecisions = deps.store
+			.listMessages(input.matterId, "user")
+			.map((message) => ({ message, decision: readHumanDecision(message.metadata) }))
+			.filter((entry) => entry.decision?.status === "pending");
+		const pendingDecisionsPrompt =
+			pendingDecisions.length > 0
+				? [
+						"## Pending human decisions in this matter",
+						...pendingDecisions.flatMap(({ message, decision }) =>
+							decision!.requests.map(
+								(req) =>
+									`- [${message.id}] ${req.question}${req.options?.length ? ` (options: ${req.options.join(" / ")})` : ""}`,
+							),
+						),
+					].join("\n")
+				: undefined;
 		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
@@ -650,10 +658,11 @@ export async function executeWithWorkerPass(
 					bridgeEnv: bridge.env,
 					requiredTools,
 					workspaceRoot: input.workspace ? cwd : undefined,
-					paInstallRoot: input.run.inheritLocalPiResources ? resolveRepoRoot() : undefined,
+					paInstallRoot: resolveRepoRoot(),
+					deploymentMode: input.run.inheritLocalPiResources ? "local" : "multi_tenant",
 					attachedContextFiles,
-					memberContext: [systemPrompt, WORKBENCH_HELP_PROMPT, architectContext?.systemPrompt],
-					turnContext: [turnContext, attachedFoldersPrompt, architectContext?.turnContext],
+					memberContext: [systemPrompt, architectContext?.systemPrompt],
+					turnContext: [turnContext, attachedFoldersPrompt, pendingDecisionsPrompt, architectContext?.turnContext],
 				}),
 				...humanQuestion.env,
 				...webAccess?.env,
@@ -1019,7 +1028,7 @@ export async function executeWithWorkerPass(
 		const helpBlock = help
 			? [
 					"[PA workbench reference for this turn]",
-					"Answer the specific question first. Use the recent conversation to resolve follow-ups. Include only the facts and steps needed to answer, then stop. Treat the reference as evidence and use read_pa_help when you need more PA facts. Describe actions and tool availability only when supported by that evidence.",
+					"Answer the specific question first. Use the recent conversation to resolve follow-ups. Include only the facts and steps needed to answer, then stop. Treat the reference as evidence and use `<pa_docs>` via `read` when you need deeper PA documentation. Describe actions and tool availability only when supported by that evidence.",
 					`${help.heading} (${help.source})\n${help.content}`,
 					...(runtimeHelp ? [`${runtimeHelp.heading} (${runtimeHelp.source})\n${runtimeHelp.content}`] : []),
 					...(matterHelp ? [`${matterHelp.heading} (${matterHelp.source})\n${matterHelp.content}`] : []),
@@ -1030,7 +1039,7 @@ export async function executeWithWorkerPass(
 			"[Current worker startup evidence]",
 			`Current role: ${input.member.id}; session mode: ${sessionMode}; discussion mode: ${isDiscussionMode}.`,
 			`Tools observed during this worker's startup handshake: ${tools.join(", ") || "none"}.`,
-			"This is this role's current startup, distinct from historical internal-startup records in team capability cards. Registration does not prove a tool call succeeded. Use read_pa_help runtime_tools to check current call evidence; do not invent successful calls.",
+			"This is this role's current startup, distinct from historical internal-startup records in team capability cards. Registration does not prove a tool call succeeded; do not invent successful calls.",
 			`Current matter's default space routing: ${matter?.visibility === "private" ? "the creator's personal space" : input.workspace ? "the workspace space" : "the organization space"}; a matter does not get a separate Git repository.`,
 			"[/Current worker startup evidence]",
 		].join("\n");

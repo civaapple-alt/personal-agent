@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 export const builtinExtensionPaths = {
 	"worker-runtime": "pa-extensions/worker-runtime/pi/index.ts",
-	"workbench-help": "pa-extensions/workbench-help/pi/index.ts",
 	space: "pa-extensions/space/pi/index.ts",
 	delegation: "pa-extensions/delegation/pi/index.ts",
 	"skill-capture": "pa-extensions/skill-capture/pi/index.ts",

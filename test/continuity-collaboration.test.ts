@@ -9,7 +9,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
 import skillCaptureExtension from "../pa-extensions/skill-capture/pi/index.ts";
 import spaceExtension from "../pa-extensions/space/pi/index.ts";
-import workbenchHelpExtension from "../pa-extensions/workbench-help/pi/index.ts";
 import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
 import workerRuntimeExtension from "../pa-extensions/worker-runtime/pi/index.ts";
 import { resolveBuiltinExtensionPath } from "../packages/server/src/extensions/builtin-paths.ts";
@@ -97,9 +96,6 @@ class SessionWorker implements RpcWorkerLike {
 					].map((name) => ({ name })),
 				setActiveTools: () => {},
 			});
-			if (this.options.args?.includes(resolveBuiltinExtensionPath("workbench-help"))) {
-				workbenchHelpExtension({ registerTool });
-			}
 			if (this.options.args?.includes(resolveBuiltinExtensionPath("space"))) {
 				spaceExtension({ registerTool });
 			}
@@ -1022,30 +1018,18 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	assert.equal(offline.reply?.metadata?.humanDecision, undefined);
 });
 
-test("workbench help reads packaged guides and active matter facts through the shipped extension", async (t) => {
+test("workers receive PA_INSTALL_ROOT, deployment mode, and pending human decisions in turnContext without read_pa_help", async (t) => {
 	for (const topic of Object.keys(WORKBENCH_TOPICS)) {
 		if (!isWorkbenchTopic(topic) || !isGuideTopic(topic)) continue;
 		assert.ok((await readWorkbenchGuide(topic, true)).content);
 		assert.ok((await readWorkbenchGuide(topic, false)).content);
 	}
 	const f = await fixture(t, async (worker) => {
-		assert.match(worker.options.env?.PA_MEMBER_CONTEXT ?? "", /read_pa_help/);
-		const details = async (topics: string[]) =>
-			JSON.stringify((await worker.call("read_pa_help", { topics, language: "zh" })).details);
-		const guide = await details(["roles", "capabilities", "deliverables"]);
-		assert.match(guide, /角色架构师.*网页检索.*资料空间/);
-		const state = await details(["current_matter", "pending_decisions", "matter_documents"]);
-		assert.match(state, /QA Manager.*持续跟进的审批.*新工作区验收/);
-		assert.doesNotMatch(state, /旧工作区|其他组织|被替代|仅存在于数据库/);
-		assert.match(await details(["runtime_tools"]), /本轮启动时的工具.*request_clarification/);
-		await assert.rejects(
-			worker.call("read_pa_help", { topics: ["current_matter"], matterId: "another_matter" }),
-			/PA help accepts only topics and language/,
-		);
-		await assert.rejects(
-			worker.call("read_pa_help", { topics: ["../../SECURITY.md"] }),
-			/Select one to three topics/,
-		);
+		assert.ok(worker.options.env?.PA_INSTALL_ROOT);
+		assert.ok(worker.options.env?.PA_DEPLOYMENT_MODE);
+		assert.equal(worker.tools.has("read_pa_help"), false);
+		assert.match(worker.options.env?.PA_TURN_CONTEXT ?? "", /Pending human decisions in this matter/);
+		assert.match(worker.options.env?.PA_TURN_CONTEXT ?? "", /持续跟进的审批/);
 		return "已查阅工作台";
 	});
 	const oldWorkspace = f.workspace;
@@ -2113,55 +2097,22 @@ test("lead receives scoped team capability evidence and distinguishes tool start
 		const turn = worker.options.env?.PA_TURN_CONTEXT ?? "";
 		assert.match(turn, /Team capability cards/);
 		assert.match(prompt, /Current role: product-manager; session mode: lead/);
-		assert.match(prompt, /Tools observed during this worker's startup handshake: .*read_pa_help/);
+		assert.match(prompt, /Tools observed during this worker's startup handshake: .*read_space/);
 		assert.match(turn, /engineering-manager.*consultable/);
 		assert.match(turn, /Role definition — responsibilities/);
 		assert.match(turn, /role tool suggestions/);
 		assert.match(turn, /historical_marker/);
 		assert.doesNotMatch(turn, /outside_workspace_marker|outside_org_marker|observer_marker/);
 		assert.match(turn, /not live availability/);
-		const team = JSON.stringify(
-			(await worker.call("read_pa_help", { topics: ["team_capabilities"], language: "zh" })).details,
-		);
-		assert.match(team, /historical_marker/);
-		assert.doesNotMatch(team, /outside_workspace_marker|outside_org_marker|observer_marker/);
-		const before = JSON.stringify(
-			(await worker.call("read_pa_help", { topics: ["runtime_tools", "current_matter"], language: "zh" })).details,
-		);
-		assert.match(before, /本轮未见调用，实际效果未验证/);
-		assert.match(before, /load_available_skill: 本轮未见调用，实际效果未验证.*启动时已加载/);
-		assert.match(before, /当前工作区空间/);
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "search-1", toolName: "web_search" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "search-1", toolName: "web_search", isError: true });
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "skill-1", toolName: "load_available_skill" });
-		worker.emitEvent({
-			type: "tool_execution_start",
-			toolCallId: "command-1",
-			toolName: "request_pi_command",
-			args: { name: "fixture" },
-		});
-		worker.emitEvent({
-			type: "tool_execution_end",
-			toolCallId: "command-1",
-			toolName: "request_pi_command",
-			isError: false,
-		});
-		worker.emitEvent({ type: "tool_execution_start", toolCallId: "content-1", toolName: "fetch_content" });
-		worker.emitEvent({ type: "tool_execution_end", toolCallId: "content-1", toolName: "fetch_content" });
 		worker.emitEvent({
 			type: "tool_execution_end",
 			toolCallId: "skill-1",
 			toolName: "load_available_skill",
 			isError: false,
 		});
-		const after = JSON.stringify(
-			(await worker.call("read_pa_help", { topics: ["runtime_tools"], language: "zh" })).details,
-		);
-		assert.match(after, /web_search: 最近调用报告错误/);
-		assert.match(after, /load_available_skill: 最近调用结束且未报告工具错误/);
-		assert.match(after, /fetch_content: 调用已结束但结果状态未知/);
-		assert.match(after, /request_pi_command: 命令已提交，执行结果未知/);
-		assert.match(after, /有 bash 不等于只读/);
 		checked = true;
 		return "能力已检查";
 	});

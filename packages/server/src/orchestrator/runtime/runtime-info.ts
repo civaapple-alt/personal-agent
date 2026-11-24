@@ -291,7 +291,6 @@ export async function buildRuntimeOverview(options: {
 	const { config, serverConfig, activeMembers, isOwner } = options;
 	const probePromise = (options.probePiCli ?? (() => probePiCli()))();
 	const workerRuntimePath = resolveBuiltinExtensionPath("worker-runtime");
-	const workbenchHelpPath = resolveBuiltinExtensionPath("workbench-help");
 	const spacePath = resolveBuiltinExtensionPath("space");
 	const delegationPath = resolveBuiltinExtensionPath("delegation");
 	const skillCapturePath = resolveBuiltinExtensionPath("skill-capture");
@@ -302,7 +301,6 @@ export async function buildRuntimeOverview(options: {
 	const [
 		piProbe,
 		workerRuntimeFileStatus,
-		workbenchHelpFileStatus,
 		spaceFileStatus,
 		delegationFileStatus,
 		skillCaptureFileStatus,
@@ -312,7 +310,6 @@ export async function buildRuntimeOverview(options: {
 	] = await Promise.all([
 		probePromise,
 		checkFileOrDir(workerRuntimePath),
-		checkFileOrDir(workbenchHelpPath),
 		checkFileOrDir(spacePath),
 		checkFileOrDir(delegationPath),
 		checkFileOrDir(skillCapturePath),
@@ -377,22 +374,6 @@ export async function buildRuntimeOverview(options: {
 		declaredByRoles: [],
 		mcpServers: [],
 		error: workerRuntimeFileStatus === "missing" ? "未找到扩展入口文件" : null,
-	};
-
-	const workbenchHelpItem: RuntimeExtensionItem = {
-		id: "builtin-workbench-help",
-		name: "workbench-help",
-		sourceKind: "builtin",
-		status: workbenchHelpFileStatus === "present" ? "active" : "error",
-		entryPath: isOwner ? workbenchHelpPath : builtinExtensionPaths["workbench-help"],
-		fileStatus: workbenchHelpFileStatus,
-		scopeSummary: "所有事项岗位与角色架构师",
-		description: "通过本机桥接按主题读取安装版指南与当前事项运行事实。",
-		registeredTools: ["read_pa_help"],
-		hooks: [],
-		declaredByRoles: [],
-		mcpServers: [],
-		error: workbenchHelpFileStatus === "missing" ? "未找到扩展入口文件" : null,
 	};
 
 	const spaceExtensionItem: RuntimeExtensionItem = {
@@ -550,7 +531,6 @@ export async function buildRuntimeOverview(options: {
 
 	const extensions: RuntimeExtensionItem[] = [
 		workerRuntimeItem,
-		workbenchHelpItem,
 		spaceExtensionItem,
 		delegationExtensionItem,
 		skillCaptureItem,

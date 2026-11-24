@@ -7,7 +7,6 @@ import skillCatalog from "@pa/ext-skill-catalog/server";
 import space from "@pa/ext-space/server";
 import visualize from "@pa/ext-visualize/server";
 import webAccess from "@pa/ext-web-access/server";
-import workbenchHelp from "@pa/ext-workbench-help/server";
 import workerRuntime from "@pa/ext-worker-runtime/server";
 import workflow from "@pa/ext-workflow/server";
 import { type PaServerExtension, summarizeServerExtension } from "@pa/extension-api/server";
@@ -20,7 +19,6 @@ export interface ServerExtensionEntry {
 /** Static registry of all built-in PA server extensions (RPC subprocess assembly + governance). */
 export const builtinServerExtensions: readonly ServerExtensionEntry[] = [
 	{ specifier: "@pa/ext-worker-runtime/server", extension: workerRuntime },
-	{ specifier: "@pa/ext-workbench-help/server", extension: workbenchHelp },
 	{ specifier: "@pa/ext-space/server", extension: space },
 	{ specifier: "@pa/ext-delegation/server", extension: delegation },
 	{ specifier: "@pa/ext-skill-capture/server", extension: skillCapture },

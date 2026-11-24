@@ -3,7 +3,6 @@ import type { createTeamToolBridge, TeamToolCall } from "../../rpc/team-tool-bri
 import { resolveBuiltinExtensionPath } from "../builtin-paths.ts";
 
 export const TEAM_EXTENSION_TOOLS = [
-	"read_pa_help",
 	"read_space",
 	"save_space_page",
 	"delegate_to_member",
@@ -30,11 +29,8 @@ export function prepareTeamExtension({
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canCaptureSkill = !isArchitect && !discussionMode && (isLead || isInternal);
 
-	const entries: string[] = [
-		resolveBuiltinExtensionPath("worker-runtime"),
-		resolveBuiltinExtensionPath("workbench-help"),
-	];
-	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
+	const entries: string[] = [resolveBuiltinExtensionPath("worker-runtime")];
+	const tools: TeamToolCall["tool"][] = [];
 	if (canReadSpace) {
 		entries.push(resolveBuiltinExtensionPath("space"));
 		tools.push("read_space");
@@ -61,6 +57,7 @@ export function prepareTeamExtension({
 			requiredTools,
 			workspaceRoot,
 			paInstallRoot,
+			deploymentMode,
 			attachedContextFiles,
 			memberContext,
 			turnContext,
@@ -69,6 +66,7 @@ export function prepareTeamExtension({
 			requiredTools: string[];
 			workspaceRoot?: string;
 			paInstallRoot?: string;
+			deploymentMode?: "local" | "multi_tenant";
 			attachedContextFiles?: Array<{ path: string; content: string }>;
 			memberContext: Array<string | undefined>;
 			turnContext: Array<string | undefined>;
@@ -77,6 +75,7 @@ export function prepareTeamExtension({
 				...bridgeEnv,
 				PA_TARGET_WORKSPACE_ROOT: workspaceRoot ?? "__none__",
 				...(paInstallRoot ? { PA_INSTALL_ROOT: paInstallRoot } : {}),
+				...(deploymentMode ? { PA_DEPLOYMENT_MODE: deploymentMode } : {}),
 				...(attachedContextFiles && attachedContextFiles.length > 0
 					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
 					: {}),

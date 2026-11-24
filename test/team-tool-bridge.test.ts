@@ -347,9 +347,10 @@ test("worker-runtime injects Pi-style <pa_docs> pointer when PA_INSTALL_ROOT is 
 	assert.ok(existsSync(paths.docsDir));
 	assert.ok(existsSync(paths.examplesDir));
 
-	const section = buildPaDocumentationSection(paths.installRoot);
+	const section = buildPaDocumentationSection(paths.installRoot, "multi_tenant");
 	assert.match(section, /<pa_docs>/);
 	assert.match(section, /<docs>/);
+	assert.match(section, /Deployment mode: multi_tenant/);
 	assert.ok(section.includes(`${paths.installRoot.replaceAll("\\", "/")}/AGENTS.md`));
 	assert.ok(section.includes(`${paths.installRoot.replaceAll("\\", "/")}/examples`));
 

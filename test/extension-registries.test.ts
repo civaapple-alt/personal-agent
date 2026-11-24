@@ -13,7 +13,6 @@ test("server and web extension registries stay aligned and resolve declared buil
 	const summaries = listServerExtensionSummaries();
 	const expectedNames = [
 		"worker-runtime",
-		"workbench-help",
 		"space",
 		"delegation",
 		"skill-capture",
