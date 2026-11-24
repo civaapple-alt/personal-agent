@@ -6,6 +6,7 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./boot": "./src/server/boot.ts"
+		"./boot": "./src/server/boot.ts",
+		"./build-support": "./src/build-support.ts"
 	}
 }

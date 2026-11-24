@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { resolveRepoAssetPath } from "../pa-extensions/builtin-paths.ts";
+import { PA_RUNTIME_ASSET_MANIFEST, resolveRepoAssetPath } from "../build-support.ts";
 import type { RoleCapabilityReport, RoleScope, RoleTemplate } from "./types.ts";
 
-export const builtinSkillsDir = resolveRepoAssetPath("pi-extensions/role-skills/skills", import.meta.url);
+export const builtinSkillsDir = resolveRepoAssetPath(PA_RUNTIME_ASSET_MANIFEST.builtinSkillsDir, import.meta.url);
 const SAFE_SEGMENT_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ROLE_LOCAL_SKILL_RE = /^skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/;

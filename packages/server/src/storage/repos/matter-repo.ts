@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { HumanDecision } from "../../orchestrator/human-decision.ts";
+import type { HumanDecision } from "@pa/contracts/human-decision";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { ModelSelection } from "../../rpc/model-selection.ts";
 import type {

@@ -162,7 +162,7 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 		return null;
 	}
 
-	// 5. packages/server: Engine Host ring (no apps/* or web halves)
+	// 5. packages/server: Engine Host ring (no apps/* or web halves) + internal unidirectional layering
 	if (fileRel.startsWith("packages/server/")) {
 		if (
 			specifier === "react" ||
@@ -176,6 +176,36 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 		}
 		if (target && (target.startsWith("apps/") || /^pa-extensions\/[^/]+\/web\//.test(target))) {
 			return `packages/server must not import app/web file (${target})`;
+		}
+		if (target?.startsWith("packages/server/src/")) {
+			const fromSeg = fileRel.slice("packages/server/src/".length).split("/")[0];
+			const toSeg = target.slice("packages/server/src/".length).split("/")[0];
+			if (fromSeg !== toSeg) {
+				if (fromSeg !== "demo" && toSeg === "demo") {
+					return `packages/server production module "${fromSeg}" must not import demo/ (${target})`;
+				}
+				if (
+					fromSeg === "roles" &&
+					["orchestrator", "server", "storage", "extensions", "pa-extensions"].includes(toSeg)
+				) {
+					return `packages/server/src/roles must not depend on "${toSeg}" (${target})`;
+				}
+				if (fromSeg === "storage" && ["orchestrator", "server", "extensions", "pa-extensions"].includes(toSeg)) {
+					return `packages/server/src/storage must not depend on "${toSeg}" (${target})`;
+				}
+				if (fromSeg === "rpc" && ["orchestrator", "server"].includes(toSeg)) {
+					return `packages/server/src/rpc must not depend on "${toSeg}" (${target})`;
+				}
+				if (fromSeg === "orchestrator" && toSeg === "server") {
+					return `packages/server/src/orchestrator must not depend on composition root server/ (${target})`;
+				}
+				if ((fromSeg === "extensions" || fromSeg === "pa-extensions") && toSeg === "server") {
+					return `packages/server/src/${fromSeg} must not depend on composition root server/ (${target})`;
+				}
+				if ((fromSeg === "subprocess" || fromSeg === "log") && toSeg !== fromSeg && toSeg !== "log") {
+					return `packages/server/src/${fromSeg} must stay leaf infrastructure (cannot import ${target})`;
+				}
+			}
 		}
 		return null;
 	}
