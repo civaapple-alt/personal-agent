@@ -18,6 +18,20 @@ import type {
 	WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers } from "../architectApi.ts";
+import { AttachmentPreviewModals, useAttachmentPreview } from "../components/chat/AttachmentPreviewModals.tsx";
+import { ChatStageHeader } from "../components/chat/ChatStageHeader.tsx";
+import { ComposerDock } from "../components/chat/ComposerDock.tsx";
+import { FloatingClarificationDock } from "../components/chat/FloatingClarificationDock.tsx";
+import { MatterCollabDrawer, type MatterCollabTab } from "../components/chat/MatterCollabDrawer.tsx";
+import {
+	type DelegationScope,
+	type DelegationView,
+	MatterDelegationPanel,
+} from "../components/chat/MatterDelegationPanel.tsx";
+import { MatterDocSidePane } from "../components/chat/MatterDocSidePane.tsx";
+import { MatterInitiationPanel } from "../components/chat/MatterInitiationPanel.tsx";
+import { MatterRosterPopover } from "../components/chat/MatterRosterPopover.tsx";
+import { MessageFeed } from "../components/chat/MessageFeed.tsx";
 import { useActiveClarification } from "../hooks/useActiveClarification.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
@@ -26,16 +40,6 @@ import { ViewFade } from "../primitives/ViewTransitions.tsx";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import { collectMatterMemories, collectMatterParticipantIds } from "../utils/matterStream.ts";
 import { transitionView } from "../viewTransitions.ts";
-import { AttachmentPreviewModals, useAttachmentPreview } from "./chat/AttachmentPreviewModals.tsx";
-import { ChatStageHeader } from "./chat/ChatStageHeader.tsx";
-import { ComposerDock } from "./chat/ComposerDock.tsx";
-import { FloatingClarificationDock } from "./chat/FloatingClarificationDock.tsx";
-import { MatterCollabDrawer, type MatterCollabTab } from "./chat/MatterCollabDrawer.tsx";
-import { type DelegationScope, type DelegationView, MatterDelegationPanel } from "./chat/MatterDelegationPanel.tsx";
-import { MatterDocSidePane } from "./chat/MatterDocSidePane.tsx";
-import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
-import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
-import { MessageFeed } from "./chat/MessageFeed.tsx";
 
 type ComposerDraftProps = Pick<
 	ComponentProps<typeof ComposerDock>,

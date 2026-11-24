@@ -9,9 +9,9 @@ import {
 	type WorkspaceSourceType,
 	type WorkspaceVisibility,
 } from "../api.ts";
+import { ServerDirectoryPicker } from "../components/ServerDirectoryPicker.tsx";
+import { WorkspaceDetailPanel } from "../components/WorkspaceDetailPanel.tsx";
 import { ModalDialog } from "../primitives/ModalDialog.tsx";
-import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
-import { WorkspaceDetailPanel } from "./WorkspaceDetailPanel.tsx";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];

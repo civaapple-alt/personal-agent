@@ -15,11 +15,11 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
+import { MemberCard } from "../components/team/MemberCard.tsx";
+import { MemberInspectorModal } from "../components/team/MemberInspectorModal.tsx";
+import { MemberPackageForms } from "../components/team/MemberPackageForms.tsx";
+import { TeamHealthcheckPanel } from "../components/team/TeamHealthcheckPanel.tsx";
 import { applyOrgAiRoleOverrides, resolveEffectivePrimaryContactId } from "../utils.ts";
-import { MemberCard } from "./team/MemberCard.tsx";
-import { MemberInspectorModal } from "./team/MemberInspectorModal.tsx";
-import { MemberPackageForms } from "./team/MemberPackageForms.tsx";
-import { TeamHealthcheckPanel } from "./team/TeamHealthcheckPanel.tsx";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;

@@ -11,18 +11,9 @@ import {
 	type MatterVisibility,
 } from "./api.ts";
 import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
-import { AccountView } from "./components/AccountView.tsx";
-import { AdminView } from "./components/AdminView.tsx";
-import { AuthGateView } from "./components/AuthGateView.tsx";
-import { ChatStage } from "./components/ChatStage.tsx";
-import { DeliverablesView } from "./components/DeliverablesView.tsx";
-import { MaterialsView } from "./components/MaterialsView.tsx";
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
-import { OrganizationsView } from "./components/OrganizationsView.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
-import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
-import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
 import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
@@ -40,6 +31,15 @@ import { ErrorBoundary } from "./primitives/ErrorBoundary.tsx";
 import { ModalDialog } from "./primitives/ModalDialog.tsx";
 import { ViewFade } from "./primitives/ViewTransitions.tsx";
 import { getBotTheme } from "./utils.ts";
+import { AccountView } from "./views/AccountView.tsx";
+import { AdminView } from "./views/AdminView.tsx";
+import { AuthGateView } from "./views/AuthGateView.tsx";
+import { ChatStage } from "./views/ChatStage.tsx";
+import { DeliverablesView } from "./views/DeliverablesView.tsx";
+import { MaterialsView } from "./views/MaterialsView.tsx";
+import { OrganizationsView } from "./views/OrganizationsView.tsx";
+import { SettingsView } from "./views/SettingsView.tsx";
+import { TeamView } from "./views/TeamView.tsx";
 
 function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
 	if (typeof requireAuth !== "boolean") return;

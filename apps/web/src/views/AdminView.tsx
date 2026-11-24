@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ModelSelection } from "../api/models.ts";
 import type { AdminOverviewPayload, AdminUserRowDto, PlatformRole, RegistrationMode, UserStatus } from "../api.ts";
-import { ModelPicker, useModelCatalog } from "./ModelPicker.tsx";
+import { ModelPicker, useModelCatalog } from "../components/ModelPicker.tsx";
 
 interface AdminViewProps {
 	overview: AdminOverviewPayload | null;

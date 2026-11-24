@@ -7,9 +7,9 @@ import type {
 	RuntimeExtensionStatus,
 	RuntimeOverviewDto,
 } from "../api.ts";
+import { SystemOneSettings } from "../components/SystemOneSettings.tsx";
+import { WebAccessSettings } from "../components/WebAccessSettings.tsx";
 import type { SettingsSection } from "../hashRouter.ts";
-import { SystemOneSettings } from "./SystemOneSettings.tsx";
-import { WebAccessSettings } from "./WebAccessSettings.tsx";
 
 interface SettingsViewProps {
 	currentUser?: CollaboratorDto | null;

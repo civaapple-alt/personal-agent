@@ -25,9 +25,9 @@ import {
 	updateSpaceDocument,
 } from "../api/space.ts";
 import type { BootstrapPayload } from "../api.ts";
+import { SpaceDocumentFeedback } from "../components/SpaceDocumentFeedback.tsx";
+import { SpaceFolderFilesPanel } from "../components/SpaceFolderFilesPanel.tsx";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { SpaceDocumentFeedback } from "./SpaceDocumentFeedback.tsx";
-import { SpaceFolderFilesPanel } from "./SpaceFolderFilesPanel.tsx";
 
 const RECENT_SPACE_ID = "__recent__";
 
