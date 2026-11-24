@@ -1,5 +1,5 @@
+import { type HumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
 import { useState } from "react";
-import { type HumanDecision, readHumanDecision } from "../../../../src/orchestrator/human-decision.ts";
 import { actOnHumanDecision, type MatterDto } from "../../api/matters.ts";
 
 interface FloatingClarificationDockProps {

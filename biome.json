@@ -24,6 +24,7 @@
 	"files": {
 		"includes": [
 			"src/**/*.ts",
+			"packages/**/*.ts",
 			"test/**/*.ts",
 			"web/src/**/*.ts",
 			"web/src/**/*.tsx",

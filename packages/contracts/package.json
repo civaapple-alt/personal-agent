@@ -1,0 +1,15 @@
+{
+	"name": "@pa/contracts",
+	"version": "0.0.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./human-decision": "./src/human-decision.ts",
+		"./role-proposal-state": "./src/role-proposal-state.ts",
+		"./team-verification": "./src/team-verification.ts",
+		"./model-selection": "./src/model-selection.ts",
+		"./extensions": "./src/extensions.ts"
+	}
+}

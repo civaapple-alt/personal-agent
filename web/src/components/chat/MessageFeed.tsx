@@ -1,10 +1,6 @@
+import { isCurrentHumanDecision, listCompletedHumanDecisions, readHumanDecision } from "@pa/contracts/human-decision";
+import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
 import { type RefObject, type UIEvent, useMemo, useState } from "react";
-import {
-	isCurrentHumanDecision,
-	listCompletedHumanDecisions,
-	readHumanDecision,
-} from "../../../../src/orchestrator/human-decision.ts";
-import { hasRoleProposalActions } from "../../../../src/roles/role-proposal-state.ts";
 import { createSpaceDocument } from "../../api/space.ts";
 import {
 	type AccountUserDto,

@@ -1,7 +1,7 @@
+import { isCurrentHumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
+import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
 import type { ReactNode } from "react";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isCurrentHumanDecision, readHumanDecision } from "../../../src/orchestrator/human-decision.ts";
-import { hasRoleProposalActions } from "../../../src/roles/role-proposal-state.ts";
 import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,

@@ -1,4 +1,4 @@
-import { isVerificationVerdict, type VerificationVerdict } from "../../../src/rpc/team-verification.ts";
+import { isVerificationVerdict, type VerificationVerdict } from "@pa/contracts/team-verification";
 import type { ActiveDelegationDto, MatterMessageDto } from "../api/matters.ts";
 
 export interface DelegationAssignment {

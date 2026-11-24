@@ -1,9 +1,5 @@
+import { type HumanDecision, isCurrentHumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
 import { useMemo } from "react";
-import {
-	type HumanDecision,
-	isCurrentHumanDecision,
-	readHumanDecision,
-} from "../../../src/orchestrator/human-decision.ts";
 import type { AccountUserDto, CollaboratorDto, MatterDetailPayload, OrganizationDto } from "../api.ts";
 
 export interface ActiveClarificationTarget {

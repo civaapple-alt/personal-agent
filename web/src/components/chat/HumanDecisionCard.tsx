@@ -1,5 +1,5 @@
+import { type HumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
 import { useId, useState } from "react";
-import { type HumanDecision, readHumanDecision } from "../../../../src/orchestrator/human-decision.ts";
 import { actOnHumanDecision, type HumanDecisionAction, type MatterDto } from "../../api/matters.ts";
 import type { AccountUserDto, CollaboratorDto, OrganizationMemberDto } from "../../api.ts";
 import { formatClockTime } from "../../utils.ts";

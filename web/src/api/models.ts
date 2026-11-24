@@ -1,4 +1,4 @@
-import type { ModelSelection, PiModelCatalog } from "../../../src/rpc/model-selection.ts";
+import type { ModelSelection, PiModelCatalog } from "@pa/contracts/model-selection";
 import { requestJson } from "./client.ts";
 
 export type { ModelSelection };

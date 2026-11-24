@@ -1,5 +1,5 @@
-export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+import { THINKING_LEVELS, type ThinkingLevel } from "@pa/contracts";
+export { THINKING_LEVELS, type ThinkingLevel };
 
 export type PromptDisposition = "started" | "queued" | "handled";
 export type QueuedInputDisposition = "queued" | "handled";
