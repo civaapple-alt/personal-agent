@@ -120,7 +120,9 @@ test("HTTP API persists observerMemberIds and broadcasts proactive observer mess
 		assert.equal(patched.matter.workspaceId, workspace.id);
 		assert.deepEqual(patched.matter.observerMemberIds, ["qa-manager"]);
 	} finally {
+		await orchestrator.shutdown();
 		await previewManager.stopAll();
+		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
@@ -239,7 +241,9 @@ test("Server supports space document feedback evaluation", async () => {
 			assert.equal(voteJson.feedback.rating, rating);
 		}
 	} finally {
+		await orchestrator.shutdown();
 		await previewManager.stopAll();
+		server.closeAllConnections();
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
