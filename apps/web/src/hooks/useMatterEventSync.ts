@@ -1,5 +1,5 @@
 import { type MutableRefObject, useEffect } from "react";
-import { fetchAuthSession, type MatterProgressDto } from "../api.ts";
+import { fetchAuthSession, type MatterProgressDto, resolveApiUrl } from "../api.ts";
 
 interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
@@ -58,7 +58,7 @@ export function useMatterEventSync({
 			}
 		};
 
-		const es = new EventSource("/api/events");
+		const es = new EventSource(resolveApiUrl("/api/events"));
 		let hasConnected = false;
 		es.addEventListener("connected", () => {
 			setSseConnected(true);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { resolveApiUrl } from "../api/client.ts";
 import {
 	createCustomSpace,
 	createSpaceDocument,
@@ -209,7 +210,7 @@ export function SpacePages({
 
 	// Live SSE sync
 	useEffect(() => {
-		const events = new EventSource("/api/events");
+		const events = new EventSource(resolveApiUrl("/api/events"));
 		let cancelled = false;
 		const sync = () => {
 			void refreshSpaces().catch(() => {});

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getApiBaseUrl, resolveApiUrl, setApiBaseUrl } from "../apps/web/src/api/client.ts";
 import type { MatterMessageDto } from "../apps/web/src/api/matters.ts";
 import {
 	createPastedTextAttachment,
@@ -695,4 +696,19 @@ test("execution records group tool starts and results by exact turn, member and 
 		],
 	);
 	assert.deepEqual(collectTurnToolCalls(notices, { ...reply, metadata: {} }, snapshot), []);
+});
+
+test("resolveApiUrl defaults to same-origin and honors configured host base URL", () => {
+	try {
+		setApiBaseUrl(null);
+		assert.equal(getApiBaseUrl(), "");
+		assert.equal(resolveApiUrl("/api/events"), "/api/events");
+		setApiBaseUrl("https://pa.internal:4310///");
+		assert.equal(getApiBaseUrl(), "https://pa.internal:4310");
+		assert.equal(resolveApiUrl("/api/events"), "https://pa.internal:4310/api/events");
+		assert.equal(resolveApiUrl("api/bootstrap"), "https://pa.internal:4310/api/bootstrap");
+		assert.equal(resolveApiUrl("https://other.example/x"), "https://other.example/x");
+	} finally {
+		setApiBaseUrl(null);
+	}
 });

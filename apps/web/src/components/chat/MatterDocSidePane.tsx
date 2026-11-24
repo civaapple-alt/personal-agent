@@ -12,7 +12,7 @@ import {
 	spaceDocTypeLabel,
 	updateSpaceDocument,
 } from "../../api/space.ts";
-import type { WorkspaceDto } from "../../api.ts";
+import { resolveApiUrl, type WorkspaceDto } from "../../api.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
 import { SpaceDocumentFeedback } from "../SpaceDocumentFeedback.tsx";
 import { SpaceFolderFilesPanel } from "../SpaceFolderFilesPanel.tsx";
@@ -115,7 +115,7 @@ export function MatterDocSidePane({
 
 	// Keep the side pane in sync when the AI or another collaborator updates the active document.
 	useEffect(() => {
-		const events = new EventSource("/api/events");
+		const events = new EventSource(resolveApiUrl("/api/events"));
 		const sync = () => {
 			if (!editing) {
 				void loadDoc(activeDocId, false);
