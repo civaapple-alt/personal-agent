@@ -1,6 +1,7 @@
 import humanQuestion from "@pa/ext-human-question/web";
 import skillCatalog from "@pa/ext-skill-catalog/web";
 import teamExtension from "@pa/ext-team-extension/web";
+import visualize from "@pa/ext-visualize/web";
 import webAccess from "@pa/ext-web-access/web";
 import workflow from "@pa/ext-workflow/web";
 import type { PaToolDisplaySpec, PaToolRendererRegistration, PaWebExtension } from "@pa/extension-api/web";
@@ -10,6 +11,7 @@ export const builtinWebExtensions: readonly PaWebExtension[] = [
 	teamExtension,
 	humanQuestion,
 	skillCatalog,
+	visualize,
 	webAccess,
 	workflow,
 ];

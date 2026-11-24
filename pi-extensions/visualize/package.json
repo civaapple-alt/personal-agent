@@ -1,0 +1,12 @@
+{
+	"name": "pa-visualize",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Portable Pi extension adding the visualize tool for Mermaid diagrams, side-by-side option comparisons, and file previews (adapted from @thinkrail/pi-visualize)",
+	"keywords": ["pi-package", "pi", "visualize", "mermaid", "diagram"],
+	"pi": {
+		"extensions": ["./index.ts"]
+	}
+}

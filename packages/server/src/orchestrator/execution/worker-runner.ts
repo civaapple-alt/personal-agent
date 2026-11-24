@@ -572,6 +572,7 @@ export async function executeWithWorkerPass(
 		args.push("--extension", teamExtension.entry);
 		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
 		args.push("--extension", resolveBuiltinExtensionPath("role-skills"));
+		if (!isArchitect) args.push("--extension", resolveBuiltinExtensionPath("visualize"));
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
@@ -721,6 +722,18 @@ export async function executeWithWorkerPass(
 									? { command: rawArgs.command.replace(/\s+/g, " ").trim().slice(0, 240) }
 									: {}),
 								...(typeof rawArgs.title === "string" ? { title: rawArgs.title.slice(0, 240) } : {}),
+								...(toolName === "visualize"
+									? {
+											...(typeof rawArgs.type === "string" ? { type: rawArgs.type.slice(0, 32) } : {}),
+											...(typeof rawArgs.before === "string"
+												? { before: rawArgs.before.slice(0, 240) }
+												: {}),
+											...(typeof rawArgs.mermaid === "string"
+												? { mermaid: rawArgs.mermaid.slice(0, 8000) }
+												: {}),
+											...(Array.isArray(rawArgs.options) ? { options: rawArgs.options.slice(0, 8) } : {}),
+										}
+									: {}),
 							}
 						: undefined;
 				deps.store.appendMessage({

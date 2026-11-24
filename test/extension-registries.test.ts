@@ -13,11 +13,11 @@ test("server and web extension registries stay aligned and resolve declared buil
 	const summaries = listServerExtensionSummaries();
 	assert.deepEqual(
 		summaries.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "web-access", "workflow"],
+		["team-extension", "human-question", "skill-catalog", "visualize", "web-access", "workflow"],
 	);
 	assert.deepEqual(
 		builtinWebExtensions.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "web-access", "workflow"],
+		["team-extension", "human-question", "skill-catalog", "visualize", "web-access", "workflow"],
 	);
 
 	for (const { extension } of builtinServerExtensions) {
