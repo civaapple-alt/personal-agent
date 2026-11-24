@@ -1,10 +1,7 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { runBounded } from "../subprocess/index.ts";
 
 const SCP_SSH_RE = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+:[a-zA-Z0-9._~/@+-]+$/;
 export function validateCloneUrl(rawUrl: string): string {
@@ -69,9 +66,9 @@ async function runGitCloneCommand(input: { cloneUrl: string; targetDir: string; 
 		args.push("--branch", input.branch, "--single-branch");
 	}
 	args.push("--", input.cloneUrl, input.targetDir);
-	await execFileAsync("git", args, {
-		timeout: 120_000,
-		maxBuffer: 4 * 1024 * 1024,
+	await runBounded("git", args, {
+		timeoutMs: 120_000,
+		maxOutputBytes: 4 * 1024 * 1024,
 		env: {
 			...process.env,
 			GIT_TERMINAL_PROMPT: "0",
@@ -101,9 +98,9 @@ export async function cloneGitWorkspaceIntoOrgRoot(input: {
 
 	try {
 		await runGitCloneCommand({ cloneUrl, targetDir, branch: branch || undefined });
-		const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+		const { stdout } = await runBounded("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
 			cwd: targetDir,
-			timeout: 10_000,
+			timeoutMs: 10_000,
 		});
 		const detectedBranch = stdout.trim() || branch || "main";
 		return { repoPath: targetDir, detectedBranch };

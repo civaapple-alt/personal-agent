@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { PA_RUNTIME_ASSET_MANIFEST } from "../build-support.ts";
+import { closeLogging, createLogger, initLogging } from "../log/index.ts";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution-context.ts";
 import { probePiCli } from "../orchestrator/runtime-info.ts";
 import { createSystemOneClassifier } from "../orchestrator/system-one.ts";
@@ -67,9 +69,9 @@ async function readDecisionKey(rootDir: string): Promise<string | undefined> {
 }
 
 function resolveDefaultWebDistDir(rootDir: string): string {
-	const workspaceWebDist = resolve(rootDir, "apps/web/dist");
+	const workspaceWebDist = resolve(rootDir, PA_RUNTIME_ASSET_MANIFEST.webDistDir);
 	if (existsSync(workspaceWebDist)) return workspaceWebDist;
-	const legacyWebDist = resolve(rootDir, "web/dist");
+	const legacyWebDist = resolve(rootDir, PA_RUNTIME_ASSET_MANIFEST.legacyWebDistDir);
 	if (existsSync(legacyWebDist)) return legacyWebDist;
 	return workspaceWebDist;
 }
@@ -95,6 +97,9 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 				? resolve(rootDir, ".data/team-workspaces")
 				: resolve(dirname(resolve(dbPath)), "team-workspaces");
 	const dataDir = dbPath === ":memory:" ? resolve(rootDir, ".data") : dirname(resolve(dbPath));
+	const log = createLogger("host.boot");
+	if (dbPath !== ":memory:") initLogging({ dataDir });
+	log.info("Booting Personal Agent host", { host, port, requireAuth, dbPath });
 
 	const db = openPersonalAgentDatabase(dbPath);
 	const store = new PersonalAgentStore(db, {
@@ -216,6 +221,8 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		db.close();
 		if (temporaryRolesDir) await rm(temporaryRolesDir, { recursive: true, force: true });
 		if (temporarySkillsDir) await rm(temporarySkillsDir, { recursive: true, force: true });
+		log.info("Personal Agent host stopped");
+		closeLogging();
 	};
 
 	return { host, port, localUrl, lanUrls, shutdown };
