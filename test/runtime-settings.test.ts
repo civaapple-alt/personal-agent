@@ -149,18 +149,31 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 		),
 	);
 
-	const teamExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-team-extension");
-	assert.ok(teamExt);
-	assert.equal(teamExt.status, "active");
-	assert.equal(teamExt.fileStatus, "present");
-	assert.deepEqual(teamExt.registeredTools, [
-		"read_pa_help",
-		"read_space",
-		"save_space_page",
-		"delegate_to_member",
-		"propose_experience",
-		"propose_skill",
-	]);
+	const workerRuntimeExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-worker-runtime");
+	assert.ok(workerRuntimeExt);
+	assert.equal(workerRuntimeExt.status, "active");
+	assert.equal(workerRuntimeExt.fileStatus, "present");
+	assert.deepEqual(workerRuntimeExt.registeredTools, []);
+
+	const workbenchHelpExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-workbench-help");
+	assert.ok(workbenchHelpExt);
+	assert.equal(workbenchHelpExt.status, "active");
+	assert.deepEqual(workbenchHelpExt.registeredTools, ["read_pa_help"]);
+
+	const spaceExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-space");
+	assert.ok(spaceExt);
+	assert.equal(spaceExt.status, "conditional");
+	assert.deepEqual(spaceExt.registeredTools, ["read_space", "save_space_page"]);
+
+	const delegationExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-delegation");
+	assert.ok(delegationExt);
+	assert.equal(delegationExt.status, "conditional");
+	assert.deepEqual(delegationExt.registeredTools, ["delegate_to_member"]);
+
+	const skillCaptureExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-skill-capture");
+	assert.ok(skillCaptureExt);
+	assert.equal(skillCaptureExt.status, "conditional");
+	assert.deepEqual(skillCaptureExt.registeredTools, ["propose_skill"]);
 	const questionExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-human-question");
 	assert.equal(questionExt?.status, "conditional");
 	assert.deepEqual(questionExt.registeredTools, ["request_clarification"]);
@@ -194,7 +207,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.equal(roleSkillsPkg.status, "active");
 	assert.equal(roleSkillsPkg.fileStatus, "present");
 
-	assert.equal(ownerPayload.summary.activeCount, 5);
+	assert.equal(ownerPayload.summary.activeCount, 6);
 	assert.equal(
 		ownerPayload.summary.conditionalCount,
 		ownerPayload.extensions.filter((ext) => ext.status === "conditional").length,
@@ -298,6 +311,10 @@ test("buildRuntimeOverview reports missing Pi CLI and reports MCP configuration 
 	assert.equal(mcpExt?.status, "conditional");
 	assert.deepEqual(mcpExt?.declaredByRoles, []);
 
-	assert.ok(statSync(resolveBuiltinExtensionPath("team-extension")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("worker-runtime")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("workbench-help")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("space")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("delegation")).isFile());
+	assert.ok(statSync(resolveBuiltinExtensionPath("skill-capture")).isFile());
 	assert.ok(statSync(resolveBuiltinExtensionPath("human-question")).isFile());
 });

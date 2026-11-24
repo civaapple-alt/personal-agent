@@ -7,7 +7,6 @@ export const TEAM_EXTENSION_TOOLS = [
 	"read_space",
 	"save_space_page",
 	"delegate_to_member",
-	"propose_experience",
 	"propose_skill",
 ] as const satisfies readonly TeamToolCall["tool"][];
 
@@ -26,21 +25,37 @@ export function prepareTeamExtension({
 }) {
 	const isLead = sessionMode === "lead";
 	const isInternal = sessionMode === "internal";
+	const canReadSpace = !isArchitect && (isLead || isInternal);
 	const canSaveSpace = !isArchitect && isLead && isMatterLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
-	const canProposeExperience = !isArchitect && !discussionMode && (isLead || isInternal);
+	const canCaptureSkill = !isArchitect && !discussionMode && (isLead || isInternal);
+
+	const entries: string[] = [
+		resolveBuiltinExtensionPath("worker-runtime"),
+		resolveBuiltinExtensionPath("workbench-help"),
+	];
 	const tools: TeamToolCall["tool"][] = ["read_pa_help"];
-	if (!isArchitect && (isLead || isInternal)) tools.push("read_space");
-	if (canSaveSpace) tools.push("save_space_page");
-	if (canDelegate) tools.push("delegate_to_member");
-	if (canProposeExperience) tools.push("propose_experience", "propose_skill");
+	if (canReadSpace) {
+		entries.push(resolveBuiltinExtensionPath("space"));
+		tools.push("read_space");
+		if (canSaveSpace) tools.push("save_space_page");
+	}
+	if (canDelegate) {
+		entries.push(resolveBuiltinExtensionPath("delegation"));
+		tools.push("delegate_to_member");
+	}
+	if (canCaptureSkill) {
+		entries.push(resolveBuiltinExtensionPath("skill-capture"));
+		tools.push("propose_skill");
+	}
 
 	return {
-		entry: resolveBuiltinExtensionPath("team-extension"),
+		entries,
 		tools,
+		canReadSpace,
 		canSaveSpace,
 		canDelegate,
-		canProposeExperience,
+		canCaptureSkill,
 		buildEnvironment({
 			bridgeEnv,
 			requiredTools,
@@ -63,8 +78,6 @@ export function prepareTeamExtension({
 					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
 					: {}),
 				PA_CAN_SAVE_SPACE: String(canSaveSpace),
-				PA_CAN_DELEGATE: String(canDelegate),
-				PA_CAN_EXPERIENCE: String(canProposeExperience),
 				PA_REQUIRED_TOOLS: JSON.stringify(requiredTools),
 				PA_MEMBER_CONTEXT: memberContext.filter(Boolean).join("\n\n"),
 				PA_TURN_CONTEXT: turnContext.filter(Boolean).join("\n\n"),

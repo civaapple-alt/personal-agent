@@ -123,19 +123,25 @@ test("document sources reject ambiguity, missing/outside/non-text files and non-
 test("changing a workspace file after saving leaves the saved snapshot intact", async (t) => {
 	const f = await fixture(t, async (options) => {
 		await invokeTool(options, "save_space_page", { ...publication, sourcePath: "final.md" });
-		await invokeTool(options, "propose_experience", {
-			scope: "role_general",
-			content: "发布应复用最终文档来源。",
+		await invokeTool(options, "propose_skill", {
+			name: "reuse-final-doc-source",
+			description: "Reuse the final workspace document source when publishing",
+			body: "Pass sourcePath when publishing a workspace document.",
+			storageScope: "workspace",
 			rationale: "文件一致性验证",
 		});
 		await writeFile(join(f.workspace, "final.md"), "# 后改的正文\n");
 	});
 	await writeFile(join(f.workspace, "final.md"), "# 已登记快照\n");
-	await f.dispatch();
+	const dispatch = await f.dispatch();
 	const [document] = f.store.spaces.listDocuments();
 	assert.ok(document);
 	assert.equal((await f.store.spaces.getDocument(document.id))?.content, "# 已登记快照\n");
-	assert.equal(f.store.listMemberMemories("product-manager").length, 1);
+	const reply = f.store.listMessages(dispatch.matter.id, "user").find((m) => m.senderType === "member");
+	assert.equal(
+		(reply?.metadata?.skillProposals as Array<{ name: string }> | undefined)?.[0]?.name,
+		"reuse-final-doc-source",
+	);
 	assert.equal(f.db.prepare("SELECT count(*) AS n FROM matter_execution_leases").get()?.n, 0);
 });
 

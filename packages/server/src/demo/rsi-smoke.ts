@@ -47,19 +47,19 @@ try {
 		preferredMemberId: "product-manager",
 		timeoutMs: 120_000,
 		prompt:
-			"这是隔离的 Personal Agent 运行测试，不是业务需求确认。请实际调用 propose_experience，提议一条 role_general、category=collaboration 的候选方法：向同事咨询时提供目标、限制和期望结果，避免只发模糊追问。然后请实际调用 save_space_page 发布一个正式测试记录 document，标题为「RSI 运行验证稿」，写明刚才的协作方法与测试边界，changeNote 说明这是明确要求发布的阶段测试版本。最后简短答复。不写文件，不编码，不调用同事。",
+			"这是隔离的 Personal Agent 运行测试，不是业务需求确认。请实际调用 propose_skill，提议一个 personal 作用域的 Skill（name='handoff-brief'），内容是：向同事咨询时提供目标、限制和期望结果，避免只发模糊追问。然后请实际调用 save_space_page 发布一个正式测试记录 document，标题为「RSI 运行验证稿」，写明刚才的协作方法与测试边界，changeNote 说明这是明确要求发布的阶段测试版本。最后简短答复。不写文件，不编码，不调用同事。",
 	});
-	assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "propose_experience" && !tool.isError));
+	assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "propose_skill" && !tool.isError));
 	assert.ok(turn.runResult.toolExecutions.some((tool) => tool.toolName === "save_space_page" && !tool.isError));
 	const document = store.spaces
 		.listDocuments({ matterId: turn.matter.id })
 		.find((item) => item.title === "RSI 运行验证稿");
 	assert.ok(document);
-	assert.ok(
-		store
-			.listMemberMemories("product-manager")
-			.some((memory) => memory.id !== seed.id && memory.status === "candidate"),
-	);
+	const replyMessage = store
+		.listMessages(turn.matter.id, "user")
+		.filter((message) => message.senderType === "member")
+		.at(-1);
+	assert.ok(Array.isArray(replyMessage?.metadata?.skillProposals) && replyMessage.metadata.skillProposals.length > 0);
 	for (const rating of ["negative", "positive"] as const) {
 		await store.spaces.saveDocumentFeedback({
 			documentId: document.id,

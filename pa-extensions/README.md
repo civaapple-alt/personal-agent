@@ -7,7 +7,11 @@
 
 | 扩展 | 组合的 Pi 能力 | 职责 |
 | --- | --- | --- |
-| `team-extension` | [pi-extensions/team-extension](../pi-extensions/team-extension/README.md) | 团队委托、资料空间读写、经验/技能提案（`propose_skill`）与工作台速查 |
+| `worker-runtime` | [pa-extensions/worker-runtime/pi/index.ts](worker-runtime/pi/index.ts) | PA 宿主运行时护栏：目标工作区 `AGENTS.md` 隔离、成员/轮次上下文注入、能力握手与外部检索证据标注 |
+| `workbench-help` | [pa-extensions/workbench-help/pi/index.ts](workbench-help/pi/index.ts) | 只读 `read_pa_help` 工作台指南与事项运行事实速查 |
+| `space` | [pa-extensions/space/pi/index.ts](space/pi/index.ts) | `read_space` / `save_space_page` Git 资料空间读写（按运行模式挂载） |
+| `delegation` | [pa-extensions/delegation/pi/index.ts](delegation/pi/index.ts) | `delegate_to_member` 团队跨岗委托与独立验收（按权限挂载） |
+| `skill-capture` | [pa-extensions/skill-capture/pi/index.ts](skill-capture/pi/index.ts) | 统一 `propose_skill` 沉淀入口（对应信任四步第二步：经人工确认后将 `SKILL.md` + 可选 `scripts/*` 原子落盘到磁盘 Skill 目录） |
 | `human-question` | [pi-extensions/human-question](../pi-extensions/human-question/README.md) | `request_clarification` 人工澄清与决策提问 |
 | `skill-catalog` | [pi-extensions/skill-catalog](../pi-extensions/skill-catalog/README.md) + [pi-extensions/role-skills](../pi-extensions/role-skills/README.md) | 可用方法检索、按需读取与内置岗位方法包 |
 | `visualize` | [pi-extensions/visualize](../pi-extensions/visualize/README.md) | Mermaid 图表、方案对比与文件预览卡片（注册 `toolRenderers`） |

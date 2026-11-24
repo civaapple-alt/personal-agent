@@ -3,12 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
+import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
+import workerRuntimeExtension, {
+	filterContextFilesForTargetWorkspace,
+	type WorkerRuntimeExtensionApi,
+} from "../pa-extensions/worker-runtime/pi/index.ts";
 import { resolveEffectiveWebSearchProvider } from "../packages/server/src/extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
-import teamExtension, {
-	filterContextFilesForTargetWorkspace,
-	type PiExtensionApi,
-} from "../pi-extensions/team-extension/index.ts";
 
 test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
 	const original = process.env.PA_WEB_SEARCH_ENABLED;
@@ -18,8 +20,7 @@ test("managed web search forces direct results and removes per-call proxy overri
 		else process.env.PA_WEB_SEARCH_ENABLED = original;
 	});
 	let onToolCall: ((event: { toolName: string; input: Record<string, unknown> }) => void) | undefined;
-	teamExtension({
-		registerTool() {},
+	workerRuntimeExtension({
 		on: (event, handler) => {
 			if (event === "tool_call") onToolCall = handler as typeof onToolCall;
 		},
@@ -63,8 +64,7 @@ test("web search provider resolution follows Exa -> DeepSeek -> Kimi auto priori
 		else process.env.PA_WEB_SEARCH_PROVIDER = origProvider;
 	});
 	let onToolCall: ((event: { toolName: string; input: Record<string, unknown> }) => void) | undefined;
-	teamExtension({
-		registerTool() {},
+	workerRuntimeExtension({
 		on: (event, handler) => {
 			if (event === "tool_call") onToolCall = handler as typeof onToolCall;
 		},
@@ -122,8 +122,7 @@ test("capability handshake waits for required tools and retains all registered t
 		PA_REQUIRED_TOOLS: JSON.stringify(["read", "delegate_to_member", "save_space_page", "mcp__local__*"]),
 	});
 	try {
-		const api: PiExtensionApi = {
-			registerTool() {},
+		const api: WorkerRuntimeExtensionApi = {
 			on: (event, handler) => {
 				if (event === "session_start") onStart = handler as () => Promise<void>;
 			},
@@ -133,7 +132,7 @@ test("capability handshake waits for required tools and retains all registered t
 				active = tools;
 			},
 		};
-		teamExtension(api);
+		workerRuntimeExtension(api);
 	} finally {
 		for (const key of [...Object.keys(bridge.env), "PA_REQUIRED_TOOLS"]) {
 			if (envBefore[key] === undefined) delete process.env[key];
@@ -180,15 +179,11 @@ test("teamExtension bridge transport disables request timeouts, returns errors, 
 		return { ok: true };
 	}, controller.signal);
 	const envBefore = { ...process.env };
-	const tools = new Map<string, Parameters<PiExtensionApi["registerTool"]>[0]>();
+	const tools = new Map<string, Parameters<PiHostToolExtensionApi["registerTool"]>[0]>();
 	Object.assign(process.env, bridge.env);
 	try {
-		teamExtension({
+		delegationExtension({
 			registerTool: (tool) => tools.set(tool.name, tool),
-			on: () => {},
-			getActiveTools: () => [],
-			getAllTools: () => [],
-			setActiveTools: () => {},
 		});
 	} finally {
 		for (const key of Object.keys(bridge.env)) {
@@ -240,15 +235,41 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 		assert.deepEqual(filterContextFilesForTargetWorkspace([{ path: hostAgents, content: "host" }], "__none__"), []);
 
 		const envBefore = { ...process.env };
-		let beforeStartHandler: Parameters<PiExtensionApi["on"]>[1] | undefined;
+		let beforeStartHandler:
+			| ((
+					event: {
+						systemPrompt: string;
+						systemPromptOptions?: {
+							cwd?: string;
+							contextFiles?: Array<{ path: string; content: string }>;
+							appendSystemPrompt?: string;
+							forceSystemPrompt?: string;
+						};
+					},
+					ctx?: {
+						sessionManager?: {
+							buildSessionProjection?(): {
+								messages: Array<{
+									role: string;
+									customType?: string;
+									toolName?: string;
+									isError?: boolean;
+									content?: unknown;
+								}>;
+							};
+						};
+					},
+			  ) =>
+					| { systemPrompt?: string; message?: { customType: string; content: string; display: boolean } }
+					| undefined)
+			| undefined;
 		Object.assign(process.env, {
 			PA_TARGET_WORKSPACE_ROOT: workspaceRoot,
 			PA_MEMBER_CONTEXT: "## Target workspace\n- Project: hello-rust",
 			PA_TURN_CONTEXT: "## Current team\n- UX </pa_runtime_context>",
 		});
 		try {
-			teamExtension({
-				registerTool() {},
+			workerRuntimeExtension({
 				on: (event, handler) => {
 					if (event === "before_agent_start") beforeStartHandler = handler as typeof beforeStartHandler;
 				},

@@ -35,7 +35,7 @@
 
 以下变量由编排核或预览管理器在拉起子进程时自动注入，用于工具桥接鉴权与端口隔离：
 
-- **Pi 子进程注入**（见[编排核](../../packages/server/src/orchestrator/team-orchestrator.ts)与[工具桥接](../../packages/server/src/rpc/team-tool-bridge.ts) / [团队扩展](../../pi-extensions/team-extension/index.ts)）：
+- **Pi 子进程注入**（见[编排核](../../packages/server/src/orchestrator/team-orchestrator.ts)与[工具桥接](../../packages/server/src/rpc/team-tool-bridge.ts) / [岗位运行时护栏](../../pa-extensions/worker-runtime/pi/index.ts)）：
   - `PA_TEAM_BRIDGE_URL`、`PA_TEAM_BRIDGE_TOKEN`、`PA_CAN_SAVE_SPACE`
   - `PA_CAN_DELEGATE`、`PA_CAN_EXPERIENCE`、`PA_REQUIRED_TOOLS`、`PA_MEMBER_CONTEXT`
 - **本地预览子进程注入**（[PreviewManager](../../packages/server/src/server/preview-manager.ts)）：`PORT`、`HOST="127.0.0.1"`
@@ -144,9 +144,9 @@ pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通�
 | `commandTimeoutMs` | `30000`（30s） | `PiRpcWorkerOptions` | 单条 RPC 控制命令（如 `get_state`、`prompt`、`abort`）等待响应超时 |
 | `shutdownGraceMs` | `2000`（2s） | `PiRpcWorkerOptions` | `stop()` 优雅关闭等待时长，超时后发送 `SIGTERM` / `SIGKILL` |
 | `idleTimeoutMs` | `900000`（15 分钟，可由 `PA_IDLE_TIMEOUT_MS` 覆写） | `RunPromptOptions` | 无任何 RPC 事件或 notice 时的空闲看门狗（有正的 `timeoutMs` 时不超过 `timeoutMs`，设为 `0` 关闭）；在宿主执行 `delegate_to_member` 期间通过 `suspendIdleTimeout()` 暂停父 worker 计时 |
-| 动态工具等待上限 | `10000`（10s） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) | `session_start` 后轮询 `pi.getAllTools()` 等待异步扩展或 MCP 注册完成的最长时间 |
+| 动态工具等待上限 | `10000`（10s） | [worker-runtime](../../pa-extensions/worker-runtime/pi/index.ts) | `session_start` 后轮询 `pi.getAllTools()` 等待异步扩展或 MCP 注册完成的最长时间 |
 | 桥接 `/ready` 握手超时 | `30000`（30s） | [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 宿主等待子扩展回报实际激活工具清单的最长时间 |
-| 桥接 HTTP 传输超时 | `0`（禁用） | [team-extension.ts](../../pi-extensions/team-extension/index.ts) / [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |
+| 桥接 HTTP 传输超时 | `0`（禁用） | [bridge-client.ts](../../pa-extensions/worker-runtime/pi/bridge-client.ts) / [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 使用 `node:http` 与关闭服务端 `requestTimeout`/`headersTimeout`/`keepAliveTimeout`，避免长耗时委托被默认 300s 传输超时中断 |
 | 桥接单次请求体积上限 | `262144` 字节（256 KiB） | [team-tool-bridge.ts](../../packages/server/src/rpc/team-tool-bridge.ts) | 工具请求 JSON 上限 |
 | 取消停止等待上限 | `1000`（1s） | [team-orchestrator.ts](../../packages/server/src/orchestrator/team-orchestrator.ts) | `abortMatter()` 等待每个 worker 响应 `abort` 的上限，随后强制 `stop()` |
 

@@ -212,9 +212,11 @@ test("RSI reads feedback only from accessible space documents in the current wor
 test("a successful colleague proposal is still discarded if the lead fails afterward", async (t) => {
 	const f = await fixture(t, async (options) => {
 		if (options.env?.PA_CAN_SAVE_SPACE === "false") {
-			await invokeTool(options, "propose_experience", {
-				scope: "role_general",
-				content: "child draft",
+			await invokeTool(options, "propose_skill", {
+				name: "child-draft-skill",
+				description: "Child draft workflow",
+				body: "Step 1: check draft.",
+				storageScope: "personal",
 				rationale: "not finalized",
 			});
 			return result("child answer");
@@ -226,7 +228,12 @@ test("a successful colleague proposal is still discarded if the lead fails after
 		f.orchestrator.dispatchMatter({ prompt: "test", preferredMemberId: "product-manager" }),
 		/lead failed/,
 	);
-	assert.equal(f.store.listMemberMemories("engineering-manager").length, 0);
+	const matters = f.store.listMatters();
+	const allMessages = matters.flatMap((m) => f.store.listMessages(m.id, "user"));
+	assert.equal(
+		allMessages.some((m) => Array.isArray(m.metadata?.skillProposals) && m.metadata.skillProposals.length > 0),
+		false,
+	);
 });
 
 test("feedback scores only memories injected for the reviewed space version", async (t) => {
@@ -477,14 +484,15 @@ test("explicit reflection abort normalizes transport rejection to the public can
 	await rejected;
 });
 
-test("org-bound propose_experience and distillation route company_private to orgId shared across org repos", async (t) => {
+test("org-bound propose_skill and distillation route org scopes cleanly across org repos", async (t) => {
 	let phase: "execute" | "distill" = "execute";
 	const f = await fixture(t, async (options) => {
 		if (phase === "execute") {
-			await invokeTool(options, "propose_experience", {
-				scope: "company_private",
-				category: "collaboration",
-				content: "ORG_COLLAB: PRD signoff required before DB migrations across Acme repos",
+			await invokeTool(options, "propose_skill", {
+				name: "acme-migration-signoff",
+				description: "PRD signoff checklist before DB migrations across Acme repos",
+				body: "Always get PRD signoff before DB migrations.",
+				storageScope: "org",
 				rationale: "Avoid breaking downstream services in the same org",
 			});
 			return result("done");
@@ -516,31 +524,33 @@ test("org-bound propose_experience and distillation route company_private to org
 	const wsA = f.store.upsertWorkspace({ orgId: org.id, name: "service-a", repoPath: "/tmp/rsi-org-a" });
 	const wsB = f.store.upsertWorkspace({ orgId: org.id, name: "service-b", repoPath: "/tmp/rsi-org-b" });
 
-	await f.orchestrator.dispatchMatter({
+	const dispatched = await f.orchestrator.dispatchMatter({
 		prompt: "在 service-a 协作",
 		preferredMemberId: "product-manager",
 		workspaceId: wsA.id,
 	});
 	const matter = f.store.listMatters()[0]!;
+	const replyMsg = f.store.listMessages(dispatched.matter.id, "user").find((m) => m.senderType === "member");
+	assert.equal(
+		(replyMsg?.metadata?.skillProposals as Array<{ name: string; storageScope: string }> | undefined)?.[0]
+			?.storageScope,
+		"org",
+	);
 	phase = "distill";
 	const distilled = await f.orchestrator.distillExperiences({ matterId: matter.id });
 	assert.equal(distilled.createdMemories.length, 2);
 
 	const memories = f.store.listMemberMemories("product-manager");
-	const orgCollab = memories.find((m) => m.content.includes("ORG_COLLAB"))!;
 	const orgConstraint = memories.find((m) => m.content.includes("ORG_CONSTRAINT"))!;
 	const wsAOnly = memories.find((m) => m.content.includes("WS_A_ONLY"))!;
 
-	assert.equal(orgCollab.orgId, org.id);
-	assert.equal(orgCollab.workspaceId, null);
 	assert.equal(orgConstraint.orgId, org.id);
 	assert.equal(orgConstraint.workspaceId, null);
 	assert.equal(wsAOnly.orgId, null);
 	assert.equal(wsAOnly.workspaceId, wsA.id);
 
-	// Both org memories are visible in sibling repo wsB; wsA-only project memory is NOT visible in wsB
+	// Org memory is visible in sibling repo wsB; wsA-only project memory is NOT visible in wsB
 	const wsBRelevant = f.store.listRelevantMemories("product-manager", wsB.id);
-	assert.ok(wsBRelevant.some((m) => m.id === orgCollab.id));
 	assert.ok(wsBRelevant.some((m) => m.id === orgConstraint.id));
 	assert.ok(!wsBRelevant.some((m) => m.id === wsAOnly.id));
 

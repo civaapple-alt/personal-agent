@@ -6,6 +6,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
+import skillCaptureExtension from "../pa-extensions/skill-capture/pi/index.ts";
+import spaceExtension from "../pa-extensions/space/pi/index.ts";
+import workbenchHelpExtension from "../pa-extensions/workbench-help/pi/index.ts";
+import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
+import workerRuntimeExtension from "../pa-extensions/worker-runtime/pi/index.ts";
 import { resolveBuiltinExtensionPath } from "../packages/server/src/extensions/builtin-paths.ts";
 import {
 	isGuideTopic,
@@ -33,10 +39,9 @@ import { openPersonalAgentDatabase } from "../packages/server/src/storage/databa
 import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import type { Matter, MatterMessage } from "../packages/server/src/storage/types.ts";
 import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
-import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
 import { invokeTool } from "./worker-helpers.ts";
 
-type Tool = Parameters<PiExtensionApi["registerTool"]>[0];
+type Tool = Parameters<PiHostToolExtensionApi["registerTool"]>[0];
 type Responder = (worker: SessionWorker, prompt: string, options: RunPromptOptions) => Promise<string>;
 
 /** Model fixture, but uses the shipped Pi extension, authenticated HTTP bridge and real session files. */
@@ -73,11 +78,10 @@ class SessionWorker implements RpcWorkerLike {
 		Object.assign(process.env, this.options.env);
 		process.env.PA_REQUIRED_TOOLS = "[]";
 		try {
-			const registerTool: PiExtensionApi["registerTool"] = (tool) => {
+			const registerTool: PiHostToolExtensionApi["registerTool"] = (tool) => {
 				this.tools.set(tool.name, tool);
 			};
-			teamExtension({
-				registerTool,
+			workerRuntimeExtension({
 				on: (event, handler) => {
 					if (event === "session_start") onStart = handler as () => Promise<void>;
 				},
@@ -93,6 +97,18 @@ class SessionWorker implements RpcWorkerLike {
 					].map((name) => ({ name })),
 				setActiveTools: () => {},
 			});
+			if (this.options.args?.includes(resolveBuiltinExtensionPath("workbench-help"))) {
+				workbenchHelpExtension({ registerTool });
+			}
+			if (this.options.args?.includes(resolveBuiltinExtensionPath("space"))) {
+				spaceExtension({ registerTool });
+			}
+			if (this.options.args?.includes(resolveBuiltinExtensionPath("delegation"))) {
+				delegationExtension({ registerTool });
+			}
+			if (this.options.args?.includes(resolveBuiltinExtensionPath("skill-capture"))) {
+				skillCaptureExtension({ registerTool });
+			}
 			if (this.options.args?.includes(resolveBuiltinExtensionPath("human-question"))) {
 				humanQuestionExtension({ registerTool });
 			}
@@ -1894,7 +1910,8 @@ test("proactive observer chimes in with independent user bubble while silent obs
 		if (worker.options.env?.PA_MEMBER_ID === "engineering-manager") {
 			emPromptCount += 1;
 			assert.equal(worker.options.env?.PA_CAN_SAVE_SPACE, "false");
-			assert.equal(worker.options.env?.PA_CAN_DELEGATE, "false");
+			assert.equal(worker.options.args?.includes(resolveBuiltinExtensionPath("delegation")), false);
+			assert.equal(worker.options.args?.includes(resolveBuiltinExtensionPath("skill-capture")), false);
 			const manifest = JSON.parse(worker.options.env?.PA_REQUIRED_TOOLS ?? "[]") as string[];
 			assert.ok(["read", "bash", "edit", "write"].every((name) => manifest.includes(name)));
 			assert.ok(worker.options.args?.includes("builtin:mcp"));

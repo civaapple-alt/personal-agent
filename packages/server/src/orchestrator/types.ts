@@ -369,7 +369,7 @@ const TOOL_LABELS: Record<string, string> = {
 	write: "写入文件",
 	delegate_to_member: "委托团队成员",
 	save_space_page: "保存资料",
-	propose_experience: "提炼候选经验",
+	propose_skill: "提议沉淀 Skill 与脚本",
 	list_available_skills: "查看可用 Skills",
 	load_available_skill: "读取 Skill",
 	list_pi_commands: "查看 Pi 插件命令",

@@ -3,7 +3,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const builtinExtensionPaths = {
-	"team-extension": "pi-extensions/team-extension/index.ts",
+	"worker-runtime": "pa-extensions/worker-runtime/pi/index.ts",
+	"workbench-help": "pa-extensions/workbench-help/pi/index.ts",
+	space: "pa-extensions/space/pi/index.ts",
+	delegation: "pa-extensions/delegation/pi/index.ts",
+	"skill-capture": "pa-extensions/skill-capture/pi/index.ts",
 	"skill-catalog": "pi-extensions/skill-catalog/index.ts",
 	"human-question": "pi-extensions/human-question/index.ts",
 	"role-skills": "pi-extensions/role-skills",

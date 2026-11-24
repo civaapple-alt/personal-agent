@@ -379,7 +379,7 @@ export function buildMemberPrompts(input: {
 					: "";
 			const suffix =
 				m.status === "candidate"
-					? " (Unverified. If current work shows this is incorrect or needs revision, use propose_experience to propose a replacement.)"
+					? " (Unverified historical memory. If current work proves a reusable workflow or rule, use propose_skill to save a SKILL.md for confirmation.)"
 					: "";
 			return `- [${m.id} | ${tag}] ${catPrefix}${m.content}${suffix}`;
 		};

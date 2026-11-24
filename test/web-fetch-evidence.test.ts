@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { formatNoticeEventLine, isKeyNoticeEvent } from "../apps/web/src/utils/matterStream.ts";
-import teamExtension from "../pi-extensions/team-extension/index.ts";
-import { classifyGithubFetch, classifyGithubFetches } from "../pi-extensions/team-extension/web-fetch-evidence.js";
+import workerRuntimeExtension from "../pa-extensions/worker-runtime/pi/index.ts";
+import { classifyGithubFetch, classifyGithubFetches } from "../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
 
 const url = "https://github.com/example/repo";
 const clone = [
@@ -92,8 +92,7 @@ test("tool result guidance preserves structured output and recognizes restored s
 	) => { content: Array<{ type: string; [key: string]: unknown }>; structuredContent?: unknown } | undefined;
 	let resultHandler: Handler | undefined;
 	let beforeStart: ((event: { systemPrompt: string }, ctx: unknown) => unknown) | undefined;
-	teamExtension({
-		registerTool() {},
+	workerRuntimeExtension({
 		on(event, handler) {
 			if (event === "tool_result") resultHandler = handler as Handler;
 			if (event === "before_agent_start") beforeStart = handler as typeof beforeStart;

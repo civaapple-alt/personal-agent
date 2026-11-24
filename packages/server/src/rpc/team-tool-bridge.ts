@@ -10,8 +10,6 @@ import {
 } from "@pa/contracts/skill-proposal";
 import { isWorkbenchTopic, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
-import { normalizeMemoryCategory } from "../storage/repositories.ts";
-import type { MemoryCategory } from "../storage/types.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
@@ -37,15 +35,6 @@ export type TeamToolCall =
 	  ))
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
-	| {
-			tool: "propose_experience";
-			callId: string;
-			scope: "role_general" | "company_private" | "project_private";
-			category: MemoryCategory;
-			content: string;
-			rationale: string;
-			supersedesMemoryId?: string;
-	  }
 	| {
 			tool: "propose_skill";
 			callId: string;
@@ -225,26 +214,6 @@ function parseCall(value: unknown): TeamToolCall {
 			context: "context" in args ? requiredString(args.context, "context", 3000) : undefined,
 			options: choices,
 			sourceAssignmentNumber,
-		};
-	}
-	if (value.tool === "propose_experience" && "scope" in args && "content" in args && "rationale" in args) {
-		const scope = args.scope;
-		if (scope !== "role_general" && scope !== "company_private" && scope !== "project_private") {
-			throw new Error("Unsupported experience scope");
-		}
-		const supersedesMemoryId =
-			"supersedesMemoryId" in args && typeof args.supersedesMemoryId === "string" && args.supersedesMemoryId.trim()
-				? requiredString(args.supersedesMemoryId, "supersedesMemoryId", 256)
-				: undefined;
-		const category = normalizeMemoryCategory("category" in args ? args.category : undefined);
-		return {
-			tool: value.tool,
-			callId,
-			scope,
-			category,
-			content: requiredString(args.content, "content", 2000),
-			rationale: requiredString(args.rationale, "rationale", 2000),
-			supersedesMemoryId,
 		};
 	}
 	if (

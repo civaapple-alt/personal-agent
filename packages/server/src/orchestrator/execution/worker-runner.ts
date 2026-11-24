@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { classifyGithubFetches } from "../../../../../pi-extensions/team-extension/web-fetch-evidence.js";
+import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
+import { classifyGithubFetches } from "../../../../../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
 import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../../extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
@@ -14,7 +15,7 @@ import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../../rpc/team-tool-bridge.ts";
 import type { ImageContent } from "../../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
-import type { Matter, MemoryCategory, MemoryScope, TeamMember, WorkspaceLink } from "../../storage/types.ts";
+import type { Matter, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import { buildArchitectMatterContext } from "../architect/meta-architect.ts";
 import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
@@ -138,7 +139,7 @@ export async function executeWithWorkerPass(
 		hasConsultTargets,
 		isMatterLead,
 	});
-	const { canSaveSpace, canDelegate, canProposeExperience } = teamExtension;
+	const { canSaveSpace, canDelegate, canCaptureSkill } = teamExtension;
 	const humanQuestion = prepareHumanQuestion({
 		sessionMode,
 		discussionMode: isDiscussionMode,
@@ -223,13 +224,7 @@ export async function executeWithWorkerPass(
 			...teamExtension.tools,
 			...humanQuestion.tools,
 		];
-		const stagedExperiences: Array<{
-			scope: MemoryScope;
-			category: MemoryCategory;
-			content: string;
-			rationale: string;
-			supersedesMemoryId?: string;
-		}> = [];
+		const stagedSkillProposals: SkillProposalItem[] = [];
 		let observedTools: string[] | undefined;
 		const workbenchContext = () => {
 			const current = deps.requireMatter(input.matterId);
@@ -505,63 +500,8 @@ export async function executeWithWorkerPass(
 				if (call.tool === "request_clarification") {
 					return humanQuestion.request(call);
 				}
-				if (call.tool === "propose_experience") {
-					if (!canProposeExperience && !isDiscussionMode) {
-						throw new Error(
-							`${sessionMode === "observer" ? "Observing" : "Verifying"} specialists cannot propose experiences during peer review`,
-						);
-					}
-					if (isDiscussionMode) {
-						throw new Error("Discussion chat mode does not propose experiences directly");
-					}
-					if (call.scope === "project_private" && !input.workspace) {
-						throw new Error(
-							"Project experiences require a bound workspace; private facts must not be reclassified as role_general",
-						);
-					}
-					if (call.scope === "company_private" && !input.workspace && !activeOrgId) {
-						throw new Error(
-							"Private company or project experiences require a bound workspace or organization; private facts must not be reclassified as role_general",
-						);
-					}
-					if (call.supersedesMemoryId) {
-						const target = deps.store.getMemory(call.supersedesMemoryId);
-						if (!target || target.memberId !== input.member.id) {
-							throw new Error("Cannot supersede missing or foreign member memory");
-						}
-						const orgId = call.scope === "company_private" ? activeOrgId : null;
-						const targetWorkspaceId =
-							call.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
-						deps.store.validateMemoryReplacement(
-							{
-								memberId: input.member.id,
-								scope: call.scope,
-								orgId,
-								workspaceId: targetWorkspaceId,
-							},
-							target.id,
-						);
-					}
-					const normContent = call.content.replace(/\s+/g, " ").trim().toLowerCase();
-					if (
-						!stagedExperiences.some(
-							(item) =>
-								item.scope === call.scope &&
-								item.content.replace(/\s+/g, " ").trim().toLowerCase() === normContent,
-						)
-					) {
-						stagedExperiences.push({
-							scope: call.scope,
-							category: call.category,
-							content: call.content,
-							rationale: call.rationale,
-							supersedesMemoryId: call.supersedesMemoryId,
-						});
-					}
-					return { staged: true, status: "candidate", scope: call.scope, note: "本轮完成后记为待验证经验" };
-				}
 				if (call.tool === "propose_skill") {
-					if (!canProposeExperience && !isDiscussionMode) {
+					if (!canCaptureSkill && !isDiscussionMode) {
 						throw new Error(
 							`${sessionMode === "observer" ? "Observing" : "Verifying"} specialists cannot propose skills during peer review`,
 						);
@@ -575,7 +515,7 @@ export async function executeWithWorkerPass(
 					if (call.storageScope === "org" && !activeOrgId) {
 						throw new Error("Organization skill proposals require an active organization");
 					}
-					const proposal = {
+					const proposal: SkillProposalItem = {
 						id: `skp_${randomUUID().slice(0, 12)}`,
 						name: call.name,
 						description: call.description,
@@ -585,9 +525,9 @@ export async function executeWithWorkerPass(
 						rationale: call.rationale,
 						status: "pending" as const,
 					};
-					const existingIdx = input.effectsTarget.skillProposals.findIndex((item) => item.name === proposal.name);
-					if (existingIdx < 0) input.effectsTarget.skillProposals.push(proposal);
-					else input.effectsTarget.skillProposals[existingIdx] = proposal;
+					const existingIdx = stagedSkillProposals.findIndex((item) => item.name === proposal.name);
+					if (existingIdx < 0) stagedSkillProposals.push(proposal);
+					else stagedSkillProposals[existingIdx] = proposal;
 					return {
 						staged: true,
 						status: "pending_confirmation",
@@ -608,7 +548,7 @@ export async function executeWithWorkerPass(
 		const args = inheritsLocalResources
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-approve"];
-		args.push("--extension", teamExtension.entry);
+		for (const entry of teamExtension.entries) args.push("--extension", entry);
 		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
 		args.push("--extension", resolveBuiltinExtensionPath("role-skills"));
 		if (!isArchitect) args.push("--extension", resolveBuiltinExtensionPath("visualize"));
@@ -1134,18 +1074,10 @@ export async function executeWithWorkerPass(
 			});
 		}
 		if (!result.aborted && !input.run.cancelled) {
-			for (const item of stagedExperiences) {
-				const orgId = item.scope === "company_private" ? activeOrgId : null;
-				const workspaceId = item.scope === "role_general" ? null : orgId ? null : (input.workspace?.id ?? null);
-				effects.experiences.push({
-					...item,
-					memberId: input.member.id,
-					orgId,
-					workspaceId,
-					sourceMatterId: input.matterId,
-					status: "candidate",
-					verified: false,
-				});
+			for (const proposal of stagedSkillProposals) {
+				const existingIdx = effects.skillProposals.findIndex((item) => item.name === proposal.name);
+				if (existingIdx < 0) effects.skillProposals.push(proposal);
+				else effects.skillProposals[existingIdx] = proposal;
 			}
 			mergeEffects(input.effectsTarget, effects);
 		}

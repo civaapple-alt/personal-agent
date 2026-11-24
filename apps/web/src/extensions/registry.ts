@@ -1,14 +1,22 @@
+import delegation from "@pa/ext-delegation/web";
 import humanQuestion from "@pa/ext-human-question/web";
+import skillCapture from "@pa/ext-skill-capture/web";
 import skillCatalog from "@pa/ext-skill-catalog/web";
-import teamExtension from "@pa/ext-team-extension/web";
+import space from "@pa/ext-space/web";
 import visualize from "@pa/ext-visualize/web";
 import webAccess from "@pa/ext-web-access/web";
+import workbenchHelp from "@pa/ext-workbench-help/web";
+import workerRuntime from "@pa/ext-worker-runtime/web";
 import workflow from "@pa/ext-workflow/web";
 import type { PaToolDisplaySpec, PaToolRendererRegistration, PaWebExtension } from "@pa/extension-api/web";
 
 /** Static registry of all built-in PA web extensions (browser-only UI metadata and tool renderers). */
 export const builtinWebExtensions: readonly PaWebExtension[] = [
-	teamExtension,
+	workerRuntime,
+	workbenchHelp,
+	space,
+	delegation,
+	skillCapture,
 	humanQuestion,
 	skillCatalog,
 	visualize,

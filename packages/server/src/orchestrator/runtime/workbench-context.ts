@@ -49,7 +49,7 @@ function readRuntimeTools(message: MatterMessage): string[] | undefined {
 }
 
 const MANAGED_EXTENSIONS = [
-	["read_pa_help", "team-extension"],
+	["read_pa_help", "workbench-help"],
 	["request_clarification", "human-question"],
 	["load_available_skill", "skill-catalog"],
 	["web_search", "pi-web-access"],

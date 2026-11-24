@@ -9,7 +9,7 @@
 | [jsonl.ts](jsonl.ts) | 严格按 LF 分帧，保留 JSON 字符串里的 Unicode 分隔符 |
 | [prompt-usage.ts](prompt-usage.ts) | 汇总 Pi 已报告的输入及缓存读写 token，单独保留第一个有效请求的统计 |
 | [types.ts](types.ts) | 本项目消费的 Pi 命令、事件与对话协议；先核实 Pi 实际语义再改 |
-| [team-extension](../../../../pi-extensions/team-extension/README.md) | PA 在启动岗位时加载此扩展。它注册团队工具，通过当轮桥接调用 PA，补充岗位上下文并核查实际工具 |
+| [pa-extensions/*](../../../../pa-extensions/README.md) | PA 按权限按需挂载 `worker-runtime`、`workbench-help`、`space`、`delegation`、`skill-capture`，通过当轮桥接调用 PA 并核查实际工具 |
 | [human-question](../../../../pi-extensions/human-question/README.md) | 注册 `request_clarification` 并使用同一桥接。独立 Pi 会话使用原生问答交互 |
 | [skill-catalog](../../../../pi-extensions/skill-catalog/README.md) | 列出 Pi 当前已发现的 Skills，并按需读取完整正文和哈希 |
 | [team-tool-bridge.ts](team-tool-bridge.ts) | 每轮执行专用的 loopback HTTP、bearer token、参数校验、调用 ID 去重和取消。宿主将 `read_pa_help` 限于允许的帮助主题和本轮事项上下文，并再次拒绝内部成员发布及旁听模式提案 |

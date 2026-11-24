@@ -32,7 +32,7 @@ test("extension-sdk rejects host-internal fields and incompatible apiVersion", (
 		name: "bad-ext",
 		title: "Bad Ext",
 		workflowRule: "inject prompt",
-		builtinPiEntry: "pi-extensions/team-extension/index.ts",
+		builtinPiEntry: "pa-extensions/worker-runtime/pi/index.ts",
 		supersedesPackages: ["pi-web-access"],
 	});
 	assert.equal(leaked.ok, false);

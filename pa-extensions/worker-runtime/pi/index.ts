@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { createTeamBridgeClient } from "../shared/team-bridge-client.ts";
+import { createTeamBridgeClient } from "./bridge-client.ts";
 import { classifyGithubFetches, temporaryClonePaths } from "./web-fetch-evidence.js";
 
 interface BeforeAgentStartResult {
@@ -8,19 +8,8 @@ interface BeforeAgentStartResult {
 	message?: { customType: string; content: string; display: boolean };
 }
 
-/** Minimal structural subset of Pi's extension API. No dependency on Pi's installation path. */
-export interface PiExtensionApi {
-	registerTool(tool: {
-		name: string;
-		label: string;
-		description: string;
-		parameters: object;
-		execute(
-			callId: string,
-			args: unknown,
-			signal?: AbortSignal,
-		): Promise<{ content: { type: "text"; text: string }[]; details: unknown }>;
-	}): void;
+/** Minimal structural subset of Pi's extension API used by PA's worker runtime guard. */
+export interface WorkerRuntimeExtensionApi {
 	on(event: "session_start", handler: () => Promise<void>): void;
 	on(event: "tool_call", handler: (event: { toolName: string; input: Record<string, unknown> }) => void): void;
 	on(
@@ -94,212 +83,11 @@ export function filterContextFilesForTargetWorkspace<T extends { path: string }>
 	});
 }
 
-export default function teamExtension(pi: PiExtensionApi): void {
+export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): void {
 	const env = { ...process.env };
 	const post = createTeamBridgeClient(env);
 	const cloneRoots = new Set<string>();
 
-	for (const tool of [
-		{
-			name: "read_space",
-			label: "读取资料空间",
-			description:
-				"List this matter's space entries (optionally filtered by docType) or read an entry by pageId. For folder entries, returns README.md plus files[]; pass subPath to read a specific sub-file inside a folder entry.",
-			parameters: {
-				type: "object",
-				properties: {
-					pageId: { type: "string" },
-					docType: { type: "string", enum: ["plan", "spec", "decision", "rule", "note"] },
-					subPath: { type: "string" },
-				},
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "save_space_page",
-			label: "保存空间资料",
-			description:
-				"Save a plan, spec, decision, rule/SOP, or note to this matter's space. Set docType accurately: plan, spec, decision, rule, or note (default). For multi-file bundles, reference materials, or static demo sites with nested subdirectories (e.g. 'refs/option-a.md', 'demo/index.html', 'demo/assets/app.js', '.gitignore'), set entryKind='folder' and pass files=[{ path, content }, ...] (optionally alongside content for README.md) or pass a single subPath. Provide title and at least one of content, sourcePath, or files.",
-			parameters: {
-				type: "object",
-				properties: {
-					type: { type: "string", enum: ["document", "artifact", "prototype_image", "service_url"] },
-					docType: { type: "string", enum: ["plan", "spec", "decision", "rule", "note"] },
-					entryKind: { type: "string", enum: ["file", "folder"] },
-					subPath: { type: "string" },
-					files: {
-						type: "array",
-						minItems: 1,
-						maxItems: 50,
-						items: {
-							type: "object",
-							properties: {
-								path: { type: "string" },
-								content: { type: "string" },
-							},
-							required: ["path", "content"],
-							additionalProperties: false,
-						},
-					},
-					title: { type: "string" },
-					content: { type: "string" },
-					sourcePath: { type: "string" },
-					summary: { type: "string" },
-					changeNote: { type: "string" },
-					pageId: { type: "string" },
-					revision: { type: "integer", minimum: 1 },
-				},
-				required: ["title"],
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "read_pa_help",
-			label: "Read PA help",
-			description:
-				"Read the installed workbench guide or live facts about this matter. Use the topic IDs from the Personal Agent help index. This tool does not operate the workbench.",
-			parameters: {
-				type: "object",
-				properties: {
-					topics: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 },
-					language: { type: "string", enum: ["zh", "en"] },
-				},
-				required: ["topics"],
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "delegate_to_member",
-			label: "咨询团队成员",
-			description:
-				"Ask an existing colleague to perform specialist work and return evidence. Include the objective, constraints, and expected evidence. During authorized work, the lead can set verification to assign independent review of a commit, workspace text file, or a staged document draft. Use a different member from the author and refer to their completed assignment when applicable. The answer includes the assignment number for this turn's handoff board.",
-			parameters: {
-				type: "object",
-				properties: {
-					memberId: { type: "string" },
-					task: { type: "string" },
-					verification: {
-						type: "object",
-						properties: {
-							assignmentNumber: {
-								type: "integer",
-								minimum: 1,
-								description: "Completed assignment number in this turn, when there is one",
-							},
-							target: {
-								type: "object",
-								properties: {
-									kind: { type: "string", enum: ["commit", "file", "draft"] },
-									reference: {
-										type: "string",
-										description:
-											"Full commit hash, workspace-relative text path, or exact staged document title",
-									},
-								},
-								required: ["kind", "reference"],
-								additionalProperties: false,
-							},
-							criteria: { type: "string" },
-						},
-						required: ["target", "criteria"],
-						additionalProperties: false,
-					},
-				},
-				required: ["memberId", "task"],
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "propose_experience",
-			label: "提炼候选经验",
-			description:
-				"Record a reusable lesson learned during execution, debugging, user correction, or team collaboration (not status logs). Focus on efficiency improvements, root-cause troubleshooting, collaboration handoffs, user-corrected constraints, or project conventions. Distinguish role_general (cross-organization/cross-project method), company_private (organization-wide shared rules/memories), and project_private (repository-specific rules).",
-			parameters: {
-				type: "object",
-				properties: {
-					scope: { type: "string", enum: ["role_general", "company_private", "project_private"] },
-					category: {
-						type: "string",
-						enum: [
-							"efficiency",
-							"troubleshooting",
-							"collaboration",
-							"user_correction",
-							"domain_constraint",
-							"general",
-						],
-						description:
-							"Dimension: efficiency, troubleshooting, collaboration, user_correction, domain_constraint, or general.",
-					},
-					content: { type: "string" },
-					rationale: { type: "string" },
-					supersedesMemoryId: { type: "string" },
-				},
-				required: ["scope", "content", "rationale"],
-				additionalProperties: false,
-			},
-		},
-		{
-			name: "propose_skill",
-			label: "提议沉淀 Skill 与脚本",
-			description:
-				"Propose saving a proven, repeatable workflow as a reusable Pi Skill (SKILL.md plus optional helper scripts under scripts/) for human confirmation. Never writes directly to disk until the user approves the confirmation card. Use when a task succeeded after concrete steps or user corrections that should be one-shot repeatable next time.",
-			parameters: {
-				type: "object",
-				properties: {
-					name: {
-						type: "string",
-						description: "Lowercase kebab-case skill name (e.g. 'release-preflight' or 'daily-repo-digest').",
-					},
-					description: {
-						type: "string",
-						description: "Concise trigger description telling future sessions when to load this Skill.",
-					},
-					body: {
-						type: "string",
-						description: "Markdown instructions for SKILL.md (without YAML frontmatter).",
-					},
-					storageScope: {
-						type: "string",
-						enum: ["global", "org", "personal", "workspace"],
-						description: "Target scope: workspace (.agents/skills/), personal, org, or global.",
-					},
-					rationale: {
-						type: "string",
-						description: "Why this workflow is worth saving and what repeated effort it eliminates.",
-					},
-					scripts: {
-						type: "array",
-						description: "Optional deterministic helper scripts under scripts/<filename>.",
-						items: {
-							type: "object",
-							properties: {
-								path: { type: "string", description: "Must match scripts/<safe-filename>." },
-								content: { type: "string" },
-								executable: { type: "boolean" },
-							},
-							required: ["path", "content"],
-							additionalProperties: false,
-						},
-					},
-				},
-				required: ["name", "description", "body", "storageScope", "rationale"],
-				additionalProperties: false,
-			},
-		},
-	]) {
-		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
-		if (tool.name === "save_space_page" && env.PA_CAN_SAVE_SPACE === "false") continue;
-		if ((tool.name === "propose_experience" || tool.name === "propose_skill") && env.PA_CAN_EXPERIENCE === "false")
-			continue;
-		pi.registerTool({
-			...tool,
-			async execute(callId, args, signal) {
-				const result = await post("/tool", { tool: tool.name, callId, args }, signal);
-				return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
-			},
-		});
-	}
 	if (env.PA_WEB_SEARCH_ENABLED === "true") {
 		pi.on("tool_call", (event) => {
 			if (event.toolName === "web_search") {
@@ -316,6 +104,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			}
 		});
 	}
+
 	pi.on("tool_result", (event) => {
 		if (event.toolName === "fetch_content") {
 			const evidenceList = classifyGithubFetches(event.input, event.content, event.isError, event.structuredContent);
@@ -359,6 +148,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			...(event.structuredContent !== undefined ? { structuredContent: event.structuredContent } : {}),
 		};
 	});
+
 	pi.on("session_start", async () => {
 		// MCP/custom tools may register after session_start. Never block later extensions' startup handlers.
 		const prepare = async () => {
@@ -384,6 +174,7 @@ export default function teamExtension(pi: PiExtensionApi): void {
 			process.stderr.write("Personal Agent capability handshake failed\n");
 		});
 	});
+
 	pi.on("before_agent_start", (event, ctx) => {
 		for (const message of ctx?.sessionManager?.buildSessionProjection?.().messages ?? []) {
 			if (message.role !== "toolResult" || message.toolName !== "fetch_content" || message.isError) continue;

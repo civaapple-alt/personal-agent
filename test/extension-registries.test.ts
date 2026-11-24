@@ -11,13 +11,25 @@ import {
 
 test("server and web extension registries stay aligned and resolve declared built-in Pi assets", () => {
 	const summaries = listServerExtensionSummaries();
+	const expectedNames = [
+		"worker-runtime",
+		"workbench-help",
+		"space",
+		"delegation",
+		"skill-capture",
+		"human-question",
+		"skill-catalog",
+		"visualize",
+		"web-access",
+		"workflow",
+	];
 	assert.deepEqual(
 		summaries.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "visualize", "web-access", "workflow"],
+		expectedNames,
 	);
 	assert.deepEqual(
 		builtinWebExtensions.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "visualize", "web-access", "workflow"],
+		expectedNames,
 	);
 
 	for (const { extension } of builtinServerExtensions) {

@@ -138,7 +138,7 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 			(target.startsWith("packages/server/") ||
 				target.startsWith("apps/cli/") ||
 				target.startsWith("pi-extensions/") ||
-				/^pa-extensions\/[^/]+\/server\//.test(target))
+				/^pa-extensions\/[^/]+\/(?:server|pi)\//.test(target))
 		) {
 			return `apps/web cannot import host/server file (${target})`;
 		}
@@ -228,8 +228,8 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 		return null;
 	}
 
-	// 6. pa-extensions/<name>/{server,web}: halves never cross-import
-	const extMatch = /^pa-extensions\/([^/]+)\/(server|web)\//.exec(fileRel);
+	// 6. pa-extensions/<name>/{server,web,pi}: halves never cross-import
+	const extMatch = /^pa-extensions\/([^/]+)\/(server|web|pi)\//.exec(fileRel);
 	if (extMatch) {
 		const [, extName, half] = extMatch;
 		if (half === "web") {
@@ -247,9 +247,21 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 				(target.startsWith("packages/server/") ||
 					target.startsWith("apps/cli/") ||
 					target.startsWith("pi-extensions/") ||
-					/^pa-extensions\/[^/]+\/server\//.test(target))
+					/^pa-extensions\/[^/]+\/(?:server|pi)\//.test(target))
 			) {
 				return `pa-extensions/${extName}/web cannot import server/pi file (${target})`;
+			}
+		} else if (half === "pi") {
+			if (specifier === "react" || specifier.startsWith("react/") || specifier.startsWith("@pa/")) {
+				return `pa-extensions/${extName}/pi must stay self-contained for Pi RPC (cannot import ${specifier})`;
+			}
+			if (
+				target &&
+				(target.startsWith("packages/server/") ||
+					target.startsWith("apps/") ||
+					/^pa-extensions\/[^/]+\/(?:server|web)\//.test(target))
+			) {
+				return `pa-extensions/${extName}/pi cannot import host/web file (${target})`;
 			}
 		} else {
 			if (

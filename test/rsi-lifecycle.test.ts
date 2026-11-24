@@ -68,7 +68,7 @@ class RsiScriptedWorker implements RpcWorkerLike {
 	}
 }
 
-test("propose_experience stages candidate memories on clean finish, blocks invalid scopes/observers, and discards on failure", async () => {
+test("propose_skill stages skill proposals on clean finish, blocks invalid scopes/observers, and discards on failure", async () => {
 	const tempRoot = mkdtempSync(join(tmpdir(), "pa-rsi-propose-"));
 	const db = openPersonalAgentDatabase(":memory:");
 	const store = new PersonalAgentStore(db);
@@ -76,7 +76,7 @@ test("propose_experience stages candidate memories on clean finish, blocks inval
 
 	try {
 		let rejectPrivateErr: string | null = null;
-		let allowGeneralRes: unknown = null;
+		let allowPersonalRes: unknown = null;
 		let observerRejectRes: unknown = null;
 		const orchestrator = new TeamOrchestrator({
 			store,
@@ -84,11 +84,14 @@ test("propose_experience stages candidate memories on clean finish, blocks inval
 			sessionDir: join(tempRoot, "sessions"),
 			workerFactory: (options) =>
 				new RsiScriptedWorker(options, async (prompt) => {
-					if (options.env?.PA_CAN_EXPERIENCE === "false") {
+					const isObserver = !options.args?.some((arg) => arg.endsWith("pa-extensions/skill-capture/pi/index.ts"));
+					if (isObserver) {
 						try {
-							await invokeTool(options, "propose_experience", {
-								scope: "role_general",
-								content: "旁听不应提出经验提案",
+							await invokeTool(options, "propose_skill", {
+								name: "observer-blocked-skill",
+								description: "旁听不应提出技能提案",
+								body: "不应通过",
+								storageScope: "personal",
 								rationale: "旁听模式禁用",
 							});
 						} catch (err) {
@@ -108,17 +111,21 @@ test("propose_experience stages candidate memories on clean finish, blocks inval
 
 					if (prompt.includes("无工作区")) {
 						try {
-							await invokeTool(options, "propose_experience", {
-								scope: "project_private",
-								content: "未绑定仓库时不应落库的规范",
+							await invokeTool(options, "propose_skill", {
+								name: "unbound-workspace-skill",
+								description: "未绑定仓库时不应落盘的规范",
+								body: "测试工作区隔离",
+								storageScope: "workspace",
 								rationale: "测试工作区隔离",
 							});
 						} catch (err) {
 							rejectPrivateErr = err instanceof Error ? err.message : String(err);
 						}
-						allowGeneralRes = await invokeTool(options, "propose_experience", {
-							scope: "role_general",
-							content: "先列出关键决策选项，再展开细节分析",
+						allowPersonalRes = await invokeTool(options, "propose_skill", {
+							name: "decision-options-first",
+							description: "先列出关键决策选项，再展开细节分析",
+							body: "整理产品决策时先给 2-3 个选项与推荐理由，再展开细节。",
+							storageScope: "personal",
 							rationale: "方便用户快速拍板",
 						});
 						return {
@@ -133,10 +140,12 @@ test("propose_experience stages candidate memories on clean finish, blocks inval
 						};
 					}
 
-					// Aborted/failed turn should discard staged candidate memories
-					await invokeTool(options, "propose_experience", {
-						scope: "role_general",
-						content: "失败回合中暂存但不应保存的经验",
+					// Aborted/failed turn should discard staged skill proposals
+					await invokeTool(options, "propose_skill", {
+						name: "failed-turn-skill",
+						description: "失败回合中暂存但不应保留的技能提案",
+						body: "会被丢弃",
+						storageScope: "personal",
 						rationale: "会被丢弃",
 					});
 					throw new Error("simulated worker failure");
@@ -148,35 +157,35 @@ test("propose_experience stages candidate memories on clean finish, blocks inval
 			observerMemberIds: ["engineering-manager"],
 		});
 		assert.match(String(rejectPrivateErr ?? ""), /require a bound workspace/);
-		assert.equal((allowGeneralRes as { result?: { staged?: boolean } })?.result?.staged, true);
-		assert.match(String(observerRejectRes ?? ""), /Observing specialists cannot propose experiences/);
+		assert.equal((allowPersonalRes as { result?: { staged?: boolean } })?.result?.staged, true);
+		assert.match(String(observerRejectRes ?? ""), /Observing specialists cannot propose skills/);
 
-		const leadMemories = store.listMemberMemories(okResult.assignedMember.id);
-		assert.equal(leadMemories.length, 1);
-		assert.equal(leadMemories[0]?.status, "candidate");
-		assert.equal(leadMemories[0]?.verified, false);
-		assert.equal(leadMemories[0]?.workspaceId, null);
-		assert.equal(leadMemories[0]?.rationale, "方便用户快速拍板");
-		assert.equal(leadMemories[0]?.sourceMatterId, okResult.matter.id);
+		const replyMsg = store.listMessages(okResult.matter.id, "user").find((m) => m.senderType === "member");
+		const proposals = (replyMsg?.metadata?.skillProposals ?? []) as Array<{
+			name: string;
+			storageScope: string;
+			status: string;
+			rationale: string;
+		}>;
+		assert.equal(proposals.length, 1);
+		assert.equal(proposals[0]?.name, "decision-options-first");
+		assert.equal(proposals[0]?.storageScope, "personal");
+		assert.equal(proposals[0]?.status, "pending");
+		assert.equal(proposals[0]?.rationale, "方便用户快速拍板");
 
-		const notices = store.listMessages(okResult.matter.id, "notice");
-		assert.ok(
-			notices.some((n) => {
-				try {
-					return (JSON.parse(n.content) as { method?: string }).method === "rsi_candidate_proposed";
-				} catch {
-					return false;
-				}
-			}),
-		);
-
-		// Verify failure discards staged candidate experience
+		// Verify failure discards staged skill proposal
 		await assert.rejects(
 			() => orchestrator.dispatchMatter({ prompt: "这轮会在中途失败" }),
 			/simulated worker failure/,
 		);
-		const afterFail = store.listMemberMemories(okResult.assignedMember.id);
-		assert.equal(afterFail.length, 1);
+		const failedMessages = store
+			.listMatters()
+			.filter((m) => m.id !== okResult.matter.id)
+			.flatMap((m) => store.listMessages(m.id, "user"));
+		assert.equal(
+			failedMessages.some((m) => Array.isArray(m.metadata?.skillProposals) && m.metadata.skillProposals.length > 0),
+			false,
+		);
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });
@@ -425,16 +434,17 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 						events: [],
 					};
 				}
-				await invokeTool(options, "propose_experience", {
-					scope: "project_private",
-					category: "domain_constraint",
-					content: "M1 基准脚本固定使用 default-tier=T1。",
+				await invokeTool(options, "propose_skill", {
+					name: "m1-benchmark-tier",
+					description: "M1 基准脚本默认使用 default-tier=T1",
+					body: "运行 M1 基准压测前统一使用 default-tier=T1。",
+					storageScope: "workspace",
 					rationale: "仓库规范固化",
 				});
 				return {
 					disposition: "started",
 					aborted: false,
-					assistantText: "已沉淀经验",
+					assistantText: "已提议固化仓库 Skill",
 					assistantMessages: [],
 					toolExecutions: [],
 					notices: [],
@@ -608,16 +618,22 @@ test("Phase 4 RSI multi-role distillation, categories, member reassignment, and 
 		assert.ok(!store.listMemberMemories("product-manager").some((m) => m.id === pmCandidate.id));
 		assert.ok(store.listMemberMemories("qa-manager").some((m) => m.id === pmCandidate.id));
 
-		// Also verify propose_experience tool call persists category properly
+		// Also verify propose_skill stages workspace-scoped proposal cleanly
 		await orchestrator.dispatchMatter({
 			matterId: matter.id,
 			workspaceId: ws.id,
 			prompt: "请固化本次默认参数规范",
 		});
-		const domainRule = store.listMemberMemories("product-manager").find((m) => m.content.includes("default-tier=T1"));
-		assert.ok(domainRule);
-		assert.equal(domainRule.category, "domain_constraint");
-		assert.equal(domainRule.scope, "project_private");
+		const latestReply = store
+			.listMessages(matter.id, "user")
+			.filter((m) => m.senderType === "member")
+			.at(-1);
+		const stagedSkill = (
+			latestReply?.metadata?.skillProposals as Array<{ name: string; storageScope: string }> | undefined
+		)?.[0];
+		assert.ok(stagedSkill);
+		assert.equal(stagedSkill.name, "m1-benchmark-tier");
+		assert.equal(stagedSkill.storageScope, "workspace");
 	} finally {
 		db.close();
 		rmSync(tempRoot, { recursive: true, force: true });

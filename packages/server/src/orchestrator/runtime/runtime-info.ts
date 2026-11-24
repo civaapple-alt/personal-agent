@@ -10,7 +10,6 @@ import {
 	resolveEnvFilePath,
 } from "../../extensions/env-credentials.ts";
 import { HUMAN_QUESTION_TOOL } from "../../extensions/human-question/runtime.ts";
-import { TEAM_EXTENSION_TOOLS } from "../../extensions/team-extension/runtime.ts";
 import { findInstalledPiWebAccess } from "../../extensions/web-access/package.ts";
 import {
 	PI_WEB_SEARCH_TOOLS,
@@ -291,19 +290,36 @@ export async function buildRuntimeOverview(options: {
 }): Promise<RuntimeOverviewPayload> {
 	const { config, serverConfig, activeMembers, isOwner } = options;
 	const probePromise = (options.probePiCli ?? (() => probePiCli()))();
-	const teamExtPath = resolveBuiltinExtensionPath("team-extension");
+	const workerRuntimePath = resolveBuiltinExtensionPath("worker-runtime");
+	const workbenchHelpPath = resolveBuiltinExtensionPath("workbench-help");
+	const spacePath = resolveBuiltinExtensionPath("space");
+	const delegationPath = resolveBuiltinExtensionPath("delegation");
+	const skillCapturePath = resolveBuiltinExtensionPath("skill-capture");
 	const humanQuestionPath = resolveBuiltinExtensionPath("human-question");
 	const skillCatalogPath = resolveBuiltinExtensionPath("skill-catalog");
 	const roleSkillsPath = resolveBuiltinExtensionPath("role-skills");
 
-	const [piProbe, teamFileStatus, humanQuestionFileStatus, skillCatalogFileStatus, roleSkillsFileStatus] =
-		await Promise.all([
-			probePromise,
-			checkFileOrDir(teamExtPath),
-			checkFileOrDir(humanQuestionPath),
-			checkFileOrDir(skillCatalogPath),
-			checkFileOrDir(roleSkillsPath),
-		]);
+	const [
+		piProbe,
+		workerRuntimeFileStatus,
+		workbenchHelpFileStatus,
+		spaceFileStatus,
+		delegationFileStatus,
+		skillCaptureFileStatus,
+		humanQuestionFileStatus,
+		skillCatalogFileStatus,
+		roleSkillsFileStatus,
+	] = await Promise.all([
+		probePromise,
+		checkFileOrDir(workerRuntimePath),
+		checkFileOrDir(workbenchHelpPath),
+		checkFileOrDir(spacePath),
+		checkFileOrDir(delegationPath),
+		checkFileOrDir(skillCapturePath),
+		checkFileOrDir(humanQuestionPath),
+		checkFileOrDir(skillCatalogPath),
+		checkFileOrDir(roleSkillsPath),
+	]);
 
 	let packageListing: Promise<string> | undefined;
 	const readPackages = (executable: string) => {
@@ -347,20 +363,84 @@ export async function buildRuntimeOverview(options: {
 	}
 	const mcpServers = [...mcpServersSet].sort();
 
-	const teamExtensionItem: RuntimeExtensionItem = {
-		id: "builtin-team-extension",
-		name: "team-extension",
+	const workerRuntimeItem: RuntimeExtensionItem = {
+		id: "builtin-worker-runtime",
+		name: "worker-runtime",
 		sourceKind: "builtin",
-		status: teamFileStatus === "present" ? "active" : "error",
-		entryPath: isOwner ? teamExtPath : builtinExtensionPaths["team-extension"],
-		fileStatus: teamFileStatus,
-		scopeSummary: "事项岗位可查阅帮助，其他工具按岗位与参与方式开放",
-		description: "通过本机桥接读取工作台帮助，并按权限处理委托、成果发布和经验提案。",
-		registeredTools: [...TEAM_EXTENSION_TOOLS],
-		hooks: ["session_start", "before_agent_start", "extension_ui"],
+		status: workerRuntimeFileStatus === "present" ? "active" : "error",
+		entryPath: isOwner ? workerRuntimePath : builtinExtensionPaths["worker-runtime"],
+		fileStatus: workerRuntimeFileStatus,
+		scopeSummary: "所有 PA 宿主岗位启动时加载",
+		description: "隔离目标工作区 AGENTS.md、注入成员与轮次上下文、核查工具握手并标注外部检索证据。",
+		registeredTools: [],
+		hooks: ["session_start", "before_agent_start", "tool_call", "tool_result"],
 		declaredByRoles: [],
 		mcpServers: [],
-		error: teamFileStatus === "missing" ? "未找到扩展入口文件" : null,
+		error: workerRuntimeFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
+	const workbenchHelpItem: RuntimeExtensionItem = {
+		id: "builtin-workbench-help",
+		name: "workbench-help",
+		sourceKind: "builtin",
+		status: workbenchHelpFileStatus === "present" ? "active" : "error",
+		entryPath: isOwner ? workbenchHelpPath : builtinExtensionPaths["workbench-help"],
+		fileStatus: workbenchHelpFileStatus,
+		scopeSummary: "所有事项岗位与角色架构师",
+		description: "通过本机桥接按主题读取安装版指南与当前事项运行事实。",
+		registeredTools: ["read_pa_help"],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: workbenchHelpFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
+	const spaceExtensionItem: RuntimeExtensionItem = {
+		id: "builtin-space",
+		name: "space",
+		sourceKind: "builtin",
+		status: spaceFileStatus === "present" ? "conditional" : "error",
+		entryPath: isOwner ? spacePath : builtinExtensionPaths.space,
+		fileStatus: spaceFileStatus,
+		scopeSummary: "非架构师主责与受托岗位（仅主责非讨论模式可写）",
+		description: "通过本机桥接读写 Git 资料空间与版本化成果。",
+		registeredTools: ["read_space", "save_space_page"],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: spaceFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
+	const delegationExtensionItem: RuntimeExtensionItem = {
+		id: "builtin-delegation",
+		name: "delegation",
+		sourceKind: "builtin",
+		status: delegationFileStatus === "present" ? "conditional" : "error",
+		entryPath: isOwner ? delegationPath : builtinExtensionPaths.delegation,
+		fileStatus: delegationFileStatus,
+		scopeSummary: "具备可委托同事的主责或内部协作者",
+		description: "通过本机桥接委托团队成员执行专业任务或独立验收。",
+		registeredTools: ["delegate_to_member"],
+		hooks: [],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: delegationFileStatus === "missing" ? "未找到扩展入口文件" : null,
+	};
+
+	const skillCaptureItem: RuntimeExtensionItem = {
+		id: "builtin-skill-capture",
+		name: "skill-capture",
+		sourceKind: "builtin",
+		status: skillCaptureFileStatus === "present" ? "conditional" : "error",
+		entryPath: isOwner ? skillCapturePath : builtinExtensionPaths["skill-capture"],
+		fileStatus: skillCaptureFileStatus,
+		scopeSummary: "正式执行的主责或内部协作者（经人工确认后写入磁盘）",
+		description: "对应信任四步第二步：提议将可复用方法与脚本存为标准 Pi Skill（SKILL.md + scripts/*）。",
+		registeredTools: ["propose_skill"],
+		hooks: ["extension_ui"],
+		declaredByRoles: [],
+		mcpServers: [],
+		error: skillCaptureFileStatus === "missing" ? "未找到扩展入口文件" : null,
 	};
 
 	const skillCatalogItem: RuntimeExtensionItem = {
@@ -469,7 +549,11 @@ export async function buildRuntimeOverview(options: {
 	);
 
 	const extensions: RuntimeExtensionItem[] = [
-		teamExtensionItem,
+		workerRuntimeItem,
+		workbenchHelpItem,
+		spaceExtensionItem,
+		delegationExtensionItem,
+		skillCaptureItem,
 		skillCatalogItem,
 		roleSkillsItem,
 		humanQuestionItem,
