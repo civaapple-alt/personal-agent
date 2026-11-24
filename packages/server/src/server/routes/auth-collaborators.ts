@@ -1,4 +1,5 @@
 import { buildRuntimeOverview } from "../../orchestrator/runtime/runtime-info.ts";
+import { buildSessionInsightsReport, type SessionInsightSource } from "../../orchestrator/runtime/session-insights.ts";
 import { isThinkingLevel } from "../../rpc/model-selection.ts";
 import { toPublicUser } from "../../storage/repositories.ts";
 import type { OrgMemberRole } from "../../storage/types.ts";
@@ -142,6 +143,61 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			probePiCli: ctx.probePiCli,
 		});
 		sendJson(res, 200, overview);
+		return true;
+	}
+
+	if (method === "GET" && pathname === "/api/runtime/insights") {
+		if (!requireActiveActor(res, actor)) return true;
+		const searchParams = new URL(req.url ?? pathname, "http://127.0.0.1").searchParams;
+		const matterIdParam = searchParams.get("matterId")?.trim() || undefined;
+		const memberIdParam = searchParams.get("memberId")?.trim() || undefined;
+		const limitParam = Number(searchParams.get("limit") ?? "40");
+		const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(100, Math.floor(limitParam))) : 40;
+
+		if (matterIdParam) {
+			const matter = store.getMatter(matterIdParam);
+			if (!matter) {
+				sendError(res, 404, `Matter not found: ${matterIdParam}`);
+				return true;
+			}
+			if (!canAccessMatter(store, actor, matter)) {
+				sendError(res, 403, "无权访问该事项");
+				return true;
+			}
+		}
+
+		const membersById = new Map(store.listMembers().map((m) => [m.id, m.displayName]));
+		const matterAccessCache = new Map<string, boolean>();
+		const rawSessions = store.listWorkerSessions({
+			matterId: matterIdParam,
+			memberId: memberIdParam,
+			limit: limit * 2,
+		});
+		const sources: SessionInsightSource[] = [];
+		for (const session of rawSessions) {
+			if (!session.sessionFile) continue;
+			let allowed = matterAccessCache.get(session.matterId);
+			if (allowed === undefined) {
+				const matter = store.getMatter(session.matterId);
+				allowed = matter ? canAccessMatter(store, actor, matter) : false;
+				matterAccessCache.set(session.matterId, allowed);
+			}
+			if (!allowed) continue;
+			sources.push({
+				sessionFile: session.sessionFile,
+				sessionId: session.piSessionId ?? session.id,
+				matterId: session.matterId,
+				memberId: session.memberId,
+				memberName: membersById.get(session.memberId) ?? session.memberId,
+				updatedAt: session.lastActiveAt,
+			});
+			if (sources.length >= limit) break;
+		}
+		const report = buildSessionInsightsReport(sources, {
+			matterId: matterIdParam ?? null,
+			memberId: memberIdParam ?? null,
+		});
+		sendJson(res, 200, report);
 		return true;
 	}
 

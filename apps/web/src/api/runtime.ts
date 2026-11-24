@@ -1,4 +1,7 @@
+import type { SessionInsightsReport } from "@pa/contracts/session-insights";
 import { requestJson } from "./client.ts";
+
+export type { SessionInsightsReport };
 
 export type RuntimeExtensionSourceKind =
 	| "builtin"
@@ -107,6 +110,19 @@ export interface RuntimeOverviewDto {
 
 export function fetchRuntimeOverview(): Promise<RuntimeOverviewDto> {
 	return requestJson("/api/runtime");
+}
+
+export function fetchRuntimeInsights(options?: {
+	matterId?: string;
+	memberId?: string;
+	limit?: number;
+}): Promise<SessionInsightsReport> {
+	const params = new URLSearchParams();
+	if (options?.matterId) params.set("matterId", options.matterId);
+	if (options?.memberId) params.set("memberId", options.memberId);
+	if (options?.limit) params.set("limit", String(options.limit));
+	const query = params.toString();
+	return requestJson(query ? `/api/runtime/insights?${query}` : "/api/runtime/insights");
 }
 
 export function installRuntimeWebAccess(): Promise<{ overview: RuntimeOverviewDto }> {

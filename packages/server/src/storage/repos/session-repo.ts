@@ -85,6 +85,37 @@ export class SessionRepo {
 			.run(status, nowIso(), id);
 	}
 
+	listWorkerSessions(options?: { matterId?: string; memberId?: string; limit?: number }): WorkerSessionRecord[] {
+		const conditions = ["session_file IS NOT NULL"];
+		const params: Array<string | number> = [];
+		if (options?.matterId) {
+			conditions.push("matter_id = ?");
+			params.push(options.matterId);
+		}
+		if (options?.memberId) {
+			conditions.push("member_id = ?");
+			params.push(options.memberId);
+		}
+		const limit = Math.max(1, Math.min(200, options?.limit ?? 50));
+		params.push(limit);
+		const rows = this.db
+			.prepare(
+				`SELECT * FROM worker_sessions WHERE ${conditions.join(" AND ")} ORDER BY last_active_at DESC, rowid DESC LIMIT ?`,
+			)
+			.all(...params);
+		return rows.map((row) => ({
+			id: String(row.id),
+			memberId: String(row.member_id),
+			matterId: String(row.matter_id),
+			messageCursor: row.message_cursor ? String(row.message_cursor) : null,
+			workspaceId: row.workspace_id ? String(row.workspace_id) : null,
+			piSessionId: row.pi_session_id ? String(row.pi_session_id) : null,
+			sessionFile: String(row.session_file),
+			status: row.status === "active" ? "active" : row.status === "closed" ? "closed" : "idle",
+			lastActiveAt: String(row.last_active_at),
+		}));
+	}
+
 	hasLiveMatterLease(matterId: string): boolean {
 		const lease = this.db.prepare("SELECT owner_pid FROM matter_execution_leases WHERE matter_id = ?").get(matterId);
 		if (!lease) return false;

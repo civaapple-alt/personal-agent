@@ -7,6 +7,7 @@ import type {
 	RuntimeExtensionStatus,
 	RuntimeOverviewDto,
 } from "../api.ts";
+import { SessionInsightsPanel } from "../components/SessionInsightsPanel.tsx";
 import { SystemOneSettings } from "../components/SystemOneSettings.tsx";
 import { WebAccessSettings } from "../components/WebAccessSettings.tsx";
 import type { SettingsSection } from "../hashRouter.ts";
@@ -38,6 +39,7 @@ const CATEGORY_TABS: Array<{ id: SettingsSection; label: string }> = [
 	{ id: "base", label: "Agent 底座" },
 	{ id: "extensions", label: "扩展插件" },
 	{ id: "config", label: "运行配置" },
+	{ id: "insights", label: "运行洞察" },
 ];
 
 const SOURCE_LABELS: Record<RuntimeExtensionSourceKind, string> = {
@@ -102,6 +104,7 @@ export function SettingsView({
 	const showBase = activeSection === "all" || activeSection === "base";
 	const showExtensions = activeSection === "all" || activeSection === "extensions";
 	const showConfig = activeSection === "all" || activeSection === "config";
+	const showInsights = activeSection === "insights";
 
 	return (
 		<div className="subpage-scroll">
@@ -439,7 +442,10 @@ export function SettingsView({
 								</div>
 							</section>
 						)}
+						{showInsights && <SessionInsightsPanel />}
 					</div>
+				) : showInsights ? (
+					<SessionInsightsPanel />
 				) : null}
 			</div>
 		</div>

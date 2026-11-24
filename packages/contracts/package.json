@@ -11,6 +11,7 @@
 		"./team-verification": "./src/team-verification.ts",
 		"./model-selection": "./src/model-selection.ts",
 		"./skill-proposal": "./src/skill-proposal.ts",
+		"./session-insights": "./src/session-insights.ts",
 		"./extensions": "./src/extensions.ts"
 	}
 }

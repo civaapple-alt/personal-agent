@@ -247,6 +247,10 @@ export class PersonalAgentStore {
 	findWorkerSession(matterId: string, memberId: string, contextKey: string, workspaceId: string | null) {
 		return this.sessions.findWorkerSession(matterId, memberId, contextKey, workspaceId);
 	}
+
+	listWorkerSessions(options?: { matterId?: string; memberId?: string; limit?: number }) {
+		return this.sessions.listWorkerSessions(options);
+	}
 	finishWorkerSession(id: string, status: "idle" | "closed") {
 		return this.sessions.finishWorkerSession(id, status);
 	}

@@ -26,6 +26,7 @@ export const PA_RUNTIME_ASSET_MANIFEST = {
 	webDistDir: "apps/web/dist",
 	legacyWebDistDir: "web/dist",
 	workflowSkillsDir: "pa-extensions/workflow/skills",
+	selfInspectSkillsDir: "pa-extensions/self-inspect/skills",
 	builtinSkillsDir: "pi-extensions/role-skills/skills",
 	builtinExtensions: builtinExtensionPaths,
 } as const;

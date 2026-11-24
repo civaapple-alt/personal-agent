@@ -14,6 +14,7 @@ description: 复盘 Personal Agent（PA）的事项、聊天或 AI 团队执行�
   - **认证团队版**（如 `PA_REQUIRE_AUTH=1 PA_HOST=0.0.0.0 PORT=4310 npm run start:web`）：支持通过 `--token`（或 `PA_TOKEN`，推荐在工作台左下角「个人账号 → 访问令牌」生成只读 Access Token，走 `Authorization: Bearer`）或 `--email` / `--password`（`PA_EMAIL` / `PA_PASSWORD`，登录后查完自动登出清理临时会话）查询 HTTP 接口；若未提供凭据返回 `401`/`403` 或服务未启动，`--source auto` 会自动回退到本机 SQLite 只读模式（`readOnly: true`）并明示回退原因与未获取到的实时运行态缺口。
   - 常用命令：
     - 查询指定链接或事项：`node .agents/skills/pa-matter-retrospective/scripts/inspect-matter.mjs <事项链接或ID>`
+    - 附带确定性会话洞察（零模型成本，检测反复失败命令、未加载的僵尸 Skill、高频返工、重复指令与未跑测试即宣称通过）：追加 `--insights`（或直接运行 `node pa-extensions/self-inspect/skills/pa-self-inspection/scripts/session-insights.mjs --matter <ID>`）
     - 附带读取关联 Pi 会话 JSONL（还原每轮注入上下文、工具参数与返回）：追加 `--sessions`（需要完整原文时加 `--full`，需机器可读输出加 `--json`）
     - 列出最近事项：`node .agents/skills/pa-matter-retrospective/scripts/inspect-matter.mjs --recent 10`
     - 指定数据目录或强制来源：支持 `--source auto|api|db`、`--base-url <url>`、`--db <path>`（或环境变量 `PA_DATA_DIR` / `PA_DB_PATH`）。

@@ -568,6 +568,7 @@ export async function executeWithWorkerPass(
 			args.push("--extension", resolveBuiltinExtensionPath("workflow"));
 			args.push("--skill", resolveRepoAssetPath("pa-extensions/workflow/skills"));
 		}
+		args.push("--skill", resolveRepoAssetPath("pa-extensions/self-inspect/skills"));
 		for (const path of skillPaths) args.push("--skill", path);
 		args.push("--tools", "*");
 

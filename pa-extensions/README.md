@@ -17,5 +17,6 @@
 | `visualize` | [pi-extensions/visualize](../pi-extensions/visualize/README.md) | Mermaid 图表、方案对比与文件预览卡片（注册 `toolRenderers`） |
 | `web-access` | 原生第三方 Pi 包 `pi-web-access` | 复用原生 Pi 社区搜索包，由 PA 治理供应商优先级与 `.env` 凭据 |
 | `workflow` | [pa-extensions/workflow/pi/index.ts](workflow/pi/index.ts) + 宿主专有 `skills/` | `before_agent_start` 薄路由 Hook + 按需加载协作（[pa-team-collaboration](workflow/skills/pa-team-collaboration/SKILL.md)）、空间交付（[pa-space-deliverables](workflow/skills/pa-space-deliverables/SKILL.md)）、信任技能沉淀（[pa-trust-capture](workflow/skills/pa-trust-capture/SKILL.md)）与外部仓库证据（[pa-external-repo-evidence](workflow/skills/pa-external-repo-evidence/SKILL.md)）SOP |
+| `self-inspect` | 宿主专有自检 `skills/` + 零依赖只读脚本 | 渐进式自检技能（[pa-self-inspection](self-inspect/skills/pa-self-inspection/SKILL.md)）、架构导航（[architecture-map.md](self-inspect/skills/pa-self-inspection/reference/architecture-map.md)）、运行排障（[runtime-troubleshooting.md](self-inspect/skills/pa-self-inspection/reference/runtime-troubleshooting.md)）与离线会话洞察 CLI（`scripts/session-insights.mjs`） |
 
 边界约束：`server/**` 与 `web/**` 严禁互相 import，由 `npm run check:boundaries` 强制门禁校验。

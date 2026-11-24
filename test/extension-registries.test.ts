@@ -22,6 +22,7 @@ test("server and web extension registries stay aligned and resolve declared buil
 		"visualize",
 		"web-access",
 		"workflow",
+		"self-inspect",
 	];
 	assert.deepEqual(
 		summaries.map((item) => item.name),

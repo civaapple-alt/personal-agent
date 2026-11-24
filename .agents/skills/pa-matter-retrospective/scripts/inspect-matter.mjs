@@ -32,6 +32,7 @@ Options:
   --password <password>    Account password for authenticated HTTP login (or env PA_PASSWORD)
   --db <path>              Local SQLite DB path (default: <dataDir>/personal-agent.db)
   --sessions               Also inspect associated Pi session JSONL files (read-only)
+  --insights               Include deterministic Session Insights (failing commands, unused skills, rework, cost)
   --full                   Do not truncate long message or tool contents
   --json                   Output structured JSON instead of Markdown summary
   --recent [N]             List the most recent N matters (default: 10)
@@ -55,6 +56,7 @@ function parseArgs(argv) {
 		password: process.env.PA_PASSWORD || null,
 		dbPath: null,
 		sessions: false,
+		insights: false,
 		full: false,
 		json: false,
 		recent: null,
@@ -66,6 +68,8 @@ function parseArgs(argv) {
 			opts.help = true;
 		} else if (arg === "--sessions") {
 			opts.sessions = true;
+		} else if (arg === "--insights") {
+			opts.insights = true;
 		} else if (arg === "--full") {
 			opts.full = true;
 		} else if (arg === "--json") {
@@ -838,6 +842,30 @@ async function main() {
 		const piSessions = opts.sessions
 			? sessionGroups.map((s) => inspectPiSessionFile(s.sessionFile, opts.full))
 			: [];
+		let insights = null;
+		if (opts.insights) {
+			if (source === "http-api") {
+				const insightsRes = await fetchJson(
+					`${baseUrl}/api/runtime/insights?matterId=${encodeURIComponent(parsed.matterId)}`,
+					activeToken,
+				);
+				if (insightsRes.ok) insights = insightsRes.body;
+			}
+			if (!insights) {
+				const cliPath = resolve(REPO_ROOT, "pa-extensions/self-inspect/skills/pa-self-inspection/scripts/session-insights.mjs");
+				if (existsSync(cliPath) && existsSync(dbPath)) {
+					try {
+						const raw = execFileSync(process.execPath, [cliPath, "--matter", parsed.matterId, "--db", dbPath, "--json"], {
+							encoding: "utf8",
+							timeout: 15_000,
+						});
+						insights = JSON.parse(raw);
+					} catch {
+						// Ignore local insights fallback failure
+					}
+				}
+			}
+		}
 
 		const report = {
 			sourceInfo: { source, httpFallbackReason, baseUrl, dbPath, repoHead },
@@ -846,12 +874,33 @@ async function main() {
 			sessionGroups,
 			timeline,
 			piSessions,
+			...(insights ? { insights } : {}),
 		};
 
 		if (opts.json) {
 			console.log(JSON.stringify(report, null, 2));
 		} else {
-			console.log(renderReportMarkdown(report));
+			let md = renderReportMarkdown(report);
+			if (insights) {
+				const usage = insights.usage ?? insights;
+				const findings = Array.isArray(insights.findings) ? insights.findings : [];
+				const lines = [
+					"",
+					"## 确定性会话洞察（Session Insights）",
+					`- 覆盖范围：${usage.sessions ?? 0} 个 Pi 会话 · ${usage.turns ?? 0} 轮 · ${usage.toolCalls ?? 0} 次工具调用（失败 ${usage.toolErrors ?? 0} 次） · Pi 记录成本 $${Number(usage.totalCostUsd ?? 0).toFixed(4)}`,
+				];
+				if (findings.length === 0) {
+					lines.push("- 异常发现：无高风险规则命中。");
+				} else {
+					for (const f of findings) {
+						const icon = f.severity === "error" ? "✗" : f.severity === "warn" ? "!" : "·";
+						const tag = f.suggestSkillCapture ? " [建议沉淀为 Skill]" : "";
+						lines.push(`- ${icon} **${f.title}**${tag}：${f.detail ?? ""}`);
+					}
+				}
+				md += `\n${lines.join("\n")}`;
+			}
+			console.log(md);
 		}
 	} finally {
 		if (tempLoginToken) {

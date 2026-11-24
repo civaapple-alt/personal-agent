@@ -3,6 +3,7 @@ export const PA_WORKFLOW_ROUTING_RULE = [
 	"- Before multi-role delegation, independent verification, or escalating a blocking clarification: load `pa-team-collaboration`.",
 	"- Before saving or updating a formal Git Space document: load `pa-space-deliverables`.",
 	"- Before proposing a reusable Skill or helper script (`propose_skill`): load `pa-trust-capture`.",
+	"- When inspecting PA itself, diagnosing recurring tool failures/unused skills, or troubleshooting MCP/extensions: load `pa-self-inspection`.",
 	"- When answering capability/isolation questions or inspecting external repositories/GitHub fetches: load `pa-external-repo-evidence`.",
 ].join("\n");
 

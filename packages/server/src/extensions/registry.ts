@@ -1,6 +1,7 @@
 import type { PaExtensionSummary } from "@pa/contracts/extensions";
 import delegation from "@pa/ext-delegation/server";
 import humanQuestion from "@pa/ext-human-question/server";
+import selfInspect from "@pa/ext-self-inspect/server";
 import skillCapture from "@pa/ext-skill-capture/server";
 import skillCatalog from "@pa/ext-skill-catalog/server";
 import space from "@pa/ext-space/server";
@@ -28,6 +29,7 @@ export const builtinServerExtensions: readonly ServerExtensionEntry[] = [
 	{ specifier: "@pa/ext-visualize/server", extension: visualize },
 	{ specifier: "@pa/ext-web-access/server", extension: webAccess },
 	{ specifier: "@pa/ext-workflow/server", extension: workflow },
+	{ specifier: "@pa/ext-self-inspect/server", extension: selfInspect },
 ];
 
 export function listServerExtensionSummaries(): PaExtensionSummary[] {
