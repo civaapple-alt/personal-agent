@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { classifyGithubFetches } from "../../../../pi-extensions/team-extension/web-fetch-evidence.js";
-import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
+import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../pa-extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../pa-extensions/web-access/runtime.ts";
@@ -576,6 +576,7 @@ export async function executeWithWorkerPass(
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
 		args.push("--extension", "builtin:mcp");
+		if (!isArchitect) args.push("--skill", resolveRepoAssetPath("pa-extensions/workflow/skills"));
 		for (const path of skillPaths) args.push("--skill", path);
 		args.push("--tools", "*");
 

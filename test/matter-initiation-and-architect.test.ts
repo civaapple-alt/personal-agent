@@ -168,7 +168,7 @@ test("Solo and selective observer runtime scopes enforce delegate restrictions, 
 		assert.ok(!promptsBySession[0]!.tools.includes("delegate_to_member"));
 		assert.ok(!promptsBySession[0]!.tools.includes("bash"));
 		assert.ok(!promptsBySession[0]!.tools.includes("edit"));
-		assert.ok(promptsBySession[0]!.prompt.includes("use the verification argument"));
+		assert.ok(promptsBySession[0]!.prompt.includes("pa-team-collaboration"));
 		assert.ok(promptsBySession[0]!.prompt.includes("## Anti-Jobs"));
 		assert.ok(promptsBySession[0]!.prompt.includes("绝不直接修改代码"));
 

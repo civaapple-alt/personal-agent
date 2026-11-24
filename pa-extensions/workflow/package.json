@@ -1,0 +1,15 @@
+{
+	"name": "@pa/ext-workflow",
+	"version": "0.0.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "PA-specific team collaboration, space deliverable, and evidence workflow skills and thin routing rule (not a portable Pi package)",
+	"exports": {
+		"./server": "./server/index.ts",
+		"./web": "./web/index.ts"
+	},
+	"pi": {
+		"skills": ["./skills"]
+	}
+}

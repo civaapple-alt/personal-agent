@@ -13,11 +13,11 @@ test("server and web extension registries stay aligned and resolve declared buil
 	const summaries = listServerExtensionSummaries();
 	assert.deepEqual(
 		summaries.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "web-access"],
+		["team-extension", "human-question", "skill-catalog", "web-access", "workflow"],
 	);
 	assert.deepEqual(
 		builtinWebExtensions.map((item) => item.name),
-		["team-extension", "human-question", "skill-catalog", "web-access"],
+		["team-extension", "human-question", "skill-catalog", "web-access", "workflow"],
 	);
 
 	for (const { extension } of builtinServerExtensions) {
@@ -32,6 +32,12 @@ test("server and web extension registries stay aligned and resolve declared buil
 			assert.ok(
 				existsSync(resolve(extension.builtinSkillPackage)),
 				`Missing built-in Pi skill package for ${extension.name}: ${extension.builtinSkillPackage}`,
+			);
+		}
+		if (extension.workflowSkillDir) {
+			assert.ok(
+				existsSync(resolve(extension.workflowSkillDir)),
+				`Missing workflow skill dir for ${extension.name}: ${extension.workflowSkillDir}`,
 			);
 		}
 		for (const tool of extension.tools) {
