@@ -166,7 +166,7 @@ flowchart TB
 | 事项路由 | 1,133 | [matters.ts](../../packages/server/src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../packages/server/src/server/routes/matter-messages.ts) 743 行 |
 | 对话流样式 | 1,014 | [chat-stream.css](../../apps/web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../apps/web/src/styles/chat-cards.css) 269 行 |
 
-行数用于定位阅读和修改成本。[ChatStage.tsx](../../apps/web/src/components/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../apps/web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../apps/web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../apps/web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../apps/web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../apps/web/src/utils/formatters.ts)、[matterStream.ts](../../apps/web/src/utils/matterStream.ts)、[orgRoster.ts](../../apps/web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../apps/web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../packages/server/src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../../apps/web/src/views/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../apps/web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../apps/web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../apps/web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../apps/web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../apps/web/src/utils/formatters.ts)、[matterStream.ts](../../apps/web/src/utils/matterStream.ts)、[orgRoster.ts](../../apps/web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../apps/web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../packages/server/src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 
@@ -338,7 +338,7 @@ sequenceDiagram
 
 | 工作面 | 已有基础 | 验证边界 |
 | --- | --- | --- |
-| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../apps/web/src/components/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
+| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../apps/web/src/primitives/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
 | 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、单兵 `solo`/定向旁听运行时收窄、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
 | 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、多角色经验复盘/取消、上下文直接核验替代与效果回写 | 连续过程交流不新增交付、多角色 AI 提炼、取消与评估 API 均有离线测试覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
 | 角色复用与建队 | Markdown 导入导出、`.data/roles/` 运行时隔离、不同角色 ID 组建与安全删除、内置 Meta-Bot「角色架构师」（对话建队、团队协作体检与事项中途介入补人）、实际 Skill 装载（含 `deliverable-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |

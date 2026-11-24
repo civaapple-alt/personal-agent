@@ -1,18 +1,21 @@
 # 本地网页工作台
 
-前端使用 React、esbuild 与原生 CSS，通过同源 HTTP/SSE 访问后端。这里没有独立 Vite 开发服务器或 WebSocket 通道；[index.html](index.html) 是构建输入，`web/dist/` 是生成资源，不直接修改。
+前端是三环架构中的 **UI Client 环**（`@pa/web`），使用 React 19、esbuild 与原生 CSS，通过可配置端点的 HTTP/SSE 传输层（默认同源，支持 `window.__PA_API_BASE__` / `setApiBaseUrl`）访问宿主，仅依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`（由 `npm run check:boundaries` 强制门禁校验）。[index.html](index.html) 是构建输入，`apps/web/dist/` 是生成资源，不直接修改。
 
 ```text
-web/
+apps/web/
 ├── index.html          # 网页构建入口模板
 ├── tsconfig.json       # 前端独立 TypeScript 配置
 ├── dist/               # esbuild 构建产物（不直接编辑）
 └── src/                # 前端源码（详见 src/README.md）
-    ├── main.tsx        # 应用挂载与样式加载顺序
-    ├── App.tsx         # 顶层页面装配、Hash 路由与全局 SSE 同步
-    ├── api/            # 按业务拆分的 HTTP DTO 与请求模块（matters/space/team/orgs/runtime 等）
+    ├── main.tsx        # 应用挂载、根级 ErrorBoundary 与样式加载顺序
+    ├── App.tsx         # 顶层壳装配、Hash 路由、视图级 ErrorBoundary 与全局 SSE 同步
+    ├── api/            # 参数化 HTTP/SSE 传输层（client.ts）与按业务拆分的 DTO 请求模块
+    ├── primitives/     # 零业务依赖的基础 UI 原语（ErrorBoundary、ModalDialog、SettingsKit 等）
+    ├── views/          # 顶层路由视图（ChatStage、DeliverablesView、SpacePages、TeamView、AccountView 等）
+    ├── components/     # 可复用业务组件（Sidebar、ExploringStatus、ModelPicker、chat/、team/ 等）
+    ├── extensions/     # 前端静态扩展注册表（registry.ts，消费 @pa/ext-*/web）
     ├── hooks/          # 会话认证、事项范围、滚动、右侧分屏文档与澄清状态等 hooks
-    ├── components/     # 页面与组件（chat/ 对话流与分屏文档、team/ 团队管理、SpacePages 等）
     ├── utils/          # 领域纯函数（委托投影、消息流解析、组织名册等）
     └── styles/         # 按页面职责拆分的原生 CSS（tokens/primitives/chat-*/deliverables/team 等）
 ```
