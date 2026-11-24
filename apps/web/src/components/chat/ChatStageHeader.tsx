@@ -7,7 +7,7 @@ import type {
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../../api.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 
 import type { MatterCollabTab } from "./MatterCollabDrawer.tsx";
 

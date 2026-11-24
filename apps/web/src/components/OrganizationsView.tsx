@@ -13,7 +13,7 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { filterBusinessMembers } from "../architectApi.ts";
-import { ModalDialog } from "./ModalDialog.tsx";
+import { ModalDialog } from "../primitives/ModalDialog.tsx";
 import { ORG_ROLE_LABEL, OrganizationDetailPanel } from "./OrganizationDetailPanel.tsx";
 
 interface OrganizationsViewProps {

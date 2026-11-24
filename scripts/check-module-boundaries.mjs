@@ -142,6 +142,24 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 		) {
 			return `apps/web cannot import host/server file (${target})`;
 		}
+		if (target?.startsWith("apps/web/src/")) {
+			const fromSeg = fileRel.slice("apps/web/src/".length).split("/")[0];
+			const toSeg = target.slice("apps/web/src/".length).split("/")[0];
+			if (fromSeg !== toSeg) {
+				if (
+					fromSeg === "primitives" &&
+					["components", "views", "hooks", "api", "extensions", "App.tsx"].includes(toSeg)
+				) {
+					return `apps/web/src/primitives must stay business-agnostic (cannot import ${target})`;
+				}
+				if (fromSeg === "api" && ["components", "views", "hooks", "primitives", "App.tsx"].includes(toSeg)) {
+					return `apps/web/src/api must not depend on UI layer (${target})`;
+				}
+				if (fromSeg === "utils" && ["components", "views", "hooks", "primitives", "App.tsx"].includes(toSeg)) {
+					return `apps/web/src/utils must not depend on UI/hook layer (${target})`;
+				}
+			}
+		}
 		return null;
 	}
 

@@ -17,7 +17,6 @@ import { AuthGateView } from "./components/AuthGateView.tsx";
 import { ChatStage } from "./components/ChatStage.tsx";
 import { DeliverablesView } from "./components/DeliverablesView.tsx";
 import { MaterialsView } from "./components/MaterialsView.tsx";
-import { ModalDialog } from "./components/ModalDialog.tsx";
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrganizationsView } from "./components/OrganizationsView.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
@@ -25,7 +24,6 @@ import { SettingsView } from "./components/SettingsView.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { TeamView } from "./components/TeamView.tsx";
 import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
-import { ViewFade } from "./components/ViewTransitions.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
 import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
 import { useAuthSession } from "./hooks/useAuthSession.ts";
@@ -39,6 +37,8 @@ import { useRsiDistill } from "./hooks/useRsiDistill.ts";
 import { useStableCallback } from "./hooks/useStableCallback.ts";
 import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
 import { ErrorBoundary } from "./primitives/ErrorBoundary.tsx";
+import { ModalDialog } from "./primitives/ModalDialog.tsx";
+import { ViewFade } from "./primitives/ViewTransitions.tsx";
 import { getBotTheme } from "./utils.ts";
 
 function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {

@@ -1,7 +1,7 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { type AccountUserDto, type CollaboratorDto, importMemberPackage, type OrganizationDto } from "../../api.ts";
 import { buildRoleScopeChoices } from "../../architectApi.ts";
-import { ModalDialog } from "../ModalDialog.tsx";
+import { ModalDialog } from "../../primitives/ModalDialog.tsx";
 
 interface MemberPackageFormsProps {
 	showImportMember: boolean;

@@ -9,7 +9,7 @@ import {
 	type WorkspaceSourceType,
 	type WorkspaceVisibility,
 } from "../api.ts";
-import { ModalDialog } from "./ModalDialog.tsx";
+import { ModalDialog } from "../primitives/ModalDialog.tsx";
 import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
 import { WorkspaceDetailPanel } from "./WorkspaceDetailPanel.tsx";
 

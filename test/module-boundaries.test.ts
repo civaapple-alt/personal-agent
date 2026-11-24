@@ -31,6 +31,9 @@ test("boundary checker rejects forbidden cross-ring and cross-half edges", () =>
 	assert.ok(checkImportEdge(rootDir, "packages/server/src/orchestrator/prompts.ts", "../server/app.ts"));
 	assert.ok(checkImportEdge(rootDir, "packages/server/src/roles/capabilities.ts", "../storage/database.ts"));
 	assert.ok(checkImportEdge(rootDir, "packages/server/src/subprocess/index.ts", "../orchestrator/types.ts"));
+	assert.ok(checkImportEdge(rootDir, "apps/web/src/primitives/ErrorBoundary.tsx", "../api/client.ts"));
+	assert.ok(checkImportEdge(rootDir, "apps/web/src/api/client.ts", "../views/TeamView.tsx"));
+	assert.ok(checkImportEdge(rootDir, "apps/web/src/utils/formatters.ts", "../components/Sidebar.tsx"));
 
 	// Allowed edges pass cleanly
 	assert.equal(checkImportEdge(rootDir, "packages/pi-rpc/src/pi-rpc-worker.ts", "@pa/contracts/human-decision"), null);

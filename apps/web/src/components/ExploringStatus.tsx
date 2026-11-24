@@ -7,6 +7,8 @@ import type {
 	TeamMemberDto,
 } from "../api.ts";
 import { getToolDisplay } from "../extensions/registry.ts";
+import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
+import { ElapsedTimer } from "../primitives/ElapsedTimer.tsx";
 import { liveDelegationEdges } from "../utils/matterDelegations.ts";
 import type { TurnToolCall } from "../utils/matterStream.ts";
 import {
@@ -18,9 +20,7 @@ import {
 	STAGE_LABELS,
 	STAGE_ORDER,
 } from "../utils.ts";
-import { BotFaceIcon } from "./BotFaceIcon.tsx";
 import { DelegationGraph } from "./chat/DelegationGraph.tsx";
-import { ElapsedTimer } from "./ElapsedTimer.tsx";
 
 function toolStatusLabel(status: TurnToolCall["status"], toolName?: string): string {
 	if (status === "success" && toolName) {

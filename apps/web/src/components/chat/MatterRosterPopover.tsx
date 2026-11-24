@@ -1,8 +1,8 @@
 import { type RefObject, useId, useState } from "react";
 import type { CollaboratorDto, TeamMemberDto } from "../../api.ts";
 import { filterBusinessMembers, isArchitectMember } from "../../architectApi.ts";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import { getMemberThemeById } from "../../utils.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
 interface MatterRosterPopoverProps {
 	panelRef: RefObject<HTMLDivElement | null>;

@@ -18,6 +18,7 @@ import {
 } from "../../api.ts";
 import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEMBER_ID } from "../../architectApi.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import type { MatterDelegations } from "../../utils/matterDelegations.ts";
 import { collectTurnToolCalls } from "../../utils/matterStream.ts";
 import {
@@ -29,7 +30,6 @@ import {
 	parseProgressSnapshot,
 	stripMarkdownFormatting,
 } from "../../utils.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExploringStatus, ProgressSnapshotCard } from "../ExploringStatus.tsx";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 import { DecisionDemo } from "./DecisionDemo.tsx";

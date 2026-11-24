@@ -1,6 +1,6 @@
 import type { AccountUserDto, AuthSessionPayload, OrgInvitePreviewDto } from "../api/auth.ts";
 import type { CollaboratorDto } from "../api/organizations.ts";
-import { ModalDialog } from "./ModalDialog.tsx";
+import { ModalDialog } from "../primitives/ModalDialog.tsx";
 
 interface OrgInviteModalProps {
 	open: boolean;

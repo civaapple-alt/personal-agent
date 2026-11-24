@@ -2,8 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
+import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
 import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
-import { BotFaceIcon } from "./BotFaceIcon.tsx";
 
 type MatterViewMode = "time" | "grouped";
 

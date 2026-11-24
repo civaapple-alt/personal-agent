@@ -12,6 +12,7 @@ import {
 	type WorkspaceDto,
 } from "../../api.ts";
 import { getMemberScopeBadge } from "../../architectApi.ts";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import {
 	defaultMemberGitName,
 	formatMemberGitIdentity,
@@ -19,7 +20,6 @@ import {
 	MEMORY_CATEGORY_LABELS,
 	MEMORY_CATEGORY_VALUES,
 } from "../../utils.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { ExperienceItemCard, ManualExperienceForm } from "../ExperienceReviewPanel.tsx";
 
 type MemoryFilterTab = "all" | "candidate" | "verified" | "archived";

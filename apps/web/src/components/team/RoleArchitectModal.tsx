@@ -13,8 +13,8 @@ import {
 	type TeamMemberDto,
 } from "../../api.ts";
 import { buildRoleScopeChoices, filterBusinessMembers } from "../../architectApi.ts";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import { formatRoleToolTierLabel, getMemberThemeById, stripMarkdownFormatting } from "../../utils.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
 import { NewSkillsDraftSection } from "./NewSkillsDraftSection.tsx";
 import { RoleCapabilityDetails } from "./RoleDesignDetails.tsx";
 

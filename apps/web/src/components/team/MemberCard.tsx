@@ -8,8 +8,8 @@ import {
 	type WorkspaceDto,
 } from "../../api.ts";
 import { getMemberScopeBadge } from "../../architectApi.ts";
+import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import { formatMemberGitIdentity, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
-import { BotFaceIcon } from "../BotFaceIcon.tsx";
 
 interface MemberCardProps {
 	member: TeamMemberDto;

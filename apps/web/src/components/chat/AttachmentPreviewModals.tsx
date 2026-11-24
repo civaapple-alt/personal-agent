@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { copyTextToClipboard } from "../../clipboard.ts";
+import { ModalDialog } from "../../primitives/ModalDialog.tsx";
 import { formatByteSize } from "../../utils/formatters.ts";
-import { ModalDialog } from "../ModalDialog.tsx";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 
 export interface PreviewFileState {

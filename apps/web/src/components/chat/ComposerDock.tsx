@@ -23,8 +23,8 @@ import {
 	MAX_COMPOSER_IMAGES,
 	shouldFoldPastedText,
 } from "../../imageAttachments.ts";
+import { ElapsedTimer } from "../../primitives/ElapsedTimer.tsx";
 import { formatByteSize, STAGE_LABELS } from "../../utils.ts";
-import { ElapsedTimer } from "../ElapsedTimer.tsx";
 
 export interface PreviewableTextAttachment {
 	id?: string;

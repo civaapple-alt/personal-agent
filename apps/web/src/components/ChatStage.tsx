@@ -22,6 +22,7 @@ import { useActiveClarification } from "../hooks/useActiveClarification.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
 import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
+import { ViewFade } from "../primitives/ViewTransitions.tsx";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import { collectMatterMemories, collectMatterParticipantIds } from "../utils/matterStream.ts";
 import { transitionView } from "../viewTransitions.ts";
@@ -35,7 +36,6 @@ import { MatterDocSidePane } from "./chat/MatterDocSidePane.tsx";
 import { MatterInitiationPanel } from "./chat/MatterInitiationPanel.tsx";
 import { MatterRosterPopover } from "./chat/MatterRosterPopover.tsx";
 import { MessageFeed } from "./chat/MessageFeed.tsx";
-import { ViewFade } from "./ViewTransitions.tsx";
 
 type ComposerDraftProps = Pick<
 	ComponentProps<typeof ComposerDock>,

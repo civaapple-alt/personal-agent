@@ -11,7 +11,7 @@ import {
 	revokeAccessToken,
 	type WorkspaceDto,
 } from "../api.ts";
-import { ModalDialog } from "./ModalDialog.tsx";
+import { ModalDialog } from "../primitives/ModalDialog.tsx";
 
 function formatDateTime(iso: string): string {
 	const parsed = Date.parse(iso);
