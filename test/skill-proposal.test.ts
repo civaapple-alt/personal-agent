@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { readSkillProposals } from "@pa/contracts/skill-proposal";
+import workflowPiExtension from "../pa-extensions/workflow/pi/index.ts";
+import { resolveScopedDiscoveredSkillDirs } from "../packages/server/src/orchestrator/execution/execution-context.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { SkillNameConflictError, saveSkillProposalToDisk } from "../packages/server/src/roles/role-package-store.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
@@ -184,10 +186,50 @@ test("saveSkillProposalToDisk writes SKILL.md + executable scripts and HTTP rout
 		const finalProposals = readSkillProposals(store.getMessage(msg.id)?.metadata);
 		assert.equal(finalProposals.find((p) => p.id === "skp_1")?.status, "applied");
 		assert.equal(finalProposals.find((p) => p.id === "skp_2")?.status, "dismissed");
+
+		// Scoped discovery loop: confirmed skills in global/org/personal are discovered for matching scope only
+		await saveSkillProposalToDisk({
+			proposal: { name: "org-standard", description: "Org SOP", body: "Org body" },
+			storageScope: "org",
+			skillsDir,
+			orgId: "org_a",
+		});
+		await saveSkillProposalToDisk({
+			proposal: { name: "user-style", description: "Personal SOP", body: "Personal body" },
+			storageScope: "personal",
+			skillsDir,
+			userId: "user_a",
+		});
+		const dirsA = resolveScopedDiscoveredSkillDirs({ skillsDir, orgId: "org_a", userId: "user_a" });
+		assert.deepEqual(dirsA, [
+			join(skillsDir, "global"),
+			join(skillsDir, "orgs", "org_a"),
+			join(skillsDir, "users", "user_a"),
+		]);
+		const dirsB = resolveScopedDiscoveredSkillDirs({ skillsDir, orgId: "org_b", userId: "user_b" });
+		assert.deepEqual(dirsB, [join(skillsDir, "global")]);
 	} finally {
 		await new Promise<void>((r) => server.close(() => r()));
 		await orchestrator.shutdown();
 		db.close();
 		rmSync(tmp, { recursive: true, force: true });
 	}
+});
+
+test("pa-extensions/workflow Pi hook injects routing rule once without duplication", () => {
+	let handler:
+		| ((event: { systemPrompt: string; systemPromptOptions?: { appendSystemPrompt?: string } }) => unknown)
+		| undefined;
+	workflowPiExtension({
+		on(event, fn) {
+			if (event === "before_agent_start") handler = fn;
+		},
+	});
+	assert.ok(handler);
+	const opts: { appendSystemPrompt?: string } = { appendSystemPrompt: "Base" };
+	handler({ systemPrompt: "", systemPromptOptions: opts });
+	assert.match(opts.appendSystemPrompt ?? "", /pa-trust-capture/);
+	const once = opts.appendSystemPrompt;
+	handler({ systemPrompt: "", systemPromptOptions: opts });
+	assert.equal(opts.appendSystemPrompt, once);
 });

@@ -8,6 +8,7 @@ export const builtinExtensionPaths = {
 	space: "pa-extensions/space/pi/index.ts",
 	delegation: "pa-extensions/delegation/pi/index.ts",
 	"skill-capture": "pa-extensions/skill-capture/pi/index.ts",
+	workflow: "pa-extensions/workflow/pi/index.ts",
 	"skill-catalog": "pi-extensions/skill-catalog/index.ts",
 	"human-question": "pi-extensions/human-question/index.ts",
 	"role-skills": "pi-extensions/role-skills",

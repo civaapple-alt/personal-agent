@@ -48,6 +48,7 @@ import {
 	prepareDelivery,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
+	resolveScopedDiscoveredSkillDirs,
 	resolveScopedPiSessionDir,
 	validateSavedSession,
 } from "./execution-context.ts";
@@ -203,7 +204,14 @@ export async function executeWithWorkerPass(
 					].join("\n")
 				: undefined;
 		const baseSkillPaths = await resolveRoleSkills(template, { skillsDir: deps.skillsDir });
-		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths])];
+		const discoveredScopedSkillDirs = isArchitect
+			? []
+			: resolveScopedDiscoveredSkillDirs({
+					skillsDir: deps.skillsDir,
+					orgId: activeOrgId,
+					userId: actorUserId,
+				});
+		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths, ...discoveredScopedSkillDirs])];
 		const previous = deps.noSession
 			? null
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
@@ -556,7 +564,10 @@ export async function executeWithWorkerPass(
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
 		args.push("--extension", "builtin:mcp");
-		if (!isArchitect) args.push("--skill", resolveRepoAssetPath("pa-extensions/workflow/skills"));
+		if (!isArchitect) {
+			args.push("--extension", resolveBuiltinExtensionPath("workflow"));
+			args.push("--skill", resolveRepoAssetPath("pa-extensions/workflow/skills"));
+		}
 		for (const path of skillPaths) args.push("--skill", path);
 		args.push("--tools", "*");
 
