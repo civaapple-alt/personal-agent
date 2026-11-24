@@ -1,6 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { Clarification } from "@pa/contracts/human-decision";
+import {
+	isSkillStorageTarget,
+	SKILL_PROPOSAL_NAME_RE,
+	SKILL_SCRIPT_PATH_RE,
+	type SkillScriptFile,
+	type SkillStorageTarget,
+} from "@pa/contracts/skill-proposal";
 import { isWorkbenchTopic, type WorkbenchTopic } from "../extensions/workbench-help/catalog.ts";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
 import { normalizeMemoryCategory } from "../storage/repositories.ts";
@@ -38,6 +45,16 @@ export type TeamToolCall =
 			content: string;
 			rationale: string;
 			supersedesMemoryId?: string;
+	  }
+	| {
+			tool: "propose_skill";
+			callId: string;
+			name: string;
+			description: string;
+			body: string;
+			storageScope: SkillStorageTarget;
+			rationale: string;
+			scripts?: SkillScriptFile[];
 	  };
 
 function requiredString(value: unknown, name: string, max = 64_000): string {
@@ -228,6 +245,53 @@ function parseCall(value: unknown): TeamToolCall {
 			content: requiredString(args.content, "content", 2000),
 			rationale: requiredString(args.rationale, "rationale", 2000),
 			supersedesMemoryId,
+		};
+	}
+	if (
+		value.tool === "propose_skill" &&
+		"name" in args &&
+		"description" in args &&
+		"body" in args &&
+		"storageScope" in args &&
+		"rationale" in args
+	) {
+		const name = requiredString(args.name, "name", 64);
+		if (!SKILL_PROPOSAL_NAME_RE.test(name)) {
+			throw new Error("Skill name must be lowercase kebab-case (e.g. 'release-preflight')");
+		}
+		if (!isSkillStorageTarget(args.storageScope)) {
+			throw new Error("storageScope must be global, org, personal, or workspace");
+		}
+		let scripts: SkillScriptFile[] | undefined;
+		if ("scripts" in args && args.scripts !== undefined) {
+			if (!Array.isArray(args.scripts) || args.scripts.length > 8) {
+				throw new Error("scripts must be an array of at most 8 files");
+			}
+			const seenPaths = new Set<string>();
+			scripts = args.scripts.map((raw) => {
+				if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+					throw new Error("Each script entry must be an object");
+				}
+				const rec = raw as Record<string, unknown>;
+				const path = requiredString(rec.path, "scripts[].path", 140);
+				if (!SKILL_SCRIPT_PATH_RE.test(path) || path.includes("..")) {
+					throw new Error("Each script path must match scripts/<safe-filename>");
+				}
+				if (seenPaths.has(path)) throw new Error(`Duplicate script path: ${path}`);
+				seenPaths.add(path);
+				const content = requiredString(rec.content, "scripts[].content", 64_000);
+				return { path, content, ...(rec.executable === true ? { executable: true } : {}) };
+			});
+		}
+		return {
+			tool: value.tool,
+			callId,
+			name,
+			description: requiredString(args.description, "description", 500),
+			body: requiredString(args.body, "body", 32_000),
+			storageScope: args.storageScope,
+			rationale: requiredString(args.rationale, "rationale", 1500),
+			...(scripts && scripts.length > 0 ? { scripts } : {}),
 		};
 	}
 	throw new Error("Unsupported tool or invalid arguments");

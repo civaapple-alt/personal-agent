@@ -239,10 +239,59 @@ export default function teamExtension(pi: PiExtensionApi): void {
 				additionalProperties: false,
 			},
 		},
+		{
+			name: "propose_skill",
+			label: "提议沉淀 Skill 与脚本",
+			description:
+				"Propose saving a proven, repeatable workflow as a reusable Pi Skill (SKILL.md plus optional helper scripts under scripts/) for human confirmation. Never writes directly to disk until the user approves the confirmation card. Use when a task succeeded after concrete steps or user corrections that should be one-shot repeatable next time.",
+			parameters: {
+				type: "object",
+				properties: {
+					name: {
+						type: "string",
+						description: "Lowercase kebab-case skill name (e.g. 'release-preflight' or 'daily-repo-digest').",
+					},
+					description: {
+						type: "string",
+						description: "Concise trigger description telling future sessions when to load this Skill.",
+					},
+					body: {
+						type: "string",
+						description: "Markdown instructions for SKILL.md (without YAML frontmatter).",
+					},
+					storageScope: {
+						type: "string",
+						enum: ["global", "org", "personal", "workspace"],
+						description: "Target scope: workspace (.agents/skills/), personal, org, or global.",
+					},
+					rationale: {
+						type: "string",
+						description: "Why this workflow is worth saving and what repeated effort it eliminates.",
+					},
+					scripts: {
+						type: "array",
+						description: "Optional deterministic helper scripts under scripts/<filename>.",
+						items: {
+							type: "object",
+							properties: {
+								path: { type: "string", description: "Must match scripts/<safe-filename>." },
+								content: { type: "string" },
+								executable: { type: "boolean" },
+							},
+							required: ["path", "content"],
+							additionalProperties: false,
+						},
+					},
+				},
+				required: ["name", "description", "body", "storageScope", "rationale"],
+				additionalProperties: false,
+			},
+		},
 	]) {
 		if (tool.name === "delegate_to_member" && env.PA_CAN_DELEGATE === "false") continue;
 		if (tool.name === "save_space_page" && env.PA_CAN_SAVE_SPACE === "false") continue;
-		if (tool.name === "propose_experience" && env.PA_CAN_EXPERIENCE === "false") continue;
+		if ((tool.name === "propose_experience" || tool.name === "propose_skill") && env.PA_CAN_EXPERIENCE === "false")
+			continue;
 		pi.registerTool({
 			...tool,
 			async execute(callId, args, signal) {

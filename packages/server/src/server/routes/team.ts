@@ -1,7 +1,14 @@
+import { isSkillStorageTarget, readSkillProposals, type SkillStorageTarget } from "@pa/contracts/skill-proposal";
 import { readHumanDecision } from "../../orchestrator/human-decision.ts";
 import { validateSkillReference } from "../../roles/capabilities.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
-import { buildScopedRoleId, deleteRolePackage, saveRolePackage } from "../../roles/role-package-store.ts";
+import {
+	buildScopedRoleId,
+	deleteRolePackage,
+	SkillNameConflictError,
+	saveRolePackage,
+	saveSkillProposalToDisk,
+} from "../../roles/role-package-store.ts";
 import { hasRoleProposalActions } from "../../roles/role-proposal-state.ts";
 import { parseRoleTemplateMarkdown, serializeRoleTemplateMarkdown } from "../../roles/template-loader.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
@@ -33,13 +40,146 @@ export async function handleTeamRoutes(ctx: ServerRouteContext, r: RouteRequest)
 			/^\/api\/members(?:\/|$)/.test(r.pathname) &&
 			r.pathname !== "/api/members/architect/chat" &&
 			r.pathname !== "/api/members/design") ||
-		(r.method === "POST" && r.pathname.endsWith("/apply-role-proposals"));
+		(r.method === "POST" &&
+			(r.pathname.endsWith("/apply-role-proposals") || r.pathname.endsWith("/skill-proposals")));
 	return mutation ? ctx.withRoleMutation(() => handleTeamRoutesUnlocked(ctx, r)) : handleTeamRoutesUnlocked(ctx, r);
 }
 
 async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
 	const { store, orchestrator, rolesDir, broadcast } = ctx;
 	const { req, res, method, pathname, actor } = r;
+
+	const skillProposalMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/skill-proposals$/);
+	if (method === "POST" && skillProposalMatch) {
+		if (!requireActiveActor(res, actor)) return true;
+		const matterId = decodeURIComponent(skillProposalMatch[1]!);
+		const messageId = decodeURIComponent(skillProposalMatch[2]!);
+		const matter = store.getMatter(matterId);
+		if (!matter) {
+			sendError(res, 404, `Matter not found: ${matterId}`);
+			return true;
+		}
+		if (!canAccessMatter(store, actor, matter)) {
+			sendError(res, 403, "无权访问该事项");
+			return true;
+		}
+		const targetMsg = store.getMessage(messageId);
+		if (!targetMsg || targetMsg.matterId !== matterId) {
+			sendError(res, 404, `Message not found: ${messageId}`);
+			return true;
+		}
+		const proposals = readSkillProposals(targetMsg.metadata);
+		if (proposals.length === 0) {
+			sendError(res, 409, "Message does not carry skill proposals");
+			return true;
+		}
+		const body = await readJsonBody(req);
+		const proposalId = typeof body.proposalId === "string" ? body.proposalId.trim() : "";
+		const action = body.action === "dismiss" ? "dismiss" : "apply";
+		const idx = proposals.findIndex((item) => item.id === proposalId);
+		if (idx < 0) {
+			sendError(res, 404, `Skill proposal not found: ${proposalId}`);
+			return true;
+		}
+		const targetProposal = proposals[idx]!;
+		const targetScope: SkillStorageTarget = isSkillStorageTarget(body.storageScope)
+			? body.storageScope
+			: targetProposal.storageScope;
+		const canManageOrg = isSuperAdminActor(actor) || canManageOrganization(store, actor, matter.orgId);
+		const isViewer = isViewerInAllOrgsOrTarget(store, actor, matter.orgId);
+		if (isViewer) {
+			sendError(res, 403, "只读成员无权处理技能提案");
+			return true;
+		}
+		if (action === "dismiss") {
+			if (targetProposal.status === "applied") {
+				sendError(res, 409, "Applied skill proposals cannot be dismissed");
+				return true;
+			}
+			const nextProposals = proposals.map((item) =>
+				item.id === proposalId
+					? {
+							...item,
+							status: "dismissed" as const,
+							actedBy: actor.user?.displayName ?? actor.authKind,
+							actedAt: new Date().toISOString(),
+						}
+					: item,
+			);
+			const updatedMsg = store.updateMessageMetadata(messageId, {
+				...(targetMsg.metadata ?? {}),
+				skillProposals: nextProposals,
+			});
+			if (updatedMsg) {
+				broadcast("matter_message", { matterId, message: updatedMsg, matter }, { matterId });
+			}
+			sendJson(res, 200, { ok: true, writtenPaths: [], message: updatedMsg, matter });
+			return true;
+		}
+
+		if (targetProposal.status !== "pending") {
+			sendError(res, 409, "Only pending skill proposals may be applied");
+			return true;
+		}
+		if (targetScope === "global" && !isSuperAdminActor(actor) && actor.authKind !== "loopback") {
+			sendError(res, 403, "仅超级管理员可将技能沉淀到全局范围");
+			return true;
+		}
+		if (targetScope === "org" && !canManageOrg) {
+			sendError(res, 403, "仅组织管理员或所有者可将技能沉淀到组织范围");
+			return true;
+		}
+		const workspace = matter.workspaceId ? store.getWorkspace(matter.workspaceId) : null;
+		if (targetScope === "workspace" && !workspace) {
+			sendError(res, 409, "当前事项未绑定工作区，无法写入工作区 .agents/skills/");
+			return true;
+		}
+		try {
+			const { writtenPaths } = await saveSkillProposalToDisk({
+				proposal: targetProposal,
+				storageScope: targetScope,
+				skillsDir: ctx.skillsDir,
+				orgId: matter.orgId,
+				userId: actor.user?.id ?? null,
+				workspaceRepoPath: workspace?.repoPath ?? null,
+			});
+			const nextProposals = proposals.map((item) =>
+				item.id === proposalId
+					? {
+							...item,
+							storageScope: targetScope,
+							status: "applied" as const,
+							writtenPaths,
+							actedBy: actor.user?.displayName ?? actor.authKind,
+							actedAt: new Date().toISOString(),
+						}
+					: item,
+			);
+			const updatedMsg = store.updateMessageMetadata(messageId, {
+				...(targetMsg.metadata ?? {}),
+				skillProposals: nextProposals,
+			});
+			auditActorAction(ctx, req, actor, {
+				action: "skill_proposal.apply",
+				targetType: "skill",
+				targetId: targetProposal.name,
+				orgId: matter.orgId,
+				detail: {
+					matterId,
+					storageScope: targetScope,
+					writtenPaths,
+				},
+			});
+			if (updatedMsg) {
+				broadcast("matter_message", { matterId, message: updatedMsg, matter }, { matterId });
+			}
+			sendJson(res, 200, { ok: true, writtenPaths, message: updatedMsg, matter });
+		} catch (error) {
+			const status = error instanceof SkillNameConflictError ? 409 : 400;
+			sendError(res, status, error instanceof Error ? error.message : String(error));
+		}
+		return true;
+	}
 
 	const proposalApplyMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/apply-role-proposals$/);
 	if (method === "POST" && proposalApplyMatch) {

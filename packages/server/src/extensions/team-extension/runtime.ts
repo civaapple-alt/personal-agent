@@ -8,6 +8,7 @@ export const TEAM_EXTENSION_TOOLS = [
 	"save_space_page",
 	"delegate_to_member",
 	"propose_experience",
+	"propose_skill",
 ] as const satisfies readonly TeamToolCall["tool"][];
 
 export function prepareTeamExtension({
@@ -32,7 +33,7 @@ export function prepareTeamExtension({
 	if (!isArchitect && (isLead || isInternal)) tools.push("read_space");
 	if (canSaveSpace) tools.push("save_space_page");
 	if (canDelegate) tools.push("delegate_to_member");
-	if (canProposeExperience) tools.push("propose_experience");
+	if (canProposeExperience) tools.push("propose_experience", "propose_skill");
 
 	return {
 		entry: resolveBuiltinExtensionPath("team-extension"),

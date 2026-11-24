@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { classifyGithubFetches } from "../../../../../pi-extensions/team-extension/web-fetch-evidence.js";
@@ -559,6 +560,44 @@ export async function executeWithWorkerPass(
 					}
 					return { staged: true, status: "candidate", scope: call.scope, note: "本轮完成后记为待验证经验" };
 				}
+				if (call.tool === "propose_skill") {
+					if (!canProposeExperience && !isDiscussionMode) {
+						throw new Error(
+							`${sessionMode === "observer" ? "Observing" : "Verifying"} specialists cannot propose skills during peer review`,
+						);
+					}
+					if (isDiscussionMode) {
+						throw new Error("Discussion chat mode does not propose skills directly");
+					}
+					if (call.storageScope === "workspace" && !input.workspace) {
+						throw new Error("Workspace skill proposals require a bound workspace");
+					}
+					if (call.storageScope === "org" && !activeOrgId) {
+						throw new Error("Organization skill proposals require an active organization");
+					}
+					const proposal = {
+						id: `skp_${randomUUID().slice(0, 12)}`,
+						name: call.name,
+						description: call.description,
+						body: call.body,
+						...(call.scripts && call.scripts.length > 0 ? { scripts: call.scripts } : {}),
+						storageScope: call.storageScope,
+						rationale: call.rationale,
+						status: "pending" as const,
+					};
+					const existingIdx = input.effectsTarget.skillProposals.findIndex((item) => item.name === proposal.name);
+					if (existingIdx < 0) input.effectsTarget.skillProposals.push(proposal);
+					else input.effectsTarget.skillProposals[existingIdx] = proposal;
+					return {
+						staged: true,
+						status: "pending_confirmation",
+						proposalId: proposal.id,
+						name: proposal.name,
+						storageScope: proposal.storageScope,
+						scriptCount: proposal.scripts?.length ?? 0,
+						note: "已暂存技能提案，本轮回复中将展示确认卡，经用户确认后写入磁盘。",
+					};
+				}
 			} finally {
 				releaseIdle?.();
 				resumeMonitor?.();
@@ -732,6 +771,21 @@ export async function executeWithWorkerPass(
 												? { mermaid: rawArgs.mermaid.slice(0, 8000) }
 												: {}),
 											...(Array.isArray(rawArgs.options) ? { options: rawArgs.options.slice(0, 8) } : {}),
+										}
+									: {}),
+								...(toolName === "propose_skill"
+									? {
+											...(typeof rawArgs.name === "string" ? { name: rawArgs.name.slice(0, 64) } : {}),
+											...(typeof rawArgs.storageScope === "string"
+												? { storageScope: rawArgs.storageScope.slice(0, 32) }
+												: {}),
+											...(typeof rawArgs.description === "string"
+												? { description: rawArgs.description.slice(0, 240) }
+												: {}),
+											...(typeof rawArgs.rationale === "string"
+												? { rationale: rawArgs.rationale.slice(0, 240) }
+												: {}),
+											...(Array.isArray(rawArgs.scripts) ? { scriptCount: rawArgs.scripts.length } : {}),
 										}
 									: {}),
 							}

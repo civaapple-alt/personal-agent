@@ -1,3 +1,4 @@
+import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
 import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
 import type { VerificationOutcome, VerificationRequest } from "../rpc/team-verification.ts";
@@ -296,11 +297,12 @@ export interface SavedSpaceDocumentEffect {
 export interface ExecutionEffects {
 	savedDocuments: SavedSpaceDocumentEffect[];
 	experiences: ExperienceDraft[];
+	skillProposals: SkillProposalItem[];
 	applicationIds: string[];
 }
 
 export function emptyEffects(): ExecutionEffects {
-	return { savedDocuments: [], experiences: [], applicationIds: [] };
+	return { savedDocuments: [], experiences: [], skillProposals: [], applicationIds: [] };
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
@@ -310,6 +312,11 @@ export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects)
 		else target.savedDocuments[idx] = doc;
 	}
 	target.experiences.push(...source.experiences);
+	for (const proposal of source.skillProposals) {
+		const idx = target.skillProposals.findIndex((existing) => existing.name === proposal.name);
+		if (idx < 0) target.skillProposals.push(proposal);
+		else target.skillProposals[idx] = proposal;
+	}
 	target.applicationIds.push(...source.applicationIds);
 }
 

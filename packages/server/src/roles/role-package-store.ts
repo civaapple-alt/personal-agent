@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { link, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { SKILL_SCRIPT_PATH_RE, type SkillProposalItem, type SkillStorageTarget } from "@pa/contracts/skill-proposal";
 import { serializeRoleTemplateMarkdown, validateRoleTemplateId } from "./template-loader.ts";
 import type { NewSkillDraft, RoleScope, RoleTemplate, SkillStorageScope } from "./types.ts";
 
@@ -306,4 +307,84 @@ export async function deleteRolePackage(params: {
 	});
 	await rm(join(scopeRolesDir, `${roleId}.md`), { force: true });
 	await rm(join(scopeRolesDir, roleId), { recursive: true, force: true });
+}
+
+/**
+ * Persist a user-confirmed `propose_skill` proposal (`SKILL.md` + optional `scripts/*`) atomically.
+ * Refuses name conflicts (`SkillNameConflictError`) and rolls back all written files on any error.
+ */
+export async function saveSkillProposalToDisk(params: {
+	proposal: Pick<SkillProposalItem, "name" | "description" | "body" | "scripts">;
+	storageScope: SkillStorageTarget;
+	skillsDir?: string;
+	orgId?: string | null;
+	userId?: string | null;
+	workspaceRepoPath?: string | null;
+}): Promise<{ skillDir: string; writtenPaths: string[] }> {
+	const name = validateSkillName(params.proposal.name);
+	let baseDir: string;
+	if (params.storageScope === "workspace") {
+		if (!params.workspaceRepoPath?.trim()) {
+			throw new Error("Workspace repository path is required to save a workspace skill");
+		}
+		baseDir = join(resolve(params.workspaceRepoPath), ".agents", "skills");
+	} else {
+		if (!params.skillsDir) {
+			throw new Error(`skillsDir is required to save ${params.storageScope} skill "${name}"`);
+		}
+		baseDir = resolveScopedSkillsBaseDir(params.skillsDir, {
+			storageScope: params.storageScope,
+			ownerOrgId: params.orgId,
+			ownerUserId: params.userId,
+		});
+	}
+
+	const skillDir = join(baseDir, name);
+	const skillMdPath = join(skillDir, "SKILL.md");
+	if (existsSync(skillMdPath)) throw new SkillNameConflictError(name);
+
+	const scripts = params.proposal.scripts ?? [];
+	const plannedFiles: Array<{ path: string; content: string; executable?: boolean }> = [
+		{
+			path: skillMdPath,
+			content: formatSkillMarkdown({
+				name,
+				description: params.proposal.description,
+				body: params.proposal.body,
+				storageScope: params.storageScope === "workspace" ? "global" : params.storageScope,
+			}),
+		},
+	];
+	for (const script of scripts) {
+		if (!SKILL_SCRIPT_PATH_RE.test(script.path) || script.path.includes("..")) {
+			throw new Error(`Invalid script path: ${script.path}`);
+		}
+		plannedFiles.push({
+			path: join(skillDir, script.path),
+			content: script.content,
+			executable: script.executable,
+		});
+	}
+
+	const writtenPaths: string[] = [];
+	try {
+		for (const file of plannedFiles) {
+			try {
+				await atomicWriteFile(file.path, file.content, true);
+			} catch (error) {
+				if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+					throw new SkillNameConflictError(name);
+				}
+				throw error;
+			}
+			if (file.executable && process.platform !== "win32") {
+				await chmod(file.path, 0o755);
+			}
+			writtenPaths.push(file.path);
+		}
+	} catch (error) {
+		await Promise.allSettled(writtenPaths.map((path) => rm(path, { force: true })));
+		throw error;
+	}
+	return { skillDir, writtenPaths };
 }

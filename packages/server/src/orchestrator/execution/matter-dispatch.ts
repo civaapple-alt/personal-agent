@@ -548,6 +548,9 @@ export async function dispatchMatterTurn(
 				workspaceId: workspace?.id ?? null,
 				repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
 				...(architectParsed?.roleProposals ? { roleProposals: architectParsed.roleProposals } : {}),
+				...(!aborted && run.effects.skillProposals.length > 0
+					? { skillProposals: run.effects.skillProposals }
+					: {}),
 				...(decision ? { humanDecision: decision } : {}),
 				...(aborted || run.recentLogs.length > 0 || run.lastProgress
 					? {

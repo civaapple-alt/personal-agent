@@ -10,6 +10,7 @@
 		"./role-proposal-state": "./src/role-proposal-state.ts",
 		"./team-verification": "./src/team-verification.ts",
 		"./model-selection": "./src/model-selection.ts",
+		"./skill-proposal": "./src/skill-proposal.ts",
 		"./extensions": "./src/extensions.ts"
 	}
 }
