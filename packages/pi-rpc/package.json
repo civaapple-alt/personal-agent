@@ -1,0 +1,17 @@
+{
+	"name": "@pa/pi-rpc",
+	"version": "0.0.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Pure Pi RPC subprocess session primitives: JSONL framing, worker lifecycle, usage aggregation, model catalog, and package CLI helpers",
+	"exports": {
+		".": "./src/index.ts",
+		"./jsonl": "./src/jsonl.ts",
+		"./types": "./src/types.ts",
+		"./prompt-usage": "./src/prompt-usage.ts",
+		"./pi-rpc-worker": "./src/pi-rpc-worker.ts",
+		"./model-catalog": "./src/model-catalog.ts",
+		"./pi-packages": "./src/pi-packages.ts"
+	}
+}
