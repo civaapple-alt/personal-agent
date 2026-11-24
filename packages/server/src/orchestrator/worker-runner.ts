@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { classifyGithubFetches } from "../../pi-extensions/team-extension/web-fetch-evidence.js";
+import { classifyGithubFetches } from "../../../../pi-extensions/team-extension/web-fetch-evidence.js";
 import { resolveBuiltinExtensionPath } from "../pa-extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../pa-extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../pa-extensions/team-extension/runtime.ts";

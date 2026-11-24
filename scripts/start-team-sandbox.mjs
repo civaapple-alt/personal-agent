@@ -5,11 +5,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 
 const ROOT_DIR = fileURLToPath(new URL("../", import.meta.url));
 const DEFAULT_PORT = 4399;
@@ -538,17 +538,17 @@ async function runSandboxCli() {
 		return;
 	}
 
-	const webEntry = resolve(ROOT_DIR, "web/dist/index.html");
+	const webEntry = resolve(ROOT_DIR, "apps/web/dist/index.html");
 	if (!existsSync(webEntry)) {
 		console.warn(
-			"[team-sandbox] web/dist/index.html not found; run via `npm run start:team:sandbox` or `npm run build:web` to serve web UI.",
+			"[team-sandbox] apps/web/dist/index.html not found; run via `npm run start:team:sandbox` or `npm run build:web` to serve web UI.",
 		);
 	}
 
 	const sessionDir = join(sandboxRoot, "pi-sessions");
 	await mkdir(sessionDir, { recursive: true });
 
-	const child = spawn(process.execPath, [resolve(ROOT_DIR, "src/server/main.ts")], {
+	const child = spawn(process.execPath, [resolve(ROOT_DIR, "apps/cli/src/main.ts")], {
 		cwd: ROOT_DIR,
 		env: {
 			...process.env,

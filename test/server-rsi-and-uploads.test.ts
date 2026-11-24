@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { parseMessageFiles, parseMessageImages } from "../apps/web/src/utils.ts";
 import {
 	createPersonalAgentServer,
 	DialogBroker,
@@ -14,9 +15,8 @@ import {
 	type PromptRunResult,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { formatMessageHistoryContent } from "../src/orchestrator/prompts.ts";
-import { parseMessageFiles, parseMessageImages } from "../web/src/utils.ts";
+} from "../packages/server/src/index.ts";
+import { formatMessageHistoryContent } from "../packages/server/src/orchestrator/prompts.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 test("HTTP API persists observerMemberIds and broadcasts proactive observer messages", async () => {

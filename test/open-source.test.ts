@@ -48,10 +48,10 @@ test("release path policy protects nested credentials, databases and generated d
 		"agent.sqlite3",
 		"agent.db-wal",
 		"dist/server.js",
-		"web/dist/assets/app.js",
+		"apps/web/dist/assets/app.js",
 		".env.example",
 		"config/.env.local.example",
-		"src/server/main.ts",
+		"apps/cli/src/main.ts",
 	];
 	const result = spawnSync(
 		process.execPath,

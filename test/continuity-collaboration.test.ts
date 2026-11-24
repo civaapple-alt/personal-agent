@@ -6,30 +6,34 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
-import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
-import type { DecisionClassifier } from "../src/orchestrator/system-one.ts";
+import type { DecisionClassifier } from "../packages/server/src/orchestrator/system-one.ts";
 import {
 	type DispatchProgressEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/orchestrator/team-orchestrator.ts";
-import { resolveBuiltinExtensionPath } from "../src/pa-extensions/builtin-paths.ts";
+} from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { resolveBuiltinExtensionPath } from "../packages/server/src/pa-extensions/builtin-paths.ts";
 import {
 	isGuideTopic,
 	isWorkbenchTopic,
 	readWorkbenchGuide,
 	WORKBENCH_TOPICS,
-} from "../src/pa-extensions/workbench-help/catalog.ts";
-import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
-import { createPersonalAgentServer } from "../src/server/app.ts";
-import { DialogBroker } from "../src/server/dialog-broker.ts";
-import { PreviewManager } from "../src/server/preview-manager.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
-import type { Matter, MatterMessage } from "../src/storage/types.ts";
+} from "../packages/server/src/pa-extensions/workbench-help/catalog.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import type {
+	PiRpcWorkerOptions,
+	PromptRunResult,
+	RunPromptOptions,
+} from "../packages/server/src/rpc/pi-rpc-worker.ts";
+import { createPersonalAgentServer } from "../packages/server/src/server/app.ts";
+import { DialogBroker } from "../packages/server/src/server/dialog-broker.ts";
+import { PreviewManager } from "../packages/server/src/server/preview-manager.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
+import type { Matter, MatterMessage } from "../packages/server/src/storage/types.ts";
+import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
+import teamExtension, { type PiExtensionApi } from "../pi-extensions/team-extension/index.ts";
 import { invokeTool } from "./worker-helpers.ts";
 
 type Tool = Parameters<PiExtensionApi["registerTool"]>[0];

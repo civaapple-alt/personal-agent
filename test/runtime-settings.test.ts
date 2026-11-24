@@ -15,8 +15,8 @@ import {
 	type RuntimeOverviewPayload,
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { findInstalledPiWebAccess } from "../src/pa-extensions/web-access/package.ts";
+} from "../packages/server/src/index.ts";
+import { findInstalledPiWebAccess } from "../packages/server/src/pa-extensions/web-access/package.ts";
 
 test("pi-web-access discovery uses the user package manifest and confines its entry to the package", async (t) => {
 	const dir = mkdtempSync(join(tmpdir(), "pa-web-access-package-"));

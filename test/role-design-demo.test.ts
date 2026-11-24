@@ -5,10 +5,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { qualityReviewTemplate, reviewHash } from "../src/demo/publication-review-quality.ts";
-import { ROLE_DEMO_FILES, type RoleDemoScenario, roleDemoRubric } from "../src/demo/role-design-case.ts";
-import { summarizeRoleDemo } from "../src/demo/role-design-report.ts";
-import { runRoleDesignDemo } from "../src/demo/role-design-runner.ts";
+import { qualityReviewTemplate, reviewHash } from "../packages/server/src/demo/publication-review-quality.ts";
+import {
+	ROLE_DEMO_FILES,
+	type RoleDemoScenario,
+	roleDemoRubric,
+} from "../packages/server/src/demo/role-design-case.ts";
+import { summarizeRoleDemo } from "../packages/server/src/demo/role-design-report.ts";
+import { runRoleDesignDemo } from "../packages/server/src/demo/role-design-runner.ts";
 
 async function fixture(t: test.TestContext, scenario: RoleDemoScenario = "architect") {
 	const directory = await mkdtemp(join(tmpdir(), "pa-role-demo-fixture-"));
@@ -45,7 +49,7 @@ test("Role demo help works with no Pi on PATH and creates no resources", async (
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const { stdout } = await promisify(execFile)(
 		process.execPath,
-		[resolve("src/demo/role-design-smoke.ts"), "--scenario", "builtin", "--help"],
+		[resolve("packages/server/src/demo/role-design-smoke.ts"), "--scenario", "builtin", "--help"],
 		{ cwd: directory, env: { ...process.env, PATH: "" } },
 	);
 	assert.match(stdout, /call no model/);

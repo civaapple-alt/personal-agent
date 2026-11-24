@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { resolveEffectiveWebSearchProvider } from "../packages/server/src/pa-extensions/web-access/runtime.ts";
+import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
 import teamExtension, {
 	filterContextFilesForTargetWorkspace,
 	type PiExtensionApi,
 } from "../pi-extensions/team-extension/index.ts";
-import { resolveEffectiveWebSearchProvider } from "../src/pa-extensions/web-access/runtime.ts";
-import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
 	const original = process.env.PA_WEB_SEARCH_ENABLED;

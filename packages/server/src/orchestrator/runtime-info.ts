@@ -593,7 +593,7 @@ export async function buildRuntimeOverview(options: {
 					value: formatDisplayPath(serverConfig?.uploadsDir, isOwner, "内存缓存"),
 				},
 				{
-					key: "web/dist/",
+					key: "apps/web/dist/",
 					label: "前端静态资源",
 					value: formatDisplayPath(serverConfig?.webDistDir, isOwner, "未提供"),
 				},

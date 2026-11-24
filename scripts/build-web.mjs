@@ -3,13 +3,13 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 
 const rootDir = process.cwd();
-const outDir = resolve(rootDir, "web/dist");
+const outDir = resolve(rootDir, "apps/web/dist");
 const assetsDir = resolve(outDir, "assets");
 
 mkdirSync(assetsDir, { recursive: true });
 
 await build({
-	entryPoints: [resolve(rootDir, "web/src/main.tsx")],
+	entryPoints: [resolve(rootDir, "apps/web/src/main.tsx")],
 	bundle: true,
 	format: "esm",
 	jsx: "automatic",
@@ -22,6 +22,6 @@ await build({
 	},
 });
 
-copyFileSync(resolve(rootDir, "web/index.html"), resolve(outDir, "index.html"));
+copyFileSync(resolve(rootDir, "apps/web/index.html"), resolve(outDir, "index.html"));
 for (const name of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) copyFileSync(resolve(rootDir, name), resolve(outDir, name));
-console.log("Built V4 web UI into web/dist");
+console.log("Built Personal Agent web UI into apps/web/dist");

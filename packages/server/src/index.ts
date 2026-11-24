@@ -111,6 +111,7 @@ export {
 	createPersonalAgentServer,
 	type PersonalAgentServerOptions,
 } from "./server/app.ts";
+export { type BootedHost, type BootHostOptions, bootHost } from "./server/boot.ts";
 export {
 	DialogBroker,
 	type DialogEventListener,

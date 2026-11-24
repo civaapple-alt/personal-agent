@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-import { attachJsonlLineReader, PiRpcWorker, serializeJsonLine } from "../src/index.ts";
+import { attachJsonlLineReader, PiRpcWorker, serializeJsonLine } from "../packages/server/src/index.ts";
 
 function makeInlineMockScript(body: string): { executable: string; leadingArgs: string[] } {
 	return {

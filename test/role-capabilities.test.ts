@@ -3,27 +3,27 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { reviewObject } from "../src/demo/publication-review-quality.ts";
-import { resolveRoleSkills } from "../src/orchestrator/execution-context.ts";
-import { parseMetaArchitectResponse } from "../src/orchestrator/meta-architect.ts";
-import { collectTeamHealthEvidence } from "../src/orchestrator/team-health.ts";
-import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { assessRoleCapabilities, listRoleSkillCatalog } from "../src/roles/capabilities.ts";
+import { reviewObject } from "../packages/server/src/demo/publication-review-quality.ts";
+import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution-context.ts";
+import { parseMetaArchitectResponse } from "../packages/server/src/orchestrator/meta-architect.ts";
+import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/team-health.ts";
+import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { assessRoleCapabilities, listRoleSkillCatalog } from "../packages/server/src/roles/capabilities.ts";
 import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
 	normalizeRoleVerificationPlan,
-} from "../src/roles/role-architect.ts";
+} from "../packages/server/src/roles/role-architect.ts";
 import {
 	loadRoleTemplatesFromDir,
 	parseRoleTemplateMarkdown,
 	serializeRoleTemplateMarkdown,
-} from "../src/roles/template-loader.ts";
-import { createPersonalAgentServer } from "../src/server/app.ts";
-import { DialogBroker } from "../src/server/dialog-broker.ts";
-import { PreviewManager } from "../src/server/preview-manager.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+} from "../packages/server/src/roles/template-loader.ts";
+import { createPersonalAgentServer } from "../packages/server/src/server/app.ts";
+import { DialogBroker } from "../packages/server/src/server/dialog-broker.ts";
+import { PreviewManager } from "../packages/server/src/server/preview-manager.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 test("All built-in roles load declared methods, explicit boundaries and round-trip definitions", async () => {

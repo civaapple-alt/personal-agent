@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizePromptUsage } from "../src/rpc/prompt-usage.ts";
-import type { AgentMessage } from "../src/rpc/types.ts";
+import { summarizePromptUsage } from "../packages/server/src/rpc/prompt-usage.ts";
+import type { AgentMessage } from "../packages/server/src/rpc/types.ts";
 
 test("prompt usage distinguishes the first reported request from tool follow-ups", () => {
 	const assistant = { role: "assistant", content: "", provider: "fixture", model: "model" };

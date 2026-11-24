@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
+import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
 import humanQuestionExtension, { type HumanQuestionExtensionApi } from "../pi-extensions/human-question/index.ts";
-import { createTeamToolBridge } from "../src/rpc/team-tool-bridge.ts";
 
 function captureTool(
 	t: TestContext,

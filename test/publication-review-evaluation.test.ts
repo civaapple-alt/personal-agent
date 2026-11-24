@@ -5,16 +5,20 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { promptForReviewDocument, REVIEW_SCENARIOS } from "../src/demo/publication-review-case.ts";
-import { assessCollaboration } from "../src/demo/publication-review-evidence.ts";
-import { parseReviewOptions, reviewDirectory, reviewPlan } from "../src/demo/publication-review-options.ts";
+import { promptForReviewDocument, REVIEW_SCENARIOS } from "../packages/server/src/demo/publication-review-case.ts";
+import { assessCollaboration } from "../packages/server/src/demo/publication-review-evidence.ts";
+import {
+	parseReviewOptions,
+	reviewDirectory,
+	reviewPlan,
+} from "../packages/server/src/demo/publication-review-options.ts";
 import {
 	assessQuality,
 	type QualityReviewFile,
 	qualityReviewTemplate,
 	reviewHash,
-} from "../src/demo/publication-review-quality.ts";
-import { summarizeReview } from "../src/demo/publication-review-report.ts";
+} from "../packages/server/src/demo/publication-review-quality.ts";
+import { summarizeReview } from "../packages/server/src/demo/publication-review-report.ts";
 
 const content = "# 最终稿\n已修正的设计条件，仅设计未实测。\n";
 const rubric = [
@@ -154,7 +158,7 @@ test("quality requires matching final snapshot and complete independent judgment
 test("help and invalid options run without a project cwd or Pi executable", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "pa-review-help-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
-	const executable = resolve("src/demo/publication-review-smoke.ts");
+	const executable = resolve("packages/server/src/demo/publication-review-smoke.ts");
 	const { stdout } = await promisify(execFile)(process.execPath, [executable, "--help"], {
 		cwd: root,
 		env: { ...process.env, PATH: "" },

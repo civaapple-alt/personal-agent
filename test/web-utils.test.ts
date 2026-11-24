@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { MatterMessageDto } from "../web/src/api/matters.ts";
+import type { MatterMessageDto } from "../apps/web/src/api/matters.ts";
 import {
 	createPastedTextAttachment,
 	isSupportedImageDescriptor as isSupportedImageFile,
 	prepareComposerTextFiles as prepareComposerFiles,
 	shouldFoldPastedText,
-} from "../web/src/textAttachments.ts";
-import { buildMatterDelegations, liveDelegationEdges } from "../web/src/utils/matterDelegations.ts";
+} from "../apps/web/src/textAttachments.ts";
+import { buildMatterDelegations, liveDelegationEdges } from "../apps/web/src/utils/matterDelegations.ts";
 import {
 	applyOrgAiRoleOverrides,
 	applyPrimaryContactToMembers,
@@ -27,7 +27,7 @@ import {
 	pickDefaultWorkspaceId,
 	resolveEffectivePrimaryContactId,
 	stripMarkdownFormatting,
-} from "../web/src/utils.ts";
+} from "../apps/web/src/utils.ts";
 
 test("delegation boards place historical handoffs and keep only the active turn running", () => {
 	const userMessages = [

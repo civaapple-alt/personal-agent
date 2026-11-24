@@ -26,8 +26,8 @@ import {
 	type PromptRunResult,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { validateCloneUrl } from "../src/server/git-clone.ts";
+} from "../packages/server/src/index.ts";
+import { validateCloneUrl } from "../packages/server/src/server/git-clone.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 class MultiTenantTestWorker implements RpcWorkerLike {
@@ -148,7 +148,7 @@ test("Multi-tenant security: admin bootstrap, open registration/review, org isol
 		dataDir,
 		defaultWorkspacesRoot: workspacesRoot,
 		uploadsDir: join(tempDir, "uploads"),
-		webDistDir: resolve(process.cwd(), "web/dist"),
+		webDistDir: resolve(process.cwd(), "apps/web/dist"),
 	});
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
 	const address = server.address();
@@ -854,7 +854,7 @@ test("Loopback trial upgrade to requireAuth preserves usr_local_owner org member
 			dataDir: join(tempDir, "data"),
 			defaultWorkspacesRoot: join(tempDir, "workspaces-root"),
 			uploadsDir: join(tempDir, "uploads"),
-			webDistDir: resolve(process.cwd(), "web/dist"),
+			webDistDir: resolve(process.cwd(), "apps/web/dist"),
 		});
 		await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
 		const addr = server.address();

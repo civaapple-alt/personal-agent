@@ -1,6 +1,11 @@
 /** Source-snapshot checks shared by local audits and the release packager. */
 export function forbiddenReleasePath(path) {
-	if (/^(?:\.data|\.notes|\.pi|\.releases|node_modules|dist|web\/dist)(?:\/|$)/.test(path)) return true;
+	if (
+		/^(?:\.data|\.notes|\.pi|\.releases|node_modules|dist|web\/dist|apps\/[^/]+\/dist|packages\/[^/]+\/dist)(?:\/|$)/.test(
+			path,
+		)
+	)
+		return true;
 	if (/(?:^|\/)\.env(?:\..+)?$/.test(path)) return !/\.example$/.test(path);
 	return (
 		/(?:^|\/)(?:\.npmrc|credentials\.json|id_rsa|id_ed25519)$/.test(path) ||

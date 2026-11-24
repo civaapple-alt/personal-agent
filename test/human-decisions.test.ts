@@ -16,9 +16,9 @@ import {
 	type RpcWorkerLike,
 	resolveBuiltinExtensionPath,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { readHumanDecision } from "../src/orchestrator/human-decision.ts";
-import type { MatterMessage } from "../src/storage/types.ts";
+} from "../packages/server/src/index.ts";
+import { readHumanDecision } from "../packages/server/src/orchestrator/human-decision.ts";
+import type { MatterMessage } from "../packages/server/src/storage/types.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 const completed = (assistantText: string): PromptRunResult => ({

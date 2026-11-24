@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { formatHashRoute, parseHashRoute } from "../apps/web/src/hashRouter.ts";
+import { parseProgressSnapshot } from "../apps/web/src/utils.ts";
 import {
 	createPersonalAgentServer,
 	DialogBroker,
@@ -17,9 +19,7 @@ import {
 	type RpcSessionEvent,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { formatHashRoute, parseHashRoute } from "../web/src/hashRouter.ts";
-import { parseProgressSnapshot } from "../web/src/utils.ts";
+} from "../packages/server/src/index.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 class InteractiveTestWorker implements RpcWorkerLike {
@@ -147,7 +147,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		templates,
 		previewManager,
 		dialogBroker,
-		webDistDir: resolve(process.cwd(), "web/dist"),
+		webDistDir: resolve(process.cwd(), "apps/web/dist"),
 	});
 
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
@@ -270,7 +270,7 @@ test("Space static preview is served in a sandbox", async () => {
 		templates,
 		previewManager,
 		dialogBroker,
-		webDistDir: resolve(process.cwd(), "web/dist"),
+		webDistDir: resolve(process.cwd(), "apps/web/dist"),
 	});
 	await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 	const address = server.address();
@@ -370,7 +370,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 		previewManager,
 		dialogBroker,
 		rolesDir: tempRolesDir,
-		webDistDir: resolve(process.cwd(), "web/dist"),
+		webDistDir: resolve(process.cwd(), "apps/web/dist"),
 	});
 
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
@@ -597,7 +597,7 @@ test("Server supports aborting a running matter and updating its bound workspace
 		templates,
 		previewManager,
 		dialogBroker,
-		webDistDir: resolve(process.cwd(), "web/dist"),
+		webDistDir: resolve(process.cwd(), "apps/web/dist"),
 	});
 
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));

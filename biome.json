@@ -23,16 +23,16 @@
 	},
 	"files": {
 		"includes": [
-			"src/**/*.ts",
+			"apps/cli/src/**/*.ts",
+			"apps/web/src/**/*.ts",
+			"apps/web/src/**/*.tsx",
 			"packages/**/*.ts",
-			"test/**/*.ts",
-			"web/src/**/*.ts",
-			"web/src/**/*.tsx",
-			"scripts/**/*.mjs",
+			"pa-extensions/**/*.{ts,tsx}",
 			"pi-extensions/**/*.{ts,js}",
+			"test/**/*.ts",
+			"scripts/**/*.mjs",
 			"!**/node_modules/**/*",
-			"!**/dist/**/*",
-			"!**/web/dist/**/*"
+			"!**/dist/**/*"
 		]
 	}
 }

@@ -69,7 +69,6 @@ export function useMatterInitiationState({
 			.map(({ id }) => id);
 	}, [businessMembers, defaultAiMemberIds, draftConsultMemberIds, draftObserverMemberIds, explicitLeadId]);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: Draft changes invalidate the pending recommendation.
 	useEffect(() => {
 		modelSeqRef.current += 1;
 		modelControllerRef.current?.abort();

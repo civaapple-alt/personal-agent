@@ -4,20 +4,23 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import test from "node:test";
-import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { BUILTIN_ROLE_ARCHITECT_TEMPLATE, ROLE_ARCHITECT_MEMBER_ID } from "../src/roles/role-architect.ts";
+import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import {
+	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
+	ROLE_ARCHITECT_MEMBER_ID,
+} from "../packages/server/src/roles/role-architect.ts";
 import {
 	loadRoleTemplatesFromDir,
 	parseRoleTemplateMarkdown,
 	serializeRoleTemplateMarkdown,
-} from "../src/roles/template-loader.ts";
-import type { ModelSelection, PiModelCatalog } from "../src/rpc/model-selection.ts";
-import type { ThinkingLevel } from "../src/rpc/types.ts";
-import { createPersonalAgentServer } from "../src/server/app.ts";
-import { DialogBroker } from "../src/server/dialog-broker.ts";
-import { PreviewManager } from "../src/server/preview-manager.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+} from "../packages/server/src/roles/template-loader.ts";
+import type { ModelSelection, PiModelCatalog } from "../packages/server/src/rpc/model-selection.ts";
+import type { ThinkingLevel } from "../packages/server/src/rpc/types.ts";
+import { createPersonalAgentServer } from "../packages/server/src/server/app.ts";
+import { DialogBroker } from "../packages/server/src/server/dialog-broker.ts";
+import { PreviewManager } from "../packages/server/src/server/preview-manager.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 const piDefault = { provider: "opencode-go", model: "deepseek-v4.1-flash", thinkingLevel: "high" } as const;

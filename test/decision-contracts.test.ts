@@ -11,8 +11,8 @@ import {
 	type PromptRunResult,
 	type RpcWorkerLike,
 	runTypedPiDecision,
-} from "../src/index.ts";
-import { normalizeRoleVerificationPlan } from "../src/roles/role-architect.ts";
+} from "../packages/server/src/index.ts";
+import { normalizeRoleVerificationPlan } from "../packages/server/src/roles/role-architect.ts";
 
 function workerReturning(result: Partial<PromptRunResult>, onPrompt?: (prompt: string) => void): RpcWorkerLike {
 	return {

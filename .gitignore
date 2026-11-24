@@ -1,6 +1,7 @@
 node_modules/
 dist/
-web/dist/
+apps/*/dist/
+packages/*/dist/
 .pi/
 .agents/skills/*
 !.agents/skills/pa-matter-retrospective/

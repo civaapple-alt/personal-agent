@@ -4,10 +4,14 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { fixtureReadAllowed } from "../src/demo/fixture-read-guard.ts";
-import { selectionCases } from "../src/demo/pstack-selection-cases.ts";
-import { selectionMethodLoaded, selectionTree, summarizeSelection } from "../src/demo/pstack-selection-runner.ts";
-import { qualityReviewTemplate, reviewHash } from "../src/demo/publication-review-quality.ts";
+import { fixtureReadAllowed } from "../packages/server/src/demo/fixture-read-guard.ts";
+import { selectionCases } from "../packages/server/src/demo/pstack-selection-cases.ts";
+import {
+	selectionMethodLoaded,
+	selectionTree,
+	summarizeSelection,
+} from "../packages/server/src/demo/pstack-selection-runner.ts";
+import { qualityReviewTemplate, reviewHash } from "../packages/server/src/demo/publication-review-quality.ts";
 
 test("natural selection cases do not tell candidates method names or expose the rubric", () => {
 	assert.deepEqual(
@@ -127,10 +131,14 @@ test("offline summaries keep missing method selection separate from reviewed sem
 });
 
 test("selection help performs no model or source configuration work", () => {
-	const result = spawnSync(process.execPath, [resolve("src/demo/pstack-selection-smoke.ts"), "--help"], {
-		encoding: "utf8",
-		env: process.env,
-	});
+	const result = spawnSync(
+		process.execPath,
+		[resolve("packages/server/src/demo/pstack-selection-smoke.ts"), "--help"],
+		{
+			encoding: "utf8",
+			env: process.env,
+		},
+	);
 	assert.equal(result.status, 0, result.stderr);
 	assert.match(result.stdout, /--summarize/);
 	assert.match(result.stdout, /no model/);

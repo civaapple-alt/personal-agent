@@ -9,11 +9,11 @@ import {
 	OBSERVER_BRIEF,
 	OBSERVER_DELIVERY_TITLE,
 	OBSERVER_PROPOSAL,
-} from "../src/demo/observer-case.ts";
-import { summarizeObserver } from "../src/demo/observer-evidence.ts";
-import { runObserverSmoke } from "../src/demo/observer-runner.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import type { PromptRunResult } from "../src/rpc/pi-rpc-worker.ts";
+} from "../packages/server/src/demo/observer-case.ts";
+import { summarizeObserver } from "../packages/server/src/demo/observer-evidence.ts";
+import { runObserverSmoke } from "../packages/server/src/demo/observer-runner.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import type { PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 const alert = "现有约束要求7天可恢复且保留全部来源。永久清空与之冲突；建议软删除、保留来源快照并验证恢复后来源一致。";

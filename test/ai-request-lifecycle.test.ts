@@ -12,7 +12,7 @@ import {
 	type PiRpcWorkerOptions,
 	PreviewManager,
 	TeamOrchestrator,
-} from "../src/index.ts";
+} from "../packages/server/src/index.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 async function fixture(

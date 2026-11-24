@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { resolveRepoAssetPath } from "../builtin-paths.ts";
 
 const GUIDES = {
 	pa_and_pi: {
@@ -89,7 +90,7 @@ export async function readWorkbenchGuide(topic: keyof typeof GUIDES, chinese: bo
 	const file = chinese ? "agent-workbench.md" : "agent-workbench.en.md";
 	const heading = chinese ? GUIDES[topic].heading : GUIDES[topic].english;
 	const source = `docs/guides/${file}`;
-	const fileContents = await readFile(new URL(`../../../${source}`, import.meta.url), "utf8");
+	const fileContents = await readFile(resolveRepoAssetPath(source, import.meta.url), "utf8");
 	const section = fileContents
 		.split(/^## /m)
 		.find((part) => part.startsWith(`${heading}\n`) || part.startsWith(`${heading}\r\n`));

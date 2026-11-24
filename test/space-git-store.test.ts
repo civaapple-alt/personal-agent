@@ -4,14 +4,22 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { encodePiSessionCwdDir, resolveScopedPiSessionDir } from "../src/orchestrator/execution-context.ts";
-import { canAccessSpace, canWriteSpace } from "../src/server/acl.ts";
-import { userToCollaboratorView } from "../src/server/auth.ts";
-import { persistUploadedFiles, resolveUploadMonthBucket } from "../src/server/uploads.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { memberSpaceId, orgSpaceId, userSpaceId, workspaceSpaceId } from "../src/storage/repos/space-repo.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
-import { resolveScopedSpaceRelativeDir, SpaceGitStore } from "../src/storage/space-git-store.ts";
+import {
+	encodePiSessionCwdDir,
+	resolveScopedPiSessionDir,
+} from "../packages/server/src/orchestrator/execution-context.ts";
+import { canAccessSpace, canWriteSpace } from "../packages/server/src/server/acl.ts";
+import { userToCollaboratorView } from "../packages/server/src/server/auth.ts";
+import { persistUploadedFiles, resolveUploadMonthBucket } from "../packages/server/src/server/uploads.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import {
+	memberSpaceId,
+	orgSpaceId,
+	userSpaceId,
+	workspaceSpaceId,
+} from "../packages/server/src/storage/repos/space-repo.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
+import { resolveScopedSpaceRelativeDir, SpaceGitStore } from "../packages/server/src/storage/space-git-store.ts";
 
 test("folder batch rejects invalid paths before changing any files", async () => {
 	const spacesDir = await mkdtemp(join(tmpdir(), "pa-spaces-batch-"));

@@ -1,4 +1,4 @@
-import type { PiRpcWorkerOptions } from "../src/rpc/pi-rpc-worker.ts";
+import type { PiRpcWorkerOptions } from "../packages/server/src/rpc/pi-rpc-worker.ts";
 
 export async function reportReady(options: PiRpcWorkerOptions, tools?: string[]): Promise<void> {
 	const requested: string[] = JSON.parse(options.env?.PA_REQUIRED_TOOLS ?? "[]");

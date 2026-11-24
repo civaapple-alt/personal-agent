@@ -1,0 +1,10 @@
+{
+	"name": "@pa/cli",
+	"version": "0.0.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"bin": {
+		"personal-agent": "./dist/main.js"
+	}
+}

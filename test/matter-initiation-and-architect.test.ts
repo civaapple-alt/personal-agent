@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { formatRoleToolTierLabel } from "../apps/web/src/utils.ts";
 import {
 	applyRoleTemplatePatch,
 	assessMatterInitiation,
@@ -22,9 +23,8 @@ import {
 	type RpcWorkerLike,
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import { isExplicitRoleSetupRequest } from "../src/roles/role-setup-intent.ts";
-import { formatRoleToolTierLabel } from "../web/src/utils.ts";
+} from "../packages/server/src/index.ts";
+import { isExplicitRoleSetupRequest } from "../packages/server/src/roles/role-setup-intent.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 test("only direct role setup wording is eligible for automatic architectural routing", () => {

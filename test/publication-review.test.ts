@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type ReviewToolTrace, specialistsBeforePublication } from "../src/demo/publication-review-evidence.ts";
+import {
+	type ReviewToolTrace,
+	specialistsBeforePublication,
+} from "../packages/server/src/demo/publication-review-evidence.ts";
 
 test("review evidence requires completed successful lead consultations before a successful publication begins", () => {
 	const trace = (input: Partial<ReviewToolTrace>): ReviewToolTrace => ({

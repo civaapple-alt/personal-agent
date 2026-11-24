@@ -8,9 +8,9 @@ import {
 	buildAttachedFolderContextFiles,
 	buildWorkspaceCustomizations,
 	extractAttachedSkillPaths,
-} from "../src/orchestrator/workspace-customizations.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+} from "../packages/server/src/orchestrator/workspace-customizations.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 
 test("WorkspaceFolderRepo and workspace-customizations manage multi-folder rules, skills, and budget demotion", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pa-multifolder-test-"));

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { preparePstackRuntime, readPstackResource } from "../src/demo/pstack-fixture.ts";
+import { preparePstackRuntime, readPstackResource } from "../packages/server/src/demo/pstack-fixture.ts";
 
 async function createPack(root: string) {
 	await mkdir(root, { recursive: true });

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -13,6 +14,30 @@ import { PersonalAgentStore } from "../storage/repositories.ts";
 import { createPersonalAgentServer } from "./app.ts";
 import { DialogBroker } from "./dialog-broker.ts";
 import { PreviewManager } from "./preview-manager.ts";
+
+export interface BootHostOptions {
+	rootDir?: string;
+	dbPath?: string;
+	port?: number;
+	host?: string;
+	requireAuth?: boolean;
+	workspacesRoot?: string;
+	sessionDir?: string;
+	webDistDir?: string;
+	piExtensions?: string[];
+	inheritLocalPiResources?: boolean;
+	adminEmail?: string;
+	adminPassword?: string;
+	adminName?: string;
+}
+
+export interface BootedHost {
+	host: string;
+	port: number;
+	localUrl: string;
+	lanUrls: string[];
+	shutdown: () => Promise<void>;
+}
 
 function listLanIpv4Addresses(): string[] {
 	const results: string[] = [];
@@ -41,19 +66,34 @@ async function readDecisionKey(rootDir: string): Promise<string | undefined> {
 	}
 }
 
-async function main(): Promise<void> {
+function resolveDefaultWebDistDir(rootDir: string): string {
+	const workspaceWebDist = resolve(rootDir, "apps/web/dist");
+	if (existsSync(workspaceWebDist)) return workspaceWebDist;
+	const legacyWebDist = resolve(rootDir, "web/dist");
+	if (existsSync(legacyWebDist)) return legacyWebDist;
+	return workspaceWebDist;
+}
+
+/**
+ * Boot the Personal Agent Engine Host as an embeddable library.
+ * Launchers (`apps/cli`, future desktop shells, sandboxes) call `bootHost()` instead of owning engine logic.
+ */
+export async function bootHost(options: BootHostOptions = {}): Promise<BootedHost> {
 	const piProbe = probePiCli();
-	const rootDir = process.cwd();
-	const dbPath = process.env.PA_DB_PATH ?? resolve(rootDir, ".data/personal-agent.db");
-	const port = Number(process.env.PORT ?? 4310);
-	const host = process.env.PA_HOST?.trim() || "127.0.0.1";
+	const rootDir = options.rootDir ?? process.cwd();
+	const dbPath = options.dbPath ?? process.env.PA_DB_PATH ?? resolve(rootDir, ".data/personal-agent.db");
+	const port = options.port ?? Number(process.env.PORT ?? 4310);
+	const host = options.host ?? (process.env.PA_HOST?.trim() || "127.0.0.1");
 	const requireAuth =
-		process.env.PA_REQUIRE_AUTH === "1" || process.env.PA_REQUIRE_AUTH?.trim().toLowerCase() === "true";
-	const defaultWorkspacesRoot = process.env.PA_WORKSPACES_ROOT?.trim()
-		? resolve(process.env.PA_WORKSPACES_ROOT.trim())
-		: dbPath === ":memory:"
-			? resolve(rootDir, ".data/team-workspaces")
-			: resolve(dirname(resolve(dbPath)), "team-workspaces");
+		options.requireAuth ??
+		(process.env.PA_REQUIRE_AUTH === "1" || process.env.PA_REQUIRE_AUTH?.trim().toLowerCase() === "true");
+	const defaultWorkspacesRoot = options.workspacesRoot
+		? resolve(options.workspacesRoot)
+		: process.env.PA_WORKSPACES_ROOT?.trim()
+			? resolve(process.env.PA_WORKSPACES_ROOT.trim())
+			: dbPath === ":memory:"
+				? resolve(rootDir, ".data/team-workspaces")
+				: resolve(dirname(resolve(dbPath)), "team-workspaces");
 	const dataDir = dbPath === ":memory:" ? resolve(rootDir, ".data") : dirname(resolve(dbPath));
 
 	const db = openPersonalAgentDatabase(dbPath);
@@ -81,10 +121,12 @@ async function main(): Promise<void> {
 		templates,
 		defaultCwd: rootDir,
 		noSession: false,
-		extensions: process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
-		sessionDir: process.env.PA_SESSION_DIR?.trim()
-			? resolve(process.env.PA_SESSION_DIR.trim())
-			: resolve(rootDir, ".data/pi-sessions"),
+		extensions: options.piExtensions ?? process.env.PA_PI_EXTENSIONS?.split(delimiter).filter(Boolean),
+		sessionDir: options.sessionDir
+			? resolve(options.sessionDir)
+			: process.env.PA_SESSION_DIR?.trim()
+				? resolve(process.env.PA_SESSION_DIR.trim())
+				: resolve(rootDir, ".data/pi-sessions"),
 		skillsDir: customSkillsDir,
 		onDialog: (ctx) => dialogBroker.requestApproval(ctx),
 	});
@@ -96,13 +138,13 @@ async function main(): Promise<void> {
 	}
 	const ownerName = resolveRepoGitUserIdentity(rootDir)?.name ?? "团队所有者";
 	const localAdmin = store.ensureLocalBootstrapAdmin(ownerName);
-	const adminEmailEnv = process.env.PA_ADMIN_EMAIL?.trim();
-	const adminPasswordEnv = process.env.PA_ADMIN_PASSWORD ?? "";
+	const adminEmailEnv = (options.adminEmail ?? process.env.PA_ADMIN_EMAIL)?.trim();
+	const adminPasswordEnv = options.adminPassword ?? process.env.PA_ADMIN_PASSWORD ?? "";
 	if (adminEmailEnv && adminPasswordEnv.length >= 8 && !store.hasPasswordedAdmin()) {
 		store.setupInitialAdmin({
 			email: adminEmailEnv,
 			password: adminPasswordEnv,
-			displayName: process.env.PA_ADMIN_NAME?.trim() || ownerName,
+			displayName: (options.adminName ?? process.env.PA_ADMIN_NAME)?.trim() || ownerName,
 		});
 	}
 	if (store.listOrgMembers(defaultOrg.id).length === 0) {
@@ -120,7 +162,7 @@ async function main(): Promise<void> {
 			name: "personal-agent",
 			repoPath: rootDir,
 			defaultBranch: "main",
-			description: "Personal Agent 主工作区（架构文档、编排核与 V4 工作台）",
+			description: "Personal Agent 主工作区（架构文档、编排核与工作台）",
 		});
 	}
 
@@ -128,18 +170,19 @@ async function main(): Promise<void> {
 	if (pi.available) console.log(`Pi CLI ${pi.version} (${pi.executable})`);
 	else console.warn(`Pi CLI startup check failed: ${pi.error}`);
 
+	const webDistDir = options.webDistDir ? resolve(options.webDistDir) : resolveDefaultWebDistDir(rootDir);
 	const { server } = createPersonalAgentServer({
 		store,
 		orchestrator,
 		templates,
 		previewManager,
 		dialogBroker,
-		webDistDir: resolve(rootDir, "web/dist"),
+		webDistDir,
 		rolesDir: customRolesDir,
 		skillsDir: customSkillsDir,
 		uploadsDir: resolve(dataDir, "uploads"),
 		requireAuth,
-		inheritLocalPiResources: process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0",
+		inheritLocalPiResources: options.inheritLocalPiResources ?? process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0",
 		defaultWorkspacesRoot,
 		dataDir,
 		probePiCli: () => piProbe,
@@ -156,21 +199,14 @@ async function main(): Promise<void> {
 	});
 
 	const localHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-	console.log(`Personal Agent V4 workbench listening on http://${localHost}:${port} (bind ${host})`);
-	if (host === "0.0.0.0" || host === "::") {
-		const lanIps = listLanIpv4Addresses();
-		if (lanIps.length > 0) {
-			console.log(
-				`LAN collaboration URLs (invite link required): ${lanIps.map((ip) => `http://${ip}:${port}`).join(", ")}`,
-			);
-		}
-	}
+	const localUrl = `http://${localHost}:${port}`;
+	const lanUrls =
+		host === "0.0.0.0" || host === "::" ? listLanIpv4Addresses().map((ip) => `http://${ip}:${port}`) : [];
 
 	let stopping = false;
 	const shutdown = async () => {
 		if (stopping) return;
 		stopping = true;
-		console.log("\nShutting down Personal Agent server...");
 		const closed = new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		server.closeAllConnections();
 		for (const pending of dialogBroker.listPending()) dialogBroker.cancelForMatter(pending.matterId);
@@ -180,19 +216,7 @@ async function main(): Promise<void> {
 		db.close();
 		if (temporaryRolesDir) await rm(temporaryRolesDir, { recursive: true, force: true });
 		if (temporarySkillsDir) await rm(temporarySkillsDir, { recursive: true, force: true });
-		process.exit(0);
 	};
 
-	process.once("SIGINT", () => void shutdown());
-	process.once("SIGTERM", () => void shutdown());
-	if (typeof process.send === "function") {
-		process.on("message", (msg) => {
-			if (msg === "shutdown") void shutdown();
-		});
-	}
+	return { host, port, localUrl, lanUrls, shutdown };
 }
-
-main().catch((error) => {
-	console.error("Failed to start Personal Agent server:", error);
-	process.exitCode = 1;
-});

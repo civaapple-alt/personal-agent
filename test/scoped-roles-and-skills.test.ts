@@ -5,16 +5,23 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { resolveRoleSkills } from "../src/orchestrator/execution-context.ts";
-import { type RpcWorkerLike, TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { assessRoleCapabilities, listScopedSkillCatalog, resolveRoleSkillPath } from "../src/roles/capabilities.ts";
-import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../src/roles/role-architect.ts";
-import { loadRoleTemplatesWithCustomDir, serializeRoleTemplateMarkdown } from "../src/roles/template-loader.ts";
-import { createPersonalAgentServer } from "../src/server/app.ts";
-import { DialogBroker } from "../src/server/dialog-broker.ts";
-import { PreviewManager } from "../src/server/preview-manager.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { resolveRoleSkills } from "../packages/server/src/orchestrator/execution-context.ts";
+import { type RpcWorkerLike, TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import {
+	assessRoleCapabilities,
+	listScopedSkillCatalog,
+	resolveRoleSkillPath,
+} from "../packages/server/src/roles/capabilities.ts";
+import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
+import {
+	loadRoleTemplatesWithCustomDir,
+	serializeRoleTemplateMarkdown,
+} from "../packages/server/src/roles/template-loader.ts";
+import { createPersonalAgentServer } from "../packages/server/src/server/app.ts";
+import { DialogBroker } from "../packages/server/src/server/dialog-broker.ts";
+import { PreviewManager } from "../packages/server/src/server/preview-manager.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 function extractCookie(res: Response): string {

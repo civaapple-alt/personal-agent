@@ -4,11 +4,11 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import type { PiRpcWorkerOptions, PromptRunResult } from "../src/rpc/pi-rpc-worker.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import type { PiRpcWorkerOptions, PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 async function fixture(t: test.TestContext, respond: (options: PiRpcWorkerOptions) => Promise<void>) {

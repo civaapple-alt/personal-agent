@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import {
+	countMemberMemoriesByScope,
+	formatMemberGitIdentity,
+	MEMORY_SCOPE_LABELS,
+	MEMORY_SCOPE_SHORT_LABELS,
+} from "../apps/web/src/utils.ts";
+import {
 	createPersonalAgentServer,
 	DialogBroker,
 	loadRoleTemplatesFromDir,
@@ -12,13 +18,7 @@ import {
 	PreviewManager,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/index.ts";
-import {
-	countMemberMemoriesByScope,
-	formatMemberGitIdentity,
-	MEMORY_SCOPE_LABELS,
-	MEMORY_SCOPE_SHORT_LABELS,
-} from "../web/src/utils.ts";
+} from "../packages/server/src/index.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 test("organization CRUD, workspace binding, member identity updates & sanitized export, and frontend identity helpers", async () => {

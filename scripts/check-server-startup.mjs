@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const entries = {
-	"--source": ["src/server/main.ts"],
-	"--prebuilt": ["dist/server/main.js"],
+	"--source": ["apps/cli/src/main.ts"],
+	"--prebuilt": ["apps/cli/dist/main.js"],
 };
 const [mode, ...extra] = process.argv.slice(2);
 assert.ok(extra.length === 0 && (mode === undefined || Object.hasOwn(entries, mode)), "Use --source or --prebuilt");
@@ -27,9 +27,13 @@ try {
 		const port = address.port;
 		await new Promise((resolve) => probe.close(resolve));
 		const cwd = join(directory, String(port));
-		await mkdir(join(cwd, "web"), { recursive: true });
+		await mkdir(join(cwd, "apps/web"), { recursive: true });
 		await cp(resolve("roles"), join(cwd, "roles"), { recursive: true });
-		await symlink(resolve("web/dist"), join(cwd, "web/dist"), process.platform === "win32" ? "junction" : "dir");
+		await symlink(
+			resolve("apps/web/dist"),
+			join(cwd, "apps/web/dist"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
 		const child = spawn(process.execPath, [resolve(entry)], {
 			cwd,
 			env: {

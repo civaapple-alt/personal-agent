@@ -4,15 +4,15 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { collectTeamFrictionDigest } from "../src/orchestrator/meta-architect.ts";
-import { TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import type { PiRpcWorkerOptions, PromptRunResult } from "../src/rpc/pi-rpc-worker.ts";
-import { canActorAccessMemory } from "../src/server/acl.ts";
-import type { RequestActor } from "../src/server/auth.ts";
-import { userToCollaboratorView } from "../src/server/auth.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { collectTeamFrictionDigest } from "../packages/server/src/orchestrator/meta-architect.ts";
+import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import type { PiRpcWorkerOptions, PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";
+import { canActorAccessMemory } from "../packages/server/src/server/acl.ts";
+import type { RequestActor } from "../packages/server/src/server/auth.ts";
+import { userToCollaboratorView } from "../packages/server/src/server/auth.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 const result = (text: string): PromptRunResult => ({

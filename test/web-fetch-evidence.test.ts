@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { formatNoticeEventLine, isKeyNoticeEvent } from "../apps/web/src/utils/matterStream.ts";
 import teamExtension from "../pi-extensions/team-extension/index.ts";
 import { classifyGithubFetch, classifyGithubFetches } from "../pi-extensions/team-extension/web-fetch-evidence.js";
-import { formatNoticeEventLine, isKeyNoticeEvent } from "../web/src/utils/matterStream.ts";
 
 const url = "https://github.com/example/repo";
 const clone = [

@@ -17,7 +17,7 @@ import {
 	TeamOrchestrator,
 	validateInitiationModelDecision,
 	validateRoleDesignDecision,
-} from "../src/index.ts";
+} from "../packages/server/src/index.ts";
 
 test("Typed Pi initiation decision model enforces schema, repo-read flag, owner auth, and abort cancellation", async () => {
 	const tmp = mkdtempSync(join(tmpdir(), "pa-pi-decision-"));

@@ -11,7 +11,7 @@ import {
 	type PromptRunResult,
 	type RpcWorkerLike,
 	TeamOrchestrator,
-} from "../src/index.ts";
+} from "../packages/server/src/index.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 class RsiScriptedWorker implements RpcWorkerLike {

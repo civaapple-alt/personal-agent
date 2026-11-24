@@ -3,11 +3,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { type RpcWorkerLike, TeamOrchestrator } from "../src/orchestrator/team-orchestrator.ts";
-import { loadRoleTemplatesFromDir } from "../src/roles/template-loader.ts";
-import type { PiRpcWorkerOptions, PromptRunResult, RunPromptOptions } from "../src/rpc/pi-rpc-worker.ts";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
-import { PersonalAgentStore } from "../src/storage/repositories.ts";
+import { type RpcWorkerLike, TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import type {
+	PiRpcWorkerOptions,
+	PromptRunResult,
+	RunPromptOptions,
+} from "../packages/server/src/rpc/pi-rpc-worker.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
+import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import { invokeTool, reportReady } from "./worker-helpers.ts";
 
 function result(text = "done"): PromptRunResult {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { openPersonalAgentDatabase } from "../src/storage/database.ts";
+import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
 
 test("a fresh database can be reopened with its data and complete schema", () => {
 	const dir = mkdtempSync(join(tmpdir(), "pa-baseline-"));

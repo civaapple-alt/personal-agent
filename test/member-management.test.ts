@@ -13,7 +13,7 @@ import {
 	PreviewManager,
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
-} from "../src/index.ts";
+} from "../packages/server/src/index.ts";
 
 async function fixture(t: test.TestContext) {
 	const directory = await mkdtemp(join(tmpdir(), "pa-member-management-"));

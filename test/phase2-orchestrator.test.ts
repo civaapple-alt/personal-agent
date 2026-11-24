@@ -17,7 +17,7 @@ import {
 	type RpcWorkerLike,
 	serializeRoleTemplateMarkdown,
 	TeamOrchestrator,
-} from "../src/index.ts";
+} from "../packages/server/src/index.ts";
 import { reportReady } from "./worker-helpers.ts";
 
 class FakeRpcWorker implements RpcWorkerLike {
