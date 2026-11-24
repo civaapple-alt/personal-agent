@@ -159,6 +159,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 		"save_space_page",
 		"delegate_to_member",
 		"propose_experience",
+		"propose_skill",
 	]);
 	const questionExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-human-question");
 	assert.equal(questionExt?.status, "conditional");
