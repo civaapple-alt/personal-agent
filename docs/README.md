@@ -27,7 +27,7 @@
 | 你要查什么 | 阅读入口 |
 | --- | --- |
 | 开发环境、隔离团队沙盒、测试与分发 | [开发指南](guides/development.md) |
-| 模块所有权、数据流和后续计划 | [当前架构与后续计划](concepts/architecture-and-plan.md)、[后端入口](../packages/server/src/README.md)、[前端入口](../apps/web/README.md) |
+| 模块所有权、数据流和后续计划 | [当前架构与后续计划](concepts/architecture-and-plan.md)、[后端入口](../packages/server/src/README.md)、[前端入口](../apps/web/README.md)、[可运行示例](../examples/README.md) |
 | Git 资料空间、五类默认空间与仓库文件关联 | [资料空间设计](concepts/space-design.md) |
 | 会话范围、委托、取消、成果归档与经验生命周期 | [运行与协作参考](reference/runtime-collaboration.md) |
 | 内置岗位的职责、能力报告与角色作用域 | [内置角色与能力参考](reference/role-design.md)、[角色定义](../roles/README.md)、[内置岗位 Skills 包](../pi-extensions/role-skills/README.md) |

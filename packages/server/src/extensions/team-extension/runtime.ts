@@ -60,6 +60,7 @@ export function prepareTeamExtension({
 			bridgeEnv,
 			requiredTools,
 			workspaceRoot,
+			paInstallRoot,
 			attachedContextFiles,
 			memberContext,
 			turnContext,
@@ -67,6 +68,7 @@ export function prepareTeamExtension({
 			bridgeEnv: Awaited<ReturnType<typeof createTeamToolBridge>>["env"];
 			requiredTools: string[];
 			workspaceRoot?: string;
+			paInstallRoot?: string;
 			attachedContextFiles?: Array<{ path: string; content: string }>;
 			memberContext: Array<string | undefined>;
 			turnContext: Array<string | undefined>;
@@ -74,6 +76,7 @@ export function prepareTeamExtension({
 			return {
 				...bridgeEnv,
 				PA_TARGET_WORKSPACE_ROOT: workspaceRoot ?? "__none__",
+				...(paInstallRoot ? { PA_INSTALL_ROOT: paInstallRoot } : {}),
 				...(attachedContextFiles && attachedContextFiles.length > 0
 					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
 					: {}),

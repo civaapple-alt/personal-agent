@@ -1,7 +1,7 @@
 // Exercise the selected entry points with disposable databases and no model requests.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { cp, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { execFileSync, spawn } from "node:child_process";
+import { cp, lstat, mkdir, mkdtemp, rm, stat, symlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,6 +13,26 @@ const entries = {
 const [mode, ...extra] = process.argv.slice(2);
 assert.ok(extra.length === 0 && (mode === undefined || Object.hasOwn(entries, mode)), "Use --source or --prebuilt");
 const selectedEntries = mode ? entries[mode] : Object.values(entries).flat();
+
+// Verify bundled PA documentation and runnable examples exist in both source checkouts and prebuilt archives.
+for (const asset of [
+	"AGENTS.md",
+	"docs/README.md",
+	"examples/README.md",
+	"examples/extensions/hello-card/package.json",
+	"examples/skills/repo-preflight/SKILL.md",
+	"examples/skills/repo-preflight/scripts/preflight.mjs",
+	"examples/roles/security-reviewer.md",
+	"pa-extensions/self-inspect/skills/pa-self-inspection/SKILL.md",
+]) {
+	assert.ok((await stat(resolve(asset))).isFile(), `Missing bundled documentation/example asset: ${asset}`);
+}
+const preflightOut = execFileSync(
+	process.execPath,
+	[resolve("examples/skills/repo-preflight/scripts/preflight.mjs"), process.cwd()],
+	{ encoding: "utf8" },
+);
+assert.equal(JSON.parse(preflightOut).packageName, "personal-agent");
 
 const directory = await mkdtemp(join(tmpdir(), "personal-agent-startup-"));
 try {

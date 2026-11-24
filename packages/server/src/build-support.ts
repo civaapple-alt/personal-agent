@@ -22,6 +22,10 @@ export type BuiltinExtensionKind = keyof typeof builtinExtensionPaths;
  * (`apps/cli`, future desktop shells, release packagers, startup checks) must ship alongside the host.
  */
 export const PA_RUNTIME_ASSET_MANIFEST = {
+	readmePath: "README.md",
+	agentsNavPath: "AGENTS.md",
+	docsDir: "docs",
+	examplesDir: "examples",
 	rolesDir: "roles",
 	webDistDir: "apps/web/dist",
 	legacyWebDistDir: "web/dist",
@@ -54,4 +58,23 @@ export function resolveRepoAssetPath(relativePath: string, fromUrl: string = imp
 /** Resolve a built-in Pi extension entry in the current source or packaged installation. */
 export function resolveBuiltinExtensionPath(kind: BuiltinExtensionKind): string {
 	return resolveRepoAssetPath(builtinExtensionPaths[kind], import.meta.url);
+}
+
+/**
+ * Resolve Personal Agent's bundled documentation and runnable examples root.
+ * Works identically for both `git clone` checkouts (`apps/cli/src/main.ts`) and extracted
+ * prebuilt release archives (`apps/cli/dist/main.js`).
+ */
+export function resolvePaDocumentationPaths(fromUrl: string = import.meta.url) {
+	const installRoot = resolveRepoRoot(fromUrl);
+	return {
+		installRoot,
+		readmePath: resolve(installRoot, PA_RUNTIME_ASSET_MANIFEST.readmePath),
+		agentsPath: resolve(installRoot, PA_RUNTIME_ASSET_MANIFEST.agentsNavPath),
+		docsDir: resolve(installRoot, PA_RUNTIME_ASSET_MANIFEST.docsDir),
+		examplesDir: resolve(installRoot, PA_RUNTIME_ASSET_MANIFEST.examplesDir),
+		paExtensionsDir: resolve(installRoot, "pa-extensions"),
+		piExtensionsDir: resolve(installRoot, "pi-extensions"),
+		rolesDir: resolve(installRoot, PA_RUNTIME_ASSET_MANIFEST.rolesDir),
+	};
 }

@@ -1,0 +1,15 @@
+{
+	"name": "pa-example-hello-card",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./server": "./server/index.ts",
+		"./web": "./web/index.ts"
+	},
+	"pa": {
+		"apiVersion": "1.0",
+		"server": "./server/index.ts",
+		"web": "./web/index.ts"
+	}
+}

@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
 import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
 import workerRuntimeExtension, {
+	buildPaDocumentationSection,
 	filterContextFilesForTargetWorkspace,
 	type WorkerRuntimeExtensionApi,
 } from "../pa-extensions/worker-runtime/pi/index.ts";
+import { resolvePaDocumentationPaths } from "../packages/server/src/extensions/builtin-paths.ts";
 import { resolveEffectiveWebSearchProvider } from "../packages/server/src/extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
 
@@ -336,4 +339,52 @@ test("teamExtension isolates before_agent_start contextFiles to the target works
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("worker-runtime injects Pi-style <pa_docs> pointer when PA_INSTALL_ROOT is set and omits it when unset", () => {
+	const paths = resolvePaDocumentationPaths();
+	assert.ok(existsSync(paths.agentsPath));
+	assert.ok(existsSync(paths.docsDir));
+	assert.ok(existsSync(paths.examplesDir));
+
+	const section = buildPaDocumentationSection(paths.installRoot);
+	assert.match(section, /<pa_docs>/);
+	assert.match(section, /<docs>/);
+	assert.ok(section.includes(`${paths.installRoot.replaceAll("\\", "/")}/AGENTS.md`));
+	assert.ok(section.includes(`${paths.installRoot.replaceAll("\\", "/")}/examples`));
+
+	const runHook = (installRoot?: string) => {
+		const prev = process.env.PA_INSTALL_ROOT;
+		if (installRoot === undefined) delete process.env.PA_INSTALL_ROOT;
+		else process.env.PA_INSTALL_ROOT = installRoot;
+		let handler:
+			| ((event: { systemPrompt: string; systemPromptOptions?: { appendSystemPrompt?: string } }) => unknown)
+			| undefined;
+		try {
+			workerRuntimeExtension({
+				on: (event, fn) => {
+					if (event === "before_agent_start") handler = fn as typeof handler;
+				},
+				getActiveTools: () => ["read"],
+				getAllTools: () => [{ name: "read" }],
+				setActiveTools: () => {},
+			});
+		} finally {
+			if (prev === undefined) delete process.env.PA_INSTALL_ROOT;
+			else process.env.PA_INSTALL_ROOT = prev;
+		}
+		const opts: { appendSystemPrompt?: string } = {};
+		handler?.({ systemPrompt: "", systemPromptOptions: opts });
+		return opts.appendSystemPrompt ?? "";
+	};
+
+	assert.match(runHook(paths.installRoot), /<pa_docs>/);
+	assert.doesNotMatch(runHook(undefined), /<pa_docs>/);
+
+	const preflightOut = execFileSync(
+		process.execPath,
+		[resolve("examples/skills/repo-preflight/scripts/preflight.mjs"), paths.installRoot],
+		{ encoding: "utf8" },
+	);
+	assert.equal(JSON.parse(preflightOut).packageName, "personal-agent");
 });

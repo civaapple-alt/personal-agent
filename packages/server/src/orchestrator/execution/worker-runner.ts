@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
 import { classifyGithubFetches } from "../../../../../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
-import { resolveBuiltinExtensionPath, resolveRepoAssetPath } from "../../extensions/builtin-paths.ts";
+import { resolveBuiltinExtensionPath, resolveRepoAssetPath, resolveRepoRoot } from "../../extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
@@ -650,6 +650,7 @@ export async function executeWithWorkerPass(
 					bridgeEnv: bridge.env,
 					requiredTools,
 					workspaceRoot: input.workspace ? cwd : undefined,
+					paInstallRoot: input.run.inheritLocalPiResources ? resolveRepoRoot() : undefined,
 					attachedContextFiles,
 					memberContext: [systemPrompt, WORKBENCH_HELP_PROMPT, architectContext?.systemPrompt],
 					turnContext: [turnContext, attachedFoldersPrompt, architectContext?.turnContext],

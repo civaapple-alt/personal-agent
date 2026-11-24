@@ -83,6 +83,26 @@ export function filterContextFilesForTargetWorkspace<T extends { path: string }>
 	});
 }
 
+/**
+ * Build a concise Pi-style `<pa_docs>` routing block pointing to the installed Personal Agent
+ * documentation and runnable examples (works identically for `git clone` and extracted prebuilt archives).
+ */
+export function buildPaDocumentationSection(installRoot: string): string {
+	const root = resolve(installRoot).replaceAll("\\", "/");
+	return [
+		"<pa_docs>",
+		"Personal Agent (PA) & Pi dual documentation (read on demand via `read` only when asked about PA or Pi itself, architecture, extensions, roles, spaces, skills, MCP, or troubleshooting):",
+		"- Pi harness docs: follow the `<docs>` section above (installed Pi README, docs/, examples/) for Pi extensions, skills, MCP, RPC, models, sessions, and SDK.",
+		`- PA installation root: ${root}`,
+		`- PA main navigation: ${root}/AGENTS.md and ${root}/docs/README.md`,
+		`- PA docs: ${root}/docs (resolve docs/... under PA docs, not the business workspace cwd)`,
+		`- PA runnable examples: ${root}/examples (dual-half external extension, Skill + script, custom role template)`,
+		"- When asked about PA: architecture & boundaries (docs/concepts/architecture-and-plan.md), collaboration & sessions (docs/reference/runtime-collaboration.md), Git spaces (docs/concepts/space-design.md), configuration & env (docs/reference/configuration.md), roles & capabilities (docs/reference/role-design.md, roles/README.md), PA host extensions (pa-extensions/README.md), portable Pi extensions (pi-extensions/README.md), self-inspection & session insights (pa-extensions/self-inspect/skills/pa-self-inspection/SKILL.md).",
+		"- For live state of THIS matter (active tools, team capabilities, pending decisions, saved space docs), call `read_pa_help` live topics. Before explaining or modifying PA or Pi internals, read the relevant docs and examples in full, following cross-references.",
+		"</pa_docs>",
+	].join("\n");
+}
+
 export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): void {
 	const env = { ...process.env };
 	const post = createTeamBridgeClient(env);
@@ -205,8 +225,12 @@ export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): v
 				// Ignore malformed attached context files payload.
 			}
 		}
+		const paDocsSection = env.PA_INSTALL_ROOT?.trim()
+			? buildPaDocumentationSection(env.PA_INSTALL_ROOT.trim())
+			: undefined;
 		const context = [
 			env.PA_MEMBER_CONTEXT,
+			paDocsSection,
 			`Active tools: ${pi.getActiveTools().join(", ")}. Use only active tools. Claim execution only when a tool actually ran.`,
 		]
 			.filter(Boolean)
