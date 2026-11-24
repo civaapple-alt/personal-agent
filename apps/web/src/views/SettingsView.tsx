@@ -8,6 +8,7 @@ import type {
 	RuntimeOverviewDto,
 } from "../api.ts";
 import { SessionInsightsPanel } from "../components/SessionInsightsPanel.tsx";
+import { SkillsTrustPanel } from "../components/SkillsTrustPanel.tsx";
 import { SystemOneSettings } from "../components/SystemOneSettings.tsx";
 import { WebAccessSettings } from "../components/WebAccessSettings.tsx";
 import type { SettingsSection } from "../hashRouter.ts";
@@ -39,6 +40,7 @@ const CATEGORY_TABS: Array<{ id: SettingsSection; label: string }> = [
 	{ id: "base", label: "Agent 底座" },
 	{ id: "extensions", label: "扩展插件" },
 	{ id: "config", label: "运行配置" },
+	{ id: "skills", label: "技能与信任" },
 	{ id: "insights", label: "运行洞察" },
 ];
 
@@ -104,6 +106,7 @@ export function SettingsView({
 	const showBase = activeSection === "all" || activeSection === "base";
 	const showExtensions = activeSection === "all" || activeSection === "extensions";
 	const showConfig = activeSection === "all" || activeSection === "config";
+	const showSkills = activeSection === "skills";
 	const showInsights = activeSection === "insights";
 
 	return (
@@ -442,8 +445,11 @@ export function SettingsView({
 								</div>
 							</section>
 						)}
+						{showSkills && <SkillsTrustPanel onNotice={onNotice} onError={onError} />}
 						{showInsights && <SessionInsightsPanel />}
 					</div>
+				) : showSkills ? (
+					<SkillsTrustPanel onNotice={onNotice} onError={onError} />
 				) : showInsights ? (
 					<SessionInsightsPanel />
 				) : null}

@@ -1,6 +1,11 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { createTeamBridgeClient } from "./bridge-client.ts";
+import {
+	buildCompactionCarryover,
+	type CompactBranchEntry,
+	PA_COMPACTION_CARRYOVER_CUSTOM_TYPE,
+} from "./compaction-carryover.ts";
 import { classifyGithubFetches, temporaryClonePaths } from "./web-fetch-evidence.js";
 
 interface BeforeAgentStartResult {
@@ -48,6 +53,22 @@ export interface WorkerRuntimeExtensionApi {
 				};
 			},
 		) => BeforeAgentStartResult | undefined,
+	): void;
+	on(
+		event: "session_compact",
+		handler: (
+			event: { compactionEntry?: { firstKeptEntryId?: string } },
+			ctx?: {
+				cwd?: string;
+				sessionManager?: {
+					getBranch?(): readonly CompactBranchEntry[];
+				};
+			},
+		) => void,
+	): void;
+	sendMessage?(
+		message: { customType: string; content: string; display: boolean },
+		options?: { triggerTurn?: boolean },
 	): void;
 	getActiveTools(): string[];
 	getAllTools(): { name: string }[];
@@ -263,5 +284,20 @@ export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): v
 			systemPrompt: `${event.systemPrompt}\n\n${context}`,
 			...(message ? { message } : {}),
 		};
+	});
+
+	pi.on("session_compact", (event, ctx) => {
+		if (typeof pi.sendMessage !== "function") return;
+		const branchEntries = ctx?.sessionManager?.getBranch?.();
+		if (!Array.isArray(branchEntries) || branchEntries.length === 0) return;
+		const carryover = buildCompactionCarryover(branchEntries, {
+			cwd: ctx?.cwd ?? process.cwd(),
+			firstKeptEntryId: event.compactionEntry?.firstKeptEntryId,
+		});
+		if (!carryover) return;
+		pi.sendMessage(
+			{ customType: PA_COMPACTION_CARRYOVER_CUSTOM_TYPE, content: carryover, display: false },
+			{ triggerTurn: false },
+		);
 	});
 }

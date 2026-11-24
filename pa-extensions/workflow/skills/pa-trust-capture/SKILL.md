@@ -25,6 +25,7 @@ Pick the narrowest accurate scope:
 - Keep `body` concrete: entry criteria, ordered steps, verification checks, and explicit failure boundaries.
 - Attach `scripts` only when deterministic code beats prose; mark runnable scripts with `executable: true` and include a shebang (e.g. `#!/usr/bin/env node` or `#!/usr/bin/env bash`).
 
-## 4. Human Confirmation Boundary
-- `propose_skill` **never** writes directly to disk during execution.
-- It stages a confirmation card in the reply so the user can inspect `SKILL.md`, review scripts, adjust scope, and explicitly approve writing to disk. Once approved, Pi natively discovers the saved Skill on subsequent turns.
+## 4. Human Confirmation & Graduated Trust (Steps 2 → 3 → 4)
+- **Step 2 (`propose_skill`)**: never writes directly to disk during execution. It stages a confirmation card so the user can inspect `SKILL.md`, review `scripts/*`, adjust scope, and explicitly approve writing to disk. Once approved, Pi natively discovers the saved Skill on subsequent turns.
+- **Step 3 (Graduated confirmation / `confirm`)**: newly approved Skills with `scripts/*` default to `confirm` policy. When a role runs a managed Skill script via `bash`, PA's Pi `tool_call` gate pauses and asks the user via a confirmation dialog to allow once, deny, or promote to autonomous.
+- **Step 4 (Autonomous execution / `autonomous`)**: once the user promotes the Skill (either from the confirmation dialog or in **Settings → 技能与信任**), roles can execute its vetted scripts autonomously within its scope, with run count and last outcome tracked and one-click downgrade/disable always available.

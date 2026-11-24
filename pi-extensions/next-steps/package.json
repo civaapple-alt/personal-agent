@@ -1,0 +1,11 @@
+{
+  "name": "pa-next-steps",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Portable Pi extension that lets an agent suggest 2-4 concrete one-click next steps at the end of a turn (adapted in spirit from @thinkrail/pi-next-steps, Apache-2.0).",
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

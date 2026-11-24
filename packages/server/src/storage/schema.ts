@@ -311,4 +311,19 @@ CREATE INDEX idx_worker_workspace ON worker_sessions(workspace_id);
 CREATE INDEX idx_workspace_folders_ws ON workspace_folders(workspace_id, sort_order, created_at);
 
 CREATE INDEX idx_workspace_links_org ON workspace_links(org_id);
+
+CREATE TABLE skill_trust_policies (
+	storage_scope TEXT NOT NULL CHECK (storage_scope IN ('global', 'org', 'personal', 'workspace')),
+	scope_id TEXT NOT NULL DEFAULT '',
+	skill_name TEXT NOT NULL,
+	trust_level TEXT NOT NULL DEFAULT 'confirm' CHECK (trust_level IN ('confirm', 'autonomous', 'disabled')),
+	run_count INTEGER NOT NULL DEFAULT 0,
+	last_run_at TEXT,
+	last_outcome TEXT,
+	updated_by_user_id TEXT,
+	updated_at TEXT NOT NULL,
+	PRIMARY KEY (storage_scope, scope_id, skill_name)
+);
+
+CREATE INDEX idx_skill_trust_policies_scope ON skill_trust_policies(storage_scope, scope_id);
 `;

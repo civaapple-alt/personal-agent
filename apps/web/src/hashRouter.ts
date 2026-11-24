@@ -7,7 +7,7 @@ export type NavTab =
 	| "settings"
 	| "admin"
 	| "account";
-export type SettingsSection = "all" | "base" | "extensions" | "config" | "insights";
+export type SettingsSection = "all" | "base" | "extensions" | "config" | "skills" | "insights";
 
 export interface HashRoute {
 	tab: NavTab;
@@ -17,7 +17,7 @@ export interface HashRoute {
 	settingsSection?: SettingsSection;
 }
 
-const VALID_SETTINGS_SECTIONS = new Set<SettingsSection>(["base", "extensions", "config", "insights"]);
+const VALID_SETTINGS_SECTIONS = new Set<SettingsSection>(["base", "extensions", "config", "skills", "insights"]);
 
 export function parseHashRoute(rawHash: string): HashRoute {
 	const cleaned = rawHash.replace(/^#\/?/, "").trim();

@@ -10,8 +10,9 @@
 | [role-skills](role-skills/README.md) | 标准 Pi Package（`pa-role-skills`），封装内置岗位方法论 Skills，终端 Pi 也可直接 `pi install` | PA 启动岗位时原生挂载 |
 | [human-question](human-question/README.md) | 请求人工答复或向直接委托者提请澄清 | PA 按运行模式显式加载。终端 Pi 也可以单独加载 |
 | [visualize](visualize/README.md) | 注册 `visualize` 工具，输出 Mermaid 图表、方案对比卡片与文件预览（改编自 `@thinkrail/pi-visualize`） | PA 启动非架构师岗位时显式加载。终端 Pi 也可以单独加载 |
+| [next-steps](next-steps/README.md) | 注册 `suggest_next_steps` 工具，在回复结束时建议 2–4 个一键可点下一步（改编自 `@thinkrail/pi-next-steps`） | PA 启动主责岗位时显式加载。终端 Pi 也可以单独加载 |
 
-> PA 宿主专有的环回桥扩展（`worker-runtime`、`workbench-help`、`space`、`delegation`、`skill-capture`）依赖 PA Server 运行时，统一收归 [pa-extensions/](../pa-extensions/README.md)，不再混入本目录。
+> PA 宿主专有的环回桥扩展（`worker-runtime`、`space`、`delegation`、`skill-capture`）依赖 PA Server 运行时，统一收归 [pa-extensions/](../pa-extensions/README.md)，不再混入本目录。
 
 [pi-web-access](../docs/guides/web-search.md) 由 Pi 从 npm 安装。[PA 扩展集成](../packages/server/src/extensions/README.md#web-access) 按岗位装配包入口，团队扩展通过现有握手核查搜索与结果读取工具。
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { NEXT_STEPS_TOOL_NAME, normalizeNextSteps } from "@pa/contracts/next-steps";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
@@ -498,6 +499,16 @@ export async function dispatchMatterTurn(
 				rawReply ||
 				(decision ? "等待你在卡片里提交决定。" : "本轮未返回正文，请继续追问；执行记录保留在协作过程中。");
 		const savedDocuments = !aborted && !isDiscussionTurn ? run.effects.savedDocuments : [];
+		const latestNextStepsTool =
+			!aborted && !decision
+				? result.toolExecutions.findLast((tool) => tool.toolName === NEXT_STEPS_TOOL_NAME && !tool.isError)
+				: undefined;
+		const nextSteps = latestNextStepsTool
+			? normalizeNextSteps(
+					(latestNextStepsTool.result as { details?: { suggestions?: unknown } } | undefined)?.details
+						?.suggestions ?? (latestNextStepsTool.args as { suggestions?: unknown } | undefined)?.suggestions,
+				)
+			: [];
 		const leadMessage = deps.store.appendMessage({
 			matterId: matter.id,
 			channel: "user",
@@ -521,6 +532,7 @@ export async function dispatchMatterTurn(
 				...(!aborted && run.effects.skillProposals.length > 0
 					? { skillProposals: run.effects.skillProposals }
 					: {}),
+				...(nextSteps.length > 0 ? { nextSteps } : {}),
 				...(decision ? { humanDecision: decision } : {}),
 				...(aborted || run.recentLogs.length > 0 || run.lastProgress
 					? {

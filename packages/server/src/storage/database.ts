@@ -41,6 +41,19 @@ export function openPersonalAgentDatabase(dbPath = ":memory:"): DatabaseSync {
 					);
 					CREATE INDEX IF NOT EXISTS idx_user_access_tokens_user ON user_access_tokens(user_id, created_at DESC);
 					CREATE INDEX IF NOT EXISTS idx_user_access_tokens_hash ON user_access_tokens(token_hash);
+					CREATE TABLE IF NOT EXISTS skill_trust_policies (
+						storage_scope TEXT NOT NULL CHECK (storage_scope IN ('global', 'org', 'personal', 'workspace')),
+						scope_id TEXT NOT NULL DEFAULT '',
+						skill_name TEXT NOT NULL,
+						trust_level TEXT NOT NULL DEFAULT 'confirm' CHECK (trust_level IN ('confirm', 'autonomous', 'disabled')),
+						run_count INTEGER NOT NULL DEFAULT 0,
+						last_run_at TEXT,
+						last_outcome TEXT,
+						updated_by_user_id TEXT,
+						updated_at TEXT NOT NULL,
+						PRIMARY KEY (storage_scope, scope_id, skill_name)
+					);
+					CREATE INDEX IF NOT EXISTS idx_skill_trust_policies_scope ON skill_trust_policies(storage_scope, scope_id);
 				`);
 			}
 			db.exec("COMMIT");

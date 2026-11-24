@@ -64,9 +64,9 @@ SOFTWARE.
 
 The prebuilt server bundles the MIT-licensed `@typesafe-ai/sdk` from the version pinned in [package-lock.json](package-lock.json). Its license accompanies the compiled module as `apps/cli/dist/typesafe-sdk-LICENSE.txt`.
 
-## ThinkRail `@thinkrail/pi-visualize` and `@thinkrail/pi-session-insights`
+## ThinkRail `@thinkrail/pi-visualize`, `@thinkrail/pi-next-steps`, `@thinkrail/pi-session-insights`, and `skillCarryover`
 
-The `visualize` tool schema, validation rules, and card presentation in [pi-extensions/visualize](pi-extensions/visualize/README.md) and [pa-extensions/visualize](pa-extensions/README.md), as well as the deterministic local session-insights rules and privacy-redaction design in [packages/server/src/orchestrator/runtime/session-insights.ts](packages/server/src/orchestrator/runtime/session-insights.ts) and [pa-extensions/self-inspect](pa-extensions/README.md), are adapted from JetBrains ThinkRail (`https://github.com/JetBrains/thinkrail`), licensed under the Apache License, Version 2.0.
+The `visualize` tool schema, validation rules, and card presentation in [pi-extensions/visualize](pi-extensions/visualize/README.md) and [pa-extensions/visualize](pa-extensions/README.md), the `suggest_next_steps` portable extension and Web chip flow in [pi-extensions/next-steps](pi-extensions/next-steps/README.md) and [pa-extensions/next-steps](pa-extensions/README.md), the post-compaction Skill carryover design in [pa-extensions/worker-runtime/pi/compaction-carryover.ts](pa-extensions/worker-runtime/pi/compaction-carryover.ts), as well as the deterministic local session-insights rules and privacy-redaction design in [packages/server/src/orchestrator/runtime/session-insights.ts](packages/server/src/orchestrator/runtime/session-insights.ts) and [pa-extensions/self-inspect](pa-extensions/README.md), are adapted from JetBrains ThinkRail (`https://github.com/JetBrains/thinkrail`), licensed under the Apache License, Version 2.0.
 
 ## Reference images and external products
 

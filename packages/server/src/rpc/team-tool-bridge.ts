@@ -8,6 +8,12 @@ import {
 	type SkillScriptFile,
 	type SkillStorageTarget,
 } from "@pa/contracts/skill-proposal";
+import {
+	isValidSkillTrustLevel,
+	isValidSkillTrustScope,
+	type SkillTrustLevel,
+	type SkillTrustScope,
+} from "@pa/contracts/skill-trust";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
@@ -42,6 +48,22 @@ export type TeamToolCall =
 			storageScope: SkillStorageTarget;
 			rationale: string;
 			scripts?: SkillScriptFile[];
+	  }
+	| {
+			tool: "record_skill_run";
+			callId: string;
+			scope: SkillTrustScope;
+			scopeId: string;
+			skillName: string;
+			outcome: string;
+	  }
+	| {
+			tool: "promote_skill_trust";
+			callId: string;
+			scope: SkillTrustScope;
+			scopeId: string;
+			skillName: string;
+			trustLevel: SkillTrustLevel;
 	  };
 
 function requiredString(value: unknown, name: string, max = 64_000): string {
@@ -246,6 +268,37 @@ function parseCall(value: unknown): TeamToolCall {
 			storageScope: args.storageScope,
 			rationale: requiredString(args.rationale, "rationale", 1500),
 			...(scripts && scripts.length > 0 ? { scripts } : {}),
+		};
+	}
+	if (value.tool === "record_skill_run" && "scope" in args && "skillName" in args && "outcome" in args) {
+		if (!isValidSkillTrustScope(args.scope)) throw new Error("Invalid skill trust scope");
+		const skillName = requiredString(args.skillName, "skillName", 80);
+		if (!SKILL_PROPOSAL_NAME_RE.test(skillName)) throw new Error("Invalid skillName");
+		const rawScopeId = "scopeId" in args ? args.scopeId : "";
+		const scopeId = typeof rawScopeId === "string" ? rawScopeId.trim().slice(0, 120) : "";
+		return {
+			tool: value.tool,
+			callId,
+			scope: args.scope,
+			scopeId,
+			skillName,
+			outcome: requiredString(args.outcome, "outcome", 120),
+		};
+	}
+	if (value.tool === "promote_skill_trust" && "scope" in args && "skillName" in args && "trustLevel" in args) {
+		if (!isValidSkillTrustScope(args.scope)) throw new Error("Invalid skill trust scope");
+		if (!isValidSkillTrustLevel(args.trustLevel)) throw new Error("Invalid skill trustLevel");
+		const skillName = requiredString(args.skillName, "skillName", 80);
+		if (!SKILL_PROPOSAL_NAME_RE.test(skillName)) throw new Error("Invalid skillName");
+		const rawScopeId = "scopeId" in args ? args.scopeId : "";
+		const scopeId = typeof rawScopeId === "string" ? rawScopeId.trim().slice(0, 120) : "";
+		return {
+			tool: value.tool,
+			callId,
+			scope: args.scope,
+			scopeId,
+			skillName,
+			trustLevel: args.trustLevel,
 		};
 	}
 	throw new Error("Unsupported tool or invalid arguments");

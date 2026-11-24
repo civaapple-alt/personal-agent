@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Add Pi-native post-compaction continuity (`pa-extensions/worker-runtime/pi/compaction-carryover.ts` wired to `session_compact`, adapted in spirit from ThinkRail's `skillCarryover.ts` under Apache-2.0) to restore adopted `SKILL.md` bodies within a bounded budget and preserve Space document & delegation anchors across long persistent role sessions.
+- Add portable `pi-extensions/next-steps` and dual-half `pa-extensions/next-steps` (`@pa/contracts/next-steps`, adapted in spirit from `@thinkrail/pi-next-steps` under Apache-2.0) registering `suggest_next_steps` on lead workers and rendering one-click next-step chips above `ComposerDock` (Click to send, Shift+Click to edit).
+- Complete Steps 3 & 4 of the Four-Step Trust progression: add `skill_trust_policies` SQLite table (`@pa/contracts/skill-trust`, `SkillTrustRepo`), Pi-native `tool_call` script execution gate in `pa-extensions/skill-capture/pi/` (`confirm` via native `ctx.ui.select` / `DialogBroker` with one-click promotion to `autonomous`, `disabled` blocking, and run telemetry), ACL-enforced `GET/PATCH /api/skills/trust`, and Web **Settings → 技能与信任** (`SkillsTrustPanel.tsx`).
+- Enhance `pa-extensions/delegation/web` and `pa-extensions/space/web` tool summaries to clearly display `[独立验收]`, target colleagues, and Space document types/titles in execution records.
+
 ## [0.8.0] - 2026-11-24
 
 See the [0.8.0 release guide](docs/releases/v0.8.0.md) for downloads and upgrade instructions.

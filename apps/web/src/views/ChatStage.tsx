@@ -1,4 +1,5 @@
 import { isCurrentHumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
+import { readNextStepsFromMetadata } from "@pa/contracts/next-steps";
 import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
 import type { ReactNode } from "react";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -653,6 +654,42 @@ export function ChatStage({
 								onAnswered={() => void onRefresh()}
 							/>
 						)}
+
+						{!activeFloatingClarification &&
+							!isTurnRunning &&
+							matterDetail &&
+							(() => {
+								const latestMsg = matterDetail.userMessages[matterDetail.userMessages.length - 1];
+								const suggestions =
+									latestMsg?.senderType === "member" ? readNextStepsFromMetadata(latestMsg.metadata) : [];
+								if (suggestions.length === 0) return null;
+								return (
+									<section className="next-steps-bar" aria-label="建议的下一步">
+										<span className="next-steps-label">下一步</span>
+										<div className="next-steps-chips">
+											{suggestions.map((item) => (
+												<button
+													key={item.prompt}
+													type="button"
+													className={`next-step-chip${item.kind ? ` is-${item.kind}` : ""}`}
+													title={`${item.prompt}\n（点击直接发送，Shift+点击填入输入框编辑）`}
+													disabled={submitting}
+													onClick={(ev) => {
+														if (ev.shiftKey || !onSendQuickPrompt) {
+															dockDraft.onComposerTextChange(item.prompt);
+															dockDraft.composerRef.current?.focus();
+															return;
+														}
+														void onSendQuickPrompt(item.prompt);
+													}}
+												>
+													{item.label}
+												</button>
+											))}
+										</div>
+									</section>
+								);
+							})()}
 
 						<ComposerDock
 							{...dockDraft}

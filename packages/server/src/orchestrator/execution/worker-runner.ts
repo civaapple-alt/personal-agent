@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
+import { skillTrustPolicyKey } from "@pa/contracts/skill-trust";
 import { classifyGithubFetches } from "../../../../../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
 import { resolveBuiltinExtensionPath, resolveRepoAssetPath, resolveRepoRoot } from "../../extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
@@ -538,6 +539,44 @@ export async function executeWithWorkerPass(
 						note: "已暂存技能提案，本轮回复中将展示确认卡，经用户确认后写入磁盘。",
 					};
 				}
+				if (call.tool === "record_skill_run") {
+					const allowedScopeMatch =
+						(call.scope === "global" && call.scopeId === "") ||
+						(call.scope === "org" && Boolean(activeOrgId) && call.scopeId === activeOrgId) ||
+						(call.scope === "personal" && Boolean(actorUserId) && call.scopeId === actorUserId) ||
+						(call.scope === "workspace" && Boolean(input.workspace?.id) && call.scopeId === input.workspace?.id);
+					if (!allowedScopeMatch) throw new Error("Skill trust scope does not match active worker context");
+					const record = deps.store.skillTrust.recordExecution({
+						scope: call.scope,
+						scopeId: call.scopeId,
+						skillName: call.skillName,
+						outcome: call.outcome,
+					});
+					return { ok: true, runCount: record.runCount, trustLevel: record.trustLevel };
+				}
+				if (call.tool === "promote_skill_trust") {
+					const allowedScopeMatch =
+						(call.scope === "global" && call.scopeId === "") ||
+						(call.scope === "org" && Boolean(activeOrgId) && call.scopeId === activeOrgId) ||
+						(call.scope === "personal" && Boolean(actorUserId) && call.scopeId === actorUserId) ||
+						(call.scope === "workspace" && Boolean(input.workspace?.id) && call.scopeId === input.workspace?.id);
+					if (!allowedScopeMatch) throw new Error("Skill trust scope does not match active worker context");
+					const updated = deps.store.skillTrust.upsertPolicy({
+						scope: call.scope,
+						scopeId: call.scopeId,
+						skillName: call.skillName,
+						trustLevel: call.trustLevel,
+						updatedByUserId: actorUserId,
+					});
+					deps.store.skillTrust.recordExecution({
+						scope: call.scope,
+						scopeId: call.scopeId,
+						skillName: call.skillName,
+						outcome: `promoted_${call.trustLevel}`,
+						defaultTrustLevel: call.trustLevel,
+					});
+					return { ok: true, policy: updated };
+				}
 			} finally {
 				releaseIdle?.();
 				resumeMonitor?.();
@@ -552,6 +591,7 @@ export async function executeWithWorkerPass(
 		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
 		args.push("--extension", resolveBuiltinExtensionPath("role-skills"));
 		if (!isArchitect) args.push("--extension", resolveBuiltinExtensionPath("visualize"));
+		if (!isArchitect && sessionMode === "lead") args.push("--extension", resolveBuiltinExtensionPath("next-steps"));
 		if (humanQuestion.entry) args.push("--extension", humanQuestion.entry);
 		for (const extension of deps.extensions) args.push("--extension", extension);
 		if (webAccess) args.push("--extension", webAccess.entry);
@@ -640,6 +680,39 @@ export async function executeWithWorkerPass(
 						),
 					].join("\n")
 				: undefined;
+		const managedSkillRoots: Array<{
+			root: string;
+			scope: "global" | "org" | "personal" | "workspace";
+			scopeId: string;
+		}> = [];
+		if (deps.skillsDir) {
+			managedSkillRoots.push({ root: resolve(deps.skillsDir, "global"), scope: "global", scopeId: "" });
+			if (activeOrgId) {
+				managedSkillRoots.push({
+					root: resolve(deps.skillsDir, "orgs", activeOrgId),
+					scope: "org",
+					scopeId: activeOrgId,
+				});
+			}
+			if (actorUserId) {
+				managedSkillRoots.push({
+					root: resolve(deps.skillsDir, "users", actorUserId),
+					scope: "personal",
+					scopeId: actorUserId,
+				});
+			}
+		}
+		if (input.workspace?.repoPath) {
+			managedSkillRoots.push({
+				root: resolve(input.workspace.repoPath, ".agents/skills"),
+				scope: "workspace",
+				scopeId: input.workspace.id,
+			});
+		}
+		const trustPolicyMap: Record<string, string> = {};
+		for (const policy of deps.store.skillTrust.listPolicies()) {
+			trustPolicyMap[skillTrustPolicyKey(policy.scope, policy.scopeId, policy.skillName)] = policy.trustLevel;
+		}
 		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
@@ -650,6 +723,10 @@ export async function executeWithWorkerPass(
 			noSession: deps.noSession,
 			args,
 			env: {
+				...(managedSkillRoots.length > 0 ? { PA_MANAGED_SKILL_ROOTS: JSON.stringify(managedSkillRoots) } : {}),
+				...(Object.keys(trustPolicyMap).length > 0
+					? { PA_SKILL_TRUST_POLICIES: JSON.stringify(trustPolicyMap) }
+					: {}),
 				...teamExtension.buildEnvironment({
 					bridgeEnv: bridge.env,
 					requiredTools,

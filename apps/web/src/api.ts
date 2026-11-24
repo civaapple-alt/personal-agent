@@ -6,4 +6,5 @@ export * from "./api/deliverables.ts";
 export * from "./api/matters.ts";
 export * from "./api/organizations.ts";
 export * from "./api/runtime.ts";
+export * from "./api/skillTrust.ts";
 export * from "./api/team.ts";

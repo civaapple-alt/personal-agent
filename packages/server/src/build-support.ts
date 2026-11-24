@@ -12,6 +12,7 @@ export const builtinExtensionPaths = {
 	"human-question": "pi-extensions/human-question/index.ts",
 	"role-skills": "pi-extensions/role-skills",
 	visualize: "pi-extensions/visualize/index.ts",
+	"next-steps": "pi-extensions/next-steps/index.ts",
 } as const;
 
 export type BuiltinExtensionKind = keyof typeof builtinExtensionPaths;

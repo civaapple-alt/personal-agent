@@ -1,5 +1,6 @@
 import delegation from "@pa/ext-delegation/web";
 import humanQuestion from "@pa/ext-human-question/web";
+import nextSteps from "@pa/ext-next-steps/web";
 import selfInspect from "@pa/ext-self-inspect/web";
 import skillCapture from "@pa/ext-skill-capture/web";
 import skillCatalog from "@pa/ext-skill-catalog/web";
@@ -19,6 +20,7 @@ export const builtinWebExtensions: readonly PaWebExtension[] = [
 	humanQuestion,
 	skillCatalog,
 	visualize,
+	nextSteps,
 	webAccess,
 	workflow,
 	selfInspect,

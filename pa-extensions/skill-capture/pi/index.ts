@@ -1,8 +1,31 @@
 import { createTeamBridgeClient, type PiHostToolExtensionApi } from "../../worker-runtime/pi/bridge-client.ts";
+import { matchManagedSkillScriptCall, parseManagedSkillRoots, parseSkillTrustPolicies } from "./skill-trust-gate.ts";
 
-export default function skillCaptureExtension(pi: PiHostToolExtensionApi): void {
+const CHOICE_ALLOW_ONCE = "仅本次允许执行";
+const CHOICE_TRUST_AUTONOMOUS = "信任此 Skill，后续自主执行";
+const CHOICE_DENY = "拒绝执行";
+
+interface SkillCaptureExtensionApi extends PiHostToolExtensionApi {
+	on?(
+		event: "tool_call",
+		handler: (
+			event: { toolName: string; toolCallId?: string; input: Record<string, unknown> },
+			ctx?: {
+				cwd?: string;
+				hasUI?: boolean;
+				ui?: {
+					select?(title: string, options: string[]): Promise<string | undefined>;
+				};
+			},
+		) => Promise<{ block: true; reason: string } | undefined> | { block: true; reason: string } | undefined,
+	): void;
+}
+
+export default function skillCaptureExtension(pi: SkillCaptureExtensionApi): void {
 	const env = { ...process.env };
 	const post = createTeamBridgeClient(env);
+	const managedRoots = parseManagedSkillRoots(env.PA_MANAGED_SKILL_ROOTS);
+	const policies = parseSkillTrustPolicies(env.PA_SKILL_TRUST_POLICIES);
 
 	pi.registerTool({
 		name: "propose_skill",
@@ -56,4 +79,75 @@ export default function skillCaptureExtension(pi: PiHostToolExtensionApi): void 
 			return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
 		},
 	});
+
+	if (typeof pi.on === "function" && managedRoots.length > 0) {
+		pi.on("tool_call", async (event, ctx) => {
+			if (event.toolName !== "bash" || typeof event.input.command !== "string") return undefined;
+			const matched = matchManagedSkillScriptCall(event.input.command, managedRoots, ctx?.cwd ?? process.cwd());
+			if (!matched) return undefined;
+
+			const trustLevel = policies.get(matched.policyKey) ?? "confirm";
+			const callId = event.toolCallId ?? `trust_${Date.now()}`;
+
+			if (trustLevel === "disabled") {
+				return {
+					block: true,
+					reason: `Skill "${matched.skillName}" (${matched.scope}) is currently disabled by trust policy. Re-enable it in Settings → 技能与信任 before running ${matched.scriptRelPath}.`,
+				};
+			}
+
+			if (trustLevel === "autonomous") {
+				void post("/tool", {
+					tool: "record_skill_run",
+					callId: `${callId}:run`,
+					args: {
+						scope: matched.scope,
+						scopeId: matched.scopeId,
+						skillName: matched.skillName,
+						outcome: "autonomous_allowed",
+					},
+				}).catch(() => {});
+				return undefined;
+			}
+
+			// Step 3 (confirm): ask the user natively via Pi extension UI (flows through DialogBroker in PA Web UI).
+			if (typeof ctx?.ui?.select === "function") {
+				const promptTitle = `允许运行 Skill「${matched.skillName}」的脚本 ${matched.scriptRelPath}？（${matched.scope}）`;
+				const choice = await ctx.ui.select(promptTitle, [CHOICE_ALLOW_ONCE, CHOICE_TRUST_AUTONOMOUS, CHOICE_DENY]);
+				if (choice === CHOICE_TRUST_AUTONOMOUS) {
+					policies.set(matched.policyKey, "autonomous");
+					await post("/tool", {
+						tool: "promote_skill_trust",
+						callId: `${callId}:promote`,
+						args: {
+							scope: matched.scope,
+							scopeId: matched.scopeId,
+							skillName: matched.skillName,
+							trustLevel: "autonomous",
+						},
+					}).catch(() => {});
+					return undefined;
+				}
+				if (choice === CHOICE_ALLOW_ONCE) {
+					void post("/tool", {
+						tool: "record_skill_run",
+						callId: `${callId}:once`,
+						args: {
+							scope: matched.scope,
+							scopeId: matched.scopeId,
+							skillName: matched.skillName,
+							outcome: "confirmed_once",
+						},
+					}).catch(() => {});
+					return undefined;
+				}
+				return {
+					block: true,
+					reason: `User declined running Skill "${matched.skillName}" script ${matched.scriptRelPath}.`,
+				};
+			}
+
+			return undefined;
+		});
+	}
 }

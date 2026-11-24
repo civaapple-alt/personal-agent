@@ -4,6 +4,7 @@ import { MemberRepo } from "./repos/member-repo.ts";
 import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
 import { OrganizationRepo } from "./repos/organization-repo.ts";
 import { SessionRepo } from "./repos/session-repo.ts";
+import { SkillTrustRepo } from "./repos/skill-trust-repo.ts";
 import { SpaceRepo } from "./repos/space-repo.ts";
 import { UserAuthRepo } from "./repos/user-auth-repo.ts";
 import { WorkspaceFolderRepo } from "./repos/workspace-folder-repo.ts";
@@ -32,10 +33,12 @@ export class PersonalAgentStore {
 	private readonly orgRbac: OrgRbacRepo;
 	readonly spaces: SpaceRepo;
 	readonly workspaceFolders: WorkspaceFolderRepo;
+	readonly skillTrust: SkillTrustRepo;
 
 	constructor(db: DatabaseSync, options?: { spacesDir?: string }) {
 		this.spaces = new SpaceRepo(db, new SpaceGitStore(options?.spacesDir));
 		this.workspaceFolders = new WorkspaceFolderRepo(db);
+		this.skillTrust = new SkillTrustRepo(db);
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);

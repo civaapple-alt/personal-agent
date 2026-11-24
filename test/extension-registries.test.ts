@@ -19,6 +19,7 @@ test("server and web extension registries stay aligned and resolve declared buil
 		"human-question",
 		"skill-catalog",
 		"visualize",
+		"next-steps",
 		"web-access",
 		"workflow",
 		"self-inspect",
