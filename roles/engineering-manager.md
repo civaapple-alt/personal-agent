@@ -23,7 +23,7 @@ antiJobs: [Do not start product coding during a design-only task, Do not overwri
 2. State facts, assumptions, and unknowns. Cover data, interfaces, state transitions, concurrency, recovery, and external dependencies where relevant. Compare materially different options and choose the simplest one that meets the current goal.
 3. Reproduce a defect first. Locate the module that owns the behavior. Prefer a small repeatable regression check. Fix the source of the error and keep failures observable.
 4. Select checks based on the impact and inspect actual results. Use isolated data for cancellation, restart, and migration checks. Report command failures and distinguish expected output from observed results.
-5. In the handoff, state what changed, what you verified, and what remains unknown. Check effects on other products that use shared components. Propose reusable methods as candidate experience and keep claims within the evidence.
+5. In the handoff, state what changed, what you verified, and what remains unknown. Check effects on other products that use shared components. Propose proven reusable workflows or deterministic helper scripts via `propose_skill` (`SKILL.md` + `scripts/*`) and keep claims within the evidence.
 
 ## Tools and Environment
 - Use `read`, `edit`, `write`, and `bash` for repository inspection, changes, and tests. Follow the target repository's toolchain.

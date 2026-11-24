@@ -38,11 +38,19 @@
 
 候选卡片展示这些状态与验证约定；尚未提供图形化的 Skills 安装器或完整插件配置系统。共享模板继续保留完整职责正文，私有身份和工作经验不写入模板。
 
+## 顺着 Pi 纹理生长的 Roles 与 RSI 闭环
+
+Personal Agent 不在 Pi 之外另造一套私有 Agent 框架或平行记忆数据库，而是把岗位配置与 RSI 自我改进完全建在 Pi 原生原语之上：
+
+1. **身份与边界层（`roles/*.md` / `.data/roles/`）**：Markdown 仅保存岗位身份、职责边界（`antiJobs`）、协作约定以及对 Pi 资源的声明（`skills`、`tools`、`mcpDependencies`），保持可分享与脱敏。
+2. **能力与沉淀层（磁盘标准 Pi Skills + 脚本）**：工作中跑通的可复用方法或确定性脚本通过 `propose_skill`（步骤 2）经人工确认落盘为标准 `SKILL.md` + `scripts/*`（`.data/skills/{global,orgs,users}/` 或 `<workspace>/.agents/skills/`），下一轮由 Pi `--skill` 原生发现；脚本执行由 Pi `tool_call` 门禁按 `skill_trust_policies` 逐步授权（步骤 3 `confirm` → 步骤 4 `autonomous`），长会话压缩时由 `session_compact` 自动延续已加载 Skill。
+3. **证据驱动 RSI 层（`session-insights` → `team-health` → 角色架构师）**：不靠模型凭空“复盘记忆”，而是由零模型确定性引擎（[session-insights.ts](../../packages/server/src/orchestrator/runtime/session-insights.ts)）直接扫描可见作用域的真实 Pi `.jsonl` 会话，连同 `skill_trust_policies` 运行遥测、岗位配置、近期事项摩擦与空间负反馈一起喂给[团队体检](../../packages/server/src/orchestrator/rsi/team-health.ts)与角色架构师，形成可引用、可核查的角色调优、Skill 沉淀与信任升级建议。
+
 ## 团队体检依据
 
-体检仍按需发起，不新增定时后台扫描。宿主从当前配置、有限近期事项消息、负反馈和纠偏经验中形成有 ID 的材料；模型通过 `evidenceIds` 引用，宿主只接纳确实存在的来源并附带原始摘录。
+体检仍按需发起，不新增定时后台扫描。宿主从当前配置（`role:*`）、有限近期事项消息（`message:*`）、空间负反馈（`feedback:*`）、确定性 Pi 会话洞察（`insight:*`，如反复失败命令、未加载僵尸 Skill、跨会话重复指令）及 Skill 信任运行遥测（`skill_trust:*`，如高频稳定待升级或已停用脚本）中形成有 ID 的材料；模型通过 `evidenceIds` 引用，宿主只接纳确实存在的来源并附带原始摘录。
 
-卡片可展开查看来源并进入对应事项或团队页；未引用到来源时明确显示需核对。源记录证明曾记录什么，不自动证明模型的解释、因果判断或建议正确。旁听次数不称为有效次数，候选经验也不作为已经验证的事实。
+卡片可展开查看来源并进入对应事项或团队页；未引用到来源时明确显示需核对。源记录证明曾记录什么，不自动证明模型的解释、因果判断或建议正确。旁听次数不称为有效次数，所有角色调整与 Skill 信任变更均需人类显式确认。
 
 ## 角色定义的保存与更新
 
