@@ -294,3 +294,21 @@ export function importMemberPackage(
 		}),
 	});
 }
+
+export async function actOnSkillProposal(
+	matterId: string,
+	messageId: string,
+	payload: {
+		proposalId: string;
+		action: "apply" | "dismiss";
+		storageScope?: "global" | "org" | "personal" | "workspace";
+	},
+): Promise<{ ok: true; writtenPaths: string[] }> {
+	return requestJson(
+		`/api/matters/${encodeURIComponent(matterId)}/messages/${encodeURIComponent(messageId)}/skill-proposals`,
+		{
+			method: "POST",
+			body: JSON.stringify(payload),
+		},
+	);
+}

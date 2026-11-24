@@ -1,5 +1,6 @@
 import { isCurrentHumanDecision, listCompletedHumanDecisions, readHumanDecision } from "@pa/contracts/human-decision";
 import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
+import { readSkillProposals } from "@pa/contracts/skill-proposal";
 import { type RefObject, type UIEvent, useMemo, useState } from "react";
 import { createSpaceDocument } from "../../api/space.ts";
 import {
@@ -37,6 +38,7 @@ import { DelegationSummaryCard } from "./DelegationSummaryCard.tsx";
 import { HumanDecisionCard } from "./HumanDecisionCard.tsx";
 import type { DelegationScope, DelegationView } from "./MatterDelegationPanel.tsx";
 import { RoleProposalCard } from "./RoleProposalCard.tsx";
+import { SkillProposalCard } from "./SkillProposalCard.tsx";
 import { type ChatSpaceDocumentItem, SpaceDocumentCard } from "./SpaceDocumentCard.tsx";
 
 interface MessageFeedProps {
@@ -616,6 +618,14 @@ export function MessageFeed({
 													: undefined
 											}
 											onLaunchWithNewRoles={onLaunchWithNewRoles}
+										/>
+									)}
+									{matterDetail && readSkillProposals(msg.metadata).length > 0 && (
+										<SkillProposalCard
+											matterId={matterDetail.matter.id}
+											messageId={msg.id}
+											proposals={readSkillProposals(msg.metadata)}
+											hasWorkspace={Boolean(matterDetail.matter.workspaceId)}
 										/>
 									)}
 									{Array.isArray(msg.metadata?.spaceDocuments) &&
