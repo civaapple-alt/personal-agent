@@ -15,10 +15,16 @@ export interface PaServerExtension {
 	readonly tools: readonly string[];
 	/** Optional upstream npm Pi package name wrapped by this extension (e.g. `pi-web-access`). */
 	readonly piPackage?: string;
-	/** Optional relative path (from repo root) to a built-in Pi extension entry under `pi-extensions/`. */
+	/** Optional relative path (from repo root) to a built-in Pi extension entry under `pi-extensions/`. Built-in only. */
 	readonly builtinPiEntry?: string;
-	/** Optional relative path (from repo root) to a built-in Pi skill package directory under `pi-extensions/`. */
+	/** Optional relative path (from repo root) to a built-in Pi skill package directory. Built-in only. */
 	readonly builtinSkillPackage?: string;
+	/** Optional thin workflow routing rule injected for built-in workflow extensions. Built-in only. */
+	readonly workflowRule?: string;
+	/** Optional relative path (from repo root) to host-specific workflow skills. Built-in only. */
+	readonly workflowSkillDir?: string;
+	/** Optional npm names of vanilla Pi packages superseded while this built-in extension is active. Built-in only. */
+	readonly supersedesPackages?: readonly string[];
 	/** Tool names that pause or stage structured user input. */
 	readonly interactiveTools?: readonly string[];
 }

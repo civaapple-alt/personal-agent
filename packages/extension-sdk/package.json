@@ -1,0 +1,13 @@
+{
+	"name": "@pa/extension-sdk",
+	"version": "0.0.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Curated external SDK for authoring Personal Agent extensions (safe subset of @pa/extension-api)",
+	"exports": {
+		"./server": "./src/server.ts",
+		"./web": "./src/web.ts",
+		"./manifest": "./src/manifest.ts"
+	}
+}
