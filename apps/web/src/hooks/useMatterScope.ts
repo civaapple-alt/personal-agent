@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { BootstrapPayload } from "../api/bootstrap.ts";
 import type { MatterDetailPayload } from "../api/matters.ts";
 import type { RoleTemplateDto, TeamMemberDto } from "../api/team.ts";
-import { isArchitectMemberId } from "../architectApi.ts";
+import { isArchitectMemberId, isSoloMemberId } from "../architectApi.ts";
 import { applyPrimaryContactToMembers, getBotTheme, resolveEffectivePrimaryContactId } from "../utils.ts";
 
 interface MatterScopeOptions {
@@ -81,7 +81,8 @@ export function useMatterScope({
 						(m) =>
 							enabledIds.includes(m.id) ||
 							m.roleScope === "personal" ||
-							isArchitectMemberId(m.id, all, templateByRoleId),
+							isArchitectMemberId(m.id, all, templateByRoleId) ||
+							isSoloMemberId(m.id, all, templateByRoleId),
 					);
 		const primaryId = resolveEffectivePrimaryContactId(all, draftEffectiveOrgId, bootstrap?.orgAiRolesByOrgId);
 		return applyPrimaryContactToMembers(filtered, primaryId);

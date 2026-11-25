@@ -5,7 +5,7 @@ import {
 	type MatterInitiationAssessmentDto,
 	type TeamMemberDto,
 } from "../api.ts";
-import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
+import { filterBusinessMembers, isArchitectMemberId, isSoloMemberId } from "../architectApi.ts";
 
 interface UseMatterInitiationParams {
 	selectedMatterId: string | null;
@@ -53,6 +53,7 @@ export function useMatterInitiationState({
 	const explicitLeadId =
 		selectedMemberId !== "auto" &&
 		!isArchitectMemberId(selectedMemberId, members) &&
+		!isSoloMemberId(selectedMemberId, members) &&
 		businessMembers.some((m) => m.id === selectedMemberId)
 			? selectedMemberId
 			: null;

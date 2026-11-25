@@ -9,7 +9,7 @@ import type {
 	TeamMemberDto,
 	WorkspaceDto,
 } from "../api.ts";
-import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
+import { filterBusinessMembers, isArchitectMemberId, isSoloMemberId } from "../architectApi.ts";
 
 const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -82,6 +82,7 @@ export function useChatStageParticipants({
 				orgEffectiveMemberIds.includes(m.id) ||
 				m.roleScope === "personal" ||
 				isArchitectMemberId(m.id, members, templateByRoleId) ||
+				isSoloMemberId(m.id, members, templateByRoleId) ||
 				m.id === matterDetail?.matter.leadMemberId,
 		);
 	}, [members, orgEffectiveMemberIds, templateByRoleId, matterDetail?.matter.leadMemberId]);

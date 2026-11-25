@@ -19,6 +19,7 @@ import {
 	filterBusinessMembers,
 	getMemberScopeBadge,
 	isArchitectMember,
+	isSoloMember,
 } from "../architectApi.ts";
 import { MemberInspectorModal } from "../components/team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "../components/team/MemberPackageForms.tsx";
@@ -96,8 +97,9 @@ export function TeamView({
 	const [savingPrimary, setSavingPrimary] = useState(false);
 	const businessMembers = useMemo(() => {
 		const regular = filterBusinessMembers(members, templateByRoleId);
+		const solo = members.filter((m) => isSoloMember(m, templateByRoleId));
 		const architect = members.filter((m) => isArchitectMember(m, templateByRoleId));
-		return [...regular, ...architect];
+		return [...regular, ...solo, ...architect];
 	}, [members, templateByRoleId]);
 	const visibleBusinessMembers = useMemo(() => {
 		if (scopeFilter === "all") return businessMembers;

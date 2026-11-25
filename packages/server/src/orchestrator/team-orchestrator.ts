@@ -286,6 +286,7 @@ export class TeamOrchestrator {
 			(member) =>
 				(member.id === matter.leadMemberId ||
 					(!this.isArchitectMember(member) &&
+						!this.isSoloMember(member) &&
 						(matter.aiMemberIds === null || matter.aiMemberIds.includes(member.id)))) &&
 				(member.roleScope !== "personal" || member.ownerUserId === actorUserId),
 		);
@@ -298,6 +299,7 @@ export class TeamOrchestrator {
 				member.roleScope !== "personal" &&
 				(member.id === matter.leadMemberId ||
 					(!this.isArchitectMember(member) &&
+						!this.isSoloMember(member) &&
 						(matter.aiMemberIds === null || matter.aiMemberIds.includes(member.id)))),
 		);
 	}
@@ -347,7 +349,9 @@ export class TeamOrchestrator {
 				if (explicit && explicit.roleScope !== "personal") return explicit;
 			}
 			const explicitGlobal = this.store.getMember(preferredMemberId);
-			if (explicitGlobal && this.isArchitectMember(explicitGlobal)) return explicitGlobal;
+			if (explicitGlobal && (this.isArchitectMember(explicitGlobal) || this.isSoloMember(explicitGlobal))) {
+				return explicitGlobal;
+			}
 			throw new Error(
 				orgId
 					? `Member ${preferredMemberId} is not enabled in organization ${orgId}`
@@ -358,7 +362,7 @@ export class TeamOrchestrator {
 		const allowedSet = allowedMemberIds ? new Set(allowedMemberIds) : null;
 		const members = allowedSet ? allMembers.filter((member) => allowedSet.has(member.id)) : allMembers;
 		const basePool = members.length > 0 ? members : allMembers;
-		const businessPool = basePool.filter((member) => !this.isArchitectMember(member));
+		const businessPool = basePool.filter((member) => !this.isArchitectMember(member) && !this.isSoloMember(member));
 		const pool = businessPool.length > 0 ? businessPool : basePool;
 
 		const lowerPrompt = prompt.toLowerCase();

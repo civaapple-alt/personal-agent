@@ -155,12 +155,37 @@ export function isArchitectMemberId(
 	return member ? isArchitectMember(member, templateByRoleId) : false;
 }
 
-/** Filters out Role Architect meta members when assembling ordinary business AI collaborator pools. */
+export const PI_DEFAULT_MEMBER_ID = "pi-default";
+
+/** True when a team member represents a solo Pi assistant role (`roleKind: "solo"`). */
+export function isSoloMember(
+	member: Pick<TeamMemberDto, "id" | "templateId"> | null | undefined,
+	templateByRoleId?: Map<string, RoleTemplateDto>,
+): boolean {
+	if (!member) return false;
+	if (member.id === PI_DEFAULT_MEMBER_ID || member.templateId === PI_DEFAULT_MEMBER_ID) return true;
+	const tpl = templateByRoleId?.get(member.templateId) ?? templateByRoleId?.get(member.id);
+	return tpl?.roleKind === "solo";
+}
+
+/** True when a member ID belongs to a solo Pi assistant role. */
+export function isSoloMemberId(
+	memberId: string | null | undefined,
+	members?: TeamMemberDto[],
+	templateByRoleId?: Map<string, RoleTemplateDto>,
+): boolean {
+	if (!memberId) return false;
+	if (memberId === PI_DEFAULT_MEMBER_ID) return true;
+	const member = members?.find((m) => m.id === memberId);
+	return member ? isSoloMember(member, templateByRoleId) : false;
+}
+
+/** Filters out Role Architect and solo Pi members when assembling ordinary business AI collaborator pools. */
 export function filterBusinessMembers(
 	members: TeamMemberDto[],
 	templateByRoleId?: Map<string, RoleTemplateDto>,
 ): TeamMemberDto[] {
-	return members.filter((m) => !isArchitectMember(m, templateByRoleId));
+	return members.filter((m) => !isArchitectMember(m, templateByRoleId) && !isSoloMember(m, templateByRoleId));
 }
 
 /** Safely parses structured inline Role Architect proposals stored on an assistant message. */

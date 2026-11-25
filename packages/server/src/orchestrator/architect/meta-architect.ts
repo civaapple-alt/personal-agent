@@ -7,8 +7,10 @@ import {
 	BUILTIN_ROLE_ARCHITECT_TEMPLATE,
 	buildRoleDesignDraft,
 	isArchitectRoleTemplate,
+	isSoloRoleTemplate,
 	normalizeRoleTools,
 	normalizeRoleVerificationPlan,
+	PI_DEFAULT_MEMBER_ID,
 	type RoleArchitectDraft,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
@@ -124,9 +126,10 @@ function listBusinessMembers(
 	templatesById: Map<string, RoleTemplate>,
 	scope?: TeamHealthScopeFilter,
 ): TeamMember[] {
-	return filterTeamMembersForScope(store.listMembers(), scope).filter(
-		(m) => !isArchitectRoleTemplate(templatesById.get(m.templateId) ?? templatesById.get(m.id) ?? { id: m.id }),
-	);
+	return filterTeamMembersForScope(store.listMembers(), scope).filter((m) => {
+		const tpl = templatesById.get(m.templateId) ?? templatesById.get(m.id) ?? { id: m.id };
+		return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+	});
 }
 
 /** Collects a compact, read-only digest of recent team friction and roster coverage for Meta-Bot audits. */
@@ -224,13 +227,11 @@ export function parseMetaArchitectResponse(
 		: [];
 
 	const businessExisting = options?.templatesById
-		? existingMembers.filter(
-				(m) =>
-					!isArchitectRoleTemplate(
-						options.templatesById!.get(m.templateId) ?? options.templatesById!.get(m.id) ?? { id: m.id },
-					),
-			)
-		: existingMembers.filter((m) => m.id !== "role-architect");
+		? existingMembers.filter((m) => {
+				const tpl = options.templatesById!.get(m.templateId) ?? options.templatesById!.get(m.id) ?? { id: m.id };
+				return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+			})
+		: existingMembers.filter((m) => m.id !== "role-architect" && m.id !== PI_DEFAULT_MEMBER_ID);
 	const memberById = new Map(businessExisting.map((m) => [m.id, m]));
 	const validExistingIds = new Set(businessExisting.map((m) => m.id));
 	let recommendedFormation: MetaArchitectFormationSuggestion | undefined;

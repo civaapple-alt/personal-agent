@@ -10,7 +10,12 @@ import {
 	type MatterProgressDto,
 	type MatterVisibility,
 } from "./api.ts";
-import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } from "./architectApi.ts";
+import {
+	filterBusinessMembers,
+	isArchitectMemberId,
+	isSoloMemberId,
+	ROLE_ARCHITECT_MEMBER_ID,
+} from "./architectApi.ts";
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
@@ -384,7 +389,11 @@ export function App() {
 		const allBusinessIds = filterBusinessMembers(allMembers, templateByRoleId).map((m) => m.id);
 		const validIds = new Set(allMembers.map((m) => m.id));
 		const leadId = headerContact?.id;
-		const defaultIds = isArchitectMemberId(leadId, allMembers, templateByRoleId) ? [leadId!] : allBusinessIds;
+		const defaultIds =
+			isArchitectMemberId(leadId, allMembers, templateByRoleId) ||
+			isSoloMemberId(leadId, allMembers, templateByRoleId)
+				? [leadId!]
+				: allBusinessIds;
 		const raw =
 			selectedMatterId && matterDetail
 				? matterDetail.matter.aiMemberIds === null || matterDetail.matter.aiMemberIds === undefined
@@ -509,12 +518,13 @@ export function App() {
 		const nextSelected =
 			activeTab === "chats" && selectedMatterId === null && selectedMemberId === memberId ? "auto" : memberId;
 		const pickingArchitect = isArchitectMemberId(nextSelected, bootstrap?.members, templateByRoleId);
+		const pickingSolo = isSoloMemberId(nextSelected, bootstrap?.members, templateByRoleId);
 		if (activeTab !== "chats" || selectedMatterId !== null) {
 			navigateRoute({ tab: "chats", isNewMatter: true });
 		}
 		setSelectedMemberId(nextSelected);
 		if (pickingArchitect || selectedMemberId === ROLE_ARCHITECT_MEMBER_ID) setDraftModelSelection(null);
-		if (pickingArchitect) {
+		if (pickingArchitect || pickingSolo) {
 			setDraftAiMemberIds([nextSelected]);
 			initiation.setDraftPresetMode("solo");
 			setDraftObserversEnabled(false);

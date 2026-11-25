@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
-import { filterBusinessMembers, isArchitectMember } from "../architectApi.ts";
+import { filterBusinessMembers, isArchitectMember, isSoloMember } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
 import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
@@ -149,11 +149,13 @@ export const Sidebar = memo(function Sidebar({
 
 	const allMembers = bootstrap?.members ?? [];
 	const allBusinessMembers = filterBusinessMembers(allMembers);
+	const soloMembers = allMembers.filter((m) => isSoloMember(m));
 	const architectMember = allMembers.find((m) => isArchitectMember(m)) ?? null;
 	const businessMembers = [
 		...(orgEffectiveMemberIds && orgEffectiveMemberIds.length > 0
 			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id) || m.roleScope === "personal")
 			: allBusinessMembers),
+		...soloMembers,
 		...(architectMember ? [architectMember] : []),
 	];
 	const getWorkingMood = (memberId: string): RoleMood => {

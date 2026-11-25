@@ -451,7 +451,9 @@ export function buildMemberPrompts(input: {
 		sections.push(
 			mode === "internal"
 				? "If a question blocks your assignment, return it to your delegator via `request_clarification`, finish independent work, and do not assume a human decision."
-				: "If missing human input would materially change scope, acceptance, or authorization, call `request_clarification` (pass `sourceAssignmentNumber` when escalating a colleague's question), finish independent work, and end the turn.",
+				: isSolo
+					? "If missing human input would materially change scope, acceptance, or authorization, call `request_clarification`, finish independent work, and end the turn."
+					: "If missing human input would materially change scope, acceptance, or authorization, call `request_clarification` (pass `sourceAssignmentNumber` when escalating a colleague's question), finish independent work, and end the turn.",
 		);
 	}
 	if (mode === "lead" && !isArchitect && !isSolo && !input.discussionMode) sections.push(PUBLICATION_REVIEW_GUIDANCE);

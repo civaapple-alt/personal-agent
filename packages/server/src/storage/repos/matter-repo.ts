@@ -70,8 +70,11 @@ export class MatterRepo {
 				...(input.observerMemberIds ?? []),
 			]);
 		}
-		if (storedAiIds === null && input.leadMemberId === ROLE_ARCHITECT_MEMBER_ID) {
-			storedAiIds = [ROLE_ARCHITECT_MEMBER_ID];
+		if (
+			storedAiIds === null &&
+			(input.leadMemberId === ROLE_ARCHITECT_MEMBER_ID || input.leadMemberId === PI_DEFAULT_MEMBER_ID)
+		) {
+			storedAiIds = [input.leadMemberId];
 		} else if (storedAiIds !== null && input.leadMemberId && !storedAiIds.includes(input.leadMemberId)) {
 			storedAiIds = [input.leadMemberId, ...storedAiIds];
 		}

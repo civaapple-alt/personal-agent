@@ -7,7 +7,7 @@ import type {
 	RoleTemplateDto,
 	TeamMemberDto,
 } from "../../api.ts";
-import { filterBusinessMembers, isArchitectMemberId } from "../../architectApi.ts";
+import { filterBusinessMembers, isArchitectMemberId, isSoloMemberId } from "../../architectApi.ts";
 
 interface MatterInitiationPanelProps {
 	isOwner: boolean;
@@ -86,7 +86,12 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		draftVisibility = "org",
 		onUpdateDraftVisibility,
 	} = props;
-	if (!isOwner || isArchitectMemberId(selectedMemberId, members, templateByRoleId)) return null;
+	if (
+		!isOwner ||
+		isArchitectMemberId(selectedMemberId, members, templateByRoleId) ||
+		isSoloMemberId(selectedMemberId, members, templateByRoleId)
+	)
+		return null;
 	const business = filterBusinessMembers(members, templateByRoleId);
 	const allowed = draftAiMemberIds ?? business.map((member) => member.id);
 	const isAutoLead = selectedMemberId === "auto";

@@ -6,8 +6,10 @@ import test from "node:test";
 import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
 import workerRuntimeExtension, { type WorkerRuntimeExtensionApi } from "../pa-extensions/worker-runtime/pi/index.ts";
 import { prepareTeamExtension } from "../packages/server/src/extensions/team-extension/runtime.ts";
+import { assessMatterInitiation } from "../packages/server/src/orchestrator/architect/matter-initiation.ts";
 import type { RoleProposalPayload } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
 import { buildMemberPrompts } from "../packages/server/src/orchestrator/execution/prompts.ts";
+import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/rsi/team-health.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
@@ -337,6 +339,63 @@ test("pi-default solo role disables delegate_to_member while preserving PA exten
 	});
 	assert.match(systemPrompt, /solo Pi assistant/i);
 	assert.doesNotMatch(systemPrompt, /Personal Agent team/);
+	assert.doesNotMatch(systemPrompt, /sourceAssignmentNumber/);
 	assert.doesNotMatch(turnContext, /## Current team/);
 	assert.doesNotMatch(turnContext, /## Team capability evidence/);
+});
+
+test("pi-default solo role stays isolated from auto-routing, team observers, initiation consults, and RSI healthchecks", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pa-solo-isolation-"));
+	const db = openPersonalAgentDatabase(join(dir, "pa.db"));
+	try {
+		const store = new PersonalAgentStore(db, { spacesDir: join(dir, "spaces") });
+		const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+		const templatesById = new Map(templates.map((t) => [t.id, t]));
+		const orchestrator = new TeamOrchestrator({
+			store,
+			templates,
+			defaultCwd: dir,
+			sessionDir: join(dir, "sessions"),
+		});
+
+		// 1. Auto keyword routing must NOT hijack prompts mentioning "pi" / "通用" / "助手" onto pi-default.
+		const routed = orchestrator.routeMemberForRequest("请帮我排查这个通用 Pi 助手配置问题");
+		assert.notEqual(routed.id, "pi-default");
+		assert.equal(routed.id, "product-manager");
+
+		// Explicit selection of pi-default still routes cleanly to pi-default.
+		const explicit = orchestrator.routeMemberForRequest("检查当前仓库", "pi-default");
+		assert.equal(explicit.id, "pi-default");
+
+		// 2. Creating a matter led by pi-default converges aiMemberIds to ["pi-default"] with zero auto observers.
+		const soloMatter = store.createMatter({
+			title: "Solo Pi check",
+			leadMemberId: "pi-default",
+			observersEnabled: true,
+		});
+		assert.deepEqual(soloMatter.aiMemberIds, ["pi-default"]);
+		assert.deepEqual(soloMatter.observerMemberIds, []);
+
+		// 3. Initiation assessment for explicit pi-default returns pure solo mode with no consults/observers.
+		const assessment = assessMatterInitiation({
+			prompt: "重构 auth 模块并请 QA 做回归验证",
+			preferredMemberId: "pi-default",
+			hasWorkspace: true,
+			members: store.listMembers(),
+			templatesByRoleId: templatesById,
+		});
+		assert.equal(assessment.fitStatus, "matched");
+		assert.equal(assessment.recommendedMode, "solo");
+		assert.equal(assessment.recommendedLeadId, "pi-default");
+		assert.deepEqual(assessment.recommendedAiMemberIds, ["pi-default"]);
+		assert.deepEqual(assessment.recommendedObserverIds, []);
+
+		// 4. RSI / Role Architect team health evidence excludes pi-default so it is never audited as a business role.
+		const healthEvidence = collectTeamHealthEvidence(store, templatesById);
+		assert.ok(!healthEvidence.some((entry) => entry.id === "role:pi-default"));
+		assert.ok(healthEvidence.some((entry) => entry.id === "role:product-manager"));
+	} finally {
+		db.close();
+		await rm(dir, { recursive: true, force: true });
+	}
 });

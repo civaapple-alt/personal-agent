@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import { isArchitectRoleTemplate, isSoloRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
 import { buildSessionInsightsReport, type SessionInsightSource } from "../runtime/session-insights.ts";
@@ -69,9 +69,10 @@ export function collectTeamHealthEvidence(
 	scope?: TeamHealthScopeFilter,
 ): TeamHealthEvidence[] {
 	const sources: TeamHealthEvidence[] = [];
-	const members = filterTeamMembersForScope(store.listMembers(), scope).filter(
-		(member) => !isArchitectRoleTemplate(templates.get(member.templateId) ?? { id: member.id }),
-	);
+	const members = filterTeamMembersForScope(store.listMembers(), scope).filter((member) => {
+		const tpl = templates.get(member.templateId) ?? { id: member.id };
+		return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+	});
 	const memberIds = new Set(members.map((member) => member.id));
 	const memberNameById = new Map(members.map((member) => [member.id, member.displayName]));
 

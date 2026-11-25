@@ -240,6 +240,25 @@ export function assessMatterInitiation(input: {
 			assessmentSource: "rules",
 		};
 	}
+	if (
+		explicitMember &&
+		isSoloRoleTemplate(
+			input.templatesByRoleId.get(explicitMember.templateId) ??
+				input.templatesByRoleId.get(explicitMember.id) ?? { id: explicitMember.id },
+		)
+	) {
+		return {
+			fitStatus: "matched",
+			headline: `将由「${explicitMember.displayName}」以单兵 Pi 模式直接处理`,
+			explanation: "单兵 Pi 助手保留原生终端工作流与 PA 扩展能力，不挂载多角色委托或旁听把关。",
+			recommendedMode: "solo",
+			recommendedLeadId: explicitMember.id,
+			recommendedAiMemberIds: [explicitMember.id],
+			recommendedObserverIds: [],
+			candidates: [],
+			assessmentSource: "rules",
+		};
+	}
 
 	const businessMembers = allMembers.filter((m) => {
 		const tpl = input.templatesByRoleId.get(m.templateId) ?? input.templatesByRoleId.get(m.id) ?? { id: m.id };
@@ -554,6 +573,27 @@ export async function assessMatterInitiationWithModel(
 			fitStatus: "matched",
 			headline: `将由「${explicitMember.displayName}」负责角色规划与协作体检`,
 			explanation: "角色架构师只读诊断团队结构并生成可勾选的角色提案，不会直接改动代码或业务职责文件。",
+			recommendedMode: "solo",
+			recommendedLeadId: explicitMember.id,
+			recommendedAiMemberIds: [explicitMember.id],
+			recommendedObserverIds: [],
+			candidates: [],
+			assessmentSource: "model",
+			confidence: "high",
+			usedRepoRead: false,
+		};
+	}
+	if (
+		explicitMember &&
+		isSoloRoleTemplate(
+			deps.templatesByRoleId.get(explicitMember.templateId) ??
+				deps.templatesByRoleId.get(explicitMember.id) ?? { id: explicitMember.id },
+		)
+	) {
+		return {
+			fitStatus: "matched",
+			headline: `将由「${explicitMember.displayName}」以单兵 Pi 模式直接处理`,
+			explanation: "单兵 Pi 助手保留原生终端工作流与 PA 扩展能力，不挂载多角色委托或旁听把关。",
 			recommendedMode: "solo",
 			recommendedLeadId: explicitMember.id,
 			recommendedAiMemberIds: [explicitMember.id],
