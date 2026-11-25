@@ -3,6 +3,7 @@ import { type SpaceDocumentType, spaceDocTypeLabel } from "../../api/space.ts";
 export interface ChatSpaceDocumentItem {
 	id: string;
 	spaceId: string;
+	spaceName?: string;
 	title: string;
 	docType?: SpaceDocumentType;
 	revision: number;
@@ -31,7 +32,7 @@ export function SpaceDocumentCard({
 					<span className={`space-doc-type-pill is-${resolvedType}`}>{spaceDocTypeLabel(resolvedType)}</span>
 					<strong className="space-doc-card-title">{doc.title}</strong>
 					<span className="space-doc-card-rev">
-						rev {doc.revision}
+						{doc.spaceName ? `${doc.spaceName} · ` : ""}rev {doc.revision}
 						{doc.headCommit ? ` · ${doc.headCommit.slice(0, 7)}` : ""}
 					</span>
 				</div>

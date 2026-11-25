@@ -147,6 +147,7 @@ export function createSpaceDocument(
 		content: string;
 		extraFiles?: Array<{ path: string; content: string }>;
 		matterId?: string | null;
+		sourceMessageId?: string | null;
 		linkedOrgId?: string | null;
 		linkedWorkspaceId?: string | null;
 		linkedFilePath?: string | null;

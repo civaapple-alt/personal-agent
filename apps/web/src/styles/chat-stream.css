@@ -663,7 +663,29 @@
 	padding-top: 8px;
 	border-top: 1px dashed rgba(180, 83, 9, 0.25);
 }
-.space-message-action { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); }
+.space-message-action { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); flex-wrap: wrap; }
+.space-message-save-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+}
+.space-message-save-form select {
+	max-width: 210px;
+	padding: 4px 8px;
+	font-size: var(--text-xs);
+}
+.space-message-save-form input {
+	flex: 1 1 180px;
+	min-width: 140px;
+	padding: 4px 8px;
+	font-size: var(--text-xs);
+}
 
 .exploring-tool-records {
 	margin-top: 10px;

@@ -196,6 +196,10 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				extraFiles.push({ subPath, content: fileContent });
 			}
 			const matterId = typeof body.matterId === "string" && body.matterId.trim() ? body.matterId.trim() : null;
+			const sourceMessageId =
+				typeof body.sourceMessageId === "string" && body.sourceMessageId.trim()
+					? body.sourceMessageId.trim()
+					: null;
 			const linkedOrgId =
 				typeof body.linkedOrgId === "string" && body.linkedOrgId.trim() ? body.linkedOrgId.trim() : null;
 			const linkedWorkspaceId =
@@ -233,6 +237,30 @@ export async function handleSpaceRoutes(ctx: ServerRouteContext, r: RouteRequest
 				actorName,
 				commitMessage,
 			});
+			if (matterId && sourceMessageId) {
+				const sourceMsg = store.listMessages(matterId, "user").find((m) => m.id === sourceMessageId);
+				if (sourceMsg) {
+					const existingDocs = Array.isArray(sourceMsg.metadata?.spaceDocuments)
+						? (sourceMsg.metadata.spaceDocuments as Array<Record<string, unknown>>)
+						: [];
+					const entry = {
+						id: document.id,
+						spaceId: document.spaceId,
+						spaceName: space.name,
+						title: document.title,
+						docType: document.docType,
+						revision: document.revision,
+						headCommit: document.headCommit,
+						memberId: sourceMsg.senderId,
+					};
+					const nextDocs = [...existingDocs.filter((item) => item?.id !== document.id), entry];
+					store.updateMessageMetadata(sourceMsg.id, {
+						...(sourceMsg.metadata ?? {}),
+						spaceDocuments: nextDocs,
+					});
+					broadcast("matter_message", { matterId });
+				}
+			}
 			broadcast("space_page_updated", { spaceId: space.id, documentId: document.id, matterId });
 			sendJson(res, 201, { document });
 			return true;

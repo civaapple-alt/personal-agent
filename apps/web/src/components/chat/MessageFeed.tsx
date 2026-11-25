@@ -2,7 +2,7 @@ import { isCurrentHumanDecision, listCompletedHumanDecisions, readHumanDecision 
 import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
 import { readSkillProposals } from "@pa/contracts/skill-proposal";
 import { type RefObject, type UIEvent, useMemo, useState } from "react";
-import { createSpaceDocument } from "../../api/space.ts";
+import { createSpaceDocument, listSpaces, type SpaceDto } from "../../api/space.ts";
 import {
 	type AccountUserDto,
 	type ApplyMatterRoleProposalsPayload,
@@ -141,29 +141,83 @@ export function MessageFeed({
 }: MessageFeedProps) {
 	const [collapsedSnapshots, setCollapsedSnapshots] = useState<Record<string, boolean>>({});
 	const [dialogInput, setDialogInput] = useState("");
-	const [spaceSave, setSpaceSave] = useState<{ id: string; message: string; pageId?: string } | null>(null);
+	const [spaceSaveError, setSpaceSaveError] = useState<{ id: string; message: string } | null>(null);
 	const [savingSpaceMessage, setSavingSpaceMessage] = useState<string | null>(null);
+	const [saveDraft, setSaveDraft] = useState<{ messageId: string; spaceId: string; title: string } | null>(null);
+	const [writableSpaces, setWritableSpaces] = useState<SpaceDto[] | null>(null);
+	const [savedDocsByMsg, setSavedDocsByMsg] = useState<Record<string, ChatSpaceDocumentItem>>({});
 
-	async function saveMessageToSpace(matterId: string, id: string, content: string) {
-		const targetSpaceId = matterDetail?.defaultSpace?.id;
+	const spaceKindLabel = (kind: SpaceDto["kind"]) => {
+		if (kind === "user") return "个人";
+		if (kind === "org") return "组织";
+		if (kind === "workspace") return "仓库";
+		if (kind === "member") return "角色";
+		return "自定义";
+	};
+
+	function openSaveToSpaceDraft(messageId: string, content: string) {
+		const rawLine = content.split("\n").find((line) => line.trim()) ?? "";
+		const cleanedTitle =
+			stripMarkdownFormatting(rawLine)
+				.replace(/^#+\s*/, "")
+				.trim()
+				.slice(0, 60) || "对话记录";
+		const defaultSpaceId = matterDetail?.defaultSpace?.id ?? writableSpaces?.[0]?.id ?? "";
+		setSpaceSaveError(null);
+		setSaveDraft({ messageId, spaceId: defaultSpaceId, title: cleanedTitle });
+		if (writableSpaces === null) {
+			void listSpaces()
+				.then(({ spaces }) => {
+					const editable = spaces.filter((space) => space.canWrite !== false);
+					setWritableSpaces(editable);
+					setSaveDraft((prev) => {
+						if (!prev || prev.messageId !== messageId) return prev;
+						if (prev.spaceId && editable.some((space) => space.id === prev.spaceId)) return prev;
+						return { ...prev, spaceId: editable[0]?.id ?? prev.spaceId };
+					});
+				})
+				.catch(() => {
+					setWritableSpaces([]);
+				});
+		}
+	}
+
+	async function confirmSaveMessageToSpace(matterId: string, id: string, content: string) {
+		if (!saveDraft || saveDraft.messageId !== id) return;
+		const targetSpaceId = saveDraft.spaceId || matterDetail?.defaultSpace?.id;
 		if (!targetSpaceId) {
-			setSpaceSave({ id, message: "未找到当前事项的默认资料空间" });
+			setSpaceSaveError({ id, message: "未找到可写入的目标资料空间" });
 			return;
 		}
 		setSavingSpaceMessage(id);
-		setSpaceSave(null);
+		setSpaceSaveError(null);
 		try {
-			const title =
-				content
-					.split("\n")
-					.find((line) => line.trim())
-					?.replace(/^#+\s*/, "")
-					.trim()
-					.slice(0, 60) || "对话记录";
-			const result = await createSpaceDocument(targetSpaceId, { matterId, title, content });
-			setSpaceSave({ id, message: "已保存到资料空间", pageId: result.document.id });
+			const title = saveDraft.title.trim().slice(0, 120) || "对话记录";
+			const result = await createSpaceDocument(targetSpaceId, {
+				matterId,
+				sourceMessageId: id,
+				title,
+				content,
+			});
+			const matchedSpace =
+				writableSpaces?.find((space) => space.id === targetSpaceId) ??
+				(matterDetail?.defaultSpace?.id === targetSpaceId ? matterDetail.defaultSpace : undefined);
+			setSavedDocsByMsg((prev) => ({
+				...prev,
+				[id]: {
+					id: result.document.id,
+					spaceId: result.document.spaceId,
+					spaceName: matchedSpace?.name,
+					title: result.document.title,
+					docType: result.document.docType,
+					revision: result.document.revision,
+					headCommit: result.document.headCommit,
+				},
+			}));
+			setSaveDraft(null);
+			onNotice?.(`已保存到「${matchedSpace?.name ?? "资料空间"}」`);
 		} catch (error) {
-			setSpaceSave({ id, message: error instanceof Error ? error.message : String(error) });
+			setSpaceSaveError({ id, message: error instanceof Error ? error.message : String(error) });
 		} finally {
 			setSavingSpaceMessage(null);
 		}
@@ -495,33 +549,88 @@ export function MessageFeed({
 										!decision &&
 										msg.content.trim().length >= 80 &&
 										!(
-											Array.isArray(msg.metadata?.spaceDocuments) && msg.metadata.spaceDocuments.length > 0
+											(Array.isArray(msg.metadata?.spaceDocuments) &&
+												msg.metadata.spaceDocuments.length > 0) ||
+											Boolean(savedDocsByMsg[msg.id])
 										) && (
 											<div className="space-message-action">
-												<button
-													type="button"
-													className="btn-inline"
-													disabled={savingSpaceMessage !== null}
-													onClick={() =>
-														void saveMessageToSpace(matterDetail.matter.id, msg.id, msg.content)
-													}
-												>
-													{savingSpaceMessage === msg.id ? "正在保存…" : "保存文字到资料空间"}
-												</button>
-												{spaceSave?.id === msg.id && <output>{spaceSave.message}</output>}
-												{spaceSave?.id === msg.id && spaceSave.pageId && (
+												{saveDraft?.messageId === msg.id ? (
+													<form
+														className="space-message-save-form"
+														onSubmit={(event) => {
+															event.preventDefault();
+															void confirmSaveMessageToSpace(
+																matterDetail.matter.id,
+																msg.id,
+																msg.content,
+															);
+														}}
+													>
+														<select
+															className="input-field"
+															aria-label="选择目标资料空间"
+															value={saveDraft.spaceId}
+															disabled={savingSpaceMessage === msg.id}
+															onChange={(event) =>
+																setSaveDraft((prev) =>
+																	prev ? { ...prev, spaceId: event.target.value } : prev,
+																)
+															}
+														>
+															{(writableSpaces && writableSpaces.length > 0
+																? writableSpaces
+																: matterDetail.defaultSpace
+																	? [matterDetail.defaultSpace]
+																	: []
+															).map((space) => (
+																<option key={space.id} value={space.id}>
+																	[{spaceKindLabel(space.kind)}] {space.name}
+																</option>
+															))}
+														</select>
+														<input
+															type="text"
+															className="input-field"
+															aria-label="资料标题"
+															placeholder="资料标题"
+															value={saveDraft.title}
+															disabled={savingSpaceMessage === msg.id}
+															onChange={(event) =>
+																setSaveDraft((prev) =>
+																	prev ? { ...prev, title: event.target.value } : prev,
+																)
+															}
+														/>
+														<button
+															type="submit"
+															className="btn-pill-dark btn-xs"
+															disabled={savingSpaceMessage !== null || !saveDraft.spaceId}
+														>
+															{savingSpaceMessage === msg.id ? "正在保存…" : "确认保存"}
+														</button>
+														<button
+															type="button"
+															className="btn-inline btn-xs"
+															disabled={savingSpaceMessage === msg.id}
+															onClick={() => {
+																setSaveDraft(null);
+																setSpaceSaveError(null);
+															}}
+														>
+															取消
+														</button>
+													</form>
+												) : (
 													<button
 														type="button"
 														className="btn-inline"
-														onClick={() =>
-															onOpenSideDoc
-																? onOpenSideDoc(spaceSave.pageId!)
-																: onOpenDeliverables(spaceSave.pageId)
-														}
+														disabled={savingSpaceMessage !== null}
+														onClick={() => openSaveToSpaceDraft(msg.id, msg.content)}
 													>
-														在右侧查看
+														保存文字到资料空间
 													</button>
 												)}
+												{spaceSaveError?.id === msg.id && <output>{spaceSaveError.message}</output>}
 											</div>
 										)}
 									{(msg.metadata?.workbenchHelpTopic === "decisions" ||
@@ -628,8 +737,16 @@ export function MessageFeed({
 											onNotice={onNotice}
 										/>
 									)}
-									{Array.isArray(msg.metadata?.spaceDocuments) &&
-										(msg.metadata.spaceDocuments as ChatSpaceDocumentItem[]).map((doc) => {
+									{(() => {
+										const persistedDocs = Array.isArray(msg.metadata?.spaceDocuments)
+											? (msg.metadata.spaceDocuments as ChatSpaceDocumentItem[])
+											: [];
+										const localDoc = savedDocsByMsg[msg.id];
+										const docs =
+											localDoc && !persistedDocs.some((doc) => doc.id === localDoc.id)
+												? [...persistedDocs, localDoc]
+												: persistedDocs;
+										return docs.map((doc) => {
 											const isLatestMessage =
 												Boolean(matterDetail) && messageIndex === matterDetail!.userMessages.length - 1;
 											const canProceed =
@@ -651,7 +768,8 @@ export function MessageFeed({
 													}
 												/>
 											);
-										})}
+										});
+									})()}
 								</div>
 							);
 						})}
