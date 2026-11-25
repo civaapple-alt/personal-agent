@@ -590,6 +590,7 @@ export function ChatStage({
 					matterDetail={matterDetail}
 					activeMatterProgress={activeMatterProgress}
 					activeDialogs={activeDialogs}
+					floatingClarificationMessageId={activeFloatingClarification?.messageId ?? null}
 					progressStartedAt={progressStartedAt}
 					streamingDelta={streamingDelta}
 					isOwner={isOwner}

@@ -848,11 +848,22 @@
 }
 .clarification-other-input {
 	flex: 1;
+	min-width: 0;
 	border: 0;
 	background: transparent;
 	color: inherit;
 	font-size: var(--text-sm);
 	outline: none;
+	box-shadow: none;
+}
+.clarification-other-input:focus,
+.clarification-other-input:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+.clarification-option-row:focus-within {
+	border-color: rgba(11, 87, 78, 0.45);
+	background: rgba(11, 87, 78, 0.05);
 }
 .clarification-dock-error {
 	margin: 0;

@@ -414,9 +414,9 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"## Design roles",
 	"1. Give each role one core outcome.",
 	"2. For non-coding, review, and observer roles, state which actions are outside their remit and when to return [SILENT].",
-	"3. Describe the role's typical workspace activities using `no_repo_docs`, `read_only_repo`, or `read_write_code` and suggest relevant tools. These declarations do not restrict runtime capabilities; all roles share configured tools. Describe directory limits as working rules.",
+	"3. All business roles share Pi's default runtime tools at execution time. Do NOT ask the user whether a role needs read/write/bash tool permissions; treat `workspaceScope` (`no_repo_docs`, `read_only_repo`, `read_write_code`) and `antiJobs` as working rules rather than runtime permission gates.",
 	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
-	"5. Ask up to three questions, limited to gaps that could change the goal, capability, or acceptance criteria. Use answers already given. When you have enough information, return the smallest workable plan.",
+	"5. Follow a clear two-stage rhythm (clarify first, then propose): if key gaps about goal, responsibility split, or boundaries still need user confirmation, ask 1–2 concise questions in `followUpQuestions` and leave `blueprints` and `roleAdjustments` empty (`[]`) in that turn. Once the goal and boundaries are clear (or already clear on turn 1), set `followUpQuestions: []` and return the smallest workable `blueprints`, `newSkills`, and `roleAdjustments` ready for one-click confirmation.",
 	'6. Use relevant installed Skills in `skills`. If the workflow lacks a tailored SOP, also propose an optional draft in `newSkills: [{ name, description, body, storageScope }]` (default `storageScope: "role_local"`) for user confirmation instead of placing unconfirmed names in `skills`. Identify missing dependencies without assuming that an integration works.',
 	"7. Follow the role-design Skill. Give each proposed role a small runnable task, success criteria, and a boundary check. Report capability as verified only after execution. Use a short string or { task, successCriteria, boundaryCheck } with three nonempty strings for verificationPlan. State when the plan is missing.",
 	"",
@@ -442,7 +442,6 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 			roleAdjustments: [
 				{
 					memberId: "product-manager",
-					suggestedTools: ["read"],
 					addAntiJobs: ["Define scope and acceptance criteria. Leave command-line checks to a specialist."],
 					workflowNote: "When retrying a delegation, include a short context brief.",
 					rationale: "One sentence explaining the adjustment",

@@ -20,6 +20,7 @@ export function HumanDecisionCard({
 	candidates,
 	requestedBy,
 	sourceName,
+	handledInFloatingDock = false,
 }: {
 	matter: MatterDto;
 	messageId: string;
@@ -35,6 +36,7 @@ export function HumanDecisionCard({
 	candidates: OrganizationMemberDto[];
 	requestedBy: string;
 	sourceName?: string;
+	handledInFloatingDock?: boolean;
 }) {
 	const inputId = useId();
 	const [assignee, setAssignee] = useState("");
@@ -135,7 +137,10 @@ export function HumanDecisionCard({
 							{active.assignedName ? `等待 ${active.assignedName} 答复` : "等待事项管理者答复"}
 						</p>
 					)}
-					{canAnswer && (
+					{canAnswer && handledInFloatingDock && (
+						<p className="human-decision-note">请在底部输入框上方的澄清卡片中回答。</p>
+					)}
+					{canAnswer && !handledInFloatingDock && (
 						<DecisionAnswerForm
 							options={options}
 							submitting={submitting}

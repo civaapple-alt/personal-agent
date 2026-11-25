@@ -56,6 +56,7 @@ interface MessageFeedProps {
 	matterDetail: MatterDetailPayload | null;
 	activeMatterProgress: MatterProgressDto | null;
 	activeDialogs: PendingDialogDto[];
+	floatingClarificationMessageId?: string | null;
 	progressStartedAt: number | null;
 	streamingDelta: string;
 	isOwner: boolean;
@@ -108,6 +109,7 @@ export function MessageFeed({
 	matterDetail,
 	activeMatterProgress,
 	activeDialogs,
+	floatingClarificationMessageId = null,
 	progressStartedAt,
 	streamingDelta,
 	isOwner,
@@ -596,6 +598,7 @@ export function MessageFeed({
 													? `${memberName(decision.source.memberId)}（委托 #${decision.source.assignmentNumber}）`
 													: undefined
 											}
+											handledInFloatingDock={floatingClarificationMessageId === msg.id}
 										/>
 									)}
 									{roleProposals && matterDetail && onApplyRoleProposals && onDismissRoleProposals && (

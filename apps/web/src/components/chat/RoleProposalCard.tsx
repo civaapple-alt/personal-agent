@@ -201,6 +201,43 @@ export function RoleProposalCard({
 		return <div className="role-proposal-status-bar dismissed">此草案已有新版，请在最新提案中确认。</div>;
 	}
 
+	const hasAnyProposalItems =
+		proposals.blueprints.length > 0 ||
+		(proposals.roleAdjustments?.length ?? 0) > 0 ||
+		(proposals.healthFindings?.length ?? 0) > 0;
+
+	if (structuredClarification && proposals.status === "pending" && hasAnyProposalItems) {
+		const summaryParts: string[] = [];
+		if (proposals.blueprints.length > 0) summaryParts.push(`拟新建 ${proposals.blueprints.length} 位角色`);
+		if (proposals.roleAdjustments?.length) summaryParts.push(`拟调整 ${proposals.roleAdjustments.length} 位现有角色`);
+		if (proposals.healthFindings?.length) summaryParts.push(`${proposals.healthFindings.length} 条诊断依据`);
+		return (
+			<div className="role-proposal-card">
+				<details className="architect-proposal-details">
+					<summary>初步草案预览（{summaryParts.join(" · ")} · 完成下方澄清后将生成最终确认卡）</summary>
+					<div style={{ marginTop: 8 }}>
+						{proposals.blueprints.map((bp, idx) => (
+							<p key={`${bp.draft.template.id}-${idx}`} className="human-decision-note">
+								• <strong>{bp.draft.template.name}</strong>：
+								{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}
+							</p>
+						))}
+						{proposals.roleAdjustments?.map((adj) => (
+							<p key={adj.memberId} className="human-decision-note">
+								• 调整 <strong>{adj.memberName}</strong>：{adj.rationale}
+							</p>
+						))}
+						{proposals.healthFindings?.map((finding, idx) => (
+							<p key={`${finding.title}-${idx}`} className="human-decision-note">
+								• <strong>{finding.title}</strong>：{finding.detail}
+							</p>
+						))}
+					</div>
+				</details>
+			</div>
+		);
+	}
+
 	const handleDismiss = async () => {
 		if (busy) return;
 		setBusy(true);
@@ -314,11 +351,13 @@ export function RoleProposalCard({
 								<div className="architect-blueprint-body">
 									<div className="architect-blueprint-top">
 										<strong>{adj.memberName}</strong>
-										{adj.suggestedTools && (
+										{adj.suggestedTools && adj.suggestedTools.join("/") !== adj.currentTools.join("/") ? (
 											<span className="pill">
-												{adj.currentTools.join(" / ") || "无工具"} →{" "}
-												{adj.suggestedTools.join(" / ") || "无工具"}
+												{adj.currentTools.join(" / ") || "默认工具"} →{" "}
+												{adj.suggestedTools.join(" / ") || "默认工具"}
 											</span>
+										) : (
+											<span className="pill">职责与边界调整</span>
 										)}
 									</div>
 									{adj.rationale && <p>{adj.rationale}</p>}
@@ -391,7 +430,7 @@ export function RoleProposalCard({
 											{bp.draft.template.name}
 											<small> ({bp.draft.template.title})</small>
 										</strong>
-										<span className="pill">{activeTools.join(" / ") || "无工作区工具"}</span>
+										<span className="pill">共享 Pi 工具</span>
 									</div>
 									<p>{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}</p>
 									<details className="architect-proposal-details">
