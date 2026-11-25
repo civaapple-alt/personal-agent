@@ -31,13 +31,18 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 	const [report, setReport] = useState<SessionInsightsReport | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [confirmingRescan, setConfirmingRescan] = useState(false);
+	const [lastScanMs, setLastScanMs] = useState<number | null>(null);
 
 	const load = useCallback(async () => {
 		setLoading(true);
 		setError(null);
+		setConfirmingRescan(false);
+		const startedAt = performance.now();
 		try {
 			const data = await fetchRuntimeInsights({ limit: 40 });
 			setReport(data);
+			setLastScanMs(Math.max(1, Math.round(performance.now() - startedAt)));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "加载运行洞察失败");
 		} finally {
@@ -50,62 +55,98 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 	}, [load]);
 
 	return (
-		<section className="settings-section">
-			<div className="pane-header-row">
-				<div className="pane-header">
-					<h2>运行洞察（Session Insights）</h2>
-					<p>仅在本机只读分析当前账号有权访问的 Pi 会话记录，零模型调用、零网络请求</p>
+		<section className="ui-section">
+			<div className="ui-section-head">
+				<div className="ui-section-heading">
+					<h2 className="ui-section-title">运行洞察（Session Insights）</h2>
+					<p className="ui-section-desc">
+						仅在本机只读分析当前账号有权访问的 Pi 会话记录，零模型调用、零网络请求
+						{lastScanMs !== null ? ` · 本次扫描耗时 ${lastScanMs}ms` : ""}
+					</p>
 				</div>
-				<button type="button" className="btn-pill-outline" onClick={() => void load()} disabled={loading}>
-					{loading ? "分析中…" : "重新扫描"}
-				</button>
+				<div className="ui-section-actions">
+					{confirmingRescan ? (
+						<div className="insights-confirm-bar">
+							<span className="insights-confirm-text">
+								确认重新扫描最近 40 个本机会话？（零模型调用，约 &lt;100ms）
+							</span>
+							<button
+								type="button"
+								className="btn-pill-dark btn-xs"
+								onClick={() => void load()}
+								disabled={loading}
+							>
+								确认扫描
+							</button>
+							<button
+								type="button"
+								className="btn-inline btn-xs"
+								onClick={() => setConfirmingRescan(false)}
+								disabled={loading}
+							>
+								取消
+							</button>
+						</div>
+					) : (
+						<button
+							type="button"
+							className="btn-pill-outline btn-xs"
+							onClick={() => setConfirmingRescan(true)}
+							disabled={loading}
+						>
+							{loading ? "分析中…" : "重新扫描"}
+						</button>
+					)}
+				</div>
 			</div>
 
 			{error && <div className="ui-banner error">{error}</div>}
 
 			{!report && loading ? (
-				<div className="ui-card">正在扫描本地 Pi 会话文件…</div>
+				<div className="ui-card insights-empty">正在扫描本地 Pi 会话文件…</div>
 			) : report ? (
-				<div className="stack-gap">
-					<div className="stats-grid">
-						<div className="ui-card compact">
-							<div className="muted-sm">分析会话</div>
-							<strong className="stat-val">{report.usage.sessions}</strong>
-							<div className="muted-xs">{report.usage.turns} 轮对话</div>
+				<div className="insights-stack">
+					<div className="insights-stats-grid">
+						<div className="insights-stat-card">
+							<span className="insights-stat-label">分析会话</span>
+							<strong className="insights-stat-val">{report.usage.sessions}</strong>
+							<span className="insights-stat-sub">{report.usage.turns} 轮对话</span>
 						</div>
-						<div className="ui-card compact">
-							<div className="muted-sm">工具调用</div>
-							<strong className="stat-val">{report.usage.toolCalls}</strong>
-							<div className="muted-xs">失败 {report.usage.toolErrors} 次</div>
+						<div className="insights-stat-card">
+							<span className="insights-stat-label">工具调用</span>
+							<strong className="insights-stat-val">{report.usage.toolCalls}</strong>
+							<span className="insights-stat-sub">失败 {report.usage.toolErrors} 次</span>
 						</div>
-						<div className="ui-card compact">
-							<div className="muted-sm">Token 用量</div>
-							<strong className="stat-val">
+						<div className="insights-stat-card">
+							<span className="insights-stat-label">Token 用量</span>
+							<strong className="insights-stat-val">
 								{formatCompactNumber(report.usage.inputTokens + report.usage.outputTokens)}
 							</strong>
-							<div className="muted-xs">缓存命中 {formatCompactNumber(report.usage.cacheReadTokens)}</div>
+							<span className="insights-stat-sub">
+								缓存命中 {formatCompactNumber(report.usage.cacheReadTokens)}
+							</span>
 						</div>
-						<div className="ui-card compact">
-							<div className="muted-sm">Pi 记录成本</div>
-							<strong className="stat-val">${report.usage.totalCostUsd.toFixed(2)}</strong>
-							<div className="muted-xs">{report.usage.byModel.length} 个模型</div>
+						<div className="insights-stat-card">
+							<span className="insights-stat-label">Pi 记录成本</span>
+							<strong className="insights-stat-val">${report.usage.totalCostUsd.toFixed(2)}</strong>
+							<span className="insights-stat-sub">{report.usage.byModel.length} 个模型</span>
 						</div>
 					</div>
 
-					<div className="ui-card">
-						<h3 style={{ marginTop: 0 }}>确定性规则发现（{report.findings.length}）</h3>
+					<div className="ui-card insights-card">
+						<h3 className="insights-card-title">确定性规则发现（{report.findings.length}）</h3>
 						{report.findings.length === 0 ? (
-							<p className="muted-sm">未发现反复失败命令、未加载的僵尸 Skill、高频返工或重复死循环。</p>
+							<p className="insights-muted">未发现反复失败命令、未加载的僵尸 Skill、高频返工或重复死循环。</p>
 						) : (
-							<div className="stack-gap-sm">
+							<div className="insights-findings-list">
 								{report.findings.map((item) => {
 									const badge = SEVERITY_BADGE[item.severity];
 									return (
-										<div key={item.id} className="ui-card compact">
-											<div className="banner-row">
-												<div className="row-wrap-gap">
+										<div key={item.id} className="insights-finding-item">
+											<div className="insights-finding-head">
+												<div className="insights-finding-title-row">
 													<span className={`pill ${badge.className}`}>{badge.label}</span>
-													<strong>{item.title}</strong>
+													<strong className="insights-finding-title">{item.title}</strong>
 													{item.suggestSkillCapture && (
 														<span className="tag-chip skill">建议沉淀为 Skill</span>
 													)}
@@ -124,11 +165,9 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 													</button>
 												)}
 											</div>
-											<p className="muted-sm" style={{ margin: "6px 0 0" }}>
-												{item.detail}
-											</p>
+											<p className="insights-finding-detail">{item.detail}</p>
 											{item.evidence && item.evidence.length > 0 && (
-												<div className="muted-xs mono-wrap" style={{ marginTop: "4px" }}>
+												<div className="insights-finding-evidence mono-wrap">
 													{item.evidence.join(" · ")}
 												</div>
 											)}
@@ -140,9 +179,9 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 					</div>
 
 					{report.usage.byTool.length > 0 && (
-						<div className="ui-card">
-							<h3 style={{ marginTop: 0 }}>高频工具分布</h3>
-							<div className="row-wrap-gap">
+						<div className="ui-card insights-card">
+							<h3 className="insights-card-title">高频工具分布</h3>
+							<div className="insights-tool-chips">
 								{report.usage.byTool.slice(0, 12).map((item) => (
 									<span key={item.tool} className="pill">
 										<code>{item.tool}</code> · {item.calls}
@@ -154,31 +193,33 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 					)}
 
 					{report.recentSessions.length > 0 && (
-						<div className="ui-card">
-							<h3 style={{ marginTop: 0 }}>最近会话（{report.recentSessions.length}）</h3>
-							<div className="stack-gap-sm">
+						<div className="ui-card insights-card">
+							<h3 className="insights-card-title">最近会话（{report.recentSessions.length}）</h3>
+							<div className="insights-session-list">
 								{report.recentSessions.slice(0, 10).map((session) => (
-									<div key={session.sessionId} className="settings-config-row">
-										<div className="settings-config-keycol">
+									<div key={session.sessionId} className="insights-session-row">
+										<div className="insights-session-meta">
 											<code>{session.sessionId.slice(0, 8)}</code>
-											<span>{session.memberName ?? session.memberId ?? "未知岗位"}</span>
+											<span className="insights-session-member">
+												{session.memberName ?? session.memberId ?? "未知岗位"}
+											</span>
 										</div>
-										<div className="settings-config-valcol">
-											<span className="mono-wrap">{session.title ?? "无标题"}</span>
-											<div className="row-wrap-gap" style={{ alignItems: "center" }}>
-												<span className="muted-xs">
-													{session.turns} 轮 · {session.toolCalls} 工具 · ${session.costUsd.toFixed(3)}
-												</span>
-												{session.matterId && onOpenMatter && (
-													<button
-														type="button"
-														className="btn-inline"
-														onClick={() => onOpenMatter(session.matterId!)}
-													>
-														打开事项 →
-													</button>
-												)}
-											</div>
+										<div className="insights-session-title" title={session.title ?? "无标题"}>
+											{session.title ?? "无标题"}
+										</div>
+										<div className="insights-session-stats">
+											<span>
+												{session.turns} 轮 · {session.toolCalls} 工具 · ${session.costUsd.toFixed(3)}
+											</span>
+											{session.matterId && onOpenMatter && (
+												<button
+													type="button"
+													className="btn-inline btn-xs"
+													onClick={() => onOpenMatter(session.matterId!)}
+												>
+													打开事项 →
+												</button>
+											)}
 										</div>
 									</div>
 								))}
@@ -186,7 +227,7 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 						</div>
 					)}
 
-					<p className="muted-xs">{report.privacyNote}</p>
+					<p className="insights-footnote">{report.privacyNote}</p>
 				</div>
 			) : null}
 		</section>
