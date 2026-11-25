@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { open, readFile, realpath, stat } from "node:fs/promises";
+import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
 	resolveAllowedSkillRoots,
@@ -126,6 +126,108 @@ export async function readWorkspaceDocument(sourcePath: string, cwd: string) {
 	}
 	if (!content.trim()) throw new Error("Document source must contain nonempty text");
 	return { path, realPath: resolved, sha256: createHash("sha256").update(bytes).digest("hex"), content };
+}
+
+const FOLDER_IMPORT_SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", ".turbo", ".cache"]);
+const FOLDER_IMPORT_MAX_FILES = 50;
+const FOLDER_IMPORT_MAX_FILE_BYTES = 256 * 1024;
+const FOLDER_IMPORT_MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+
+function isSkippedImportFile(name: string): boolean {
+	return name === ".DS_Store" || name === "Thumbs.db" || name === ".env" || name.startsWith(".env.");
+}
+
+/** Read a workspace-contained directory into a bounded UTF-8 file batch for `save_space_page({ sourceDir })`. */
+export async function readWorkspaceFolder(
+	rawSourceDir: string,
+	cwd: string,
+): Promise<{ realDir: string; relDir: string; files: Array<{ subPath: string; content: string }> }> {
+	let cleaned = rawSourceDir.trim();
+	if (cleaned.startsWith("file://")) cleaned = cleaned.slice("file://".length);
+	if (cleaned.startsWith("@")) cleaned = cleaned.slice(1);
+	const root = await realpath(cwd);
+	const resolvedDir = await realpath(resolve(cwd, cleaned));
+	const relFromRoot = relative(root, resolvedDir);
+	if (relFromRoot === ".." || relFromRoot.startsWith("../") || isAbsolute(relFromRoot)) {
+		throw new Error("sourceDir must be inside the current workspace");
+	}
+	if (!(await stat(resolvedDir)).isDirectory()) {
+		throw new Error("sourceDir must be an existing directory");
+	}
+
+	const collected: Array<{ subPath: string; content: string }> = [];
+	const refused: string[] = [];
+	let totalBytes = 0;
+
+	const walk = async (dir: string, prefix: string): Promise<void> => {
+		const entries = await readdir(dir, { withFileTypes: true });
+		entries.sort((a, b) => a.name.localeCompare(b.name));
+		for (const entry of entries) {
+			const subPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				if (FOLDER_IMPORT_SKIP_DIRS.has(entry.name)) continue;
+				await walk(resolve(dir, entry.name), subPath);
+				continue;
+			}
+			if (isSkippedImportFile(entry.name)) continue;
+			if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+
+			const fullPath = resolve(dir, entry.name);
+			let realFile: string;
+			try {
+				realFile = await realpath(fullPath);
+			} catch {
+				refused.push(`- ${subPath}: broken link or unreadable path`);
+				continue;
+			}
+			const relToDir = relative(resolvedDir, realFile);
+			if (relToDir === ".." || relToDir.startsWith("../") || isAbsolute(relToDir)) {
+				refused.push(`- ${subPath}: symlink escapes sourceDir`);
+				continue;
+			}
+			const info = await stat(realFile);
+			if (!info.isFile()) continue;
+			if (collected.length >= FOLDER_IMPORT_MAX_FILES) {
+				refused.push(`- ${subPath}: exceeds max ${FOLDER_IMPORT_MAX_FILES} files per folder import`);
+				continue;
+			}
+			if (info.size > FOLDER_IMPORT_MAX_FILE_BYTES) {
+				refused.push(`- ${subPath}: exceeds ${FOLDER_IMPORT_MAX_FILE_BYTES} bytes`);
+				continue;
+			}
+			totalBytes += info.size;
+			if (totalBytes > FOLDER_IMPORT_MAX_TOTAL_BYTES) {
+				refused.push(`- ${subPath}: total folder size exceeds ${FOLDER_IMPORT_MAX_TOTAL_BYTES} bytes`);
+				continue;
+			}
+			const bytes = await readFile(realFile);
+			if (bytes.includes(0)) {
+				refused.push(`- ${subPath}: binary file (NUL byte) is not supported in text space folder`);
+				continue;
+			}
+			try {
+				const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+				collected.push({ subPath, content });
+			} catch {
+				refused.push(`- ${subPath}: must be valid UTF-8 text`);
+			}
+		}
+	};
+
+	await walk(resolvedDir, "");
+	if (refused.length > 0) {
+		throw new Error(
+			`save_space_page(sourceDir): nothing was published because these paths were refused:\n${refused.join("\n")}`,
+		);
+	}
+	if (collected.length === 0) {
+		throw new Error("save_space_page(sourceDir): directory contains no publishable UTF-8 text files");
+	}
+	return {
+		realDir: resolvedDir,
+		relDir: relFromRoot ? relFromRoot.replace(/\\/g, "/") : ".",
+		files: collected,
+	};
 }
 
 /** Resolve one authoritative source once; file-backed documents retain their exact text snapshot. */

@@ -6,6 +6,8 @@ export interface PiHostToolExtensionApi {
 		name: string;
 		label: string;
 		description: string;
+		promptSnippet?: string;
+		promptGuidelines?: string[];
 		parameters: object;
 		execute(
 			callId: string,

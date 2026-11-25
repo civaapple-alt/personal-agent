@@ -27,6 +27,7 @@ export type TeamToolCall =
 			entryKind?: SpaceEntryKind;
 			subPath?: string;
 			files?: Array<{ path: string; content: string }>;
+			sourceDir?: string;
 			pageId?: string;
 			revision?: number;
 			type: "document" | "artifact" | "prototype_image" | "service_url";
@@ -36,6 +37,7 @@ export type TeamToolCall =
 			| { content: string; sourcePath?: never }
 			| { sourcePath: string; content?: never }
 			| { content?: undefined; sourcePath?: undefined; files: Array<{ path: string; content: string }> }
+			| { content?: string; sourcePath?: undefined; sourceDir: string }
 	  ))
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
 	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
@@ -156,10 +158,14 @@ function parseCall(value: unknown): TeamToolCall {
 			throw new Error("Provide pageId and revision together");
 		const hasContent = "content" in args && args.content !== undefined;
 		const hasSourcePath = "sourcePath" in args && args.sourcePath !== undefined;
+		const hasSourceDir = "sourceDir" in args && args.sourceDir !== undefined;
 		const files = "files" in args ? parseOptionalFiles(args.files) : undefined;
 		if (hasContent && hasSourcePath) throw new Error("Provide at most one of content or sourcePath");
-		if (!hasContent && !hasSourcePath && !files) {
-			throw new Error("Provide content, sourcePath, or files");
+		if (hasSourceDir && (hasSourcePath || files)) {
+			throw new Error("sourceDir cannot be combined with sourcePath or files");
+		}
+		if (!hasContent && !hasSourcePath && !hasSourceDir && !files) {
+			throw new Error("Provide content, sourcePath, sourceDir, or files");
 		}
 		const type = "type" in args ? args.type : "document";
 		if (type !== "document" && type !== "artifact" && type !== "prototype_image" && type !== "service_url")
@@ -167,7 +173,9 @@ function parseCall(value: unknown): TeamToolCall {
 		const docType = "docType" in args ? parseOptionalDocType(args.docType) : undefined;
 		const entryKind = "entryKind" in args ? parseOptionalEntryKind(args.entryKind) : undefined;
 		const subPath = "subPath" in args ? requiredString(args.subPath, "subPath", 512) : undefined;
-		if (type !== "document" && hasSourcePath) throw new Error("sourcePath is only supported for document items");
+		if (type !== "document" && (hasSourcePath || hasSourceDir)) {
+			throw new Error("sourcePath/sourceDir is only supported for document items");
+		}
 		const base = {
 			tool: "save_space_page" as const,
 			callId,
@@ -181,6 +189,13 @@ function parseCall(value: unknown): TeamToolCall {
 			...("changeNote" in args ? { changeNote: requiredString(args.changeNote, "changeNote", 2000) } : {}),
 			...(pageId ? { pageId, revision: Number(revision) } : {}),
 		};
+		if (hasSourceDir) {
+			return {
+				...base,
+				sourceDir: requiredString(args.sourceDir, "sourceDir", 4096),
+				...(hasContent ? { content: requiredString(args.content, "content", 64_000) } : {}),
+			};
+		}
 		if (hasSourcePath) {
 			return { ...base, sourcePath: requiredString(args.sourcePath, "sourcePath", 4096) };
 		}

@@ -48,6 +48,7 @@ import {
 import {
 	listWorkspaceTopLevelEntries,
 	prepareDelivery,
+	readWorkspaceFolder,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
 	resolveScopedDiscoveredSkillDirs,
@@ -337,13 +338,16 @@ export async function executeWithWorkerPass(
 							cwd,
 						)
 					: null;
+				const importedFolder = call.sourceDir ? await readWorkspaceFolder(call.sourceDir, cwd) : null;
 				toolSignal.throwIfAborted();
 				const currentMatter = deps.requireMatter(input.matterId);
 				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
 				const linkedFilePath =
 					draft && draft.type === "document" && draft.source.kind === "workspace_file"
 						? relative(cwd, draft.source.realPath).replace(/\\/g, "/")
-						: null;
+						: importedFolder
+							? importedFolder.relDir
+							: null;
 				const linkedOrgId = linkedFilePath ? activeOrgId : null;
 				const linkedWorkspaceId = linkedFilePath ? (input.workspace?.id ?? null) : null;
 				const staged = !call.pageId
@@ -352,6 +356,7 @@ export async function executeWithWorkerPass(
 						)
 					: undefined;
 				const batchFiles: Array<{ subPath: string; content: string }> = [
+					...(importedFolder?.files ?? []),
 					...(call.files ?? []).map((f) => ({ subPath: f.path, content: f.content })),
 				];
 				if (call.subPath && draft) {

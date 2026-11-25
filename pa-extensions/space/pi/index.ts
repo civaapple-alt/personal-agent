@@ -9,6 +9,7 @@ export default function spaceExtension(pi: PiHostToolExtensionApi): void {
 		label: "读取资料空间",
 		description:
 			"List this matter's space entries (optionally filtered by docType) or read an entry by pageId. For folder entries, returns README.md plus files[]; pass subPath to read a specific sub-file inside a folder entry.",
+		promptSnippet: "List or read versioned documents and folder entries in this matter's Git space",
 		parameters: {
 			type: "object",
 			properties: {
@@ -29,7 +30,13 @@ export default function spaceExtension(pi: PiHostToolExtensionApi): void {
 			name: "save_space_page",
 			label: "保存空间资料",
 			description:
-				"Save a plan, spec, decision, rule/SOP, or note to this matter's space. Set docType accurately: plan, spec, decision, rule, or note (default). For multi-file bundles, reference materials, or static demo sites with nested subdirectories (e.g. 'refs/option-a.md', 'demo/index.html', 'demo/assets/app.js', '.gitignore'), set entryKind='folder' and pass files=[{ path, content }, ...] (optionally alongside content for README.md) or pass a single subPath. Provide title and at least one of content, sourcePath, or files.",
+				"Save a plan, spec, decision, rule/SOP, or note to this matter's Git space. Set docType accurately: plan, spec, decision, rule, or note (default). For multi-file bundles or static HTML demos, prefer writing files cleanly on disk with native write/edit first and passing entryKind='folder' + sourceDir (pointer-based import), or pass inline files=[{ path, content }, ...]. Provide title and at least one of content, sourcePath, sourceDir, or files.",
+			promptSnippet: "Publish finished plans, specs, decisions, or multi-file folders to the matter's Git space",
+			promptGuidelines: [
+				"Use save_space_page for finished deliverables that the user should review or keep (plans, specs, decisions, static HTML prototypes), never for scratch notes or partial drafts.",
+				"For multi-file bundles or static prototypes, prefer creating the finished directory on disk with Pi native write/edit and importing it via save_space_page({ title, entryKind: 'folder', sourceDir }) rather than serializing large files into JSON.",
+				"Before updating an existing space document, read it first with read_space and pass its pageId and current revision.",
+			],
 			parameters: {
 				type: "object",
 				properties: {
@@ -54,6 +61,11 @@ export default function spaceExtension(pi: PiHostToolExtensionApi): void {
 					title: { type: "string" },
 					content: { type: "string" },
 					sourcePath: { type: "string" },
+					sourceDir: {
+						type: "string",
+						description:
+							"Workspace-relative or absolute directory inside the current workspace to import as a folder entry (skips .git, node_modules, dist, .env*; max 50 UTF-8 text files).",
+					},
 					summary: { type: "string" },
 					changeNote: { type: "string" },
 					pageId: { type: "string" },
