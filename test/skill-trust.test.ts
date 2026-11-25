@@ -164,13 +164,19 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 	store.upsertOrgMember({ orgId: org.id, userId: admin.id, orgRole: "org_owner" });
 	const ws = store.upsertWorkspace({ name: "demo-repo", repoPath: repoDir, orgId: org.id });
 
-	// Seed a workspace skill with script and a personal skill
+	// Seed a workspace skill under .agents/skills, a .pi/skills entry, and a personal skill
 	mkdirSync(join(repoDir, ".agents/skills/repo-preflight/scripts"), { recursive: true });
 	writeFileSync(
 		join(repoDir, ".agents/skills/repo-preflight/SKILL.md"),
 		"---\nname: repo-preflight\ndescription: Run repo preflight\n---\nBody\n",
 	);
 	writeFileSync(join(repoDir, ".agents/skills/repo-preflight/scripts/preflight.mjs"), "#!/usr/bin/env node\n");
+
+	mkdirSync(join(repoDir, ".pi/skills/pi-local-helper"), { recursive: true });
+	writeFileSync(
+		join(repoDir, ".pi/skills/pi-local-helper/SKILL.md"),
+		"---\nname: pi-local-helper\ndescription: Workspace .pi skill\n---\nPi Body\n",
+	);
 
 	mkdirSync(join(skillsDir, "users", admin.id, "my-digest"), { recursive: true });
 	writeFileSync(
@@ -234,8 +240,10 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 		assert.ok(listJson.piNativeSkills.some((s) => s.name === "frontend-design" && s.source === "local"));
 		assert.ok(listJson.piNativeSkills.some((s) => s.name === "poteto-mode" && s.origin === "package"));
 		const wsSkill = listJson.skills.find((s) => s.scope === "workspace" && s.name === "repo-preflight");
+		const wsPiSkill = listJson.skills.find((s) => s.scope === "workspace" && s.name === "pi-local-helper");
 		const personalSkill = listJson.skills.find((s) => s.scope === "personal" && s.name === "my-digest");
 		assert.ok(wsSkill);
+		assert.ok(wsPiSkill);
 		assert.deepEqual(wsSkill.scripts, ["scripts/preflight.mjs"]);
 		assert.equal(wsSkill.trustLevel, "confirm");
 		assert.equal(wsSkill.canManage, true);
@@ -280,6 +288,14 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 		assert.equal(detailJson.detail.scripts.length, 1);
 		assert.equal(detailJson.detail.scripts[0]?.path, "scripts/preflight.mjs");
 		assert.match(detailJson.detail.scripts[0]?.content ?? "", /#!\/usr\/bin\/env node/);
+
+		const piDetailRes = await fetch(
+			`${baseUrl}/api/skills/trust/detail?scope=workspace&scopeId=${encodeURIComponent(ws.id)}&skillName=pi-local-helper`,
+		);
+		assert.equal(piDetailRes.status, 200);
+		const piDetailJson = (await piDetailRes.json()) as { detail: { name: string; content: string } };
+		assert.equal(piDetailJson.detail.name, "pi-local-helper");
+		assert.match(piDetailJson.detail.content, /Pi Body/);
 
 		// Invalid skill name or unauthorized personal scope is rejected
 		const badNameRes = await fetch(

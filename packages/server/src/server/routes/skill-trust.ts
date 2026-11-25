@@ -160,16 +160,33 @@ function canViewSkillScope(
 	return false;
 }
 
-function resolveSkillScopeRoot(ctx: ServerRouteContext, scope: SkillTrustScope, scopeId: string): string | null {
+function resolveSkillScopeRoots(ctx: ServerRouteContext, scope: SkillTrustScope, scopeId: string): string[] {
 	if (scope === "workspace") {
 		const ws = ctx.store.getWorkspace(scopeId);
-		return ws ? resolve(ws.repoPath, ".agents/skills") : null;
+		if (!ws) return [];
+		const folders = ctx.store.workspaceFolders
+			.listFolders(ws.id)
+			.filter((folder) => folder.loadSkills)
+			.sort((a, b) => (a.role === "primary" ? -1 : b.role === "primary" ? 1 : a.path.localeCompare(b.path)));
+		const baseDirs = folders.length > 0 ? folders.map((f) => f.path) : [ws.repoPath];
+		const roots: string[] = [];
+		const seen = new Set<string>();
+		for (const dir of baseDirs) {
+			for (const rel of [".agents/skills", ".pi/skills"]) {
+				const candidate = resolve(dir, rel);
+				if (!seen.has(candidate)) {
+					seen.add(candidate);
+					roots.push(candidate);
+				}
+			}
+		}
+		return roots;
 	}
-	if (!ctx.skillsDir) return null;
-	if (scope === "global") return resolve(ctx.skillsDir, "global");
-	if (scope === "personal") return scopeId ? resolve(ctx.skillsDir, "users", scopeId) : null;
-	if (scope === "org") return scopeId ? resolve(ctx.skillsDir, "orgs", scopeId) : null;
-	return null;
+	if (!ctx.skillsDir) return [];
+	if (scope === "global") return [resolve(ctx.skillsDir, "global")];
+	if (scope === "personal") return scopeId ? [resolve(ctx.skillsDir, "users", scopeId)] : [];
+	if (scope === "org") return scopeId ? [resolve(ctx.skillsDir, "orgs", scopeId)] : [];
+	return [];
 }
 
 /** Handles `GET /api/skills/trust`, `GET /api/skills/trust/detail`, and `PATCH /api/skills/trust` for Four-Step Trust skill management. */
@@ -200,24 +217,33 @@ export async function handleSkillTrustRoutes(
 			sendError(res, 403, "无权查看该作用域下的 Skill 内容");
 			return true;
 		}
-		const rootDir = resolveSkillScopeRoot(ctx, scope, scopeId);
-		if (!rootDir) {
+		const rootDirs = resolveSkillScopeRoots(ctx, scope, scopeId);
+		if (rootDirs.length === 0) {
 			sendError(res, 404, "未找到对应的 Skill 根目录");
 			return true;
 		}
-		const skillDir = resolve(rootDir, skillName);
-		if (skillDir !== rootDir && !skillDir.startsWith(`${rootDir}${sep}`)) {
-			sendError(res, 400, "skillName 路径无效");
-			return true;
+		let matchedSkillDir: string | null = null;
+		let matchedSkillMd: string | null = null;
+		for (const rootDir of rootDirs) {
+			const candidateDir = resolve(rootDir, skillName);
+			if (candidateDir !== rootDir && !candidateDir.startsWith(`${rootDir}${sep}`)) {
+				sendError(res, 400, "skillName 路径无效");
+				return true;
+			}
+			const candidateMd = join(candidateDir, "SKILL.md");
+			if (existsSync(candidateMd)) {
+				matchedSkillDir = candidateDir;
+				matchedSkillMd = candidateMd;
+				break;
+			}
 		}
-		const skillMd = join(skillDir, "SKILL.md");
-		if (!existsSync(skillMd)) {
+		if (!matchedSkillDir || !matchedSkillMd) {
 			sendError(res, 404, "未找到该 Skill 的 SKILL.md");
 			return true;
 		}
-		const md = readBoundedUtf8(skillMd);
-		const scripts: ManagedSkillScriptDetailDto[] = listSkillScripts(skillDir).map((relPath) => {
-			const scriptFull = resolve(skillDir, relPath);
+		const md = readBoundedUtf8(matchedSkillMd);
+		const scripts: ManagedSkillScriptDetailDto[] = listSkillScripts(matchedSkillDir).map((relPath) => {
+			const scriptFull = resolve(matchedSkillDir, relPath);
 			const read = readBoundedUtf8(scriptFull);
 			return {
 				path: relPath,
@@ -229,7 +255,7 @@ export async function handleSkillTrustRoutes(
 			scope,
 			scopeId,
 			name: skillName,
-			filePath: skillMd,
+			filePath: matchedSkillMd,
 			content: md.content,
 			...(md.truncated ? { truncated: true } : {}),
 			scripts,
@@ -291,16 +317,23 @@ export async function handleSkillTrustRoutes(
 
 		for (const ws of ctx.store.listWorkspaces()) {
 			if (!canAccessWorkspace(ctx.store, actor, ws)) continue;
-			skills.push(
-				...scanSkillRoot({
-					rootDir: resolve(ws.repoPath, ".agents/skills"),
+			const canManage = canManageSkillScope(ctx, actor, "workspace", ws.id);
+			const seenInWs = new Set<string>();
+			for (const rootDir of resolveSkillScopeRoots(ctx, "workspace", ws.id)) {
+				const found = scanSkillRoot({
+					rootDir,
 					scope: "workspace",
 					scopeId: ws.id,
-					scopeLabel: `仓库 · ${ws.name}`,
-					canManage: canManageSkillScope(ctx, actor, "workspace", ws.id),
+					scopeLabel: `工作区 · ${ws.name}`,
+					canManage,
 					policiesByKey,
-				}),
-			);
+				});
+				for (const item of found) {
+					if (seenInWs.has(item.name)) continue;
+					seenInWs.add(item.name);
+					skills.push(item);
+				}
+			}
 		}
 
 		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");

@@ -48,7 +48,7 @@ function formatPiSourceLabel(source: string): string {
 }
 
 function stripScopePrefix(label: string): string {
-	return label.replace(/^(仓库|组织)\s*·\s*/, "");
+	return label.replace(/^(工作区|仓库|组织)\s*·\s*/, "");
 }
 
 function skillKey(skill: Pick<ManagedSkillEntryDto, "scope" | "scopeId" | "name">): string {
@@ -205,15 +205,16 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 		if (selection.kind === "managed_all") {
 			return {
 				title: "全部 PA 托管技能",
-				subtitle: "通过 propose_skill 沉淀在仓库、组织、个人或全局作用域的标准 Skill 与脚本信任策略",
+				subtitle: "通过 propose_skill 沉淀在工作区、组织、个人或全局作用域的标准 Skill 与脚本信任策略",
 			};
 		}
 		if (selection.kind === "managed_scope") {
 			if (selection.scope === "workspace") {
 				const target = groupedManaged.workspaces.find((w) => w.scopeId === selection.scopeId);
 				return {
-					title: target ? `仓库 · ${target.label}` : "仓库技能",
-					subtitle: "来自已登记代码仓库的 .agents/skills/ 目录，脚本默认步骤 3 执行前确认",
+					title: target ? `工作区 · ${target.label}` : "工作区技能",
+					subtitle:
+						"来自工作区主目录及已启用 Skills 的附加目录（.agents/skills、.pi/skills），脚本默认步骤 3 执行前确认",
 				};
 			}
 			if (selection.scope === "org") {
@@ -362,9 +363,9 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 					</div>
 
 					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">仓库技能</div>
+						<div className="skills-nav-group-label">工作区技能</div>
 						{groupedManaged.workspaces.length === 0 ? (
-							<div className="skills-nav-empty">暂无仓库技能</div>
+							<div className="skills-nav-empty">暂无可见工作区</div>
 						) : (
 							groupedManaged.workspaces.map((ws) => (
 								<button
