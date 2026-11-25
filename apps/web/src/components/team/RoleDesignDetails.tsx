@@ -4,9 +4,16 @@ import { formatHashRoute } from "../../hashRouter.ts";
 export function RoleCapabilityDetails({ draft }: { draft: RoleArchitectDraftDto }) {
 	const missing =
 		draft.capabilityReport?.skills.filter((skill) => skill.state === "missing").map((skill) => skill.name) ?? [];
+	const bundledNewSkills = draft.newSkills ?? [];
+	const skillsSummary =
+		draft.template.skills.length > 0
+			? draft.template.skills.join("、")
+			: bundledNewSkills.length > 0
+				? `将配套新建 ${bundledNewSkills.length} 个 Skill（${bundledNewSkills.map((skill) => skill.name).join("、")}）`
+				: "未选择 Skill";
 	return (
 		<div className="architect-blueprint-anti">
-			<p>工作方法：{draft.template.skills.join("、") || "未选择 Skill"}</p>
+			<p>工作方法：{skillsSummary}</p>
 			{missing.length > 0 && <p>缺少技能文件：{missing.join("、")}，执行前需配置。</p>}
 			{(draft.template.mcpDependencies?.length ?? 0) > 0 && (
 				<p>外部集成：{draft.template.mcpDependencies?.join("、")}，待运行核查。</p>

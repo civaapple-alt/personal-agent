@@ -207,7 +207,7 @@ function buildDefaultAntiJobs(input: {
 	};
 
 	for (const item of input.explicitAntiJobs) pushItem(item);
-	if (input.workspaceScope !== "read_write_code") {
+	if (input.workspaceScope === "read_only_repo") {
 		pushItem("不直接修改工作区代码或执行命令行变更");
 	}
 	if (input.interactionStyle === "consult_specialist") {
