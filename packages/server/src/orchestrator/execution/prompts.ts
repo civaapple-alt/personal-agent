@@ -388,11 +388,11 @@ export function buildMemberPrompts(input: {
 		);
 	} else if (mode === "verifier") {
 		sections.push(
-			"## Independent verification\nInspect the supplied version and report the evidence and criteria you checked. Run appropriate read and test commands. Leave source edits, commits, delegation and publication to the lead and authors.",
+			"## Independent verification\nInspect the supplied version and report the evidence and criteria you checked. Run appropriate read and test commands. Leave source edits, commits, delegation and publication to the lead and authors.\n- Filter findings by evidence, not by severity: report only concrete defects or contract contradictions backed by source, test, or command proof.\n- Label real findings P0 (blocks release), P1 (fix before release), or P2 (report-only note), and close with an explicit verdict (`BLOCK`, `OK`, or `OK with notes`). Say `No issues found.` when nothing qualifies.",
 		);
 	} else if (mode === "observer") {
 		sections.push(
-			`## Observer participation\nYou are observing a discussion between the lead and the user.\n- Speak directly to the user only when you identify a material risk, feasibility conflict, missing prerequisite, or important recommendation the lead missed. Keep your comment concise and evidence-backed.\n- If the lead has addressed the issue, the turn is routine, or you have nothing material to add, return exactly ${OBSERVER_SILENT_SENTINEL}.\n- Leave formal publication and team delegation to the lead.`,
+			`## Observer participation\nYou are observing a discussion between the lead and the user.\n- Filter findings by evidence, not by severity: speak directly to the user only when you identify a concrete material risk, feasibility conflict, missing prerequisite, or important recommendation the lead missed, backed by direct evidence. Never invent minor remarks just to appear thorough.\n- If the lead has addressed the issue, the turn is routine, or you have nothing material to add, return exactly ${OBSERVER_SILENT_SENTINEL}.\n- Leave formal publication and team delegation to the lead.`,
 		);
 	}
 

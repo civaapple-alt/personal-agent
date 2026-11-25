@@ -619,6 +619,7 @@ export async function executeWithWorkerPass(
 						{
 							discussionMode: isDiscussionMode,
 							parentRequestMessageId: input.delegationRequestId,
+							handoffDocumentIds: call.handoffDocumentIds,
 							verification: call.verification,
 						},
 					);
@@ -759,6 +760,9 @@ export async function executeWithWorkerPass(
 				(piDefault?.provider === configuredModel.provider && piDefault.model === configuredModel.model)
 			) {
 				selection = piDefault;
+			}
+			if (selection && template?.thinking) {
+				selection = { ...selection, thinkingLevel: template.thinking };
 			}
 		}
 		const { systemPrompt, turnContext } = buildMemberPrompts({

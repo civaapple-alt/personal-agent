@@ -40,7 +40,14 @@ export type TeamToolCall =
 			| { content?: string; sourcePath?: undefined; sourceDir: string }
 	  ))
 	| ({ tool: "request_clarification"; callId: string; sourceAssignmentNumber?: number } & Clarification)
-	| { tool: "delegate_to_member"; callId: string; memberId: string; task: string; verification?: VerificationRequest }
+	| {
+			tool: "delegate_to_member";
+			callId: string;
+			memberId: string;
+			task: string;
+			handoffDocumentIds?: string[];
+			verification?: VerificationRequest;
+	  }
 	| {
 			tool: "propose_skill";
 			callId: string;
@@ -244,11 +251,22 @@ function parseCall(value: unknown): TeamToolCall {
 		return { ...base, files: files! };
 	}
 	if (value.tool === "delegate_to_member" && "memberId" in args && "task" in args) {
+		let handoffDocumentIds: string[] | undefined;
+		if ("handoffDocumentIds" in args && args.handoffDocumentIds !== undefined) {
+			if (!Array.isArray(args.handoffDocumentIds) || args.handoffDocumentIds.length > 5) {
+				throw new Error("handoffDocumentIds must be an array of at most 5 document IDs");
+			}
+			const parsed = [
+				...new Set(args.handoffDocumentIds.map((id, idx) => requiredString(id, `handoffDocumentIds[${idx}]`, 128))),
+			];
+			if (parsed.length > 0) handoffDocumentIds = parsed;
+		}
 		return {
 			tool: value.tool,
 			callId,
 			memberId: requiredString(args.memberId, "memberId", 256),
 			task: requiredString(args.task, "task", 16_000),
+			...(handoffDocumentIds ? { handoffDocumentIds } : {}),
 			...("verification" in args ? { verification: parseVerification(args.verification) } : {}),
 		};
 	}

@@ -14,6 +14,13 @@ export default function delegationExtension(pi: PiHostToolExtensionApi): void {
 			properties: {
 				memberId: { type: "string" },
 				task: { type: "string" },
+				handoffDocumentIds: {
+					type: "array",
+					items: { type: "string" },
+					maxItems: 5,
+					description:
+						"Optional Space document IDs visible in this matter to attach as structured handoff context (validated before launching the colleague; missing or inaccessible documents fail closed).",
+				},
 				verification: {
 					type: "object",
 					properties: {

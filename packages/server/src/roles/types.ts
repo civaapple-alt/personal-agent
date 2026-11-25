@@ -8,6 +8,8 @@ export interface RoleTemplateSections {
 
 export type RoleKind = "business" | "architect" | "solo";
 
+export type RoleThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 export type RoleScope = "global" | "org" | "personal";
 
 export type SkillStorageScope = "role_local" | "global" | "org" | "personal";
@@ -33,6 +35,7 @@ export interface RoleTemplate {
 	name: string;
 	title: string;
 	roleKind?: RoleKind;
+	thinking?: RoleThinkingLevel;
 	roleScope?: RoleScope;
 	ownerOrgId?: string | null;
 	ownerUserId?: string | null;

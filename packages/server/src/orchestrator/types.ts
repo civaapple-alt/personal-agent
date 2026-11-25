@@ -329,6 +329,7 @@ export interface MatterRun {
 export interface DelegationContext {
 	discussionMode?: boolean;
 	parentRequestMessageId?: string;
+	handoffDocumentIds?: string[];
 	verification?: VerificationRequest;
 }
 

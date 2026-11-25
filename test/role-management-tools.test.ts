@@ -8,6 +8,7 @@ import workerRuntimeExtension, { type WorkerRuntimeExtensionApi } from "../pa-ex
 import { prepareTeamExtension } from "../packages/server/src/extensions/team-extension/runtime.ts";
 import { assessMatterInitiation } from "../packages/server/src/orchestrator/architect/matter-initiation.ts";
 import type { RoleProposalPayload } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
+import { delegateBetweenMembers } from "../packages/server/src/orchestrator/execution/delegation-runner.ts";
 import { buildMemberPrompts } from "../packages/server/src/orchestrator/execution/prompts.ts";
 import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/rsi/team-health.ts";
 import {
@@ -15,8 +16,13 @@ import {
 	buildTeamCapabilities,
 } from "../packages/server/src/orchestrator/runtime/team-capabilities.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
+import { emptyAbortedResult, emptyEffects, type MatterRun } from "../packages/server/src/orchestrator/types.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
-import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
+import {
+	loadRoleTemplatesFromDir,
+	parseRoleTemplateMarkdown,
+	serializeRoleTemplateMarkdown,
+} from "../packages/server/src/roles/template-loader.ts";
 import { createTeamToolBridge, type TeamToolCall } from "../packages/server/src/rpc/team-tool-bridge.ts";
 import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
 import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
@@ -442,6 +448,182 @@ test("pi-default solo role stays isolated from auto-routing, team observers, ini
 		});
 		assert.equal(compactAfterTurn1, compactAfterTurn2);
 		assert.ok(compactAfterTurn1.length < fullAfterTurn1.length / 3);
+	} finally {
+		db.close();
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("role templates parse/serialize optional thinking level and verifier/observer prompts enforce evidence rubric", async () => {
+	const raw = [
+		"---",
+		"id: scout-helper",
+		"name: Scout Helper",
+		"title: Codebase Scout",
+		"thinking: low",
+		"version: 1.0.0",
+		"shareable: true",
+		"isPrimaryContact: false",
+		"keywords: [scout]",
+		"tools: [read]",
+		"skills: []",
+		"mcpDependencies: []",
+		"---",
+		"",
+		"## Responsibilities and Boundaries",
+		"- Fast read-only codebase recon.",
+	].join("\n");
+	const parsed = parseRoleTemplateMarkdown(raw);
+	assert.equal(parsed.thinking, "low");
+	const roundtripped = parseRoleTemplateMarkdown(serializeRoleTemplateMarkdown(parsed));
+	assert.equal(roundtripped.thinking, "low");
+
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const qaTemplate = templates.find((t) => t.id === "qa-manager");
+	assert.ok(qaTemplate);
+	const member = {
+		id: "qa-manager",
+		templateId: "qa-manager",
+		displayName: "QA Manager",
+		roleTitle: "QA Manager",
+		gitName: "QA Manager",
+		gitEmail: "qa-manager@team.local",
+		identitySummary: "",
+		roleScope: "global" as const,
+		isPrimaryContact: false,
+		keywords: qaTemplate.keywords,
+		createdAt: "2026-11-25T00:00:00.000Z",
+		updatedAt: "2026-11-25T00:00:00.000Z",
+	};
+	const verifierPrompt = buildMemberPrompts({
+		member,
+		template: qaTemplate,
+		workspace: null,
+		sessionMode: "verifier",
+		teamMembers: [member],
+	}).systemPrompt;
+	assert.match(verifierPrompt, /Filter findings by evidence, not by severity/);
+	assert.match(verifierPrompt, /No issues found\./);
+
+	const observerPrompt = buildMemberPrompts({
+		member,
+		template: qaTemplate,
+		workspace: null,
+		sessionMode: "observer",
+		teamMembers: [member],
+	}).systemPrompt;
+	assert.match(observerPrompt, /Filter findings by evidence, not by severity/);
+});
+
+test("delegate_to_member preflight validates handoffDocumentIds and injects Space document content", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pa-handoff-preflight-"));
+	const db = openPersonalAgentDatabase(join(dir, "pa.db"));
+	try {
+		const store = new PersonalAgentStore(db, { spacesDir: join(dir, "spaces") });
+		const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+		for (const tpl of templates) {
+			store.upsertMember({
+				id: tpl.id,
+				templateId: tpl.id,
+				displayName: tpl.name,
+				roleTitle: tpl.title,
+				isPrimaryContact: tpl.isPrimaryContact,
+				keywords: tpl.keywords,
+			});
+		}
+		store.spaces.ensureAllDefaultSpaces();
+		const matter = store.createMatter({ title: "Handoff check", leadMemberId: "product-manager" });
+		const space = store.spaces.resolveMatterDefaultSpace(matter);
+		const doc = await store.spaces.createDocument({
+			spaceId: space.id,
+			matterId: matter.id,
+			title: "Auth Spec",
+			docType: "spec",
+			content: "# Auth Spec\nMust verify token expiry on every request.",
+			actorId: "product-manager",
+		});
+
+		const makeRun = (): MatterRun => ({
+			settled: Promise.resolve(),
+			finish: () => {},
+			controller: new AbortController(),
+			cancelled: false,
+			workers: new Set(),
+			contexts: new Set(),
+			delegations: new Map(),
+			activeDelegations: new Map(),
+			draftVerifications: new Map(),
+			recentLogs: [],
+			delegationCount: 0,
+			effects: emptyEffects(),
+			userMessageId: "msg-user-1",
+			startedAt: Date.now(),
+			timeoutMs: 60_000,
+			deadlineAt: null,
+		});
+
+		// 1. Missing Space doc fails closed in preflight without launching colleague worker.
+		let launchedOnInvalid = false;
+		await assert.rejects(
+			() =>
+				delegateBetweenMembers(
+					{
+						store,
+						executeWithWorker: async () => {
+							launchedOnInvalid = true;
+							throw new Error("should not run");
+						},
+					},
+					{
+						matterId: matter.id,
+						fromMemberId: "product-manager",
+						toMemberId: "engineering-manager",
+						question: "Implement auth spec",
+					},
+					makeRun(),
+					null,
+					["product-manager"],
+					new AbortController().signal,
+					emptyEffects(),
+					undefined,
+					{ handoffDocumentIds: ["doc-does-not-exist"] },
+				),
+			/Delegation preflight failed/,
+		);
+		assert.equal(launchedOnInvalid, false);
+
+		// 2. Valid Space doc passes preflight and injects structured handoff content into colleague prompt.
+		let receivedPrompt = "";
+		const res = await delegateBetweenMembers(
+			{
+				store,
+				executeWithWorker: async (workerInput) => {
+					receivedPrompt = workerInput.taskPrompt;
+					return {
+						...emptyAbortedResult(),
+						aborted: false,
+						assistantText: "Implemented token expiry check.",
+					};
+				},
+			},
+			{
+				matterId: matter.id,
+				fromMemberId: "product-manager",
+				toMemberId: "engineering-manager",
+				question: "Implement auth spec",
+			},
+			makeRun(),
+			null,
+			["product-manager"],
+			new AbortController().signal,
+			emptyEffects(),
+			undefined,
+			{ handoffDocumentIds: [doc.id] },
+		);
+		assert.equal(res.answerText, "Implemented token expiry check.");
+		assert.match(receivedPrompt, /## Handoff Space documents/);
+		assert.match(receivedPrompt, /Auth Spec/);
+		assert.match(receivedPrompt, /Must verify token expiry on every request\./);
 	} finally {
 		db.close();
 		await rm(dir, { recursive: true, force: true });

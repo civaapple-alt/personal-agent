@@ -169,6 +169,16 @@ export function parseRoleTemplateMarkdown(
 	const meta = parseFrontmatter(frontmatterRaw);
 
 	const roleKind = meta.roleKind === "architect" ? "architect" : meta.roleKind === "solo" ? "solo" : undefined;
+	const rawThinking = typeof meta.thinking === "string" ? meta.thinking.trim().toLowerCase() : "";
+	const thinking =
+		rawThinking === "off" ||
+		rawThinking === "minimal" ||
+		rawThinking === "low" ||
+		rawThinking === "medium" ||
+		rawThinking === "high" ||
+		rawThinking === "xhigh"
+			? rawThinking
+			: undefined;
 	const responsibilityKeywords = meta.responsibilityKeywords;
 	const forcedScope = normalizeScopeOverride(explicitScope);
 	const parsedScope = parseRoleScope(meta.roleScope) ?? "global";
@@ -188,6 +198,7 @@ export function parseRoleTemplateMarkdown(
 		name: requireString(meta, "name", sourcePath),
 		title: requireString(meta, "title", sourcePath),
 		...(roleKind ? { roleKind } : {}),
+		...(thinking ? { thinking } : {}),
 		roleScope: effectiveScope.roleScope,
 		ownerOrgId: effectiveScope.ownerOrgId,
 		ownerUserId: effectiveScope.ownerUserId,
@@ -309,6 +320,7 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		`name: ${template.name}`,
 		`title: ${template.title}`,
 		...(template.roleKind === "architect" || template.roleKind === "solo" ? [`roleKind: ${template.roleKind}`] : []),
+		...(template.thinking ? [`thinking: ${template.thinking}`] : []),
 		...(template.roleScope && template.roleScope !== "global" ? [`roleScope: ${template.roleScope}`] : []),
 		...(template.roleScope === "org" && template.ownerOrgId ? [`ownerOrgId: ${template.ownerOrgId}`] : []),
 		...(template.roleScope === "personal" && template.ownerUserId ? [`ownerUserId: ${template.ownerUserId}`] : []),

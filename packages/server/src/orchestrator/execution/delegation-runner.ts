@@ -68,6 +68,44 @@ export async function delegateBetweenMembers(
 	if (chain.includes(toMember.id)) throw new Error("Delegation cycle: cannot call yourself or an ancestor");
 	if (chain.length >= 3) throw new Error("Delegation depth limit reached (3 members)");
 	const verification = options?.verification;
+	const handoffDocs: Array<{ id: string; title: string; docType: string; revision: number; content: string }> = [];
+	if (options?.handoffDocumentIds && options.handoffDocumentIds.length > 0) {
+		if (!matterRecord) {
+			throw new Error("Delegation preflight failed: matter not found for handoffDocumentIds");
+		}
+		const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(matterRecord);
+		let totalChars = 0;
+		for (const docId of options.handoffDocumentIds) {
+			const doc = await deps.store.spaces.getDocument(docId);
+			const visible =
+				doc &&
+				doc.spaceId === targetSpace.id &&
+				(!doc.matterId ||
+					doc.matterId === input.matterId ||
+					deps.store.getMatter(doc.matterId)?.visibility === "org");
+			if (!visible) {
+				throw new Error(
+					`Delegation preflight failed: handoff Space document "${docId}" does not exist or is not accessible in this matter`,
+				);
+			}
+			const remainingBudget = Math.max(0, 12_000 - totalChars);
+			const sliceLimit = Math.min(4_000, remainingBudget);
+			const snippet =
+				sliceLimit > 0
+					? doc.content.length > sliceLimit
+						? `${doc.content.slice(0, sliceLimit)}\n[...truncated; call read_space({ pageId: "${doc.id}" }) for full text]`
+						: doc.content
+					: `[omitted due to handoff budget; call read_space({ pageId: "${doc.id}" })]`;
+			totalChars += snippet.length;
+			handoffDocs.push({
+				id: doc.id,
+				title: doc.title,
+				docType: doc.docType,
+				revision: doc.revision,
+				content: snippet,
+			});
+		}
+	}
 	const subject = verification
 		? await prepareVerification(
 				deps.store,
@@ -86,6 +124,7 @@ export async function delegateBetweenMembers(
 		fromMember.id,
 		toMember.id,
 		input.question.trim(),
+		handoffDocs.map((doc) => `${doc.id}@r${doc.revision}`),
 		verification,
 		subject?.target.digest,
 	]);
@@ -152,7 +191,18 @@ export async function delegateBetweenMembers(
 		let lastStreamBroadcastAt = 0;
 		try {
 			const effects = emptyEffects();
-			const assignment = `Internal delegation from ${fromMember.displayName}:\nAssignment #${delegationNumber} for this turn.\n${input.question}`;
+			const handoffSection =
+				handoffDocs.length > 0
+					? [
+							"",
+							"## Handoff Space documents",
+							...handoffDocs.map(
+								(doc) =>
+									`### ${doc.title} (pageId: ${doc.id}, docType: ${doc.docType}, rev ${doc.revision})\n${doc.content}`,
+							),
+						].join("\n")
+					: "";
+			const assignment = `Internal delegation from ${fromMember.displayName}:\nAssignment #${delegationNumber} for this turn.\n${input.question}${handoffSection}`;
 			const result = await deps.executeWithWorker({
 				effectsTarget: effects,
 				matterId: input.matterId,

@@ -23,7 +23,8 @@ antiJobs: [Do not pass acceptance based on a teammate's account or simulated out
 2. Construct boundary cases that could disprove the proposal. Select relevant combinations of states, repeated operations, data loss, concurrency, recovery, and migration based on actual risk.
 3. Inspect the real deliverable, service, or code. Rerun key steps with temporary resources to protect user data. Record inputs, commands, actual output, and the tested version.
 4. Assess tooling, collaboration, and business results separately. Judge content from direct evidence even when consultation happened, copied content matches, test counts grew, or teammates agree.
-5. Report reproduction steps, expected and observed results, and impact. Retest the same counterexample after a revision and check related regressions. Reuse lessons about missed coverage once verified. Mark unrun scenarios as unverified.
+5. Filter findings by evidence, not by severity. Report only concrete defects or contract contradictions supported by source proof, test output, or reproduction; distinguish verified evidence from interpretation or inference. Classify real findings as P0 (blocks release), P1 (fix before release), or P2 (report-only note), and end with an explicit verdict (`BLOCK`, `OK`, or `OK with notes`). Say `No issues found.` when nothing qualifies rather than padding with speculative remarks.
+6. Report reproduction steps, expected and observed results, and impact. Retest the same counterexample after a revision and check related regressions. Reuse lessons about missed coverage once verified. Mark unrun scenarios as unverified.
 
 ## Tools and Environment
 - Use `read` to inspect deliverables and test definitions. Use `bash` for existing tests and isolated verification. Confirm the environment and data before running commands that can have side effects.
