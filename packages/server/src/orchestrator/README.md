@@ -9,7 +9,7 @@
 - [team-health.ts](rsi/team-health.ts) 收集有 ID 的有限配置与协作案例供架构师体检引用，并支持按用户/组织过滤可见成员与最近案例，解析时过滤不存在的来源。`role-design` 方法全文由宿主提供给无业务工具的架构师；技能目录、能力状态和具体边界见[角色设计](../../../../docs/reference/role-design.md)。
 - [matter-context.ts](runtime/matter-context.ts) 按历史消息中的工作区锚点筛选证据与有来源关联的成果，不以事项今天的绑定推断旧消息范围。
   筛选同时校验组织快照；旁听主题、摘要、断点简报与复盘均不得带入其他组织的旧背景。
-- [team-capabilities.ts](runtime/team-capabilities.ts) 给主责提供当前可见事项成员的角色声明、委托状态和同事项同工作区最近一次内部协作启动清单，标注来源时间、轮次及模式。启动清单是历史证据，不预测下一次运行；`read_pa_help` 的 `team_capabilities` 提供同一视图。
+- [team-capabilities.ts](runtime/team-capabilities.ts) 提供两层团队能力视图：`buildCompactTeamCapabilities` 向主责 `PA_TURN_CONTEXT` 注入稳定、保 Prompt Cache 的极简同事索引（仅含一句核心职责、边界条数与是否已有内部启动记录，不含易变时间戳或完整工具清单），主责按需调用 `read_team_roles({ includeCapabilities: true })` 获取 `buildTeamCapabilities` 生成的完整能力卡（角色声明、边界、Skills/MCP 声明与同事项同工作区最近一次内部协作启动清单）；`read_pa_help` 的 `team_capabilities` 亦复用同一完整视图。
 - 独立合成场景的真实模型检查使用 `npm run demo:team:capabilities`，保留启动事件、回复和内部消息，仍需人工审阅；详见[运行验证](../../../../docs/validation/runtime-checks.md)。
 - GitHub `fetch_content` 结束后，岗位运行器在事项事件中记录工具明确报告的获取方式、去除参数的来源和截断标记；不把临时路径当作持久工作区。续接时团队扩展对已知失效的临时路径补充提示。
 

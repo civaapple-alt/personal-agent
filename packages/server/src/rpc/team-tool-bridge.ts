@@ -70,6 +70,7 @@ export type TeamToolCall =
 	| {
 			tool: "read_team_roles";
 			callId: string;
+			includeCapabilities?: boolean;
 			includeHealthEvidence?: boolean;
 	  }
 	| {
@@ -355,6 +356,10 @@ function parseCall(value: unknown): TeamToolCall {
 		};
 	}
 	if (value.tool === "read_team_roles") {
+		const includeCapabilities =
+			"includeCapabilities" in args && args.includeCapabilities !== undefined
+				? Boolean(args.includeCapabilities)
+				: undefined;
 		const includeHealthEvidence =
 			"includeHealthEvidence" in args && args.includeHealthEvidence !== undefined
 				? Boolean(args.includeHealthEvidence)
@@ -362,6 +367,7 @@ function parseCall(value: unknown): TeamToolCall {
 		return {
 			tool: "read_team_roles",
 			callId,
+			...(includeCapabilities !== undefined ? { includeCapabilities } : {}),
 			...(includeHealthEvidence !== undefined ? { includeHealthEvidence } : {}),
 		};
 	}

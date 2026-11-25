@@ -28,7 +28,7 @@ import { readHumanDecision } from "../human-decision.ts";
 import { filterTeamMembersForScope } from "../rsi/team-health.ts";
 import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
-import { buildTeamCapabilities } from "../runtime/team-capabilities.ts";
+import { buildCompactTeamCapabilities, buildTeamCapabilities } from "../runtime/team-capabilities.ts";
 import { readWorkbenchTopic } from "../runtime/workbench-context.ts";
 import {
 	buildAttachedFolderContextFiles,
@@ -280,12 +280,11 @@ export async function executeWithWorkerPass(
 				}
 				const scopeFilter = { orgId: activeOrgId, actorUserId };
 				const templatesById = deps.getTemplatesById?.() ?? new Map<string, RoleTemplate>();
-				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter).filter(
-					(member) =>
-						!isArchitectRoleTemplate(
-							deps.getTemplateForMember(member) ?? templatesById.get(member.templateId) ?? { id: member.id },
-						),
-				);
+				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter).filter((member) => {
+					const tpl = deps.getTemplateForMember(member) ??
+						templatesById.get(member.templateId) ?? { id: member.id };
+					return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+				});
 				const roles = visibleMembers.map((member) => {
 					const tpl = deps.getTemplateForMember(member) ?? templatesById.get(member.templateId);
 					return {
@@ -303,6 +302,19 @@ export async function executeWithWorkerPass(
 				return {
 					orgId: activeOrgId,
 					roles,
+					...(call.includeCapabilities && matter
+						? {
+								teamCapabilities: buildTeamCapabilities({
+									matter,
+									members: matterAiMembers,
+									messages: deps.store.listMessages(input.matterId),
+									workspaceId: input.workspace?.id ?? null,
+									repoPath: cwd,
+									orgId: activeOrgId,
+									getTemplate: deps.getTemplateForMember,
+								}),
+							}
+						: {}),
 					...(call.includeHealthEvidence
 						? { healthEvidenceDigest: collectTeamFrictionDigest(deps.store, templatesById, scopeFilter) }
 						: {}),
@@ -764,7 +776,7 @@ export async function executeWithWorkerPass(
 			teamMembers: matterAiMembers,
 			teamCapabilities:
 				matter && sessionMode === "lead"
-					? buildTeamCapabilities({
+					? buildCompactTeamCapabilities({
 							matter,
 							members: matterAiMembers,
 							messages: deps.store.listMessages(input.matterId),

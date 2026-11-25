@@ -10,6 +10,10 @@ import { assessMatterInitiation } from "../packages/server/src/orchestrator/arch
 import type { RoleProposalPayload } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
 import { buildMemberPrompts } from "../packages/server/src/orchestrator/execution/prompts.ts";
 import { collectTeamHealthEvidence } from "../packages/server/src/orchestrator/rsi/team-health.ts";
+import {
+	buildCompactTeamCapabilities,
+	buildTeamCapabilities,
+} from "../packages/server/src/orchestrator/runtime/team-capabilities.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
@@ -394,6 +398,50 @@ test("pi-default solo role stays isolated from auto-routing, team observers, ini
 		const healthEvidence = collectTeamHealthEvidence(store, templatesById);
 		assert.ok(!healthEvidence.some((entry) => entry.id === "role:pi-default"));
 		assert.ok(healthEvidence.some((entry) => entry.id === "role:product-manager"));
+
+		// 5. Compact team capability index stays byte-for-byte cache-stable across subsequent internal startups.
+		const teamMatter = store.createMatter({ title: "Team cache check", leadMemberId: "product-manager" });
+		const businessMembers = store.listMembers().filter((m) => m.id !== "pi-default" && m.id !== "role-architect");
+		const appendInternalReady = (turnId: string, tools: string[]) =>
+			store.appendMessage({
+				matterId: teamMatter.id,
+				channel: "notice",
+				senderType: "system",
+				senderId: "engineering-manager",
+				metadata: { workspaceId: null, repoPath: dir, orgId: null, sourceUserMessageId: turnId },
+				content: JSON.stringify({ method: "runtime_ready", sessionMode: "internal", discussionMode: false, tools }),
+			});
+		appendInternalReady("turn-1", ["read", "bash"]);
+		const compactAfterTurn1 = buildCompactTeamCapabilities({
+			matter: teamMatter,
+			members: businessMembers,
+			messages: store.listMessages(teamMatter.id),
+			workspaceId: null,
+			repoPath: dir,
+			orgId: null,
+			getTemplate: (m) => templatesById.get(m.templateId),
+		});
+		const fullAfterTurn1 = buildTeamCapabilities({
+			matter: teamMatter,
+			members: businessMembers,
+			messages: store.listMessages(teamMatter.id),
+			workspaceId: null,
+			repoPath: dir,
+			orgId: null,
+			getTemplate: (m) => templatesById.get(m.templateId),
+		});
+		appendInternalReady("turn-2", ["read", "bash", "edit", "write"]);
+		const compactAfterTurn2 = buildCompactTeamCapabilities({
+			matter: teamMatter,
+			members: businessMembers,
+			messages: store.listMessages(teamMatter.id),
+			workspaceId: null,
+			repoPath: dir,
+			orgId: null,
+			getTemplate: (m) => templatesById.get(m.templateId),
+		});
+		assert.equal(compactAfterTurn1, compactAfterTurn2);
+		assert.ok(compactAfterTurn1.length < fullAfterTurn1.length / 3);
 	} finally {
 		db.close();
 		await rm(dir, { recursive: true, force: true });

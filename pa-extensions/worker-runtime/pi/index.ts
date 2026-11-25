@@ -143,15 +143,21 @@ export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): v
 			name: "read_team_roles",
 			label: "读取当前团队角色",
 			description:
-				"Read the currently visible AI team roles (id, name, title, scope, responsibilities, anti-jobs, skills, MCP dependencies) in this organization/matter scope, plus optional recent collaboration health evidence.",
+				"Read the currently visible AI team roles (id, name, title, scope, responsibilities, anti-jobs, skills, MCP dependencies) in this organization/matter scope, plus optional full matter capability cards (past internal startup tool snapshots) or collaboration health evidence.",
 			promptSnippet:
-				"Read the visible AI team roster and optional collaboration health evidence before designing or adjusting roles.",
+				"Read the visible AI team roster, full capability cards (`includeCapabilities: true`), or collaboration health evidence (`includeHealthEvidence: true`).",
 			promptGuidelines: [
+				"Call read_team_roles({ includeCapabilities: true }) when you need colleagues' full responsibilities, anti-jobs, declared skills/MCP, or past internal startup tool evidence.",
 				"Call read_team_roles before proposing new roles or role adjustments so proposals reuse existing members and avoid overlapping responsibilities.",
 			],
 			parameters: {
 				type: "object",
 				properties: {
+					includeCapabilities: {
+						type: "boolean",
+						description:
+							"Include full scoped team capability cards and past internal-delegation startup tool snapshots for this matter and workspace (default false).",
+					},
 					includeHealthEvidence: {
 						type: "boolean",
 						description: "Include recent team collaboration friction and health evidence digest (default false).",

@@ -41,11 +41,66 @@ function runtimeSnapshot(message: MatterMessage): RuntimeSnapshot | undefined {
 }
 
 const compact = (value: string, limit: number) => value.replace(/\s+/gu, " ").trim().slice(0, limit);
+const firstSummaryLine = (value: string, limit = 110) => {
+	const cleaned = value
+		.split(/\r?\n/u)
+		.map((line) => line.replace(/^\s*[-*•]\s*/u, "").trim())
+		.find(Boolean);
+	if (!cleaned) return "not declared";
+	const sentence = cleaned.match(/^(.+?[.。!?])(?:\s|$)/u)?.[1] ?? cleaned;
+	return compact(sentence, limit);
+};
 const list = (items: string[], count = 12) =>
 	items
 		.slice(0, count)
 		.map((s) => compact(s, 100))
 		.join(", ") || "none declared";
+
+/**
+ * Cache-stable, compact team capability index for PA_TURN_CONTEXT.
+ * Avoids embedding volatile timestamps, turn IDs, or full role definitions on every turn;
+ * the lead can call `read_team_roles({ includeCapabilities: true })` for full capability cards.
+ */
+export function buildCompactTeamCapabilities(
+	input: WorkspaceContext & {
+		matter: Matter;
+		members: TeamMember[];
+		messages: MatterMessage[];
+		getTemplate: (member: TeamMember) => RoleTemplate | undefined;
+	},
+): string {
+	const history = selectMatterContext(input).messages;
+	const recordedMembers = new Set<string>();
+	for (const message of history) {
+		if (runtimeSnapshot(message)) recordedMembers.add(message.senderId);
+	}
+	const colleagues = input.members.filter((member) => member.id !== input.matter.leadMemberId).slice(0, 40);
+	const lines = [
+		"Team capability index (declarations are not proof of live tools or execution; call `read_team_roles({ includeCapabilities: true })` for full boundaries, skills, MCP dependencies, and past internal startup tool snapshots):",
+	];
+	if (colleagues.length === 0) {
+		lines.push("- No other team members in this matter.");
+		return lines.join("\n");
+	}
+	for (const member of colleagues) {
+		const template = input.getTemplate(member);
+		const consult = input.matter.consultMemberIds == null || input.matter.consultMemberIds.includes(member.id);
+		const observer = input.matter.observersEnabled && input.matter.observerMemberIds.includes(member.id);
+		const roleTag = `${consult ? "consultable" : "not consultable"}${observer ? ", observer" : ""}`;
+		const summary = template
+			? firstSummaryLine(template.sections.responsibilitiesAndBoundaries)
+			: "definition unavailable";
+		const boundaryCount = template?.antiJobs?.length ?? 0;
+		const startup = recordedMembers.has(member.id) ? "recorded" : "none";
+		lines.push(
+			`- ${compact(member.id, 80)} · ${compact(member.displayName, 80)} [${roleTag}]: ${summary} | boundaries: ${boundaryCount} | past internal startup: ${startup}`,
+		);
+	}
+	if (input.members.length - 1 > 40) {
+		lines.push(`Showing 40 of ${input.members.length - 1} visible colleagues.`);
+	}
+	return lines.join("\n");
+}
 
 /** A scoped snapshot, not a prediction of what a future worker will be granted. */
 export function buildTeamCapabilities(

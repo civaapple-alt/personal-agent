@@ -2043,19 +2043,36 @@ test("dispatchMatter forwards attached images to lead and observer workers witho
 	assert.match(lateObserverPrompts[0]!, /\[Image attachments: 1\]/);
 });
 
-test("lead receives scoped team capability evidence and distinguishes tool startup from calls", async (t) => {
+test("lead receives compact cache-stable capability index and can load full scoped evidence via read_team_roles", async (t) => {
 	let checked = false;
 	const f = await fixture(t, async (worker, prompt) => {
 		const turn = worker.options.env?.PA_TURN_CONTEXT ?? "";
-		assert.match(turn, /Team capability cards/);
+		assert.match(turn, /Team capability index/);
+		assert.match(turn, /read_team_roles\(\{ includeCapabilities: true \}\)/);
 		assert.match(prompt, /Current role: product-manager; session mode: lead/);
 		assert.match(prompt, /Tools observed during this worker's startup handshake: .*read_space/);
 		assert.match(turn, /engineering-manager.*consultable/);
-		assert.match(turn, /Role definition — responsibilities/);
-		assert.match(turn, /role tool suggestions/);
-		assert.match(turn, /historical_marker/);
-		assert.doesNotMatch(turn, /outside_workspace_marker|outside_org_marker|observer_marker/);
-		assert.match(turn, /not live availability/);
+		assert.match(turn, /past internal startup: recorded/);
+		assert.doesNotMatch(turn, /historical_marker|outside_workspace_marker|outside_org_marker|observer_marker/);
+
+		const response = (await invokeTool(worker.options, "read_team_roles", { includeCapabilities: true })) as {
+			result?: {
+				roles?: Array<{ id: string }>;
+				teamCapabilities?: string;
+			};
+		};
+		const parsed = response.result ?? {};
+		assert.ok(Array.isArray(parsed.roles));
+		assert.ok(!parsed.roles.some((r) => r.id === "pi-default"));
+		const caps = parsed.teamCapabilities ?? "";
+		assert.match(caps, /Team capability cards/);
+		assert.match(caps, /engineering-manager.*consultable/);
+		assert.match(caps, /Role definition — responsibilities/);
+		assert.match(caps, /role tool suggestions/);
+		assert.match(caps, /historical_marker/);
+		assert.doesNotMatch(caps, /outside_workspace_marker|outside_org_marker|observer_marker/);
+		assert.match(caps, /not live availability/);
+
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "search-1", toolName: "web_search" });
 		worker.emitEvent({ type: "tool_execution_end", toolCallId: "search-1", toolName: "web_search", isError: true });
 		worker.emitEvent({ type: "tool_execution_start", toolCallId: "skill-1", toolName: "load_available_skill" });
