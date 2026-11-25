@@ -13,11 +13,17 @@ import {
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../api.ts";
-import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } from "../architectApi.ts";
-import { MemberCard } from "../components/team/MemberCard.tsx";
+import {
+	buildRoleScopeChoices,
+	canMemberManageRole,
+	filterBusinessMembers,
+	getMemberScopeBadge,
+	isArchitectMember,
+} from "../architectApi.ts";
 import { MemberInspectorModal } from "../components/team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "../components/team/MemberPackageForms.tsx";
-import { applyOrgAiRoleOverrides, resolveEffectivePrimaryContactId } from "../utils.ts";
+import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
+import { applyOrgAiRoleOverrides, getBotTheme, resolveEffectivePrimaryContactId } from "../utils.ts";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -88,7 +94,11 @@ export function TeamView({
 	} | null>(null);
 	const [inspectedMemberId, setInspectedMemberId] = useState<string | null>(null);
 	const [savingPrimary, setSavingPrimary] = useState(false);
-	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
+	const businessMembers = useMemo(() => {
+		const regular = filterBusinessMembers(members, templateByRoleId);
+		const architect = members.filter((m) => isArchitectMember(m, templateByRoleId));
+		return [...regular, ...architect];
+	}, [members, templateByRoleId]);
 	const visibleBusinessMembers = useMemo(() => {
 		if (scopeFilter === "all") return businessMembers;
 		return businessMembers.filter((m) => (m.roleScope ?? (m.ownerOrgId ? "org" : "global")) === scopeFilter);
@@ -105,10 +115,13 @@ export function TeamView({
 		}
 		return { global, org, personal };
 	}, [businessMembers]);
-	const inspectedMember = useMemo(
-		() => (inspectedMemberId ? (members.find((m) => m.id === inspectedMemberId) ?? null) : null),
-		[inspectedMemberId, members],
-	);
+	const inspectedMember = useMemo(() => {
+		if (inspectedMemberId) {
+			const exact = visibleBusinessMembers.find((m) => m.id === inspectedMemberId);
+			if (exact) return exact;
+		}
+		return visibleBusinessMembers[0] ?? null;
+	}, [inspectedMemberId, visibleBusinessMembers]);
 	const inspectedIndex = inspectedMember ? businessMembers.findIndex((m) => m.id === inspectedMember.id) : -1;
 	const inspectedCanManage = useMemo(
 		() => canMemberManageRole(inspectedMember, { isSuperAdmin, accountUser, currentUser, organizations }),
@@ -252,7 +265,7 @@ export function TeamView({
 						<div className="ui-section-head">
 							<div className="team-members-heading">
 								<h2 className="ui-section-title">
-									AI 业务团队成员（{businessMembers.length}）
+									AI 团队成员（{businessMembers.length}）
 									{accountUser && scopeCounts.personal > 0 && (
 										<span className="muted-tiny">
 											{" "}
@@ -260,7 +273,7 @@ export function TeamView({
 										</span>
 									)}
 								</h2>
-								<p className="ui-section-desc">点开「身份与详情」可查看 Git 署名、核心职责与不做边界</p>
+								<p className="ui-section-desc">左侧选择角色，右侧直接查看职责、技能、不做边界与身份档案</p>
 							</div>
 							<div className="actions-row compact">
 								{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (
@@ -310,57 +323,81 @@ export function TeamView({
 								)}
 							</div>
 						</div>
-						<div className="team-grid">
-							{cardDisplayMembers.map((member, idx) => (
-								<MemberCard
-									key={member.id}
-									member={member}
-									index={idx}
-									template={templateByRoleId.get(member.templateId)}
-									activeWorkspace={activeWorkspace}
-									activeOrg={primaryTargetOrg ?? activeOrg}
-									organizationName={organizationName}
-									canManage={canMemberManageRole(member, {
-										isSuperAdmin,
-										accountUser,
-										currentUser,
-										organizations,
+						<div className="team-split-layout">
+							<aside className="team-split-nav" aria-label="AI 角色列表">
+								<div className="team-split-list">
+									{cardDisplayMembers.map((member) => {
+										const fullIdx = businessMembers.findIndex((m) => m.id === member.id);
+										const theme = getBotTheme(fullIdx >= 0 ? fullIdx : 0);
+										const isSelected = inspectedMember?.id === member.id;
+										const isPrimary = member.id === effectivePrimaryId;
+										const isArch = isArchitectMember(member, templateByRoleId);
+										const scopeBadge = getMemberScopeBadge(member, organizationName);
+										return (
+											<button
+												key={member.id}
+												type="button"
+												className={`team-nav-item ${isSelected ? "active" : ""}`}
+												onClick={() => setInspectedMemberId(member.id)}
+											>
+												<BotFaceIcon
+													bg={theme.bg}
+													tilt={theme.tilt}
+													size="sm"
+													mood={isArch ? "thinking" : "idle"}
+												/>
+												<span className="team-nav-copy">
+													<span className="team-nav-name-row">
+														<strong>{member.displayName}</strong>
+														{isPrimary && <span className="pill live">主联系</span>}
+													</span>
+													<span className="team-nav-sub">
+														{scopeBadge.label}
+														{member.roleTitle && member.roleTitle !== member.displayName
+															? ` · ${member.roleTitle}`
+															: ""}
+													</span>
+												</span>
+											</button>
+										);
 									})}
-									isPrimary={member.id === effectivePrimaryId}
-									canSetPrimary={canSwitchPrimary && eligiblePrimaryIds.has(member.id)}
-									primaryActionLabel={
-										primaryTargetOrg ? `设为「${primaryTargetOrg.name}」主联系人` : "设为全局默认主联系"
-									}
-									canDispatch={canDispatchAny}
-									onAssignTask={onAssignTask}
-									onSetPrimary={handleSetPrimary}
-									onExportMember={handleExportMember}
-									onInspectMember={(memberId) => setInspectedMemberId(memberId)}
-									onRefresh={onRefresh}
-									onNotice={onNotice}
-									onError={onError}
-								/>
-							))}
+								</div>
+							</aside>
+							<div className="team-split-main">
+								{inspectedMember ? (
+									<MemberInspectorModal
+										inline
+										member={inspectedMember}
+										memberIndex={inspectedIndex}
+										template={templateByRoleId.get(inspectedMember.templateId)}
+										canEditIdentity={inspectedCanManage}
+										canDispatch={canDispatchAny}
+										canSetPrimary={canSwitchPrimary && eligiblePrimaryIds.has(inspectedMember.id)}
+										primaryActionLabel={
+											primaryTargetOrg ? `设为「${primaryTargetOrg.name}」主联系` : "设为全局默认主联系"
+										}
+										isPrimary={inspectedMember.id === effectivePrimaryId}
+										effectiveGitOverride={inspectedEffectiveGitConfig}
+										activeWorkspace={activeWorkspace}
+										activeOrg={primaryTargetOrg ?? activeOrg}
+										organizationName={organizationName}
+										onAssignTask={onAssignTask}
+										onSetPrimary={handleSetPrimary}
+										onExportMember={handleExportMember}
+										onRefresh={onRefresh}
+										onNotice={onNotice}
+										onError={onError}
+									/>
+								) : (
+									<div className="ui-card">
+										<p className="muted-sm">当前筛选条件下暂无 AI 角色。</p>
+									</div>
+								)}
+							</div>
 						</div>
 					</section>
 				</div>
 			</div>
-
-			<MemberInspectorModal
-				member={inspectedMember}
-				memberIndex={inspectedIndex}
-				template={inspectedMember ? templateByRoleId.get(inspectedMember.templateId) : undefined}
-				canEditIdentity={inspectedCanManage}
-				isPrimary={inspectedMember ? inspectedMember.id === effectivePrimaryId : undefined}
-				effectiveGitOverride={inspectedEffectiveGitConfig}
-				activeWorkspace={activeWorkspace}
-				activeOrg={primaryTargetOrg ?? activeOrg}
-				organizationName={organizationName}
-				onClose={() => setInspectedMemberId(null)}
-				onRefresh={onRefresh}
-				onNotice={onNotice}
-				onError={onError}
-			/>
 		</div>
 	);
 }
