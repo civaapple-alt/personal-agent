@@ -916,6 +916,8 @@ export function App() {
 								{...settingsProps}
 								currentUser={currentUser}
 								isSuperAdmin={isSuperAdmin}
+								organizations={bootstrap?.organizations ?? []}
+								workspaces={bootstrap?.workspaces ?? []}
 								activeSection={settingsSection}
 								onSelectSection={(section) => navigateRoute({ tab: "settings", settingsSection: section })}
 								onNotice={(msg) => setNoticeBanner(msg)}

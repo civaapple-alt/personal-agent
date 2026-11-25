@@ -1,7 +1,9 @@
 import { createServer, type Server } from "node:http";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import type { PiNativeSkillDto } from "@pa/contracts/skill-trust";
 import { readPiDiscoveredSkills } from "@pa/pi-rpc";
+import { resolveRepoAssetPath } from "../build-support.ts";
+import { resolveBuiltinExtensionPath } from "../extensions/builtin-paths.ts";
 import { type InstalledPiWebAccess, installPiWebAccess } from "../extensions/web-access/package.ts";
 import {
 	type LocalPiResourcesPolicy,
@@ -127,8 +129,31 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		if (!opts.refresh && cached && cached.expiresAt > now) {
 			return cached.skills;
 		}
+		const roleSkillsDir = resolveRepoAssetPath("pi-extensions/role-skills");
+		const workflowSkillsDir = resolveRepoAssetPath("pa-extensions/workflow/skills");
+		const selfInspectSkillsDir = resolveRepoAssetPath("pa-extensions/self-inspect/skills");
 		const loader =
-			options.readPiNativeSkills ?? ((o: { inheritLocalPiResources: boolean }) => readPiDiscoveredSkills(o));
+			options.readPiNativeSkills ??
+			(async (o: { inheritLocalPiResources: boolean }) => {
+				const raw = await readPiDiscoveredSkills({
+					inheritLocalPiResources: o.inheritLocalPiResources,
+					extraExtensions: [resolveBuiltinExtensionPath("role-skills")],
+					extraSkillPaths: [workflowSkillsDir, selfInspectSkillsDir],
+				});
+				return raw.map((item) => {
+					const fullPath = item.filePath ? resolve(item.filePath) : "";
+					if (fullPath.startsWith(`${roleSkillsDir}${sep}`)) {
+						return { ...item, source: "pa-builtin:role-skills", origin: "package" };
+					}
+					if (fullPath.startsWith(`${workflowSkillsDir}${sep}`)) {
+						return { ...item, source: "pa-builtin:workflow", origin: "package" };
+					}
+					if (fullPath.startsWith(`${selfInspectSkillsDir}${sep}`)) {
+						return { ...item, source: "pa-builtin:self-inspect", origin: "package" };
+					}
+					return item;
+				});
+			});
 		const skills = await loader({ inheritLocalPiResources: opts.inheritLocalPiResources });
 		piSkillsCache.set(opts.inheritLocalPiResources, { expiresAt: now + 30_000, skills });
 		return skills;

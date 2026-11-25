@@ -6,6 +6,8 @@ import { PiRpcWorker } from "./pi-rpc-worker.ts";
 export async function readPiDiscoveredSkills(options?: {
 	cwd?: string;
 	inheritLocalPiResources?: boolean;
+	extraExtensions?: string[];
+	extraSkillPaths?: string[];
 	commandTimeoutMs?: number;
 }): Promise<PiNativeSkillDto[]> {
 	const inheritLocal = options?.inheritLocalPiResources !== false;
@@ -19,6 +21,8 @@ export async function readPiDiscoveredSkills(options?: {
 			"--no-tools",
 			"--no-context-files",
 			...(inheritLocal ? [] : ["--no-extensions"]),
+			...(options?.extraExtensions ?? []).flatMap((entry) => ["--extension", entry]),
+			...(options?.extraSkillPaths ?? []).flatMap((path) => ["--skill", path]),
 		],
 	});
 	try {

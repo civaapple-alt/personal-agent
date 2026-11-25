@@ -7,10 +7,18 @@ import {
 	type SkillTrustScope,
 } from "@pa/contracts/skill-trust";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchManagedSkillDetail, fetchManagedSkills, updateSkillTrustPolicy } from "../api.ts";
+import {
+	fetchManagedSkillDetail,
+	fetchManagedSkills,
+	type OrganizationDto,
+	updateSkillTrustPolicy,
+	type WorkspaceDto,
+} from "../api.ts";
 import { ModalDialog } from "../primitives/ModalDialog.tsx";
 
 interface SkillsTrustPanelProps {
+	organizations?: OrganizationDto[];
+	workspaces?: WorkspaceDto[];
 	onNotice?: (message: string) => void;
 	onError?: (message: string) => void;
 }
@@ -18,6 +26,8 @@ interface SkillsTrustPanelProps {
 type SkillsNavSelection =
 	| { kind: "managed_all" }
 	| { kind: "managed_scope"; scope: SkillTrustScope; scopeId?: string }
+	| { kind: "builtin_all" }
+	| { kind: "builtin_source"; source: string }
 	| { kind: "pi_all" }
 	| { kind: "pi_source"; source: string };
 
@@ -28,6 +38,9 @@ const TRUST_BADGE_CLASS: Record<SkillTrustLevel, string> = {
 };
 
 function formatPiSourceLabel(source: string): string {
+	if (source === "pa-builtin:role-skills") return "岗位方法 (role-skills)";
+	if (source === "pa-builtin:workflow") return "协作工作流";
+	if (source === "pa-builtin:self-inspect") return "宿主自检";
 	if (source === "local" || source === "auto") return "本机用户";
 	if (source.startsWith("git:")) return source.slice("git:".length);
 	if (source.startsWith("npm:")) return source.slice("npm:".length);
@@ -43,7 +56,7 @@ function skillKey(skill: Pick<ManagedSkillEntryDto, "scope" | "scopeId" | "name"
 }
 
 /** Settings → 技能与信任 split-pane panel for PA-managed Skills (Four-Step Trust) and Pi natively discovered Skills. */
-export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
+export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice, onError }: SkillsTrustPanelProps) {
 	const [skills, setSkills] = useState<ManagedSkillEntryDto[]>([]);
 	const [piNativeSkills, setPiNativeSkills] = useState<PiNativeSkillDto[]>([]);
 	const [piNativeSkillsError, setPiNativeSkillsError] = useState<string | null>(null);
@@ -81,24 +94,31 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 	}, [load]);
 
 	const groupedManaged = useMemo(() => {
-		const workspaces = new Map<string, { scopeId: string; label: string; count: number }>();
-		const orgs = new Map<string, { scopeId: string; label: string; count: number }>();
+		const wsMap = new Map<string, { scopeId: string; label: string; count: number }>();
+		const orgMap = new Map<string, { scopeId: string; label: string; count: number }>();
+		for (const ws of workspaces) {
+			wsMap.set(ws.id, { scopeId: ws.id, label: ws.name, count: 0 });
+		}
+		for (const org of organizations) {
+			orgMap.set(org.id, { scopeId: org.id, label: org.name, count: 0 });
+		}
 		let personalCount = 0;
 		let globalCount = 0;
 		for (const item of skills) {
 			if (item.scope === "workspace") {
-				const existing = workspaces.get(item.scopeId);
+				const existing = wsMap.get(item.scopeId);
 				if (existing) existing.count += 1;
 				else
-					workspaces.set(item.scopeId, {
+					wsMap.set(item.scopeId, {
 						scopeId: item.scopeId,
 						label: stripScopePrefix(item.scopeLabel),
 						count: 1,
 					});
 			} else if (item.scope === "org") {
-				const existing = orgs.get(item.scopeId);
+				const existing = orgMap.get(item.scopeId);
 				if (existing) existing.count += 1;
-				else orgs.set(item.scopeId, { scopeId: item.scopeId, label: stripScopePrefix(item.scopeLabel), count: 1 });
+				else
+					orgMap.set(item.scopeId, { scopeId: item.scopeId, label: stripScopePrefix(item.scopeLabel), count: 1 });
 			} else if (item.scope === "personal") {
 				personalCount += 1;
 			} else if (item.scope === "global") {
@@ -106,25 +126,47 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 			}
 		}
 		return {
-			workspaces: Array.from(workspaces.values()).sort((a, b) => a.label.localeCompare(b.label)),
-			orgs: Array.from(orgs.values()).sort((a, b) => a.label.localeCompare(b.label)),
+			workspaces: Array.from(wsMap.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+			orgs: Array.from(orgMap.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
 			personalCount,
 			globalCount,
 		};
-	}, [skills]);
+	}, [skills, organizations, workspaces]);
 
-	const piSources = useMemo(() => {
-		const counts = new Map<string, number>();
+	const { builtinSkills, hostPiSkills } = useMemo(() => {
+		const builtin: PiNativeSkillDto[] = [];
+		const host: PiNativeSkillDto[] = [];
 		for (const item of piNativeSkills) {
+			if (item.source.startsWith("pa-builtin:")) builtin.push(item);
+			else host.push(item);
+		}
+		return { builtinSkills: builtin, hostPiSkills: host };
+	}, [piNativeSkills]);
+
+	const builtinSources = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const item of builtinSkills) {
 			counts.set(item.source, (counts.get(item.source) ?? 0) + 1);
 		}
 		return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-	}, [piNativeSkills]);
+	}, [builtinSkills]);
 
-	const isPiView = selection.kind === "pi_all" || selection.kind === "pi_source";
+	const piSources = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const item of hostPiSkills) {
+			counts.set(item.source, (counts.get(item.source) ?? 0) + 1);
+		}
+		return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+	}, [hostPiSkills]);
+
+	const isReadOnlyPiView =
+		selection.kind === "builtin_all" ||
+		selection.kind === "builtin_source" ||
+		selection.kind === "pi_all" ||
+		selection.kind === "pi_source";
 
 	const visibleManagedSkills = useMemo(() => {
-		if (isPiView) return [];
+		if (isReadOnlyPiView) return [];
 		const q = searchQuery.trim().toLowerCase();
 		return skills.filter((item) => {
 			if (selection.kind === "managed_scope") {
@@ -140,12 +182,15 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 				item.scripts.some((s) => s.toLowerCase().includes(q))
 			);
 		});
-	}, [skills, selection, isPiView, trustFilter, searchQuery]);
+	}, [skills, selection, isReadOnlyPiView, trustFilter, searchQuery]);
 
 	const visiblePiSkills = useMemo(() => {
-		if (!isPiView) return [];
+		if (!isReadOnlyPiView) return [];
+		const pool =
+			selection.kind === "builtin_all" || selection.kind === "builtin_source" ? builtinSkills : hostPiSkills;
 		const q = searchQuery.trim().toLowerCase();
-		return piNativeSkills.filter((item) => {
+		return pool.filter((item) => {
+			if (selection.kind === "builtin_source" && item.source !== selection.source) return false;
 			if (selection.kind === "pi_source" && item.source !== selection.source) return false;
 			if (!q) return true;
 			return (
@@ -154,7 +199,7 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 				item.source.toLowerCase().includes(q)
 			);
 		});
-	}, [piNativeSkills, selection, isPiView, searchQuery]);
+	}, [builtinSkills, hostPiSkills, selection, isReadOnlyPiView, searchQuery]);
 
 	const activeHeading = useMemo(() => {
 		if (selection.kind === "managed_all") {
@@ -187,6 +232,18 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 			return {
 				title: "平台全局技能",
 				subtitle: "平台级共享 Skill，由超级管理员维护信任策略",
+			};
+		}
+		if (selection.kind === "builtin_all") {
+			return {
+				title: "PA 内置技能（只读）",
+				subtitle: "随 PA 启动自动挂载到 Pi 的岗位方法（pi-extensions/role-skills）、协作工作流与宿主自检技能",
+			};
+		}
+		if (selection.kind === "builtin_source") {
+			return {
+				title: `PA 内置 · ${formatPiSourceLabel(selection.source)}`,
+				subtitle: "由 Pi RPC get_commands 直接回报的 PA 内置技能，随角色按需读取",
 			};
 		}
 		if (selection.kind === "pi_source") {
@@ -254,6 +311,9 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 		if (selection.kind !== candidate.kind) return false;
 		if (selection.kind === "managed_scope" && candidate.kind === "managed_scope") {
 			return selection.scope === candidate.scope && selection.scopeId === candidate.scopeId;
+		}
+		if (selection.kind === "builtin_source" && candidate.kind === "builtin_source") {
+			return selection.source === candidate.source;
 		}
 		if (selection.kind === "pi_source" && candidate.kind === "pi_source") {
 			return selection.source === candidate.source;
@@ -324,19 +384,27 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 					</div>
 
 					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">组织 / 个人 / 全局</div>
-						{groupedManaged.orgs.map((org) => (
-							<button
-								key={org.scopeId}
-								type="button"
-								className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "org", scopeId: org.scopeId }) ? "active" : ""}`}
-								onClick={() => setSelection({ kind: "managed_scope", scope: "org", scopeId: org.scopeId })}
-								title={org.label}
-							>
-								<span className="skills-nav-item-name">组织 · {org.label}</span>
-								<span className="skills-nav-count">{org.count}</span>
-							</button>
-						))}
+						<div className="skills-nav-group-label">组织技能</div>
+						{groupedManaged.orgs.length === 0 ? (
+							<div className="skills-nav-empty">暂无可见组织</div>
+						) : (
+							groupedManaged.orgs.map((org) => (
+								<button
+									key={org.scopeId}
+									type="button"
+									className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "org", scopeId: org.scopeId }) ? "active" : ""}`}
+									onClick={() => setSelection({ kind: "managed_scope", scope: "org", scopeId: org.scopeId })}
+									title={org.label}
+								>
+									<span className="skills-nav-item-name">{org.label}</span>
+									<span className="skills-nav-count">{org.count}</span>
+								</button>
+							))
+						)}
+					</div>
+
+					<div className="skills-nav-group">
+						<div className="skills-nav-group-label">个人 / 全局</div>
 						<button
 							type="button"
 							className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "personal" }) ? "active" : ""}`}
@@ -358,6 +426,32 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 					<div className="skills-nav-divider" />
 
 					<div className="skills-nav-group">
+						<div className="skills-nav-group-label">PA 内置技能（只读）</div>
+						<button
+							type="button"
+							className={`skills-nav-item ${isSelected({ kind: "builtin_all" }) ? "active" : ""}`}
+							onClick={() => setSelection({ kind: "builtin_all" })}
+						>
+							<span className="skills-nav-item-name">全部内置技能</span>
+							<span className="skills-nav-count">{builtinSkills.length}</span>
+						</button>
+						{builtinSources.map(([src, count]) => (
+							<button
+								key={src}
+								type="button"
+								className={`skills-nav-item ${isSelected({ kind: "builtin_source", source: src }) ? "active" : ""}`}
+								onClick={() => setSelection({ kind: "builtin_source", source: src })}
+								title={src}
+							>
+								<span className="skills-nav-item-name">{formatPiSourceLabel(src)}</span>
+								<span className="skills-nav-count">{count}</span>
+							</button>
+						))}
+					</div>
+
+					<div className="skills-nav-divider" />
+
+					<div className="skills-nav-group">
 						<div className="skills-nav-group-label">Pi 原生发现（只读）</div>
 						<button
 							type="button"
@@ -365,7 +459,7 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 							onClick={() => setSelection({ kind: "pi_all" })}
 						>
 							<span className="skills-nav-item-name">全部 Pi 原生</span>
-							<span className="skills-nav-count">{piNativeSkills.length}</span>
+							<span className="skills-nav-count">{hostPiSkills.length}</span>
 						</button>
 						{piSources.map(([src, count]) => (
 							<button
@@ -398,7 +492,7 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
-							{!isPiView && (
+							{!isReadOnlyPiView && (
 								<div className="actions-row compact">
 									{(
 										[
@@ -422,7 +516,7 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 						</div>
 					</div>
 
-					{isPiView ? (
+					{isReadOnlyPiView ? (
 						<>
 							{piNativeSkillsError && (
 								<div className="approval-card" role="alert">
@@ -446,7 +540,13 @@ export function SkillsTrustPanel({ onNotice, onError }: SkillsTrustPanelProps) {
 													<strong>{item.name}</strong>
 													<span className="pill">{formatPiSourceLabel(item.source)}</span>
 												</div>
-												<span className="muted-tiny">{item.origin === "package" ? "Pi 包" : "用户级"}</span>
+												<span className="muted-tiny">
+													{item.source.startsWith("pa-builtin:")
+														? "PA 内置"
+														: item.origin === "package"
+															? "Pi 包"
+															: "用户级"}
+												</span>
 											</div>
 											{item.description && <p className="muted-tiny skills-item-desc">{item.description}</p>}
 											{item.filePath && (

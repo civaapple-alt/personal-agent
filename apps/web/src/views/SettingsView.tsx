@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import type {
 	CollaboratorDto,
+	OrganizationDto,
 	RuntimeConfigSectionDto,
 	RuntimeExtensionDto,
 	RuntimeExtensionSourceKind,
 	RuntimeExtensionStatus,
 	RuntimeOverviewDto,
+	WorkspaceDto,
 } from "../api.ts";
 import { SessionInsightsPanel } from "../components/SessionInsightsPanel.tsx";
 import { SkillsTrustPanel } from "../components/SkillsTrustPanel.tsx";
@@ -16,6 +18,8 @@ import type { SettingsSection } from "../hashRouter.ts";
 interface SettingsViewProps {
 	currentUser?: CollaboratorDto | null;
 	isSuperAdmin?: boolean;
+	organizations?: OrganizationDto[];
+	workspaces?: WorkspaceDto[];
 	activeSection: SettingsSection;
 	overview: RuntimeOverviewDto | null;
 	loading: boolean;
@@ -70,6 +74,8 @@ const STATUS_BADGE_CLASSES: Record<RuntimeExtensionStatus, string> = {
 
 export function SettingsView({
 	isSuperAdmin = false,
+	organizations = [],
+	workspaces = [],
 	activeSection,
 	overview,
 	loading,
@@ -449,7 +455,14 @@ export function SettingsView({
 								</div>
 							</section>
 						)}
-						{showSkills && <SkillsTrustPanel onNotice={onNotice} onError={onError} />}
+						{showSkills && (
+							<SkillsTrustPanel
+								organizations={organizations}
+								workspaces={workspaces}
+								onNotice={onNotice}
+								onError={onError}
+							/>
+						)}
 						{showInsights && (
 							<SessionInsightsPanel
 								onOpenMatter={onOpenMatter}
@@ -458,7 +471,12 @@ export function SettingsView({
 						)}
 					</div>
 				) : showSkills ? (
-					<SkillsTrustPanel onNotice={onNotice} onError={onError} />
+					<SkillsTrustPanel
+						organizations={organizations}
+						workspaces={workspaces}
+						onNotice={onNotice}
+						onError={onError}
+					/>
 				) : showInsights ? (
 					<SessionInsightsPanel onOpenMatter={onOpenMatter} onStartMatterWithPrompt={onStartMatterWithPrompt} />
 				) : null}
