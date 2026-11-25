@@ -812,7 +812,7 @@ test("System One drives saved conversations, workbench help, roster data and lea
 		["怎么安排旁听", { topic: "collaboration", match: /查看交接/ }],
 		["PA 支持自己做插件吗", { topic: "capabilities", match: /维护者开发及发布/ }],
 		[runtimeQuestion, { topic: "runtime_tools", match: /本轮启动时的工具.*request_clarification/ }],
-		[howToRun, { topic: "starting_work", match: /直接使用自己配置的/ }],
+		[howToRun, { topic: "starting_work", match: /直接使用 Pi 默认运行工具/ }],
 		[paAndPi, { topic: "pa_and_pi", match: /Pi 是岗位的执行底座/ }],
 		["怎么看成果版本", { topic: "deliverables", match: /资料空间/ }],
 		["当前事项还有什么等我决定", { topic: "pending_decisions", match: /共 0 条/ }],

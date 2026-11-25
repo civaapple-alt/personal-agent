@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-25
+
+See the [0.8.2 release guide](docs/releases/v0.8.2.md) for downloads and upgrade instructions.
+
 - Add `offset`/`hasMore`/`nextOffset` pagination to `list_available_skills` and explicit `hasMore=true` truncation hints to `pi-extensions/skill-catalog`, raise the compact single-line index cap to `6,500` chars (fitting full `pstack` packs without truncation), accept direct `read` of sibling `SKILL.md` files in `pstack-evidence.ts`, and capture the real-Pi runtime auditing & tuning playbook in `.agents/skills/pa-pi-runtime-tuning/SKILL.md`.
 - Slim and optimize `pi-extensions/skill-catalog` for PA Web (RPC without TUI): remove TUI-oriented `list_pi_commands` and `request_pi_command` tools across runtime, registries, and docs (`worker-runner.ts`, `prompts.ts`, `types.ts`, `runtime-info.ts`, `workbench-context.ts`, `pa-extensions/skill-catalog`), switch `before_agent_start` to a compact single-line index capped at `3,600` chars with zero injection when no extra skills exist, and add `query`/`source`/`limit` filtering (omitting verbose `path` unless duplicate names exist) to `list_available_skills`.
 - Decouple runtime matter-lead / internal / observer coordination from built-in business role definitions (`roles/{product-manager,engineering-manager,qa-manager,marketing-lead}.md`): keep role Markdown focused purely on domain responsibilities, methods, anti-jobs, and quality standards, and dynamically inject `## Matter lead coordination` in `prompts.ts` whenever any business role serves as the active matter lead.

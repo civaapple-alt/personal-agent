@@ -14,10 +14,10 @@ For example, asking QA to run the login regression or asking which login cases t
 
 ## How roles work and execute
 
-Each AI role runs with its configured tools, skills, `read_pa_help`, and Human Question (`request_clarification`) in a single persistent Pi session per matter workspace:
+Each AI role runs with Pi's default runtime tools, on-demand Skills (via compact, paginated `skill-catalog` and `load_available_skill`), `<pa_docs>` on-demand documentation pointers, and Human Question (`request_clarification`) in a single persistent Pi session per matter workspace (carrying over loaded Skills and anchors across `session_compact`):
 
 - For questions, advice, or status checks, the role replies directly (using read-only inspection when helpful) without modifying files, committing, or publishing deliverables.
-- When your intent to act is clear, the role executes, delegates, or publishes deliverables within its role boundaries.
+- When your intent to act is clear, the role executes, delegates (optionally attaching Space `handoffDocumentIds` with preflight validation), or publishes deliverables within its role boundaries. For direct solo Pi workflows without team delegation overhead, pick `Pi Default`.
 - When scope, trade-offs, or side-effecting authorization need your input, the lead calls `request_clarification` to show a decision card and waits for your answer.
 
 ## Collaboration and observers
@@ -62,4 +62,4 @@ For GitHub fetches, matter events identify a temporary clone, an API view, or an
 
 ## Team experience
 
-A matter retrospective can propose reusable working practices. Review the evidence and the organization or repository scope before confirming an experience as verified.
+When a repeatable workflow or deterministic helper script works well, a role can stage a standard `SKILL.md` + `scripts/*` proposal via `propose_skill` for human confirmation and govern script execution in **Settings → Skills & Trust** using the Four-Step Trust `tool_call` gate. Deterministic **Session Insights** scans real Pi session logs and feeds findings into Role Architect team healthchecks (`read_team_roles` / `propose_role`) so role boundaries and Skills evolve from real evidence.

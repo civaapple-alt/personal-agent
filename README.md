@@ -1,12 +1,20 @@
 # Personal Agent
 
-Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件需求交给产品经理，让它按需请教研发和测试，形成可审阅的方案，再根据反馈修订。各岗位可在不同项目中连续工作，交付成果会保留版本和修改依据。
+Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件需求交给产品经理，让它按需请教研发和测试，形成可审阅的方案，再根据反馈修订；也可以在探索期直接使用内置的 `Pi Default` 单兵助手直连干活。各岗位可在不同项目中连续工作，交付成果在 Git 资料空间（Space）中保留完整版本和修改依据。
+
+## 架构方向：顺着 Pi 纹理生长
+
+核心原则是 **「喂养而不自造（Influence by feeding, never by assembling）」**：不在 Pi 之外另建私有 Agent 框架或平行记忆库，而是把 **角色身份（Roles）**、**能力沉淀（Skills & 脚本）** 和 **RSI 自我改进（Session Insights + Team Health + Four-Step Trust）** 拆成三层，全部直接长在 Pi 原生原语上：
+
+- **角色身份层（Roles）**：基于标准可分享 Markdown（`roles/*.md`）定义岗位职责、方法、明确不做清单（`antiJobs`）与可选默认 `thinking` 档位；岗位专业定义与运行态主责/内部委托/旁听解耦，同时支持多岗位协作与 `Pi Default`（`roleKind: solo`）原生单兵轨道。
+- **能力沉淀层（Skills & 脚本）**：可复用流程与确定性脚本通过 `propose_skill` 沉淀为标准磁盘 `SKILL.md` + `scripts/*`，依托 Pi 原生 `--skill` 发现与紧凑分页 `skill-catalog` 按需读取；正式文档与版本修订归档于 Git 资料空间。
+- **RSI 自我改进层**：结合零模型成本的确定性 **Session Insights**、**Team Health** 协作体检（`Role Architect` + `read_team_roles` / `propose_role`）与基于 Pi `tool_call` Hook 的 **信任四步（Four-Step Trust）**，让角色边界与可复用脚本在真实运行证据中持续演化。
 
 ## 开始使用或参与开发
 
 | 你的目标 | 从这里开始 |
 | --- | --- |
-| 在自己的电脑上试用 | 从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.7.1) 下载 `personal-agent-0.7.1-prebuilt.tar.gz`，按[首次运行教程](docs/tutorials/getting-started.md)启动 |
+| 在自己的电脑上试用 | 从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.8.2) 下载 `personal-agent-0.8.2-prebuilt.tar.gz`，按[首次运行教程](docs/tutorials/getting-started.md)启动 |
 | 在服务器上为团队部署 | 按[团队部署指南](docs/guides/team-administration.md)启动带账号认证的服务，配置 HTTPS、工作区和成员权限 |
 | 已收到团队邀请 | 按[使用指南](docs/guides/user-guide.md#加入组织)加入组织，学习安排事项和审阅成果 |
 | 修改源码或贡献文档 | 按[开发指南](docs/guides/development.md)从源码启动，再查[贡献指南](CONTRIBUTING.md)了解如何提交 Pull Request |
@@ -23,11 +31,11 @@ Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件�
 
 ## 当前能力和限制
 
-- 支持按事项接续会话、咨询其他岗位、安排 AI 在主负责人回复后补充意见，以及发布和修订成果。
+- 支持按事项接续会话、真实内部委托（含 Space 文档交接预检）、旁听风险把关、单兵 `Pi Default` 轨道，以及在 Git 资料空间发布与对比成果版本。
 - 团队部署支持账号审核、组织邀请、项目仓库授权和私密事项。Pi 和它调用的工具以服务所在机器的系统账号权限运行。请在接入真实仓库或向团队开放前阅读[安全说明](SECURITY.md)。
-- 支持导入岗位定义、加载 Skills 和核验候选工作经验。当前适合由个人或可信小团队使用并审阅输出。操作系统级执行隔离和持久后台调度仍在规划中。
+- 支持导入/设计岗位角色包、沉淀与信任分级管理 Skills 及脚本、基于真实会话日志运行洞察与团队协作体检。当前适合个人或可信小团队使用并审阅输出；操作系统级执行隔离、长期无人值守后台自治和公开人才市场仍在规划中。
 
-[完整文档索引](docs/README.md) · [0.7.1 发布说明](docs/releases/v0.7.1.md) · [变更日志](CHANGELOG.md)
+[完整文档索引](docs/README.md) · [0.8.2 发布说明](docs/releases/v0.8.2.md) · [单兵与团队模式](docs/concepts/solo-and-team-modes.md) · [变更日志](CHANGELOG.md)
 
 ## 仓库目录全景
 
