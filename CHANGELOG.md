@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Add zero-dependency CSS class gate (`scripts/check-css-classes.mjs` / `npm run check:css`, wired into `npm run check`) to catch undefined JSX `className` tokens across `apps/web/src` and `pa-extensions/*/web`, and define all previously missing utility/component CSS classes (`btn-pill-primary`, `btn-pill-ghost`, `btn-danger-inline`, `skill-proposal-card`, `settings-card-*`, `md-olist`, `space-nav-*`, etc.).
+
 ## [0.8.1] - 2026-11-25
 
 See the [0.8.1 release guide](docs/releases/v0.8.1.md) for downloads and upgrade instructions.

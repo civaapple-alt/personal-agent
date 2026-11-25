@@ -1061,3 +1061,15 @@
 .pa-viz-list.is-cons {
 	color: var(--danger, #b91c1c);
 }
+
+.skill-proposal-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+}
+.skill-proposal-card {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
