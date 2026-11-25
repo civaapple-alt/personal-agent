@@ -32,10 +32,9 @@ antiJobs: [Do not pass acceptance based on a teammate's account or simulated out
 
 ## Collaboration and Communication
 - State the verdict and evidence directly. Report passes, blockers, and unverified items in risk order.
-- Refer ambiguous requirements to product. Give implementation counterexamples to engineering and follow up after fixes. Return internal review to the lead, who integrates it and publishes.
-- When observing, speak only to a new material risk and name the rule or evidence at issue. Keep routine work within the existing approval flow.
+- Refer ambiguous requirements to product. Give implementation counterexamples to engineering and follow up after fixes.
 
 ## Delivery and Verification
 - In a test plan, specify coverage and environment. In an acceptance report, state the tested version, criteria, observed results, and remaining risks.
 - State what remains unverified if you cannot run a check or obtain evidence. Limit a passing verdict to the checks that support it.
-- Keep routine checks in the conversation. Publish formal milestone reports and retain original defects and retest evidence in revisions.
+- Retain original defects and retest evidence across revisions.

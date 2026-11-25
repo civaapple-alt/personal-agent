@@ -382,7 +382,16 @@ export function buildMemberPrompts(input: {
 		);
 	}
 
-	if (mode === "internal") {
+	if (mode === "lead" && !isSolo && !isArchitect && !input.discussionMode) {
+		sections.push(
+			[
+				"## Matter lead coordination",
+				"You are the lead for this matter regardless of your specialist domain.",
+				"- Own the end-to-end answer to the user: confirm scope and constraints, delegate specialist questions outside your domain via `delegate_to_member` when consultable teammates can help, and integrate their evidence into a coherent response.",
+				"- Keep routine progress and consultation in the conversation; save durable formal milestones to Space via `save_space_page` when ready.",
+			].join("\n"),
+		);
+	} else if (mode === "internal") {
 		sections.push(
 			"## Internal delegation\nGive the requester evidence-backed findings, risks, and conclusions from your role. The lead integrates your findings.",
 		);

@@ -513,6 +513,26 @@ test("role templates parse/serialize optional thinking level and verifier/observ
 		teamMembers: [member],
 	}).systemPrompt;
 	assert.match(observerPrompt, /Filter findings by evidence, not by severity/);
+
+	// Any business role acting as matter lead receives runtime Matter lead coordination,
+	// while role templates themselves stay free of hardcoded lead/observer coordination prose.
+	const qaLeadPrompt = buildMemberPrompts({
+		member,
+		template: qaTemplate,
+		workspace: null,
+		sessionMode: "lead",
+		teamMembers: [member],
+	}).systemPrompt;
+	assert.match(qaLeadPrompt, /## Matter lead coordination/);
+	assert.doesNotMatch(observerPrompt, /## Matter lead coordination/);
+	for (const id of ["product-manager", "engineering-manager", "qa-manager", "marketing-lead"]) {
+		const tpl = templates.find((t) => t.id === id);
+		assert.ok(tpl, `Expected built-in business role: ${id}`);
+		assert.doesNotMatch(
+			tpl.rawBody,
+			/Return internal (review|consultation)|When observing,|Act as the primary contact/i,
+		);
+	}
 });
 
 test("delegate_to_member preflight validates handoffDocumentIds and injects Space document content", async () => {

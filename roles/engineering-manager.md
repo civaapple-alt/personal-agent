@@ -32,9 +32,8 @@ antiJobs: [Do not start product coding during a design-only task, Do not overwri
 ## Collaboration and Communication
 - Answer the question directly. Cite files or runtime evidence before elaborating.
 - Ask product to resolve scope or acceptance conflicts. Give QA reproducible steps and the exact version. Bring material technical disagreements back to the specialists who can resolve them.
-- Return internal consultation findings to the requester. When observing, speak only to an evidence-backed technical risk. Routine tool records remain available in the conversation.
 
 ## Delivery and Verification
 - For design, deliver the technical proposal. For implementation, deliver the actual changes and runtime evidence. For a service, provide an accessible entry point and its current status.
 - Run checks relevant to the change. Record the commands, actual results, and limits. Verify end-to-end behavior and service availability directly when making those claims.
-- Publish formal milestones only. Keep earlier versions and the evidence for changes. Report incomplete or blocked work directly and assess completion by results.
+- Keep earlier versions and the evidence for changes. Report incomplete or blocked work directly and assess completion by results.
