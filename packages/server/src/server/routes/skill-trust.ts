@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { SKILL_PROPOSAL_NAME_RE } from "@pa/contracts/skill-proposal";
 import {
 	isValidSkillTrustLevel,
@@ -7,6 +7,7 @@ import {
 	type ManagedSkillDetailDto,
 	type ManagedSkillEntryDto,
 	type ManagedSkillScriptDetailDto,
+	type PiNativeSkillDto,
 	type SkillTrustPolicyRecord,
 	type SkillTrustScope,
 	skillTrustPolicyKey,
@@ -302,7 +303,26 @@ export async function handleSkillTrustRoutes(
 			);
 		}
 
-		sendJson(res, 200, { skills });
+		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
+		const refresh = parsedUrl.searchParams.get("refresh") === "1";
+		const runtimeConfig = ctx.getServerRuntimeConfig?.();
+		const inheritLocalPiResources = Boolean(runtimeConfig?.inheritLocalPiResources);
+		const isOwner = isSuperAdminActor(actor) || actor.authKind === "loopback";
+		let piNativeSkills: PiNativeSkillDto[] = [];
+		let piNativeSkillsError: string | null = null;
+		if (ctx.readPiNativeSkills) {
+			try {
+				const raw = await ctx.readPiNativeSkills({ inheritLocalPiResources, refresh });
+				piNativeSkills = raw.map((item) => ({
+					...item,
+					filePath: item.filePath ? (isOwner ? item.filePath : basename(item.filePath)) : null,
+				}));
+			} catch (err: unknown) {
+				piNativeSkillsError = err instanceof Error ? err.message : String(err);
+			}
+		}
+
+		sendJson(res, 200, { skills, piNativeSkills, piNativeSkillsError });
 		return true;
 	}
 

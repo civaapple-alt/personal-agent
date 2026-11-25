@@ -1,5 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
+import type { PiNativeSkillDto } from "@pa/contracts/skill-trust";
+import { readPiDiscoveredSkills } from "@pa/pi-rpc";
 import { type InstalledPiWebAccess, installPiWebAccess } from "../extensions/web-access/package.ts";
 import {
 	type LocalPiResourcesPolicy,
@@ -55,6 +57,7 @@ export interface PersonalAgentServerOptions {
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
+	readPiNativeSkills?: (options: { inheritLocalPiResources: boolean }) => Promise<PiNativeSkillDto[]>;
 	runtimeMeta?: Pick<ServerRuntimeConfig, "host" | "port" | "dbPath" | "builtinRolesDir">;
 }
 
@@ -117,12 +120,27 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		inheritsLocalPiResources,
 	});
 
+	const piSkillsCache = new Map<boolean, { expiresAt: number; skills: PiNativeSkillDto[] }>();
+	const readPiNativeSkills = async (opts: { inheritLocalPiResources: boolean; refresh?: boolean }) => {
+		const now = Date.now();
+		const cached = piSkillsCache.get(opts.inheritLocalPiResources);
+		if (!opts.refresh && cached && cached.expiresAt > now) {
+			return cached.skills;
+		}
+		const loader =
+			options.readPiNativeSkills ?? ((o: { inheritLocalPiResources: boolean }) => readPiDiscoveredSkills(o));
+		const skills = await loader({ inheritLocalPiResources: opts.inheritLocalPiResources });
+		piSkillsCache.set(opts.inheritLocalPiResources, { expiresAt: now + 30_000, skills });
+		return skills;
+	};
+
 	const routeCtx: ServerRouteContext = {
 		store,
 		orchestrator,
 		previewManager,
 		dialogBroker,
 		probePiCli: probeRuntimePi,
+		readPiNativeSkills,
 		installWebAccess: () => {
 			webAccessInstallation ??= queuePiInstall(installPiWebAccess).finally(() => {
 				webAccessInstallation = undefined;

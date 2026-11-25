@@ -23,6 +23,21 @@ export interface RpcModel {
 	maxTokens?: number;
 }
 
+export interface RpcSourceInfo {
+	path: string;
+	source: string;
+	scope: string;
+	origin: string;
+	baseDir?: string;
+}
+
+export interface RpcSlashCommand {
+	name: string;
+	description?: string;
+	source: "extension" | "prompt" | "skill";
+	sourceInfo?: RpcSourceInfo;
+}
+
 export interface RpcSessionState {
 	model?: RpcModel;
 	thinkingLevel: ThinkingLevel;

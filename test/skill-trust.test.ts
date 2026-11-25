@@ -185,6 +185,24 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 		previewManager,
 		dialogBroker,
 		skillsDir,
+		readPiNativeSkills: async () => [
+			{
+				name: "poteto-mode",
+				description: "Poteto agent style",
+				source: "git:github.com/backnotprop/pstack",
+				scope: "user",
+				origin: "package",
+				filePath: "/Users/owner/.pi/agent/git/pstack/skills/poteto-mode/SKILL.md",
+			},
+			{
+				name: "frontend-design",
+				description: "Frontend design skill",
+				source: "local",
+				scope: "user",
+				origin: "top-level",
+				filePath: "/Users/owner/.agents/skills/frontend-design/SKILL.md",
+			},
+		],
 	});
 	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", () => resolveListen()));
 	const address = server.address();
@@ -203,7 +221,18 @@ test("GET/PATCH /api/skills/trust lists scoped disk Skills and enforces trust po
 				trustLevel: string;
 				canManage: boolean;
 			}>;
+			piNativeSkills: Array<{
+				name: string;
+				source: string;
+				origin: string;
+				filePath: string | null;
+			}>;
+			piNativeSkillsError: string | null;
 		};
+		assert.equal(listJson.piNativeSkillsError, null);
+		assert.equal(listJson.piNativeSkills.length, 2);
+		assert.ok(listJson.piNativeSkills.some((s) => s.name === "frontend-design" && s.source === "local"));
+		assert.ok(listJson.piNativeSkills.some((s) => s.name === "poteto-mode" && s.origin === "package"));
 		const wsSkill = listJson.skills.find((s) => s.scope === "workspace" && s.name === "repo-preflight");
 		const personalSkill = listJson.skills.find((s) => s.scope === "personal" && s.name === "my-digest");
 		assert.ok(wsSkill);

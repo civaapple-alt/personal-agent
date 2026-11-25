@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename } from "node:path";
+import type { PiNativeSkillDto } from "@pa/contracts/skill-trust";
 import type { InstalledPiWebAccess } from "../../extensions/web-access/package.ts";
 import { resolveRepoGitUserIdentity } from "../../orchestrator/execution/execution-context.ts";
 import type { PiCliProbeResult, ServerRuntimeConfig } from "../../orchestrator/runtime/runtime-info.ts";
@@ -19,6 +20,10 @@ export interface ServerRouteContext {
 	previewManager: PreviewManager;
 	dialogBroker: DialogBroker;
 	probePiCli?: () => Promise<PiCliProbeResult>;
+	readPiNativeSkills?: (options: {
+		inheritLocalPiResources: boolean;
+		refresh?: boolean;
+	}) => Promise<PiNativeSkillDto[]>;
 	installWebAccess: () => Promise<InstalledPiWebAccess>;
 	getServerRuntimeConfig?: () => ServerRuntimeConfig;
 	rolesDir?: string;

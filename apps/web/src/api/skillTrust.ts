@@ -1,15 +1,23 @@
 import type {
 	ManagedSkillDetailDto,
 	ManagedSkillEntryDto,
+	PiNativeSkillDto,
 	SkillTrustLevel,
 	SkillTrustScope,
 } from "@pa/contracts/skill-trust";
 import { requestJson } from "./client.ts";
 
-export type { ManagedSkillDetailDto, ManagedSkillEntryDto, SkillTrustLevel, SkillTrustScope };
+export type { ManagedSkillDetailDto, ManagedSkillEntryDto, PiNativeSkillDto, SkillTrustLevel, SkillTrustScope };
 
-export function fetchManagedSkills(): Promise<{ skills: ManagedSkillEntryDto[] }> {
-	return requestJson<{ skills: ManagedSkillEntryDto[] }>("/api/skills/trust");
+export interface ManagedSkillsListResponse {
+	skills: ManagedSkillEntryDto[];
+	piNativeSkills?: PiNativeSkillDto[];
+	piNativeSkillsError?: string | null;
+}
+
+export function fetchManagedSkills(options?: { refresh?: boolean }): Promise<ManagedSkillsListResponse> {
+	const path = options?.refresh ? "/api/skills/trust?refresh=1" : "/api/skills/trust";
+	return requestJson<ManagedSkillsListResponse>(path);
 }
 
 export function fetchManagedSkillDetail(params: {

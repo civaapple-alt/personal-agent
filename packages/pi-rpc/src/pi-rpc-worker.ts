@@ -17,6 +17,7 @@ import type {
 	RpcResponse,
 	RpcSessionEvent,
 	RpcSessionState,
+	RpcSlashCommand,
 	ThinkingLevel,
 } from "./types.ts";
 
@@ -395,6 +396,11 @@ export class PiRpcWorker {
 	async getAvailableModels(): Promise<RpcModel[]> {
 		const response = await this.sendCommand({ type: "get_available_models" });
 		return this.unwrapData<{ models: RpcModel[] }>(response).models;
+	}
+
+	async getCommands(): Promise<RpcSlashCommand[]> {
+		const response = await this.sendCommand({ type: "get_commands" });
+		return this.unwrapData<{ commands: RpcSlashCommand[] }>(response).commands;
 	}
 
 	async setModel(provider: string, modelId: string): Promise<RpcModel> {

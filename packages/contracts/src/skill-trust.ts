@@ -45,6 +45,19 @@ export interface ManagedSkillDetailDto {
 	scripts: ManagedSkillScriptDetailDto[];
 }
 
+export interface PiNativeSkillDto {
+	name: string;
+	description: string;
+	/** Resource source reported by Pi `get_commands` (e.g. `local`, `git:github.com/...`, `npm:...`). */
+	source: string;
+	/** Scope reported by Pi (`user` | `project` | `temporary`). */
+	scope: string;
+	/** Origin reported by Pi (`package` | `top-level`). */
+	origin: string;
+	/** File path reported by Pi `sourceInfo.path` (redacted for non-owner collaborators). */
+	filePath: string | null;
+}
+
 export const SKILL_TRUST_LEVEL_LABELS: Record<SkillTrustLevel, string> = {
 	confirm: "步骤 3 · 执行前确认",
 	autonomous: "步骤 4 · 自主执行",
