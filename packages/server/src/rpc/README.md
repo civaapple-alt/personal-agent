@@ -12,7 +12,7 @@
 | [pa-extensions/*](../../../../pa-extensions/README.md) | PA 按权限按需挂载 `worker-runtime`、`workbench-help`、`space`、`delegation`、`skill-capture`，通过当轮桥接调用 PA 并核查实际工具 |
 | [human-question](../../../../pi-extensions/human-question/README.md) | 注册 `request_clarification` 并使用同一桥接。独立 Pi 会话使用原生问答交互 |
 | [skill-catalog](../../../../pi-extensions/skill-catalog/README.md) | 列出 Pi 当前已发现的 Skills，并按需读取完整正文和哈希 |
-| [team-tool-bridge.ts](team-tool-bridge.ts) | 每轮执行专用的 loopback HTTP、bearer token、参数校验、调用 ID 去重和取消。宿主将 `read_pa_help` 限于允许的帮助主题和本轮事项上下文，并再次拒绝内部成员发布及旁听模式提案 |
+| [team-tool-bridge.ts](team-tool-bridge.ts) | 每轮执行专用的 loopback HTTP、bearer token、参数校验、调用 ID 去重和取消。宿主校验 `delegate_to_member`（含 `handoffDocumentIds` 预检）、`read_space`/`save_space_page`、`propose_skill`、`read_team_roles`/`propose_role` 与 `request_clarification` 的权限与边界，并拒绝内部成员发布及旁听模式提案 |
 
 `agent_settled` 表示执行收尾，不能据此自动生成交付；`disposition: handled` 不等待 settled。
 RPC 的 `steer` 等方法也不代表网页已有运行中插话。模型错误不能伪装为空正文成功。

@@ -28,7 +28,7 @@ Look for these deterministic signals before changing prompts or code:
 - **File rework / repeated tool calls**: signals missing upfront specs or broken verification loops.
 - **Repeated user instructions**: strong evidence to propose a reusable Skill (`SKILL.md` + `scripts/*`) via `propose_skill`.
 
-When running inside a live PA matter, you can also call `read_pa_help` with `topics: ["runtime_tools", "current_matter"]` for live turn facts, and users can view the same insights in **Settings → 运行洞察** (`#/settings/insights` / `GET /api/runtime/insights`).
+When running inside a live PA matter, inspect the latest `<pa_runtime_context>` snapshot (and call `read_team_roles({ includeCapabilities: true })` for full colleague capability cards or `read_space` for saved documents), and users can view the same insights in **Settings → 运行洞察** (`#/settings/insights` / `GET /api/runtime/insights`).
 
 ## 2. Navigate PA Progressively (Do Not Rely on One Summary)
 

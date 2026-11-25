@@ -35,7 +35,7 @@ Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件�
 - 团队部署支持账号审核、组织邀请、项目仓库授权和私密事项。Pi 和它调用的工具以服务所在机器的系统账号权限运行。请在接入真实仓库或向团队开放前阅读[安全说明](SECURITY.md)。
 - 支持导入/设计岗位角色包、沉淀与信任分级管理 Skills 及脚本、基于真实会话日志运行洞察与团队协作体检。当前适合个人或可信小团队使用并审阅输出；操作系统级执行隔离、长期无人值守后台自治和公开人才市场仍在规划中。
 
-[完整文档索引](docs/README.md) · [0.8.2 发布说明](docs/releases/v0.8.2.md) · [单兵与团队模式](docs/concepts/solo-and-team-modes.md) · [变更日志](CHANGELOG.md)
+[完整文档索引](docs/README.md) · [0.8.x LTS 候选基线](docs/releases/v0.8-lts-baseline.md) · [0.8.2 发布说明](docs/releases/v0.8.2.md) · [单兵与团队模式](docs/concepts/solo-and-team-modes.md) · [变更日志](CHANGELOG.md)
 
 ## 仓库目录全景
 

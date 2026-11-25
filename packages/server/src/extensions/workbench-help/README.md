@@ -2,7 +2,7 @@
 
 [catalog.ts](catalog.ts) 定义岗位可查的主题，并按主题读取随版本发布的[工作台功能速查](../../../../../docs/guides/agent-workbench.md)。扩展向岗位提供简短的主题索引。
 
-团队扩展通过当轮桥接提供 `read_pa_help`。需要查实时状态时，[编排模块](../../orchestrator/runtime/workbench-context.ts)使用当前事项和工作区的记录。工具参数只接收主题和答复语言。
+发送流程识别出工作台问题时，[岗位运行器](../../orchestrator/execution/worker-runner.ts)通过[编排模块](../../orchestrator/runtime/workbench-context.ts)按主题读取静态速查或当前事项/工作区实时状态，放入本轮参考资料由岗位结合对话回答；常规问答则通过 `<pa_docs>` 指针由岗位使用原生 `read` 按需查阅文档。
 
 `team_capabilities` 展示当前事项可见成员的角色声明及有作用域的历史内部启动记录。`runtime_tools` 区分当前岗位启动清单和本轮检索、方法工具的调用记录；未观察到调用时保持未验证。工具执行事件记录当前轮次与工作区，避免将其他轮次或其他工作区的结果当成本轮证据。
 

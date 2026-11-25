@@ -4,6 +4,8 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Establish `0.8.x` as the **LTS candidate baseline** (`docs/releases/v0.8-lts-baseline.md`, `README.md`, `docs/README.md`, `docs/concepts/architecture-and-plan.md`), freezing three-ring boundaries, role/extension/storage contracts, and patch-only maintenance policy; remove remaining legacy `read_pa_help` ghost references (`pa-self-inspection/SKILL.md`, dead `WORKBENCH_HELP_PROMPT` in `workbench-help/catalog.ts`, and local READMEs).
+
 ## [0.8.2] - 2026-11-25
 
 See the [0.8.2 release guide](docs/releases/v0.8.2.md) for downloads and upgrade instructions.

@@ -76,12 +76,6 @@ export function isWorkbenchTopic(topic: unknown): topic is WorkbenchTopic {
 	return typeof topic === "string" && Object.hasOwn(WORKBENCH_TOPICS, topic);
 }
 
-export const WORKBENCH_HELP_PROMPT = [
-	"Personal Agent help: call read_pa_help for questions about the workbench's features or current matter state. Use the business repository for questions about the project itself.",
-	`Guide topics: ${Object.keys(GUIDES).join(", ")}.`,
-	"Live topics: current_matter (roles and repository), team_capabilities (role declarations and scoped past internal startups), runtime_tools (current role's startup tools, not verified operation), pending_decisions, matter_documents.",
-].join("\n");
-
 export function isGuideTopic(topic: WorkbenchTopic): topic is keyof typeof GUIDES {
 	return Object.hasOwn(GUIDES, topic);
 }
