@@ -18,7 +18,12 @@ import { reportReady } from "./worker-helpers.ts";
 async function fixture(
 	t: test.TestContext,
 	hold?: Promise<void>,
-	settings?: { requireAuth: boolean; host?: string; inheritLocalPiResources?: boolean; ownerToken?: boolean },
+	settings?: {
+		requireAuth: boolean;
+		host?: string;
+		inheritLocalPiResources?: boolean | "auto" | "always" | "off";
+		ownerToken?: boolean;
+	},
 ) {
 	const root = await realpath(await mkdtemp(join(tmpdir(), "pa-request-lifecycle-")));
 	const db = openPersonalAgentDatabase(":memory:");
@@ -229,13 +234,26 @@ test("concurrent image dispatch cannot overwrite the active run or mark it faile
 	}
 });
 
-test("Only the local owner on a loopback listener inherits native Pi resources", async (t) => {
+test("Tri-state PA_LOCAL_PI_RESOURCES controls native Pi resource inheritance across personal and team modes", async (t) => {
 	const scenarios = [
-		{ name: "personal owner", requireAuth: false, inherit: true },
-		{ name: "explicit opt-out", requireAuth: false, inheritLocalPiResources: false, inherit: false },
-		{ name: "LAN listener", requireAuth: false, host: "0.0.0.0", inherit: false },
-		{ name: "signed-in owner", requireAuth: false, ownerToken: true, inherit: false },
-		{ name: "team server", requireAuth: true, inherit: false },
+		{ name: "personal owner (auto)", requireAuth: false, inherit: true },
+		{ name: "explicit opt-out (off)", requireAuth: false, inheritLocalPiResources: "off" as const, inherit: false },
+		{ name: "LAN listener (auto)", requireAuth: false, host: "0.0.0.0", inherit: false },
+		{ name: "signed-in owner (auto)", requireAuth: false, ownerToken: true, inherit: false },
+		{ name: "team server (auto)", requireAuth: true, inherit: false },
+		{
+			name: "team server (always)",
+			requireAuth: true,
+			inheritLocalPiResources: "always" as const,
+			inherit: true,
+		},
+		{
+			name: "LAN listener (always)",
+			requireAuth: false,
+			host: "0.0.0.0",
+			inheritLocalPiResources: "always" as const,
+			inherit: true,
+		},
 	];
 	for (const { name, inherit, ...settings } of scenarios) {
 		await t.test(name, async (t) => {

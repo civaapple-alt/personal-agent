@@ -22,7 +22,7 @@
 | `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../../apps/cli/src/main.ts) → [HTTP 鉴权](../../packages/server/src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
 | `PA_WORKSPACES_ROOT` | `<dataDir>/team-workspaces` | [服务入口](../../apps/cli/src/main.ts) → [Git 克隆](../../packages/server/src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
 | `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
-| `PA_LOCAL_PI_RESOURCES` | 个人版回环监听下启用 | [服务入口](../../apps/cli/src/main.ts) | 设为 `0` 时恢复显式装配。本机所有者在个人版回环监听下启动的业务主责与内部委托可使用 Pi 原生资源发现 |
+| `PA_LOCAL_PI_RESOURCES` | `auto`（个人版回环继承，团队版显式装配） | [服务入口](../../apps/cli/src/main.ts) | 三态策略：`auto`（默认）、`1`/`always`（团队/登录/局域网模式也继承宿主机 `~/.pi` 扩展与包，传 `--offline`；托管克隆仓仍保持 `--no-extensions --no-approve`）、`0`/`off`（强制显式装配 `--no-extensions`） |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) → [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
 | `PA_TURN_TIMEOUT_MS` | `0`（不设固定总上限） | [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 单轮用户事项的墙钟总时长上限（毫秒，覆盖主负责人、内部委托与旁听评估）。默认 `0` 表示按 Goal/Plan 长任务模式运行，不因墙钟固定时长掐断仍在活动的任务，改由无活动看门狗（`PA_IDLE_TIMEOUT_MS`）与手动「停止」收口；设为正整数时按指定毫秒数硬限时 |
 | `PA_PROMPT_TIMEOUT_MS` | `0`（不设固定总上限） | [PiRpcWorker](../../packages/server/src/rpc/pi-rpc-worker.ts) / [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 单个 Pi worker 单次 `runPromptAndWait` 的墙钟硬上限（毫秒）；在未设置 `PA_TURN_TIMEOUT_MS` 时也作为编排核整轮总上限回退值（`0` 表示关闭） |

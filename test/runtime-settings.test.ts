@@ -294,7 +294,7 @@ test("buildRuntimeOverview reports missing Pi CLI and reports MCP configuration 
 	);
 	const localResources = await buildRuntimeOverview({
 		config: orchestrator.getRuntimeConfig(),
-		serverConfig: { inheritLocalPiResources: true },
+		serverConfig: { inheritLocalPiResources: true, localPiResourcesPolicy: "auto" },
 		activeMembers: store.listMembers(),
 		isOwner: true,
 		probePiCli: async () => ({ available: false, executable: "pi", version: null, error: "not installed" }),
@@ -302,6 +302,18 @@ test("buildRuntimeOverview reports missing Pi CLI and reports MCP configuration 
 	assert.match(
 		localResources.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "",
 		/可继承 Pi 资源/,
+	);
+
+	const alwaysResources = await buildRuntimeOverview({
+		config: orchestrator.getRuntimeConfig(),
+		serverConfig: { inheritLocalPiResources: true, localPiResourcesPolicy: "always" },
+		activeMembers: store.listMembers(),
+		isOwner: true,
+		probePiCli: async () => ({ available: false, executable: "pi", version: null, error: "not installed" }),
+	});
+	assert.match(
+		alwaysResources.base.isolationModes.find((mode) => mode.id === "worker")?.extensionsPolicy ?? "",
+		/PA_LOCAL_PI_RESOURCES=1/,
 	);
 
 	const mcpExt = payload.extensions.find((ext) => ext.id === "pi-builtin-mcp");

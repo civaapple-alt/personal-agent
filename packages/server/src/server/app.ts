@@ -1,12 +1,18 @@
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 import { type InstalledPiWebAccess, installPiWebAccess } from "../extensions/web-access/package.ts";
-import { type PiCliProbeResult, probePiCli, type ServerRuntimeConfig } from "../orchestrator/runtime/runtime-info.ts";
+import {
+	type LocalPiResourcesPolicy,
+	normalizeLocalPiResourcesPolicy,
+	type PiCliProbeResult,
+	probePiCli,
+	type ServerRuntimeConfig,
+} from "../orchestrator/runtime/runtime-info.ts";
 import type { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { type PersonalAgentStore, WorkspaceMutationError } from "../storage/repositories.ts";
 import { canActorAccessUpload } from "./acl.ts";
-import { isLoopbackAddress, requireActiveActor, resolveRequestActor } from "./auth.ts";
+import { isLoopbackAddress, type RequestActor, requireActiveActor, resolveRequestActor } from "./auth.ts";
 import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
 import { HttpRequestError, isAllowedMutatingOrigin, sendError, serveStaticAsset } from "./http.ts";
@@ -39,7 +45,13 @@ export interface PersonalAgentServerOptions {
 	skillsDir?: string;
 	uploadsDir?: string;
 	requireAuth?: boolean;
-	inheritLocalPiResources?: boolean;
+	/**
+	 * Control host `~/.pi` resource inheritance (`--offline` vs `--no-extensions`):
+	 * - `"auto"` (default / `true`): inherit only for unauthenticated loopback owner.
+	 * - `"always"`: inherit for all authorized business dispatches, including team/auth/LAN modes.
+	 * - `"off"` (`false`): never inherit; always pass `--no-extensions`.
+	 */
+	inheritLocalPiResources?: boolean | LocalPiResourcesPolicy;
 	defaultWorkspacesRoot?: string;
 	dataDir?: string;
 	probePiCli?: () => Promise<PiCliProbeResult>;
@@ -85,14 +97,17 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		sse.broadcast(evt.type, evt);
 	});
 
-	const inheritsLocalPiResources = () => {
+	const localPiResourcesPolicy = normalizeLocalPiResourcesPolicy(options.inheritLocalPiResources);
+	const inheritsLocalPiResources = (actor?: RequestActor) => {
+		if (localPiResourcesPolicy === "always") return true;
+		if (localPiResourcesPolicy === "off") return false;
 		const address = server.address();
 		return (
-			options.inheritLocalPiResources !== false &&
 			!options.requireAuth &&
 			address !== null &&
 			typeof address !== "string" &&
-			isLoopbackAddress(address.address)
+			isLoopbackAddress(address.address) &&
+			(!actor || actor.authKind === "loopback")
 		);
 	};
 	const { activeRuns, runDispatchInBackground } = createDispatchRunner({
@@ -127,6 +142,7 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				webDistDir,
 				requireAuth: Boolean(options.requireAuth),
 				inheritLocalPiResources: inheritsLocalPiResources(),
+				localPiResourcesPolicy,
 			};
 		},
 		rolesDir,

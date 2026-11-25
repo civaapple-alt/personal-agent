@@ -8,7 +8,12 @@ import { listServerExtensionSummaries } from "../extensions/registry.ts";
 import { closeLogging, createLogger, initLogging } from "../log/index.ts";
 import { createSystemOneClassifier } from "../orchestrator/architect/system-one.ts";
 import { resolveRepoGitUserIdentity } from "../orchestrator/execution/execution-context.ts";
-import { type PiCliProbeResult, probePiCli } from "../orchestrator/runtime/runtime-info.ts";
+import {
+	type LocalPiResourcesPolicy,
+	normalizeLocalPiResourcesPolicy,
+	type PiCliProbeResult,
+	probePiCli,
+} from "../orchestrator/runtime/runtime-info.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
@@ -28,7 +33,7 @@ export interface BootHostOptions {
 	sessionDir?: string;
 	webDistDir?: string;
 	piExtensions?: string[];
-	inheritLocalPiResources?: boolean;
+	inheritLocalPiResources?: boolean | LocalPiResourcesPolicy;
 	adminEmail?: string;
 	adminPassword?: string;
 	adminName?: string;
@@ -298,9 +303,12 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 	}
 
 	const pi = await piProbe;
-	const inheritLocalPiResourcesOption =
-		options.inheritLocalPiResources ?? process.env.PA_LOCAL_PI_RESOURCES?.trim() !== "0";
-	const localPiResourcesInherited = !requireAuth && isLoopbackHost(host) && inheritLocalPiResourcesOption;
+	const localPiResourcesPolicy = normalizeLocalPiResourcesPolicy(
+		options.inheritLocalPiResources ?? process.env.PA_LOCAL_PI_RESOURCES,
+	);
+	const localPiResourcesInherited =
+		localPiResourcesPolicy === "always" ||
+		(localPiResourcesPolicy === "auto" && !requireAuth && isLoopbackHost(host));
 	const installRoot = resolveRepoRoot(import.meta.url);
 
 	const webDistDir = options.webDistDir ? resolve(options.webDistDir) : resolveDefaultWebDistDir(rootDir);
@@ -315,7 +323,7 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		skillsDir: customSkillsDir,
 		uploadsDir: resolve(dataDir, "uploads"),
 		requireAuth,
-		inheritLocalPiResources: inheritLocalPiResourcesOption,
+		inheritLocalPiResources: localPiResourcesPolicy,
 		defaultWorkspacesRoot,
 		dataDir,
 		probePiCli: () => piProbe,

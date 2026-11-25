@@ -52,7 +52,7 @@ export function createDispatchRunner(deps: {
 	store: PersonalAgentStore;
 	orchestrator: TeamOrchestrator;
 	broadcast: (eventName: string, payload: unknown) => void;
-	inheritsLocalPiResources: () => boolean;
+	inheritsLocalPiResources: (actor: RequestActor) => boolean;
 }) {
 	const { store, orchestrator, broadcast } = deps;
 	const activeRuns = new Map<string, ActiveRunState>();
@@ -115,10 +115,7 @@ export function createDispatchRunner(deps: {
 				workspaceId: input.workspaceId,
 				orgId: input.orgId,
 				actorUserId: input.startedByUserId ?? null,
-				inheritLocalPiResources:
-					input.interactionMode !== "discussion" &&
-					actor.authKind === "loopback" &&
-					deps.inheritsLocalPiResources(),
+				inheritLocalPiResources: input.interactionMode !== "discussion" && deps.inheritsLocalPiResources(actor),
 				observerMemberIds: input.observerMemberIds,
 				author: input.author,
 				onTextDelta: (delta) => {

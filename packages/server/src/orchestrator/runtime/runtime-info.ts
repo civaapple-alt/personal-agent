@@ -34,6 +34,24 @@ export interface OrchestratorRuntimeConfig {
 	templates: RoleTemplate[];
 }
 
+export type LocalPiResourcesPolicy = "auto" | "always" | "off";
+
+/** Parse `PA_LOCAL_PI_RESOURCES` or programmatic option into tri-state policy (`auto` | `always` | `off`). */
+export function normalizeLocalPiResourcesPolicy(
+	raw: boolean | LocalPiResourcesPolicy | string | undefined,
+): LocalPiResourcesPolicy {
+	if (raw === false) return "off";
+	if (raw === true || raw === undefined) return "auto";
+	const normalized = raw.trim().toLowerCase();
+	if (normalized === "1" || normalized === "true" || normalized === "always" || normalized === "on") {
+		return "always";
+	}
+	if (normalized === "0" || normalized === "false" || normalized === "off" || normalized === "never") {
+		return "off";
+	}
+	return "auto";
+}
+
 export interface ServerRuntimeConfig {
 	host?: string;
 	port?: number;
@@ -44,6 +62,7 @@ export interface ServerRuntimeConfig {
 	webDistDir?: string;
 	requireAuth?: boolean;
 	inheritLocalPiResources?: boolean;
+	localPiResourcesPolicy?: LocalPiResourcesPolicy;
 }
 
 export interface PiCliProbeResult {
@@ -582,10 +601,20 @@ export async function buildRuntimeOverview(options: {
 				},
 				{
 					key: "PA_LOCAL_PI_RESOURCES",
-					label: "本机 Pi 资源发现",
-					value: serverConfig?.inheritLocalPiResources ? "本机所有者的业务执行启用" : "仅显式装配",
-					defaultValue: "个人版回环监听时启用",
-					overridden: process.env.PA_LOCAL_PI_RESOURCES?.trim() === "0",
+					label: "宿主机 Pi 资源继承",
+					value:
+						serverConfig?.localPiResourcesPolicy === "always"
+							? "已强制启用（always · 含团队/登录模式）"
+							: serverConfig?.localPiResourcesPolicy === "off"
+								? "已禁用（off · 仅显式装配）"
+								: serverConfig?.inheritLocalPiResources
+									? "自动（auto · 本机个人版已继承）"
+									: "自动（auto · 团队/非回环模式仅显式装配）",
+					defaultValue: "auto（支持 1/always 或 0/off）",
+					overridden:
+						serverConfig?.localPiResourcesPolicy !== undefined
+							? serverConfig.localPiResourcesPolicy !== "auto"
+							: normalizeLocalPiResourcesPolicy(process.env.PA_LOCAL_PI_RESOURCES) !== "auto",
 				},
 				{
 					key: "PA_TURN_TIMEOUT_MS",
@@ -718,8 +747,10 @@ export async function buildRuntimeOverview(options: {
 							...mode,
 							...(config.noSession ? { sessionStrategy: "无持久 Pi 会话" } : {}),
 							extensionsPolicy: serverConfig?.inheritLocalPiResources
-								? "本机个人模式可继承 Pi 资源（--offline）；Skill 由 Pi 发现及按需读取"
-								: "--no-extensions 显式装配 PA 扩展；按租户作用域挂载 --skill（Skill 由 Pi 发现及按需读取）",
+								? serverConfig.localPiResourcesPolicy === "always"
+									? "宿主机 Pi 资源已继承（PA_LOCAL_PI_RESOURCES=1 · --offline）；托管克隆仓保持 --no-extensions；Skill 由 Pi 发现及按需读取"
+									: "本机个人模式可继承 Pi 资源（--offline）；Skill 由 Pi 发现及按需读取"
+								: "--no-extensions 显式装配 PA 扩展；按租户作用域挂载 --skill（Skill 由 Pi 发现及按需读取；设 PA_LOCAL_PI_RESOURCES=1 可继承宿主机 Pi 扩展）",
 						}
 					: mode,
 			),

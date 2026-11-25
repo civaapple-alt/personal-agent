@@ -583,7 +583,7 @@ export async function executeWithWorkerPass(
 			}
 		}, signal);
 
-		// Use Pi's own resource and project trust rules. Without a workspace, load user resources only.
+		// Use Pi's own resource and project trust rules. Without a workspace, load user resources only; cloned repos stay isolated.
 		const args = inheritsLocalResources
 			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
 			: ["--no-extensions", "--no-approve"];
