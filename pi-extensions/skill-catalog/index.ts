@@ -105,7 +105,7 @@ export function renderAvailableResources(commands: SkillCommand[], existingPromp
 		...lines,
 		...(lines.length < rows.length
 			? [
-					`Catalogue truncated: ${lines.length} of ${rows.length} additional skills shown. Use list_available_skills({ query }) to search.`,
+					`Catalogue truncated (hasMore=true): ${lines.length} of ${rows.length} additional skills shown (${rows.length - lines.length} more). Use list_available_skills({ query }) to search or list_available_skills({ offset: ${lines.length}, limit: ${DEFAULT_LIST_LIMIT} }) to page through the rest.`,
 				]
 			: []),
 	].join("\n");
@@ -128,7 +128,7 @@ export default function registerSkillCatalog(pi: SkillCatalogApi): void {
 		name: "list_available_skills",
 		label: "查看可用 Skills",
 		description:
-			"Search or list Pi-discovered Skills (including manual/slash-invoked Skills). Pass `query` to filter by keywords before calling `load_available_skill(name)`.",
+			"Search or paginate Pi-discovered Skills (including manual/slash-invoked Skills). Pass `query` to filter by keywords or `offset`/`limit` to page through remaining entries (`hasMore` / `nextOffset`), then call `load_available_skill(name)`.",
 		parameters: {
 			type: "object",
 			properties: {
@@ -140,11 +140,16 @@ export default function registerSkillCatalog(pi: SkillCatalogApi): void {
 					type: "string",
 					description: "Optional filter matching skill source or scope.",
 				},
+				offset: {
+					type: "integer",
+					minimum: 0,
+					description: "Zero-based pagination offset into matching skills (default 0).",
+				},
 				limit: {
 					type: "integer",
 					minimum: 1,
 					maximum: MAX_LIST_LIMIT,
-					description: `Maximum number of skills to return (default ${DEFAULT_LIST_LIMIT}).`,
+					description: `Maximum number of skills to return per page (default ${DEFAULT_LIST_LIMIT}).`,
 				},
 			},
 			additionalProperties: false,
@@ -155,6 +160,9 @@ export default function registerSkillCatalog(pi: SkillCatalogApi): void {
 			const rawQuery = typeof input.query === "string" ? input.query.trim().toLowerCase() : "";
 			const queryTokens = rawQuery ? rawQuery.split(/\s+/u).filter(Boolean) : [];
 			const rawSource = typeof input.source === "string" ? input.source.trim().toLowerCase() : "";
+			const rawOffset =
+				typeof input.offset === "number" && Number.isFinite(input.offset) ? Math.floor(input.offset) : 0;
+			const offset = Math.max(0, rawOffset);
 			const rawLimit =
 				typeof input.limit === "number" && Number.isFinite(input.limit)
 					? Math.floor(input.limit)
@@ -178,22 +186,31 @@ export default function registerSkillCatalog(pi: SkillCatalogApi): void {
 				}
 				return true;
 			});
-			const sliced = matched.slice(0, limit).map((item) => ({
+			const sliced = matched.slice(offset, offset + limit).map((item) => ({
 				name: item.name,
 				description: sanitizeInline(item.description, 160),
 				...(item.source ? { source: item.source } : {}),
 				...(item.scope ? { scope: item.scope } : {}),
 				...((nameCounts.get(item.name) ?? 0) > 1 ? { path: item.path } : {}),
 			}));
+			const hasMore = offset + sliced.length < matched.length;
 			const payload = {
 				total: matched.length,
+				offset,
+				limit,
 				returned: sliced.length,
-				...(matched.length > sliced.length ? { truncated: true, hint: "Pass `query` to narrow results." } : {}),
+				hasMore,
+				...(hasMore
+					? {
+							nextOffset: offset + sliced.length,
+							hint: "Pass `offset: nextOffset` to fetch the next page, or `query` to narrow results.",
+						}
+					: {}),
 				skills: sliced,
 			};
 			return {
 				content: [{ type: "text", text: JSON.stringify(payload) }],
-				details: { total: matched.length, returned: sliced.length },
+				details: { total: matched.length, offset, returned: sliced.length, hasMore },
 			};
 		},
 	});

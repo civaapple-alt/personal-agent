@@ -82,7 +82,8 @@ test("Pi skill catalogue uses compact index, query-filtered discovery, and reads
 				description: "x".repeat(100),
 			})),
 		);
-		assert.match(truncated, /Catalogue truncated/);
+		assert.match(truncated, /Catalogue truncated \(hasMore=true\)/);
+		assert.match(truncated, /offset:/);
 		assert.ok(truncated.length < 7200);
 
 		const list = tools.get("list_available_skills")!;
@@ -224,6 +225,29 @@ test("pstack poteto-mode and downstream skills (how, why, principles) remain dis
 			const content = (await load.execute(`l-${expectedName}`, { name: expectedName })).content[0]!.text;
 			assert.match(content, expectedHeading);
 		}
+		// 3. Pagination (`offset` + `limit` + `hasMore` + `nextOffset`) walks the full list without dropping tail skills.
+		const collectedNames: string[] = [];
+		let offset = 0;
+		for (let page = 0; page < 10; page += 1) {
+			const pagePayload = JSON.parse((await list.execute(`p-${page}`, { offset, limit: 15 })).content[0]!.text) as {
+				total: number;
+				offset: number;
+				returned: number;
+				hasMore: boolean;
+				nextOffset?: number;
+				skills: Array<{ name: string }>;
+			};
+			assert.equal(pagePayload.total, commands.length);
+			assert.equal(pagePayload.offset, offset);
+			collectedNames.push(...pagePayload.skills.map((s) => s.name));
+			if (!pagePayload.hasMore) break;
+			assert.equal(pagePayload.nextOffset, offset + pagePayload.returned);
+			offset = pagePayload.nextOffset!;
+		}
+		assert.equal(collectedNames.length, commands.length);
+		assert.ok(collectedNames.includes("poteto-mode"));
+		assert.ok(collectedNames.includes("how"));
+		assert.ok(collectedNames.includes("why"));
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

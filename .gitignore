@@ -5,6 +5,7 @@ packages/*/dist/
 .pi/
 .agents/skills/*
 !.agents/skills/pa-matter-retrospective/
+!.agents/skills/pa-pi-runtime-tuning/
 .data/
 .notes/
 .releases/
