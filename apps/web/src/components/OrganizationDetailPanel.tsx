@@ -108,6 +108,10 @@ export function OrganizationDetailPanel({
 	// Reset invites & sync AI draft whenever organization or its server config changes
 	useEffect(() => {
 		setLatestInviteToken(null);
+		if (!canManageOrg) {
+			setInvites([]);
+			return;
+		}
 		let cancelled = false;
 		void fetchOrgInvites(organization.id)
 			.then((res) => {
@@ -119,7 +123,7 @@ export function OrganizationDetailPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [organization.id]);
+	}, [organization.id, canManageOrg]);
 
 	useEffect(() => {
 		const enabledIds = orgAiRoles ? orgAiRoles.effectiveMemberIds : eligibleAiMembers.map((m) => m.id);

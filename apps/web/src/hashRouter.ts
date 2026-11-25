@@ -31,7 +31,7 @@ export function parseHashRoute(rawHash: string): HashRoute {
 	if (segment0 === "deliverables") {
 		return { tab: "deliverables" };
 	}
-	if (segment0 === "space") {
+	if (segment0 === "space" || segment0 === "spaces") {
 		return segment1 ? { tab: "deliverables", spacePageId: segment1 } : { tab: "deliverables" };
 	}
 	if (segment0 === "chats") {

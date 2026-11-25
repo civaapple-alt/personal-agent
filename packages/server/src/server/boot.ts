@@ -171,9 +171,12 @@ export function formatStartupBanner(booted: Pick<BootedHost, "host" | "localUrl"
 	}
 	lines.push("");
 	lines.push("[Roles]");
-	const roleList = summary.businessRoleIds.join(", ") || "none";
-	const archSuffix = summary.hasArchitectRole ? " (+ role-architect)" : "";
-	lines.push(`  ${summary.businessRoleIds.length} business roles: ${roleList}${archSuffix}`);
+	const hasSoloRole = summary.businessRoleIds.includes("pi-default");
+	const pureBusinessIds = summary.businessRoleIds.filter((id) => id !== "pi-default");
+	const roleList = pureBusinessIds.join(", ") || "none";
+	const extraRoles = [...(hasSoloRole ? ["pi-default"] : []), ...(summary.hasArchitectRole ? ["role-architect"] : [])];
+	const extraSuffix = extraRoles.length > 0 ? ` (+ ${extraRoles.join(", ")})` : "";
+	lines.push(`  ${pureBusinessIds.length} business roles: ${roleList}${extraSuffix}`);
 	lines.push("");
 	lines.push("[Extensions]");
 	lines.push(`  ${summary.extensionNames.join(", ")}`);

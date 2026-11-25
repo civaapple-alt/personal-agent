@@ -124,7 +124,7 @@ export function TeamView({
 		}
 		return visibleBusinessMembers[0] ?? null;
 	}, [inspectedMemberId, visibleBusinessMembers]);
-	const inspectedIndex = inspectedMember ? businessMembers.findIndex((m) => m.id === inspectedMember.id) : -1;
+	const inspectedIndex = inspectedMember ? members.findIndex((m) => m.id === inspectedMember.id) : -1;
 	const inspectedCanManage = useMemo(
 		() => canMemberManageRole(inspectedMember, { isSuperAdmin, accountUser, currentUser, organizations }),
 		[inspectedMember, isSuperAdmin, accountUser, currentUser, organizations],
@@ -329,7 +329,7 @@ export function TeamView({
 							<aside className="team-split-nav" aria-label="AI 角色列表">
 								<div className="team-split-list">
 									{cardDisplayMembers.map((member) => {
-										const fullIdx = businessMembers.findIndex((m) => m.id === member.id);
+										const fullIdx = members.findIndex((m) => m.id === member.id);
 										const theme = getBotTheme(fullIdx >= 0 ? fullIdx : 0);
 										const isSelected = inspectedMember?.id === member.id;
 										const isPrimary = member.id === effectivePrimaryId;

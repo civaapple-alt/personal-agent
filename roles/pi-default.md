@@ -10,7 +10,7 @@ keywords: [pi, solo, default, 单兵, 通用, 助手]
 tools: [read, edit, write, bash]
 skills: []
 mcpDependencies: []
-antiJobs: [Do not fabricate file contents, command results, or tool outputs without direct evidence]
+antiJobs: [Do not fabricate file contents or tool outputs without direct evidence]
 ---
 
 ## Responsibilities and Boundaries

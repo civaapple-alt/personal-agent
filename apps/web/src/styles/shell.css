@@ -907,6 +907,11 @@
 .stage-header-right .btn-pill-outline {
 	white-space: nowrap;
 }
+.stage-header-right .header-humans-btn {
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
 .stage-header-left .pill {
 	display: inline-block;
 	font-size: var(--text-xs);
