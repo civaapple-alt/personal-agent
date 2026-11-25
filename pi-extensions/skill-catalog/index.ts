@@ -34,18 +34,9 @@ interface SkillCatalogApi {
 	}): void;
 }
 
-const MAX_CATALOG_CHARS = 3600;
+const MAX_CATALOG_CHARS = 6500;
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
-
-function formatCommandSource(command: SkillCommand): string | undefined {
-	const raw = command.sourceInfo?.source?.trim();
-	if (raw) return raw;
-	const path = command.sourceInfo?.path?.trim();
-	if (!path) return undefined;
-	const segments = path.split(/[\\/]+/u).filter(Boolean);
-	return segments.slice(-2).join("/") || undefined;
-}
 
 function skills(pi: SkillCatalogApi) {
 	return pi.getCommands().flatMap((command) => {
@@ -102,9 +93,8 @@ export function renderAvailableResources(commands: SkillCommand[], existingPromp
 	let chars = 0;
 	for (const row of rows) {
 		const skillName = sanitizeInline(row.name.slice(6), 80);
-		const source = formatCommandSource(row);
-		const desc = sanitizeInline(row.description ?? "", 120);
-		const line = `- ${skillName}${source ? ` [${sanitizeInline(source, 48)}]` : ""}${desc ? `: ${desc}` : ""}`;
+		const desc = sanitizeInline(row.description ?? "", 96);
+		const line = `- ${skillName}${desc ? `: ${desc}` : ""}`;
 		if (chars + line.length + 1 > MAX_CATALOG_CHARS) continue;
 		lines.push(line);
 		chars += line.length + 1;

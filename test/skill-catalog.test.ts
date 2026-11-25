@@ -83,7 +83,7 @@ test("Pi skill catalogue uses compact index, query-filtered discovery, and reads
 			})),
 		);
 		assert.match(truncated, /Catalogue truncated/);
-		assert.ok(truncated.length < 4200);
+		assert.ok(truncated.length < 7200);
 
 		const list = tools.get("list_available_skills")!;
 		const load = tools.get("load_available_skill")!;
@@ -121,6 +121,109 @@ test("Pi skill catalogue uses compact index, query-filtered discovery, and reads
 		await assert.rejects(load.execute("4", { name: "how" }), /Ambiguous/);
 		assert.match((await load.execute("5", { name: "how", path: second })).content[0]!.text, /Second method/);
 		await assert.rejects(load.execute("6", { name: "how" }, AbortSignal.abort()), /abort/i);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("pstack poteto-mode and downstream skills (how, why, principles) remain discoverable and loadable under compact catalog", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pa-pstack-poteto-"));
+	try {
+		const skillsRoot = root;
+		const skillSpecs = [
+			{
+				name: "poteto-mode",
+				description: "poteto's agent style for concise, detailed responses, unslopped prose, and verified work.",
+				body: "---\nname: poteto-mode\ndisable-model-invocation: true\n---\n# Poteto mode\nRead leaf skills like how, why, and principle-prove-it-works.",
+			},
+			{
+				name: "how",
+				description: 'Use for "how does X work", code walkthroughs, and layering questions.',
+				body: "---\nname: how\n---\n# How\nTrace the real code path with file and line citations.",
+			},
+			{
+				name: "why",
+				description: 'Use for "why does X work this way", design rationale, regressions, and history.',
+				body: "---\nname: why\n---\n# Why\nCheck git history and recorded decisions; separate facts from inference.",
+			},
+			{
+				name: "principle-prove-it-works",
+				description: "After a task, verify against the real artifact, not a proxy.",
+				body: "---\nname: principle-prove-it-works\n---\n# Prove It Works\nRun the real check and report observed output.",
+			},
+			...Array.from({ length: 45 }, (_, i) => ({
+				name: `alpha-filler-${String(i).padStart(2, "0")}`,
+				description: `Synthetic pstack filler skill ${i} to force compact catalog truncation before tail skills.`,
+				body: `# Filler ${i}`,
+			})),
+		];
+		const commands: Array<{
+			name: string;
+			description: string;
+			source: string;
+			sourceInfo: { path: string; source: string; scope: string };
+		}> = [];
+		for (const spec of skillSpecs) {
+			const filePath = join(skillsRoot, `${spec.name}.md`);
+			await writeFile(filePath, spec.body);
+			commands.push({
+				name: `skill:${spec.name}`,
+				description: spec.description,
+				source: "skill",
+				sourceInfo: { path: filePath, source: "git:github.com/backnotprop/pstack", scope: "user" },
+			});
+		}
+		// Sort alphabetically like Pi does so tail skills (`poteto-mode`, `why`) sit past the 3600-char inline cap.
+		commands.sort((a, b) => a.name.localeCompare(b.name));
+
+		type Tool = Parameters<Parameters<typeof registerSkillCatalog>[0]["registerTool"]>[0];
+		const tools = new Map<string, Tool>();
+		registerSkillCatalog({
+			on: () => {},
+			getCommands: () => commands,
+			registerTool: (tool) => {
+				tools.set(tool.name, tool);
+			},
+		});
+
+		// Inline compact catalog fits all ~50 pstack skills (including poteto-mode, how, why) without truncation!
+		const inlineCatalog = renderAvailableResources(commands);
+		assert.match(inlineCatalog, /- poteto-mode:/);
+		assert.match(inlineCatalog, /- how:/);
+		assert.match(inlineCatalog, /- why:/);
+		assert.doesNotMatch(inlineCatalog, /Catalogue truncated/);
+		assert.ok(inlineCatalog.length < 6800);
+
+		const list = tools.get("list_available_skills")!;
+		const load = tools.get("load_available_skill")!;
+
+		// 1. Discover & load poteto-mode even when truncated from inline catalog.
+		const potetoSearch = JSON.parse((await list.execute("s1", { query: "poteto" })).content[0]!.text) as {
+			total: number;
+			skills: Array<{ name: string }>;
+		};
+		assert.equal(potetoSearch.total, 1);
+		assert.equal(potetoSearch.skills[0]!.name, "poteto-mode");
+		const potetoLoaded = (await load.execute("l1", { name: "poteto-mode" })).content[0]!.text;
+		assert.match(potetoLoaded, /# Poteto mode/);
+		assert.match(potetoLoaded, /SHA256:/);
+
+		// 2. Discover & load downstream `how`, `why`, and `principle-prove-it-works` skills via query & direct name.
+		for (const [query, expectedName, expectedHeading] of [
+			["walkthroughs", "how", /# How/],
+			["rationale", "why", /# Why/],
+			["prove it works", "principle-prove-it-works", /# Prove It Works/],
+		] as const) {
+			const res = JSON.parse((await list.execute(`q-${expectedName}`, { query })).content[0]!.text) as {
+				skills: Array<{ name: string; path?: string }>;
+			};
+			assert.ok(
+				res.skills.some((s) => s.name === expectedName),
+				`Expected query "${query}" to find ${expectedName}`,
+			);
+			const content = (await load.execute(`l-${expectedName}`, { name: expectedName })).content[0]!.text;
+			assert.match(content, expectedHeading);
+		}
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

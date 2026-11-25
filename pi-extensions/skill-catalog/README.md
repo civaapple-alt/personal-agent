@@ -1,6 +1,6 @@
 # Pi Skill 目录
 
-PA 在事项岗位和独立角色架构师进程中加载此扩展，将 Pi 当前发现且未出现在 `<available_skills>` 中的额外 Skill（如 `disable-model-invocation` 手动触发类方法）以极简单行索引注入系统提示（上限 `3,600` 字符；若无额外 Skill 则零开销不注入）。角色按任务或用户自然语言自主搜索并调用 `load_available_skill` 直接应用，不要求用户在 Web 端输入 Pi 终端的 `/skill:*` 斜杠命令。
+PA 在事项岗位和独立角色架构师进程中加载此扩展，将 Pi 当前发现且未出现在 `<available_skills>` 中的额外 Skill（如 `disable-model-invocation` 手动触发类方法）以极简单行索引注入系统提示（上限 `6,500` 字符，可无截断容纳整套 `pstack` 等方法包；若无额外 Skill 则零开销不注入）。角色按任务或用户自然语言自主搜索并调用 `load_available_skill` 直接应用，不要求用户在 Web 端输入 Pi 终端的 `/skill:*` 斜杠命令。
 
 - `list_available_skills`：按可选 `query`（关键词）、`source` 与 `limit`（默认 `20`）检索 Pi 当前发现的 Skill 清单（含手动调用类 Skill）。为节省上下文，单名无歧义的 Skill 默认省略宿主机绝对 `path`，仅在重名时返回 `path` 供消歧。
 - `load_available_skill`：根据名称（兼容 `name`、`skill:name`、`/skill:name`）读取清单中对应的完整 `SKILL.md` 正文并返回 SHA-256；重名时须同时提供 `path`。只读取 Pi 当前发现的 Skill 文件，单个文件不超过 256 KiB。
