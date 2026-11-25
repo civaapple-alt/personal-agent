@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Extract `role-architect` into `roles/role-architect.md` alongside the other built-in roles, deduplicate template loading in `boot.ts` / `role-design-runner.ts`, and remove the dedicated Sidebar architect banner, TeamView「对话规划角色」button, and special-case architect composer/header badges so role design runs as a standard matter while keeping default + user-configurable role scope selection on `RoleProposalCard`.
 - Add zero-dependency CSS class gate (`scripts/check-css-classes.mjs` / `npm run check:css`, wired into `npm run check`) to catch undefined JSX `className` tokens across `apps/web/src` and `pa-extensions/*/web`, and define all previously missing utility/component CSS classes (`btn-pill-primary`, `btn-pill-ghost`, `btn-danger-inline`, `skill-proposal-card`, `settings-card-*`, `md-olist`, `space-nav-*`, etc.).
 
 ## [0.8.1] - 2026-11-25

@@ -783,7 +783,7 @@ export function App() {
 									canDispatchAi && canManageMatter && (!selectedMatterId || currentMatter) ? (
 										<MatterModelControl
 											key={selectedMatterId ?? "new"}
-											label={currentLeadId === ROLE_ARCHITECT_MEMBER_ID ? "架构师模型" : "主责模型"}
+											label="主责模型"
 											value={
 												selectedMatterId ? (currentMatter?.modelSelection ?? null) : draftModelSelection
 											}

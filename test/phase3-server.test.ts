@@ -167,7 +167,7 @@ test("Personal Agent HTTP server handles bootstrap, async dispatch, dialog appro
 		const bootRes = await fetch(`${baseUrl}/api/bootstrap`);
 		assert.equal(bootRes.status, 200);
 		const boot = (await bootRes.json()) as { members: unknown[]; workspaces: unknown[] };
-		assert.equal(boot.members.length, 4);
+		assert.equal(boot.members.length, 5);
 		assert.equal(boot.workspaces.length, 1);
 		assert.equal("deliverables" in boot, false);
 
@@ -404,7 +404,7 @@ test("Server emits matter_progress via SSE and supports team build, export/impor
 		const boot = (await bootRes.json()) as {
 			templates: Array<{ id: string; responsibilities: string; keywords: string[] }>;
 		};
-		assert.equal(boot.templates.length, 4);
+		assert.equal(boot.templates.length, 5);
 		assert.ok(boot.templates.some((t) => t.id === "engineering-manager" && t.responsibilities.length > 0));
 
 		// 2. Dispatch matter and verify matter_progress SSE events

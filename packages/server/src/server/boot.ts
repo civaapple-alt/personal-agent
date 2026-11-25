@@ -240,10 +240,10 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		dbPath === ":memory:" ? await mkdtemp(join(tmpdir(), "personal-agent-skills-")) : undefined;
 	const customRolesDir = temporaryRolesDir ?? resolve(dirname(resolve(dbPath)), "roles");
 	const customSkillsDir = temporarySkillsDir ?? resolve(dirname(resolve(dbPath)), "skills");
-	const templates = [
-		...(await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir)),
-		BUILTIN_ROLE_ARCHITECT_TEMPLATE,
-	];
+	const loadedTemplates = await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir);
+	const templates = loadedTemplates.some((tpl) => tpl.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
+		? loadedTemplates
+		: [...loadedTemplates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 

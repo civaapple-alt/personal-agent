@@ -226,11 +226,6 @@ export function TeamView({
 					</div>
 					{canCreateAnyRole && (
 						<div className="actions-row compact">
-							{onOpenArchitectMatter && canDispatchAny && (
-								<button type="button" className="btn-pill-dark" onClick={() => onOpenArchitectMatter()}>
-									对话规划角色
-								</button>
-							)}
 							<button type="button" className="btn-pill-outline" onClick={() => setShowImportMember((v) => !v)}>
 								导入角色包
 							</button>

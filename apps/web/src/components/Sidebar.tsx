@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
-import { filterBusinessMembers, isArchitectMember, ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
+import { filterBusinessMembers, isArchitectMember } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
 import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
 import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
@@ -149,11 +149,13 @@ export const Sidebar = memo(function Sidebar({
 
 	const allMembers = bootstrap?.members ?? [];
 	const allBusinessMembers = filterBusinessMembers(allMembers);
-	const businessMembers =
-		orgEffectiveMemberIds && orgEffectiveMemberIds.length > 0
-			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id) || m.roleScope === "personal")
-			: allBusinessMembers;
 	const architectMember = allMembers.find((m) => isArchitectMember(m)) ?? null;
+	const businessMembers = [
+		...(orgEffectiveMemberIds && orgEffectiveMemberIds.length > 0
+			? allBusinessMembers.filter((m) => orgEffectiveMemberIds.includes(m.id) || m.roleScope === "personal")
+			: allBusinessMembers),
+		...(architectMember ? [architectMember] : []),
+	];
 	const getWorkingMood = (memberId: string): RoleMood => {
 		for (const [mId, prog] of Object.entries(progressByMatter)) {
 			const delegated = prog.activeDelegations?.find((entry) => entry.memberId === memberId);
@@ -163,14 +165,6 @@ export const Sidebar = memo(function Sidebar({
 		}
 		return "idle";
 	};
-	const architectIdx = architectMember ? allMembers.findIndex((m) => m.id === architectMember.id) : -1;
-	const architectTheme = getBotTheme(architectIdx >= 0 ? architectIdx : 0);
-	const architectMood = architectMember ? getWorkingMood(architectMember.id) : "idle";
-	const architectSelected =
-		Boolean(architectMember) &&
-		activeTab === "chats" &&
-		!selectedMatterId &&
-		selectedMemberId === architectMember?.id;
 
 	const runningCount = Object.keys(progressByMatter).length;
 	const userLabel =
@@ -399,29 +393,6 @@ export const Sidebar = memo(function Sidebar({
 					</div>
 				);
 			})()}
-
-			{architectMember && (
-				<div className="architect-sidebar-wrap">
-					<button
-						type="button"
-						className={`architect-sidebar-entry ${architectSelected ? "active" : ""}`}
-						onClick={() => onToggleMember(ROLE_ARCHITECT_MEMBER_ID)}
-						title="角色架构师 · 规划 1~N 个新角色或做团队协作体检（进入独立对话）"
-					>
-						<span className="roster-avatar-wrap">
-							<BotFaceIcon bg={architectTheme.bg} tilt={architectTheme.tilt} size="xs" mood={architectMood} />
-							{architectMood !== "idle" && <span className="roster-working-dot" />}
-						</span>
-						<span className="architect-sidebar-copy">
-							<strong>{architectMember.displayName}</strong>
-							<small>按流程定制角色与边界</small>
-						</span>
-						<span className="architect-sidebar-arrow" aria-hidden="true">
-							{architectSelected ? "已选" : "→"}
-						</span>
-					</button>
-				</div>
-			)}
 
 			<div className="matter-scroll">
 				<div className="sidebar-matters-toolbar">

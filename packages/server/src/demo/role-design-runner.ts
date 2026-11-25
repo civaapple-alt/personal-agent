@@ -67,7 +67,9 @@ export async function runRoleDesignDemo(input: {
 	const before = await snapshot(workspaceDir);
 	const db = openPersonalAgentDatabase(join(directory, "proof.db"));
 	const store = new PersonalAgentStore(db);
-	const templates = [...input.templates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
+	const templates = input.templates.some((tpl) => tpl.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
+		? [...input.templates]
+		: [...input.templates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const workers: Array<{
 		memberId: string;
 		tools: string[];

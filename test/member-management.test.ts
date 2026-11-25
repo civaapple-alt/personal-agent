@@ -20,10 +20,10 @@ async function fixture(t: test.TestContext) {
 	const rolesDir = join(directory, "roles");
 	const db = openPersonalAgentDatabase(join(directory, "agent.db"));
 	const store = new PersonalAgentStore(db);
-	const templates = [
-		...(await loadRoleTemplatesWithCustomDir(resolve("roles"), rolesDir)),
-		BUILTIN_ROLE_ARCHITECT_TEMPLATE,
-	];
+	const loadedTemplates = await loadRoleTemplatesWithCustomDir(resolve("roles"), rolesDir);
+	const templates = loadedTemplates.some((tpl) => tpl.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
+		? loadedTemplates
+		: [...loadedTemplates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const orchestrator = new TeamOrchestrator({ store, templates, defaultCwd: directory, noSession: true });
 	const { server } = createPersonalAgentServer({
 		store,

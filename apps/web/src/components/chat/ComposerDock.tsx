@@ -424,68 +424,58 @@ export function ComposerDock({
 					)}
 
 					<div className="composer-top-bar">
-						{isArchitectMode && (
-							<div className="composer-top-left">
-								<span className="composer-architect-badge">角色架构师 · 只读建队规划</span>
-							</div>
-						)}
-
 						<div className="composer-top-right">
-							{!isArchitectMode && (
-								<>
-									<select
-										className="composer-ctx-select"
-										aria-label="所属组织"
-										value={effectiveOrgId ?? ""}
-										disabled={isTurnRunning || !isOwner}
-										title={
-											!isOwner
-												? "仅团队所有者可切换组织"
-												: isTurnRunning
-													? "AI 执行中，停止后可切换组织"
-													: "选择所属组织"
-										}
-										onChange={(e) => onSelectOrganization(e.target.value)}
-									>
-										{organizations.map((org) => (
-											<option key={org.id} value={org.id}>
-												组织：{org.name}
-												{org.isDefault ? "（默认）" : ""}
-											</option>
-										))}
-										{allowUnboundOrg && (
-											<option value="">
-												{organizations.length === 0 ? "暂无组织（请先在「我的团队」新建）" : "不归属组织"}
-											</option>
-										)}
-									</select>
-									<select
-										className="composer-ctx-select"
-										aria-label="项目仓库"
-										value={selectedWorkspaceId}
-										disabled={isTurnRunning || !isOwner}
-										title={
-											!isOwner
-												? "仅团队所有者可切换项目仓库"
-												: isTurnRunning
-													? "AI 执行中，停止后可切换项目仓库"
-													: "选择关联仓库"
-										}
-										onChange={(e) => onSelectWorkspace(e.target.value)}
-									>
-										<option value="">
-											{effectiveOrgId && orgFilteredWorkspaces.length === 0
-												? "不绑定仓库（该组织暂无仓库）"
-												: "不绑定仓库"}
-										</option>
-										{orgFilteredWorkspaces.map((ws) => (
-											<option key={ws.id} value={ws.id}>
-												仓库：{ws.name}
-											</option>
-										))}
-									</select>
-								</>
-							)}
+							<select
+								className="composer-ctx-select"
+								aria-label="所属组织"
+								value={effectiveOrgId ?? ""}
+								disabled={isTurnRunning || !isOwner}
+								title={
+									!isOwner
+										? "仅团队所有者可切换组织"
+										: isTurnRunning
+											? "AI 执行中，停止后可切换组织"
+											: "选择所属组织"
+								}
+								onChange={(e) => onSelectOrganization(e.target.value)}
+							>
+								{organizations.map((org) => (
+									<option key={org.id} value={org.id}>
+										组织：{org.name}
+										{org.isDefault ? "（默认）" : ""}
+									</option>
+								))}
+								{allowUnboundOrg && (
+									<option value="">
+										{organizations.length === 0 ? "暂无组织（请先在「我的团队」新建）" : "不归属组织"}
+									</option>
+								)}
+							</select>
+							<select
+								className="composer-ctx-select"
+								aria-label="项目仓库"
+								value={selectedWorkspaceId}
+								disabled={isTurnRunning || !isOwner}
+								title={
+									!isOwner
+										? "仅团队所有者可切换项目仓库"
+										: isTurnRunning
+											? "AI 执行中，停止后可切换项目仓库"
+											: "选择关联仓库"
+								}
+								onChange={(e) => onSelectWorkspace(e.target.value)}
+							>
+								<option value="">
+									{effectiveOrgId && orgFilteredWorkspaces.length === 0
+										? "不绑定仓库（该组织暂无仓库）"
+										: "不绑定仓库"}
+								</option>
+								{orgFilteredWorkspaces.map((ws) => (
+									<option key={ws.id} value={ws.id}>
+										仓库：{ws.name}
+									</option>
+								))}
+							</select>
 							{selectedMatterId && (
 								<button type="button" className="composer-ctx-btn" onClick={onNewMatter}>
 									+ 新事项

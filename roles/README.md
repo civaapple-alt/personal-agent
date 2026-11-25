@@ -8,6 +8,7 @@
 | [engineering-manager.md](engineering-manager.md) | 核查仓库事实、技术设计和授权范围内的实现 |
 | [qa-manager.md](qa-manager.md) | 验证计划、回归影响和实际验收证据 |
 | [marketing-lead.md](marketing-lead.md) | 市场、竞品、价值表达与发布内容 |
+| [role-architect.md](role-architect.md) | 按真实工作流拆解角色职责、边界与协作体检（`roleKind: architect`，不参与普通业务自动路由或自动旁听） |
 
 新增角色可参考现有文件的 frontmatter 和五个正文标题，不必固定为上述四个岗位。`id` 决定注册身份，当前通过不同 ID 组合成员；修改已有 ID 会影响成员与运行历史的对应。
 
