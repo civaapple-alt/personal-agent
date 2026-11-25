@@ -54,14 +54,7 @@ const MANAGED_EXTENSIONS = [
 	["web_search", "pi-web-access"],
 ] as const;
 
-const OBSERVED_TOOLS = [
-	"web_search",
-	"get_search_content",
-	"fetch_content",
-	"load_available_skill",
-	"list_pi_commands",
-	"request_pi_command",
-];
+const OBSERVED_TOOLS = ["web_search", "get_search_content", "fetch_content", "load_available_skill"];
 
 function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchContext, chinese: boolean): string {
 	if (!context.sourceUserMessageId || !context.runtimeMemberId || !context.activeTools) {
@@ -112,9 +105,7 @@ function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchCont
 		const outcome = matching.at(-1)?.outcome;
 		const label = chinese
 			? outcome === "success"
-				? name === "request_pi_command"
-					? "命令已提交，执行结果未知"
-					: "最近调用结束且未报告工具错误"
+				? "最近调用结束且未报告工具错误"
 				: outcome === "error"
 					? "最近调用报告错误"
 					: outcome === "pending"
@@ -123,9 +114,7 @@ function describeTurnToolCalls(store: PersonalAgentStore, context: WorkbenchCont
 							? "调用已结束但结果状态未知"
 							: "本轮未见调用，实际效果未验证"
 			: outcome === "success"
-				? name === "request_pi_command"
-					? "command submitted; execution outcome unknown"
-					: "latest call ended without a reported tool error"
+				? "latest call ended without a reported tool error"
 				: outcome === "error"
 					? "latest call reported an error"
 					: outcome === "pending"
@@ -180,8 +169,8 @@ function describeRuntimeTools(store: PersonalAgentStore, context: WorkbenchConte
 					: `No startup record is available for ${label} in this workspace.`,
 			extensions.length
 				? chinese
-					? `从清单识别到的 PA 扩展：${codeList(extensions)}（另默认挂载内置岗位方法包 \`role-skills\` 与 Pi 内置 \`builtin:mcp\`，具体已注册斜杠命令以 \`list_pi_commands\` 返回的 \`source\` 为准）。`
-					: `PA-managed extensions identified from the list: ${codeList(extensions)} (built-in \`role-skills\` package and Pi \`builtin:mcp\` are also mounted; check \`list_pi_commands\` \`source\` for registered slash command origins).`
+					? `从清单识别到的 PA 扩展：${codeList(extensions)}（另默认挂载内置岗位方法包 \`role-skills\` 与 Pi 内置 \`builtin:mcp\`）。`
+					: `PA-managed extensions identified from the list: ${codeList(extensions)} (built-in \`role-skills\` package and Pi \`builtin:mcp\` are also mounted).`
 				: null,
 			lastStartup
 				? chinese

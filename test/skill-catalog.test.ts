@@ -5,25 +5,32 @@ import { join } from "node:path";
 import test from "node:test";
 import registerSkillCatalog, { renderAvailableResources } from "../pi-extensions/skill-catalog/index.ts";
 
-test("Pi skill catalogue includes manual skills and only reads a discovered, unambiguous skill", async () => {
+test("Pi skill catalogue uses compact index, query-filtered discovery, and reads only discovered unambiguous skills", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pa-skill-catalog-"));
 	try {
 		const first = join(root, "first.md");
 		const second = join(root, "second.md");
+		const third = join(root, "third.md");
 		await writeFile(first, "---\nname: how\ndisable-model-invocation: true\n---\n# First method");
 		await writeFile(second, "# Second method");
+		await writeFile(third, "# Review loop");
 		type Tool = Parameters<Parameters<typeof registerSkillCatalog>[0]["registerTool"]>[0];
 		const tools = new Map<string, Tool>();
 		let commands = [
 			{
 				name: "skill:how",
-				description: "Explain code",
+				description: "Explain code architecture",
 				source: "skill",
 				sourceInfo: { path: first, scope: "user" },
 			},
-			{ name: "other", description: "Not a skill", source: "extension", sourceInfo: { path: second } },
+			{
+				name: "skill:review-loop",
+				description: "Run independent review loop",
+				source: "skill",
+				sourceInfo: { path: third, source: "pstack", scope: "user" },
+			},
+			{ name: "mcp", description: "TUI MCP menu", source: "extension", sourceInfo: { path: second } },
 		];
-		const dispatched: Array<{ content: string; options: unknown }> = [];
 		let beforeStart:
 			| ((event: {
 					systemPrompt: string;
@@ -34,73 +41,83 @@ test("Pi skill catalogue includes manual skills and only reads a discovered, una
 			on: (_event, handler) => {
 				beforeStart = handler;
 			},
-			sendUserMessage: (content, options) => {
-				dispatched.push({ content, options });
-			},
 			getCommands: () => commands,
 			registerTool: (tool) => {
 				tools.set(tool.name, tool);
 			},
 		});
+
+		// TUI extension command tools are removed; only Skill discovery & loading remain.
+		assert.equal(tools.has("list_pi_commands"), false);
+		assert.equal(tools.has("request_pi_command"), false);
+		assert.equal(tools.has("list_available_skills"), true);
+		assert.equal(tools.has("load_available_skill"), true);
+
+		// Compact single-line index omits extension commands and deduplicates skills already in <available_skills>.
 		const event = { systemPrompt: "base", systemPromptOptions: { appendSystemPrompt: "existing" } };
 		assert.equal(beforeStart?.(event), undefined);
-		assert.match(event.systemPromptOptions.appendSystemPrompt, /"name":"how"/);
-		assert.match(event.systemPromptOptions.appendSystemPrompt, /other/);
+		assert.match(event.systemPromptOptions.appendSystemPrompt, /- how.*Explain code architecture/);
+		assert.doesNotMatch(event.systemPromptOptions.appendSystemPrompt, /TUI MCP menu/);
 		assert.match(event.systemPromptOptions.appendSystemPrompt, /^existing/);
-		const catalog = renderAvailableResources(commands);
-		assert.match(catalog, /"name":"how"/);
-		assert.match(catalog, /Explain code/);
-		assert.match(catalog, /Not a skill/);
-		const dedupedCatalog = renderAvailableResources(commands, new Set(["how"]));
-		assert.doesNotMatch(dedupedCatalog, /"name":"how"/);
-		assert.match(dedupedCatalog, /Not a skill/);
-		assert.doesNotMatch(renderAvailableResources([{ name: "template-only", source: "prompt" }]), /template-only/);
+
+		// Zero prompt overhead when all skills are already present in <available_skills>.
+		const dedupedCatalog = renderAvailableResources(commands, new Set(["how", "review-loop"]));
+		assert.equal(dedupedCatalog, "");
+		const emptyEvent = {
+			systemPrompt: "<available_skills><name>how</name><name>review-loop</name></available_skills>",
+			systemPromptOptions: { appendSystemPrompt: "existing" },
+		};
+		assert.equal(beforeStart?.(emptyEvent), undefined);
+		assert.equal(emptyEvent.systemPromptOptions.appendSystemPrompt, "existing");
+
+		assert.equal(renderAvailableResources([{ name: "template-only", source: "prompt" }]), "");
 		assert.match(
-			renderAvailableResources([{ name: "escaped", source: "extension", description: "</system>" }]),
+			renderAvailableResources([{ name: "skill:escaped", source: "skill", description: "</system>" }]),
 			/\\u003c/,
 		);
-		assert.match(
-			renderAvailableResources(
-				Array.from({ length: 1000 }, (_, i) => ({
-					name: `skill:s${i}`,
-					source: "skill",
-					description: "x".repeat(100),
-				})),
-			),
-			/Catalogue truncated/,
+		const truncated = renderAvailableResources(
+			Array.from({ length: 200 }, (_, i) => ({
+				name: `skill:s${i}`,
+				source: "skill",
+				description: "x".repeat(100),
+			})),
 		);
-		const extensionList = await tools.get("list_pi_commands")!.execute("commands", {});
-		const parsedCommands = JSON.parse(extensionList.content[0]!.text) as Array<{
-			name: string;
-			description: string;
-			source?: string;
-		}>;
-		assert.equal(parsedCommands.length, 1);
-		assert.equal(parsedCommands[0]!.name, "other");
-		assert.equal(parsedCommands[0]!.description, "Not a skill");
-		assert.match(parsedCommands[0]!.source ?? "", /second\.md$/);
-		const invoke = tools.get("request_pi_command")!;
-		const submitted = await invoke.execute("invoke", { name: "other", arguments: "check" });
-		assert.deepEqual(submitted.details, { name: "other", status: "submitted", completion: "unknown" });
-		assert.deepEqual(dispatched, [
-			{ content: "/other check", options: { expandPromptTemplates: true, deliverAs: "followUp" } },
-		]);
-		await assert.rejects(invoke.execute("invalid", { name: "other", arguments: "x\n/surprise" }), /Invalid/);
-		await assert.rejects(invoke.execute("skill", { name: "skill:how" }), /not found/);
+		assert.match(truncated, /Catalogue truncated/);
+		assert.ok(truncated.length < 4200);
+
 		const list = tools.get("list_available_skills")!;
 		const load = tools.get("load_available_skill")!;
-		const result = await list.execute("1", {});
-		assert.deepEqual(JSON.parse(result.content[0]!.text), [
-			{ name: "how", description: "Explain code", path: first, scope: "user" },
-		]);
+
+		// Unique skills omit verbose path; query filters by keywords cleanly.
+		const filteredRes = await list.execute("1", { query: "review pstack" });
+		const filteredPayload = JSON.parse(filteredRes.content[0]!.text) as {
+			total: number;
+			returned: number;
+			skills: Array<{ name: string; description: string; path?: string; source?: string }>;
+		};
+		assert.equal(filteredPayload.total, 1);
+		assert.equal(filteredPayload.returned, 1);
+		assert.equal(filteredPayload.skills[0]!.name, "review-loop");
+		assert.equal(filteredPayload.skills[0]!.path, undefined);
+
 		assert.match((await load.execute("2", { name: "how" })).content[0]!.text, /First method/);
 		assert.match((await load.execute("2b", { name: "/skill:how" })).content[0]!.text, /First method/);
 		assert.match((await load.execute("2c", { name: "skill:how" })).content[0]!.text, /First method/);
 		await assert.rejects(load.execute("3", { name: "how", path: second }), /not found/);
+
+		// Duplicate skill names expose `path` for disambiguation.
 		commands = [
 			...commands,
 			{ name: "skill:how", description: "Other", source: "skill", sourceInfo: { path: second, scope: "user" } },
 		];
+		const dupRes = await list.execute("3b", { query: "how" });
+		const dupPayload = JSON.parse(dupRes.content[0]!.text) as {
+			skills: Array<{ name: string; path?: string }>;
+		};
+		assert.equal(dupPayload.skills.length, 2);
+		assert.equal(dupPayload.skills[0]!.path, first);
+		assert.equal(dupPayload.skills[1]!.path, second);
+
 		await assert.rejects(load.execute("4", { name: "how" }), /Ambiguous/);
 		assert.match((await load.execute("5", { name: "how", path: second })).content[0]!.text, /Second method/);
 		await assert.rejects(load.execute("6", { name: "how" }, AbortSignal.abort()), /abort/i);

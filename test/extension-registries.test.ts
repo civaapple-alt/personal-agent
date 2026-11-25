@@ -59,6 +59,6 @@ test("server and web extension registries stay aligned and resolve declared buil
 	}
 
 	assert.equal(findServerExtension("web-access")?.piPackage, "pi-web-access");
-	assert.equal(getToolDisplay("request_pi_command")?.successLabel, "已提交");
+	assert.equal(getToolDisplay("load_available_skill")?.category, "skill");
 	assert.equal(getToolDisplay("web_search")?.category, "web");
 });

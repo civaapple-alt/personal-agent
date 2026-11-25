@@ -118,7 +118,7 @@
 
 服务启动时运行 `pi --version`，在启动日志显示版本或检查失败原因。「设置 → Agent 底座」可查看同一次检查结果。安装 Pi CLI 或调整服务账号的 PATH 后，重启 PA 重新检查。
 
-岗位工作进程使用 `--mode rpc`，显式装配团队工具、角色 Skills 和配置的扩展，并由 Pi 发现服务账号已启用的用户级 Skills。`list_available_skills` 返回 Pi 当前 Skill 命令清单，包括仅供手动调用的项目；角色会收到目录名称和用途，按任务选择并通过 `load_available_skill` 读取正文。已加载扩展注册的斜杠命令也会列出，可通过 `request_pi_command` 提交；Pi 不提供统一的命令完成回执，必须另行核对结果。角色声明是建议，不是运行工具限制。
+岗位工作进程使用 `--mode rpc`，显式装配团队工具、角色 Skills 和配置的扩展，并由 Pi 发现服务账号已启用的用户级 Skills。`list_available_skills` 支持按 `query` / `source` / `limit` 检索 Pi 当前 Skill 清单（含手动调用类 Skill），角色按任务选择并通过 `load_available_skill` 读取正文；系统提示仅以极简紧凑索引补充未出现在 `<available_skills>` 中的额外 Skill（无额外条目时零开销不注入）。角色声明是建议，不是运行工具限制。
 
 超级管理员可安装 `pi-web-access` 并设置搜索供应商。PA 通过 `pi list --no-approve` 找到服务账号安装的 npm 包，并为岗位运行加载入口；不再按岗位授权。 [网页检索设置](../guides/web-search.md)
 

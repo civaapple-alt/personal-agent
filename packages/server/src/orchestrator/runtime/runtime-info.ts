@@ -437,7 +437,7 @@ export async function buildRuntimeOverview(options: {
 		fileStatus: skillCatalogFileStatus,
 		scopeSummary: "事项岗位与独立角色架构师",
 		description: "发现 Pi 当前可用的 Skills 和插件命令，按需读取方法或提交命令。",
-		registeredTools: ["list_available_skills", "load_available_skill", "list_pi_commands", "request_pi_command"],
+		registeredTools: ["list_available_skills", "load_available_skill"],
 		hooks: [],
 		declaredByRoles: [],
 		mcpServers: [],

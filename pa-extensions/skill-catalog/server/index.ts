@@ -1,6 +1,6 @@
 import { defineServerExtension } from "@pa/extension-api/server";
 
-export const SKILL_CATALOG_TOOLS = ["list_available_skills", "load_available_skill", "request_pi_command"] as const;
+export const SKILL_CATALOG_TOOLS = ["list_available_skills", "load_available_skill"] as const;
 
 export default defineServerExtension({
 	name: "skill-catalog",
