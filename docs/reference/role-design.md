@@ -8,6 +8,7 @@
 
 | 角色 | 核心结果 | 主要方法与沟通 | 明确边界 |
 | --- | --- | --- | --- |
+| Pi Default（`roleKind: solo`） | 原汁原味单兵 Pi 助手，端到端完成探索、编码、分析与文档工作 | 保留原生 Pi 终端直接务实风格，按需加载已安装 Skills 与 PA 扩展（`space`/`propose_skill`/`visualize`/`request_clarification`/`suggest_next_steps`/`propose_role`） | 不挂载 `delegate_to_member`，不注入多角色名册与复核话术，不参与多角色业务自动路由或自动旁听 |
 | 产品经理 | 将真实问题转为可执行、可验收的产品决定 | 核对事实与假设，定义范围，咨询专业意见并解决矛盾；先说建议、依据和必要取舍 | 不自行编码，不将示例当事实，不代替专业验证 |
 | 研发经理 | 基于真实仓库形成可运行、可维护的技术结果 | 区分咨询、设计与实现，先复现再修复，按影响验证；用具体文件和运行结果交接 | 不扩产品范围，不覆盖用户改动，不把构建当完整验收 |
 | 测试经理 | 对具体版本给出可复现的通过、失败或未验证判断 | 按风险设计反例，检查实际产物，修订后复用相同反例；按严重性报告证据 | 不根据同事自述放行，不降低条件迁就缺陷，不推广到未检查产品 |
@@ -56,4 +57,4 @@ Personal Agent 不在 Pi 之外另造一套私有 Agent 框架或平行记忆数
 
 启动时 `.data/roles/` 根目录（全局角色）、`orgs/<orgId>/`（组织共享）与 `users/<userId>/`（个人私有）支持单文件 `<id>.md` 与带包内私有 Skill 的目录形式 `<id>/<id>.md`；同 ID 的全局定义优先于仓库基线，非全局目录不允许覆盖全局角色 ID，也不允许通过 frontmatter 伪造更高权限的作用域。需要更新自定义成员时，通过导入、团队管理或角色调整入口显式选择。
 
-角色履职、英文 Skill 小样本和模型决策验证见[角色验证记录](../validation/role-design-demo.md)。
+角色履职、英文 Skill 小样本和模型决策验证见[角色验证记录](../validation/role-design-demo.md)；`pi-default`（`solo`）与业务角色（`business`）在真实 Pi 中的上下文与工具握手对照可使用 `npm run demo:solo`（见 [demo 说明](../../packages/server/src/demo/README.md)）。
