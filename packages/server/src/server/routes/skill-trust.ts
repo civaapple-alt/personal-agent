@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { SKILL_PROPOSAL_NAME_RE } from "@pa/contracts/skill-proposal";
 import {
 	isValidSkillTrustLevel,
@@ -7,6 +7,7 @@ import {
 	type ManagedSkillDetailDto,
 	type ManagedSkillEntryDto,
 	type ManagedSkillScriptDetailDto,
+	type PiNativeSkillDetailDto,
 	type PiNativeSkillDto,
 	type SkillTrustPolicyRecord,
 	type SkillTrustScope,
@@ -18,6 +19,115 @@ import { readJsonBody, sendError, sendJson } from "../http.ts";
 import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
 
 const MAX_SKILL_PREVIEW_CHARS = 64 * 1024;
+const MAX_SKILL_PREVIEW_FILES = 40;
+const MAX_SKILL_SCAN_DEPTH = 4;
+const IGNORED_SKILL_DIRS = new Set([".git", "node_modules", "__pycache__", ".venv", "dist", "build"]);
+const BINARY_FILE_EXTS = new Set([
+	".png",
+	".jpg",
+	".jpeg",
+	".gif",
+	".webp",
+	".ico",
+	".pdf",
+	".zip",
+	".tar",
+	".gz",
+	".tgz",
+	".wasm",
+	".pyc",
+	".so",
+	".dylib",
+	".dll",
+	".exe",
+	".bin",
+	".woff",
+	".woff2",
+	".ttf",
+	".otf",
+	".mp3",
+	".mp4",
+	".mov",
+]);
+
+function isLikelyBinaryFile(filePath: string): boolean {
+	if (BINARY_FILE_EXTS.has(extname(filePath).toLowerCase())) return true;
+	try {
+		const buf = readFileSync(filePath);
+		const probeLen = Math.min(buf.length, 4096);
+		for (let i = 0; i < probeLen; i++) {
+			if (buf[i] === 0) return true;
+		}
+		return false;
+	} catch {
+		return true;
+	}
+}
+
+function listSkillDirFiles(skillDir: string): string[] {
+	if (!existsSync(skillDir)) return [];
+	let canonicalRoot: string;
+	try {
+		canonicalRoot = realpathSync(skillDir);
+	} catch {
+		return [];
+	}
+	const collected: string[] = [];
+	const walk = (currentDir: string, depth: number) => {
+		if (depth > MAX_SKILL_SCAN_DEPTH || collected.length >= MAX_SKILL_PREVIEW_FILES) return;
+		const entries = (() => {
+			try {
+				return readdirSync(currentDir, { withFileTypes: true });
+			} catch {
+				return [];
+			}
+		})();
+		for (const entry of entries) {
+			if (collected.length >= MAX_SKILL_PREVIEW_FILES) break;
+			if (entry.name.startsWith(".") || IGNORED_SKILL_DIRS.has(entry.name)) continue;
+			const full = join(currentDir, entry.name);
+			let realFull: string;
+			try {
+				realFull = realpathSync(full);
+			} catch {
+				continue;
+			}
+			if (realFull !== canonicalRoot && !realFull.startsWith(`${canonicalRoot}${sep}`)) continue;
+			if (entry.isDirectory()) {
+				walk(full, depth + 1);
+			} else if (entry.isFile()) {
+				const rel = relative(skillDir, full).replace(/\\/g, "/");
+				if (rel === "SKILL.md") continue;
+				if (isLikelyBinaryFile(full)) continue;
+				collected.push(rel);
+			}
+		}
+	};
+	walk(skillDir, 0);
+	const groupRank = (rel: string) => {
+		if (rel.startsWith("scripts/")) return 0;
+		if (rel.startsWith("references/") || rel.startsWith("reference/")) return 1;
+		if (rel.startsWith("assets/")) return 2;
+		return 3;
+	};
+	return collected.sort((a, b) => {
+		const ra = groupRank(a);
+		const rb = groupRank(b);
+		return ra !== rb ? ra - rb : a.localeCompare(b);
+	});
+}
+
+function readSkillFilesDetail(skillDir: string, relPaths: string[]): ManagedSkillScriptDetailDto[] {
+	return relPaths.map((relPath) => {
+		const full = resolve(skillDir, relPath);
+		const read = readBoundedUtf8(full);
+		return {
+			path: relPath,
+			content: read.content,
+			...(read.truncated ? { truncated: true } : {}),
+		};
+	});
+}
 
 function readBoundedUtf8(filePath: string): { content: string; truncated: boolean } {
 	const raw = readFileSync(filePath, "utf8");
@@ -194,7 +304,13 @@ export async function handleSkillTrustRoutes(
 	ctx: ServerRouteContext,
 	{ req, res, method, pathname, actor }: RouteRequest,
 ) {
-	if (pathname !== "/api/skills/trust" && pathname !== "/api/skills/trust/detail") return false;
+	if (
+		pathname !== "/api/skills/trust" &&
+		pathname !== "/api/skills/trust/detail" &&
+		pathname !== "/api/skills/trust/native-detail"
+	) {
+		return false;
+	}
 	if (!actor) {
 		sendError(res, 401, "未认证");
 		return true;
@@ -242,15 +358,8 @@ export async function handleSkillTrustRoutes(
 			return true;
 		}
 		const md = readBoundedUtf8(matchedSkillMd);
-		const scripts: ManagedSkillScriptDetailDto[] = listSkillScripts(matchedSkillDir).map((relPath) => {
-			const scriptFull = resolve(matchedSkillDir, relPath);
-			const read = readBoundedUtf8(scriptFull);
-			return {
-				path: relPath,
-				content: read.content,
-				...(read.truncated ? { truncated: true } : {}),
-			};
-		});
+		const scripts = readSkillFilesDetail(matchedSkillDir, listSkillScripts(matchedSkillDir));
+		const files = readSkillFilesDetail(matchedSkillDir, listSkillDirFiles(matchedSkillDir));
 		const detail: ManagedSkillDetailDto = {
 			scope,
 			scopeId,
@@ -259,6 +368,43 @@ export async function handleSkillTrustRoutes(
 			content: md.content,
 			...(md.truncated ? { truncated: true } : {}),
 			scripts,
+			files,
+		};
+		sendJson(res, 200, { detail });
+		return true;
+	}
+
+	if (pathname === "/api/skills/trust/native-detail" && method === "GET") {
+		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
+		const skillName = (parsedUrl.searchParams.get("name") ?? "").trim();
+		const source = (parsedUrl.searchParams.get("source") ?? "").trim();
+		if (!skillName || !source) {
+			sendError(res, 400, "必须提供 name 与 source");
+			return true;
+		}
+		if (!ctx.readPiNativeSkills) {
+			sendError(res, 404, "当前运行环境不支持读取 Pi 原生技能详情");
+			return true;
+		}
+		const runtimeConfig = ctx.getServerRuntimeConfig?.();
+		const inheritLocalPiResources = Boolean(runtimeConfig?.inheritLocalPiResources);
+		const isOwner = isSuperAdminActor(actor) || actor.authKind === "loopback";
+		const discovered = await ctx.readPiNativeSkills({ inheritLocalPiResources, refresh: false });
+		const matched = discovered.find((item) => item.name === skillName && item.source === source);
+		if (!matched?.filePath || !existsSync(matched.filePath)) {
+			sendError(res, 404, "未找到对应的 Pi 原生技能文件");
+			return true;
+		}
+		const matchedSkillDir = dirname(matched.filePath);
+		const md = readBoundedUtf8(matched.filePath);
+		const files = readSkillFilesDetail(matchedSkillDir, listSkillDirFiles(matchedSkillDir));
+		const detail: PiNativeSkillDetailDto = {
+			name: matched.name,
+			source: matched.source,
+			filePath: isOwner ? matched.filePath : basename(matched.filePath),
+			content: md.content,
+			...(md.truncated ? { truncated: true } : {}),
+			files,
 		};
 		sendJson(res, 200, { detail });
 		return true;

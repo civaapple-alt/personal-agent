@@ -43,6 +43,16 @@ export interface ManagedSkillDetailDto {
 	content: string;
 	truncated?: boolean;
 	scripts: ManagedSkillScriptDetailDto[];
+	files?: ManagedSkillScriptDetailDto[];
+}
+
+export interface PiNativeSkillDetailDto {
+	name: string;
+	source: string;
+	filePath: string | null;
+	content: string;
+	truncated?: boolean;
+	files: ManagedSkillScriptDetailDto[];
 }
 
 export interface PiNativeSkillDto {

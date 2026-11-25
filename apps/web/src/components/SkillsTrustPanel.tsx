@@ -1,6 +1,6 @@
 import {
-	type ManagedSkillDetailDto,
 	type ManagedSkillEntryDto,
+	type ManagedSkillScriptDetailDto,
 	type PiNativeSkillDto,
 	SKILL_TRUST_LEVEL_LABELS,
 	type SkillTrustLevel,
@@ -10,10 +10,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	fetchManagedSkillDetail,
 	fetchManagedSkills,
+	fetchPiNativeSkillDetail,
 	type OrganizationDto,
 	updateSkillTrustPolicy,
 	type WorkspaceDto,
 } from "../api.ts";
+import { MarkdownView } from "../MarkdownView.tsx";
 import { ModalDialog } from "../primitives/ModalDialog.tsx";
 
 interface SkillsTrustPanelProps {
@@ -51,6 +53,33 @@ function stripScopePrefix(label: string): string {
 	return label.replace(/^(工作区|仓库|组织)\s*·\s*/, "");
 }
 
+type PreviewTarget =
+	| { kind: "managed"; key: string; skill: ManagedSkillEntryDto }
+	| { kind: "native"; key: string; skill: PiNativeSkillDto };
+
+interface UnifiedSkillPreviewDetail {
+	filePath: string | null;
+	content: string;
+	truncated?: boolean;
+	files: ManagedSkillScriptDetailDto[];
+}
+
+function groupSkillPreviewFiles(files: ManagedSkillScriptDetailDto[]) {
+	const groups = new Map<string, ManagedSkillScriptDetailDto[]>();
+	for (const file of files) {
+		const slashIdx = file.path.indexOf("/");
+		const group = slashIdx > 0 ? `${file.path.slice(0, slashIdx)}/` : "根目录";
+		const list = groups.get(group) ?? [];
+		list.push(file);
+		groups.set(group, list);
+	}
+	return [...groups.entries()].map(([group, items]) => ({ group, items }));
+}
+
+function stripFrontmatterForMarkdown(raw: string): string {
+	return raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/, "");
+}
+
 function skillKey(skill: Pick<ManagedSkillEntryDto, "scope" | "scopeId" | "name">): string {
 	return `${skill.scope}:${skill.scopeId}:${skill.name}`;
 }
@@ -68,9 +97,10 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 	const [updatingKey, setUpdatingKey] = useState<string | null>(null);
 
 	// Floating preview modal state
-	const [previewSkill, setPreviewSkill] = useState<ManagedSkillEntryDto | null>(null);
+	const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
 	const [previewFileTab, setPreviewFileTab] = useState<string>("SKILL.md");
-	const [detailsByKey, setDetailsByKey] = useState<Record<string, ManagedSkillDetailDto>>({});
+	const [previewMdMode, setPreviewMdMode] = useState<"rendered" | "raw">("rendered");
+	const [detailsByKey, setDetailsByKey] = useState<Record<string, UnifiedSkillPreviewDetail>>({});
 	const [loadingDetailKey, setLoadingDetailKey] = useState<string | null>(null);
 	const [detailError, setDetailError] = useState<string | null>(null);
 
@@ -260,9 +290,10 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 	}, [selection, groupedManaged]);
 
 	const handleOpenPreview = async (skill: ManagedSkillEntryDto) => {
-		const key = skillKey(skill);
-		setPreviewSkill(skill);
+		const key = `managed:${skillKey(skill)}`;
+		setPreviewTarget({ kind: "managed", key, skill });
 		setPreviewFileTab("SKILL.md");
+		setPreviewMdMode("rendered");
 		setDetailError(null);
 		if (detailsByKey[key]) return;
 		setLoadingDetailKey(key);
@@ -272,7 +303,44 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 				scopeId: skill.scopeId,
 				skillName: skill.name,
 			});
-			setDetailsByKey((prev) => ({ ...prev, [key]: detail }));
+			setDetailsByKey((prev) => ({
+				...prev,
+				[key]: {
+					filePath: detail.filePath,
+					content: detail.content,
+					truncated: detail.truncated,
+					files: detail.files ?? detail.scripts,
+				},
+			}));
+		} catch (err: unknown) {
+			setDetailError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setLoadingDetailKey(null);
+		}
+	};
+
+	const handleOpenNativePreview = async (skill: PiNativeSkillDto) => {
+		const key = `native:${skill.source}:${skill.name}`;
+		setPreviewTarget({ kind: "native", key, skill });
+		setPreviewFileTab("SKILL.md");
+		setPreviewMdMode("rendered");
+		setDetailError(null);
+		if (detailsByKey[key]) return;
+		setLoadingDetailKey(key);
+		try {
+			const { detail } = await fetchPiNativeSkillDetail({
+				name: skill.name,
+				source: skill.source,
+			});
+			setDetailsByKey((prev) => ({
+				...prev,
+				[key]: {
+					filePath: detail.filePath,
+					content: detail.content,
+					truncated: detail.truncated,
+					files: detail.files,
+				},
+			}));
 		} catch (err: unknown) {
 			setDetailError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -292,8 +360,8 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 				trustLevel,
 			});
 			onNotice?.(`已将 Skill「${skill.name}」设为「${SKILL_TRUST_LEVEL_LABELS[trustLevel]}」`);
-			if (previewSkill && skillKey(previewSkill) === key) {
-				setPreviewSkill({ ...previewSkill, trustLevel });
+			if (previewTarget?.kind === "managed" && skillKey(previewTarget.skill) === key) {
+				setPreviewTarget({ ...previewTarget, skill: { ...previewTarget.skill, trustLevel } });
 			}
 			await load(false);
 		} catch (err: unknown) {
@@ -304,9 +372,26 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 		}
 	};
 
-	const activePreviewKey = previewSkill ? skillKey(previewSkill) : null;
+	const activePreviewKey = previewTarget?.key ?? null;
 	const activePreviewDetail = activePreviewKey ? detailsByKey[activePreviewKey] : null;
-	const activePreviewBusy = activePreviewKey ? updatingKey === activePreviewKey : false;
+	const activePreviewManaged = previewTarget?.kind === "managed" ? previewTarget.skill : null;
+	const activePreviewBusy = activePreviewManaged ? updatingKey === skillKey(activePreviewManaged) : false;
+	const activePreviewFileGroups = useMemo(
+		() => (activePreviewDetail ? groupSkillPreviewFiles(activePreviewDetail.files) : []),
+		[activePreviewDetail],
+	);
+	const activeFileEntry = useMemo(() => {
+		if (!activePreviewDetail) return null;
+		if (previewFileTab === "SKILL.md") {
+			return {
+				path: "SKILL.md",
+				content: activePreviewDetail.content,
+				truncated: activePreviewDetail.truncated,
+			};
+		}
+		return activePreviewDetail.files.find((file) => file.path === previewFileTab) ?? null;
+	}, [activePreviewDetail, previewFileTab]);
+	const activeFileIsMarkdown = Boolean(activeFileEntry && /\.md$/i.test(activeFileEntry.path));
 
 	const isSelected = (candidate: SkillsNavSelection): boolean => {
 		if (selection.kind !== candidate.kind) return false;
@@ -550,11 +635,22 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 												</span>
 											</div>
 											{item.description && <p className="muted-tiny skills-item-desc">{item.description}</p>}
-											{item.filePath && (
-												<div className="skills-item-path mono-wrap" title={item.filePath}>
-													{item.filePath}
-												</div>
-											)}
+											<div className="skills-item-footer">
+												<span className="skills-item-path mono-wrap" title={item.filePath ?? ""}>
+													{item.filePath ?? ""}
+												</span>
+												{item.filePath && (
+													<div className="skills-item-actions">
+														<button
+															type="button"
+															className="btn-pill-outline btn-xs"
+															onClick={() => void handleOpenNativePreview(item)}
+														>
+															查看内容
+														</button>
+													</div>
+												)}
+											</div>
 										</div>
 									))}
 								</div>
@@ -652,52 +748,60 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 			</div>
 
 			<ModalDialog
-				open={Boolean(previewSkill)}
-				title={previewSkill ? previewSkill.name : ""}
-				subtitle={previewSkill ? `${previewSkill.scopeLabel} · ${previewSkill.filePath}` : undefined}
+				open={Boolean(previewTarget)}
+				title={previewTarget ? previewTarget.skill.name : ""}
+				subtitle={
+					previewTarget
+						? previewTarget.kind === "managed"
+							? `${previewTarget.skill.scopeLabel} · ${previewTarget.skill.filePath}`
+							: `${formatPiSourceLabel(previewTarget.skill.source)}${previewTarget.skill.filePath ? ` · ${previewTarget.skill.filePath}` : ""}`
+						: undefined
+				}
 				size="lg"
 				headerExtra={
-					previewSkill ? (
-						<span className={`pill ${TRUST_BADGE_CLASS[previewSkill.trustLevel]}`}>
-							{SKILL_TRUST_LEVEL_LABELS[previewSkill.trustLevel]}
+					activePreviewManaged ? (
+						<span className={`pill ${TRUST_BADGE_CLASS[activePreviewManaged.trustLevel]}`}>
+							{SKILL_TRUST_LEVEL_LABELS[activePreviewManaged.trustLevel]}
 						</span>
+					) : previewTarget?.kind === "native" ? (
+						<span className="pill">只读预览</span>
 					) : null
 				}
-				onClose={() => setPreviewSkill(null)}
+				onClose={() => setPreviewTarget(null)}
 				footer={
-					previewSkill ? (
+					previewTarget ? (
 						<>
-							{previewSkill.canManage && previewSkill.trustLevel !== "autonomous" && (
+							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "autonomous" && (
 								<button
 									type="button"
 									className="btn-pill-dark btn-xs"
 									disabled={activePreviewBusy}
-									onClick={() => void handleSetTrust(previewSkill, "autonomous")}
+									onClick={() => void handleSetTrust(activePreviewManaged, "autonomous")}
 								>
 									升级为自主执行
 								</button>
 							)}
-							{previewSkill.canManage && previewSkill.trustLevel !== "confirm" && (
+							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "confirm" && (
 								<button
 									type="button"
 									className="btn-pill-outline btn-xs"
 									disabled={activePreviewBusy}
-									onClick={() => void handleSetTrust(previewSkill, "confirm")}
+									onClick={() => void handleSetTrust(activePreviewManaged, "confirm")}
 								>
 									设为执行前确认
 								</button>
 							)}
-							{previewSkill.canManage && previewSkill.trustLevel !== "disabled" && (
+							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "disabled" && (
 								<button
 									type="button"
 									className="btn-inline"
 									disabled={activePreviewBusy}
-									onClick={() => void handleSetTrust(previewSkill, "disabled")}
+									onClick={() => void handleSetTrust(activePreviewManaged, "disabled")}
 								>
 									停用脚本
 								</button>
 							)}
-							<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewSkill(null)}>
+							<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewTarget(null)}>
 								关闭
 							</button>
 						</>
@@ -705,45 +809,90 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 				}
 			>
 				{loadingDetailKey === activePreviewKey ? (
-					<p className="muted-sm">正在读取 SKILL.md 与脚本内容…</p>
+					<p className="muted-sm">正在读取 Skill 目录与文件内容…</p>
 				) : detailError ? (
 					<div className="approval-card" role="alert">
 						读取失败：{detailError}
 					</div>
 				) : activePreviewDetail ? (
-					<div className="stack-gap-sm">
-						{activePreviewDetail.scripts.length > 0 && (
-							<div className="actions-row compact" role="tablist" aria-label="Skill 文件切换">
+					<div className="skills-preview-split">
+						<aside className="skills-preview-nav" aria-label="Skill 目录文件">
+							<div className="skills-preview-group">
+								<span className="skills-preview-group-label">入口定义</span>
 								<button
 									type="button"
-									role="tab"
-									aria-selected={previewFileTab === "SKILL.md"}
-									className={`choice-chip ${previewFileTab === "SKILL.md" ? "active" : ""}`}
+									className={`skills-preview-file-btn ${previewFileTab === "SKILL.md" ? "active" : ""}`}
 									onClick={() => setPreviewFileTab("SKILL.md")}
+									title="SKILL.md"
 								>
-									SKILL.md
+									<span>SKILL.md</span>
 								</button>
-								{activePreviewDetail.scripts.map((script) => (
-									<button
-										key={script.path}
-										type="button"
-										role="tab"
-										aria-selected={previewFileTab === script.path}
-										className={`choice-chip ${previewFileTab === script.path ? "active" : ""}`}
-										onClick={() => setPreviewFileTab(script.path)}
-									>
-										{script.path}
-									</button>
-								))}
 							</div>
-						)}
-						<pre className="pa-viz-code skills-modal-code">
-							<code>
-								{previewFileTab === "SKILL.md"
-									? activePreviewDetail.content
-									: (activePreviewDetail.scripts.find((s) => s.path === previewFileTab)?.content ?? "")}
-							</code>
-						</pre>
+							{activePreviewFileGroups.map(({ group, items }) => (
+								<div key={group} className="skills-preview-group">
+									<span className="skills-preview-group-label">
+										{group} ({items.length})
+									</span>
+									{items.map((file) => {
+										const displayName = file.path.includes("/")
+											? file.path.slice(file.path.indexOf("/") + 1)
+											: file.path;
+										return (
+											<button
+												key={file.path}
+												type="button"
+												className={`skills-preview-file-btn ${previewFileTab === file.path ? "active" : ""}`}
+												onClick={() => setPreviewFileTab(file.path)}
+												title={file.path}
+											>
+												<span>{displayName}</span>
+											</button>
+										);
+									})}
+								</div>
+							))}
+						</aside>
+						<div className="skills-preview-content">
+							<div className="skills-preview-filebar">
+								<div className="row-wrap-gap">
+									<code className="skills-preview-filepath">{activeFileEntry?.path ?? previewFileTab}</code>
+									{activeFileEntry?.truncated && <span className="pill">已截断至 64KB</span>}
+								</div>
+								{activeFileIsMarkdown && (
+									<div className="skills-preview-mode-toggle" role="tablist" aria-label="查看模式">
+										<button
+											type="button"
+											role="tab"
+											aria-selected={previewMdMode === "rendered"}
+											className={`choice-chip ${previewMdMode === "rendered" ? "active" : ""}`}
+											onClick={() => setPreviewMdMode("rendered")}
+										>
+											渲染
+										</button>
+										<button
+											type="button"
+											role="tab"
+											aria-selected={previewMdMode === "raw"}
+											className={`choice-chip ${previewMdMode === "raw" ? "active" : ""}`}
+											onClick={() => setPreviewMdMode("raw")}
+										>
+											源码
+										</button>
+									</div>
+								)}
+							</div>
+							<div className="skills-preview-viewer">
+								{activeFileIsMarkdown && previewMdMode === "rendered" ? (
+									<div className="skills-preview-markdown">
+										<MarkdownView content={stripFrontmatterForMarkdown(activeFileEntry?.content ?? "")} />
+									</div>
+								) : (
+									<pre className="pa-viz-code skills-modal-code">
+										<code>{activeFileEntry?.content ?? ""}</code>
+									</pre>
+								)}
+							</div>
+						</div>
 					</div>
 				) : null}
 			</ModalDialog>
