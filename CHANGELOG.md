@@ -4,6 +4,10 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-25
+
+See the [0.8.1 release guide](docs/releases/v0.8.1.md) for downloads and upgrade instructions.
+
 - Polish `SessionInsightsPanel` (`#/settings/insights`) typography and layout in `apps/web/src/styles/settings.css` to align with `SettingsView` (`ui-section` header, 4-column KPI grid, 3-column truncated recent sessions list, and inline confirmation with scan duration readout on rescan).
 - Persist manual "保存文字到资料空间" links onto message `metadata.spaceDocuments` via optional `sourceMessageId` on `POST /api/spaces/:spaceId/documents` (preventing duplicate saves after reload), display target space names on `SpaceDocumentCard`, add an inline target space picker + Markdown-stripped title input in `MessageFeed`, show bundled `newSkills` summaries in `RoleCapabilityDetails`, and stop appending repo-code anti-jobs to `no_repo_docs` roles.
 - Simplify role creation and team healthcheck UX and expose Pi-native role management tools (`read_team_roles` and `propose_role` in `pa-extensions/worker-runtime` + `team-tool-bridge.ts` + `worker-runner.ts` + `matter-dispatch.ts`): remove obsolete manual role-creation form (`RoleArchitectModal.tsx`) and standalone `TeamHealthcheckPanel.tsx` modal, route TeamView's「团队协作体检」into a scoped persistent `role-architect` matter, and allow any lead role (built-in `role-architect` or user-imported domain role designers) to read visible team roles/health evidence and stage role creation/adjustment proposals onto the shared `RoleProposalCard` confirmation flow.
