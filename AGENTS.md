@@ -30,6 +30,16 @@
 - 文档改动使用 `npm run check:docs`；无需因此重跑整套应用测试或真实模型。
 - `demo:rpc`、`demo:team`、`demo:team:capabilities`、`demo:space`、`demo:rsi`（`demo:trust`）、`demo:pi-native`、`demo:review`、`demo:observer`、`demo:architect`、`demo:roles`、`demo:decision`、`demo:pstack`、`demo:pstack:selection` 会调用本机 Pi 与真实模型，按 [demo 说明](packages/server/src/demo/README.md)选择，不能把离线 fixture 通过当作真实岗位能力证明。
 
+## 顺着 Pi 纹理生长
+
+设计、实现与审查新功能时，优先复用 Pi 原生机制而非在宿主另造平行抽象：
+
+- **优先用 Pi 原语**：持久上下文走 `--session` 与 `session_compact`（不靠宿主手工拼 `transcript`）；可复用流程/脚本走磁盘标准 `SKILL.md` + `scripts/*` + `--skill` 发现（不另建数据库经验表）；运行时门禁与人机确认走 `tool_call` hook 与 `ctx.ui` / `DialogBroker`（不靠提示词声明替代实际约束）。
+- **静态边界靠 CLI flags，不粗暴阉割宿主机生态**：通过 `--offline` / `--no-extensions` / `--no-approve` / `--skill` / `--tools` 控制边界；区分“宿主机管理员维护的 `~/.pi`”（可由 `PA_LOCAL_PI_RESOURCES` 三态按需继承）与“外部托管克隆仓”（保持隔离），避免多租户策略一刀切切断 Pi 生态。
+- **辅助通道宁紧勿松、避免双轨**：无 `DialogBroker` 审批通道的一次性辅助调用（如 `architect-aux`）仅开放只读工具（`read,grep,find,ls`），长期演进应收敛回标准持久会话而非维护平行管道。
+- **展示与真实运行参数对齐**：`runtime-info`、文档和 Web 面板必须直接反映实际传给 Pi 的 flags、hooks 与作用域边界，删除旧能力时同步清理残留展示与类型，不留幽灵抽象。
+- **真机纹理用真实 Pi 验证**：涉及 Skill 发现、`tool_call` 拦截、会话压缩续接或扩展装配的改动，除离线测试外还应按需跑 `demo:pi-native` / `demo:trust` 等真实 Pi 冒烟验证，不能只凭 mock 断定闭环成立。
+
 ## 改动边界
 
 先查看 Git 状态，保留用户和其他工具的改动。用户授权范围内的实现与必要优化直接推进，常规取舍不用另设审批流程；没有明确授权不推送远端或发送外部消息。
