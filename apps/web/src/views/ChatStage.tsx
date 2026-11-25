@@ -72,7 +72,6 @@ type MatterInitiationProps = Pick<
 	| "onApplyRecommendation"
 	| "onRequestModelAssessment"
 	| "onCancelModelAssessment"
-	| "onOpenArchitect"
 	| "onStartArchitectMatter"
 >;
 
@@ -618,7 +617,6 @@ export function ChatStage({
 						dockDraft.onComposerTextChange(text);
 						dockDraft.composerRef.current?.focus();
 					}}
-					onOpenQuickCreator={() => initiation.onOpenArchitect()}
 					onLaunchWithNewRoles={onLaunchWithNewRoles}
 					onSkillProposalDone={() => void onRefresh()}
 					onOpenSkillTrust={onOpenSkillTrust}

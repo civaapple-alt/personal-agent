@@ -66,6 +66,44 @@ export type TeamToolCall =
 			scopeId: string;
 			skillName: string;
 			trustLevel: SkillTrustLevel;
+	  }
+	| {
+			tool: "read_team_roles";
+			callId: string;
+			includeHealthEvidence?: boolean;
+	  }
+	| {
+			tool: "propose_role";
+			callId: string;
+			action: "create";
+			id?: string;
+			name?: string;
+			title?: string;
+			oneJob: string;
+			antiJobs?: string[];
+			quietWhen?: string;
+			interactionStyle?: "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
+			workflowRules?: string;
+			communicationStyle?: string;
+			verificationPlan?: string;
+			skills?: string[];
+			mcpDependencies?: string[];
+			newSkills?: Array<{
+				name: string;
+				description: string;
+				body: string;
+				storageScope?: "role_local" | "org" | "personal" | "global";
+			}>;
+			rationale: string;
+	  }
+	| {
+			tool: "propose_role";
+			callId: string;
+			action: "update";
+			memberId: string;
+			addAntiJobs?: string[];
+			workflowNote?: string;
+			rationale: string;
 	  };
 
 function requiredString(value: unknown, name: string, max = 64_000): string {
@@ -315,6 +353,124 @@ function parseCall(value: unknown): TeamToolCall {
 			skillName,
 			trustLevel: args.trustLevel,
 		};
+	}
+	if (value.tool === "read_team_roles") {
+		const includeHealthEvidence =
+			"includeHealthEvidence" in args && args.includeHealthEvidence !== undefined
+				? Boolean(args.includeHealthEvidence)
+				: undefined;
+		return {
+			tool: "read_team_roles",
+			callId,
+			...(includeHealthEvidence !== undefined ? { includeHealthEvidence } : {}),
+		};
+	}
+	if (value.tool === "propose_role" && "action" in args && "rationale" in args) {
+		const rationale = requiredString(args.rationale, "rationale", 2000);
+		const parseStringArray = (raw: unknown, field: string, maxItems = 12, maxLen = 400): string[] | undefined => {
+			if (raw === undefined) return undefined;
+			if (!Array.isArray(raw) || raw.length > maxItems) {
+				throw new Error(`${field} must be an array of at most ${maxItems} strings`);
+			}
+			const list = raw.map((item) => (typeof item === "string" ? item.trim().slice(0, maxLen) : "")).filter(Boolean);
+			return list.length > 0 ? list : undefined;
+		};
+		if (args.action === "create") {
+			if (!("oneJob" in args)) throw new Error("propose_role(create) requires oneJob");
+			const oneJob = requiredString(args.oneJob, "oneJob", 2000);
+			const interactionStyle =
+				"interactionStyle" in args &&
+				(args.interactionStyle === "lead_direct" ||
+					args.interactionStyle === "consult_specialist" ||
+					args.interactionStyle === "risk_observer" ||
+					args.interactionStyle === "mixed")
+					? args.interactionStyle
+					: undefined;
+			let newSkills:
+				| Array<{
+						name: string;
+						description: string;
+						body: string;
+						storageScope?: "role_local" | "org" | "personal" | "global";
+				  }>
+				| undefined;
+			if ("newSkills" in args && args.newSkills !== undefined) {
+				if (!Array.isArray(args.newSkills) || args.newSkills.length > 5) {
+					throw new Error("newSkills must be an array of at most 5 skill drafts");
+				}
+				newSkills = args.newSkills.map((raw, idx) => {
+					if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+						throw new Error(`newSkills[${idx}] must be an object`);
+					}
+					const rec = raw as Record<string, unknown>;
+					const storageScope =
+						rec.storageScope === "role_local" ||
+						rec.storageScope === "org" ||
+						rec.storageScope === "personal" ||
+						rec.storageScope === "global"
+							? rec.storageScope
+							: undefined;
+					return {
+						name: requiredString(rec.name, `newSkills[${idx}].name`, 64),
+						description: requiredString(rec.description, `newSkills[${idx}].description`, 500),
+						body: requiredString(rec.body, `newSkills[${idx}].body`, 16_000),
+						...(storageScope ? { storageScope } : {}),
+					};
+				});
+			}
+			const optString = (key: string, max: number) =>
+				key in args && typeof (args as Record<string, unknown>)[key] === "string"
+					? (args as Record<string, unknown>)[key]?.toString().trim().slice(0, max) || undefined
+					: undefined;
+			const antiJobs = "antiJobs" in args ? parseStringArray(args.antiJobs, "antiJobs", 12, 400) : undefined;
+			const skills = "skills" in args ? parseStringArray(args.skills, "skills", 16, 120) : undefined;
+			const mcpDependencies =
+				"mcpDependencies" in args ? parseStringArray(args.mcpDependencies, "mcpDependencies", 12, 120) : undefined;
+			return {
+				tool: "propose_role",
+				callId,
+				action: "create",
+				oneJob,
+				rationale,
+				...(optString("id", 80) ? { id: optString("id", 80) } : {}),
+				...(optString("name", 80) ? { name: optString("name", 80) } : {}),
+				...(optString("title", 120) ? { title: optString("title", 120) } : {}),
+				...(optString("quietWhen", 500) ? { quietWhen: optString("quietWhen", 500) } : {}),
+				...(interactionStyle ? { interactionStyle } : {}),
+				...(optString("workflowRules", 4000) ? { workflowRules: optString("workflowRules", 4000) } : {}),
+				...(optString("communicationStyle", 1000)
+					? { communicationStyle: optString("communicationStyle", 1000) }
+					: {}),
+				...(optString("verificationPlan", 2000) ? { verificationPlan: optString("verificationPlan", 2000) } : {}),
+				...(antiJobs ? { antiJobs } : {}),
+				...(skills ? { skills } : {}),
+				...(mcpDependencies ? { mcpDependencies } : {}),
+				...(newSkills && newSkills.length > 0 ? { newSkills } : {}),
+			};
+		}
+		if (args.action === "update") {
+			if (!("memberId" in args)) throw new Error("propose_role(update) requires memberId");
+			const memberId = requiredString(args.memberId, "memberId", 160);
+			const addAntiJobs =
+				"addAntiJobs" in args ? parseStringArray(args.addAntiJobs, "addAntiJobs", 12, 400) : undefined;
+			const workflowNote =
+				"workflowNote" in args && typeof args.workflowNote === "string"
+					? args.workflowNote.trim().slice(0, 2000) || undefined
+					: undefined;
+			if (!addAntiJobs && !workflowNote) {
+				throw new Error("propose_role(update) requires addAntiJobs or workflowNote");
+			}
+			return {
+				tool: "propose_role",
+				callId,
+				action: "update",
+				memberId,
+				rationale,
+				...(addAntiJobs ? { addAntiJobs } : {}),
+				...(workflowNote ? { workflowNote } : {}),
+			};
+		}
+		throw new Error("propose_role action must be 'create' or 'update'");
 	}
 	throw new Error("Unsupported tool or invalid arguments");
 }

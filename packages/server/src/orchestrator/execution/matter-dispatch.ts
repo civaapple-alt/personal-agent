@@ -499,6 +499,29 @@ export async function dispatchMatterTurn(
 				rawReply ||
 				(decision ? "等待你在卡片里提交决定。" : "本轮未返回正文，请继续追问；执行记录保留在协作过程中。");
 		const savedDocuments = !aborted && !isDiscussionTurn ? run.effects.savedDocuments : [];
+		const toolRoleBlueprints = !aborted && !isDiscussionTurn ? run.effects.roleBlueprints : [];
+		const toolRoleAdjustments = !aborted && !isDiscussionTurn ? run.effects.roleAdjustments : [];
+		const mergedRoleProposals = (() => {
+			const base = architectParsed?.roleProposals;
+			if (toolRoleBlueprints.length === 0 && toolRoleAdjustments.length === 0) return base;
+			const blueprints = [...(base?.blueprints ?? [])];
+			for (const bp of toolRoleBlueprints) {
+				const idx = blueprints.findIndex((existing) => existing.draft.template.id === bp.draft.template.id);
+				if (idx < 0) blueprints.push(bp);
+				else blueprints[idx] = bp;
+			}
+			const adjustments = [...(base?.roleAdjustments ?? [])];
+			for (const adj of toolRoleAdjustments) {
+				const idx = adjustments.findIndex((existing) => existing.memberId === adj.memberId);
+				if (idx < 0) adjustments.push(adj);
+				else adjustments[idx] = adj;
+			}
+			return {
+				...(base ?? { status: "pending" as const, followUpQuestions: [] }),
+				blueprints,
+				...(adjustments.length > 0 ? { roleAdjustments: adjustments } : {}),
+			};
+		})();
 		const latestNextStepsTool =
 			!aborted && !decision
 				? result.toolExecutions.findLast((tool) => tool.toolName === NEXT_STEPS_TOOL_NAME && !tool.isError)
@@ -528,7 +551,7 @@ export async function dispatchMatterTurn(
 				sourceUserMessageId: run.userMessageId,
 				workspaceId: workspace?.id ?? null,
 				repoPath: resolve(workspace?.repoPath ?? deps.defaultCwd),
-				...(architectParsed?.roleProposals ? { roleProposals: architectParsed.roleProposals } : {}),
+				...(mergedRoleProposals ? { roleProposals: mergedRoleProposals } : {}),
 				...(!aborted && run.effects.skillProposals.length > 0
 					? { skillProposals: run.effects.skillProposals }
 					: {}),

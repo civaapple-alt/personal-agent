@@ -159,7 +159,7 @@ test("GET /api/runtime reports Pi base, built-in and operator extensions, MCP de
 	assert.ok(workerRuntimeExt);
 	assert.equal(workerRuntimeExt.status, "active");
 	assert.equal(workerRuntimeExt.fileStatus, "present");
-	assert.deepEqual(workerRuntimeExt.registeredTools, []);
+	assert.deepEqual(workerRuntimeExt.registeredTools, ["read_team_roles", "propose_role"]);
 
 	const spaceExt = ownerPayload.extensions.find((ext) => ext.id === "builtin-space");
 	assert.ok(spaceExt);

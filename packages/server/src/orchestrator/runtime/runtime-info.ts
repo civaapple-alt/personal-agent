@@ -371,8 +371,9 @@ export async function buildRuntimeOverview(options: {
 		entryPath: isOwner ? workerRuntimePath : builtinExtensionPaths["worker-runtime"],
 		fileStatus: workerRuntimeFileStatus,
 		scopeSummary: "所有 PA 宿主岗位启动时加载",
-		description: "隔离目标工作区 AGENTS.md、注入成员与轮次上下文、核查工具握手并标注外部检索证据。",
-		registeredTools: [],
+		description:
+			"隔离目标工作区 AGENTS.md、注入成员与轮次上下文、核查工具握手、标注外部检索证据，并为非讨论主责提供团队角色读取与提案工具。",
+		registeredTools: ["read_team_roles", "propose_role"],
 		hooks: ["session_start", "before_agent_start", "tool_call", "tool_result"],
 		declaredByRoles: [],
 		mcpServers: [],

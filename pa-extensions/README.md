@@ -7,7 +7,7 @@
 
 | 扩展 | 组合的 Pi 能力 | 职责 |
 | --- | --- | --- |
-| `worker-runtime` | [pa-extensions/worker-runtime/pi/index.ts](worker-runtime/pi/index.ts) | PA 宿主运行时护栏：目标工作区 `AGENTS.md` 隔离、`<pa_docs>` 双文档指针、成员/轮次上下文注入、能力握手、`session_compact` Skill 与事项锚点延续、外部检索证据标注 |
+| `worker-runtime` | [pa-extensions/worker-runtime/pi/index.ts](worker-runtime/pi/index.ts) | PA 宿主运行时护栏与角色读写工具：目标工作区 `AGENTS.md` 隔离、`<pa_docs>` 双文档指针、成员/轮次上下文注入、能力握手、`session_compact` Skill 与事项锚点延续、外部检索证据标注，以及面向非讨论主责的 `read_team_roles` / `propose_role` |
 | `space` | [pa-extensions/space/pi/index.ts](space/pi/index.ts) | `read_space` / `save_space_page` Git 资料空间读写（按运行模式挂载，Web 侧展示文档类型与标题摘要） |
 | `delegation` | [pa-extensions/delegation/pi/index.ts](delegation/pi/index.ts) | `delegate_to_member` 团队跨岗委托与独立验收（按权限挂载，Web 侧突出标注 `[独立验收]` 与目标同事） |
 | `skill-capture` | [pa-extensions/skill-capture/pi/index.ts](skill-capture/pi/index.ts) | 统一 `propose_skill` 沉淀入口（步骤 2）与 Pi 原生 `tool_call` 脚本信任门禁（步骤 3 `confirm` 经 `DialogBroker` 确认 / 步骤 4 `autonomous` 自主执行） |

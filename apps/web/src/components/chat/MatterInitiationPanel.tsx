@@ -4,7 +4,6 @@ import type {
 	MatterInitiationAssessmentDto,
 	MatterVisibility,
 	OrganizationMemberDto,
-	RoleGapSuggestionDto,
 	RoleTemplateDto,
 	TeamMemberDto,
 } from "../../api.ts";
@@ -42,7 +41,6 @@ interface MatterInitiationPanelProps {
 	onApplyRecommendation: () => void;
 	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
 	onCancelModelAssessment?: () => void;
-	onOpenArchitect: (gap?: RoleGapSuggestionDto) => void;
 	onStartArchitectMatter?: (seedText?: string) => void;
 }
 
@@ -81,7 +79,6 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		onApplyRecommendation,
 		onRequestModelAssessment,
 		onCancelModelAssessment,
-		onOpenArchitect,
 		onStartArchitectMatter,
 		orgMembers = [],
 		initiatorId,
@@ -255,11 +252,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 													type="button"
 													className="btn-inline"
 													onClick={() =>
-														onStartArchitectMatter
-															? onStartArchitectMatter(
-																	`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
-																)
-															: onOpenArchitect(assessment.gapSuggestion)
+														onStartArchitectMatter?.(
+															`请围绕这项工作规划角色：${assessment.gapSuggestion?.suggestedJob ?? assessment.headline}`,
+														)
 													}
 												>
 													请架构师协助
@@ -477,13 +472,11 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 									))}
 							</div>
 						)}
-						<button
-							type="button"
-							className="btn-inline"
-							onClick={() => (onStartArchitectMatter ? onStartArchitectMatter() : onOpenArchitect())}
-						>
-							需要补充专职角色？
-						</button>
+						{onStartArchitectMatter && (
+							<button type="button" className="btn-inline" onClick={() => onStartArchitectMatter()}>
+								需要补充专职角色？
+							</button>
+						)}
 					</div>
 				</div>
 			)}

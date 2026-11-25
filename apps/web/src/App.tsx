@@ -14,7 +14,6 @@ import { filterBusinessMembers, isArchitectMemberId, ROLE_ARCHITECT_MEMBER_ID } 
 import { MatterModelControl, ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
-import { RoleArchitectModal } from "./components/team/RoleArchitectModal.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
 import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
 import { useAuthSession } from "./hooks/useAuthSession.ts";
@@ -726,7 +725,6 @@ export function App() {
 									onApplyRecommendation: initiation.applyAssessmentRecommendation,
 									onRequestModelAssessment: (opts) => void initiation.requestModelAssessment(opts),
 									onCancelModelAssessment: initiation.cancelModelAssessment,
-									onOpenArchitect: initiation.openArchitectForGap,
 									onStartArchitectMatter: startArchitectMatter,
 								}}
 								currentUser={currentUser}
@@ -857,8 +855,7 @@ export function App() {
 										initiation.setDraftPresetMode("solo");
 									}
 								}}
-								onOpenArchitect={() => initiation.openArchitectForGap()}
-								onOpenArchitectMatter={() => startArchitectMatter()}
+								onOpenArchitectMatter={(seedText) => startArchitectMatter(seedText)}
 								onOpenOrganizations={() => navigateRoute({ tab: "organizations" })}
 							/>
 						</ViewFade>
@@ -961,38 +958,6 @@ export function App() {
 					)}
 				</ErrorBoundary>
 			</main>
-
-			<RoleArchitectModal
-				open={initiation.architectOpen}
-				seedGap={initiation.architectSeed}
-				members={bootstrap?.members ?? []}
-				templateByRoleId={templateByRoleId}
-				isSuperAdmin={isSuperAdmin}
-				accountUser={accountUser}
-				currentUser={currentUser}
-				organizations={bootstrap?.organizations ?? []}
-				defaultOrgId={effectiveOrgIdForScope}
-				onClose={() => initiation.setArchitectOpen(false)}
-				onOpenArchitectMatter={() => startArchitectMatter()}
-				onCreated={async (member) => {
-					await refreshBootstrap();
-					if (activeTab === "chats" && !selectedMatterId) {
-						setSelectedMemberId(member.id);
-						setDraftAiMemberIds((prev) =>
-							initiation.draftPresetMode === "solo"
-								? [member.id]
-								: prev
-									? Array.from(new Set([member.id, ...prev]))
-									: [member.id],
-						);
-						if (initiation.draftPresetMode === "human_first") {
-							initiation.setDraftPresetMode("solo");
-						}
-					}
-				}}
-				onNotice={(msg) => setNoticeBanner(msg)}
-				onError={(msg) => setErrorBanner(msg)}
-			/>
 
 			<OrgInviteModal
 				{...auth.inviteDialogProps}

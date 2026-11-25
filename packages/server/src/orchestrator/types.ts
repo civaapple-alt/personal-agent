@@ -11,6 +11,7 @@ import type {
 } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import type { CollaboratorRole, Matter, MatterMessage, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import type { MetaArchitectBlueprintProposal, MetaArchitectRoleAdjustment } from "./architect/meta-architect.ts";
 import type { DecisionClassifier } from "./architect/system-one.ts";
 import type { DraftVerification } from "./execution/independent-verification.ts";
 import type { StalledMember, TurnMonitor } from "./execution/turn-monitor.ts";
@@ -265,10 +266,12 @@ export interface SavedSpaceDocumentEffect {
 export interface ExecutionEffects {
 	savedDocuments: SavedSpaceDocumentEffect[];
 	skillProposals: SkillProposalItem[];
+	roleBlueprints: MetaArchitectBlueprintProposal[];
+	roleAdjustments: MetaArchitectRoleAdjustment[];
 }
 
 export function emptyEffects(): ExecutionEffects {
-	return { savedDocuments: [], skillProposals: [] };
+	return { savedDocuments: [], skillProposals: [], roleBlueprints: [], roleAdjustments: [] };
 }
 
 export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects): void {
@@ -281,6 +284,18 @@ export function mergeEffects(target: ExecutionEffects, source: ExecutionEffects)
 		const idx = target.skillProposals.findIndex((existing) => existing.name === proposal.name);
 		if (idx < 0) target.skillProposals.push(proposal);
 		else target.skillProposals[idx] = proposal;
+	}
+	for (const blueprint of source.roleBlueprints) {
+		const idx = target.roleBlueprints.findIndex(
+			(existing) => existing.draft.template.id === blueprint.draft.template.id,
+		);
+		if (idx < 0) target.roleBlueprints.push(blueprint);
+		else target.roleBlueprints[idx] = blueprint;
+	}
+	for (const adjustment of source.roleAdjustments) {
+		const idx = target.roleAdjustments.findIndex((existing) => existing.memberId === adjustment.memberId);
+		if (idx < 0) target.roleAdjustments.push(adjustment);
+		else target.roleAdjustments[idx] = adjustment;
 	}
 }
 
@@ -325,6 +340,8 @@ const TOOL_LABELS: Record<string, string> = {
 	delegate_to_member: "委托团队成员",
 	save_space_page: "保存资料",
 	propose_skill: "提议沉淀 Skill 与脚本",
+	read_team_roles: "读取团队角色名录",
+	propose_role: "提议角色方案",
 	list_available_skills: "查看可用 Skills",
 	load_available_skill: "读取 Skill",
 	list_pi_commands: "查看 Pi 插件命令",

@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { createTeamBridgeClient } from "./bridge-client.ts";
+import { createTeamBridgeClient, type PiHostToolExtensionApi } from "./bridge-client.ts";
 import {
 	buildCompactionCarryover,
 	type CompactBranchEntry,
@@ -70,6 +70,7 @@ export interface WorkerRuntimeExtensionApi {
 		message: { customType: string; content: string; display: boolean },
 		options?: { triggerTurn?: boolean },
 	): void;
+	registerTool?: PiHostToolExtensionApi["registerTool"];
 	getActiveTools(): string[];
 	getAllTools(): { name: string }[];
 	setActiveTools(names: string[]): void;
@@ -136,6 +137,130 @@ export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): v
 	const env = { ...process.env };
 	const post = createTeamBridgeClient(env);
 	const cloneRoots = new Set<string>();
+
+	if (env.PA_CAN_MANAGE_ROLES === "true" && typeof pi.registerTool === "function") {
+		pi.registerTool({
+			name: "read_team_roles",
+			label: "读取当前团队角色",
+			description:
+				"Read the currently visible AI team roles (id, name, title, scope, responsibilities, anti-jobs, skills, MCP dependencies) in this organization/matter scope, plus optional recent collaboration health evidence.",
+			promptSnippet:
+				"Read the visible AI team roster and optional collaboration health evidence before designing or adjusting roles.",
+			promptGuidelines: [
+				"Call read_team_roles before proposing new roles or role adjustments so proposals reuse existing members and avoid overlapping responsibilities.",
+			],
+			parameters: {
+				type: "object",
+				properties: {
+					includeHealthEvidence: {
+						type: "boolean",
+						description: "Include recent team collaboration friction and health evidence digest (default false).",
+					},
+				},
+				additionalProperties: false,
+			},
+			async execute(callId, args, signal) {
+				const result = await post("/tool", { tool: "read_team_roles", callId, args: args ?? {} }, signal);
+				return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
+			},
+		});
+
+		pi.registerTool({
+			name: "propose_role",
+			label: "提议创建或调整 AI 角色",
+			description:
+				"Propose creating a new AI role (with optional bundled SKILL.md drafts) or updating an existing role's boundaries/workflow notes for human confirmation. Never modifies role files directly until the user approves the confirmation card.",
+			promptSnippet:
+				"Propose creating a new AI role or updating an existing role's boundaries for human confirmation (never writes role files without approval).",
+			promptGuidelines: [
+				"When key role boundaries are still unclear, clarify with the user first; call propose_role once the role's core job and boundaries are confirmed.",
+				"Roles share Pi's default runtime tools; focus on oneJob, antiJobs, skills, and collaboration boundaries rather than tool permission toggles.",
+			],
+			parameters: {
+				type: "object",
+				properties: {
+					action: {
+						type: "string",
+						enum: ["create", "update"],
+						description:
+							"'create' to propose a new role, or 'update' to propose boundary/workflow adjustments to an existing role.",
+					},
+					rationale: {
+						type: "string",
+						description: "Concrete evidence-based rationale for creating or updating this role.",
+					},
+					id: { type: "string", description: "Optional kebab-case slug for a new role (action='create')." },
+					name: { type: "string", description: "Display name for a new role (action='create')." },
+					title: { type: "string", description: "Role title for a new role (action='create')." },
+					oneJob: {
+						type: "string",
+						description: "Required for action='create': single core outcome this role owns.",
+					},
+					antiJobs: {
+						type: "array",
+						items: { type: "string" },
+						description: "Explicit boundaries / non-goals for a new role (action='create').",
+					},
+					quietWhen: { type: "string", description: "When this new role should remain silent (action='create')." },
+					interactionStyle: {
+						type: "string",
+						enum: ["lead_direct", "consult_specialist", "risk_observer", "mixed"],
+						description: "Recommended participation pattern (action='create').",
+					},
+					workflowRules: { type: "string", description: "Workflow and handoff conventions (action='create')." },
+					communicationStyle: { type: "string", description: "Communication style notes (action='create')." },
+					verificationPlan: {
+						type: "string",
+						description: "Concrete verification task, success criteria, and boundary check (action='create').",
+					},
+					skills: {
+						type: "array",
+						items: { type: "string" },
+						description: "Existing skill names to attach to a new role (action='create').",
+					},
+					mcpDependencies: {
+						type: "array",
+						items: { type: "string" },
+						description: "Optional MCP server names referenced by this role (action='create').",
+					},
+					newSkills: {
+						type: "array",
+						description: "Optional bundled SKILL.md drafts to create alongside the new role (action='create').",
+						items: {
+							type: "object",
+							properties: {
+								name: { type: "string" },
+								description: { type: "string" },
+								body: { type: "string" },
+								storageScope: { type: "string", enum: ["role_local", "org", "personal", "global"] },
+							},
+							required: ["name", "description", "body"],
+							additionalProperties: false,
+						},
+					},
+					memberId: {
+						type: "string",
+						description: "Required for action='update': existing visible team member ID.",
+					},
+					addAntiJobs: {
+						type: "array",
+						items: { type: "string" },
+						description: "New Anti-Jobs boundaries to append to an existing role (action='update').",
+					},
+					workflowNote: {
+						type: "string",
+						description: "New collaboration or workflow convention note to append (action='update').",
+					},
+				},
+				required: ["action", "rationale"],
+				additionalProperties: false,
+			},
+			async execute(callId, args, signal) {
+				const result = await post("/tool", { tool: "propose_role", callId, args }, signal);
+				return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
+			},
+		});
+	}
 
 	if (env.PA_WEB_SEARCH_ENABLED === "true") {
 		pi.on("tool_call", (event) => {

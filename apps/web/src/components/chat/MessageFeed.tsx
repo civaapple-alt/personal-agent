@@ -85,7 +85,6 @@ interface MessageFeedProps {
 	onDismissRoleProposals?: (matterId: string, messageId: string) => Promise<void>;
 	onSendQuickPrompt?: (prompt: string, options?: { preferredMemberId?: string }) => Promise<boolean>;
 	onFillComposer?: (text: string) => void;
-	onOpenQuickCreator?: () => void;
 	onLaunchWithNewRoles?: (memberIds: string[]) => void;
 	onSkillProposalDone?: () => void;
 	onOpenSkillTrust?: () => void;
@@ -134,7 +133,6 @@ export function MessageFeed({
 	onDismissRoleProposals,
 	onSendQuickPrompt,
 	onFillComposer,
-	onOpenQuickCreator,
 	onLaunchWithNewRoles,
 	onSkillProposalDone,
 	onOpenSkillTrust,
@@ -242,31 +240,21 @@ export function MessageFeed({
 							</div>
 						)}
 						{isOwner && selectedIsArchitect && (
-							<>
-								<div className="architect-workflow-chips">
-									{[
-										"我们做新产品验证，想拆 1 个只梳理用户反馈痛点、1 个上线前只读挑漏洞且平时静默的角色",
-										"平时开发经常到验收才发现遗漏，帮我按现有成员配一套前置把关角色和参与边界",
-									].map((sample) => (
-										<button
-											key={sample}
-											type="button"
-											className="choice-chip"
-											onClick={() => onFillComposer?.(sample)}
-										>
-											{sample}
-										</button>
-									))}
-								</div>
-								{onOpenQuickCreator && (
-									<div className="architect-quick-alt">
-										<span>只需新增 1 个明确分工的小角色？</span>
-										<button type="button" className="btn-inline" onClick={onOpenQuickCreator}>
-											打开快速创建卡片 →
-										</button>
-									</div>
-								)}
-							</>
+							<div className="architect-workflow-chips">
+								{[
+									"我们做新产品验证，想拆 1 个只梳理用户反馈痛点、1 个上线前只读挑漏洞且平时静默的角色",
+									"平时开发经常到验收才发现遗漏，帮我按现有成员配一套前置把关角色和参与边界",
+								].map((sample) => (
+									<button
+										key={sample}
+										type="button"
+										className="choice-chip"
+										onClick={() => onFillComposer?.(sample)}
+									>
+										{sample}
+									</button>
+								))}
+							</div>
 						)}
 					</div>
 				) : (

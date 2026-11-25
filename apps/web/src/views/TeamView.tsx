@@ -17,7 +17,6 @@ import { buildRoleScopeChoices, canMemberManageRole, filterBusinessMembers } fro
 import { MemberCard } from "../components/team/MemberCard.tsx";
 import { MemberInspectorModal } from "../components/team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "../components/team/MemberPackageForms.tsx";
-import { TeamHealthcheckPanel } from "../components/team/TeamHealthcheckPanel.tsx";
 import { applyOrgAiRoleOverrides, resolveEffectivePrimaryContactId } from "../utils.ts";
 
 interface TeamViewProps {
@@ -41,8 +40,7 @@ interface TeamViewProps {
 	onNotice: (message: string) => void;
 	onError: (message: string) => void;
 	onAssignTask: (memberId: string) => void;
-	onOpenArchitect?: () => void;
-	onOpenArchitectMatter?: () => void;
+	onOpenArchitectMatter?: (seedText?: string) => void;
 	onOpenOrganizations?: () => void;
 }
 
@@ -55,7 +53,6 @@ export function TeamView({
 	workspaces,
 	organizations = [],
 	orgAiRolesByOrgId = {},
-	matters = [],
 	selectedOrgId = null,
 	defaultWorkspaceId = null,
 	templateByRoleId,
@@ -65,7 +62,6 @@ export function TeamView({
 	onNotice,
 	onError,
 	onAssignTask,
-	onOpenArchitect,
 	onOpenArchitectMatter,
 	onOpenOrganizations,
 }: TeamViewProps) {
@@ -90,7 +86,6 @@ export function TeamView({
 		filename: string;
 		markdown: string;
 	} | null>(null);
-	const [healthcheckOpen, setHealthcheckOpen] = useState(false);
 	const [inspectedMemberId, setInspectedMemberId] = useState<string | null>(null);
 	const [savingPrimary, setSavingPrimary] = useState(false);
 	const businessMembers = useMemo(() => filterBusinessMembers(members, templateByRoleId), [members, templateByRoleId]);
@@ -232,20 +227,8 @@ export function TeamView({
 					{canCreateAnyRole && (
 						<div className="actions-row compact">
 							{onOpenArchitectMatter && canDispatchAny && (
-								<button type="button" className="btn-pill-dark" onClick={onOpenArchitectMatter}>
+								<button type="button" className="btn-pill-dark" onClick={() => onOpenArchitectMatter()}>
 									对话规划角色
-								</button>
-							)}
-							{onOpenArchitect && (
-								<button
-									type="button"
-									className={onOpenArchitectMatter && canDispatchAny ? "btn-pill-outline" : "btn-pill-dark"}
-									onClick={() => {
-										setShowImportMember(false);
-										onOpenArchitect();
-									}}
-								>
-									+ 快速创建角色
 								</button>
 							)}
 							<button type="button" className="btn-pill-outline" onClick={() => setShowImportMember((v) => !v)}>
@@ -312,11 +295,15 @@ export function TeamView({
 										))}
 									</div>
 								)}
-								{canRunHealthcheck && (
+								{canRunHealthcheck && onOpenArchitectMatter && canDispatchAny && (
 									<button
 										type="button"
 										className="btn-pill-outline btn-xs"
-										onClick={() => setHealthcheckOpen(true)}
+										onClick={() =>
+											onOpenArchitectMatter(
+												`请基于当前可见团队名册（${businessMembers.length} 个业务角色）、近期运行洞察与交付反馈，做一次团队协作体检：指出真实存在的职责重叠、协作卡点或工具/Skill 摩擦；如有需要再给出调整或补位建议，没有明显问题时直接说明即可。`,
+											)
+										}
 									>
 										团队协作体检
 									</button>
@@ -363,17 +350,6 @@ export function TeamView({
 					</section>
 				</div>
 			</div>
-
-			<TeamHealthcheckPanel
-				open={healthcheckOpen}
-				memberCount={businessMembers.length}
-				matterCount={matters.length}
-				onClose={() => setHealthcheckOpen(false)}
-				onApplied={onRefresh}
-				onOpenArchitectChat={onOpenArchitectMatter}
-				onNotice={onNotice}
-				onError={onError}
-			/>
 
 			<MemberInspectorModal
 				member={inspectedMember}

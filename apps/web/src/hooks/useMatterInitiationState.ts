@@ -3,7 +3,6 @@ import {
 	assessMatterInitiation,
 	type CollaborationPresetMode,
 	type MatterInitiationAssessmentDto,
-	type RoleGapSuggestionDto,
 	type TeamMemberDto,
 } from "../api.ts";
 import { filterBusinessMembers, isArchitectMemberId } from "../architectApi.ts";
@@ -47,8 +46,6 @@ export function useMatterInitiationState({
 	const [assessment, setAssessment] = useState<MatterInitiationAssessmentDto | null>(null);
 	const [modelAssessing, setModelAssessing] = useState(false);
 	const [modelAssessmentError, setModelAssessmentError] = useState<string | null>(null);
-	const [architectOpen, setArchitectOpen] = useState(false);
-	const [architectSeed, setArchitectSeed] = useState<RoleGapSuggestionDto | null>(null);
 	const modelSeqRef = useRef(0);
 	const modelControllerRef = useRef<AbortController | null>(null);
 
@@ -321,11 +318,6 @@ export function useMatterInitiationState({
 		],
 	);
 
-	const openArchitectForGap = useCallback((gap?: RoleGapSuggestionDto) => {
-		setArchitectSeed(gap ?? null);
-		setArchitectOpen(true);
-	}, []);
-
 	const resetInitiationState = useCallback(() => {
 		modelSeqRef.current += 1;
 		modelControllerRef.current?.abort();
@@ -350,14 +342,10 @@ export function useMatterInitiationState({
 		assessment,
 		modelAssessing,
 		modelAssessmentError,
-		architectOpen,
-		architectSeed,
 		setDraftConsultMemberIds,
 		setDraftObserverMemberIds,
 		setDraftCollaboratorIds,
 		setDraftPresetMode,
-		setArchitectOpen,
-		setArchitectSeed,
 		syncDraftRoster,
 		setScopeMode,
 		toggleDraftMemberConsult,
@@ -366,7 +354,6 @@ export function useMatterInitiationState({
 		applyAssessmentRecommendation,
 		requestModelAssessment,
 		cancelModelAssessment,
-		openArchitectForGap,
 		resetInitiationState,
 	};
 }

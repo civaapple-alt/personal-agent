@@ -9,16 +9,23 @@ import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts
 import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
 import type { WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
-import { isArchitectRoleTemplate } from "../../roles/role-architect.ts";
-import type { RoleTemplate } from "../../roles/types.ts";
+import { assessRoleCapabilities } from "../../roles/capabilities.ts";
+import { buildRoleDesignDraft, isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import type { RoleScope, RoleTemplate } from "../../roles/types.ts";
 import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
 import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../../rpc/team-tool-bridge.ts";
 import type { ImageContent } from "../../rpc/types.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
 import type { Matter, TeamMember, WorkspaceLink } from "../../storage/types.ts";
-import { buildArchitectMatterContext } from "../architect/meta-architect.ts";
+import {
+	buildArchitectMatterContext,
+	collectTeamFrictionDigest,
+	type MetaArchitectBlueprintProposal,
+	type MetaArchitectRoleAdjustment,
+} from "../architect/meta-architect.ts";
 import { readHumanDecision } from "../human-decision.ts";
+import { filterTeamMembersForScope } from "../rsi/team-health.ts";
 import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
 import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
 import { buildTeamCapabilities } from "../runtime/team-capabilities.ts";
@@ -143,7 +150,7 @@ export async function executeWithWorkerPass(
 		hasConsultTargets,
 		isMatterLead,
 	});
-	const { canSaveSpace, canDelegate, canCaptureSkill } = teamExtension;
+	const { canSaveSpace, canDelegate, canCaptureSkill, canManageRoles } = teamExtension;
 	const humanQuestion = prepareHumanQuestion({
 		sessionMode,
 		discussionMode: isDiscussionMode,
@@ -236,6 +243,8 @@ export async function executeWithWorkerPass(
 			...humanQuestion.tools,
 		];
 		const stagedSkillProposals: SkillProposalItem[] = [];
+		const stagedRoleBlueprints: MetaArchitectBlueprintProposal[] = [];
+		const stagedRoleAdjustments: MetaArchitectRoleAdjustment[] = [];
 		let observedTools: string[] | undefined;
 		const workbenchContext = () => {
 			const current = deps.requireMatter(input.matterId);
@@ -263,6 +272,112 @@ export async function executeWithWorkerPass(
 				if (!document.matterId || document.matterId === input.matterId) return true;
 				return deps.store.getMatter(document.matterId)?.visibility === "org";
 			};
+			if (call.tool === "read_team_roles") {
+				if (!canManageRoles) {
+					throw new Error("Only the lead in non-discussion mode can read team roles for role design");
+				}
+				const scopeFilter = { orgId: activeOrgId, actorUserId };
+				const templatesById = deps.getTemplatesById?.() ?? new Map<string, RoleTemplate>();
+				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter).filter(
+					(member) =>
+						!isArchitectRoleTemplate(
+							deps.getTemplateForMember(member) ?? templatesById.get(member.templateId) ?? { id: member.id },
+						),
+				);
+				const roles = visibleMembers.map((member) => {
+					const tpl = deps.getTemplateForMember(member) ?? templatesById.get(member.templateId);
+					return {
+						id: member.id,
+						name: member.displayName,
+						title: member.roleTitle,
+						roleScope: member.roleScope ?? "global",
+						isPrimaryContact: member.isPrimaryContact,
+						skills: tpl?.skills ?? [],
+						mcpDependencies: tpl?.mcpDependencies ?? [],
+						antiJobs: tpl?.antiJobs ?? [],
+						responsibilities: tpl?.sections.responsibilitiesAndBoundaries ?? "",
+					};
+				});
+				return {
+					orgId: activeOrgId,
+					roles,
+					...(call.includeHealthEvidence
+						? { healthEvidenceDigest: collectTeamFrictionDigest(deps.store, templatesById, scopeFilter) }
+						: {}),
+				};
+			}
+			if (call.tool === "propose_role") {
+				if (!canManageRoles) {
+					throw new Error("Only the lead in non-discussion mode can propose role changes");
+				}
+				const scopeFilter = { orgId: activeOrgId, actorUserId };
+				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter);
+				if (call.action === "create") {
+					const roleScope: RoleScope = activeOrgId ? "org" : actorUserId ? "personal" : "global";
+					const draft = buildRoleDesignDraft({
+						oneJob: call.oneJob,
+						antiJobs: call.antiJobs,
+						quietWhen: call.quietWhen,
+						interactionStyle: call.interactionStyle,
+						roleScope,
+						ownerOrgId: roleScope === "org" ? activeOrgId : null,
+						ownerUserId: roleScope === "personal" ? actorUserId : null,
+						roleId: call.id,
+						roleName: call.name,
+						roleTitle: call.title,
+						workflowRules: call.workflowRules,
+						communicationStyle: call.communicationStyle,
+						verificationPlan: call.verificationPlan,
+						skills: call.skills,
+						mcpDependencies: call.mcpDependencies,
+						suggestedNewSkills: call.newSkills?.map((skill) => ({
+							...skill,
+							storageScope: skill.storageScope ?? "role_local",
+						})),
+						existingMemberIds: deps.store.listMembers().map((m) => m.id),
+					});
+					draft.capabilityReport = await assessRoleCapabilities(draft.template, { skillsDir: deps.skillsDir });
+					const proposal: MetaArchitectBlueprintProposal = { draft, rationale: call.rationale };
+					const existingIdx = stagedRoleBlueprints.findIndex(
+						(item) => item.draft.template.id === draft.template.id,
+					);
+					if (existingIdx < 0) stagedRoleBlueprints.push(proposal);
+					else stagedRoleBlueprints[existingIdx] = proposal;
+					return {
+						staged: true,
+						status: "pending_confirmation",
+						action: "create",
+						roleId: draft.template.id,
+						roleName: draft.template.name,
+						newSkillCount: draft.newSkills?.length ?? 0,
+						note: "已暂存新建角色提案，本轮回复中将展示确认卡，经用户确认后生效。",
+					};
+				}
+				const target = visibleMembers.find((member) => member.id === call.memberId);
+				if (!target) {
+					throw new Error(`Role "${call.memberId}" was not found in the current visible scope`);
+				}
+				const targetTemplate = deps.getTemplateForMember(target);
+				const adjustment: MetaArchitectRoleAdjustment = {
+					memberId: target.id,
+					memberName: target.displayName,
+					currentTools: targetTemplate?.tools ?? [],
+					...(call.addAntiJobs?.length ? { addAntiJobs: call.addAntiJobs } : {}),
+					...(call.workflowNote ? { workflowNote: call.workflowNote } : {}),
+					rationale: call.rationale,
+				};
+				const existingIdx = stagedRoleAdjustments.findIndex((item) => item.memberId === adjustment.memberId);
+				if (existingIdx < 0) stagedRoleAdjustments.push(adjustment);
+				else stagedRoleAdjustments[existingIdx] = adjustment;
+				return {
+					staged: true,
+					status: "pending_confirmation",
+					action: "update",
+					memberId: target.id,
+					memberName: target.displayName,
+					note: "已暂存角色调整提案，本轮回复中将展示确认卡，经用户确认后生效。",
+				};
+			}
 			if (isArchitect) throw new Error("Role architect cannot execute team tools");
 			if (call.tool === "read_space") {
 				if (sessionMode !== "lead" && sessionMode !== "internal")
@@ -828,6 +943,18 @@ export async function executeWithWorkerPass(
 											...(Array.isArray(rawArgs.scripts) ? { scriptCount: rawArgs.scripts.length } : {}),
 										}
 									: {}),
+								...(toolName === "propose_role"
+									? {
+											...(typeof rawArgs.action === "string" ? { action: rawArgs.action.slice(0, 16) } : {}),
+											...(typeof rawArgs.name === "string" ? { name: rawArgs.name.slice(0, 80) } : {}),
+											...(typeof rawArgs.memberId === "string"
+												? { memberId: rawArgs.memberId.slice(0, 120) }
+												: {}),
+											...(typeof rawArgs.rationale === "string"
+												? { rationale: rawArgs.rationale.slice(0, 240) }
+												: {}),
+										}
+									: {}),
 							}
 						: undefined;
 				deps.store.appendMessage({
@@ -1169,6 +1296,18 @@ export async function executeWithWorkerPass(
 				const existingIdx = effects.skillProposals.findIndex((item) => item.name === proposal.name);
 				if (existingIdx < 0) effects.skillProposals.push(proposal);
 				else effects.skillProposals[existingIdx] = proposal;
+			}
+			for (const blueprint of stagedRoleBlueprints) {
+				const existingIdx = effects.roleBlueprints.findIndex(
+					(item) => item.draft.template.id === blueprint.draft.template.id,
+				);
+				if (existingIdx < 0) effects.roleBlueprints.push(blueprint);
+				else effects.roleBlueprints[existingIdx] = blueprint;
+			}
+			for (const adjustment of stagedRoleAdjustments) {
+				const existingIdx = effects.roleAdjustments.findIndex((item) => item.memberId === adjustment.memberId);
+				if (existingIdx < 0) effects.roleAdjustments.push(adjustment);
+				else effects.roleAdjustments[existingIdx] = adjustment;
 			}
 			mergeEffects(input.effectsTarget, effects);
 		}

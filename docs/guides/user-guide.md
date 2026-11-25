@@ -137,6 +137,6 @@ AI 忙碌时仍能发送消息，发送后的提示会说明本条消息是否�
 | 组织共享（`org`） | 组织管理员或超级管理员创建，成员在所属组织内使用 | `.data/roles/orgs/<orgId>/` |
 | 个人私有（`personal`） | 活跃的普通成员也可按配额创建。只有创建者可以查看、使用和管理 | `.data/roles/users/<userId>/` |
 
-快速创建角色或通过角色架构师设计岗位时，可以同时生成 Skill 草案。勾选要采用的草案，再编辑 ID、正文和位置。确认创建或应用提案后，工作台才将所选 Skill 保存到角色包的 `skills/<name>/SKILL.md` 或所选的全局、组织、个人 Skill 库。
+通过角色架构师或任意支持角色设计的岗位（借助 `read_team_roles` / `propose_role`）规划岗位时，可以同时生成 Skill 草案。勾选要采用的草案，再编辑 ID、正文和位置。在确认卡中点击应用后，工作台才将所选角色与 Skill 保存到角色包的 `skills/<name>/SKILL.md` 或所选的全局、组织、个人 Skill 库。
 
 需要在团队启用完整方法包时，请由管理员按[pstack 配置步骤](pstack-runtime.md)操作。

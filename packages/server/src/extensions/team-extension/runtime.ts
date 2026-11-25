@@ -7,6 +7,8 @@ export const TEAM_EXTENSION_TOOLS = [
 	"save_space_page",
 	"delegate_to_member",
 	"propose_skill",
+	"read_team_roles",
+	"propose_role",
 ] as const satisfies readonly TeamToolCall["tool"][];
 
 export function prepareTeamExtension({
@@ -28,9 +30,13 @@ export function prepareTeamExtension({
 	const canSaveSpace = !isArchitect && isLead && isMatterLead && !discussionMode;
 	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
 	const canCaptureSkill = !isArchitect && !discussionMode && (isLead || isInternal);
+	const canManageRoles = isLead && !discussionMode;
 
 	const entries: string[] = [resolveBuiltinExtensionPath("worker-runtime")];
 	const tools: TeamToolCall["tool"][] = [];
+	if (canManageRoles) {
+		tools.push("read_team_roles", "propose_role");
+	}
 	if (canReadSpace) {
 		entries.push(resolveBuiltinExtensionPath("space"));
 		tools.push("read_space");
@@ -52,6 +58,7 @@ export function prepareTeamExtension({
 		canSaveSpace,
 		canDelegate,
 		canCaptureSkill,
+		canManageRoles,
 		buildEnvironment({
 			bridgeEnv,
 			requiredTools,
@@ -80,6 +87,7 @@ export function prepareTeamExtension({
 					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
 					: {}),
 				PA_CAN_SAVE_SPACE: String(canSaveSpace),
+				PA_CAN_MANAGE_ROLES: String(canManageRoles),
 				PA_REQUIRED_TOOLS: JSON.stringify(requiredTools),
 				PA_MEMBER_CONTEXT: memberContext.filter(Boolean).join("\n\n"),
 				PA_TURN_CONTEXT: turnContext.filter(Boolean).join("\n\n"),

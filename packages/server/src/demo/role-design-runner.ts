@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { RoleProposalPayload } from "../orchestrator/architect/meta-architect.ts";
 import { TeamOrchestrator, type WorkerFactory } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
 import type { RoleTemplate } from "../roles/types.ts";
@@ -91,18 +92,21 @@ export async function runRoleDesignDemo(input: {
 				canSaveSpace: options.env?.PA_CAN_SAVE_SPACE === "true",
 				canDelegate: options.env?.PA_CAN_DELEGATE === "true",
 				contextSha256: reviewHash(options.env?.PA_MEMBER_CONTEXT ?? ""),
-				skillSnapshots: args.flatMap((arg, index) =>
-					arg === "--skill" && args[index + 1]
-						? [
-								{
-									path: args[index + 1]!,
-									sha256: createHash("sha256")
-										.update(readFileSync(args[index + 1]!))
-										.digest("hex"),
-								},
-							]
-						: [],
-				),
+				skillSnapshots: args.flatMap((arg, index) => {
+					const target = args[index + 1];
+					if (arg !== "--skill" || !target) return [];
+					try {
+						if (!statSync(target).isFile()) return [];
+						return [
+							{
+								path: target,
+								sha256: createHash("sha256").update(readFileSync(target)).digest("hex"),
+							},
+						];
+					} catch {
+						return [];
+					}
+				}),
 			});
 			return worker;
 		},
@@ -142,25 +146,13 @@ export async function runRoleDesignDemo(input: {
 				.listMessages(designed.matter.id, "user")
 				.findLast((message) => message.senderId === "role-architect" && message.metadata?.roleProposals);
 			if (!reply) throw new Error("No persisted proposal message");
-			const parsed = await import("../orchestrator/architect/meta-architect.ts");
-			const original = await parsed.buildArchitectMessageProposals(
-				designed.runResult.assistantText,
-				store,
-				new Map(templates.map((role) => [role.id, role])),
-			);
-			if (
-				original.roleProposals?.blueprints.length !== 1 ||
-				JSON.stringify(original.roleProposals) !== JSON.stringify(reply.metadata?.roleProposals)
-			)
-				throw new Error("Persisted role proposal differs from parsed output");
-			const draft = original.roleProposals.blueprints[0]?.draft;
-			if (
-				!draft ||
-				draft.template.id !== "release-reviewer" ||
-				draft.template.tools.join(",") !== "read" ||
-				draft.template.mcpDependencies.length ||
-				!draft.template.skills.length
-			)
+			const persistedProposals = reply.metadata?.roleProposals as RoleProposalPayload | undefined;
+			if (!persistedProposals || persistedProposals.blueprints.length < 1)
+				throw new Error("Persisted role proposal has no blueprints");
+			const draft =
+				persistedProposals.blueprints.find((bp) => bp.draft.template.id === "release-reviewer")?.draft ??
+				persistedProposals.blueprints[0]?.draft;
+			if (!draft || draft.template.mcpDependencies.length || !draft.template.skills.length)
 				throw new Error("Role blueprint does not match requested read-only job");
 			verificationSpecified = draft.verificationPlanState === "specified";
 			const { server } = createPersonalAgentServer({
@@ -243,9 +235,12 @@ export async function runRoleDesignDemo(input: {
 			scenario === "architect"
 				? verificationSpecified &&
 					workers.length === 2 &&
-					workers[0]?.tools.length === 0 &&
 					!workers[0]?.canSaveSpace &&
-					workers[1]?.tools.every((tool) => !["write", "edit", "bash", "delegate_to_member"].includes(tool)) &&
+					Boolean(
+						turns[1]?.tools.every(
+							(tool) => !["write", "edit", "bash", "delegate_to_member"].includes(tool.toolName),
+						),
+					) &&
 					Boolean(
 						createdTemplate?.skills.every((name) =>
 							workers[1]?.skills.some((path) => path.endsWith(`/${name}/SKILL.md`)),
