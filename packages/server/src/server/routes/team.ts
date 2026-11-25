@@ -1,6 +1,8 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { isSkillStorageTarget, readSkillProposals, type SkillStorageTarget } from "@pa/contracts/skill-proposal";
 import { readHumanDecision } from "../../orchestrator/human-decision.ts";
-import { validateSkillReference } from "../../roles/capabilities.ts";
+import { resolveRoleSkillPath, validateSkillReference } from "../../roles/capabilities.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import {
 	buildScopedRoleId,
@@ -498,6 +500,71 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 		const member = store.setPrimaryContact(memberId);
 		broadcast("team_updated", { memberId: member.id });
 		sendJson(res, 200, { member });
+		return true;
+	}
+
+	const memberSkillDetailMatch = pathname.match(/^\/api\/members\/([^/]+)\/skills\/detail$/);
+	if (method === "GET" && memberSkillDetailMatch) {
+		if (!requireActiveActor(res, actor)) return true;
+		const memberId = decodeURIComponent(memberSkillDetailMatch[1]!);
+		const member = store.getMember(memberId);
+		if (!member) {
+			sendError(res, 404, `Member not found: ${memberId}`);
+			return true;
+		}
+		if (!canActorUseMember(store, actor, member)) {
+			sendError(res, 403, "无权查看其他组织或他人的私有角色技能");
+			return true;
+		}
+		const template = orchestrator.getTemplateForMember(member);
+		if (!template) {
+			sendError(res, 404, `Role template not found for member: ${memberId}`);
+			return true;
+		}
+		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
+		const skillRef = (parsedUrl.searchParams.get("skill") ?? "").trim();
+		if (!skillRef || !template.skills.includes(skillRef)) {
+			sendError(res, 404, "该角色未声明此技能");
+			return true;
+		}
+		const resolvedPath = resolveRoleSkillPath(skillRef, template, { skillsDir: ctx.skillsDir });
+		if (!resolvedPath || !existsSync(resolvedPath)) {
+			sendError(res, 404, `未在磁盘找到技能文件：${skillRef}`);
+			return true;
+		}
+		const MAX_CHARS = 64 * 1024;
+		const readBounded = (target: string) => {
+			const raw = readFileSync(target, "utf8");
+			return raw.length <= MAX_CHARS ? raw : `${raw.slice(0, MAX_CHARS)}\n\n…（内容超过 64KB，已截断预览）`;
+		};
+		const skillDir = dirname(resolvedPath);
+		const scriptsDir = resolve(skillDir, "scripts");
+		const scripts: Array<{ path: string; content: string }> = [];
+		if (existsSync(scriptsDir)) {
+			try {
+				for (const entry of readdirSync(scriptsDir, { withFileTypes: true })) {
+					if (!entry.isFile() || entry.name.startsWith(".")) continue;
+					scripts.push({
+						path: `scripts/${entry.name}`,
+						content: readBounded(resolve(scriptsDir, entry.name)),
+					});
+				}
+				scripts.sort((a, b) => a.path.localeCompare(b.path));
+			} catch {
+				// Ignore unreadable scripts directory
+			}
+		}
+		const isOwner = isSuperAdminActor(actor) || actor.authKind === "loopback";
+		const nameMatch = skillRef.match(/^skills\/([^/]+)\/SKILL\.md$/);
+		sendJson(res, 200, {
+			detail: {
+				name: nameMatch?.[1] ?? skillRef,
+				skillRef,
+				filePath: isOwner ? resolvedPath : basename(resolvedPath),
+				content: readBounded(resolvedPath),
+				scripts,
+			},
+		});
 		return true;
 	}
 

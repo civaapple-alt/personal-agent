@@ -88,7 +88,6 @@ export function RoleProposalCard({
 		Object.fromEntries(proposals.blueprints.map((bp, idx) => [idx, bp.draft.newSkills ?? []])),
 	);
 	const [selectedNewSkillsByBlueprint, setSelectedNewSkillsByBlueprint] = useState<Record<number, number[]>>({});
-	const [toolsByBlueprint, setToolsByBlueprint] = useState<Record<number, string[]>>({});
 	const [isReplyEditorOpen, setReplyEditorOpen] = useState(false);
 	const [replyText, setReplyText] = useState("");
 	const [sendingReply, setSendingReply] = useState(false);
@@ -171,7 +170,7 @@ export function RoleProposalCard({
 						skills: draft.template.skills,
 						...(confirmedNewSkills.length > 0 ? { newSkills: confirmedNewSkills } : {}),
 						mcpDependencies: draft.template.mcpDependencies,
-						tools: toolsByBlueprint[idx] ?? draft.template.tools,
+						tools: draft.template.tools,
 						antiJobs: draft.antiJobs,
 						sections: draft.template.sections,
 						isPrimaryContact: false,
@@ -411,7 +410,6 @@ export function RoleProposalCard({
 						const disabled = proposals.status !== "pending" || !canApplyBlueprints;
 						const bpNewSkills = newSkillsByBlueprint[idx] ?? bp.draft.newSkills ?? [];
 						const bpSelectedSkillIndices = selectedNewSkillsByBlueprint[idx] ?? [];
-						const activeTools = toolsByBlueprint[idx] ?? bp.draft.template.tools;
 						return (
 							<div
 								key={`${bp.draft.template.id}-${idx}`}
@@ -435,34 +433,11 @@ export function RoleProposalCard({
 									<p>{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}</p>
 									<details className="architect-proposal-details">
 										<summary>
-											职责、工具与 Skill
+											职责、边界与 Skill
 											{bpNewSkills.length > 0
 												? `（已选 ${bpSelectedSkillIndices.length} / ${bpNewSkills.length} 个 Skill）`
 												: ""}
 										</summary>
-										{bp.draft.template.tools.length > 0 && (
-											<fieldset className="architect-tool-choices">
-												<legend>工作区工具</legend>
-												{bp.draft.template.tools.map((tool) => (
-													<label key={tool} className="checkbox-label">
-														<input
-															type="checkbox"
-															checked={activeTools.includes(tool)}
-															disabled={disabled || !checked}
-															onChange={() =>
-																setToolsByBlueprint((previous) => ({
-																	...previous,
-																	[idx]: activeTools.includes(tool)
-																		? activeTools.filter((name) => name !== tool)
-																		: [...activeTools, tool],
-																}))
-															}
-														/>
-														{tool}
-													</label>
-												))}
-											</fieldset>
-										)}
 										<RoleCapabilityDetails draft={bp.draft} />
 										{bp.draft.antiJobs.length > 0 && (
 											<div className="architect-blueprint-anti">

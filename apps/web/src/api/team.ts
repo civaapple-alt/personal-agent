@@ -281,6 +281,21 @@ export function exportMemberPackage(memberId: string): Promise<{
 	return requestJson(`/api/members/${encodeURIComponent(memberId)}/export`);
 }
 
+export interface MemberSkillDetailDto {
+	name: string;
+	skillRef: string;
+	filePath: string;
+	content: string;
+	scripts: Array<{ path: string; content: string }>;
+}
+
+export function fetchMemberSkillDetail(memberId: string, skillRef: string): Promise<{ detail: MemberSkillDetailDto }> {
+	const query = new URLSearchParams({ skill: skillRef });
+	return requestJson<{ detail: MemberSkillDetailDto }>(
+		`/api/members/${encodeURIComponent(memberId)}/skills/detail?${query.toString()}`,
+	);
+}
+
 export function importMemberPackage(
 	markdown: string,
 	options?: { roleScope?: RoleScope; ownerOrgId?: string | null },

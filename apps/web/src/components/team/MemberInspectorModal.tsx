@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+	fetchMemberSkillDetail,
+	type MemberSkillDetailDto,
 	type OrganizationDto,
 	type RoleTemplateDto,
 	type TeamMemberDto,
@@ -8,7 +10,28 @@ import {
 } from "../../api.ts";
 import { getMemberScopeBadge } from "../../architectApi.ts";
 import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
+import { ModalDialog } from "../../primitives/ModalDialog.tsx";
 import { defaultMemberGitName, formatMemberGitIdentity, getBotTheme } from "../../utils.ts";
+
+function formatMemberSkillLabel(skillRef: string): string {
+	const roleLocal = skillRef.match(/^skills\/([^/]+)\/SKILL\.md$/);
+	if (roleLocal?.[1]) return `${roleLocal[1]} · 角色专属`;
+	return skillRef;
+}
+
+function extractCoreResponsibilities(raw: string, hasAntiJobsSection: boolean): string {
+	const cleaned = raw
+		.replace(/\*\*([^*]+)\*\*/g, "$1")
+		.split(/\r?\n|(?=-\s*不做\s*\/\s*边界)/)
+		.map((line) => line.replace(/^[-*]\s*/, "").trim())
+		.filter((line) => {
+			if (!line) return false;
+			if (hasAntiJobsSection && /^不做\s*\/\s*边界[：:]/.test(line)) return false;
+			return true;
+		})
+		.map((line) => line.replace(/^核心唯一职责[：:]\s*/, "").trim());
+	return cleaned.join("\n").trim();
+}
 
 interface MemberInspectorModalProps {
 	member: TeamMemberDto | null;
@@ -48,6 +71,11 @@ export function MemberInspectorModal({
 	const [editGitEmail, setEditGitEmail] = useState("");
 	const [editIdentitySummary, setEditIdentitySummary] = useState("");
 	const [savingIdentity, setSavingIdentity] = useState(false);
+	const [previewSkillRef, setPreviewSkillRef] = useState<string | null>(null);
+	const [previewSkillDetail, setPreviewSkillDetail] = useState<MemberSkillDetailDto | null>(null);
+	const [previewSkillTab, setPreviewSkillTab] = useState<string>("SKILL.md");
+	const [loadingSkill, setLoadingSkill] = useState(false);
+	const [skillError, setSkillError] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (!member) return;
@@ -56,9 +84,26 @@ export function MemberInspectorModal({
 		setEditGitName(member.gitName || defaultMemberGitName(member));
 		setEditGitEmail(member.gitEmail || `${member.id}@team.local`);
 		setEditIdentitySummary(member.identitySummary || "");
+		setPreviewSkillRef(null);
 	}, [member]);
 
 	if (!member) return null;
+
+	const handleOpenSkill = async (skillRef: string) => {
+		setPreviewSkillRef(skillRef);
+		setPreviewSkillDetail(null);
+		setPreviewSkillTab("SKILL.md");
+		setSkillError(null);
+		setLoadingSkill(true);
+		try {
+			const { detail } = await fetchMemberSkillDetail(member.id, skillRef);
+			setPreviewSkillDetail(detail);
+		} catch (err) {
+			setSkillError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setLoadingSkill(false);
+		}
+	};
 
 	const theme = getBotTheme(memberIndex >= 0 ? memberIndex : 0);
 	const effectiveMemberForGit =
@@ -202,18 +247,39 @@ export function MemberInspectorModal({
 							<div className="architect-preview-pane">
 								<h4>核心职责与能力标签</h4>
 								{template.responsibilities && (
-									<p className="architect-preview-copy">{template.responsibilities}</p>
+									<p className="architect-preview-copy" style={{ whiteSpace: "pre-line" }}>
+										{extractCoreResponsibilities(
+											template.responsibilities,
+											Boolean(template.antiJobs && template.antiJobs.length > 0),
+										)}
+									</p>
 								)}
-								{(template.keywords.length > 0 || template.skills.length > 0) && (
-									<div className="tag-list">
+								{template.skills.length > 0 && (
+									<div style={{ marginTop: 8 }}>
+										<div className="muted-tiny" style={{ marginBottom: 4 }}>
+											配套技能（点击浮窗查看 SKILL.md）
+										</div>
+										<div className="tag-list">
+											{template.skills.map((sk) => (
+												<button
+													key={sk}
+													type="button"
+													className="tag-chip skill"
+													style={{ cursor: "pointer", border: "none" }}
+													title={`点击查看 ${sk}`}
+													onClick={() => void handleOpenSkill(sk)}
+												>
+													{formatMemberSkillLabel(sk)}
+												</button>
+											))}
+										</div>
+									</div>
+								)}
+								{template.keywords.length > 0 && (
+									<div className="tag-list" style={{ marginTop: 8 }}>
 										{template.keywords.map((kw) => (
 											<span key={kw} className="tag-chip">
 												#{kw}
-											</span>
-										))}
-										{template.skills.map((sk) => (
-											<span key={sk} className="tag-chip skill">
-												{sk}
 											</span>
 										))}
 									</div>
@@ -233,9 +299,7 @@ export function MemberInspectorModal({
 					)}
 
 					<div className="form-footer">
-						<span className="muted-tiny">
-							岗位建议工具：{template?.tools.length ? template.tools.join(", ") : "无"}（不限制运行工具）
-						</span>
+						<span className="muted-tiny">运行工具：共享 Pi 默认工具（边界由职责与 Anti-Jobs 约束）</span>
 						<div className="ui-row-actions">
 							<button type="button" className="btn-pill-outline" onClick={onClose}>
 								{canEditIdentity ? "取消" : "关闭"}
@@ -254,6 +318,62 @@ export function MemberInspectorModal({
 					</div>
 				</div>
 			</div>
+
+			<ModalDialog
+				open={Boolean(previewSkillRef)}
+				title={previewSkillDetail ? previewSkillDetail.name : (previewSkillRef ?? "")}
+				subtitle={previewSkillDetail?.filePath}
+				size="lg"
+				onClose={() => setPreviewSkillRef(null)}
+				footer={
+					<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewSkillRef(null)}>
+						关闭
+					</button>
+				}
+			>
+				{loadingSkill ? (
+					<p className="muted-sm">正在读取 SKILL.md 内容…</p>
+				) : skillError ? (
+					<div className="approval-card" role="alert">
+						读取失败：{skillError}
+					</div>
+				) : previewSkillDetail ? (
+					<div className="stack-gap-sm">
+						{previewSkillDetail.scripts.length > 0 && (
+							<div className="actions-row compact" role="tablist" aria-label="Skill 文件切换">
+								<button
+									type="button"
+									role="tab"
+									aria-selected={previewSkillTab === "SKILL.md"}
+									className={`choice-chip ${previewSkillTab === "SKILL.md" ? "active" : ""}`}
+									onClick={() => setPreviewSkillTab("SKILL.md")}
+								>
+									SKILL.md
+								</button>
+								{previewSkillDetail.scripts.map((script) => (
+									<button
+										key={script.path}
+										type="button"
+										role="tab"
+										aria-selected={previewSkillTab === script.path}
+										className={`choice-chip ${previewSkillTab === script.path ? "active" : ""}`}
+										onClick={() => setPreviewSkillTab(script.path)}
+									>
+										{script.path}
+									</button>
+								))}
+							</div>
+						)}
+						<pre className="pa-viz-code skills-modal-code">
+							<code>
+								{previewSkillTab === "SKILL.md"
+									? previewSkillDetail.content
+									: (previewSkillDetail.scripts.find((s) => s.path === previewSkillTab)?.content ?? "")}
+							</code>
+						</pre>
+					</div>
+				) : null}
+			</ModalDialog>
 		</div>
 	);
 }
