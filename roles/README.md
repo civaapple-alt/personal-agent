@@ -4,6 +4,7 @@
 
 | 初始资产 | 主要职责 |
 | --- | --- |
+| [pi-default.md](pi-default.md) | 原汁原味单兵 Pi 助手（`roleKind: solo`）：不挂载多角色委托，保留 `space` / `propose_skill` / `visualize` / `human-question` / `next-steps` / `propose_role` 等 PA 扩展能力，适合「先单兵跑透、后专业化拆岗」 |
 | [product-manager.md](product-manager.md) | 澄清需求、组织专业意见、定义范围与验收；新安装时的默认主要联系人 |
 | [engineering-manager.md](engineering-manager.md) | 核查仓库事实、技术设计和授权范围内的实现 |
 | [qa-manager.md](qa-manager.md) | 验证计划、回归影响和实际验收证据 |

@@ -168,7 +168,7 @@ export function parseRoleTemplateMarkdown(
 	const body = normalized.slice(closingIdx + 5).trim();
 	const meta = parseFrontmatter(frontmatterRaw);
 
-	const roleKind = meta.roleKind === "architect" ? "architect" : undefined;
+	const roleKind = meta.roleKind === "architect" ? "architect" : meta.roleKind === "solo" ? "solo" : undefined;
 	const responsibilityKeywords = meta.responsibilityKeywords;
 	const forcedScope = normalizeScopeOverride(explicitScope);
 	const parsedScope = parseRoleScope(meta.roleScope) ?? "global";
@@ -308,7 +308,7 @@ export function serializeRoleTemplateMarkdown(template: RoleTemplate): string {
 		`id: ${template.id}`,
 		`name: ${template.name}`,
 		`title: ${template.title}`,
-		...(template.roleKind === "architect" ? ["roleKind: architect"] : []),
+		...(template.roleKind === "architect" || template.roleKind === "solo" ? [`roleKind: ${template.roleKind}`] : []),
 		...(template.roleScope && template.roleScope !== "global" ? [`roleScope: ${template.roleScope}`] : []),
 		...(template.roleScope === "org" && template.ownerOrgId ? [`ownerOrgId: ${template.ownerOrgId}`] : []),
 		...(template.roleScope === "personal" && template.ownerUserId ? [`ownerUserId: ${template.ownerUserId}`] : []),

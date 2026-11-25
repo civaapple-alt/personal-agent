@@ -456,9 +456,17 @@ export function applyRoleTemplatePatch(template: RoleTemplate, patch: RoleTempla
 /** Reserved role/member ID for the built-in Meta-Bot Role Architect. */
 export const ROLE_ARCHITECT_MEMBER_ID = "role-architect";
 
+/** Built-in solo Pi assistant role ID (native Pi terminal behavior + PA extensions, without team delegation). */
+export const PI_DEFAULT_MEMBER_ID = "pi-default";
+
 /** True when a role template or member identity represents the Meta-Bot Role Architect. */
 export function isArchitectRoleTemplate(template: Pick<RoleTemplate, "id" | "roleKind"> | null | undefined): boolean {
 	return Boolean(template && (template.roleKind === "architect" || template.id === ROLE_ARCHITECT_MEMBER_ID));
+}
+
+/** True when a role template or member identity represents a solo Pi assistant (no team delegation). */
+export function isSoloRoleTemplate(template: Pick<RoleTemplate, "id" | "roleKind"> | null | undefined): boolean {
+	return Boolean(template && (template.roleKind === "solo" || template.id === PI_DEFAULT_MEMBER_ID));
 }
 
 const ARCHITECT_SECTIONS = {

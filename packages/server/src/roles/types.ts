@@ -6,7 +6,7 @@ export interface RoleTemplateSections {
 	deliveryAndVerification: string;
 }
 
-export type RoleKind = "business" | "architect";
+export type RoleKind = "business" | "architect" | "solo";
 
 export type RoleScope = "global" | "org" | "personal";
 

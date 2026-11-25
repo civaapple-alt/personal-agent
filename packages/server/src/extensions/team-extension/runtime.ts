@@ -15,12 +15,14 @@ export function prepareTeamExtension({
 	sessionMode,
 	discussionMode,
 	isArchitect,
+	isSolo = false,
 	hasConsultTargets,
 	isMatterLead = true,
 }: {
 	sessionMode: WorkerSessionMode;
 	discussionMode: boolean;
 	isArchitect: boolean;
+	isSolo?: boolean;
 	hasConsultTargets: boolean;
 	isMatterLead?: boolean;
 }) {
@@ -28,7 +30,7 @@ export function prepareTeamExtension({
 	const isInternal = sessionMode === "internal";
 	const canReadSpace = !isArchitect && (isLead || isInternal);
 	const canSaveSpace = !isArchitect && isLead && isMatterLead && !discussionMode;
-	const canDelegate = !isArchitect && (isInternal || (isLead && hasConsultTargets));
+	const canDelegate = !isArchitect && !isSolo && (isInternal || (isLead && hasConsultTargets));
 	const canCaptureSkill = !isArchitect && !discussionMode && (isLead || isInternal);
 	const canManageRoles = isLead && !discussionMode;
 

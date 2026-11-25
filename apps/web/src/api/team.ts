@@ -35,7 +35,7 @@ export interface RoleTemplateDto {
 	id: string;
 	name: string;
 	title: string;
-	roleKind?: "business" | "architect";
+	roleKind?: "business" | "architect" | "solo";
 	roleScope?: RoleScope;
 	ownerOrgId?: string | null;
 	ownerUserId?: string | null;

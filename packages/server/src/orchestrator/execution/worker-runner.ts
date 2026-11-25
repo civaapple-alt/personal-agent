@@ -10,7 +10,7 @@ import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
 import type { WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
 import { assessRoleCapabilities } from "../../roles/capabilities.ts";
-import { buildRoleDesignDraft, isArchitectRoleTemplate } from "../../roles/role-architect.ts";
+import { buildRoleDesignDraft, isArchitectRoleTemplate, isSoloRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleScope, RoleTemplate } from "../../roles/types.ts";
 import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
 import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
@@ -143,10 +143,12 @@ export async function executeWithWorkerPass(
 	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
 	const template = deps.getTemplateForMember(input.member);
 	const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
+	const isSolo = isSoloRoleTemplate(template ?? { id: input.member.id });
 	const teamExtension = prepareTeamExtension({
 		sessionMode,
 		discussionMode: isDiscussionMode,
 		isArchitect,
+		isSolo,
 		hasConsultTargets,
 		isMatterLead,
 	});

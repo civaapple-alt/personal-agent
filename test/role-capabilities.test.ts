@@ -30,7 +30,9 @@ test("All built-in roles load declared methods, explicit boundaries and round-tr
 	const templates = [...(await loadRoleTemplatesFromDir(resolve("roles"))), BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	for (const template of templates) {
 		assert.ok(template.antiJobs?.length, template.id);
-		assert.ok((await resolveRoleSkills(template)).length > 0, template.id);
+		if (template.roleKind !== "solo") {
+			assert.ok((await resolveRoleSkills(template)).length > 0, template.id);
+		}
 		const parsed = parseRoleTemplateMarkdown(serializeRoleTemplateMarkdown(template));
 		assert.deepEqual(parsed.skills, template.skills);
 		assert.deepEqual(parsed.responsibilityKeywords, template.responsibilityKeywords);

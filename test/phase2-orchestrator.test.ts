@@ -108,12 +108,19 @@ class FakeRpcWorker implements RpcWorkerLike {
 	}
 }
 
-test("loads 5 shareable role templates alongside README and serializes without private state", async () => {
+test("loads 6 shareable role templates alongside README and serializes without private state", async () => {
 	const rolesDir = resolve(process.cwd(), "roles");
 	const templates = await loadRoleTemplatesFromDir(rolesDir);
 	const ids = templates.map((t) => t.id).sort();
 
-	assert.deepEqual(ids, ["engineering-manager", "marketing-lead", "product-manager", "qa-manager", "role-architect"]);
+	assert.deepEqual(ids, [
+		"engineering-manager",
+		"marketing-lead",
+		"pi-default",
+		"product-manager",
+		"qa-manager",
+		"role-architect",
+	]);
 	const pm = templates.find((t) => t.id === "product-manager")!;
 	assert.equal(pm.isPrimaryContact, true);
 	assert.equal(pm.shareable, true);

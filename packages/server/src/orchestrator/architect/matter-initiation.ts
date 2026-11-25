@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
 	isArchitectRoleTemplate,
+	isSoloRoleTemplate,
 	type RoleInteractionStyle,
 	type RoleWorkspaceScope,
 } from "../../roles/role-architect.ts";
@@ -240,12 +241,10 @@ export function assessMatterInitiation(input: {
 		};
 	}
 
-	const businessMembers = allMembers.filter(
-		(m) =>
-			!isArchitectRoleTemplate(
-				input.templatesByRoleId.get(m.templateId) ?? input.templatesByRoleId.get(m.id) ?? { id: m.id },
-			),
-	);
+	const businessMembers = allMembers.filter((m) => {
+		const tpl = input.templatesByRoleId.get(m.templateId) ?? input.templatesByRoleId.get(m.id) ?? { id: m.id };
+		return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+	});
 	const members = businessMembers.length > 0 ? businessMembers : allMembers;
 	const primary = members.find((m) => m.isPrimaryContact) ?? members[0] ?? null;
 
@@ -566,12 +565,10 @@ export async function assessMatterInitiationWithModel(
 		};
 	}
 
-	const businessMembers = deps.members.filter(
-		(m) =>
-			!isArchitectRoleTemplate(
-				deps.templatesByRoleId.get(m.templateId) ?? deps.templatesByRoleId.get(m.id) ?? { id: m.id },
-			),
-	);
+	const businessMembers = deps.members.filter((m) => {
+		const tpl = deps.templatesByRoleId.get(m.templateId) ?? deps.templatesByRoleId.get(m.id) ?? { id: m.id };
+		return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
+	});
 	const pool = businessMembers.length > 0 ? businessMembers : deps.members;
 	const primary = pool.find((m) => m.isPrimaryContact) ?? pool[0] ?? null;
 	const explicitBusinessId = explicitMember && pool.some((m) => m.id === explicitMember.id) ? explicitMember.id : null;

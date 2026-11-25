@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { HumanDecision } from "@pa/contracts/human-decision";
-import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import { PI_DEFAULT_MEMBER_ID, ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import type { ModelSelection } from "../../rpc/model-selection.ts";
 import type {
 	Matter,
@@ -33,12 +33,14 @@ export class MatterRepo {
 	private resolveEffectiveAiIds(aiMemberIds: string[] | null): string[] {
 		if (aiMemberIds !== null) return aiMemberIds;
 		const all = this.memberRepo.listMembers().map((member) => member.id);
-		const business = all.filter((id) => id !== ROLE_ARCHITECT_MEMBER_ID);
+		const business = all.filter((id) => id !== ROLE_ARCHITECT_MEMBER_ID && id !== PI_DEFAULT_MEMBER_ID);
 		return business.length > 0 ? business : all;
 	}
 
 	private computeAutoObservers(effectiveAiIds: string[], leadMemberId: string | null): string[] {
-		return effectiveAiIds.filter((id) => id !== leadMemberId && id !== ROLE_ARCHITECT_MEMBER_ID);
+		return effectiveAiIds.filter(
+			(id) => id !== leadMemberId && id !== ROLE_ARCHITECT_MEMBER_ID && id !== PI_DEFAULT_MEMBER_ID,
+		);
 	}
 
 	createMatter(input: {

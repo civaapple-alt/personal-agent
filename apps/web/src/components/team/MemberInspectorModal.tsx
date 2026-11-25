@@ -189,6 +189,9 @@ export function MemberInspectorModal({
 								<span className="pill live">{isPrimary !== undefined ? "主联系" : "默认主联系"}</span>
 							)}
 							{isArchitect && <span className="pill">内置角色设计</span>}
+							{(template?.roleKind === "solo" || member.id === "pi-default") && (
+								<span className="pill">单兵 Pi</span>
+							)}
 							<span className={`pill role-scope-pill is-${getMemberScopeBadge(member, organizationName).scope}`}>
 								{getMemberScopeBadge(member, organizationName).label}
 							</span>

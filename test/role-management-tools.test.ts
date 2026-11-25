@@ -7,6 +7,7 @@ import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/
 import workerRuntimeExtension, { type WorkerRuntimeExtensionApi } from "../pa-extensions/worker-runtime/pi/index.ts";
 import { prepareTeamExtension } from "../packages/server/src/extensions/team-extension/runtime.ts";
 import type { RoleProposalPayload } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
+import { buildMemberPrompts } from "../packages/server/src/orchestrator/execution/prompts.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../packages/server/src/roles/role-architect.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
@@ -291,4 +292,51 @@ test("non-architect lead role can read_team_roles and stage propose_role proposa
 	});
 	const abortedMsg = store.listMessages(aborted.matter.id, "user").findLast((m) => m.senderId === "product-manager");
 	assert.equal(abortedMsg?.metadata?.roleProposals, undefined);
+});
+
+test("pi-default solo role disables delegate_to_member while preserving PA extensions and native Pi prompt", async () => {
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const piDefault = templates.find((t) => t.id === "pi-default");
+	assert.ok(piDefault);
+	assert.equal(piDefault.roleKind, "solo");
+
+	const soloExt = prepareTeamExtension({
+		sessionMode: "lead",
+		discussionMode: false,
+		isArchitect: false,
+		isSolo: true,
+		hasConsultTargets: true,
+	});
+	assert.equal(soloExt.canDelegate, false);
+	assert.ok(!soloExt.tools.includes("delegate_to_member"));
+	assert.equal(soloExt.canReadSpace, true);
+	assert.equal(soloExt.canSaveSpace, true);
+	assert.equal(soloExt.canCaptureSkill, true);
+	assert.equal(soloExt.canManageRoles, true);
+
+	const { systemPrompt, turnContext } = buildMemberPrompts({
+		member: {
+			id: "pi-default",
+			templateId: "pi-default",
+			displayName: "Pi Default",
+			roleTitle: "Solo Pi Assistant",
+			gitName: "Pi Default",
+			gitEmail: "pi-default@team.local",
+			identitySummary: "",
+			roleScope: "global",
+			isPrimaryContact: false,
+			keywords: piDefault.keywords,
+			createdAt: "2026-11-25T00:00:00.000Z",
+			updatedAt: "2026-11-25T00:00:00.000Z",
+		},
+		template: piDefault,
+		workspace: null,
+		sessionMode: "lead",
+		teamMembers: [],
+		teamCapabilities: "synthetic capability card",
+	});
+	assert.match(systemPrompt, /solo Pi assistant/i);
+	assert.doesNotMatch(systemPrompt, /Personal Agent team/);
+	assert.doesNotMatch(turnContext, /## Current team/);
+	assert.doesNotMatch(turnContext, /## Team capability evidence/);
 });

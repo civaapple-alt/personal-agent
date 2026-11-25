@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
 	isArchitectRoleTemplate,
+	isSoloRoleTemplate,
 	type RoleArchitectDraft,
 	type RoleDesignBriefInput,
 } from "../roles/role-architect.ts";
@@ -234,6 +235,13 @@ export class TeamOrchestrator {
 		);
 	}
 
+	private isSoloMember(member: TeamMember | null | undefined): boolean {
+		if (!member) return false;
+		return isSoloRoleTemplate(
+			this.templatesById.get(member.templateId) ?? this.templatesById.get(member.id) ?? { id: member.id },
+		);
+	}
+
 	private resolveMatterAiMembers(matter: Matter | null, actorUserId?: string | null): TeamMember[] {
 		const orgId = matter?.orgId ?? null;
 		const effectiveUserId = actorUserId === undefined ? (matter?.createdByUserId ?? null) : actorUserId;
@@ -248,7 +256,9 @@ export class TeamOrchestrator {
 			: sharedOrgMembers;
 		if (!matter || matter.aiMemberIds === null) {
 			const business = all.filter((member) => {
-				if (this.isArchitectMember(member) && member.id !== matter?.leadMemberId) return false;
+				if ((this.isArchitectMember(member) || this.isSoloMember(member)) && member.id !== matter?.leadMemberId) {
+					return false;
+				}
 				if (member.roleScope === "personal" && !actorUserId && matter?.createdByUserId !== member.ownerUserId) {
 					return false;
 				}
