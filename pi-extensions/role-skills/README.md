@@ -18,7 +18,7 @@ pi -e ./pi-extensions/role-skills
 
 | 岗位方向 | 具体方法 |
 | --- | --- |
-| 通用 | [技术与成果写作规范](skills/deliverable-writing/SKILL.md) |
+| 通用 | [技术与成果写作规范](skills/deliverable-writing/SKILL.md)、[Skill 设计与编写原则](skills/skill-design/SKILL.md) |
 | 角色架构师 | [职责、能力组合与验证设计](skills/role-design/SKILL.md) |
 | 产品 | [澄清需求](skills/requirement-clarification/SKILL.md)、[范围与优先级](skills/scope-prioritization/SKILL.md)、[验收条件](skills/acceptance-criteria/SKILL.md) |
 | 研发 | [仓库核查](skills/repo-analysis/SKILL.md)、[技术设计](skills/architecture-design/SKILL.md)、[工作拆解](skills/task-breakdown/SKILL.md)、[编码执行](skills/coding-execution/SKILL.md) |

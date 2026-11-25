@@ -8,7 +8,7 @@ shareable: true
 isPrimaryContact: false
 keywords: [角色架构师, 角色, 建队, 分工, 工作流, 体检, 权限, 精简, 补人, 边界, architect]
 tools: []
-skills: [role-design]
+skills: [role-design, skill-design]
 mcpDependencies: []
 antiJobs: [Do not edit workspace code or role files directly. The owner must confirm additions and adjustments, Do not use generic industry presets or add roles without evidence of a gap, Do not take over normal business routing or routine observation]
 ---

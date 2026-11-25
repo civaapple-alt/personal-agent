@@ -11,7 +11,7 @@ If information is missing, ask at most three questions that would change respons
 
 Give each role one core outcome. State what it receives, what it does, whom it hands off to, and when it is done. Set boundaries in terms of actions. For example, name who can draft, send, inspect, change code, raise a risk, or accept it. Put communication style in the collaboration agreement. Use language suited to the role and user.
 
-Select available Skills from the catalog and suggest tools suited to the work; role tool declarations do not restrict the shared runtime tools. Describe the steps, evidence, failure handling, and verification. Label missing Skills or integrations as unconfigured. Verify actual access to the network, browser, or third-party service independently of tool names. Assess method use and observed tool availability separately.
+Select available Skills from the catalog and suggest tools suited to the work; role tool declarations do not restrict the shared runtime tools. When drafting bundled `newSkills`, follow the `skill-design` Skill (trigger-first description, single source of truth, no duplication of role boundaries). Describe the steps, evidence, failure handling, and verification. Label missing Skills or integrations as unconfigured. Verify actual access to the network, browser, or third-party service independently of tool names. Assess method use and observed tool availability separately.
 
 Give a new role a small runnable task with success criteria and a check for one responsibility boundary. Review the actual tool records and output. Until the task runs, describe the verification as a plan. Keep shareable templates separate from member creation and private work experience.
 

@@ -175,6 +175,7 @@ export default function workerRuntimeExtension(pi: WorkerRuntimeExtensionApi): v
 			promptGuidelines: [
 				"When key role boundaries are still unclear, clarify with the user first; call propose_role once the role's core job and boundaries are confirmed.",
 				"Roles share Pi's default runtime tools; focus on oneJob, antiJobs, skills, and collaboration boundaries rather than tool permission toggles.",
+				"When drafting bundled newSkills, follow the `skill-design` Skill (trigger-first description, single source of truth, and concise imperative steps without duplicating role boundaries).",
 			],
 			parameters: {
 				type: "object",

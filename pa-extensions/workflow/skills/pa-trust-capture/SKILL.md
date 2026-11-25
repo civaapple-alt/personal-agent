@@ -20,10 +20,8 @@ Pick the narrowest accurate scope:
 - **`global`** (`.data/skills/global/<name>/`): general methodology useful across all organizations and projects.
 
 ## 3. Authoring Quality `SKILL.md` + `scripts/*`
-- Use a concise lowercase kebab-case `name` (e.g. `release-preflight`, `ci-log-triage`).
-- Write `description` as a sharp trigger sentence so Pi's native Skill discovery loads it at the right moment.
-- Keep `body` concrete: entry criteria, ordered steps, verification checks, and explicit failure boundaries.
-- Attach `scripts` only when deterministic code beats prose; mark runnable scripts with `executable: true` and include a shebang (e.g. `#!/usr/bin/env node` or `#!/usr/bin/env bash`).
+- Follow the `skill-design` Skill for authoring principles (trigger-first `description`, one home per fact, progressive disclosure, no no-op guardrails or one-off bandaids, and verification).
+- Attach `scripts` only when deterministic code beats prose (prefer existing CLI tools when adequate); mark runnable scripts with `executable: true` and include a shebang (e.g. `#!/usr/bin/env node` or `#!/usr/bin/env bash`).
 
 ## 4. Human Confirmation & Graduated Trust (Steps 2 → 3 → 4)
 - **Step 2 (`propose_skill`)**: never writes directly to disk during execution. It stages a confirmation card so the user can inspect `SKILL.md`, review `scripts/*`, adjust scope, and explicitly approve writing to disk. Once approved, Pi natively discovers the saved Skill on subsequent turns.

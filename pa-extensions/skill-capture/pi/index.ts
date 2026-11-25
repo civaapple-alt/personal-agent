@@ -32,6 +32,11 @@ export default function skillCaptureExtension(pi: SkillCaptureExtensionApi): voi
 		label: "提议沉淀 Skill 与脚本",
 		description:
 			"Propose saving a proven, reusable workflow, convention, user correction, or deterministic helper script as a standard Pi Skill (SKILL.md plus optional executable scripts under scripts/) for human confirmation. Never writes directly to disk until the user approves the confirmation card. Use whenever work uncovers a reusable method, rule, or multi-step procedure that should be one-shot repeatable next time.",
+		promptSnippet:
+			"Propose saving a proven workflow or deterministic script as a standard Pi Skill (SKILL.md + scripts/*) for human confirmation.",
+		promptGuidelines: [
+			"Follow the `skill-design` Skill before calling propose_skill: sharp trigger-first description, one home per fact, concise imperative steps, and deterministic scripts/* only when code beats prose.",
+		],
 		parameters: {
 			type: "object",
 			properties: {
