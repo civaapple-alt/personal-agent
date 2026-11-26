@@ -1,3 +1,4 @@
+import { SSE_SYNC_EVENT_NAMES, type SseEventPayloadMap } from "@pa/contracts/sse-events";
 import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto, resolveApiUrl } from "../api.ts";
 
@@ -66,7 +67,7 @@ export function useMatterEventSync({
 			hasConnected = true;
 		});
 		es.addEventListener("text_delta", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; delta: string };
+			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["text_delta"];
 			if (data.matterId === selectedMatterIdRef.current) {
 				markStreamUpdate(data.matterId);
 				setStreamingDelta((prev) => prev + data.delta);
@@ -87,18 +88,18 @@ export function useMatterEventSync({
 			}
 		});
 		es.addEventListener("matter_settled", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string };
+			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_settled"];
 			clearMatterProgress(data.matterId);
 		});
 		es.addEventListener("matter_failed", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string; error?: string };
+			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_failed"];
 			if (data.error) {
 				setErrorBanner(`执行未完成：${data.error}`);
 			}
 			clearMatterProgress(data.matterId);
 		});
 		es.addEventListener("matter_aborted", (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { matterId: string };
+			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_aborted"];
 			clearMatterProgress(data.matterId);
 		});
 
@@ -108,18 +109,7 @@ export function useMatterEventSync({
 				void refreshDetail(selectedMatterIdRef.current);
 			}
 		};
-		for (const evtName of [
-			"matter_started",
-			"matter_message",
-			"matter_updated",
-			"collaborator_updated",
-			"dialog_requested",
-			"dialog_resolved",
-			"workspace_updated",
-			"organization_updated",
-			"preview_updated",
-			"team_updated",
-		]) {
+		for (const evtName of SSE_SYNC_EVENT_NAMES) {
 			es.addEventListener(evtName, handleSync);
 		}
 		es.addEventListener("auth_revoked", () => {

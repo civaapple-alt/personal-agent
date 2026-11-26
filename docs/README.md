@@ -47,7 +47,7 @@
 
 ## 理解设计与沿革
 
-- [设计思路](concepts/design-principles.md)解释岗位、事项、交付和经验设计。[产品方向](concepts/product-direction.md)记录长期目标。
+- [设计思路](concepts/design-principles.md)解释岗位、事项、交付和经验设计。[产品方向](concepts/product-direction.md)记录长期目标。[未来版本提案（0.9.x+）](concepts/future-proposals.md)汇总 `0.8.x LTS` 与后续版本的分流准则及待办提案。
 - [产品讨论](history/product-discussion.md)、[角色草案](history/team-roles.md)、[团队交互探索](history/team-interaction.md)和[架构演进](history/architecture-history.md)记录当时的判断与验证。
 - [0.6.3](releases/v0.6.3.md)、[0.6.2](releases/v0.6.2.md)、[0.6.1](releases/v0.6.1.md)、[0.6.0](releases/v0.6.0.md)和[0.5.0](releases/v0.5.0.md)记录各版的安装、升级与验证范围。[变更日志](../CHANGELOG.md)列出逐版改动。
 

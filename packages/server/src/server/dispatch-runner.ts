@@ -13,6 +13,7 @@ import type { CollaboratorRole } from "../storage/types.ts";
 import { canAccessMatter, canDispatchAiInOrg, canParticipateInMatter, canTargetMatterAi } from "./acl.ts";
 import type { RequestActor } from "./auth.ts";
 import { HttpRequestError } from "./http.ts";
+import type { SseBroadcastFn } from "./sse.ts";
 
 export interface ActiveRunState {
 	settled: Promise<void>;
@@ -51,7 +52,7 @@ export interface BackgroundDispatchInput {
 export function createDispatchRunner(deps: {
 	store: PersonalAgentStore;
 	orchestrator: TeamOrchestrator;
-	broadcast: (eventName: string, payload: unknown) => void;
+	broadcast: SseBroadcastFn;
 	inheritsLocalPiResources: (actor: RequestActor) => boolean;
 }) {
 	const { store, orchestrator, broadcast } = deps;

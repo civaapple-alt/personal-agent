@@ -1,3 +1,4 @@
+import type { SseEventPayloadMap } from "@pa/contracts/sse-events";
 import { validateSkillReference } from "../../roles/capabilities.ts";
 import {
 	applyRoleTemplatePatch,
@@ -35,7 +36,7 @@ interface ResolvedRoleScopeTarget {
 
 export function broadcastTeamUpdateForMember(
 	broadcast: ServerRouteContext["broadcast"],
-	payload: unknown,
+	payload: SseEventPayloadMap["team_updated"],
 	member: Pick<TeamMember, "roleScope" | "ownerOrgId" | "ownerUserId">,
 ): void {
 	if (member.roleScope === "personal") {

@@ -14,6 +14,8 @@
 		"./skill-trust": "./src/skill-trust.ts",
 		"./session-insights": "./src/session-insights.ts",
 		"./next-steps": "./src/next-steps.ts",
-		"./extensions": "./src/extensions.ts"
+		"./extensions": "./src/extensions.ts",
+		"./matter": "./src/matter.ts",
+		"./sse-events": "./src/sse-events.ts"
 	}
 }

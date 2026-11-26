@@ -35,7 +35,7 @@ import { handleSkillTrustRoutes } from "./routes/skill-trust.ts";
 import { handleSpaceRoutes } from "./routes/spaces.ts";
 import { handleTeamRoutes } from "./routes/team.ts";
 import { handleWorkspaceFolderRoutes } from "./routes/workspace-folders.ts";
-import { createSseHub } from "./sse.ts";
+import { createSseHub, type SseBroadcastFn } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
 
 export interface PersonalAgentServerOptions {
@@ -68,7 +68,7 @@ export interface PersonalAgentServerOptions {
  */
 export function createPersonalAgentServer(options: PersonalAgentServerOptions): {
 	server: Server;
-	broadcast: (eventName: string, payload: unknown) => void;
+	broadcast: SseBroadcastFn;
 } {
 	const { store, orchestrator, previewManager, dialogBroker, webDistDir, rolesDir, uploadsDir } = options;
 	const skillsDir =
@@ -99,7 +99,11 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	}
 
 	const offDialog = dialogBroker.onEvent((evt) => {
-		sse.broadcast(evt.type, evt);
+		if (evt.type === "dialog_requested") {
+			sse.broadcast("dialog_requested", evt);
+		} else {
+			sse.broadcast("dialog_resolved", evt);
+		}
 	});
 
 	const localPiResourcesPolicy = normalizeLocalPiResourcesPolicy(options.inheritLocalPiResources);

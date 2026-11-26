@@ -37,6 +37,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "user" as const,
 			senderId: "user",
 			content: "开始技术评估",
+			metadata: null,
 			createdAt: "2026-11-15T01:00:00.000Z",
 		},
 		{
@@ -46,6 +47,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "system" as const,
 			senderId: "orchestrator",
 			content: "执行异常",
+			metadata: null,
 			createdAt: "2026-11-15T01:05:00.000Z",
 		},
 		{
@@ -55,6 +57,7 @@ test("delegation boards place historical handoffs and keep only the active turn 
 			senderType: "user" as const,
 			senderId: "user",
 			content: "继续追问",
+			metadata: null,
 			createdAt: "2026-11-15T01:06:00.000Z",
 		},
 	];
@@ -275,8 +278,12 @@ test("collectMatterParticipantIds aggregates multi-role participants", () => {
 			title: "Test",
 			summary: "",
 			workspaceId: null,
+			orgId: null,
 			leadMemberId: "product-manager",
+			aiMemberIds: null,
+			observersEnabled: true,
 			observerMemberIds: ["qa-manager"],
+			collaboratorIds: [],
 			status: "open",
 			createdAt: "2026-11-15T09:00:00.000Z",
 			updatedAt: "2026-11-15T09:00:00.000Z",

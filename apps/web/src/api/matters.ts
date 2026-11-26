@@ -1,32 +1,10 @@
+import type { MatterDto, MatterMessageDto, MatterSendMode, MatterStatus, MatterVisibility } from "@pa/contracts/matter";
 import { requestJson } from "./client.ts";
 import type { ModelSelection } from "./models.ts";
 import type { SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
 import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
 
-export type MatterVisibility = "org" | "private";
-
-export type MatterSendMode = "conversation" | "discussion" | "dispatch" | "ai_request";
-
-export interface MatterDto {
-	id: string;
-	title: string;
-	summary: string;
-	status: "open" | "waiting_user" | "archived";
-	leadMemberId: string | null;
-	workspaceId: string | null;
-	orgId?: string | null;
-	createdByUserId?: string | null;
-	visibility?: MatterVisibility;
-	aiMemberIds?: string[] | null;
-	consultMemberIds?: string[] | null;
-	observersEnabled?: boolean;
-	observerMemberIds?: string[];
-	discussionAiEnabled?: boolean;
-	modelSelection?: ModelSelection | null;
-	collaboratorIds?: string[];
-	createdAt: string;
-	updatedAt: string;
-}
+export type { MatterDto, MatterMessageDto, MatterSendMode, MatterStatus, MatterVisibility };
 
 export interface MessageImageDto {
 	url?: string;
@@ -71,17 +49,6 @@ export interface ComposerFileAttachment extends UploadFilePayload {
 	lineCount: number;
 	charCount: number;
 	previewText: string;
-}
-
-export interface MatterMessageDto {
-	id: string;
-	matterId: string;
-	channel: "user" | "internal_collab" | "notice";
-	senderType: "user" | "member" | "system";
-	senderId: string;
-	content: string;
-	metadata?: Record<string, unknown> | null;
-	createdAt: string;
 }
 
 export interface PendingDialogDto {

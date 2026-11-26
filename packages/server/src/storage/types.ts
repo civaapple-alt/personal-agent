@@ -1,11 +1,17 @@
+import type {
+	MatterDto,
+	MatterMessageChannel,
+	MatterMessageDto,
+	MatterMessageSenderType,
+	MatterStatus,
+	MatterVisibility,
+} from "@pa/contracts/matter";
 import type { RoleScope } from "../roles/types.ts";
 import type { ModelSelection } from "../rpc/model-selection.ts";
 import type { ThinkingLevel } from "../rpc/types.ts";
 
+export type { MatterMessageChannel, MatterMessageSenderType, MatterStatus, MatterVisibility };
 export type FeedbackRating = "positive" | "negative" | "neutral";
-export type MatterStatus = "open" | "waiting_user" | "archived";
-export type MatterMessageChannel = "user" | "internal_collab" | "notice";
-export type MatterMessageSenderType = "user" | "member" | "system";
 export type CollaboratorRole = "owner" | "collaborator";
 export type PlatformRole = "super_admin" | "user";
 export type UserStatus = "active" | "pending_review" | "disabled";
@@ -13,7 +19,6 @@ export type OrgMemberRole = "org_owner" | "org_admin" | "org_member" | "org_view
 export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
 export type WorkspaceSourceType = "local" | "cloned";
 export type WorkspaceVisibility = "org" | "restricted";
-export type MatterVisibility = "org" | "private";
 export type AccessTokenScope = "read" | "full";
 
 export interface PlatformUser {
@@ -192,37 +197,9 @@ export interface WorkspaceLink {
 	createdAt: string;
 }
 
-export interface Matter {
-	id: string;
-	title: string;
-	summary: string;
-	status: MatterStatus;
-	leadMemberId: string | null;
-	workspaceId: string | null;
-	orgId: string | null;
-	createdByUserId?: string | null;
-	visibility?: MatterVisibility;
-	aiMemberIds: string[] | null;
-	consultMemberIds?: string[] | null;
-	observersEnabled: boolean;
-	observerMemberIds: string[];
-	discussionAiEnabled?: boolean;
-	modelSelection?: ModelSelection | null;
-	collaboratorIds: string[];
-	createdAt: string;
-	updatedAt: string;
-}
+export type Matter = MatterDto;
 
-export interface MatterMessage {
-	id: string;
-	matterId: string;
-	channel: MatterMessageChannel;
-	senderType: MatterMessageSenderType;
-	senderId: string;
-	content: string;
-	metadata: Record<string, unknown> | null;
-	createdAt: string;
-}
+export type MatterMessage = MatterMessageDto;
 
 export interface WorkerSessionRecord {
 	messageCursor: string | null;

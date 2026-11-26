@@ -12,7 +12,7 @@ import { extractClientIp, isSuperAdminActor, type RequestActor } from "../auth.t
 import type { DialogBroker } from "../dialog-broker.ts";
 import type { ActiveRunState, BackgroundDispatchInput } from "../dispatch-runner.ts";
 import type { PreviewManager } from "../preview-manager.ts";
-import type { SseBroadcastScope } from "../sse.ts";
+import type { SseBroadcastFn } from "../sse.ts";
 
 export interface ServerRouteContext {
 	store: PersonalAgentStore;
@@ -32,7 +32,7 @@ export interface ServerRouteContext {
 	uploadsDir?: string;
 	memoryUploads: Map<string, { buffer: Buffer; mimeType: string }>;
 	activeRuns: Map<string, ActiveRunState>;
-	broadcast: (eventName: string, payload: unknown, scope?: SseBroadcastScope) => void;
+	broadcast: SseBroadcastFn;
 	revokeTokenSessions: (collaboratorId: string, reason: string) => void;
 	closeAccountSession: (sessionHash: string) => void;
 	runDispatchInBackground: (input: BackgroundDispatchInput, actor: RequestActor) => void;

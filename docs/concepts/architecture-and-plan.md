@@ -30,7 +30,7 @@ Personal Agent 采用**三环硬边界多包架构**（由 [check-module-boundar
   - **Engine Host（[`packages/server`](../../packages/server/src/README.md)）**：可嵌入的引擎宿主库，导出 `bootHost()` 与全部后端能力；
   - **Pi RPC 会话原语底座（[`packages/pi-rpc`](../../packages/pi-rpc/README.md)）**：纯 Pi RPC 子进程生命周期与 JSONL 协议原语，与上层团队工具和业务编排解耦；
   - **The Wire（[`packages/contracts`](../../packages/contracts/README.md)）**：零 `node:*` / React 依赖的共享契约层，是前后端之间唯一允许共享的协议边；
-  - **内部契约与外部 SDK 分层（[`packages/extension-api`](../../packages/extension-api/README.md) / [`packages/extension-sdk`](../../packages/extension-sdk/README.md)）**：内部全量契约供内置扩展使用，对外 SDK 仅暴露精选稳定安全子集并校验版本；
+  - **内部契约与声明式扩展清单（[`packages/extension-api`](../../packages/extension-api/README.md) / [`packages/extension-sdk`](../../packages/extension-sdk/README.md)）**：当前提供内置扩展的静态声明式装配清单与前端工具展示元数据，尚未实现第三方动态插件加载、生命周期钩子或版本依赖解析；
   - **UI Client（[`apps/web`](../../apps/web/README.md)）**：纯浏览器端 React 工作台，只依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`；
   - **薄启动器（[`apps/cli`](../../apps/cli/README.md)）**：仅做参数/信号处理并调用 `@pa/server/boot`，构建为无 `node_modules` 依赖的自包含 `apps/cli/dist/main.js`，为后续多入口（桌面壳、远程端、IM 网关）保持同一宿主路径。
 - **双半边扩展与原生 Pi 复用（`pi-extensions/` + `pa-extensions/`）**：
@@ -148,13 +148,21 @@ flowchart TB
 
 后端沿 HTTP、编排、数据与 Pi RPC 分层。HTTP 层校验请求和访问范围，编排层负责一次执行及协作，存储层维护事务和记录，RPC 层处理 Pi 进程和协议。网页保留页面入口和共用组件，按业务拆分 HTTP 请求与 DTO，按交互范围维护会话、草稿和页面数据。具体入口见[后端源码地图](../../packages/server/src/README.md)和[前端状态与组件](../../apps/web/src/README.md)。
 
-统计范围为 `src/` 和 `web/` 的 TypeScript、JavaScript、CSS 和 HTML 源文件。计入注释与空行，排除文档、依赖和构建产物。下表比较重构前的 `ab40a07` 与重构完成时的 `1a0c04d`。
+统计范围为历史拆分重构（`ab40a07` → `1a0c04d`）时的 `src/` 和 `web/` 源文件（计入注释与空行，排除文档、依赖和构建产物），作为演进基线留存：
 
-| 目录 | 文件数（调整前 → 调整后） | 总行数 | ≥500 行 | ≥1,000 行 |
+| 目录（历史重构快照） | 文件数（调整前 → 调整后） | 总行数 | ≥500 行 | ≥1,000 行 |
 | --- | ---: | ---: | ---: | ---: |
 | `src/` | 86 → 93 | 24,942 → 25,073 | 16 → 16 | 3 → 0 |
 | `web/` | 59 → 79 | 26,293 → 26,618 | 22 → 21 | 4 → 0 |
 | 合计 | 145 → 172 | 51,235 → 51,691 | 38 → 37 | 7 → 0 |
+
+**0.8.x LTS 当前实测超大文件（≥1,000 行）**：随 0.8.x 演进，当前仓库中已有 5 个文件回升至 1,000 行以上（计划在 0.9.x 按生命周期逐步拆分，不在 0.8.x LTS 稳定期做大面积重构）：
+
+- [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（~1,353 行，单轮 Worker 执行器）
+- [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（~1,040 行，Git 资料空间仓储）
+- [App.tsx](../../apps/web/src/App.tsx)（~1,022 行，前端根装配组件）
+- [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（~1,002 行，资料空间视图）
+- [deliverables.css](../../apps/web/src/styles/deliverables.css)（~1,811 行，成果与资料空间样式）
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |

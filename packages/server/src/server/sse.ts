@@ -1,4 +1,5 @@
 import type { ServerResponse } from "node:http";
+import type { SseEventName, SseEventPayloadMap } from "@pa/contracts/sse-events";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
 import { canAccessMatter, canAccessOrganization, canAccessWorkspace } from "./acl.ts";
 import { isSuperAdminActor, type RequestActor } from "./auth.ts";
@@ -10,6 +11,12 @@ export interface SseBroadcastScope {
 	userId?: string | null;
 	adminOnly?: boolean;
 }
+
+export type SseBroadcastFn = <K extends SseEventName>(
+	eventName: K,
+	payload: SseEventPayloadMap[K],
+	scope?: SseBroadcastScope,
+) => void;
 
 interface SseClientMeta {
 	actor: RequestActor;
@@ -70,7 +77,7 @@ export function createSseHub(store?: PersonalAgentStore) {
 		return undefined;
 	};
 
-	const broadcast = (eventName: string, payload: unknown, scope?: SseBroadcastScope): void => {
+	const broadcast: SseBroadcastFn = (eventName, payload, scope) => {
 		const effectiveScope = scope ?? inferScope(eventName, payload);
 		const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
 		for (const [client, meta] of [...clients.entries()]) {
