@@ -12,12 +12,12 @@ Personal Agent follows a four-step trust progression: **probe first → capture 
 - A repetitive, deterministic step (data parsing, preflight check, report formatting, API query) can be distilled into a small helper script under `scripts/<safe-filename>` so future runs do not re-derive it from scratch.
 - Do **not** propose trivial one-off status notes or unverified guesses.
 
-## 2. Choosing `storageScope`
-Pick the narrowest accurate scope:
-- **`workspace`** (`<workspace>/.agents/skills/<name>/`): repository-specific commands, release checks, or codebase conventions that belong in Git alongside the project.
+## 2. Confirm `storageScope` Before Designing
+Scope determines **both visibility and abstraction level**. First infer `storageScope` from the user's request; if it is unclear whether the Skill should live in this repository, across the organization, globally, or personally, **ask the user first** (via `request_clarification` when available, or a brief question) before drafting `SKILL.md` and `scripts/*`. Then deliberately tailor wording, examples, and scripts to the chosen scope:
+- **`workspace`** (`<workspace>/.agents/skills/<name>/`): repository-specific commands, release checks, or codebase conventions that belong in Git alongside the project — concrete repo paths, modules, and domain entities are welcome.
+- **`org`** (`.data/skills/orgs/<orgId>/<name>/`): cross-repository standards shared across the organization — strip single-repo names/entities while keeping shared tech-stack conventions and reusable scripts.
+- **`global`** (`.data/skills/global/<name>/`): general methodology useful across all organizations and projects — keep zero repo-specific symbols and avoid single-stack hardcoded scripts.
 - **`personal`** (`.data/skills/users/<userId>/<name>/`): individual working style, formatting preferences, or personal automation.
-- **`org`** (`.data/skills/orgs/<orgId>/<name>/`): cross-repository standards shared across the organization.
-- **`global`** (`.data/skills/global/<name>/`): general methodology useful across all organizations and projects.
 
 ## 3. Authoring Quality `SKILL.md` + `scripts/*`
 - Follow the `skill-design` Skill for authoring principles (trigger-first `description`, one home per fact, progressive disclosure, no no-op guardrails or one-off bandaids, and verification).

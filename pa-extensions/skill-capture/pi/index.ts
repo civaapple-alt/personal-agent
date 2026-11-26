@@ -46,7 +46,9 @@ export default function skillCaptureExtension(pi: SkillCaptureExtensionApi): voi
 				},
 				description: {
 					type: "string",
-					description: "Concise trigger description telling future sessions when to load this Skill.",
+					maxLength: 500,
+					description:
+						"Concise trigger description telling future sessions when to load this Skill (max 500 chars).",
 				},
 				body: {
 					type: "string",

@@ -76,8 +76,10 @@ function groupSkillPreviewFiles(files: ManagedSkillScriptDetailDto[]) {
 	return [...groups.entries()].map(([group, items]) => ({ group, items }));
 }
 
-function stripFrontmatterForMarkdown(raw: string): string {
-	return raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/, "");
+function splitFrontmatterForMarkdown(raw: string): { frontmatter: string | null; body: string } {
+	const match = raw.match(/^(---\r?\n[\s\S]*?\r?\n---)\r?\n?([\s\S]*)$/u);
+	if (!match) return { frontmatter: null, body: raw };
+	return { frontmatter: match[1]!, body: match[2]!.trimStart() };
 }
 
 function skillKey(skill: Pick<ManagedSkillEntryDto, "scope" | "scopeId" | "name">): string {
@@ -883,9 +885,19 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 							</div>
 							<div className="skills-preview-viewer">
 								{activeFileIsMarkdown && previewMdMode === "rendered" ? (
-									<div className="skills-preview-markdown">
-										<MarkdownView content={stripFrontmatterForMarkdown(activeFileEntry?.content ?? "")} />
-									</div>
+									(() => {
+										const split = splitFrontmatterForMarkdown(activeFileEntry?.content ?? "");
+										return (
+											<div className="skills-preview-markdown">
+												{split.frontmatter && (
+													<pre className="pa-viz-code skills-modal-code" style={{ marginBottom: 14 }}>
+														<code>{split.frontmatter}</code>
+													</pre>
+												)}
+												<MarkdownView content={split.body} />
+											</div>
+										);
+									})()
 								) : (
 									<pre className="pa-viz-code skills-modal-code">
 										<code>{activeFileEntry?.content ?? ""}</code>
