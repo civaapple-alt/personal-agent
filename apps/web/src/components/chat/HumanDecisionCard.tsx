@@ -165,7 +165,7 @@ export function HumanDecisionCard({
 							<label>
 								<span>答复人</span>
 								<select
-									className="wechat-row-select"
+									className="roster-row-select"
 									value={assignee}
 									onChange={(event) => setAssignee(event.target.value)}
 								>

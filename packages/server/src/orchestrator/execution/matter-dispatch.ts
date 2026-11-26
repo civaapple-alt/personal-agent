@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { NEXT_STEPS_TOOL_NAME, normalizeNextSteps } from "@pa/contracts/next-steps";
-import { ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
+import { isSoloRoleTemplate, ROLE_ARCHITECT_MEMBER_ID } from "../../roles/role-architect.ts";
 import { isExplicitRoleSetupRequest } from "../../roles/role-setup-intent.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
@@ -278,7 +278,20 @@ export async function dispatchMatterTurn(
 					)
 				: resolveDiscussionMentionTargets(input.prompt, discussionMentionPool)
 			: [];
-	let activeSpeaker = mentionedTargets[0] ?? assignedMember;
+	const assignedIsSolo = isSoloRoleTemplate(deps.templatesById.get(assignedMember.id) ?? { id: assignedMember.id });
+	const routeMentionsThroughLead =
+		isConversation &&
+		Boolean(matter.leadMemberId) &&
+		!assignedIsArchitect &&
+		!assignedIsSolo &&
+		mentionedTargets.length > 0;
+	const leadDelegatedMentions = routeMentionsThroughLead
+		? mentionedTargets.filter((member) => member.id !== assignedMember.id)
+		: [];
+	if (leadDelegatedMentions.length > 0) {
+		run.explicitlyMentionedMemberIds = leadDelegatedMentions.map((member) => member.id);
+	}
+	let activeSpeaker = routeMentionsThroughLead ? assignedMember : (mentionedTargets[0] ?? assignedMember);
 	speakerMemberId = activeSpeaker.id;
 	try {
 		let intent: ConversationIntent = "respond";
@@ -437,7 +450,17 @@ export async function dispatchMatterTurn(
 			trimmedPrompt.length > 0
 				? input.prompt
 				: `Review the user's attachments (${files.length} files, ${rpcImages.length} images) and reply directly. If the conversation has no requested language, reply in Chinese.`;
-		const effectiveTaskPrompt = formattedFilesBlock ? `${basePromptText}\n\n${formattedFilesBlock}` : basePromptText;
+		const mentionRoutingNote =
+			leadDelegatedMentions.length > 0
+				? [
+						"[Host routing note — explicit @mention delegation]",
+						`The user explicitly mentioned ${leadDelegatedMentions.map((member) => `@${member.displayName} (\`${member.id}\`)`).join(", ")}.`,
+						"As the matter lead holding full context, do NOT bypass or answer on their behalf without involving them. Call `delegate_to_member` for each mentioned teammate with concrete context, file paths, and acceptance criteria from this matter (pass `verification` when asking them to verify, check, or review; when multiple teammates are mentioned in one turn, orchestrate them in logical order such as execution then verification), then integrate their evidence and reply to the user.",
+					].join("\n")
+				: "";
+		const effectiveTaskPrompt = [basePromptText, formattedFilesBlock, mentionRoutingNote]
+			.filter(Boolean)
+			.join("\n\n");
 		let result: PromptRunResult;
 		try {
 			result = await deps.executeWithWorker({
@@ -583,7 +606,14 @@ export async function dispatchMatterTurn(
 			: deps.store.updateMatterStatus(matter.id, decision ? "waiting_user" : "open", replyText.slice(0, 200));
 		const extraMentionMessages: MatterMessage[] = [];
 		let extraReplyAborted = false;
-		if (usesExistingRoster && !decision && !aborted && !run.cancelled && mentionedTargets.length > 1) {
+		if (
+			usesExistingRoster &&
+			!routeMentionsThroughLead &&
+			!decision &&
+			!aborted &&
+			!run.cancelled &&
+			mentionedTargets.length > 1
+		) {
 			for (const extraSpeaker of mentionedTargets.slice(1)) {
 				if (run.cancelled || run.controller.signal.aborted) break;
 				speakerMemberId = extraSpeaker.id;

@@ -138,7 +138,8 @@ export async function executeWithWorkerPass(
 			member.id !== input.member.id &&
 			(matter?.consultMemberIds == null ||
 				member.id === matter.leadMemberId ||
-				matter.consultMemberIds.includes(member.id)),
+				matter.consultMemberIds.includes(member.id) ||
+				Boolean(input.run.explicitlyMentionedMemberIds?.includes(member.id))),
 	);
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;

@@ -37,7 +37,7 @@
     - 图片约束：最多 6 张、PNG/JPEG/WebP/GIF、单张解码 <= 5MB、JSON 上限 36MB，允许纯图片提交。
     - 文本/折叠粘贴文件约束：最多 6 个、单文件 UTF-8 文本 <= 512KB（拒绝含 NUL 的二进制负载），支持 `kind: "file" | "pasted_text"`，允许纯附件提交。
   - 上传图片与 `.txt` 规范化文本附件均按 `YYYY-MM/` 按月分桶落盘 `uploadsDir`（默认 `.data/uploads/YYYY-MM/`；测试未指定时用有界内存缓存）并经 `GET /api/uploads/:filename` 提供访问（`.txt` 响应带 `Content-Type: text/plain; charset=utf-8` 与 `X-Content-Type-Options: nosniff`），消息仅存轻量引用 `metadata.images` / `metadata.files`。
-  - 统一发送使用 `conversation`，默认由主责先回应。仅点名人类同事时保存消息并返回 `human_recipient`。`observersEnabled` 只控制协作 AI 主动补充。`discussionAiEnabled` 继续用于旧客户端的显式 `discussion` 请求。启动 AI 仍需满足组织派发权限与并发额度。
+  - 统一发送使用 `conversation`，默认由主责回应；已有业务主责时，点名 `@单个或多个 AI 成员` 也统一经主责统筹并放行当轮委托，由主责带完整上下文调用 `delegate_to_member` 安排对应成员后汇总答复。仅点名人类同事时保存消息并返回 `human_recipient`。`observersEnabled` 只控制协作 AI 主动补充。`discussionAiEnabled` 继续用于旧客户端的显式 `discussion` 请求。启动 AI 仍需满足组织派发权限与并发额度。
   - AI 讨论失败时保留已发消息、已保存的回复及原事项状态。失败消息关联触发本轮讨论的消息。
 - 组织与成员身份接口：
   - `PATCH /api/organizations/:id/ai-roles` 接收 `primaryMemberId`，供组织管理员切换到已启用的业务 AI 角色。已有角色配置保留模型、思考档位和 Git 署名。批量更新名册与组织 Git 署名开关时在同一事务保存。

@@ -38,6 +38,7 @@
     "demo:trust": "node packages/server/src/demo/rsi-smoke.ts",
     "demo:pi-native": "node packages/server/src/demo/pi-native-smoke.ts",
     "demo:solo": "node packages/server/src/demo/solo-vs-business-smoke.ts",
+    "demo:mention-verify": "node packages/server/src/demo/mention-verify-smoke.ts",
     "demo:review": "node packages/server/src/demo/publication-review-smoke.ts",
     "demo:observer": "node packages/server/src/demo/observer-smoke.ts",
     "demo:architect": "node packages/server/src/demo/role-design-smoke.ts --scenario architect",

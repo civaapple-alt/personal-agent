@@ -322,6 +322,7 @@ export interface MatterRun {
 	startedByUserId?: string | null;
 	keepMatterLead?: boolean;
 	inheritLocalPiResources?: boolean;
+	explicitlyMentionedMemberIds?: string[];
 	startedAt: number;
 	lastProgress?: DispatchProgressEvent;
 	timeoutMs: number;

@@ -62,7 +62,7 @@ export function NewSkillsDraftSection({
 										<span className="mono-chip">{skill.name}</span>
 									</label>
 									<select
-										className="wechat-row-select"
+										className="roster-row-select"
 										aria-label="Skill 保存位置"
 										disabled={disabled || !checked}
 										value={effectiveScope}

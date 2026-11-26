@@ -100,14 +100,14 @@ export function MatterRosterPopover({
 			ref={panelRef}
 			role="dialog"
 			aria-label="协作成员"
-			className="collab-dock-panel unified-roster-panel wechat-roster-panel"
+			className="collab-dock-panel unified-roster-panel roster-panel"
 		>
 			{rosterMode === "add" && isOwner ? (
 				<>
-					<div className="wechat-roster-nav">
+					<div className="roster-nav">
 						<button
 							type="button"
-							className="wechat-nav-btn"
+							className="roster-nav-btn"
 							onClick={() => {
 								onModeChange("view");
 								onSearchChange("");
@@ -115,10 +115,10 @@ export function MatterRosterPopover({
 						>
 							‹ 返回
 						</button>
-						<strong className="wechat-nav-title">添加协作成员</strong>
+						<strong className="roster-nav-title">添加协作成员</strong>
 						<button
 							type="button"
-							className="wechat-nav-btn primary"
+							className="roster-nav-btn primary"
 							onClick={() => {
 								onModeChange("view");
 								onSearchChange("");
@@ -130,15 +130,15 @@ export function MatterRosterPopover({
 
 					<input
 						type="search"
-						className="wechat-roster-search"
+						className="roster-search"
 						placeholder="搜索同事或 AI 角色"
 						value={rosterSearch}
 						onChange={(e) => onSearchChange(e.target.value)}
 					/>
 
-					<div className="wechat-add-scroll">
-						<div className="wechat-add-group">
-							<div className="wechat-add-head">
+					<div className="roster-add-scroll">
+						<div className="roster-add-group">
+							<div className="roster-add-head">
 								<span>人类同事</span>
 								<button
 									type="button"
@@ -152,7 +152,7 @@ export function MatterRosterPopover({
 								</button>
 							</div>
 							{filteredCollabCandidates.length === 0 ? (
-								<div className="wechat-empty-row">
+								<div className="roster-empty-row">
 									{nonOwnerCollaborators.length === 0 ? "暂无协同同事，可在团队页新增" : "无匹配同事"}
 								</div>
 							) : (
@@ -160,11 +160,11 @@ export function MatterRosterPopover({
 									const inMatter = assignedCollabIds.includes(col.id);
 									const canToggle = Boolean(selectedMatterId && onUpdateMatterCollaborators);
 									return (
-										<div key={col.id} className="wechat-pick-row">
+										<div key={col.id} className="roster-pick-row">
 											{canToggle ? (
 												<button
 													type="button"
-													className="wechat-pick-main wechat-pick-toggle"
+													className="roster-pick-main roster-pick-toggle"
 													aria-pressed={inMatter}
 													aria-label={`邀请 ${col.name} 参与本事项`}
 													onClick={() => {
@@ -175,23 +175,23 @@ export function MatterRosterPopover({
 														onUpdateMatterCollaborators(nextIds);
 													}}
 												>
-													<span className={`wechat-check-box ${inMatter ? "checked" : ""}`}>
+													<span className={`roster-check-box ${inMatter ? "checked" : ""}`}>
 														{inMatter ? "✓" : ""}
 													</span>
-													<span className="wechat-mini-avatar human">
+													<span className="roster-mini-avatar human">
 														{col.name.slice(0, 1).toUpperCase()}
 													</span>
-													<span className="wechat-pick-text">
+													<span className="roster-pick-text">
 														<strong>{col.name}</strong>
 														<small>{col.roleTitle}</small>
 													</span>
 												</button>
 											) : (
-												<div className="wechat-pick-main">
-													<span className="wechat-mini-avatar human">
+												<div className="roster-pick-main">
+													<span className="roster-mini-avatar human">
 														{col.name.slice(0, 1).toUpperCase()}
 													</span>
-													<span className="wechat-pick-text">
+													<span className="roster-pick-text">
 														<strong>{col.name}</strong>
 														<small>{col.roleTitle}</small>
 													</span>
@@ -203,8 +203,8 @@ export function MatterRosterPopover({
 							)}
 						</div>
 
-						<div className="wechat-add-group">
-							<div className="wechat-add-head">
+						<div className="roster-add-group">
+							<div className="roster-add-head">
 								<span>可添回的 AI 角色</span>
 								{removableBusinessPool.length > 0 && (
 									<button
@@ -217,9 +217,9 @@ export function MatterRosterPopover({
 								)}
 							</div>
 							{removableBusinessPool.length === 0 ? (
-								<div className="wechat-empty-row">全部业务 AI 角色已参与当前事项</div>
+								<div className="roster-empty-row">全部业务 AI 角色已参与当前事项</div>
 							) : filteredRemovedAi.length === 0 ? (
-								<div className="wechat-empty-row">无匹配 AI 角色</div>
+								<div className="roster-empty-row">无匹配 AI 角色</div>
 							) : (
 								filteredRemovedAi.map((peer) => {
 									const theme = getMemberThemeById(members, peer.id);
@@ -227,13 +227,13 @@ export function MatterRosterPopover({
 										<button
 											key={peer.id}
 											type="button"
-											className="wechat-pick-row clickable"
+											className="roster-pick-row clickable"
 											onClick={() => onUpdateMatterAiMembers([...matterAiMemberIds, peer.id])}
 										>
-											<span className="wechat-pick-main">
-												<span className="wechat-check-box">+</span>
+											<span className="roster-pick-main">
+												<span className="roster-check-box">+</span>
 												<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-												<span className="wechat-pick-text">
+												<span className="roster-pick-text">
 													<strong>{peer.displayName}</strong>
 													<small>{peer.roleTitle}</small>
 												</span>
@@ -249,18 +249,18 @@ export function MatterRosterPopover({
 				<>
 					<input
 						type="search"
-						className="wechat-roster-search"
+						className="roster-search"
 						placeholder="搜索协作成员 / AI"
 						value={rosterSearch}
 						onChange={(e) => onSearchChange(e.target.value)}
 					/>
 
-					<div className="wechat-member-grid">
+					<div className="roster-member-grid">
 						{showOwnerTile && (
-							<div className="wechat-member-tile" title={`${ownerLabel} · 所有者`}>
-								<div className="wechat-avatar-box owner">{ownerLabel.slice(0, 1).toUpperCase()}</div>
-								<span className="wechat-tile-name">{ownerLabel}</span>
-								<span className="wechat-tile-tag">
+							<div className="roster-member-tile" title={`${ownerLabel} · 所有者`}>
+								<div className="roster-avatar-box owner">{ownerLabel.slice(0, 1).toUpperCase()}</div>
+								<span className="roster-tile-name">{ownerLabel}</span>
+								<span className="roster-tile-tag">
 									所有者{!ownerCollab || currentUser?.id === ownerCollab.id ? " · 我" : ""}
 								</span>
 							</div>
@@ -273,7 +273,7 @@ export function MatterRosterPopover({
 								<button
 									key={`human-${col.id}`}
 									type="button"
-									className={`wechat-member-tile ${canRemoveHuman ? "interactive" : ""}`}
+									className={`roster-member-tile ${canRemoveHuman ? "interactive" : ""}`}
 									title={canRemoveHuman ? `移出 ${col.name}` : `${col.name} · ${col.roleTitle}`}
 									onClick={() => {
 										if (canRemoveHuman && onUpdateMatterCollaborators) {
@@ -281,12 +281,12 @@ export function MatterRosterPopover({
 										}
 									}}
 								>
-									<div className="wechat-avatar-box human">
+									<div className="roster-avatar-box human">
 										{col.name.slice(0, 1).toUpperCase()}
-										{canRemoveHuman && <span className="wechat-remove-badge">−</span>}
+										{canRemoveHuman && <span className="roster-remove-badge">−</span>}
 									</div>
-									<span className="wechat-tile-name">{col.name}</span>
-									<span className="wechat-tile-tag">{currentUser?.id === col.id ? "我" : col.roleTitle}</span>
+									<span className="roster-tile-name">{col.name}</span>
+									<span className="roster-tile-tag">{currentUser?.id === col.id ? "我" : col.roleTitle}</span>
 								</button>
 							);
 						})}
@@ -300,10 +300,10 @@ export function MatterRosterPopover({
 							const tagLabel = isLead ? "负责人" : isObs ? "旁听" : "成员";
 							const tagClass = isLead ? "lead" : isObs ? "observer" : "";
 							return (
-								<div key={`ai-${ai.id}`} className="wechat-member-tile-wrap">
+								<div key={`ai-${ai.id}`} className="roster-member-tile-wrap">
 									<button
 										type="button"
-										className={`wechat-member-tile ${canRemoveAi || canConfigure ? "interactive" : ""}`}
+										className={`roster-member-tile ${canRemoveAi || canConfigure ? "interactive" : ""}`}
 										aria-pressed={canConfigure ? selectedMember?.id === ai.id : undefined}
 										title={
 											canRemoveAi
@@ -322,12 +322,12 @@ export function MatterRosterPopover({
 											}
 										}}
 									>
-										<div className={`wechat-avatar-box ai ${isLead ? "is-lead" : ""}`}>
+										<div className={`roster-avatar-box ai ${isLead ? "is-lead" : ""}`}>
 											<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-											{canRemoveAi && <span className="wechat-remove-badge">−</span>}
+											{canRemoveAi && <span className="roster-remove-badge">−</span>}
 										</div>
-										<span className="wechat-tile-name">{ai.displayName}</span>
-										<span className={`wechat-tile-tag ${tagClass}`}>{tagLabel}</span>
+										<span className="roster-tile-name">{ai.displayName}</span>
+										<span className={`roster-tile-tag ${tagClass}`}>{tagLabel}</span>
 									</button>
 								</div>
 							);
@@ -336,37 +336,37 @@ export function MatterRosterPopover({
 						{isOwner && !query && (
 							<button
 								type="button"
-								className="wechat-member-tile interactive"
+								className="roster-member-tile interactive"
 								title="邀请同事或添回已移出的 AI 角色"
 								onClick={() => {
 									onSearchChange("");
 									onModeChange("add");
 								}}
 							>
-								<div className="wechat-avatar-box action">+</div>
-								<span className="wechat-tile-name">添加</span>
+								<div className="roster-avatar-box action">+</div>
+								<span className="roster-tile-name">添加</span>
 							</button>
 						)}
 
 						{isOwner && !query && hasRemovable && (
 							<button
 								type="button"
-								className="wechat-member-tile interactive"
+								className="roster-member-tile interactive"
 								title={rosterMode === "remove" ? "完成移出" : "移出协同同事或非负责人 AI"}
 								onClick={() => onModeChange(rosterMode === "remove" ? "view" : "remove")}
 							>
-								<div className={`wechat-avatar-box action ${rosterMode === "remove" ? "active" : ""}`}>−</div>
-								<span className="wechat-tile-name">{rosterMode === "remove" ? "完成" : "移出"}</span>
+								<div className={`roster-avatar-box action ${rosterMode === "remove" ? "active" : ""}`}>−</div>
+								<span className="roster-tile-name">{rosterMode === "remove" ? "完成" : "移出"}</span>
 							</button>
 						)}
 					</div>
 
-					<div className="wechat-roster-rows">
-						<div className="wechat-roster-row">
+					<div className="roster-rows">
+						<div className="roster-row">
 							<span>事项负责人</span>
 							{isOwner ? (
 								<select
-									className="wechat-row-select"
+									className="roster-row-select"
 									aria-label="事项负责人"
 									value={leadAi?.id ?? ""}
 									disabled={isTurnRunning}
@@ -380,14 +380,14 @@ export function MatterRosterPopover({
 									))}
 								</select>
 							) : (
-								<span className="wechat-row-val">{leadAi?.displayName ?? "默认"}</span>
+								<span className="roster-row-val">{leadAi?.displayName ?? "默认"}</span>
 							)}
 						</div>
 						{selectedMember && isOwner && rosterMode === "view" && (
-							<fieldset className="wechat-member-settings">
+							<fieldset className="roster-member-settings">
 								<legend>{selectedMember.displayName}</legend>
 								{onUpdateMatterConsultMembers && (
-									<label className="wechat-roster-row">
+									<label className="roster-row">
 										<span>允许主责委托</span>
 										<input
 											type="checkbox"
@@ -406,7 +406,7 @@ export function MatterRosterPopover({
 									</label>
 								)}
 								{onUpdateMatterObservers && observersEnabled && (
-									<label className="wechat-roster-row">
+									<label className="roster-row">
 										<span>旁听补充</span>
 										<input
 											type="checkbox"
@@ -426,7 +426,7 @@ export function MatterRosterPopover({
 						)}
 						{onToggleObserversEnabled && (
 							<div>
-								<div className="wechat-roster-row">
+								<div className="roster-row">
 									<span>AI 旁听</span>
 									{isOwner ? (
 										<button
@@ -435,26 +435,26 @@ export function MatterRosterPopover({
 											aria-checked={observersEnabled}
 											aria-label="AI 旁听"
 											aria-describedby={observerHintId}
-											className={`wechat-switch ${observersEnabled ? "on" : ""}`}
+											className={`roster-switch ${observersEnabled ? "on" : ""}`}
 											onClick={() => onToggleObserversEnabled(!observersEnabled)}
 										>
-											<span className="wechat-switch-thumb" />
+											<span className="roster-switch-thumb" />
 										</button>
 									) : (
-										<span className="wechat-row-val">{observersEnabled ? "已开启" : "已关闭"}</span>
+										<span className="roster-row-val">{observersEnabled ? "已开启" : "已关闭"}</span>
 									)}
 								</div>
-								<p className="wechat-roster-hint" id={observerHintId}>
+								<p className="roster-hint" id={observerHintId}>
 									协作 AI 可主动补充，主责照常回应和委托。
 								</p>
 							</div>
 						)}
 						{isOwner ? (
-							<div className="wechat-roster-row">
+							<div className="roster-row">
 								<span>团队同事</span>
 								<button
 									type="button"
-									className="wechat-row-action"
+									className="roster-row-action"
 									onClick={() => {
 										if (nonOwnerCollaborators.length > 0) {
 											onSearchChange("");
@@ -472,17 +472,17 @@ export function MatterRosterPopover({
 								</button>
 							</div>
 						) : (
-							<div className="wechat-roster-row">
+							<div className="roster-row">
 								<span>协同权限</span>
-								<span className="wechat-row-val">AI 执行需所有者确认</span>
+								<span className="roster-row-val">AI 执行需所有者确认</span>
 							</div>
 						)}
 						{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
-							<div className="wechat-roster-row is-architect-row">
+							<div className="roster-row is-architect-row">
 								<span>缺少角色或需调整？</span>
 								<button
 									type="button"
-									className="wechat-row-action"
+									className="roster-row-action"
 									disabled={isTurnRunning}
 									title={
 										isTurnRunning

@@ -392,7 +392,7 @@ export function RoleProposalCard({
 							<label className="role-proposal-join-select">
 								<span>本批角色可用范围</span>
 								<select
-									className="wechat-row-select"
+									className="roster-row-select"
 									value={activeScopeChoice.key}
 									onChange={(event) => setSelectedScopeKey(event.target.value)}
 								>
@@ -504,7 +504,7 @@ export function RoleProposalCard({
 							<label className="role-proposal-join-select">
 								<span>新角色在本事项中</span>
 								<select
-									className="wechat-row-select"
+									className="roster-row-select"
 									value={joinMode}
 									onChange={(e) => setJoinMode(e.target.value as MatterRoleJoinMode)}
 								>

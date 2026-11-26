@@ -35,6 +35,7 @@ export function useHashRouteNav({
 				} else if (next.tab === "chats") {
 					if (next.isNewMatter) {
 						setSelectedMatterId(null);
+						setSelectedMemberId(next.newMatterLeadId || "auto");
 					} else if (next.matterId !== undefined) {
 						setSelectedMemberId("auto");
 						setSelectedMatterId(next.matterId || null);

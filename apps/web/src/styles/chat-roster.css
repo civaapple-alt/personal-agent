@@ -1,20 +1,20 @@
-.wechat-roster-panel {
+.roster-panel {
 	width: min(348px, calc(100% - 48px));
 	padding: 14px;
 	gap: 12px;
 	overflow: hidden;
 }
-.wechat-roster-nav {
+.roster-nav {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
 }
-.wechat-nav-title {
+.roster-nav-title {
 	font-size: var(--text-sm);
 	color: var(--text-primary);
 }
-.wechat-nav-btn {
+.roster-nav-btn {
 	border: none;
 	background: transparent;
 	font-size: var(--text-xs);
@@ -22,14 +22,14 @@
 	padding: 2px 4px;
 	cursor: pointer;
 }
-.wechat-nav-btn:hover {
+.roster-nav-btn:hover {
 	color: var(--text-primary);
 }
-.wechat-nav-btn.primary {
+.roster-nav-btn.primary {
 	color: var(--accent);
 	font-weight: 600;
 }
-.wechat-roster-search {
+.roster-search {
 	width: 100%;
 	box-sizing: border-box;
 	border: 1px solid var(--border);
@@ -39,15 +39,15 @@
 	font-size: var(--text-xs);
 	color: var(--text-primary);
 }
-.wechat-roster-search:focus {
+.roster-search:focus {
 	border-color: var(--accent);
 	background: #fff;
 }
-.wechat-roster-search:focus-visible {
+.roster-search:focus-visible {
 	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
-.wechat-member-grid {
+.roster-member-grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 12px 8px;
@@ -56,7 +56,7 @@
 	overscroll-behavior: contain;
 	padding: 2px 0;
 }
-.wechat-member-tile {
+.roster-member-tile {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -70,14 +70,14 @@
 	font-family: inherit;
 	text-align: center;
 }
-.wechat-member-tile.interactive {
+.roster-member-tile.interactive {
 	cursor: pointer;
 }
-.wechat-member-tile.interactive:hover .wechat-avatar-box {
+.roster-member-tile.interactive:hover .roster-avatar-box {
 	transform: translateY(-1px);
 	box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
 }
-.wechat-avatar-box {
+.roster-avatar-box {
 	position: relative;
 	width: 46px;
 	height: 46px;
@@ -88,22 +88,22 @@
 	font-weight: 700;
 	transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.wechat-avatar-box.owner {
+.roster-avatar-box.owner {
 	background: #1e293b;
 	color: #fff;
 }
-.wechat-avatar-box.human {
+.roster-avatar-box.human {
 	background: #e0f2fe;
 	color: #0369a1;
 }
-.wechat-avatar-box.action {
+.roster-avatar-box.action {
 	background: #fff;
 	border: 1.5px dashed #cbd5e1;
 	color: #64748b;
 	font-size: 20px;
 	font-weight: 400;
 }
-.wechat-avatar-box.action.active {
+.roster-avatar-box.action.active {
 	border-style: solid;
 	border-color: #ef4444;
 	color: #ef4444;
@@ -111,7 +111,7 @@
 	font-size: var(--text-xs);
 	font-weight: 600;
 }
-.wechat-remove-badge {
+.roster-remove-badge {
 	position: absolute;
 	top: -5px;
 	right: -5px;
@@ -127,7 +127,7 @@
 	display: grid;
 	place-items: center;
 }
-.wechat-tile-name {
+.roster-tile-name {
 	font-size: var(--text-micro);
 	color: var(--text-primary);
 	max-width: 100%;
@@ -135,7 +135,7 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.wechat-tile-tag {
+.roster-tile-tag {
 	font-size: var(--text-micro);
 	color: var(--text-muted);
 	line-height: 1.15;
@@ -144,21 +144,21 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.wechat-tile-tag.lead {
+.roster-tile-tag.lead {
 	color: #0b574e;
 	font-weight: 600;
 }
-.wechat-tile-tag.observer {
+.roster-tile-tag.observer {
 	color: #6d28d9;
 }
-.wechat-roster-rows {
+.roster-rows {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	padding-top: 10px;
 	border-top: 1px solid var(--border);
 }
-.wechat-roster-row {
+.roster-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -166,16 +166,16 @@
 	font-size: var(--text-xs);
 	color: var(--text-primary);
 }
-.wechat-roster-row > span:first-child {
+.roster-row > span:first-child {
 	white-space: nowrap;
 	flex-shrink: 0;
 }
-.wechat-roster-row.is-architect-row {
+.roster-row.is-architect-row {
 	padding-top: 8px;
 	margin-top: 2px;
 	border-top: 1px dashed var(--border);
 }
-.wechat-row-action {
+.roster-row-action {
 	border: none;
 	background: transparent;
 	padding: 0;
@@ -183,24 +183,24 @@
 	color: var(--text-muted);
 	cursor: pointer;
 }
-.wechat-row-action:hover {
+.roster-row-action:hover {
 	color: var(--text-primary);
 }
-.wechat-row-val {
+.roster-row-val {
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 }
-.wechat-roster-hint {
+.roster-hint {
 	margin: 4px 0 0;
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 }
-.wechat-row-sub {
+.roster-row-sub {
 	font-size: var(--text-micro);
 	color: var(--text-muted);
 	margin-left: 2px;
 }
-.wechat-row-select {
+.roster-row-select {
 	border: 1px solid var(--border);
 	background: #f8fafc;
 	border-radius: 6px;
@@ -210,11 +210,11 @@
 	font-family: inherit;
 	cursor: pointer;
 }
-.wechat-row-select:disabled {
+.roster-row-select:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
 }
-.wechat-switch {
+.roster-switch {
 	position: relative;
 	width: 36px;
 	height: 20px;
@@ -226,10 +226,10 @@
 	transition: background 0.16s ease;
 	flex-shrink: 0;
 }
-.wechat-switch.on {
+.roster-switch.on {
 	background: var(--accent);
 }
-.wechat-switch-thumb {
+.roster-switch-thumb {
 	display: block;
 	width: 16px;
 	height: 16px;
@@ -238,14 +238,14 @@
 	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
 	transition: transform 0.16s ease;
 }
-.wechat-switch.on .wechat-switch-thumb {
+.roster-switch.on .roster-switch-thumb {
 	transform: translateX(16px);
 }
-.wechat-avatar-box.ai.is-lead {
+.roster-avatar-box.ai.is-lead {
 	box-shadow: 0 0 0 2px var(--accent);
 	border-radius: 14px;
 }
-.wechat-add-scroll {
+.roster-add-scroll {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
@@ -253,12 +253,12 @@
 	overflow-y: auto;
 	overscroll-behavior: contain;
 }
-.wechat-add-group {
+.roster-add-group {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
-.wechat-add-head {
+.roster-add-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -267,12 +267,12 @@
 	font-weight: 600;
 	color: var(--text-muted);
 }
-.wechat-empty-row {
+.roster-empty-row {
 	font-size: var(--text-xs);
 	color: var(--text-muted);
 	padding: 4px 2px;
 }
-.wechat-pick-row {
+.roster-pick-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -283,25 +283,25 @@
 	border: 1px solid transparent;
 	text-align: left;
 }
-.wechat-pick-row.clickable {
+.roster-pick-row.clickable {
 	width: 100%;
 	cursor: pointer;
 }
-.wechat-pick-row.clickable:hover {
+.roster-pick-row.clickable:hover {
 	background: #f1f5f9;
 }
-.wechat-pick-row.clickable.active {
+.roster-pick-row.clickable.active {
 	background: #edf9f5;
 	border-color: rgba(15, 107, 96, 0.25);
 }
-.wechat-pick-main {
+.roster-pick-main {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
 	flex: 1;
 }
-.wechat-pick-toggle {
+.roster-pick-toggle {
 	border: none;
 	background: transparent;
 	padding: 0;
@@ -309,7 +309,7 @@
 	text-align: left;
 	cursor: pointer;
 }
-.wechat-mini-avatar {
+.roster-mini-avatar {
 	width: 24px;
 	height: 24px;
 	border-radius: 6px;
@@ -319,27 +319,27 @@
 	font-weight: 700;
 	flex-shrink: 0;
 }
-.wechat-mini-avatar.human {
+.roster-mini-avatar.human {
 	background: #e0f2fe;
 	color: #0369a1;
 }
-.wechat-pick-text {
+.roster-pick-text {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
 }
-.wechat-pick-text strong {
+.roster-pick-text strong {
 	font-size: var(--text-xs);
 	color: var(--text-primary);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-.wechat-pick-text small {
+.roster-pick-text small {
 	font-size: var(--text-micro);
 	color: var(--text-muted);
 }
-.wechat-copy-link {
+.roster-copy-link {
 	border: none;
 	background: transparent;
 	font-size: var(--text-micro);
@@ -347,10 +347,10 @@
 	cursor: pointer;
 	flex-shrink: 0;
 }
-.wechat-copy-link:hover {
+.roster-copy-link:hover {
 	text-decoration: underline;
 }
-.wechat-check-box {
+.roster-check-box {
 	width: 16px;
 	height: 16px;
 	border-radius: 4px;
@@ -363,11 +363,11 @@
 	color: #fff;
 	flex-shrink: 0;
 }
-.wechat-check-box.checked {
+.roster-check-box.checked {
 	background: var(--accent);
 	border-color: var(--accent);
 }
-.wechat-member-tile-wrap {
+.roster-member-tile-wrap {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -376,14 +376,14 @@
 	min-width: 0;
 	overflow: hidden;
 }
-.wechat-chip-row {
+.roster-chip-row {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 3px;
 	flex-wrap: wrap;
 }
-.wechat-obs-chip {
+.roster-obs-chip {
 	border: 1px solid var(--border);
 	background: var(--bg-stage);
 	color: var(--text-secondary);
@@ -393,18 +393,18 @@
 	border-radius: 999px;
 	cursor: pointer;
 }
-.wechat-obs-chip:hover {
+.roster-obs-chip:hover {
 	border-color: var(--observer-border);
 	color: var(--observer-text);
 }
-.wechat-obs-chip.active {
+.roster-obs-chip.active {
 	border-color: var(--observer-border);
 	background: var(--observer-soft);
 	color: var(--observer-text);
 	font-weight: 600;
 }
 
-.wechat-member-settings {
+.roster-member-settings {
 	margin: 0;
 	min-width: 0;
 	padding: 0.35rem 0.6rem;
@@ -412,7 +412,7 @@
 	border-radius: 0.65rem;
 }
 
-.wechat-member-settings legend {
+.roster-member-settings legend {
 	padding-inline: 0.25rem;
 	font-weight: 600;
 }

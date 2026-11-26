@@ -14,6 +14,7 @@ export interface HashRoute {
 	spacePageId?: string;
 	matterId?: string;
 	isNewMatter?: boolean;
+	newMatterLeadId?: string;
 	settingsSection?: SettingsSection;
 }
 
@@ -27,6 +28,7 @@ export function parseHashRoute(rawHash: string): HashRoute {
 	const parts = cleaned.split("/");
 	const segment0 = parts[0] ? decodeURIComponent(parts[0]) : "";
 	const segment1 = parts[1] ? decodeURIComponent(parts[1]) : undefined;
+	const segment2 = parts[2] ? decodeURIComponent(parts[2]) : undefined;
 
 	if (segment0 === "deliverables") {
 		return { tab: "deliverables" };
@@ -36,7 +38,9 @@ export function parseHashRoute(rawHash: string): HashRoute {
 	}
 	if (segment0 === "chats") {
 		if (segment1 === "new") {
-			return { tab: "chats", isNewMatter: true };
+			return segment2 && segment2 !== "auto"
+				? { tab: "chats", isNewMatter: true, newMatterLeadId: segment2 }
+				: { tab: "chats", isNewMatter: true };
 		}
 		return segment1 ? { tab: "chats", matterId: segment1 } : { tab: "chats" };
 	}
@@ -71,7 +75,9 @@ export function formatHashRoute(route: HashRoute): string {
 	}
 	if (route.tab === "chats") {
 		if (route.isNewMatter) {
-			return "#/chats/new";
+			return route.newMatterLeadId && route.newMatterLeadId !== "auto"
+				? `#/chats/new/${encodeURIComponent(route.newMatterLeadId)}`
+				: "#/chats/new";
 		}
 		return route.matterId ? `#/chats/${encodeURIComponent(route.matterId)}` : "#/chats";
 	}

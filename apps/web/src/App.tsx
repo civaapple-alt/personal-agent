@@ -69,7 +69,9 @@ export function App() {
 	const [spaceRoute, setSpaceRoute] = useState<{ pageId?: string }>({
 		pageId: initialRoute.spacePageId,
 	});
-	const [selectedMemberId, setSelectedMemberId] = useState<string>("auto");
+	const [selectedMemberId, setSelectedMemberId] = useState<string>(
+		initialRoute.isNewMatter && initialRoute.newMatterLeadId ? initialRoute.newMatterLeadId : "auto",
+	);
 	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => readStoredSetting("pa.defaultOrgId"));
 	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
 		readStoredSetting("pa.defaultWorkspaceId"),
@@ -318,12 +320,13 @@ export function App() {
 		return business.find((member) => member.isPrimaryContact)?.id ?? business[0]?.id ?? "auto";
 	};
 
-	const startNewMatter = () => {
+	const startNewMatter = (preferredLeadId?: string) => {
 		setDraftModelSelection(null);
 		initiation.resetInitiationState();
 		setDraftMatterVisibility("org");
-		setSelectedMemberId(resolveDefaultPrimaryLeadId());
-		navigateRoute({ tab: "chats", isNewMatter: true });
+		const leadId = preferredLeadId ?? resolveDefaultPrimaryLeadId();
+		setSelectedMemberId(leadId);
+		navigateRoute({ tab: "chats", isNewMatter: true, newMatterLeadId: leadId === "auto" ? undefined : leadId });
 		composerRef.current?.focus();
 	};
 
@@ -354,7 +357,11 @@ export function App() {
 			inheritedLeadId === "auto" ? null : inheritedLeadId,
 		);
 		setDraftObserversEnabled(Boolean(currentMatter.observersEnabled));
-		navigateRoute({ tab: "chats", isNewMatter: true });
+		navigateRoute({
+			tab: "chats",
+			isNewMatter: true,
+			newMatterLeadId: inheritedLeadId === "auto" ? undefined : inheritedLeadId,
+		});
 		composerRef.current?.focus();
 	};
 
@@ -368,7 +375,7 @@ export function App() {
 		if (seedText !== undefined) {
 			appendComposerText(seedText, NEW_ARCHITECT_DRAFT);
 		}
-		navigateRoute({ tab: "chats", isNewMatter: true });
+		navigateRoute({ tab: "chats", isNewMatter: true, newMatterLeadId: ROLE_ARCHITECT_MEMBER_ID });
 		composerRef.current?.focus();
 	};
 
@@ -380,9 +387,20 @@ export function App() {
 		setDraftAiMemberIds(memberIds);
 		initiation.setDraftPresetMode(memberIds.length === 1 ? "solo" : "lead_consult");
 		setDraftObserversEnabled(false);
-		navigateRoute({ tab: "chats", isNewMatter: true });
+		navigateRoute({ tab: "chats", isNewMatter: true, newMatterLeadId: memberIds[0]! });
 		composerRef.current?.focus();
 	};
+
+	useEffect(() => {
+		if (activeTab !== "chats" || selectedMatterId !== null || !explicitNewMatterRef.current) return;
+		const nextHash =
+			selectedMemberId && selectedMemberId !== "auto"
+				? `#/chats/new/${encodeURIComponent(selectedMemberId)}`
+				: "#/chats/new";
+		if (window.location.hash !== nextHash) {
+			window.history.replaceState(null, "", nextHash);
+		}
+	}, [activeTab, selectedMatterId, selectedMemberId]);
 
 	const matterAiMemberIds: string[] = useMemo(() => {
 		const allMembers = bootstrap?.members ?? [];
@@ -519,9 +537,11 @@ export function App() {
 			activeTab === "chats" && selectedMatterId === null && selectedMemberId === memberId ? "auto" : memberId;
 		const pickingArchitect = isArchitectMemberId(nextSelected, bootstrap?.members, templateByRoleId);
 		const pickingSolo = isSoloMemberId(nextSelected, bootstrap?.members, templateByRoleId);
-		if (activeTab !== "chats" || selectedMatterId !== null) {
-			navigateRoute({ tab: "chats", isNewMatter: true });
-		}
+		const alreadyOnNewMatter = activeTab === "chats" && selectedMatterId === null;
+		navigateRoute(
+			{ tab: "chats", isNewMatter: true, newMatterLeadId: nextSelected === "auto" ? undefined : nextSelected },
+			{ replace: alreadyOnNewMatter },
+		);
 		setSelectedMemberId(nextSelected);
 		if (pickingArchitect || selectedMemberId === ROLE_ARCHITECT_MEMBER_ID) setDraftModelSelection(null);
 		if (pickingArchitect || pickingSolo) {
@@ -858,9 +878,11 @@ export function App() {
 								onNotice={(msg) => setNoticeBanner(msg)}
 								onError={(msg) => setErrorBanner(msg)}
 								onAssignTask={(memberId) => {
-									startNewMatter();
-									setSelectedMemberId(memberId);
-									if (isArchitectMemberId(memberId, bootstrap?.members, templateByRoleId)) {
+									startNewMatter(memberId);
+									if (
+										isArchitectMemberId(memberId, bootstrap?.members, templateByRoleId) ||
+										isSoloMemberId(memberId, bootstrap?.members, templateByRoleId)
+									) {
 										setDraftAiMemberIds([memberId]);
 										initiation.setDraftPresetMode("solo");
 									}

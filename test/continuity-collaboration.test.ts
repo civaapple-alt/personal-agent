@@ -552,7 +552,9 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	const softQuestion = "我想看一下 现在「待你决定」的使用方式";
 	const observerStarted = Promise.withResolvers<void>();
 	let observerInterrupted = false;
+	const recordedPrompts: string[] = [];
 	const f = await fixture(t, async (worker, prompt, options) => {
+		recordedPrompts.push(prompt);
 		if (worker.options.env?.PA_DECISION_NAME) {
 			assert.equal(worker.options.noSession, true);
 			assert.equal(worker.options.args?.at(-1), "");
@@ -661,18 +663,20 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	const question = await send("@QA Manager 这条验收标准清楚吗？");
 	assert.equal(question.aiDiscussionTriggered, true);
 	const directedReply = await reply(question.message);
-	assert.equal(directedReply.senderId, "qa-manager");
-	assert.equal(directedReply.metadata?.matterLeadReply, undefined);
+	// Explicit @AI mentions on a matter with an active lead route through the lead so it keeps full context and delegates with concrete briefs.
+	assert.equal(directedReply.senderId, "engineering-manager");
+	assert.equal(directedReply.metadata?.matterLeadReply, true);
 	assert.ok(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS);
-	// Mentioned non-lead specialist gets its own role tools + request_clarification, but cannot publish deliverables.
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
+	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /delegate_to_member/);
 	assert.match(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /request_clarification/);
-	assert.doesNotMatch(f.workers[0]?.options.env?.PA_REQUIRED_TOOLS ?? "", /save_space_page/);
+	assert.match(recordedPrompts.at(-1) ?? "", /explicit @mention delegation/);
+	assert.match(recordedPrompts.at(-1) ?? "", /qa-manager/);
 	assert.equal(f.workers.length, 1);
 
 	await post(`/api/matters/${first.matter.id}`, { observersEnabled: true }, "PATCH");
 	const execute = await send(`@QA Manager ${direct}`);
-	assert.equal((await reply(execute.message)).senderId, "qa-manager");
+	assert.equal((await reply(execute.message)).senderId, "engineering-manager");
 	assert.match(f.workers[1]?.options.env?.PA_REQUIRED_TOOLS ?? "", /bash/);
 	assert.equal(f.workers[2]?.options.env?.PA_MEMBER_ID, "product-manager");
 	assert.match(f.workers[2]?.options.env?.PA_MEMBER_CONTEXT ?? "", /Observer participation/);
@@ -710,7 +714,7 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	assert.equal(human.message.metadata?.mode, "conversation");
 	assert.equal(f.workers.length, beforeHumanOnly);
 	const together = await send("@张宁 和 @QA Manager 一起看看");
-	assert.equal((await reply(together.message)).senderId, "qa-manager");
+	assert.equal((await reply(together.message)).senderId, "engineering-manager");
 	assert.equal(f.store.getMatter(first.matter.id)?.leadMemberId, "engineering-manager");
 
 	const delegate = async (observersEnabled: boolean) => {
@@ -748,7 +752,7 @@ test("one conversation entry point runs roles directly with their tools, preserv
 	};
 	await delegate(true);
 	const directed = await send("@Product Manager 补充配色意见");
-	assert.equal((await reply(directed.message)).senderId, "product-manager");
+	assert.equal((await reply(directed.message)).senderId, "engineering-manager");
 	assert.equal(
 		f.store
 			.listMessages(first.matter.id, "user")
@@ -931,7 +935,7 @@ test("System One drives saved conversations, workbench help, roster data and lea
 	assert.match(roster.reply?.content ?? "", /QA Manager.*负责人/);
 	assert.equal(f.workers.length, 1);
 	const mentioned = await send(path, { prompt: "@Product Manager 可以讲讲现状吗" });
-	assert.equal(mentioned.reply?.senderId, "product-manager");
+	assert.equal(mentioned.reply?.senderId, "qa-manager");
 	assert.equal(mentioned.matter.leadMemberId, "qa-manager");
 	const response = await send(path, { prompt: featureDemo });
 	assert.equal(response.message.metadata?.conversationDecisionSource, "system_one");

@@ -68,11 +68,8 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		modelAssessing = false,
 		modelAssessmentError,
 		onSelectLeadMember,
-		onSetScopeMode,
-		onToggleObserverPreset,
 		onToggleDraftMemberConsult,
 		onToggleDraftMemberObserver,
-		onApplyPresetMode,
 		onUpdateDraftAiMemberIds,
 		onUpdateDraftObserverIds,
 		onUpdateDraftCollaboratorIds,
@@ -117,10 +114,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		: [];
 	const hasObservers = observersEnabled;
 	const consultCount = consultIds.length;
-	const teamSummary =
-		isSoloScope && !hasObservers
-			? "由主责独立处理。"
-			: `${consultCount > 0 ? `可按需请教 ${consultCount} 位成员` : "不主动请教其他成员"}${activeObservers.length ? `，${activeObservers.length} 位成员旁听把关` : "，不自动旁听"}。`;
+	const teamSummary = isSoloScope
+		? "由主责独立处理。"
+		: `可按需委托 ${consultCount} 位成员${activeObservers.length ? `，${activeObservers.length} 位旁听` : ""}。`;
 	const applied =
 		assessment &&
 		(assessment.recommendedMode === "human_first"
@@ -165,6 +161,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const isModelResult = assessment?.assessmentSource === "model";
 	const confidenceLabel =
 		assessment?.confidence === "high" ? "高把握" : assessment?.confidence === "low" ? "低把握" : "中把握";
+	const otherOrgMembers = orgMembers.filter((member) => member.userId !== initiatorId);
 	const showAssessmentBar =
 		assessment || modelAssessing || modelAssessmentError || confirmModel || onRequestModelAssessment;
 
@@ -207,7 +204,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								<div className="initiation-recommendation-row">
 									<span className="initiation-assess-note">
 										{hasPromptText
-											? "可让 AI 根据需求推荐主责、委托与旁听安排。"
+											? "可让 AI 根据需求推荐主责与可委托成员。"
 											: "输入需求或添加文字附件后，可让 AI 推荐参与阵型。"}
 									</span>
 									<button
@@ -332,47 +329,10 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			)}
 			{expanded && (
 				<div id={rosterId} className="initiation-roster-drawer compact">
-					<div className="initiation-scope-bar">
-						<fieldset className="initiation-mode-pills" aria-label="协作范围">
-							<button
-								type="button"
-								className={`choice-chip ${isSoloScope ? "active" : ""}`}
-								aria-pressed={isSoloScope}
-								title="仅一位主责处理，保留旁听安排"
-								onClick={() => (onSetScopeMode ? onSetScopeMode("solo") : onApplyPresetMode("solo"))}
-							>
-								一人处理
-							</button>
-							<button
-								type="button"
-								className={`choice-chip ${!isSoloScope ? "active" : ""}`}
-								aria-pressed={!isSoloScope}
-								title="团队分工协作，可自由勾选「按需请教」与「旁听把关」，两者可叠加"
-								onClick={() => (onSetScopeMode ? onSetScopeMode("team") : onApplyPresetMode("lead_consult"))}
-							>
-								团队协作
-							</button>
-						</fieldset>
-						<button
-							type="button"
-							className={`choice-chip initiation-observer-chip ${hasObservers ? "active" : ""}`}
-							aria-pressed={hasObservers}
-							title={
-								hasObservers
-									? "已启用旁听把关（不清空按需请教名单）；点击关闭全部旁听"
-									: "叠加开启旁听把关，主责回复后由旁听成员检查风险，保留现有按需请教配置"
-							}
-							onClick={() =>
-								onToggleObserverPreset ? onToggleObserverPreset() : onApplyPresetMode("lead_review")
-							}
-						>
-							{hasObservers ? `AI 旁听 · ${activeObservers.length} 位` : "AI 旁听 · 关闭"}
-						</button>
-					</div>
 					<label className="initiation-lead-picker">
 						<span>主责</span>
 						<select
-							className="wechat-row-select"
+							className="roster-row-select"
 							aria-label="新事项主责 AI"
 							value={selectedMemberId === "auto" ? "auto" : (leadId ?? "")}
 							onChange={(event) => {
@@ -396,34 +356,30 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						</select>
 					</label>
 					{business.length > 1 && (
-						<fieldset className="initiation-role-rows" aria-label="成员委托与主动检查设置">
+						<fieldset className="initiation-role-rows" aria-label="可委托成员设置">
 							{business
 								.filter((member) => member.id !== leadId)
 								.map((member) => {
 									const isConsult = consultIds.includes(member.id);
-									const isObserver = activeObservers.includes(member.id);
 									return (
 										<div key={member.id} className="initiation-role-row">
 											<span className="initiation-role-name">{member.displayName}</span>
 											<div className="initiation-role-toggles">
-												<label className={`role-flag-pill ${isConsult ? "active" : ""}`}>
-													<input
-														type="checkbox"
-														checked={isConsult}
-														aria-label={`允许主责委托 ${member.displayName}`}
-														onChange={(e) => setRoleFlag(member.id, "consult", e.target.checked)}
-													/>
-													<span>允许委托</span>
-												</label>
-												<label className={`role-flag-pill observer ${isObserver ? "active" : ""}`}>
-													<input
-														type="checkbox"
-														checked={isObserver}
-														aria-label={`${member.displayName} 在主责回复后检查`}
-														onChange={(e) => setRoleFlag(member.id, "observer", e.target.checked)}
-													/>
-													<span>回复后检查</span>
-												</label>
+												<button
+													type="button"
+													role="switch"
+													aria-checked={isConsult}
+													aria-label={`允许主责委托 ${member.displayName}`}
+													title={
+														isConsult
+															? `已允许主责委托 ${member.displayName}`
+															: `点击允许主责委托 ${member.displayName}`
+													}
+													className={`roster-switch ${isConsult ? "on" : ""}`}
+													onClick={() => setRoleFlag(member.id, "consult", !isConsult)}
+												>
+													<span className="roster-switch-thumb" />
+												</button>
 											</div>
 										</div>
 									);
@@ -431,7 +387,7 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 						</fieldset>
 					)}
 					<div className="initiation-compact-footer">
-						{onUpdateDraftVisibility && (
+						{otherOrgMembers.length > 0 && onUpdateDraftVisibility && (
 							<div className="initiation-human-row">
 								<span className="initiation-mini-label">事项范围</span>
 								<button
@@ -452,29 +408,27 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 								</button>
 							</div>
 						)}
-						{(initiatorName || orgMembers.length > 0) && (
+						{otherOrgMembers.length > 0 && (
 							<div className="initiation-human-row">
 								<span className="initiation-mini-label">人类成员</span>
 								{initiatorName && <span className="initiation-initiator">{initiatorName} · 发起人</span>}
-								{orgMembers
-									.filter((member) => member.userId !== initiatorId)
-									.map((member) => (
-										<button
-											key={member.userId}
-											type="button"
-											className={`choice-chip ${draftCollaboratorIds.includes(member.userId) ? "active" : ""}`}
-											aria-pressed={draftCollaboratorIds.includes(member.userId)}
-											onClick={() =>
-												onUpdateDraftCollaboratorIds(
-													draftCollaboratorIds.includes(member.userId)
-														? draftCollaboratorIds.filter((id) => id !== member.userId)
-														: [...draftCollaboratorIds, member.userId],
-												)
-											}
-										>
-											{member.displayName ?? member.email ?? member.userId}
-										</button>
-									))}
+								{otherOrgMembers.map((member) => (
+									<button
+										key={member.userId}
+										type="button"
+										className={`choice-chip ${draftCollaboratorIds.includes(member.userId) ? "active" : ""}`}
+										aria-pressed={draftCollaboratorIds.includes(member.userId)}
+										onClick={() =>
+											onUpdateDraftCollaboratorIds(
+												draftCollaboratorIds.includes(member.userId)
+													? draftCollaboratorIds.filter((id) => id !== member.userId)
+													: [...draftCollaboratorIds, member.userId],
+											)
+										}
+									>
+										{member.displayName ?? member.email ?? member.userId}
+									</button>
+								))}
 							</div>
 						)}
 						{onStartArchitectMatter && (

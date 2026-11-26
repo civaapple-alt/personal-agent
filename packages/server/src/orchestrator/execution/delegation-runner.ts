@@ -61,7 +61,8 @@ export async function delegateBetweenMembers(
 		matterRecord &&
 		matterRecord.consultMemberIds != null &&
 		toMember.id !== matterRecord.leadMemberId &&
-		!matterRecord.consultMemberIds.includes(toMember.id)
+		!matterRecord.consultMemberIds.includes(toMember.id) &&
+		!run.explicitlyMentionedMemberIds?.includes(toMember.id)
 	) {
 		throw new Error(`Team member ${toMember.displayName} is unavailable for on-demand consultation in this matter`);
 	}
