@@ -5,8 +5,10 @@ import {
 	fetchWorkspaceCustomizations,
 	removeWorkspaceFolder,
 	updateWorkspaceFolder,
+	updateWorkspacePiTrust,
 	type WorkspaceCustomizationsReportDto,
 	type WorkspaceFolderDto,
+	type WorkspacePiTrustDto,
 } from "../api/workspaceFolders.ts";
 import type { MatterDto, OrganizationDto, WorkspaceDto } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
@@ -81,6 +83,7 @@ export function WorkspaceDetailPanel({
 }: WorkspaceDetailPanelProps) {
 	const [subTab, setSubTab] = useState<"config" | "activity">("config");
 	const [folders, setFolders] = useState<WorkspaceFolderDto[]>([]);
+	const [piTrust, setPiTrust] = useState<WorkspacePiTrustDto | null>(null);
 	const [report, setReport] = useState<WorkspaceCustomizationsReportDto | null>(null);
 	const [spaceDocs, setSpaceDocs] = useState<SpaceDocumentMetaDto[]>([]);
 	const [folderFilter, setFolderFilter] = useState<string>("");
@@ -103,6 +106,7 @@ export function WorkspaceDetailPanel({
 		try {
 			const res = await fetchWorkspaceCustomizations(wsId, filterId || undefined);
 			setFolders(res.folders);
+			setPiTrust(res.piTrust ?? null);
 			setReport(res.report);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -176,6 +180,27 @@ export function WorkspaceDetailPanel({
 		}
 	};
 
+	const handleTogglePiTrust = async () => {
+		if (!piTrust?.eligible || !piTrust.canEdit) return;
+		const nextTrusted = !piTrust.effectiveTrusted;
+		setBusy(true);
+		setError("");
+		try {
+			const res = await updateWorkspacePiTrust(workspace.id, nextTrusted);
+			setPiTrust(res.piTrust);
+			await onChanged?.();
+			onNotice(
+				nextTrusted
+					? "已信任该工作区目录并同步至 ~/.pi/agent/trust.json"
+					: "已取消信任该工作区目录并同步至 ~/.pi/agent/trust.json",
+			);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusy(false);
+		}
+	};
+
 	const handleRemoveFolder = async (folder: WorkspaceFolderDto) => {
 		setBusy(true);
 		setError("");
@@ -208,6 +233,14 @@ export function WorkspaceDetailPanel({
 						<h2>{workspace.name}</h2>
 						<span className="ws-role-pill">{workspace.defaultBranch}</span>
 						{workspace.visibility === "restricted" && <span className="ws-warn-pill">受限访问</span>}
+						{piTrust?.eligible && !piTrust.effectiveTrusted && (
+							<span
+								className="ws-warn-pill"
+								title="~/.pi/agent/trust.json 中已拒绝该目录，可在下方点击切换为信任"
+							>
+								Pi 未信任
+							</span>
+						)}
 					</div>
 					<div className="ws-detail-sub">
 						<code>{workspace.repoPath}</code>
@@ -341,6 +374,25 @@ export function WorkspaceDetailPanel({
 													</span>
 													Skills
 												</button>
+												{folder.role === "primary" && piTrust?.eligible && piTrust.canEdit && (
+													<button
+														type="button"
+														aria-pressed={piTrust.effectiveTrusted}
+														className={`ws-toggle-pill ${piTrust.effectiveTrusted ? "is-on" : ""}`}
+														disabled={busy}
+														title={
+															piTrust.effectiveTrusted
+																? "已允许 Pi 加载该目录的 .pi/ 与 .agents/（点击设为拒绝并写入 ~/.pi/agent/trust.json）"
+																: "~/.pi/agent/trust.json 当前拒绝此目录（点击切换为信任并写入 trust.json）"
+														}
+														onClick={() => void handleTogglePiTrust()}
+													>
+														<span className="ws-toggle-check" aria-hidden="true">
+															{piTrust.effectiveTrusted ? "✓" : ""}
+														</span>
+														Pi 信任
+													</button>
+												)}
 												<span className="ws-folder-remove-slot">
 													{folder.role === "attached" && (
 														<button

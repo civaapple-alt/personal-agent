@@ -50,13 +50,29 @@ export interface WorkspaceCustomizationsReportDto {
 	skills: DiscoveredSkillDto[];
 }
 
+export interface WorkspacePiTrustDto {
+	eligible: boolean;
+	decision: boolean | null;
+	matchedPath: string | null;
+	effectiveTrusted: boolean;
+	canEdit: boolean;
+}
+
 export function fetchWorkspaceCustomizations(workspaceId: string, folderId?: string) {
 	const query = folderId ? `?folderId=${encodeURIComponent(folderId)}` : "";
 	return requestJson<{
 		workspaceId: string;
 		folders: WorkspaceFolderDto[];
+		piTrust?: WorkspacePiTrustDto;
 		report: WorkspaceCustomizationsReportDto;
 	}>(`/api/workspaces/${encodeURIComponent(workspaceId)}/customizations${query}`);
+}
+
+export function updateWorkspacePiTrust(workspaceId: string, trusted: boolean | null) {
+	return requestJson<{ workspaceId: string; piTrust: WorkspacePiTrustDto }>(
+		`/api/workspaces/${encodeURIComponent(workspaceId)}/pi-trust`,
+		{ method: "PATCH", body: JSON.stringify({ trusted }) },
+	);
 }
 
 export function addWorkspaceFolder(

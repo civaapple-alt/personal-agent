@@ -78,6 +78,7 @@ export class TeamOrchestrator {
 	private readonly store: PersonalAgentStore;
 	private readonly templatesById = new Map<string, RoleTemplate>();
 	private readonly defaultCwd: string;
+	private readonly defaultWorkspaceDir: string | undefined;
 	private readonly sessionDir: string | undefined;
 	private readonly skillsDir: string | undefined;
 	private readonly noSession: boolean;
@@ -97,6 +98,7 @@ export class TeamOrchestrator {
 		this.classifier = options.classifier;
 		this.extensions = options.extensions ?? [];
 		this.defaultCwd = options.defaultCwd ?? process.cwd();
+		this.defaultWorkspaceDir = options.defaultWorkspaceDir;
 		this.sessionDir = options.sessionDir;
 		this.skillsDir = options.skillsDir;
 		this.noSession = options.noSession ?? false;
@@ -466,7 +468,7 @@ export class TeamOrchestrator {
 				decideConversationIntent: ({ matterId, workspace, message, memberId, ...routing }) => {
 					const matter = this.requireMatter(matterId);
 					const orgId = workspace ? workspace.orgId : (matter.orgId ?? null);
-					const cwd = workspace?.repoPath ?? this.defaultCwd;
+					const cwd = workspace?.repoPath ?? this.defaultWorkspaceDir ?? this.defaultCwd;
 					const modelSelection = resolveConfiguredModel(
 						this.store,
 						orgId ?? null,
@@ -601,6 +603,7 @@ export class TeamOrchestrator {
 			{
 				store: this.store,
 				defaultCwd: this.defaultCwd,
+				defaultWorkspaceDir: this.defaultWorkspaceDir,
 				sessionDir: this.sessionDir,
 				skillsDir: this.skillsDir,
 				noSession: this.noSession,

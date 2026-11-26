@@ -158,6 +158,8 @@ export interface TeamOrchestratorOptions {
 	store: PersonalAgentStore;
 	templates: RoleTemplate[];
 	defaultCwd?: string;
+	/** Dedicated fallback working directory for unbound matters (e.g. ~/.pa/workspaces/default). */
+	defaultWorkspaceDir?: string;
 	sessionDir?: string;
 	skillsDir?: string;
 	noSession?: boolean;

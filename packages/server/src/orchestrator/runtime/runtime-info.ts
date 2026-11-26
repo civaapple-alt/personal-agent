@@ -749,8 +749,8 @@ export async function buildRuntimeOverview(options: {
 							...(config.noSession ? { sessionStrategy: "无持久 Pi 会话" } : {}),
 							extensionsPolicy: serverConfig?.inheritLocalPiResources
 								? serverConfig.localPiResourcesPolicy === "always"
-									? "宿主机 Pi 资源已继承（PA_LOCAL_PI_RESOURCES=1 · --offline）；托管克隆仓保持 --no-extensions；Skill 由 Pi 发现及按需读取"
-									: "本机个人模式可继承 Pi 资源（--offline）；Skill 由 Pi 发现及按需读取"
+									? "宿主机 Pi 资源已继承（PA_LOCAL_PI_RESOURCES=1 · --offline；本地工作区按 trust.json 传 --approve，托管克隆仓保持 --no-extensions --no-approve）；Skill 由 Pi 发现及按需读取"
+									: "本机个人模式可继承 Pi 资源（--offline；本地工作区按 trust.json 传 --approve，无工作区落盘至 ~/.pa/workspaces/default）；Skill 由 Pi 发现及按需读取"
 								: "--no-extensions 显式装配 PA 扩展；按租户作用域挂载 --skill（Skill 由 Pi 发现及按需读取；设 PA_LOCAL_PI_RESOURCES=1 可继承宿主机 Pi 扩展）",
 						}
 					: mode,

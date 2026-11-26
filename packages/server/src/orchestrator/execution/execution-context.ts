@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
 	resolveAllowedSkillRoots,
 	resolveRoleSkillPath,
@@ -338,4 +339,163 @@ export function resolveScopedDiscoveredSkillDirs(options: {
 		candidates.push(resolve(options.skillsDir, "users", options.userId));
 	}
 	return candidates.filter((dir) => existsSync(dir));
+}
+
+const DEFAULT_WORKSPACE_AGENTS_MD = `# Default Workspace
+
+This directory is the default working directory for Personal Agent matters that are not bound to a specific repository workspace.
+
+- General discussions, drafts, and scratch files created without a bound project workspace live here rather than inside the Personal Agent source repository.
+- You can customize this file with your own general instructions for unbound matters.
+`;
+
+/**
+ * Ensure the dedicated default workspace directory (by default \`~/.pa/workspaces/default\`)
+ * exists and has a minimal \`AGENTS.md\` when first created.
+ */
+export function ensureDefaultWorkspaceDir(dirPath: string): string {
+	const resolved = resolve(dirPath);
+	mkdirSync(resolved, { recursive: true });
+	const agentsPath = join(resolved, "AGENTS.md");
+	if (!existsSync(agentsPath)) {
+		writeFileSync(agentsPath, DEFAULT_WORKSPACE_AGENTS_MD, "utf8");
+	}
+	return resolved;
+}
+
+function canonicalizeFsPath(targetPath: string): string {
+	const resolved = resolve(targetPath);
+	try {
+		return realpathSync(resolved);
+	} catch {
+		return resolved;
+	}
+}
+
+function sameFsPath(left: string, right: string): boolean {
+	if (process.platform === "win32") {
+		return left.toLowerCase() === right.toLowerCase();
+	}
+	return left === right;
+}
+
+/** Resolve Pi's agent configuration directory (respecting \`PI_CODING_AGENT_DIR\`). */
+export function resolvePiAgentDir(): string {
+	const configured = process.env.PI_CODING_AGENT_DIR?.trim();
+	if (configured) {
+		if (configured === "~") return homedir();
+		if (configured.startsWith("~/") || configured.startsWith("~\\")) {
+			return join(homedir(), configured.slice(2));
+		}
+		return resolve(configured);
+	}
+	return join(homedir(), ".pi", "agent");
+}
+
+export interface PiProjectTrustState {
+	decision: boolean | null;
+	matchedPath: string | null;
+}
+
+/**
+ * Read Pi's saved project trust state from \`~/.pi/agent/trust.json\` using Pi's
+ * nearest-ancestor lookup rule. Returns both the decision and the matched path.
+ */
+export function readPiProjectTrustState(cwd: string, agentDir?: string): PiProjectTrustState {
+	const trustPath = join(agentDir ?? resolvePiAgentDir(), "trust.json");
+	if (!existsSync(trustPath)) return { decision: null, matchedPath: null };
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(trustPath, "utf8").replace(/^\uFEFF/, ""));
+	} catch {
+		return { decision: null, matchedPath: null };
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { decision: null, matchedPath: null };
+	const entries = Object.entries(parsed as Record<string, unknown>)
+		.filter(([, value]) => value === true || value === false)
+		.map(([key, value]) => ({ rawKey: key, path: canonicalizeFsPath(key), decision: value as boolean }));
+	if (entries.length === 0) return { decision: null, matchedPath: null };
+
+	let currentDir = canonicalizeFsPath(cwd);
+	while (true) {
+		const matched = entries.find((entry) => sameFsPath(entry.path, currentDir));
+		if (matched) return { decision: matched.decision, matchedPath: matched.rawKey };
+		const parentDir = dirname(currentDir);
+		if (parentDir === currentDir) return { decision: null, matchedPath: null };
+		currentDir = parentDir;
+	}
+}
+
+/**
+ * Read Pi's saved project trust decision from \`~/.pi/agent/trust.json\` using Pi's
+ * nearest-ancestor lookup rule. Returns \`true\`, \`false\`, or \`null\` if undecided.
+ */
+export function readPiProjectTrustDecision(cwd: string, agentDir?: string): boolean | null {
+	return readPiProjectTrustState(cwd, agentDir).decision;
+}
+
+/**
+ * Update a directory's trust decision in Pi's native \`~/.pi/agent/trust.json\` file
+ * (\`true\`, \`false\`, or \`null\` to clear an explicit entry for \`cwd\`).
+ */
+export function writePiProjectTrustDecision(
+	cwd: string,
+	decision: boolean | null,
+	agentDir?: string,
+): PiProjectTrustState {
+	const dir = agentDir ?? resolvePiAgentDir();
+	const trustPath = join(dir, "trust.json");
+	mkdirSync(dir, { recursive: true });
+	const data: Record<string, boolean> = {};
+	if (existsSync(trustPath)) {
+		try {
+			const parsed: unknown = JSON.parse(readFileSync(trustPath, "utf8").replace(/^\uFEFF/, ""));
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+				for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+					if (value === true || value === false) data[key] = value;
+				}
+			}
+		} catch {
+			// Fall back to a clean object if the existing file is unreadable or corrupt.
+		}
+	}
+	const canonicalCwd = canonicalizeFsPath(cwd);
+	for (const existingKey of Object.keys(data)) {
+		if (sameFsPath(canonicalizeFsPath(existingKey), canonicalCwd)) {
+			delete data[existingKey];
+		}
+	}
+	if (decision === true || decision === false) {
+		data[canonicalCwd] = decision;
+	}
+	const tempPath = `${trustPath}.${process.pid}.${Date.now()}.tmp`;
+	writeFileSync(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+	renameSync(tempPath, trustPath);
+	return readPiProjectTrustState(cwd, agentDir);
+}
+
+/**
+ * Build Pi's resource discovery & project trust CLI flags for a worker pass:
+ * - Isolated / team / cloned workspaces: \`--no-extensions --no-approve\`
+ * - Inherited local personal mode + explicit local workspace:
+ *   \`--offline --approve\` unless \`~/.pi/agent/trust.json\` explicitly sets \`false\` (\`--offline --no-approve\`)
+ * - Inherited local personal mode + unbound matter:
+ *   \`--offline\` when using a dedicated default workspace dir (\`~/.pa/workspaces/default\`),
+ *   or \`--offline --no-approve\` when falling back to the host repo cwd.
+ */
+export function resolveLocalWorkspacePiArgs(options: {
+	inheritsLocalResources: boolean;
+	hasWorkspace: boolean;
+	cwd: string;
+	hasDedicatedDefaultWorkspace: boolean;
+	agentDir?: string;
+}): string[] {
+	if (!options.inheritsLocalResources) {
+		return ["--no-extensions", "--no-approve"];
+	}
+	if (options.hasWorkspace) {
+		const savedDecision = readPiProjectTrustDecision(options.cwd, options.agentDir);
+		return savedDecision === false ? ["--offline", "--no-approve"] : ["--offline", "--approve"];
+	}
+	return options.hasDedicatedDefaultWorkspace ? ["--offline"] : ["--offline", "--no-approve"];
 }

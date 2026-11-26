@@ -56,6 +56,7 @@ import {
 	listWorkspaceTopLevelEntries,
 	prepareDelivery,
 	readWorkspaceFolder,
+	resolveLocalWorkspacePiArgs,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
 	resolveScopedDiscoveredSkillDirs,
@@ -73,6 +74,7 @@ import {
 export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;
 	defaultCwd: string;
+	defaultWorkspaceDir?: string;
 	sessionDir: string | undefined;
 	skillsDir?: string;
 	noSession: boolean;
@@ -140,7 +142,7 @@ export async function executeWithWorkerPass(
 	);
 	const activeOrgId = input.workspace ? input.workspace.orgId : (matter?.orgId ?? null);
 	const organization = activeOrgId ? deps.store.getOrganization(activeOrgId) : null;
-	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultCwd);
+	const cwd = resolve(input.workspace?.repoPath ?? deps.defaultWorkspaceDir ?? deps.defaultCwd);
 	const template = deps.getTemplateForMember(input.member);
 	const isArchitect = isArchitectRoleTemplate(template ?? { id: input.member.id });
 	const isSolo = isSoloRoleTemplate(template ?? { id: input.member.id });
@@ -716,10 +718,14 @@ export async function executeWithWorkerPass(
 			}
 		}, signal);
 
-		// Use Pi's own resource and project trust rules. Without a workspace, load user resources only; cloned repos stay isolated.
-		const args = inheritsLocalResources
-			? ["--offline", ...(input.workspace ? [] : ["--no-approve"])]
-			: ["--no-extensions", "--no-approve"];
+		// Respect ~/.pi/agent/trust.json explicit refusals; otherwise approve explicitly selected local workspaces
+		// (since Pi RPC has hasUI=false and would silently skip undecided repos). Cloned repos stay isolated.
+		const args = resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: Boolean(inheritsLocalResources),
+			hasWorkspace: Boolean(input.workspace),
+			cwd,
+			hasDedicatedDefaultWorkspace: Boolean(deps.defaultWorkspaceDir),
+		});
 		for (const entry of teamExtension.entries) args.push("--extension", entry);
 		args.push("--extension", resolveBuiltinExtensionPath("skill-catalog"));
 		args.push("--extension", resolveBuiltinExtensionPath("role-skills"));

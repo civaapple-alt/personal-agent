@@ -1,5 +1,9 @@
 import { readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import {
+	readPiProjectTrustState,
+	writePiProjectTrustDecision,
+} from "../../orchestrator/execution/execution-context.ts";
 import { buildWorkspaceCustomizations } from "../../orchestrator/runtime/workspace-customizations.ts";
 import {
 	canAccessWorkspace,
@@ -110,13 +114,71 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 		const allFolders = store.workspaceFolders.listFolders(workspaceId);
 		const scopedFolders = folderIdFilter ? allFolders.filter((f) => f.id === folderIdFilter) : allFolders;
 		const report = buildWorkspaceCustomizations(scopedFolders);
+		const canEditPiTrust = isGlobalUnscopedActor(actor) || isSuperAdminActor(actor);
+		const piTrust =
+			workspace.sourceType === "cloned"
+				? {
+						eligible: false,
+						decision: null as boolean | null,
+						matchedPath: null as string | null,
+						effectiveTrusted: false,
+						canEdit: false,
+					}
+				: (() => {
+						const state = readPiProjectTrustState(workspace.repoPath);
+						return {
+							eligible: true,
+							decision: state.decision,
+							matchedPath: state.matchedPath,
+							effectiveTrusted: state.decision !== false,
+							canEdit: canEditPiTrust,
+						};
+					})();
 		sendJson(res, 200, {
 			workspaceId,
 			folders: allFolders,
+			piTrust,
 			report: {
 				...report,
 				// Strip full markdown bodies from the overview API; UI only needs preview, path, and token breakdown.
 				rules: report.rules.map(({ content: _content, ...rest }) => rest),
+			},
+		});
+		return true;
+	}
+
+	const piTrustMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/pi-trust$/);
+	if (piTrustMatch && method === "PATCH") {
+		if (!requireActiveActor(res, actor)) return true;
+		const workspaceId = decodeURIComponent(piTrustMatch[1]!);
+		const workspace = store.getWorkspace(workspaceId);
+		if (!workspace) {
+			sendError(res, 404, "工作区不存在");
+			return true;
+		}
+		if (!isGlobalUnscopedActor(actor) && !isSuperAdminActor(actor)) {
+			sendError(res, 403, "仅本机所有者或超级管理员可调整 Pi 目录信任状态");
+			return true;
+		}
+		if (workspace.sourceType === "cloned") {
+			sendError(res, 400, "托管克隆仓固定保持隔离，不支持切换 Pi 目录信任");
+			return true;
+		}
+		const body = await readJsonBody(req);
+		if (body.trusted !== true && body.trusted !== false && body.trusted !== null) {
+			sendError(res, 400, "trusted 字段必须为 true、false 或 null");
+			return true;
+		}
+		const state = writePiProjectTrustDecision(workspace.repoPath, body.trusted);
+		broadcast("workspace_updated", { workspaceId });
+		sendJson(res, 200, {
+			workspaceId,
+			piTrust: {
+				eligible: true,
+				decision: state.decision,
+				matchedPath: state.matchedPath,
+				effectiveTrusted: state.decision !== false,
+				canEdit: true,
 			},
 		});
 		return true;

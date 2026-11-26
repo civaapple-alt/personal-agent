@@ -7,7 +7,7 @@ import { PA_RUNTIME_ASSET_MANIFEST, resolveRepoRoot } from "../build-support.ts"
 import { listServerExtensionSummaries } from "../extensions/registry.ts";
 import { closeLogging, createLogger, initLogging } from "../log/index.ts";
 import { createSystemOneClassifier } from "../orchestrator/architect/system-one.ts";
-import { resolveRepoGitUserIdentity } from "../orchestrator/execution/execution-context.ts";
+import { ensureDefaultWorkspaceDir, resolveRepoGitUserIdentity } from "../orchestrator/execution/execution-context.ts";
 import {
 	type LocalPiResourcesPolicy,
 	normalizeLocalPiResourcesPolicy,
@@ -30,6 +30,7 @@ export interface BootHostOptions {
 	host?: string;
 	requireAuth?: boolean;
 	workspacesRoot?: string;
+	defaultWorkspaceDir?: string;
 	sessionDir?: string;
 	webDistDir?: string;
 	piExtensions?: string[];
@@ -257,12 +258,20 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 		: process.env.PA_SESSION_DIR?.trim()
 			? resolve(process.env.PA_SESSION_DIR.trim())
 			: resolve(rootDir, ".data/pi-sessions");
+	const defaultWorkspaceDir = options.defaultWorkspaceDir
+		? ensureDefaultWorkspaceDir(options.defaultWorkspaceDir)
+		: process.env.PA_DEFAULT_WORKSPACE_DIR?.trim()
+			? ensureDefaultWorkspaceDir(process.env.PA_DEFAULT_WORKSPACE_DIR.trim())
+			: dbPath === ":memory:"
+				? undefined
+				: ensureDefaultWorkspaceDir(join(homedir(), ".pa", "workspaces", "default"));
 	const decisionKey = await readDecisionKey(rootDir);
 	const orchestrator = new TeamOrchestrator({
 		classifier: savedSettings.systemOneEnabled && decisionKey ? createSystemOneClassifier(decisionKey) : undefined,
 		store,
 		templates,
 		defaultCwd: rootDir,
+		defaultWorkspaceDir,
 		noSession: false,
 		extensions: extraPiExtensions.length > 0 ? extraPiExtensions : undefined,
 		sessionDir,

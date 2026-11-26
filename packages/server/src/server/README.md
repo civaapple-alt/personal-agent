@@ -17,7 +17,7 @@
 | 角色设计、架构师对话及请求取消 | [role-design.ts](routes/role-design.ts) |
 | 组织、工作区与预览服务 | [deliverables-orgs.ts](routes/deliverables-orgs.ts) |
 | Git 资料空间与文档提交/Diff | [spaces.ts](routes/spaces.ts)（[acl.ts](acl.ts) 提供 `canAccessSpace` / `canWriteSpace`） |
-| 多目录工作区与 Rules/Skills 预算明细 | [workspace-folders.ts](routes/workspace-folders.ts) |
+| 多目录工作区、Rules/Skills 预算明细与 Pi 目录信任切换（`PATCH /api/workspaces/:id/pi-trust`） | [workspace-folders.ts](routes/workspace-folders.ts) |
 | 信任四步 Skill 列表、只读预览与策略更新 | [skill-trust.ts](routes/skill-trust.ts)（`GET/PATCH /api/skills/trust`、`GET /api/skills/trust/detail`） |
 
 `GET /api/workspaces/directory-browser` 为工作区登记和附加目录提供服务器目录浏览。请求须指定目标组织或工作区；服务端检查管理权限，并对当前目录、父目录及每个子目录复用本地绑定策略。列表不包含隐藏目录和符号链接，手动输入仍由绑定接口校验。

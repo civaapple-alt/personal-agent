@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { collectTeamFrictionDigest } from "../packages/server/src/orchestrator/architect/meta-architect.ts";
+import {
+	ensureDefaultWorkspaceDir,
+	readPiProjectTrustDecision,
+	resolveLocalWorkspacePiArgs,
+	writePiProjectTrustDecision,
+} from "../packages/server/src/orchestrator/execution/execution-context.ts";
 import { TeamOrchestrator } from "../packages/server/src/orchestrator/team-orchestrator.ts";
 import { loadRoleTemplatesFromDir } from "../packages/server/src/roles/template-loader.ts";
 import type { PiRpcWorkerOptions, PromptRunResult } from "../packages/server/src/rpc/pi-rpc-worker.ts";
@@ -178,4 +184,159 @@ test("Native resource discovery separates sessions, includes observers, and isol
 	});
 	assert.ok(!f.calls[7]?.options.args?.includes("--no-skills"));
 	assert.ok(f.calls[7]?.options.args?.includes("--no-approve"));
+});
+
+test("ensureDefaultWorkspaceDir seeds AGENTS.md without overwriting user customizations", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "pa-default-ws-"));
+	t.after(async () => rm(root, { recursive: true, force: true }));
+	const target = join(root, "workspaces", "default");
+
+	const created = ensureDefaultWorkspaceDir(target);
+	assert.equal(created, resolve(target));
+	const initial = await readFile(join(target, "AGENTS.md"), "utf8");
+	assert.match(initial, /Default Workspace/);
+
+	await writeFile(join(target, "AGENTS.md"), "# Custom User Rules\n", "utf8");
+	ensureDefaultWorkspaceDir(target);
+	const preserved = await readFile(join(target, "AGENTS.md"), "utf8");
+	assert.equal(preserved, "# Custom User Rules\n");
+});
+
+test("readPiProjectTrustDecision and resolveLocalWorkspacePiArgs honor trust.json and defaultWorkspaceDir", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "pa-trust-json-"));
+	t.after(async () => rm(root, { recursive: true, force: true }));
+	const agentDir = join(root, "pi-agent");
+	const codeDir = join(root, "code");
+	const trustedRepo = join(codeDir, "trusted-app");
+	const deniedRepo = join(codeDir, "denied-app");
+	const undecidedRepo = join(root, "other", "new-app");
+	await mkdir(agentDir, { recursive: true });
+	await mkdir(trustedRepo, { recursive: true });
+	await mkdir(deniedRepo, { recursive: true });
+	await mkdir(undecidedRepo, { recursive: true });
+
+	await writeFile(
+		join(agentDir, "trust.json"),
+		JSON.stringify({
+			[codeDir]: true,
+			[deniedRepo]: false,
+		}),
+		"utf8",
+	);
+
+	assert.equal(readPiProjectTrustDecision(trustedRepo, agentDir), true);
+	assert.equal(readPiProjectTrustDecision(deniedRepo, agentDir), false);
+	assert.equal(readPiProjectTrustDecision(undecidedRepo, agentDir), null);
+
+	// Local workspace: undecided or trusted -> --offline --approve; explicit false -> --offline --no-approve
+	assert.deepEqual(
+		resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: true,
+			hasWorkspace: true,
+			cwd: undecidedRepo,
+			hasDedicatedDefaultWorkspace: true,
+			agentDir,
+		}),
+		["--offline", "--approve"],
+	);
+	assert.deepEqual(
+		resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: true,
+			hasWorkspace: true,
+			cwd: deniedRepo,
+			hasDedicatedDefaultWorkspace: true,
+			agentDir,
+		}),
+		["--offline", "--no-approve"],
+	);
+
+	// Flip an explicitly denied directory (false) to trusted (true) in trust.json, preserving other entries
+	const flipped = writePiProjectTrustDecision(deniedRepo, true, agentDir);
+	assert.equal(flipped.decision, true);
+	assert.equal(readPiProjectTrustDecision(deniedRepo, agentDir), true);
+	assert.equal(readPiProjectTrustDecision(trustedRepo, agentDir), true);
+	assert.deepEqual(
+		resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: true,
+			hasWorkspace: true,
+			cwd: deniedRepo,
+			hasDedicatedDefaultWorkspace: true,
+			agentDir,
+		}),
+		["--offline", "--approve"],
+	);
+
+	// Clearing the explicit entry falls back to ancestor trust (codeDir: true)
+	const cleared = writePiProjectTrustDecision(deniedRepo, null, agentDir);
+	assert.equal(cleared.decision, true);
+
+	// Unbound matter with dedicated default workspace -> --offline (no --no-approve needed)
+	assert.deepEqual(
+		resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: true,
+			hasWorkspace: false,
+			cwd: join(root, "default-ws"),
+			hasDedicatedDefaultWorkspace: true,
+			agentDir,
+		}),
+		["--offline"],
+	);
+
+	// Isolated / team / cloned mode -> --no-extensions --no-approve
+	assert.deepEqual(
+		resolveLocalWorkspacePiArgs({
+			inheritsLocalResources: false,
+			hasWorkspace: true,
+			cwd: trustedRepo,
+			hasDedicatedDefaultWorkspace: true,
+			agentDir,
+		}),
+		["--no-extensions", "--no-approve"],
+	);
+
+	// End-to-end orchestrator check with dedicated defaultWorkspaceDir
+	const defaultWorkspaceDir = ensureDefaultWorkspaceDir(join(root, "pa-default"));
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve("roles"));
+	const calls: Array<PiRpcWorkerOptions> = [];
+	const orchestrator = new TeamOrchestrator({
+		store,
+		templates,
+		defaultCwd: root,
+		defaultWorkspaceDir,
+		noSession: true,
+		workerFactory: (options) => {
+			calls.push(options);
+			return {
+				async start() {
+					if (options.env?.PA_TEAM_BRIDGE_URL) await reportReady(options);
+				},
+				async getState() {
+					return { sessionId: randomUUID(), sessionFile: undefined, isStreaming: false };
+				},
+				async runPromptAndWait() {
+					return result("ok");
+				},
+				onNotice() {
+					return () => {};
+				},
+				setDialogHandler() {},
+				async stop() {},
+			};
+		},
+	});
+	t.after(async () => {
+		await orchestrator.shutdown();
+		db.close();
+	});
+
+	await orchestrator.dispatchMatter({
+		prompt: "General question without workspace",
+		preferredMemberId: "product-manager",
+		inheritLocalPiResources: true,
+	});
+	assert.equal(calls[0]?.cwd, defaultWorkspaceDir);
+	assert.ok(calls[0]?.args?.includes("--offline"));
+	assert.ok(!calls[0]?.args?.includes("--no-approve"));
 });

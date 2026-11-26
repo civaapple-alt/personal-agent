@@ -21,6 +21,7 @@
 | `PA_SESSION_DIR` | `<cwd>/.data/pi-sessions` | [服务入口](../../apps/cli/src/main.ts) | Pi CLI 会话文件持久化根目录；隔离脚本（如 [start-team-sandbox.mjs](../../scripts/start-team-sandbox.mjs)）可单独重定向以避免写入 `.data/pi-sessions` |
 | `PA_REQUIRE_AUTH` | `0`（关闭） | [服务入口](../../apps/cli/src/main.ts) → [HTTP 鉴权](../../packages/server/src/server/auth.ts) | 设为 `1`/`true` 启用多用户强制认证模式（禁止本机回环免登录回退，需超管初始化并凭账号会话或口令访问） |
 | `PA_WORKSPACES_ROOT` | `<dataDir>/team-workspaces` | [服务入口](../../apps/cli/src/main.ts) → [Git 克隆](../../packages/server/src/server/git-clone.ts) | 多团队默认 Git 克隆主目录；各组织从 Git 地址克隆的代码库自动落盘至 `<workspacesRoot>/<orgSlug>/`（也可在 `#/admin` 动态修改） |
+| `PA_DEFAULT_WORKSPACE_DIR` | `~/.pa/workspaces/default` | [服务入口](../../apps/cli/src/main.ts) → [boot.ts](../../packages/server/src/server/boot.ts) | 未绑定业务工作区的通用事项默认 `cwd`；放在 `personal-agent` 仓库外以避免 Pi 向上遍历祖先目录读到宿主仓库的 `AGENTS.md`，首次启动自动初始化并写入默认 `AGENTS.md` |
 | `PA_ADMIN_EMAIL` / `PA_ADMIN_PASSWORD` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) | 可选的非交互式初始超级管理员自举凭证；当 `users` 表为空且两者均有值（密码 ≥ 8 位）时启动即创建初始 `super_admin` 账号 |
 | `PA_LOCAL_PI_RESOURCES` | `auto`（个人版回环继承，团队版显式装配） | [服务入口](../../apps/cli/src/main.ts) | 三态策略：`auto`（默认）、`1`/`always`（团队/登录/局域网模式也继承宿主机 `~/.pi` 扩展与包，传 `--offline`；托管克隆仓仍保持 `--no-extensions --no-approve`）、`0`/`off`（强制显式装配 `--no-extensions`） |
 | `PA_PI_EXTENSIONS` | 未设置（空） | [服务入口](../../apps/cli/src/main.ts) → [编排核](../../packages/server/src/orchestrator/team-orchestrator.ts) | 运维者批准加载的额外 Pi 扩展路径列表，按系统路径分隔符（`path.delimiter`，macOS/Linux 为 `:`，Windows 为 `;`）拆分为多个 `--extension` |
@@ -136,10 +137,10 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
 | --- | --- | --- |
 | `--mode rpc` | 以严格 LF 分隔的 JSONL 协议在标准输入/输出运行（非 TUI 交互模式） | 所有工作进程与辅助查询均固定传入，由 [`PiRpcWorker`](../../packages/pi-rpc/src/pi-rpc-worker.ts) 驱动 |
 | `--offline` | 禁用 Pi 启动时的联网检查/自动更新等网络操作（等价于 `PI_OFFLINE=1`），**不影响**模型调用，也**不关闭**本地已安装扩展与 Skills 发现 | 继承宿主机 Pi 资源时传入（如本地个人版 `PA_LOCAL_PI_RESOURCES=auto` 或 `1`），让 Pi 快速加载 `~/.pi`、`~/.agents` 及 `pi install` 已安装包而不卡在启动联网检查 |
-| `--no-approve` | 本次运行忽略工作区项目本地文件（如仓库内的 `.pi/`、`.agents/`、项目配置/扩展），不触发项目信任审批；**不关闭**用户级 `~/.pi` / `~/.agents` Skills（对应 `--approve` 为本次信任项目本地文件） | 未绑定业务工作区、托管克隆仓（`sourceType === "cloned"`）、团队隔离模式、模型目录查询与 `pi list --no-approve` 时传入，防止未审查仓库代码随启动自动执行 |
+| `--approve` / `--no-approve` | `--approve` 本次运行信任工作区项目本地文件（`.pi/settings.json`、项目级扩展/Skills/MCP、`.pi/SYSTEM.md` 等）；`--no-approve` 本次忽略项目本地文件（**不关闭**用户级 `~/.pi` / `~/.agents` Skills，也不控制 `AGENTS.md`） | 本机个人模式选中本地目录工作区时，PA 先读取 `~/.pi/agent/trust.json`（兼容 `PI_CODING_AGENT_DIR` 与祖先目录继承）：若用户未明确标记 `false`，传 `--approve`（解决 `--mode rpc` 下 `hasUI=false` 导致新仓库被静默跳过的问题）；若明确标记 `false`，则尊重拒绝传 `--no-approve`，且可在工作区详情页点击「Pi 信任」直接切换并写回 `~/.pi/agent/trust.json`（`PATCH /api/workspaces/:id/pi-trust`）。托管克隆仓（`sourceType === "cloned"`）、团队隔离模式、模型目录查询与 `pi list --no-approve` 固定传 `--no-approve` |
 | `--no-extensions` | 关闭 Pi 的扩展自动发现与内置扩展默认加载；但**显式通过 `--extension <path>` 传入的扩展仍会生效** | 团队多租户模式、托管克隆仓、`PA_LOCAL_PI_RESOURCES=0` 及只读辅助通道传入，确保只加载 PA 显式批准的扩展，避免宿主机任意扩展串入多租户环境 |
-| `--extension <path\|builtin:name>` | 显式加载单个扩展入口文件或 Pi 内置扩展（如 `builtin:mcp`），可重复传入多次 | 常规岗位固定挂载 PA 团队工具、角色护栏、`skill-catalog`、`role-skills`、`visualize`、`next-steps`、`workflow`、`builtin:mcp` 及 `PA_PI_EXTENSIONS` 指定扩展 |
-| `--skill <path>` | 显式追加加载一个 Skill 文件或目录，可重复传入多次 | 按角色作用域与工作区附加目录显式挂载角色 Skills、`pa-extensions/*/skills` 等（即使开了 `--no-extensions` 也能按需装配） |
+| `--extension <path\|builtin:name>` | 显式**追加**加载单个扩展入口文件或 Pi 内置扩展（如 `builtin:mcp`），可重复传入多次；**单独传入不会屏蔽** `pi install` 已安装包或 `~/.pi` 自动发现的扩展（与已发现扩展合并加载），仅在同时传入 `--no-extensions` 时才变为「只加载显式指定的扩展」 | 常规岗位固定挂载 PA 团队工具、角色护栏、`skill-catalog`、`role-skills`、`visualize`、`next-steps`、`workflow`、`builtin:mcp` 及 `PA_PI_EXTENSIONS` 指定扩展 |
+| `--skill <path>` | 显式**追加**加载一个 Skill 文件或目录，可重复传入多次；**单独传入不会屏蔽**用户级/项目级已发现的 Skills，仅在同时传入 `--no-skills` 时才关闭自动发现 | 按角色作用域与工作区附加目录显式挂载角色 Skills、`pa-extensions/*/skills` 等（即使开了 `--no-extensions` 也能按需装配） |
 | `--no-skills` | 关闭 Pi 对用户级和项目级 Skills 的自动发现与加载 | 仅用于纯模型目录查询（`model-catalog`）、无工具类型化决策（`pi-decision`）、只读经验提炼或隔离评测脚本 |
 | `--no-mcp` | 禁用 Pi 内置 MCP 支持，不连接任何 MCP 服务器也不注册 MCP 工具 | 用于类型化决策与只读经验提炼等轻量辅助调用，避免拉起外部 MCP 连接 |
 | `--no-context-files` | 禁用 Pi 自动读取工作目录下的 `AGENTS.md` 和 `CLAUDE.md` | 用于模型目录查询、类型化决策等与代码仓约定无关的辅助调用，降低上下文噪音 |
@@ -151,8 +152,8 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
 
 | 运行场景 | 核心资源与边界参数组合 | 实际效果 |
 | --- | --- | --- |
-| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **已绑定本地工作区** | `--mode rpc --offline --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承 `~/.pi`（含 `pi install` 包）与 `~/.agents`，并由 Pi 按项目信任规则自动发现该工作区下的 `.pi/` 与 `.agents/` |
-| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **未绑定工作区** | `--mode rpc --offline --no-approve --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承用户级 `~/.pi` 与 `~/.agents`，但忽略当前启动目录的项目本地文件 |
+| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **已绑定本地工作区** | `--mode rpc --offline --approve`（若 `~/.pi/agent/trust.json` 明确拒绝则为 `--no-approve`）`--extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承 `~/.pi`（含 `pi install` 包）与 `~/.agents`，并自动发现该本地工作区下的 `.pi/` 与 `.agents/`（尊重 `trust.json` 中的显式 `false` 拒绝记录） |
+| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **未绑定工作区** | `--mode rpc --offline --extension <PA扩展>... --skill <作用域Skills>... --tools *`（`cwd` 为 `~/.pa/workspaces/default`） | 继承用户级 `~/.pi` 与 `~/.agents`；工作目录隔离在 `~/.pa/workspaces/default`，不会把 `personal-agent` 源码仓误当成业务项目，也不会向上读到宿主仓库的 `AGENTS.md` |
 | 团队多租户 / 托管克隆仓 / `PA_LOCAL_PI_RESOURCES=0` | `--mode rpc --no-extensions --no-approve --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 不自动发现宿主机扩展、不信任克隆仓项目本地文件；仅运行 PA 显式挂载的扩展、作用域 Skills 及服务账号已启用的用户级 Skills |
 | 轻量辅助调用（类型化决策 / 经验提炼 / 模型查询） | `--mode rpc --no-session --no-approve --no-extensions --no-skills --no-mcp --no-context-files --tools ""`（或 `--no-tools` / `--tools read`） | 纯无状态、隔离外部插件与上下文文件，避免污染会话或误触写操作 |
 

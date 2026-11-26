@@ -513,6 +513,7 @@ async function runSandboxCli() {
 			PORT: String(opts.port),
 			PA_DB_PATH: summary.dbPath,
 			PA_WORKSPACES_ROOT: summary.workspacesRoot,
+			PA_DEFAULT_WORKSPACE_DIR: join(sandboxRoot, "default-workspace"),
 			PA_SESSION_DIR: sessionDir,
 		},
 		stdio: ["ignore", "pipe", "pipe", "ipc"],
