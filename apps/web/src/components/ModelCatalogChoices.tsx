@@ -11,8 +11,11 @@ interface ModelCatalogChoicesProps {
 
 export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onChange }: ModelCatalogChoicesProps) {
 	const panelId = useId();
-	const [provider, setProvider] = useState("");
+	const [provider, setProvider] = useState(() =>
+		value && models.some((option) => option.provider === value.provider) ? value.provider : "",
+	);
 	const [query, setQuery] = useState("");
+	const querySyncedFromSelection = useRef(false);
 	const search = useRef<HTMLInputElement>(null);
 	const firstResult = useRef<HTMLButtonElement>(null);
 
@@ -40,7 +43,13 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 						className="input-field"
 						value={provider}
 						disabled={disabled}
-						onChange={(event) => setProvider(event.currentTarget.value)}
+						onChange={(event) => {
+							setProvider(event.currentTarget.value);
+							if (querySyncedFromSelection.current) {
+								querySyncedFromSelection.current = false;
+								setQuery("");
+							}
+						}}
 					>
 						<option value="">全部供应商</option>
 						{providers.map((option) => (
@@ -65,7 +74,10 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 						placeholder="模型名称或 ID…"
 						value={query}
 						disabled={disabled}
-						onChange={(event) => setQuery(event.currentTarget.value)}
+						onChange={(event) => {
+							querySyncedFromSelection.current = false;
+							setQuery(event.currentTarget.value);
+						}}
 						onKeyDown={(event) => {
 							if (event.nativeEvent.isComposing) return;
 							if (event.key === "Enter") {
@@ -85,7 +97,12 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 				className="model-choices-option model-choices-inherit"
 				aria-pressed={!value}
 				disabled={disabled}
-				onClick={() => onChange(null)}
+				onClick={() => {
+					querySyncedFromSelection.current = false;
+					setProvider("");
+					setQuery("");
+					onChange(null);
+				}}
 			>
 				{inheritLabel}
 			</button>
@@ -99,7 +116,12 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 								className="model-choices-option"
 								aria-pressed={value?.provider === option.provider && value.model === option.model}
 								disabled={disabled}
-								onClick={() => onChange({ provider: option.provider, model: option.model })}
+								onClick={() => {
+									querySyncedFromSelection.current = true;
+									setProvider(option.provider);
+									setQuery(option.name);
+									onChange({ provider: option.provider, model: option.model });
+								}}
 							>
 								<span>{option.name}</span>
 								<small>{option.provider}</small>

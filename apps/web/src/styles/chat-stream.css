@@ -306,9 +306,12 @@
 	overflow-wrap: anywhere;
 	word-break: break-word;
 	display: -webkit-box;
-	-webkit-line-clamp: 4;
+	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+}
+.exploring-label:hover {
+	-webkit-line-clamp: 4;
 }
 .exploring-time {
 	margin-left: auto;
@@ -440,9 +443,12 @@
 	overflow-wrap: anywhere;
 	word-break: break-word;
 	display: -webkit-box;
-	-webkit-line-clamp: 4;
+	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
+}
+.exploring-feed-item:hover .exploring-feed-text {
+	-webkit-line-clamp: 4;
 }
 .progress-snapshot-card {
 	align-self: flex-start;
@@ -744,7 +750,7 @@
 }
 .exploring-tool-item {
 	display: flex;
-	align-items: flex-start;
+	align-items: baseline;
 	flex-wrap: nowrap;
 	gap: 6px;
 	min-width: 0;
@@ -771,10 +777,13 @@
 	overflow-wrap: anywhere;
 	word-break: break-word;
 	display: -webkit-box;
-	-webkit-line-clamp: 4;
+	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 	color: var(--text-secondary);
+}
+.exploring-tool-item:hover .exploring-tool-detail {
+	-webkit-line-clamp: 4;
 }
 .exploring-tool-status { flex-shrink: 0; white-space: nowrap; color: var(--text-muted); font-size: var(--text-micro); }
 .exploring-tool-status.is-error { color: var(--danger, #b42318); }
