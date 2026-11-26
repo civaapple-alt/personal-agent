@@ -49,7 +49,7 @@ npm run start:web
 
 终端显示监听地址后，打开 `http://127.0.0.1:4310`。首次启动默认以本机个人模式监听回环地址，浏览器直接以本机所有者身份进入工作台；运行数据默认写入启动目录的 `.data/`。按 `Ctrl+C` 停止服务。
 
-> **本地资源发现（`PA_LOCAL_PI_RESOURCES=auto`）**：本机个人模式下默认继承原生 Pi 发现机制（`--offline`），自动复用你通过 `pi install` 安装的插件/包，以及 `~/.pi`、`~/.agents` 下的用户级 Skills 与配置；当你为事项指定本地业务工作区（非托管克隆仓）时，Pi 还会自动检测该工作区仓库下的 `.pi/` 与 `.agents/`（遵循 Pi 自身项目信任规则）。
+> **本地资源发现（`PA_LOCAL_PI_RESOURCES=auto`）**：本机个人模式下默认继承原生 Pi 发现机制（传 `--offline` 关闭启动联网检查但不关闭本地资源发现），自动复用你通过 `pi install` 安装的插件/包，以及 `~/.pi`、`~/.agents` 下的用户级 Skills 与配置；当你为事项指定本地业务工作区（非托管克隆仓）时，Pi 还会自动检测该工作区仓库下的 `.pi/` 与 `.agents/`（遵循 Pi 自身项目信任规则）。各 Pi CLI 参数（`--offline`、`--no-approve`、`--no-extensions` 等）的详细含义见[配置参考：PA 传给 Pi 的常用 CLI 参数说明](../reference/configuration.md#pa-传给-pi-的常用-cli-参数说明)。
 
 ## 4. 发起第一次任务
 

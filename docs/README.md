@@ -16,7 +16,7 @@
 | 启动共享服务、迁移本机数据、备份 | [部署与管理团队工作台](guides/team-administration.md) |
 | 审核账号、邀请同事、设置仓库和事项权限 | [团队账号、超级管理员与组织协作](guides/team-administration.md#团队账号超级管理员与组织协作) |
 | 核对本机执行权限、数据流和网络边界 | [安全说明](../SECURITY.md) |
-| 查环境变量、存储路径、Pi 资源发现或超时 | [配置参考](reference/configuration.md) |
+| 查环境变量、存储路径、Pi CLI 参数（`--offline` 等）、资源发现或超时 | [配置参考](reference/configuration.md) |
 | 使用 Pi 管理 pstack 等 Skill 包 | [启用 pstack 方法包](guides/pstack-runtime.md) |
 | 安装 pi-web-access、授权岗位或使用 Kimi 搜索 | [为 AI 岗位启用网页检索](guides/web-search.md) |
 

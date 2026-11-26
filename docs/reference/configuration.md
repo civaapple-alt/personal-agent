@@ -4,7 +4,7 @@
 
 - [环境变量](#1-环境变量)
 - [默认存储位置](#2-目录结构与默认存储位置)
-- [Pi RPC 与资源装配](#3-pi-rpc工作进程与桥接参数)
+- [Pi RPC 与资源装配](#3-pi-rpc工作进程与桥接参数)（含 [PA 传给 Pi 的常用 CLI 参数说明](#pa-传给-pi-的常用-cli-参数说明)）
 - [岗位模板字段](#4-岗位模板配置rolesmd)
 - [编排、旁听与工作台参数](#5-编排边界旁听席与工作台参数)
 
@@ -127,6 +127,36 @@
 pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
 
 工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../packages/server/src/orchestrator/execution/execution-context.ts)
+
+### PA 传给 Pi 的常用 CLI 参数说明
+
+Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` CLI 参数控制每个子进程的协议、会话持久化、扩展/Skill 发现与项目信任边界。下表列出 PA 实际会传入的 Pi 参数及其在 Pi 中的原生语义（以 `pi --help` 为准）：
+
+| Pi CLI 参数 | Pi 原生含义 | PA 何时传入与作用 |
+| --- | --- | --- |
+| `--mode rpc` | 以严格 LF 分隔的 JSONL 协议在标准输入/输出运行（非 TUI 交互模式） | 所有工作进程与辅助查询均固定传入，由 [`PiRpcWorker`](../../packages/pi-rpc/src/pi-rpc-worker.ts) 驱动 |
+| `--offline` | 禁用 Pi 启动时的联网检查/自动更新等网络操作（等价于 `PI_OFFLINE=1`），**不影响**模型调用，也**不关闭**本地已安装扩展与 Skills 发现 | 继承宿主机 Pi 资源时传入（如本地个人版 `PA_LOCAL_PI_RESOURCES=auto` 或 `1`），让 Pi 快速加载 `~/.pi`、`~/.agents` 及 `pi install` 已安装包而不卡在启动联网检查 |
+| `--no-approve` | 本次运行忽略工作区项目本地文件（如仓库内的 `.pi/`、`.agents/`、项目配置/扩展），不触发项目信任审批；**不关闭**用户级 `~/.pi` / `~/.agents` Skills（对应 `--approve` 为本次信任项目本地文件） | 未绑定业务工作区、托管克隆仓（`sourceType === "cloned"`）、团队隔离模式、模型目录查询与 `pi list --no-approve` 时传入，防止未审查仓库代码随启动自动执行 |
+| `--no-extensions` | 关闭 Pi 的扩展自动发现与内置扩展默认加载；但**显式通过 `--extension <path>` 传入的扩展仍会生效** | 团队多租户模式、托管克隆仓、`PA_LOCAL_PI_RESOURCES=0` 及只读辅助通道传入，确保只加载 PA 显式批准的扩展，避免宿主机任意扩展串入多租户环境 |
+| `--extension <path\|builtin:name>` | 显式加载单个扩展入口文件或 Pi 内置扩展（如 `builtin:mcp`），可重复传入多次 | 常规岗位固定挂载 PA 团队工具、角色护栏、`skill-catalog`、`role-skills`、`visualize`、`next-steps`、`workflow`、`builtin:mcp` 及 `PA_PI_EXTENSIONS` 指定扩展 |
+| `--skill <path>` | 显式追加加载一个 Skill 文件或目录，可重复传入多次 | 按角色作用域与工作区附加目录显式挂载角色 Skills、`pa-extensions/*/skills` 等（即使开了 `--no-extensions` 也能按需装配） |
+| `--no-skills` | 关闭 Pi 对用户级和项目级 Skills 的自动发现与加载 | 仅用于纯模型目录查询（`model-catalog`）、无工具类型化决策（`pi-decision`）、只读经验提炼或隔离评测脚本 |
+| `--no-mcp` | 禁用 Pi 内置 MCP 支持，不连接任何 MCP 服务器也不注册 MCP 工具 | 用于类型化决策与只读经验提炼等轻量辅助调用，避免拉起外部 MCP 连接 |
+| `--no-context-files` | 禁用 Pi 自动读取工作目录下的 `AGENTS.md` 和 `CLAUDE.md` | 用于模型目录查询、类型化决策等与代码仓约定无关的辅助调用，降低上下文噪音 |
+| `--tools <list\|*\|"">` / `--no-tools` | 指定允许启用的工具白名单（`*` 表示开放已注册的全部内置/扩展工具，空串 `""` 表示无工具）；`--no-tools` 关闭所有内置与扩展工具 | 常规岗位传 `--tools *`（配合扩展护栏与工作区边界）；只读决策按需传 `--tools ""` 或 `--tools read`；模型目录查询传 `--no-tools` |
+| `--session <path>` / `--session-dir <dir>` / `--no-session` | `--session` 恢复指定 JSONL 会话文件；`--session-dir` 指定新会话落盘目录；`--no-session` 禁用会话持久化（一次性临时运行） | 常规事项/委托/旁听按事项与成员持久化到 `.data/pi-sessions/` 并用 `--session` 接续；模型目录查询、类型化决策、经验提炼使用 `--no-session` |
+| `--provider <name>` / `--model <id>` | 指定本次会话使用的模型供应商与模型 ID | 当事项、岗位或平台配置了覆盖模型时由 `PiRpcWorker` 传入；省略时沿用本机 Pi 默认模型 |
+
+#### 常见运行场景的实际参数组合
+
+| 运行场景 | 核心资源与边界参数组合 | 实际效果 |
+| --- | --- | --- |
+| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **已绑定本地工作区** | `--mode rpc --offline --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承 `~/.pi`（含 `pi install` 包）与 `~/.agents`，并由 Pi 按项目信任规则自动发现该工作区下的 `.pi/` 与 `.agents/` |
+| 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **未绑定工作区** | `--mode rpc --offline --no-approve --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承用户级 `~/.pi` 与 `~/.agents`，但忽略当前启动目录的项目本地文件 |
+| 团队多租户 / 托管克隆仓 / `PA_LOCAL_PI_RESOURCES=0` | `--mode rpc --no-extensions --no-approve --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 不自动发现宿主机扩展、不信任克隆仓项目本地文件；仅运行 PA 显式挂载的扩展、作用域 Skills 及服务账号已启用的用户级 Skills |
+| 轻量辅助调用（类型化决策 / 经验提炼 / 模型查询） | `--mode rpc --no-session --no-approve --no-extensions --no-skills --no-mcp --no-context-files --tools ""`（或 `--no-tools` / `--tools read`） | 纯无状态、隔离外部插件与上下文文件，避免污染会话或误触写操作 |
+
+> 可在工作台「设置 → 运行配置」（`#/settings/config`）查看当前实例实际生效的参数策略；源码组装逻辑见 [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts) 与 [pi-rpc-worker.ts](../../packages/pi-rpc/src/pi-rpc-worker.ts)。
 
 ### 项目信任与文件访问
 

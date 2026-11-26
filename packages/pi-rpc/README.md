@@ -9,3 +9,5 @@
 - [model-catalog.ts](src/model-catalog.ts)、[pi-packages.ts](src/pi-packages.ts)：通过原生 Pi 查询可用模型目录与已安装包
 
 约束：本包除 `node:*` 外仅允许依赖 `@pa/contracts`，由 `npm run check:boundaries` 强制门禁校验。
+
+PA 传给 `pi` 的各类 CLI 参数（`--mode rpc`、`--offline`、`--no-approve`、`--no-extensions`、`--skill`、`--session` 等）及其场景组合见 [配置参考：PA 传给 Pi 的常用 CLI 参数说明](../../docs/reference/configuration.md#pa-传给-pi-的常用-cli-参数说明)。
