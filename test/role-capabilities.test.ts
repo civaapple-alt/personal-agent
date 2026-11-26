@@ -344,3 +344,30 @@ test("Architect receives the design method and workbench help while publication 
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test("parseMetaArchitectResponse preserves structured followUpQuestions options alongside plain strings", () => {
+	const parsed = parseMetaArchitectResponse(
+		JSON.stringify({
+			reply: "先确认幕僚长的两个边界。",
+			followUpQuestions: [
+				{
+					question: "幕僚长的核心场景偏向哪种？",
+					options: ["跨事项汇总与优先级梳理", "事项内协调与催办", "两者都要"],
+					context: "决定是否需要跨事项视角",
+				},
+				"还有其他特殊约束吗？",
+			],
+			blueprints: [],
+		}),
+		[],
+	);
+	assert.deepEqual(parsed.followUpQuestions, ["幕僚长的核心场景偏向哪种？", "还有其他特殊约束吗？"]);
+	assert.deepEqual(parsed.followUpQuestionItems, [
+		{
+			question: "幕僚长的核心场景偏向哪种？",
+			options: ["跨事项汇总与优先级梳理", "事项内协调与催办", "两者都要"],
+			context: "决定是否需要跨事项视角",
+		},
+		{ question: "还有其他特殊约束吗？" },
+	]);
+});

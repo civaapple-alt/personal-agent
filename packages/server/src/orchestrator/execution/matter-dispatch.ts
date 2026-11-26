@@ -478,6 +478,7 @@ export async function dispatchMatterTurn(
 					})
 				: null;
 		const requests: Clarification[] =
+			architectParsed?.roleProposals?.followUpQuestionItems ??
 			architectParsed?.roleProposals?.followUpQuestions?.map((question) => ({ question })) ??
 			(result.clarification ? [result.clarification] : []);
 		const decisionOwnerId = isConversation || input.keepMatterLead ? effectiveUserId : matter.createdByUserId;

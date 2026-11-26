@@ -99,8 +99,14 @@ export function HumanDecisionCard({
 				</div>
 			) : (
 				<ol className="human-decision-questions">
-					{active.requests.map(({ question }, index) => (
-						<li key={`${index}-${question}`}>{question}</li>
+					{active.requests.map(({ question, context, options: reqOptions }, index) => (
+						<li key={`${index}-${question}`}>
+							<div>{question}</div>
+							{context && <div className="human-decision-context">{context}</div>}
+							{reqOptions && reqOptions.length > 0 && (
+								<div className="human-decision-note">选项：{reqOptions.join(" / ")}</div>
+							)}
+						</li>
 					))}
 				</ol>
 			)}

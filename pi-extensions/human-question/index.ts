@@ -73,7 +73,14 @@ export default function humanQuestionExtension(pi: HumanQuestionExtensionApi): v
 			properties: {
 				question: { type: "string", maxLength: 1000 },
 				context: { type: "string", maxLength: 3000, description: "Why this is needed and what it blocks" },
-				options: { type: "array", minItems: 2, maxItems: 4, items: { type: "string", maxLength: 240 } },
+				options: {
+					type: "array",
+					minItems: 2,
+					maxItems: 4,
+					items: { type: "string", maxLength: 240 },
+					description:
+						"2–4 short clickable choices (put discrete choices here instead of embedding A./B. inside question)",
+				},
 				...(inPa
 					? {
 							sourceAssignmentNumber: {

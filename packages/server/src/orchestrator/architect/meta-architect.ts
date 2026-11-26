@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Clarification } from "@pa/contracts/human-decision";
 import { resolveBuiltinExtensionPath } from "../../extensions/builtin-paths.ts";
 import { prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
 import { assessRoleCapabilities, listScopedSkillCatalog } from "../../roles/capabilities.ts";
@@ -85,6 +86,7 @@ export interface MetaArchitectChatInput {
 export interface MetaArchitectChatResult {
 	reply: string;
 	followUpQuestions: string[];
+	followUpQuestionItems?: Clarification[];
 	healthFindings?: MetaArchitectHealthFinding[];
 	roleAdjustments?: MetaArchitectRoleAdjustment[];
 	blueprints: MetaArchitectBlueprintProposal[];
@@ -96,6 +98,7 @@ export interface RoleProposalPayload {
 	status: "pending" | "applied" | "dismissed";
 	reply?: string;
 	followUpQuestions: string[];
+	followUpQuestionItems?: Clarification[];
 	healthFindings?: MetaArchitectHealthFinding[];
 	roleAdjustments?: MetaArchitectRoleAdjustment[];
 	blueprints: MetaArchitectBlueprintProposal[];
@@ -219,12 +222,40 @@ export function parseMetaArchitectResponse(
 		typeof rec.reply === "string" && rec.reply.trim()
 			? rec.reply.trim()
 			: "我已整理出初步建议，请核对下方追问或角色草案。";
-	const followUpQuestions = Array.isArray(rec.followUpQuestions)
+	const followUpQuestionItems: Clarification[] = Array.isArray(rec.followUpQuestions)
 		? rec.followUpQuestions
-				.map((q) => (typeof q === "string" ? q.trim() : ""))
-				.filter(Boolean)
+				.map((item): Clarification | null => {
+					if (typeof item === "string") {
+						const q = item.trim();
+						return q ? { question: q } : null;
+					}
+					if (item && typeof item === "object") {
+						const obj = item as Record<string, unknown>;
+						const q = typeof obj.question === "string" ? obj.question.trim() : "";
+						if (!q) return null;
+						const context =
+							typeof obj.context === "string" && obj.context.trim() ? obj.context.trim() : undefined;
+						const options = Array.isArray(obj.options)
+							? [
+									...new Set(
+										obj.options
+											.map((opt) => (typeof opt === "string" ? opt.trim().slice(0, 240) : ""))
+											.filter(Boolean),
+									),
+								].slice(0, 4)
+							: [];
+						return {
+							question: q,
+							...(context ? { context } : {}),
+							...(options.length >= 2 ? { options } : {}),
+						};
+					}
+					return null;
+				})
+				.filter((item): item is Clarification => item !== null)
 				.slice(0, 3)
 		: [];
+	const followUpQuestions = followUpQuestionItems.map((item) => item.question);
 
 	const businessExisting = options?.templatesById
 		? existingMembers.filter((m) => {
@@ -391,6 +422,7 @@ export function parseMetaArchitectResponse(
 	return {
 		reply,
 		followUpQuestions,
+		...(followUpQuestionItems.length > 0 ? { followUpQuestionItems } : {}),
 		...(healthFindings.length > 0 ? { healthFindings } : {}),
 		...(roleAdjustments.length > 0 ? { roleAdjustments } : {}),
 		blueprints,
@@ -417,7 +449,7 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	"2. For non-coding, review, and observer roles, state which actions are outside their remit and when to return [SILENT].",
 	"3. All business roles share Pi's default runtime tools at execution time. Do NOT ask the user whether a role needs read/write/bash tool permissions; treat `workspaceScope` (`no_repo_docs`, `read_only_repo`, `read_write_code`) and `antiJobs` as working rules rather than runtime permission gates.",
 	"4. Reuse suitable team members first. If gaps remain, propose one to four complementary roles with distinct responsibilities in `blueprints`. Explain how they work with people.",
-	"5. Follow a clear two-stage rhythm (clarify first, then propose): if key gaps about goal, responsibility split, or boundaries still need user confirmation, ask 1–2 concise questions in `followUpQuestions` and leave `blueprints` and `roleAdjustments` empty (`[]`) in that turn. Once the goal and boundaries are clear (or already clear on turn 1), set `followUpQuestions: []` and return the smallest workable `blueprints`, `newSkills`, and `roleAdjustments` ready for one-click confirmation.",
+	"5. Follow a clear two-stage rhythm (clarify first, then propose): if key gaps about goal, responsibility split, or boundaries still need user confirmation, ask 1–2 concise questions in `followUpQuestions` and leave `blueprints` and `roleAdjustments` empty (`[]`) in that turn. Whenever a question has discrete choices, return `{ question, options }` with 2–4 short clickable options instead of embedding `A. / B.` lists inside `question`; omit `options` only for truly open-ended questions. Once the goal and boundaries are clear (or already clear on turn 1), set `followUpQuestions: []` and return the smallest workable `blueprints`, `newSkills`, and `roleAdjustments` ready for one-click confirmation.",
 	'6. Use relevant installed Skills in `skills`. If the workflow lacks a tailored SOP, also propose an optional draft in `newSkills: [{ name, description, body, storageScope }]` (default `storageScope: "role_local"`) for user confirmation instead of placing unconfirmed names in `skills`. Identify missing dependencies without assuming that an integration works.',
 	"7. Follow the role-design Skill. Give each proposed role a small runnable task, success criteria, and a boundary check. Report capability as verified only after execution. Use a short string or { task, successCriteria, boundaryCheck } with three nonempty strings for verificationPlan. State when the plan is missing.",
 	"",
@@ -431,7 +463,12 @@ export const ARCHITECT_SYSTEM_INSTRUCTIONS = [
 	JSON.stringify(
 		{
 			reply: "One or two concise sentences for the user, or a clarifying question",
-			followUpQuestions: ["One short question for the user to answer, only if needed"],
+			followUpQuestions: [
+				{
+					question: "One short question for the user to answer, only if needed",
+					options: ["Concise choice 1", "Concise choice 2", "Concise choice 3"],
+				},
+			],
 			healthFindings: [
 				{
 					status: "ok | warn",
@@ -548,6 +585,7 @@ export async function buildArchitectMessageProposals(
 		roleProposals: {
 			status: "pending",
 			followUpQuestions: parsed.followUpQuestions,
+			...(parsed.followUpQuestionItems?.length ? { followUpQuestionItems: parsed.followUpQuestionItems } : {}),
 			...(parsed.healthFindings ? { healthFindings: parsed.healthFindings } : {}),
 			...(parsed.roleAdjustments ? { roleAdjustments: parsed.roleAdjustments } : {}),
 			blueprints: parsed.blueprints,
