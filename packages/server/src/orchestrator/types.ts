@@ -394,7 +394,7 @@ export function summarizeToolArgs(args: unknown): string {
 		return truncateInline(compact, 48);
 	}
 	if (typeof record.command === "string" && record.command.trim()) {
-		return truncateInline(record.command, 52);
+		return truncateInline(record.command, 320);
 	}
 	if (typeof record.title === "string" && record.title.trim()) {
 		return truncateInline(record.title, 44);

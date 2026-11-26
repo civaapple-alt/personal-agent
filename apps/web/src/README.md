@@ -51,7 +51,8 @@
 - [ExploringStatus](components/ExploringStatus.tsx) 与 [Sidebar](components/Sidebar.tsx) 分别展示主成员及协同/旁听同事的动态头像、5 阶段标签进度及 `recentLogs`；
   点击左上角 AI 头像仅用于按该角色发起新事项，已有事项顶栏始终显示该事项真实负责人且不随左上角选择切换。
 - [ExploringStatus](components/ExploringStatus.tsx)（`ProgressSnapshotCard`）消费已完成、失败与中止消息的 `metadata.progressSnapshot`：
-  - 运行中的 `.exploring-feed` 保持紧凑固定高度并支持向上滚动查看本轮最多 60 条完整活动轨迹（新日志自动滚底）；
+  - 运行中的 `.exploring-feed` 保持有界高度（最多 220px）并支持向上滚动查看本轮最多 60 条完整活动轨迹（新日志自动滚底）；长命令摘要与工具详情最多展开 4 行并优雅截断；
+  - [MessageFeed](components/chat/MessageFeed.tsx) 在每条含正文的用户消息下方提供「复制」、在每条 AI 回复下方提供「复制 Markdown」（通过 [clipboard.ts](clipboard.ts) 兼容非 HTTPS 局域网降级复制）；
   - 正常完成回复下方默认折叠展示「执行过程 · 角色 · 耗时 · 活动条数」，点击可就地展开回看；执行过程按来源轮次、组织及工作区关联工具事件，展示工具名、实际 Skill 读取及完成状态；警告或中止气泡下默认展开停滞阶段、耗时、协同岗位与步骤摘要。
 - [ChatStage](views/ChatStage.tsx) 顶栏显示当前组织徽标、欢迎区展示 `组织` / `仓库` / `Git 真实提交者` 上下文栏，
   输入栏支持先选「所属组织」再选「仓库」（未绑仓库也可按组织发起）；每条 AI 回复显示角色头像与「旁听补充」徽章。

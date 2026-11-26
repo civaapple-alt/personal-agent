@@ -303,7 +303,12 @@
 	color: var(--text-secondary);
 	font-size: var(--text-xs);
 	line-height: 1.45;
+	overflow-wrap: anywhere;
 	word-break: break-word;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
 }
 .exploring-time {
 	margin-left: auto;
@@ -399,22 +404,24 @@
 	border-top: 1px dashed var(--border);
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 6px;
 	font-size: var(--text-micro);
 	color: var(--text-secondary);
-	max-height: 112px;
+	max-height: 220px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 }
 .exploring-feed-item {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 6px;
 	min-width: 0;
+	line-height: 1.45;
 }
 .exploring-feed-dot {
 	width: 6px;
 	height: 6px;
+	margin-top: 5px;
 	border-radius: 50%;
 	flex-shrink: 0;
 }
@@ -428,9 +435,14 @@
 	flex-shrink: 0;
 }
 .exploring-feed-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .progress-snapshot-card {
 	align-self: flex-start;
@@ -663,6 +675,36 @@
 	padding-top: 8px;
 	border-top: 1px dashed rgba(180, 83, 9, 0.25);
 }
+.stream-msg-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding: 0 4px;
+	font-size: var(--text-xs);
+}
+.stream-msg-copy-btn {
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--text-muted);
+	border-radius: 6px;
+	padding: 2px 7px;
+	font: inherit;
+	font-size: var(--text-xs);
+	line-height: 1.4;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.stream-msg-copy-btn:hover {
+	background: var(--bg-hover);
+	border-color: var(--border);
+	color: var(--text-primary);
+}
+.stream-msg-copy-btn.is-copied {
+	color: var(--accent);
+	border-color: var(--surface-accent-border);
+	background: var(--bg-accent-soft);
+}
 .space-message-action { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); flex-wrap: wrap; }
 .space-message-save-form {
 	display: flex;
@@ -702,12 +744,12 @@
 }
 .exploring-tool-item {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	flex-wrap: nowrap;
 	gap: 6px;
 	min-width: 0;
 	font-size: var(--text-micro);
-	line-height: 1.4;
+	line-height: 1.45;
 }
 .exploring-tool-member {
 	flex-shrink: 0;
@@ -724,11 +766,14 @@
 }
 .exploring-skill-badge { color: var(--accent); }
 .exploring-tool-detail {
-	flex: 0 1 auto;
+	flex: 1 1 auto;
 	min-width: 0;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
 	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 	color: var(--text-secondary);
 }
 .exploring-tool-status { flex-shrink: 0; white-space: nowrap; color: var(--text-muted); font-size: var(--text-micro); }

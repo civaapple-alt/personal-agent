@@ -1,7 +1,7 @@
 import { isCurrentHumanDecision, listCompletedHumanDecisions, readHumanDecision } from "@pa/contracts/human-decision";
 import { hasRoleProposalActions } from "@pa/contracts/role-proposal-state";
 import { readSkillProposals } from "@pa/contracts/skill-proposal";
-import { type RefObject, type UIEvent, useMemo, useState } from "react";
+import { type RefObject, type UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createSpaceDocument, listSpaces, type SpaceDto } from "../../api/space.ts";
 import {
 	type AccountUserDto,
@@ -18,6 +18,7 @@ import {
 	type WorkspaceDto,
 } from "../../api.ts";
 import { isArchitectMemberId, parseRoleProposalsFromMetadata, ROLE_ARCHITECT_MEMBER_ID } from "../../architectApi.ts";
+import { writeTextToClipboard } from "../../clipboard.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
 import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import type { MatterDelegations } from "../../utils/matterDelegations.ts";
@@ -144,6 +145,29 @@ export function MessageFeed({
 	const [spaceSaveError, setSpaceSaveError] = useState<{ id: string; message: string } | null>(null);
 	const [savingSpaceMessage, setSavingSpaceMessage] = useState<string | null>(null);
 	const [saveDraft, setSaveDraft] = useState<{ messageId: string; spaceId: string; title: string } | null>(null);
+	const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+	const copyResetTimerRef = useRef<number | null>(null);
+
+	useEffect(() => {
+		return () => {
+			if (copyResetTimerRef.current !== null) {
+				window.clearTimeout(copyResetTimerRef.current);
+			}
+		};
+	}, []);
+
+	const handleCopyMessage = async (messageId: string, content: string) => {
+		const ok = await writeTextToClipboard(content);
+		if (!ok) return;
+		setCopiedMessageId(messageId);
+		if (copyResetTimerRef.current !== null) {
+			window.clearTimeout(copyResetTimerRef.current);
+		}
+		copyResetTimerRef.current = window.setTimeout(() => {
+			setCopiedMessageId((prev) => (prev === messageId ? null : prev));
+			copyResetTimerRef.current = null;
+		}, 1800);
+	};
 	const [writableSpaces, setWritableSpaces] = useState<SpaceDto[] | null>(null);
 	const [savedDocsByMsg, setSavedDocsByMsg] = useState<Record<string, ChatSpaceDocumentItem>>({});
 
@@ -543,6 +567,50 @@ export function MessageFeed({
 											)}
 										</div>
 									)}
+									{isUser && msg.content.trim().length > 0 && (
+										<div className="stream-msg-actions">
+											<button
+												type="button"
+												className={`stream-msg-copy-btn${copiedMessageId === msg.id ? " is-copied" : ""}`}
+												title="复制消息内容"
+												aria-label="复制消息内容"
+												onClick={() => void handleCopyMessage(msg.id, msg.content)}
+											>
+												{copiedMessageId === msg.id ? "✓ 已复制" : "复制"}
+											</button>
+										</div>
+									)}
+									{!isUser && !isSystem && !hidePlaceholderDecisionBubble && msg.content.trim().length > 0 && (
+										<div className="stream-msg-actions">
+											<button
+												type="button"
+												className={`stream-msg-copy-btn${copiedMessageId === msg.id ? " is-copied" : ""}`}
+												title="复制原始 Markdown 内容"
+												aria-label="复制原始 Markdown 内容"
+												onClick={() => void handleCopyMessage(msg.id, msg.content)}
+											>
+												{copiedMessageId === msg.id ? "✓ 已复制 Markdown" : "复制 Markdown"}
+											</button>
+											{canSaveSpace &&
+												!decision &&
+												msg.content.trim().length >= 80 &&
+												!(
+													(Array.isArray(msg.metadata?.spaceDocuments) &&
+														msg.metadata.spaceDocuments.length > 0) ||
+													Boolean(savedDocsByMsg[msg.id])
+												) &&
+												saveDraft?.messageId !== msg.id && (
+													<button
+														type="button"
+														className="btn-inline"
+														disabled={savingSpaceMessage !== null}
+														onClick={() => openSaveToSpaceDraft(msg.id, msg.content)}
+													>
+														保存文字到资料空间
+													</button>
+												)}
+										</div>
+									)}
 									{canSaveSpace &&
 										!isSystem &&
 										!isUser &&
@@ -552,9 +620,10 @@ export function MessageFeed({
 											(Array.isArray(msg.metadata?.spaceDocuments) &&
 												msg.metadata.spaceDocuments.length > 0) ||
 											Boolean(savedDocsByMsg[msg.id])
-										) && (
+										) &&
+										(saveDraft?.messageId === msg.id || spaceSaveError?.id === msg.id) && (
 											<div className="space-message-action">
-												{saveDraft?.messageId === msg.id ? (
+												{saveDraft?.messageId === msg.id && (
 													<form
 														className="space-message-save-form"
 														onSubmit={(event) => {
@@ -620,15 +689,6 @@ export function MessageFeed({
 															取消
 														</button>
 													</form>
-												) : (
-													<button
-														type="button"
-														className="btn-inline"
-														disabled={savingSpaceMessage !== null}
-														onClick={() => openSaveToSpaceDraft(msg.id, msg.content)}
-													>
-														保存文字到资料空间
-													</button>
 												)}
 												{spaceSaveError?.id === msg.id && <output>{spaceSaveError.message}</output>}
 											</div>
