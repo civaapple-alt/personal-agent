@@ -4,6 +4,11 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-26
+
+See the [0.8.3 release guide](docs/releases/v0.8.3.md) for downloads and upgrade instructions.
+
+- Keep tool/progress rows compact at 1 line by default and expand up to 4 lines on hover (`apps/web/src/styles/chat-stream.css`), and sync the top provider dropdown and search box when selecting a model in `ModelCatalogChoices` (`apps/web/src/components/ModelCatalogChoices.tsx`).
 - Route inline `@AI成员` mentions in conversation mode through the existing matter lead (`matter-dispatch.ts`, `worker-runner.ts`, `delegation-runner.ts`) so the lead keeps full context, can orchestrate single or multiple `@`-mentioned teammates (e.g. `@Engineering Manager` task + `@QA Manager` verification in one message) via `delegate_to_member` with concrete briefs, and automatically authorizes explicitly `@`-mentioned teammates for delegation on that turn; add real-Pi verification demo `npm run demo:mention-verify` (`packages/server/src/demo/mention-verify-smoke.ts`, supporting `--verifier-provider`/`--verifier-model` cross-model verification); rename legacy `wechat-*` CSS classes to `roster-*`.
 - Persist selected lead role in the new-matter hash URL (`#/chats/new/<memberId>` in `hashRouter.ts`, `useHashRouteNav.ts`, `App.tsx`) so refreshing the browser on a new-matter screen preserves the chosen role instead of resetting to `"auto"`.
 - Simplify new-matter `MatterInitiationPanel` to focus on choosing the lead role and delegable members (`允许委托`), removing redundant `一人处理 / 团队协作`, `AI 旁听`, and per-member `回复后检查` controls from matter initiation, and hiding multi-user `事项范围` / `人类成员` rows when there are no other human members in the organization (observers remain configurable anytime inside an active matter via the header `协作成员` popover).
