@@ -57,7 +57,8 @@ export default function skillCaptureExtension(pi: SkillCaptureExtensionApi): voi
 				storageScope: {
 					type: "string",
 					enum: ["global", "org", "personal", "workspace"],
-					description: "Target scope: workspace (.agents/skills/), personal, org, or global.",
+					description:
+						"Target scope: workspace (.data/skills/workspaces/<workspaceId>/), personal, org, or global.",
 				},
 				rationale: {
 					type: "string",

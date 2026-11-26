@@ -224,6 +224,7 @@ export async function executeWithWorkerPass(
 					skillsDir: deps.skillsDir,
 					orgId: activeOrgId,
 					userId: actorUserId,
+					workspaceId: input.workspace?.id ?? null,
 				});
 		const skillPaths = [...new Set([...baseSkillPaths, ...attachedSkillPaths, ...discoveredScopedSkillDirs])];
 		const previous = deps.noSession
@@ -843,13 +844,33 @@ export async function executeWithWorkerPass(
 					scopeId: actorUserId,
 				});
 			}
+			if (input.workspace?.id) {
+				managedSkillRoots.push({
+					root: resolve(deps.skillsDir, "workspaces", input.workspace.id),
+					scope: "workspace",
+					scopeId: input.workspace.id,
+				});
+			}
 		}
-		if (input.workspace?.repoPath) {
-			managedSkillRoots.push({
-				root: resolve(input.workspace.repoPath, ".agents/skills"),
-				scope: "workspace",
-				scopeId: input.workspace.id,
-			});
+		if (input.workspace) {
+			const folderDirs =
+				workspaceFolders.length > 0
+					? workspaceFolders.filter((f) => f.loadSkills).map((f) => f.path)
+					: [input.workspace.repoPath];
+			const seenWsRoots = new Set(managedSkillRoots.map((entry) => entry.root));
+			for (const dir of folderDirs) {
+				for (const rel of [".agents/skills", ".pi/skills"]) {
+					const candidate = resolve(dir, rel);
+					if (!seenWsRoots.has(candidate)) {
+						seenWsRoots.add(candidate);
+						managedSkillRoots.push({
+							root: candidate,
+							scope: "workspace",
+							scopeId: input.workspace.id,
+						});
+					}
+				}
+			}
 		}
 		const trustPolicyMap: Record<string, string> = {};
 		for (const policy of deps.store.skillTrust.listPolicies()) {

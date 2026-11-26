@@ -321,14 +321,15 @@ export function listWorkspaceTopLevelEntries(workspacePath?: string | null, limi
 const SAFE_SCOPE_SEGMENT_RE = /^[a-zA-Z0-9._-]+$/;
 
 /**
- * Return existing scoped Skill directories (`global`, `orgs/<orgId>`, `users/<userId>`)
- * so Skills confirmed via `propose_skill` are natively discovered by Pi on subsequent turns
- * without leaking across organizations or users.
+ * Return existing scoped Skill directories (`global`, `orgs/<orgId>`, `users/<userId>`,
+ * `workspaces/<workspaceId>`) so Skills confirmed via `propose_skill` are natively discovered
+ * by Pi on subsequent turns without leaking across organizations, users, or workspaces.
  */
 export function resolveScopedDiscoveredSkillDirs(options: {
 	skillsDir?: string;
 	orgId?: string | null;
 	userId?: string | null;
+	workspaceId?: string | null;
 }): string[] {
 	if (!options.skillsDir) return [];
 	const candidates: string[] = [resolve(options.skillsDir, "global")];
@@ -337,6 +338,9 @@ export function resolveScopedDiscoveredSkillDirs(options: {
 	}
 	if (options.userId && SAFE_SCOPE_SEGMENT_RE.test(options.userId)) {
 		candidates.push(resolve(options.skillsDir, "users", options.userId));
+	}
+	if (options.workspaceId && SAFE_SCOPE_SEGMENT_RE.test(options.workspaceId)) {
+		candidates.push(resolve(options.skillsDir, "workspaces", options.workspaceId));
 	}
 	return candidates.filter((dir) => existsSync(dir));
 }

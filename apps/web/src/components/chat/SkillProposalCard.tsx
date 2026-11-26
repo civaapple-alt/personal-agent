@@ -5,7 +5,7 @@ import { MarkdownView } from "../../MarkdownView.tsx";
 import { ModalDialog } from "../../primitives/ModalDialog.tsx";
 
 const SCOPE_LABELS: Record<SkillStorageTarget, string> = {
-	workspace: "工作区 (.agents/skills)",
+	workspace: "工作区专属",
 	personal: "个人 Skill",
 	org: "组织共享",
 	global: "全局共享",
@@ -155,7 +155,7 @@ export function SkillProposalCard({
 											}))
 										}
 									>
-										{hasWorkspace && <option value="workspace">工作区 (.agents/skills)</option>}
+										{hasWorkspace && <option value="workspace">工作区专属</option>}
 										<option value="personal">个人 Skill</option>
 										<option value="org">组织共享</option>
 										<option value="global">全局共享</option>
@@ -202,7 +202,7 @@ export function SkillProposalCard({
 									<span>已写入：{proposal.writtenPaths.join("、")}</span>
 								)}
 								{proposal.scripts && proposal.scripts.length > 0 && (
-									<span className="pill rsi-status-candidate">默认步骤 3 · 执行前确认</span>
+									<span className="pill rsi-status-verified">已默认信任 · 自主执行</span>
 								)}
 								{onOpenSkillTrust && (
 									<button type="button" className="btn-inline" onClick={onOpenSkillTrust}>

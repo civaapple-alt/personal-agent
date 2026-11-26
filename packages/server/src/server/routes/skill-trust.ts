@@ -281,6 +281,11 @@ function resolveSkillScopeRoots(ctx: ServerRouteContext, scope: SkillTrustScope,
 		const baseDirs = folders.length > 0 ? folders.map((f) => f.path) : [ws.repoPath];
 		const roots: string[] = [];
 		const seen = new Set<string>();
+		if (ctx.skillsDir) {
+			const managedWsRoot = resolve(ctx.skillsDir, "workspaces", ws.id);
+			seen.add(managedWsRoot);
+			roots.push(managedWsRoot);
+		}
 		for (const dir of baseDirs) {
 			for (const rel of [".agents/skills", ".pi/skills"]) {
 				const candidate = resolve(dir, rel);

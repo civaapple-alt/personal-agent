@@ -246,7 +246,7 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 				return {
 					title: target ? `工作区 · ${target.label}` : "工作区技能",
 					subtitle:
-						"来自工作区主目录及已启用 Skills 的附加目录（.agents/skills、.pi/skills），脚本默认步骤 3 执行前确认",
+						"来自 PA 工作区专属目录（.data/skills/workspaces/<id>/）以及工作区主目录/关联目录的 .agents/skills、.pi/skills，脚本默认步骤 3 执行前确认",
 				};
 			}
 			if (selection.scope === "org") {

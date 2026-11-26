@@ -12,7 +12,7 @@ A Skill is an actionable prompt and optional deterministic toolkit for an agent,
 - `description` is the sole discovery trigger (keep under 500 chars): state both **what the Skill does** and **concrete user intents/contexts when to load it**. Keep all "when to use" triggers in `description` so Pi loads it reliably without undertriggering.
 
 ## 2. Scope Shapes Abstraction
-- Confirm the intended scope **before** drafting `SKILL.md` or `scripts/*`; if the user's request does not make the scope clear, ask first rather than guessing.
+- Confirm the intended scope **before** drafting `SKILL.md` or `scripts/*`: when the workflow is clearly specific to the current repository (repo-only paths, build/release commands, or codebase conventions), default directly to repository-local without interrupting the user; only ask first when the scope is genuinely ambiguous (e.g., could be repo-local, org-wide, or global).
 - Deliberately match the level of abstraction to the target scope:
   - **Repository-local**: concrete repo paths, module names, domain objects, and project commands are appropriate.
   - **Team / organization**: strip single-repo names and private symbols; keep shared tech-stack conventions and reusable scripts.

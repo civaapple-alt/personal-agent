@@ -61,9 +61,10 @@
 │   ├── <roleId>.md 或 <roleId>/        #   global：平台通用角色
 │   ├── orgs/<orgId>/<roleId>/          #   org：组织共享角色（支持角色包及内嵌 skills/）
 │   └── users/<userId>/<roleId>/        #   personal：个人私有角色（仅本人可见）
-├── skills/                             # 【运行期自定义 Skill】与 roles/ 对齐的三层作用域
+├── skills/                             # 【运行期自定义 Skill】与 spaces/ 对齐的四层作用域
 │   ├── global/<skillName>/SKILL.md     #   平台通用
 │   ├── orgs/<orgId>/<skillName>/       #   组织共享
+│   ├── workspaces/<workspaceId>/       #   工作区专属（覆盖主目录与关联目录，不污染业务 Git 仓）
 │   └── users/<userId>/<skillName>/     #   个人私有
 ├── uploads/                            # 【对话附件】按 YYYY-MM/ 分桶存放图片与 .txt
 │   └── 2026-11/<timestamp>-<hash>.{png,txt}

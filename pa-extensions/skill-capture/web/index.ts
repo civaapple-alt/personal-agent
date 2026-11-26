@@ -2,7 +2,7 @@ import { defineWebExtension, type PaToolRenderProps } from "@pa/extension-api/we
 import { createElement as h } from "react";
 
 const SCOPE_LABELS: Record<string, string> = {
-	workspace: "工作区 .agents/skills",
+	workspace: "工作区专属",
 	personal: "个人 Skill",
 	org: "组织共享",
 	global: "全局共享",

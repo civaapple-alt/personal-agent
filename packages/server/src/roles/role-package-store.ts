@@ -319,15 +319,23 @@ export async function saveSkillProposalToDisk(params: {
 	skillsDir?: string;
 	orgId?: string | null;
 	userId?: string | null;
+	workspaceId?: string | null;
 	workspaceRepoPath?: string | null;
 }): Promise<{ skillDir: string; writtenPaths: string[] }> {
 	const name = validateSkillName(params.proposal.name);
 	let baseDir: string;
 	if (params.storageScope === "workspace") {
-		if (!params.workspaceRepoPath?.trim()) {
-			throw new Error("Workspace repository path is required to save a workspace skill");
+		if (params.skillsDir && params.workspaceId?.trim()) {
+			const wsId = params.workspaceId.trim();
+			if (!/^[a-zA-Z0-9._-]+$/.test(wsId)) {
+				throw new Error(`Invalid workspaceId for workspace skill: ${wsId}`);
+			}
+			baseDir = resolve(params.skillsDir, "workspaces", wsId);
+		} else if (params.workspaceRepoPath?.trim()) {
+			baseDir = join(resolve(params.workspaceRepoPath), ".agents", "skills");
+		} else {
+			throw new Error("Workspace id and skillsDir are required to save a workspace skill");
 		}
-		baseDir = join(resolve(params.workspaceRepoPath), ".agents", "skills");
 	} else {
 		if (!params.skillsDir) {
 			throw new Error(`skillsDir is required to save ${params.storageScope} skill "${name}"`);

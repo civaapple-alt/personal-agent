@@ -97,7 +97,7 @@ test("saveSkillProposalToDisk writes SKILL.md + executable scripts and HTTP rout
 	const baseUrl = `http://127.0.0.1:${addr.port}`;
 
 	try {
-		// Direct disk writer check (SKILL.md + executable script + conflict rejection)
+		// Direct disk writer check (centralized .data/skills/workspaces/<wsId> + executable script + conflict rejection)
 		const saved = await saveSkillProposalToDisk({
 			proposal: {
 				name: "repo-health",
@@ -108,15 +108,18 @@ test("saveSkillProposalToDisk writes SKILL.md + executable scripts and HTTP rout
 				],
 			},
 			storageScope: "workspace",
+			skillsDir,
+			workspaceId: "ws-demo",
 			workspaceRepoPath: workspaceDir,
 		});
 		assert.equal(saved.writtenPaths.length, 2);
-		assert.ok(existsSync(join(workspaceDir, ".agents/skills/repo-health/SKILL.md")));
+		assert.ok(existsSync(join(skillsDir, "workspaces/ws-demo/repo-health/SKILL.md")));
+		assert.ok(!existsSync(join(workspaceDir, ".agents/skills/repo-health/SKILL.md")));
 		assert.match(
-			readFileSync(join(workspaceDir, ".agents/skills/repo-health/SKILL.md"), "utf8"),
+			readFileSync(join(skillsDir, "workspaces/ws-demo/repo-health/SKILL.md"), "utf8"),
 			/name: repo-health/,
 		);
-		const scriptStat = statSync(join(workspaceDir, ".agents/skills/repo-health/scripts/check.mjs"));
+		const scriptStat = statSync(join(skillsDir, "workspaces/ws-demo/repo-health/scripts/check.mjs"));
 		if (process.platform !== "win32") assert.ok((scriptStat.mode & 0o111) !== 0);
 
 		await assert.rejects(
@@ -124,6 +127,8 @@ test("saveSkillProposalToDisk writes SKILL.md + executable scripts and HTTP rout
 				saveSkillProposalToDisk({
 					proposal: { name: "repo-health", description: "dup", body: "dup" },
 					storageScope: "workspace",
+					skillsDir,
+					workspaceId: "ws-demo",
 					workspaceRepoPath: workspaceDir,
 				}),
 			SkillNameConflictError,
@@ -176,6 +181,7 @@ test("saveSkillProposalToDisk writes SKILL.md + executable scripts and HTTP rout
 		assert.equal(appliedBody.writtenPaths.length, 2);
 		assert.ok(existsSync(join(skillsDir, "global/ci-triage/SKILL.md")));
 		assert.ok(existsSync(join(skillsDir, "global/ci-triage/scripts/parse.mjs")));
+		assert.equal(store.skillTrust.getPolicy("global", "", "ci-triage")?.trustLevel, "autonomous");
 
 		const dismissRes = await fetch(`${baseUrl}/api/matters/${matter.id}/messages/${msg.id}/skill-proposals`, {
 			method: "POST",

@@ -133,7 +133,7 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 		}
 		const workspace = matter.workspaceId ? store.getWorkspace(matter.workspaceId) : null;
 		if (targetScope === "workspace" && !workspace) {
-			sendError(res, 409, "当前事项未绑定工作区，无法写入工作区 .agents/skills/");
+			sendError(res, 409, "当前事项未绑定工作区，无法写入工作区级 Skill");
 			return true;
 		}
 		try {
@@ -143,7 +143,23 @@ async function handleTeamRoutesUnlocked(ctx: ServerRouteContext, r: RouteRequest
 				skillsDir: ctx.skillsDir,
 				orgId: matter.orgId,
 				userId: actor.user?.id ?? null,
+				workspaceId: workspace?.id ?? null,
 				workspaceRepoPath: workspace?.repoPath ?? null,
+			});
+			const trustScopeId =
+				targetScope === "global"
+					? ""
+					: targetScope === "org"
+						? (matter.orgId ?? "")
+						: targetScope === "personal"
+							? (actor.user?.id ?? actor.collaborator?.id ?? "")
+							: (workspace?.id ?? "");
+			store.skillTrust.upsertPolicy({
+				scope: targetScope,
+				scopeId: trustScopeId,
+				skillName: targetProposal.name,
+				trustLevel: "autonomous",
+				updatedByUserId: actor.user?.id ?? null,
 			});
 			const nextProposals = proposals.map((item) =>
 				item.id === proposalId
