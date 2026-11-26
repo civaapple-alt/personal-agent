@@ -26,7 +26,7 @@ git --version
 
 ### 从预构建包启动
 
-打开 [0.8.2 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.8.2)，下载 Assets 中的 `personal-agent-0.8.2-prebuilt.tar.gz`。在下载目录解压，再进入包含 `dist/` 和 `roles/` 的目录。预构建包可以直接用 Node.js 启动。
+打开 [0.8.2 发布页](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.8.2)，下载 Assets 中的 `personal-agent-0.8.2-prebuilt.tar.gz`。在下载目录解压，再进入包含 `apps/cli/dist/` 和 `roles/` 的目录。预构建包可以直接用 Node.js 启动。
 
 ```bash
 tar -xzf personal-agent-0.8.2-prebuilt.tar.gz
@@ -36,7 +36,7 @@ node apps/cli/dist/main.js
 
 ### 从源码启动
 
-用 Git 克隆发布标签，然后在仓库根安装依赖并启动。
+用 Git 克隆仓库（或指定发布标签），在仓库根安装依赖并启动。`npm run start:web` 会自动构建前端（`apps/web/dist/`）并直接启动服务端，无需先手动执行 `npm run build`：
 
 ```bash
 git clone --branch v0.8.2 https://github.com/civaapple-alt/personal-agent.git
@@ -47,19 +47,23 @@ npm run start:web
 
 也可以从发布页下载 `personal-agent-0.8.2-source.tar.gz`。解压后进入包含 `package.json` 的目录，执行 `npm ci` 和 `npm run start:web`。
 
-终端显示监听地址后，打开 `http://127.0.0.1:4310`。首次启动默认监听本机回环地址，浏览器直接以本机所有者身份进入工作台。运行数据默认写入启动目录的 `.data/`。按 `Ctrl+C` 停止服务。
+终端显示监听地址后，打开 `http://127.0.0.1:4310`。首次启动默认以本机个人模式监听回环地址，浏览器直接以本机所有者身份进入工作台；运行数据默认写入启动目录的 `.data/`。按 `Ctrl+C` 停止服务。
 
-## 4. 发起第一次需求讨论
+> **本地资源发现（`PA_LOCAL_PI_RESOURCES=auto`）**：本机个人模式下默认继承原生 Pi 发现机制（`--offline`），自动复用你通过 `pi install` 安装的插件/包，以及 `~/.pi`、`~/.agents` 下的用户级 Skills 与配置；当你为事项指定本地业务工作区（非托管克隆仓）时，Pi 还会自动检测该工作区仓库下的 `.pi/` 与 `.agents/`（遵循 Pi 自身项目信任规则）。
 
-1. 在「新建事项」选择产品经理，输入一项需求，例如“帮我梳理小团队反馈收集工具的首版范围”，然后发送。这一步会调用模型。
-2. 等待产品经理整理需求并提出待确认的问题。按需回复，或邀请其他岗位参与。
-3. 需要生成工作文件时，可先登记并选择工作区。Pi 和它调用的工具具备当前系统用户的权限。更多操作见[工作台使用指南](../guides/user-guide.md)。
+## 4. 发起第一次任务
+
+1. **选择起手方式**：
+   - **团队协作（默认）**：在「新建事项」保持 **Product Manager**，输入一项需求（例如“帮我梳理小团队反馈收集工具的首版范围”），它会按需请教研发与测试并在关键分叉处发出「待你决定」卡片。
+   - **单兵直连**：若只想保留原生 Pi 终端手感处理探索性任务或直接编码，可在左侧直接点选 **Pi Default**（关闭多角色委托与旁听，保留资料空间、`propose_skill` 等扩展）。
+2. **绑定自己的业务仓库**：首次启动会自动登记 `personal-agent`（工作台自身源码仓）。要让 AI 读写你自己的项目，前往左侧「工作区」登记你的本地 Git 仓库路径，再在新建事项顶部选中该仓库。
+3. **沉淀与演进**：正式方案可保存到 Git 资料空间（`#/spaces`），跑通的流程可用 `propose_skill` 沉淀并在「设置 → 技能与信任」管理。Pi 和它调用的工具具备当前系统用户的权限。更多操作见[工作台使用指南](../guides/user-guide.md)与[单兵模式与团队协作模式](../concepts/solo-and-team-modes.md)。
 
 ## 5. 处理常见启动问题
 
 | 现象 | 处理方式 |
 | --- | --- |
-| 提示缺少 `dist/server/main.js` | 先确认已进入预构建包根目录。使用源码包时，安装依赖后执行 `npm run start:web` |
+| 提示缺少 `apps/cli/dist/main.js` | 先确认已进入预构建包根目录。使用源码仓库时，安装依赖后执行 `npm run start:web`（或先 `npm run build`） |
 | Node 报告不支持 `node:sqlite` 或 TypeScript | 执行 `node --version`，确认当前终端使用 Node.js 22.19.0 或更新版本 |
 | 端口 4310 已被占用 | 停止旧实例，或设置 `PORT` 后重启并打开对应端口。环境变量写法见[启动共享服务](../guides/team-administration.md#启动共享服务) |
 | 页面可打开，发送消息时报找不到 Pi | 在启动工作台的终端执行 `pi --version`。修正终端的 `PATH` 后重启工作台 |

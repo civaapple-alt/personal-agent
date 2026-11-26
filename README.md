@@ -12,9 +12,20 @@ Personal Agent 是一套可自部署的 AI 团队工作台。你可以把一件�
 
 ## 开始使用或参与开发
 
+直接从源码启动本机个人工作台（默认 `PA_LOCAL_PI_RESOURCES=auto`，自动构建前端并继承本机 Pi 的 `~/.pi`、`~/.agents` 与 `pi install` 已装包）：
+
+```bash
+git clone https://github.com/civaapple-alt/personal-agent.git
+cd personal-agent
+npm ci
+npm run start:web
+```
+
+启动后打开 `http://127.0.0.1:4310`（本机回环免登录；数据默认存于 `.data/`）。
+
 | 你的目标 | 从这里开始 |
 | --- | --- |
-| 在自己的电脑上试用 | 从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.8.2) 下载 `personal-agent-0.8.2-prebuilt.tar.gz`，按[首次运行教程](docs/tutorials/getting-started.md)启动 |
+| 在自己的电脑上试用 | 按[首次运行教程](docs/tutorials/getting-started.md)源码启动，或从 [GitHub Releases](https://github.com/civaapple-alt/personal-agent/releases/tag/v0.8.2) 下载 `personal-agent-0.8.2-prebuilt.tar.gz` |
 | 在服务器上为团队部署 | 按[团队部署指南](docs/guides/team-administration.md)启动带账号认证的服务，配置 HTTPS、工作区和成员权限 |
 | 已收到团队邀请 | 按[使用指南](docs/guides/user-guide.md#加入组织)加入组织，学习安排事项和审阅成果 |
 | 修改源码或贡献文档 | 按[开发指南](docs/guides/development.md)从源码启动，再查[贡献指南](CONTRIBUTING.md)了解如何提交 Pull Request |

@@ -51,7 +51,7 @@ npm run start:team:sandbox
 | 岗位及方法资产 | [roles](../../roles/README.md)、[role-skills](../../pi-extensions/role-skills/README.md) |
 | 定义解析、序列化与能力目录 | [角色解析](../../packages/server/src/roles/README.md) |
 
-后端使用 TypeScript 和 Node.js 自带的 SQLite，前端用 React 和 esbuild 构建。修改源码后重新构建。`dist/` 和 `web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。
+后端使用 TypeScript 和 Node.js 自带的 SQLite，前端用 React 和 esbuild 构建。修改源码后重新构建。`apps/cli/dist/main.js` 和 `apps/web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。
 
 从维护该行为的模块开始。修改 HTTP 接口时，同时检查服务端返回值和前端调用。调整数据库结构时，验证已有数据可以升级。跨模块的数据流见[架构说明](../concepts/architecture-and-plan.md)。
 

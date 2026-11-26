@@ -88,7 +88,7 @@
 | `.data/roles/` | 运行时自建/调整角色目录 | 根目录属全局作用域（`global`），`orgs/<orgId>/` 属组织共享（`org`），`users/<userId>/` 属个人私有（`personal`）；各作用域同时支持 `<id>.md` 单文件与带包内 Skill 的 `<id>/<id>.md` 目录。自定义 `PA_DB_PATH` 时位于数据库同级 `roles/`；`:memory:` 时创建临时目录并于退出后清理 |
 | `.data/skills/` | 运行时自定义 Skill 库目录 | 按 `global/`、`orgs/<orgId>/` 与 `users/<userId>/` 隔离存放确认后落盘的 `<skillName>/SKILL.md`（若随角色包隔离则位于 `<roleDir>/skills/<skillName>/SKILL.md`）；自定义 `PA_DB_PATH` 时位于数据库同级 `skills/` |
 | `pi-extensions/role-skills/skills/<name>/SKILL.md` | 内置岗位方法 Skill 包（标准 Pi Package） | 运行时作为 Pi Package 原生挂载，同时供角色 `skills` 名称解析；执行器校验所有解析后路径落在允许作用域根目录内 |
-| `web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `web/src/main.tsx` 与 `web/index.html` 生成，勿手工编辑 |
+| `apps/web/dist/` | 前端构建输出目录 | 由 `npm run build:web` 从 `apps/web/src/main.tsx` 与 `apps/web/index.html` 生成，勿手工编辑 |
 
 修改 `PA_DB_PATH` 后，会话仍从 `PA_SESSION_DIR` 或启动目录下的 `.data/pi-sessions` 读取。手动指定的仓库和方法包路径也需要单独保留。迁移前请按[备份步骤](../guides/team-administration.md#保存与备份运行资料)收集数据。
 
