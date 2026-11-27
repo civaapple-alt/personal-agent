@@ -2,7 +2,7 @@
 
 模块文件分工：
 
-- [database.ts](database.ts) 在空数据库中创建 [schema.ts](schema.ts) 的完整表结构，并拒绝打开其他格式的数据库；它不会迁移或清空已有文件。[types.ts](types.ts) 定义领域记录。[workspace-folder-repo.ts](repos/workspace-folder-repo.ts) 维护工作区的主目录与附加目录。
+- [database.ts](database.ts) 在空数据库中创建 [schema.ts](schema.ts) 的完整表结构，并拒绝打开其他格式的数据库；它不会迁移或清空已有文件。[types.ts](types.ts) 定义领域记录。[workspace-folder-repo.ts](repos/workspace-folder-repo.ts) 维护工作区的主目录与附加目录。完整 23 张表结构、索引与约束见[SQLite 库表设计参考](../../../../docs/reference/database-schema.md)。
 - [space-git-store.ts](space-git-store.ts) 与 [space-repo.ts](repos/space-repo.ts) 维护基于独立 Git 仓库（`<dataDir>/spaces/{orgs,workspaces,users,members,custom}/<id>/`）的五类资料空间（`org`、`workspace`、`user`、`member` 和 `custom`）：
   - `spaces` 与 `space_documents` 保存空间元数据与文档索引；新建单文件落入 `plans/`、`specs/`、`decisions/`、`rules/`、`notes/`，目录条目支持子文件与静态预览。正文和修订历史保存在各自 Git 仓库中。每个空间的 Git 写操作按 `spaceId` 串行排队，更新时校验修订号或基线提交。
   - 私密事项默认路由到发起人的 `user` 个人空间（`spc_usr_<userId>`），从物理仓库层面隔离私密正文；非私密事项按仓库优先、其次组织默认空间路由。
