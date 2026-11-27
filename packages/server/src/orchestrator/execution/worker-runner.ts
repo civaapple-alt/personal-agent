@@ -1,37 +1,27 @@
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { relative, resolve } from "node:path";
-import type { BoardRole } from "@pa/contracts/board";
-import type { ModelSelection } from "@pa/contracts/model-selection";
+import { resolve } from "node:path";
 import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
-import { skillTrustPolicyKey } from "@pa/contracts/skill-trust";
-import { classifyGithubFetches } from "../../../../../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
 import { resolveBuiltinExtensionPath, resolveRepoAssetPath, resolveRepoRoot } from "../../extensions/builtin-paths.ts";
 import { prepareHumanQuestion } from "../../extensions/human-question/runtime.ts";
 import { prepareTeamExtension } from "../../extensions/team-extension/runtime.ts";
 import { escapeWebAccessSlashCommand, prepareWebAccessForWorker } from "../../extensions/web-access/runtime.ts";
 import type { WorkbenchTopic } from "../../extensions/workbench-help/catalog.ts";
-import { assessRoleCapabilities } from "../../roles/capabilities.ts";
-import { buildRoleDesignDraft, isArchitectRoleTemplate, isSoloRoleTemplate } from "../../roles/role-architect.ts";
-import type { RoleScope, RoleTemplate } from "../../roles/types.ts";
+import { isArchitectRoleTemplate, isSoloRoleTemplate } from "../../roles/role-architect.ts";
+import type { RoleTemplate } from "../../roles/types.ts";
 import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
 import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
-import { abortable, createTeamToolBridge, type TeamToolCall } from "../../rpc/team-tool-bridge.ts";
+import { abortable, createTeamToolBridge } from "../../rpc/team-tool-bridge.ts";
 import type { ImageContent } from "../../rpc/types.ts";
-import type { MatterEventRecord } from "../../storage/repos/board-repo.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
 import type { Matter, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import {
 	buildArchitectMatterContext,
-	collectTeamFrictionDigest,
 	type MetaArchitectBlueprintProposal,
 	type MetaArchitectRoleAdjustment,
 } from "../architect/meta-architect.ts";
-import { readHumanDecision } from "../human-decision.ts";
-import { filterTeamMembersForScope } from "../rsi/team-health.ts";
 import { messageMatchesContext, scopedSpaceDocumentIds, selectMatterContext } from "../runtime/matter-context.ts";
-import { applyWorkerModel, type ReadPiModels, resolveConfiguredModel } from "../runtime/model-selection.ts";
-import { buildCompactTeamCapabilities, buildTeamCapabilities } from "../runtime/team-capabilities.ts";
+import { applyWorkerModel, type ReadPiModels } from "../runtime/model-selection.ts";
+import { buildCompactTeamCapabilities } from "../runtime/team-capabilities.ts";
 import { readWorkbenchTopic } from "../runtime/workbench-context.ts";
 import {
 	buildAttachedFolderContextFiles,
@@ -45,20 +35,15 @@ import {
 	type DispatchProgressEvent,
 	type ExecutionEffects,
 	emptyEffects,
-	formatToolAction,
 	type MatterRun,
 	mergeEffects,
 	type OrchestratorDialogHandler,
-	pushRunLog,
 	type RpcWorkerLike,
-	summarizeToolArgs,
 	type WorkerFactory,
 	type WorkerSessionMode,
 } from "../types.ts";
 import {
 	listWorkspaceTopLevelEntries,
-	prepareDelivery,
-	readWorkspaceFolder,
 	resolveLocalWorkspacePiArgs,
 	resolveRepoGitUserIdentity,
 	resolveRoleSkills,
@@ -73,6 +58,18 @@ import {
 	formatMessageHistoryContent,
 	formatMessageHistorySpeaker,
 } from "./prompts.ts";
+import {
+	type BoardWorkerContext,
+	buildBoardAssignmentPrompt,
+	buildManagedSkillRoots,
+	buildPendingDecisionsPrompt,
+	buildTrustPolicyMap,
+	resolveWorkerModelSelection,
+} from "./worker-setup.ts";
+import { attachWorkerTelemetry } from "./worker-telemetry.ts";
+import { createWorkerToolHandler } from "./worker-tool-handler.ts";
+
+export type { BoardWorkerContext, BoardWorkerToolCall } from "./worker-setup.ts";
 
 export interface WorkerRunnerDeps {
 	store: PersonalAgentStore;
@@ -100,25 +97,6 @@ export interface WorkerRunnerDeps {
 		onProgress?: (progress: DispatchProgressEvent) => void,
 		options?: DelegationContext,
 	) => Promise<DelegateResult>;
-}
-
-export type BoardWorkerToolCall = Extract<
-	TeamToolCall,
-	{ tool: "spawn_board_agent" | "post_to_board" | "read_board_post" }
->;
-
-export interface BoardWorkerContext {
-	agentId: string;
-	boardRole: BoardRole;
-	displayName: string;
-	brief: string;
-	skills?: string[];
-	ownedScope?: string[];
-	acceptanceCriteria?: string;
-	modelOverride?: ModelSelection | null;
-	turnPromptContext?: string;
-	onToolCall: (call: BoardWorkerToolCall, signal: AbortSignal) => Promise<unknown>;
-	onEventAppended?: (event: MatterEventRecord) => void;
 }
 
 export interface ExecuteWorkerInput {
@@ -302,464 +280,39 @@ export async function executeWithWorkerPass(
 				activeTools: observedTools,
 			};
 		};
-		bridge = await createTeamToolBridge(async (call: TeamToolCall, toolSignal) => {
-			toolSignal.throwIfAborted();
-			const visibleInMatter = (document: { matterId: string | null }) => {
-				if (!document.matterId || document.matterId === input.matterId) return true;
-				return deps.store.getMatter(document.matterId)?.visibility === "org";
-			};
-			if (call.tool === "read_team_roles") {
-				if (!canManageRoles) {
-					throw new Error("Only the lead in non-discussion mode can read team roles for role design");
-				}
-				const scopeFilter = { orgId: activeOrgId, actorUserId };
-				const templatesById = deps.getTemplatesById?.() ?? new Map<string, RoleTemplate>();
-				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter).filter((member) => {
-					const tpl = deps.getTemplateForMember(member) ??
-						templatesById.get(member.templateId) ?? { id: member.id };
-					return !isArchitectRoleTemplate(tpl) && !isSoloRoleTemplate(tpl);
-				});
-				const roles = visibleMembers.map((member) => {
-					const tpl = deps.getTemplateForMember(member) ?? templatesById.get(member.templateId);
-					return {
-						id: member.id,
-						name: member.displayName,
-						title: member.roleTitle,
-						roleScope: member.roleScope ?? "global",
-						isPrimaryContact: member.isPrimaryContact,
-						skills: tpl?.skills ?? [],
-						mcpDependencies: tpl?.mcpDependencies ?? [],
-						antiJobs: tpl?.antiJobs ?? [],
-						responsibilities: tpl?.sections.responsibilitiesAndBoundaries ?? "",
-					};
-				});
-				return {
-					orgId: activeOrgId,
-					roles,
-					...(call.includeCapabilities && matter
-						? {
-								teamCapabilities: buildTeamCapabilities({
-									matter,
-									members: matterAiMembers,
-									messages: deps.store.listMessages(input.matterId),
-									workspaceId: input.workspace?.id ?? null,
-									repoPath: cwd,
-									orgId: activeOrgId,
-									getTemplate: deps.getTemplateForMember,
-								}),
-							}
-						: {}),
-					...(call.includeHealthEvidence
-						? { healthEvidenceDigest: collectTeamFrictionDigest(deps.store, templatesById, scopeFilter) }
-						: {}),
-				};
-			}
-			if (call.tool === "propose_role") {
-				if (!canManageRoles) {
-					throw new Error("Only the lead in non-discussion mode can propose role changes");
-				}
-				const scopeFilter = { orgId: activeOrgId, actorUserId };
-				const visibleMembers = filterTeamMembersForScope(deps.store.listMembers(), scopeFilter);
-				if (call.action === "create") {
-					const roleScope: RoleScope = activeOrgId ? "org" : actorUserId ? "personal" : "global";
-					const draft = buildRoleDesignDraft({
-						oneJob: call.oneJob,
-						antiJobs: call.antiJobs,
-						quietWhen: call.quietWhen,
-						interactionStyle: call.interactionStyle,
-						roleScope,
-						ownerOrgId: roleScope === "org" ? activeOrgId : null,
-						ownerUserId: roleScope === "personal" ? actorUserId : null,
-						roleId: call.id,
-						roleName: call.name,
-						roleTitle: call.title,
-						workflowRules: call.workflowRules,
-						communicationStyle: call.communicationStyle,
-						verificationPlan: call.verificationPlan,
-						skills: call.skills,
-						mcpDependencies: call.mcpDependencies,
-						suggestedNewSkills: call.newSkills?.map((skill) => ({
-							...skill,
-							storageScope: skill.storageScope ?? "role_local",
-						})),
-						existingMemberIds: deps.store.listMembers().map((m) => m.id),
-					});
-					draft.capabilityReport = await assessRoleCapabilities(draft.template, { skillsDir: deps.skillsDir });
-					const proposal: MetaArchitectBlueprintProposal = { draft, rationale: call.rationale };
-					const existingIdx = stagedRoleBlueprints.findIndex(
-						(item) => item.draft.template.id === draft.template.id,
-					);
-					if (existingIdx < 0) stagedRoleBlueprints.push(proposal);
-					else stagedRoleBlueprints[existingIdx] = proposal;
-					return {
-						staged: true,
-						status: "pending_confirmation",
-						action: "create",
-						roleId: draft.template.id,
-						roleName: draft.template.name,
-						newSkillCount: draft.newSkills?.length ?? 0,
-						note: "已暂存新建角色提案，本轮回复中将展示确认卡，经用户确认后生效。",
-					};
-				}
-				const target = visibleMembers.find((member) => member.id === call.memberId);
-				if (!target) {
-					throw new Error(`Role "${call.memberId}" was not found in the current visible scope`);
-				}
-				const targetTemplate = deps.getTemplateForMember(target);
-				const adjustment: MetaArchitectRoleAdjustment = {
-					memberId: target.id,
-					memberName: target.displayName,
-					currentTools: targetTemplate?.tools ?? [],
-					...(call.addAntiJobs?.length ? { addAntiJobs: call.addAntiJobs } : {}),
-					...(call.workflowNote ? { workflowNote: call.workflowNote } : {}),
-					rationale: call.rationale,
-				};
-				const existingIdx = stagedRoleAdjustments.findIndex((item) => item.memberId === adjustment.memberId);
-				if (existingIdx < 0) stagedRoleAdjustments.push(adjustment);
-				else stagedRoleAdjustments[existingIdx] = adjustment;
-				return {
-					staged: true,
-					status: "pending_confirmation",
-					action: "update",
-					memberId: target.id,
-					memberName: target.displayName,
-					note: "已暂存角色调整提案，本轮回复中将展示确认卡，经用户确认后生效。",
-				};
-			}
-			if (isArchitect) throw new Error("Role architect cannot execute team tools");
-			if (call.tool === "read_space") {
-				if (sessionMode !== "lead" && sessionMode !== "internal")
-					throw new Error("This worker cannot access space pages");
-				const currentMatter = deps.requireMatter(input.matterId);
-				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
-				if (!call.pageId) {
-					const availableSpaces = deps.store.spaces
-						.listSpaces()
-						.filter((space) => {
-							if (space.id === targetSpace.id) return true;
-							if (space.kind === "org") return space.orgId === activeOrgId;
-							if (space.kind === "workspace") return space.workspaceId === currentMatter.workspaceId;
-							if (space.kind === "member") return space.memberId === input.member.id;
-							if (space.kind === "custom" && space.visibility === "org") return space.orgId === activeOrgId;
-							return false;
-						})
-						.map((space) => ({
-							id: space.id,
-							name: space.name,
-							kind: space.kind,
-							documentCount: deps.store.spaces.listDocuments({ spaceId: space.id }).filter(visibleInMatter)
-								.length,
-							isDefaultForMatter: space.id === targetSpace.id,
-						}));
-					return {
-						space: { id: targetSpace.id, name: targetSpace.name, kind: targetSpace.kind },
-						availableSpaces,
-						pages: deps.store.spaces
-							.listDocuments({ spaceId: targetSpace.id, docType: call.docType })
-							.filter(visibleInMatter),
-					};
-				}
-				const doc = await deps.store.spaces.getDocument(call.pageId);
-				if (!doc || doc.spaceId !== targetSpace.id || !visibleInMatter(doc))
-					throw new Error("Space page not found in this space");
-				if (doc.entryKind === "folder") {
-					const listed = await deps.store.spaces.listDocumentFiles(doc.id);
-					if (call.subPath) {
-						const fileContent = await deps.store.spaces.readDocumentFile(doc.id, call.subPath);
-						if (fileContent === null) throw new Error(`Sub-file not found in folder entry: ${call.subPath}`);
-						return {
-							page: doc,
-							subPath: call.subPath,
-							fileContent,
-							files: listed?.files ?? [],
-							previewEntryPath: listed?.previewEntryPath ?? null,
-						};
-					}
-					return {
-						page: doc,
-						files: listed?.files ?? [],
-						previewEntryPath: listed?.previewEntryPath ?? null,
-					};
-				}
-				return { page: doc };
-			}
-			if (call.tool === "save_space_page") {
-				if (!canSaveSpace) throw new Error("Only the matter lead can save space pages");
-				const hasMainBody = call.sourcePath !== undefined || call.content !== undefined;
-				const draft = hasMainBody
-					? await prepareDelivery(
-							{
-								tool: "save_space_page",
-								callId: call.callId,
-								title: call.title,
-								summary: call.summary ?? "",
-								changeNote: call.changeNote ?? "本轮形成的空间资料",
-								...(call.sourcePath !== undefined
-									? { type: "document" as const, sourcePath: call.sourcePath }
-									: { type: call.type, content: call.content! }),
-							},
-							cwd,
-						)
-					: null;
-				const importedFolder = call.sourceDir ? await readWorkspaceFolder(call.sourceDir, cwd) : null;
-				toolSignal.throwIfAborted();
-				const currentMatter = deps.requireMatter(input.matterId);
-				const targetSpace = deps.store.spaces.resolveMatterDefaultSpace(currentMatter);
-				const linkedFilePath =
-					draft && draft.type === "document" && draft.source.kind === "workspace_file"
-						? relative(cwd, draft.source.realPath).replace(/\\/g, "/")
-						: importedFolder
-							? importedFolder.relDir
-							: null;
-				const linkedOrgId = linkedFilePath ? activeOrgId : null;
-				const linkedWorkspaceId = linkedFilePath ? (input.workspace?.id ?? null) : null;
-				const staged = !call.pageId
-					? effects.savedDocuments.find(
-							(entry) => entry.memberId === input.member.id && entry.title === call.title,
-						)
-					: undefined;
-				const batchFiles: Array<{ subPath: string; content: string }> = [
-					...(importedFolder?.files ?? []),
-					...(call.files ?? []).map((f) => ({ subPath: f.path, content: f.content })),
-				];
-				if (call.subPath && draft) {
-					batchFiles.push({ subPath: call.subPath, content: draft.content });
-				}
-				if (!call.pageId && !staged) {
-					const wantsFolder = call.entryKind === "folder" || batchFiles.length > 0;
-					const readmeFromBatch = batchFiles.find((f) => f.subPath === "README.md");
-					const initialContent =
-						!call.subPath && draft
-							? draft.content
-							: readmeFromBatch
-								? readmeFromBatch.content
-								: `# ${call.title}\n`;
-					const extraFiles = batchFiles.filter((f) => f.subPath !== "README.md");
-					const doc = await deps.store.spaces.createDocument({
-						spaceId: targetSpace.id,
-						matterId: input.matterId,
-						title: call.title,
-						docType: call.docType,
-						entryKind: wantsFolder ? "folder" : "file",
-						content: initialContent,
-						extraFiles,
-						linkedOrgId,
-						linkedWorkspaceId,
-						linkedFilePath,
-						actorId: input.member.id,
-						actorName: input.member.displayName,
-						commitMessage: call.changeNote || `Create ${call.title}`,
-					});
-					effects.savedDocuments.push({
-						id: doc.id,
-						spaceId: doc.spaceId,
-						title: doc.title,
-						docType: doc.docType,
-						revision: doc.revision,
-						headCommit: doc.headCommit,
-						memberId: input.member.id,
-						summary: (call.changeNote || call.summary || "").trim().slice(0, 240) || undefined,
-					});
-					input.onProgress?.({
-						stage: "tool",
-						label: `${input.member.displayName}保存了资料`,
-						toolName: "save_space_page",
-						collabUpdated: true,
-					});
-					const listed = doc.entryKind === "folder" ? await deps.store.spaces.listDocumentFiles(doc.id) : null;
-					return {
-						page: doc,
-						...(listed ? { files: listed.files, previewEntryPath: listed.previewEntryPath } : {}),
-					};
-				}
-				const targetDocId = call.pageId ?? staged!.id;
-				const previous = deps.store.spaces.getDocumentMeta(targetDocId);
-				if (!previous || previous.spaceId !== targetSpace.id || !visibleInMatter(previous))
-					throw new Error("Space page not found in this space");
-				let doc: Awaited<ReturnType<typeof deps.store.spaces.updateDocument>>;
-				if (batchFiles.length > 0) {
-					const allToWrite = [
-						...(!call.subPath && draft ? [{ subPath: "README.md", content: draft.content }] : []),
-						...batchFiles,
-					];
-					const written = await deps.store.spaces.writeDocumentFiles(previous.id, {
-						files: allToWrite,
-						actorId: input.member.id,
-						actorName: input.member.displayName,
-						commitMessage: call.changeNote || `Update files in ${call.title}`,
-					});
-					doc = written?.document ?? null;
-				} else {
-					doc = await deps.store.spaces.updateDocument(previous.id, {
-						revision: call.revision ?? staged?.revision ?? previous.revision,
-						title: call.title,
-						docType: call.docType,
-						content: draft?.content ?? "",
-						...(linkedFilePath ? { linkedOrgId, linkedWorkspaceId, linkedFilePath } : {}),
-						actorId: input.member.id,
-						actorName: input.member.displayName,
-						commitMessage: call.changeNote || `Update ${call.title}`,
-					});
-				}
-				if (!doc) throw new Error("Space page changed. Read its latest revision before saving.");
-				const existingIdx = effects.savedDocuments.findIndex((entry) => entry.id === doc.id);
-				const savedEntry = {
-					id: doc.id,
-					spaceId: doc.spaceId,
-					title: doc.title,
-					docType: doc.docType,
-					revision: doc.revision,
-					headCommit: doc.headCommit,
-					memberId: input.member.id,
-					summary: (call.changeNote || call.summary || "").trim().slice(0, 240) || undefined,
-				};
-				if (existingIdx < 0) effects.savedDocuments.push(savedEntry);
-				else effects.savedDocuments[existingIdx] = savedEntry;
-				input.onProgress?.({
-					stage: "tool",
-					label: `${input.member.displayName}更新了资料`,
-					toolName: "save_space_page",
-					collabUpdated: true,
-				});
-				return { page: doc };
-			}
-			const releaseIdle = worker?.suspendIdleTimeout?.();
-			const resumeMonitor = activity?.wait();
-			try {
-				if (call.tool === "delegate_to_member") {
-					if (!canDelegate) {
-						throw new Error(
-							sessionMode === "observer"
-								? "Observing specialists cannot delegate secondary tasks during peer review"
-								: "This member cannot delegate secondary tasks",
-						);
-					}
-					if (call.verification && !canSaveSpace) {
-						throw new Error("Only the lead of an authorized work turn can request independent verification");
-					}
-					const result = await deps.delegate(
-						{
-							matterId: input.matterId,
-							fromMemberId: input.member.id,
-							toMemberId: call.memberId,
-							question: call.task,
-						},
-						input.run,
-						input.workspace,
-						input.chain,
-						toolSignal,
-						effects,
-						input.onProgress,
-						{
-							discussionMode: isDiscussionMode,
-							parentRequestMessageId: input.delegationRequestId,
-							handoffDocumentIds: call.handoffDocumentIds,
-							verification: call.verification,
-						},
-					);
-					return {
-						memberId: result.toMember.id,
-						delegationNumber: result.delegationNumber,
-						answer: result.answerText,
-						...(result.clarification
-							? { status: "needs_clarification", clarification: result.clarification }
-							: {}),
-						...(result.verification ? { verification: result.verification } : {}),
-					};
-				}
-				if (call.tool === "request_clarification") {
-					return humanQuestion.request(call);
-				}
-				if (call.tool === "spawn_board_agent" || call.tool === "post_to_board" || call.tool === "read_board_post") {
-					if (!boardCtx) {
-						throw new Error(`Tool '${call.tool}' is only available in board collaboration mode`);
-					}
-					if (call.tool === "spawn_board_agent" && boardCtx.boardRole !== "coordinator") {
-						throw new Error("Only the coordinator can invoke spawn_board_agent");
-					}
-					return await boardCtx.onToolCall(call, toolSignal);
-				}
-				if (call.tool === "propose_skill") {
-					if (!canCaptureSkill && !isDiscussionMode) {
-						throw new Error(
-							`${sessionMode === "observer" ? "Observing" : "Verifying"} specialists cannot propose skills during peer review`,
-						);
-					}
-					if (isDiscussionMode) {
-						throw new Error("Discussion chat mode does not propose skills directly");
-					}
-					if (call.storageScope === "workspace" && !input.workspace) {
-						throw new Error("Workspace skill proposals require a bound workspace");
-					}
-					if (call.storageScope === "org" && !activeOrgId) {
-						throw new Error("Organization skill proposals require an active organization");
-					}
-					const proposal: SkillProposalItem = {
-						id: `skp_${randomUUID().slice(0, 12)}`,
-						name: call.name,
-						description: call.description,
-						body: call.body,
-						...(call.scripts && call.scripts.length > 0 ? { scripts: call.scripts } : {}),
-						storageScope: call.storageScope,
-						rationale: call.rationale,
-						status: "pending" as const,
-					};
-					const existingIdx = stagedSkillProposals.findIndex((item) => item.name === proposal.name);
-					if (existingIdx < 0) stagedSkillProposals.push(proposal);
-					else stagedSkillProposals[existingIdx] = proposal;
-					return {
-						staged: true,
-						status: "pending_confirmation",
-						proposalId: proposal.id,
-						name: proposal.name,
-						storageScope: proposal.storageScope,
-						scriptCount: proposal.scripts?.length ?? 0,
-						note: "已暂存技能提案，本轮回复中将展示确认卡，经用户确认后写入磁盘。",
-					};
-				}
-				if (call.tool === "record_skill_run") {
-					const allowedScopeMatch =
-						(call.scope === "global" && call.scopeId === "") ||
-						(call.scope === "org" && Boolean(activeOrgId) && call.scopeId === activeOrgId) ||
-						(call.scope === "personal" && Boolean(actorUserId) && call.scopeId === actorUserId) ||
-						(call.scope === "workspace" && Boolean(input.workspace?.id) && call.scopeId === input.workspace?.id);
-					if (!allowedScopeMatch) throw new Error("Skill trust scope does not match active worker context");
-					const record = deps.store.skillTrust.recordExecution({
-						scope: call.scope,
-						scopeId: call.scopeId,
-						skillName: call.skillName,
-						outcome: call.outcome,
-					});
-					return { ok: true, runCount: record.runCount, trustLevel: record.trustLevel };
-				}
-				if (call.tool === "promote_skill_trust") {
-					const allowedScopeMatch =
-						(call.scope === "global" && call.scopeId === "") ||
-						(call.scope === "org" && Boolean(activeOrgId) && call.scopeId === activeOrgId) ||
-						(call.scope === "personal" && Boolean(actorUserId) && call.scopeId === actorUserId) ||
-						(call.scope === "workspace" && Boolean(input.workspace?.id) && call.scopeId === input.workspace?.id);
-					if (!allowedScopeMatch) throw new Error("Skill trust scope does not match active worker context");
-					const updated = deps.store.skillTrust.upsertPolicy({
-						scope: call.scope,
-						scopeId: call.scopeId,
-						skillName: call.skillName,
-						trustLevel: call.trustLevel,
-						updatedByUserId: actorUserId,
-					});
-					deps.store.skillTrust.recordExecution({
-						scope: call.scope,
-						scopeId: call.scopeId,
-						skillName: call.skillName,
-						outcome: `promoted_${call.trustLevel}`,
-						defaultTrustLevel: call.trustLevel,
-					});
-					return { ok: true, policy: updated };
-				}
-			} finally {
-				releaseIdle?.();
-				resumeMonitor?.();
-			}
-		}, signal);
+		bridge = await createTeamToolBridge(
+			createWorkerToolHandler({
+				deps,
+				matterId: input.matterId,
+				member: input.member,
+				workspace: input.workspace,
+				delegationRequestId: input.delegationRequestId,
+				run: input.run,
+				chain: input.chain,
+				onProgress: input.onProgress,
+				matter,
+				matterAiMembers,
+				activeOrgId,
+				actorUserId,
+				cwd,
+				sessionMode,
+				isDiscussionMode,
+				isArchitect,
+				canSaveSpace,
+				canDelegate,
+				canCaptureSkill,
+				canManageRoles,
+				humanQuestion,
+				boardCtx,
+				effects,
+				stagedSkillProposals,
+				stagedRoleBlueprints,
+				stagedRoleAdjustments,
+				getWorker: () => worker,
+				activity,
+			}),
+			signal,
+		);
 
 		// Respect ~/.pi/agent/trust.json explicit refusals; otherwise approve explicitly selected local workspaces
 		// (since Pi RPC has hasUI=false and would silently skip undecided repos). Cloned repos stay isolated.
@@ -793,26 +346,20 @@ export async function executeWithWorkerPass(
 		const workspaceTopLevelEntries = input.workspace ? listWorkspaceTopLevelEntries(cwd) : undefined;
 		const committerName = repoGitUser?.name || gitIdentity.gitName;
 		const committerEmail = repoGitUser?.email || gitIdentity.gitEmail;
-		const matterModel =
-			sessionMode === "lead" &&
-			(!(isArchitect || isDiscussionMode || input.run.keepMatterLead) || input.member.id === matter?.leadMemberId)
-				? matter?.modelSelection
-				: null;
-		const configuredModel =
-			boardCtx?.modelOverride ?? resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);
-		let selection = configuredModel;
-		if (!configuredModel || configuredModel.thinkingLevel === undefined) {
-			const piDefault = (await abortable(deps.readPiModels(configuredModel ?? undefined), signal)).defaultModel;
-			if (
-				!configuredModel ||
-				(piDefault?.provider === configuredModel.provider && piDefault.model === configuredModel.model)
-			) {
-				selection = piDefault;
-			}
-			if (selection && template?.thinking) {
-				selection = { ...selection, thinkingLevel: template.thinking };
-			}
-		}
+		const selection = await resolveWorkerModelSelection({
+			store: deps.store,
+			readPiModels: deps.readPiModels,
+			activeOrgId,
+			memberId: input.member.id,
+			matter,
+			sessionMode,
+			isArchitect,
+			isDiscussionMode,
+			keepMatterLead: input.run.keepMatterLead,
+			template,
+			boardModelOverride: boardCtx?.modelOverride,
+			signal,
+		});
 		const { systemPrompt, turnContext } = buildMemberPrompts({
 			member: effectiveMember,
 			template,
@@ -850,103 +397,16 @@ export async function executeWithWorkerPass(
 						},
 					)
 				: undefined;
-		const pendingDecisions = deps.store
-			.listMessages(input.matterId, "user")
-			.map((message) => ({ message, decision: readHumanDecision(message.metadata) }))
-			.filter((entry) => entry.decision?.status === "pending");
-		const pendingDecisionsPrompt =
-			pendingDecisions.length > 0
-				? [
-						"## Pending human decisions in this matter",
-						...pendingDecisions.flatMap(({ message, decision }) =>
-							decision!.requests.map(
-								(req) =>
-									`- [${message.id}] ${req.question}${req.options?.length ? ` (options: ${req.options.join(" / ")})` : ""}`,
-							),
-						),
-					].join("\n")
-				: undefined;
-		const managedSkillRoots: Array<{
-			root: string;
-			scope: "global" | "org" | "personal" | "workspace";
-			scopeId: string;
-		}> = [];
-		if (deps.skillsDir) {
-			managedSkillRoots.push({ root: resolve(deps.skillsDir, "global"), scope: "global", scopeId: "" });
-			if (activeOrgId) {
-				managedSkillRoots.push({
-					root: resolve(deps.skillsDir, "orgs", activeOrgId),
-					scope: "org",
-					scopeId: activeOrgId,
-				});
-			}
-			if (actorUserId) {
-				managedSkillRoots.push({
-					root: resolve(deps.skillsDir, "users", actorUserId),
-					scope: "personal",
-					scopeId: actorUserId,
-				});
-			}
-			if (input.workspace?.id) {
-				managedSkillRoots.push({
-					root: resolve(deps.skillsDir, "workspaces", input.workspace.id),
-					scope: "workspace",
-					scopeId: input.workspace.id,
-				});
-			}
-		}
-		if (input.workspace) {
-			const folderDirs =
-				workspaceFolders.length > 0
-					? workspaceFolders.filter((f) => f.loadSkills).map((f) => f.path)
-					: [input.workspace.repoPath];
-			const seenWsRoots = new Set(managedSkillRoots.map((entry) => entry.root));
-			for (const dir of folderDirs) {
-				for (const rel of [".agents/skills", ".pi/skills"]) {
-					const candidate = resolve(dir, rel);
-					if (!seenWsRoots.has(candidate)) {
-						seenWsRoots.add(candidate);
-						managedSkillRoots.push({
-							root: candidate,
-							scope: "workspace",
-							scopeId: input.workspace.id,
-						});
-					}
-				}
-			}
-		}
-		const trustPolicyMap: Record<string, string> = {};
-		for (const policy of deps.store.skillTrust.listPolicies()) {
-			trustPolicyMap[skillTrustPolicyKey(policy.scope, policy.scopeId, policy.skillName)] = policy.trustLevel;
-		}
-		const boardAssignmentPrompt = boardCtx
-			? [
-					"[Board Agent Assignment]",
-					`Agent ID: ${boardCtx.agentId} (${boardCtx.displayName})`,
-					`Board Role: ${boardCtx.boardRole}`,
-					`Mission Brief: ${boardCtx.brief}`,
-					...(boardCtx.ownedScope && boardCtx.ownedScope.length > 0
-						? [`Owned Scope: ${boardCtx.ownedScope.join(", ")}`]
-						: []),
-					...(boardCtx.acceptanceCriteria ? [`Acceptance Criteria: ${boardCtx.acceptanceCriteria}`] : []),
-					...(boardCtx.skills && boardCtx.skills.length > 0
-						? [`Assigned Skills: ${boardCtx.skills.join(", ")}`]
-						: []),
-					...(boardCtx.boardRole === "verifier"
-						? [
-								"Verifier Boundary: read/test-only (no write/edit tools). Verify independently from author and post verify_pass or verify_rework via post_to_board.",
-							]
-						: boardCtx.boardRole === "coordinator"
-							? [
-									"Coordinator Boundary: decompose tasks, spawn dynamic agents with spawn_board_agent, post @mentions, and escalate/summarize. Do not edit files directly.",
-								]
-							: [
-									"Builder Boundary: implement only within your ownedScope, verify locally with tests/commands, and report handoff via post_to_board.",
-								]),
-					...(boardCtx.turnPromptContext ? ["", boardCtx.turnPromptContext] : []),
-					"[/Board Agent Assignment]",
-				].join("\n")
-			: undefined;
+		const pendingDecisionsPrompt = buildPendingDecisionsPrompt(deps.store, input.matterId);
+		const managedSkillRoots = buildManagedSkillRoots({
+			skillsDir: deps.skillsDir,
+			activeOrgId,
+			actorUserId,
+			workspace: input.workspace,
+			workspaceFolders,
+		});
+		const trustPolicyMap = buildTrustPolicyMap(deps.store);
+		const boardAssignmentPrompt = boardCtx ? buildBoardAssignmentPrompt(boardCtx) : undefined;
 		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
@@ -998,224 +458,22 @@ export async function executeWithWorkerPass(
 			},
 		});
 		input.run.workers.add(worker);
-		const fetchInputs = new Map<string, unknown>();
-		const offEvent = worker.onEvent?.((event) => {
-			if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
-				const toolName = String(event.toolName ?? "tool");
-				const toolCallId = String(event.toolCallId);
-				if (toolName === "fetch_content" && event.type === "tool_execution_start")
-					fetchInputs.set(toolCallId, event.args);
-				if (event.type === "tool_execution_start") activity?.toolStarted(toolCallId, formatToolAction(toolName));
-				else activity?.toolFinished(toolCallId, `已返回${formatToolAction(toolName)}`);
-				const rawArgs =
-					event.args && typeof event.args === "object" ? (event.args as Record<string, unknown>) : undefined;
-				const compactArgs =
-					event.type === "tool_execution_start" && rawArgs
-						? {
-								...(toolName === "load_available_skill" && typeof rawArgs.name === "string"
-									? { name: rawArgs.name.slice(0, 128) }
-									: {}),
-								...(toolName === "load_available_skill" && typeof rawArgs.resource === "string"
-									? { resource: rawArgs.resource.slice(0, 240) }
-									: {}),
-								...(typeof rawArgs.path === "string" ? { path: rawArgs.path.slice(0, 240) } : {}),
-								...(toolName === "read" &&
-								typeof rawArgs.path === "string" &&
-								/(?:^|[\\/])SKILL\.md$/i.test(rawArgs.path)
-									? {
-											skillName: rawArgs.path
-												.replace(/\\/g, "/")
-												.split("/")
-												.filter(Boolean)
-												.at(-2)
-												?.slice(0, 128),
-										}
-									: {}),
-								...(typeof rawArgs.sourcePath === "string"
-									? { sourcePath: rawArgs.sourcePath.slice(0, 240) }
-									: {}),
-								...(typeof rawArgs.command === "string"
-									? { command: rawArgs.command.replace(/\s+/g, " ").trim().slice(0, 240) }
-									: {}),
-								...(typeof rawArgs.title === "string" ? { title: rawArgs.title.slice(0, 240) } : {}),
-								...(toolName === "visualize"
-									? {
-											...(typeof rawArgs.type === "string" ? { type: rawArgs.type.slice(0, 32) } : {}),
-											...(typeof rawArgs.before === "string"
-												? { before: rawArgs.before.slice(0, 240) }
-												: {}),
-											...(typeof rawArgs.mermaid === "string"
-												? { mermaid: rawArgs.mermaid.slice(0, 8000) }
-												: {}),
-											...(Array.isArray(rawArgs.options) ? { options: rawArgs.options.slice(0, 8) } : {}),
-										}
-									: {}),
-								...(toolName === "propose_skill"
-									? {
-											...(typeof rawArgs.name === "string" ? { name: rawArgs.name.slice(0, 64) } : {}),
-											...(typeof rawArgs.storageScope === "string"
-												? { storageScope: rawArgs.storageScope.slice(0, 32) }
-												: {}),
-											...(typeof rawArgs.description === "string"
-												? { description: rawArgs.description.slice(0, 240) }
-												: {}),
-											...(typeof rawArgs.rationale === "string"
-												? { rationale: rawArgs.rationale.slice(0, 240) }
-												: {}),
-											...(Array.isArray(rawArgs.scripts) ? { scriptCount: rawArgs.scripts.length } : {}),
-										}
-									: {}),
-								...(toolName === "propose_role"
-									? {
-											...(typeof rawArgs.action === "string" ? { action: rawArgs.action.slice(0, 16) } : {}),
-											...(typeof rawArgs.name === "string" ? { name: rawArgs.name.slice(0, 80) } : {}),
-											...(typeof rawArgs.memberId === "string"
-												? { memberId: rawArgs.memberId.slice(0, 120) }
-												: {}),
-											...(typeof rawArgs.rationale === "string"
-												? { rationale: rawArgs.rationale.slice(0, 240) }
-												: {}),
-										}
-									: {}),
-							}
-						: undefined;
-				if (boardCtx) {
-					const appendedEvent = deps.store.appendEvent({
-						matterId: input.matterId,
-						runId: input.run.userMessageId || "board",
-						agentId: boardCtx.agentId,
-						eventType: event.type === "tool_execution_start" ? "tool_start" : "tool_end",
-						payload: {
-							toolCallId,
-							toolName,
-							...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
-							...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
-								? { isError: event.isError }
-								: {}),
-						},
-					});
-					boardCtx.onEventAppended?.(appendedEvent);
-				} else {
-					deps.store.appendMessage({
-						matterId: input.matterId,
-						channel: "notice",
-						senderType: "system",
-						senderId: input.member.id,
-						metadata: {
-							workspaceId: input.workspace?.id ?? null,
-							repoPath: cwd,
-							orgId: activeOrgId,
-							sourceUserMessageId: input.run.userMessageId,
-						},
-						content: JSON.stringify({
-							type: event.type,
-							toolCallId: event.toolCallId,
-							toolName,
-							...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
-							...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
-								? { isError: event.isError }
-								: {}),
-						}),
-					});
-				}
-				if (toolName === "fetch_content" && event.type === "tool_execution_end") {
-					const inputArgs = fetchInputs.get(toolCallId);
-					fetchInputs.delete(toolCallId);
-					const result = event.result;
-					const content = result && typeof result === "object" && "content" in result ? result.content : undefined;
-					const structured =
-						result && typeof result === "object" && "structuredContent" in result
-							? result.structuredContent
-							: undefined;
-					for (const evidence of classifyGithubFetches(inputArgs, content, event.isError !== false, structured)) {
-						deps.store.appendMessage({
-							matterId: input.matterId,
-							channel: "notice",
-							senderType: "system",
-							senderId: input.member.id,
-							metadata: {
-								workspaceId: input.workspace?.id ?? null,
-								repoPath: cwd,
-								orgId: activeOrgId,
-								sourceUserMessageId: input.run.userMessageId,
-							},
-							content: JSON.stringify({
-								method: "web_fetch_evidence",
-								toolCallId,
-								source: evidence.source,
-								kind: evidence.kind,
-								truncated: evidence.truncated,
-							}),
-						});
-						const label =
-							evidence.kind === "temporary_clone"
-								? "已获取 GitHub 临时副本，跨轮次可能失效"
-								: evidence.kind === "github_api"
-									? "已获取 GitHub API 视图，未确认本地克隆"
-									: "已获取 GitHub 内容，获取方式未确认";
-						pushRunLog(input.run, input.member.displayName, label);
-					}
-				}
-				const toolSummary = event.type === "tool_execution_start" ? summarizeToolArgs(event.args) : undefined;
-				if (event.type === "tool_execution_start" && toolName !== "delegate_to_member") {
-					pushRunLog(
-						input.run,
-						input.member.displayName,
-						`${formatToolAction(toolName)}${toolSummary ? `：${toolSummary}` : ""}`,
-						{ memberId: input.member.id, toolCallId, toolName },
-					);
-				}
-				if (event.type === "tool_execution_end") {
-					const log = input.run.recentLogs.findLast(
-						(entry) => entry.memberId === input.member.id && entry.toolCallId === toolCallId,
-					);
-					if (log)
-						log.toolStatus =
-							typeof event.isError === "boolean" ? (event.isError ? "error" : "success") : "unknown";
-				}
-				if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
-					return;
-				}
-				if (event.type === "tool_execution_start") {
-					input.onProgress?.({
-						stage: "tool",
-						label: `${input.member.displayName}：${formatToolAction(toolName)}${toolSummary ? `（${toolSummary}）` : ""}`,
-						toolName,
-						toolSummary,
-						recentLogs: [...input.run.recentLogs],
-					});
-				} else {
-					input.onProgress?.({
-						stage: "thinking",
-						label: `${input.member.displayName}正在分析结果`,
-						toolName,
-						recentLogs: [...input.run.recentLogs],
-					});
-				}
-			} else if (event.type === "agent_start") {
-				activity?.pulse("开始生成回复");
-				if (sessionMode === "lead" && input.run.activeDelegations.size > 0) {
-					return;
-				}
-				input.onProgress?.({
-					stage: "thinking",
-					label: `${input.member.displayName}正在思考`,
-					recentLogs: [...input.run.recentLogs],
-				});
-			} else activity?.pulse();
-		});
-		if (offEvent) cleanups.push(offEvent);
-		cleanups.push(
-			worker.onNotice((notice) => {
-				activity?.pulse();
-				deps.store.appendMessage({
-					matterId: input.matterId,
-					channel: "notice",
-					senderType: "system",
-					senderId: input.member.id,
-					content: JSON.stringify(notice),
-				});
-			}),
+		attachWorkerTelemetry(
+			{
+				worker,
+				store: deps.store,
+				matterId: input.matterId,
+				member: input.member,
+				workspace: input.workspace,
+				cwd,
+				activeOrgId,
+				run: input.run,
+				sessionMode,
+				boardCtx,
+				onProgress: input.onProgress,
+				activity,
+			},
+			cleanups,
 		);
 		worker.setDialogHandler(async (request) => {
 			signal.throwIfAborted();

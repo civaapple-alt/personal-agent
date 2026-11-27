@@ -151,13 +151,13 @@ flowchart TB
 | `web/` | 59 → 79 | 26,293 → 26,618 | 22 → 21 | 4 → 0 |
 | 合计 | 145 → 172 | 51,235 → 51,691 | 38 → 37 | 7 → 0 |
 
-**0.8.x LTS 当前实测超大文件（≥1,000 行）**：随 0.8.x 演进，当前仓库中已有 5 个文件回升至 1,000 行以上（计划在 0.9.x 按生命周期逐步拆分，不在 0.8.x LTS 稳定期做大面积重构）：
+**0.9.x 热点拆分结果（`P-0902`）**：已将此前 ≥1,000 行的 5 个高频热点文件按生命周期与领域拆分至 `<1,000` 行，并纳入 `npm run check:sizes` 行数门禁：
 
-- [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（~1,353 行，单轮 Worker 执行器）
-- [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（~1,040 行，Git 资料空间仓储）
-- [App.tsx](../../apps/web/src/App.tsx)（~1,022 行，前端根装配组件）
-- [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（~1,002 行，资料空间视图）
-- [deliverables.css](../../apps/web/src/styles/deliverables.css)（~1,811 行，成果与资料空间样式）
+- [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（拆出 `worker-setup.ts`、`worker-tool-handler.ts`、`worker-telemetry.ts`）
+- [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（拆出 `space-types.ts`）
+- [App.tsx](../../apps/web/src/App.tsx)（拆出 `AppStageRouter.tsx`）
+- [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）
+- [deliverables.css](../../apps/web/src/styles/deliverables.css)（拆出 `spaces.css` 与 `workspaces.css`）
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |

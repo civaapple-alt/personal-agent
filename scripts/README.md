@@ -8,6 +8,7 @@
 | [build-cli.mjs](build-cli.mjs)：`npm run build:cli` | 将 `apps/cli/src/main.ts` 与 `@pa/server`、System One SDK 打包为无 `node_modules` 依赖的自包含 `apps/cli/dist/main.js`，并附带 SDK 许可。由 `npm run build` 调用 |
 | [check-module-boundaries.mjs](check-module-boundaries.mjs)：`npm run check:boundaries` | 静态检查 `apps/`、`packages/`、`pa-extensions/`、`pi-extensions/` 之间的三环硬边界与双半边隔离，纳入 `npm run check` |
 | [check-css-classes.mjs](check-css-classes.mjs)：`npm run check:css` | 零依赖静态检查 `apps/web/src` 与 `pa-extensions/*/web` 中 TSX 使用的静态 `className` 是否均在样式表中定义，纳入 `npm run check` |
+| [check-file-sizes.mjs](check-file-sizes.mjs)：`npm run check:sizes` | 零依赖源文件行数门禁（默认 `<1000` 行，历史观察清单文件不允许超过基线），防止热点超大文件回潮 |
 | [run-tests.mjs](run-tests.mjs)：`npm test` | 在临时 Pi 配置目录运行所有离线测试，避免本机 Pi 软件包影响工具清单；退出时清理目录 |
 | [start-team-sandbox.mjs](start-team-sandbox.mjs)：`npm run start:team:sandbox` | 构建网页并在系统临时目录启动独立团队版沙盒（`PA_REQUIRE_AUTH=1`，默认端口 `4399`，退出自动清理除非传 `--keep` 或 `--dir=`）；预置超级管理员、待审核账号、多组织 RBAC 角色（`org_owner`/`org_admin`/`org_member`/`org_viewer`）、公开与受限仓库及跨组织/多版本/私密/受限交付成果、验收反馈与候选经验，不触碰 `.data/`，登录界面保持标准表单 |
 | [check-server-startup.mjs](check-server-startup.mjs)：`npm run check:startup` | 需要先构建；源码/编译入口分别检查文件与内存数据库，使用临时工作目录、模板副本、端口并固定绑定 `127.0.0.1`，不继承 `PA_HOST`（Windows 用 junction）。检查 bootstrap、已移除的演示接口、角色隔离、首页与退出；非 Windows 文件库用 `SIGTERM`、内存库用 IPC，Windows 全用 IPC，不派发 AI |

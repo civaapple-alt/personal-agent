@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "check:boundaries": "node scripts/check-module-boundaries.mjs",
     "check:css": "node scripts/check-css-classes.mjs",
+    "check:sizes": "node scripts/check-file-sizes.mjs",
     "check": "npm run lint && npm run typecheck && npm run check:boundaries && npm run check:css",
     "build:cli": "node scripts/build-cli.mjs",
     "build:web": "node scripts/build-web.mjs",

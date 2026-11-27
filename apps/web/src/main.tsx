@@ -12,6 +12,8 @@ import "./styles/chat-composer.css";
 import "./styles/model-picker.css";
 import "./styles/chat-roster.css";
 import "./styles/deliverables.css";
+import "./styles/spaces.css";
+import "./styles/workspaces.css";
 import "./styles/team.css";
 import "./styles/role-architect.css";
 import "./styles/settings.css";

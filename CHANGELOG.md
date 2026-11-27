@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Complete `0.9.x` Stage 2 hotspot decoupling (`P-0902`) and add file-size gate `npm run check:sizes` ([check-file-sizes.mjs](scripts/check-file-sizes.mjs)):
+  - Split [worker-runner.ts](packages/server/src/orchestrator/execution/worker-runner.ts) along lifecycle phases into [worker-setup.ts](packages/server/src/orchestrator/execution/worker-setup.ts), [worker-tool-handler.ts](packages/server/src/orchestrator/execution/worker-tool-handler.ts), and [worker-telemetry.ts](packages/server/src/orchestrator/execution/worker-telemetry.ts).
+  - Split [space-repo.ts](packages/server/src/storage/repos/space-repo.ts) domain types, normalizers, and row mappers into [space-types.ts](packages/server/src/storage/repos/space-types.ts) (re-exported cleanly).
+  - Split [App.tsx](apps/web/src/App.tsx) tab routing and archive confirmation into [AppStageRouter.tsx](apps/web/src/views/AppStageRouter.tsx).
+  - Split [SpacePages.tsx](apps/web/src/views/SpacePages.tsx) into [SpaceDocumentEditorForm.tsx](apps/web/src/components/spaces/SpaceDocumentEditorForm.tsx) and [SpaceDocumentDetailPane.tsx](apps/web/src/components/spaces/SpaceDocumentDetailPane.tsx).
+  - Split [deliverables.css](apps/web/src/styles/deliverables.css) into `deliverables.css`, [spaces.css](apps/web/src/styles/spaces.css), and [workspaces.css](apps/web/src/styles/workspaces.css) loaded in [main.tsx](apps/web/src/main.tsx).
+
 - Harden `0.9.1` Board governance and add complex multi-slice real-Pi live verification ([v0.9-board-and-storage-design.md](docs/concepts/v0.9-board-and-storage-design.md), [board-complex-verification.md](docs/validation/board-complex-verification.md)):
   - Hard-block unrestricted `@all` mentions consistently across PA `board-runner.ts`, HTTP `POST /api/matters/:id/board/posts` (`400`), and portable `pi-extensions/board` (`LocalBoardStore.createPost` + tool schema description).
   - Enforce `ownedScope` write boundaries at runtime via Pi `tool_call` hook ([pi-extensions/board/scope-guard.ts](pi-extensions/board/scope-guard.ts)) for both PA Bridge and standalone `builder` workers (`PA_BOARD_OWNED_SCOPE`), blocking out-of-scope `write`/`edit` and path traversal while allowing reads and non-path command hints; serialize same-repo `builder` turns in `board-runner.ts` (`activeBuilderRepoPaths`) without blocking read-only `verifier` checks.
