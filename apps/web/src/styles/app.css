@@ -14,7 +14,6 @@
 @import "./deliverables.css" layer(legacy);
 @import "./spaces.css" layer(legacy);
 @import "./workspaces.css" layer(legacy);
-@import "./team.css" layer(legacy);
 @import "./role-architect.css" layer(legacy);
 @import "./settings.css" layer(legacy);
 @import "./account-admin.css" layer(legacy);

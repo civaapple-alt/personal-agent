@@ -23,8 +23,19 @@ import {
 } from "../architectApi.ts";
 import { MemberInspectorModal } from "../components/team/MemberInspectorModal.tsx";
 import { MemberPackageForms } from "../components/team/MemberPackageForms.tsx";
-import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
+import {
+	Badge,
+	BotFaceIcon,
+	Button,
+	EmptyState,
+	PageShell,
+	PaneHeader,
+	SplitPane,
+	type TabItem,
+	Tabs,
+} from "../primitives/index.ts";
 import { applyOrgAiRoleOverrides, getBotTheme, resolveEffectivePrimaryContactId } from "../utils.ts";
+import { cn } from "../utils/cn.ts";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -117,6 +128,15 @@ export function TeamView({
 		}
 		return { global, org, personal };
 	}, [businessMembers]);
+	const scopeTabItems = useMemo<TabItem[]>(() => {
+		const items: TabItem[] = [
+			{ id: "all", label: "全部", count: businessMembers.length },
+			{ id: "global", label: "平台通用", count: scopeCounts.global },
+		];
+		if (scopeCounts.org > 0) items.push({ id: "org", label: "组织共享", count: scopeCounts.org });
+		if (scopeCounts.personal > 0) items.push({ id: "personal", label: "仅我可用", count: scopeCounts.personal });
+		return items;
+	}, [businessMembers.length, scopeCounts]);
 	const inspectedMember = useMemo(() => {
 		if (inspectedMemberId) {
 			const exact = visibleBusinessMembers.find((m) => m.id === inspectedMemberId);
@@ -232,174 +252,169 @@ export function TeamView({
 	};
 
 	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
-				<div className="pane-header-row">
-					<div className="pane-header">
-						<h1>AI 团队</h1>
-						<p>专注 AI 岗位分工与能力包管理；组织成员与主联系人配置请前往「组织」页。</p>
+		<PageShell maxWidth="wide">
+			<PaneHeader
+				title="AI 团队"
+				subtitle="专注 AI 岗位分工与能力包管理；组织成员与主联系人配置请前往「组织」页。"
+				actions={
+					canCreateAnyRole ? (
+						<Button variant="secondary" size="sm" onClick={() => setShowImportMember((v) => !v)}>
+							导入角色包
+						</Button>
+					) : undefined
+				}
+			/>
+
+			<div className="mt-4 flex flex-col gap-4">
+				<MemberPackageForms
+					showImportMember={showImportMember}
+					exportedPackage={exportedPackage}
+					isSuperAdmin={isSuperAdmin}
+					accountUser={accountUser}
+					currentUser={currentUser}
+					organizations={organizations}
+					onCloseImportMember={() => setShowImportMember(false)}
+					onCloseExportedPackage={() => setExportedPackage(null)}
+					onRefresh={onRefresh}
+					onNotice={onNotice}
+					onError={onError}
+				/>
+
+				<section className="flex flex-col gap-3">
+					<div className="flex items-start justify-between gap-3 flex-wrap">
+						<div className="flex items-baseline gap-2.5 flex-wrap">
+							<h2 className="m-0 text-lg font-semibold text-ink leading-snug">
+								AI 团队成员（{businessMembers.length}）
+								{accountUser && scopeCounts.personal > 0 && (
+									<span className="text-xs font-normal text-ink-muted">
+										{" "}
+										· 个人私有 {scopeCounts.personal}/{accountUser.maxPersonalRoles ?? 5}
+									</span>
+								)}
+							</h2>
+							<p className="m-0 text-xs text-ink-muted">左侧选择角色，右侧直接查看职责、技能、不做边界与身份档案</p>
+						</div>
+						<div className="flex items-center gap-2 flex-wrap">
+							{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (
+								<Tabs
+									variant="pill"
+									size="sm"
+									ariaLabel="按角色使用范围筛选"
+									value={scopeFilter}
+									onChange={(id) => setScopeFilter(id as "all" | RoleScope)}
+									items={scopeTabItems}
+								/>
+							)}
+							{canRunHealthcheck && onOpenArchitectMatter && canDispatchAny && (
+								<Button
+									variant="secondary"
+									size="xs"
+									onClick={() =>
+										onOpenArchitectMatter(
+											`请基于当前可见团队名册（${businessMembers.length} 个业务角色）、近期运行洞察与交付反馈，做一次团队协作体检：指出真实存在的职责重叠、协作卡点或工具/Skill 摩擦；如有需要再给出调整或补位建议，没有明显问题时直接说明即可。`,
+										)
+									}
+								>
+									团队协作体检
+								</Button>
+							)}
+							{onOpenOrganizations && (
+								<Button variant="inline" size="xs" onClick={onOpenOrganizations}>
+									组织与主联系人 →
+								</Button>
+							)}
+						</div>
 					</div>
-					{canCreateAnyRole && (
-						<div className="actions-row compact">
-							<button type="button" className="btn-pill-outline" onClick={() => setShowImportMember((v) => !v)}>
-								导入角色包
-							</button>
-						</div>
-					)}
-				</div>
 
-				<div className="ui-sections-stack">
-					<MemberPackageForms
-						showImportMember={showImportMember}
-						exportedPackage={exportedPackage}
-						isSuperAdmin={isSuperAdmin}
-						accountUser={accountUser}
-						currentUser={currentUser}
-						organizations={organizations}
-						onCloseImportMember={() => setShowImportMember(false)}
-						onCloseExportedPackage={() => setExportedPackage(null)}
-						onRefresh={onRefresh}
-						onNotice={onNotice}
-						onError={onError}
-					/>
-
-					<section className="ui-section">
-						<div className="ui-section-head">
-							<div className="team-members-heading">
-								<h2 className="ui-section-title">
-									AI 团队成员（{businessMembers.length}）
-									{accountUser && scopeCounts.personal > 0 && (
-										<span className="muted-tiny">
-											{" "}
-											· 个人私有 {scopeCounts.personal}/{accountUser.maxPersonalRoles ?? 5}
-										</span>
-									)}
-								</h2>
-								<p className="ui-section-desc">左侧选择角色，右侧直接查看职责、技能、不做边界与身份档案</p>
-							</div>
-							<div className="actions-row compact">
-								{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (
-									<div className="architect-quick-chips" role="tablist" aria-label="按角色使用范围筛选">
-										{(
-											[
-												["all", `全部 (${businessMembers.length})`],
-												["global", `平台通用 (${scopeCounts.global})`],
-												...(scopeCounts.org > 0
-													? ([["org", `组织共享 (${scopeCounts.org})`]] as const)
-													: []),
-												...(scopeCounts.personal > 0
-													? ([["personal", `仅我可用 (${scopeCounts.personal})`]] as const)
-													: []),
-											] as const
-										).map(([key, label]) => (
-											<button
-												key={key}
-												type="button"
-												role="tab"
-												aria-selected={scopeFilter === key}
-												className={`choice-chip ${scopeFilter === key ? "active" : ""}`}
-												onClick={() => setScopeFilter(key)}
-											>
-												{label}
-											</button>
-										))}
-									</div>
-								)}
-								{canRunHealthcheck && onOpenArchitectMatter && canDispatchAny && (
-									<button
-										type="button"
-										className="btn-pill-outline btn-xs"
-										onClick={() =>
-											onOpenArchitectMatter(
-												`请基于当前可见团队名册（${businessMembers.length} 个业务角色）、近期运行洞察与交付反馈，做一次团队协作体检：指出真实存在的职责重叠、协作卡点或工具/Skill 摩擦；如有需要再给出调整或补位建议，没有明显问题时直接说明即可。`,
-											)
-										}
-									>
-										团队协作体检
-									</button>
-								)}
-								{onOpenOrganizations && (
-									<button type="button" className="btn-inline" onClick={onOpenOrganizations}>
-										组织与主联系人 →
-									</button>
-								)}
-							</div>
-						</div>
-						<div className="team-split-layout">
-							<aside className="team-split-nav" aria-label="AI 角色列表">
-								<div className="team-split-list">
-									{cardDisplayMembers.map((member) => {
-										const fullIdx = members.findIndex((m) => m.id === member.id);
-										const theme = getBotTheme(fullIdx >= 0 ? fullIdx : 0);
-										const isSelected = inspectedMember?.id === member.id;
-										const isPrimary = member.id === effectivePrimaryId;
-										const isArch = isArchitectMember(member, templateByRoleId);
-										const scopeBadge = getMemberScopeBadge(member, organizationName);
-										return (
-											<button
-												key={member.id}
-												type="button"
-												className={`team-nav-item ${isSelected ? "active" : ""}`}
-												onClick={() => setInspectedMemberId(member.id)}
-											>
-												<BotFaceIcon
-													bg={theme.bg}
-													tilt={theme.tilt}
-													size="sm"
-													mood={isArch ? "thinking" : "idle"}
-												/>
-												<span className="team-nav-copy">
-													<span className="team-nav-name-row">
-														<strong>{member.displayName}</strong>
-														{isPrimary && <span className="pill live">主联系</span>}
-													</span>
-													<span className="team-nav-sub">
-														{scopeBadge.label}
-														{member.roleTitle && member.roleTitle !== member.displayName
-															? ` · ${member.roleTitle}`
-															: ""}
-													</span>
+					<SplitPane
+						sidebarWidth="276px"
+						sidebar={
+							<nav
+								aria-label="AI 角色列表"
+								className="lg:sticky lg:top-3 lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto lg:pr-1 flex flex-col gap-1.5"
+							>
+								{cardDisplayMembers.map((member) => {
+									const fullIdx = members.findIndex((m) => m.id === member.id);
+									const theme = getBotTheme(fullIdx >= 0 ? fullIdx : 0);
+									const isSelected = inspectedMember?.id === member.id;
+									const isPrimary = member.id === effectivePrimaryId;
+									const isArch = isArchitectMember(member, templateByRoleId);
+									const scopeBadge = getMemberScopeBadge(member, organizationName);
+									return (
+										<button
+											key={member.id}
+											type="button"
+											aria-current={isSelected ? "true" : undefined}
+											onClick={() => setInspectedMemberId(member.id)}
+											className={cn(
+												"w-full flex items-center gap-2.5 px-2.5 py-2 border rounded-md text-left cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-accent",
+												isSelected
+													? "border-accent bg-accent-soft"
+													: "border-line bg-stage hover:border-line-strong hover:bg-hover/60",
+											)}
+										>
+											<BotFaceIcon
+												bg={theme.bg}
+												tilt={theme.tilt}
+												size="sm"
+												mood={isArch ? "thinking" : "idle"}
+											/>
+											<span className="flex flex-col gap-0.5 min-w-0 flex-1">
+												<span className="flex items-center gap-1.5 text-sm min-w-0">
+													<strong className="font-semibold text-ink truncate">{member.displayName}</strong>
+													{isPrimary && (
+														<Badge tone="success" dot>
+															主联系
+														</Badge>
+													)}
 												</span>
-											</button>
-										);
-									})}
-								</div>
-							</aside>
-							<div className="team-split-main">
-								{inspectedMember ? (
-									<MemberInspectorModal
-										inline
-										member={inspectedMember}
-										memberIndex={inspectedIndex}
-										template={templateByRoleId.get(inspectedMember.templateId)}
-										canEditIdentity={inspectedCanManage}
-										canDispatch={canDispatchAny}
-										canSetPrimary={canSwitchPrimary && eligiblePrimaryIds.has(inspectedMember.id)}
-										primaryActionLabel={
-											primaryTargetOrg ? `设为「${primaryTargetOrg.name}」主联系` : "设为全局默认主联系"
-										}
-										isPrimary={inspectedMember.id === effectivePrimaryId}
-										effectiveGitOverride={inspectedEffectiveGitConfig}
-										activeWorkspace={activeWorkspace}
-										activeOrg={primaryTargetOrg ?? activeOrg}
-										organizationName={organizationName}
-										onAssignTask={onAssignTask}
-										onSetPrimary={handleSetPrimary}
-										onExportMember={handleExportMember}
-										onRefresh={onRefresh}
-										onNotice={onNotice}
-										onError={onError}
-									/>
-								) : (
-									<div className="ui-card">
-										<p className="muted-sm">当前筛选条件下暂无 AI 角色。</p>
-									</div>
-								)}
-							</div>
-						</div>
-					</section>
-				</div>
+												<span className="text-micro text-ink-muted truncate">
+													{scopeBadge.label}
+													{member.roleTitle && member.roleTitle !== member.displayName
+														? ` · ${member.roleTitle}`
+														: ""}
+												</span>
+											</span>
+										</button>
+									);
+								})}
+							</nav>
+						}
+					>
+						{inspectedMember ? (
+							<MemberInspectorModal
+								inline
+								member={inspectedMember}
+								memberIndex={inspectedIndex}
+								template={templateByRoleId.get(inspectedMember.templateId)}
+								canEditIdentity={inspectedCanManage}
+								canDispatch={canDispatchAny}
+								canSetPrimary={canSwitchPrimary && eligiblePrimaryIds.has(inspectedMember.id)}
+								primaryActionLabel={
+									primaryTargetOrg ? `设为「${primaryTargetOrg.name}」主联系` : "设为全局默认主联系"
+								}
+								isPrimary={inspectedMember.id === effectivePrimaryId}
+								effectiveGitOverride={inspectedEffectiveGitConfig}
+								activeWorkspace={activeWorkspace}
+								activeOrg={primaryTargetOrg ?? activeOrg}
+								organizationName={organizationName}
+								onAssignTask={onAssignTask}
+								onSetPrimary={handleSetPrimary}
+								onExportMember={handleExportMember}
+								onRefresh={onRefresh}
+								onNotice={onNotice}
+								onError={onError}
+							/>
+						) : (
+							<EmptyState
+								compact
+								title="当前筛选条件下暂无 AI 角色"
+								description="可切换上方使用范围筛选，或导入新的角色能力包。"
+							/>
+						)}
+					</SplitPane>
+				</section>
 			</div>
-		</div>
+		</PageShell>
 	);
 }

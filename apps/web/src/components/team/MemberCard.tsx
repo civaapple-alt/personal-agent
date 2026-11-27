@@ -2,13 +2,25 @@ import { useEffect, useId, useRef, useState } from "react";
 import {
 	deleteMember,
 	type OrganizationDto,
+	type RoleScope,
 	type RoleTemplateDto,
 	type TeamMemberDto,
 	type WorkspaceDto,
 } from "../../api.ts";
 import { getMemberScopeBadge } from "../../architectApi.ts";
-import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
+import { Badge, type BadgeTone, BotFaceIcon, Button, Card, IconButton } from "../../primitives/index.ts";
 import { formatMemberGitIdentity, getBotTheme, stripMarkdownFormatting } from "../../utils.ts";
+
+const SCOPE_BADGE_TONE: Record<RoleScope, BadgeTone> = {
+	global: "neutral",
+	org: "info",
+	personal: "observer",
+};
+
+const MENU_ITEM_CLS =
+	"w-full border-0 bg-transparent text-ink text-xs font-medium text-left px-2.5 py-1.5 rounded-xs cursor-pointer whitespace-nowrap hover:bg-subtle focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-45";
+const MENU_ITEM_DANGER_CLS =
+	"w-full border-0 bg-transparent text-danger-text text-xs font-medium text-left px-2.5 py-1.5 rounded-xs cursor-pointer whitespace-nowrap hover:bg-danger-bg focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-45";
 
 interface MemberCardProps {
 	member: TeamMemberDto;
@@ -106,8 +118,8 @@ export function MemberCard({
 			e.preventDefault();
 			target?.focus();
 		};
-		const target = confirmDelete ? ".member-more-confirm button" : '[role="menuitem"]';
-		menuRef.current?.querySelector<HTMLButtonElement>(target)?.focus();
+		const targetSelector = confirmDelete ? '[data-confirm-delete="true"]' : '[role="menuitem"]';
+		menuRef.current?.querySelector<HTMLButtonElement>(targetSelector)?.focus();
 		document.addEventListener("pointerdown", handlePointerDown);
 		document.addEventListener("keydown", handleKeyDown);
 		return () => {
@@ -127,19 +139,23 @@ export function MemberCard({
 	const isPrimary = isPrimaryProp ?? member.isPrimaryContact;
 
 	return (
-		<div className="member-card">
-			<div className="member-card-top">
-				<div className="member-ident">
+		<Card padding="md" className="h-full flex flex-col gap-2.5 shadow-sm">
+			<div className="flex items-start justify-between gap-2.5">
+				<div className="flex items-center gap-2.5 min-w-0 flex-1">
 					<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" />
-					<div className="member-ident-copy">
-						<div className="member-name-row">
-							<strong>{member.displayName}</strong>
-							{isPrimary && <span className="pill live">主联系</span>}
-							<span className={`pill role-scope-pill is-${scopeBadge.scope}`}>{scopeBadge.label}</span>
+					<div className="min-w-0 flex-1">
+						<div className="flex items-center gap-1.5 flex-wrap">
+							<strong className="text-sm font-semibold text-ink">{member.displayName}</strong>
+							{isPrimary && (
+								<Badge tone="success" dot>
+									主联系
+								</Badge>
+							)}
+							<Badge tone={SCOPE_BADGE_TONE[scopeBadge.scope]}>{scopeBadge.label}</Badge>
 						</div>
 						{member.roleTitle &&
 							member.roleTitle.trim().toLowerCase() !== member.displayName.trim().toLowerCase() && (
-								<div className="member-sub" title={member.roleTitle}>
+								<div className="mt-0.5 text-xs text-ink-muted truncate" title={member.roleTitle}>
 									{member.roleTitle}
 								</div>
 							)}
@@ -148,13 +164,18 @@ export function MemberCard({
 			</div>
 
 			{cleanResponsibility && (
-				<p className="member-resp" title={cleanResponsibility}>
+				<p className="m-0 text-sm text-ink-secondary leading-relaxed line-clamp-3" title={cleanResponsibility}>
 					{cleanResponsibility}
 				</p>
 			)}
-			{member.identitySummary && <div className="member-summary-line">{member.identitySummary}</div>}
+			{member.identitySummary && (
+				<div className="text-xs text-ink-muted leading-snug truncate">{member.identitySummary}</div>
+			)}
 
-			<div className="member-meta-line" title={`Git Author：${gitIdentity.formatted}`}>
+			<div
+				className="flex items-center gap-1.5 flex-wrap text-xs text-ink-muted leading-snug"
+				title={`Git Author：${gitIdentity.formatted}`}
+			>
 				<span>共享运行工具</span>
 				{antiJobsCount > 0 && (
 					<>
@@ -164,22 +185,23 @@ export function MemberCard({
 				)}
 			</div>
 
-			<div className="member-card-footer">
-				<div className="member-footer-primary">
+			<div className="mt-auto pt-2.5 border-t border-line-subtle flex items-center justify-between gap-2">
+				<div className="flex items-center gap-2 flex-wrap">
 					{canDispatch && (
-						<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
+						<Button variant="primary" size="xs" onClick={() => onAssignTask(member.id)}>
 							向 TA 派活
-						</button>
+						</Button>
 					)}
-					<button type="button" className="btn-pill-outline btn-xs" onClick={() => onInspectMember(member.id)}>
+					<Button variant="secondary" size="xs" onClick={() => onInspectMember(member.id)}>
 						身份与详情
-					</button>
+					</Button>
 				</div>
-				<div className="member-more-wrap" ref={menuRef}>
-					<button
+				<div className="relative shrink-0" ref={menuRef}>
+					<IconButton
 						ref={menuButtonRef}
-						type="button"
-						className={`icon-btn member-more-btn${menuOpen ? " active" : ""}`}
+						size="sm"
+						variant="ghost"
+						active={menuOpen}
 						aria-label={`${member.displayName} 更多操作`}
 						aria-expanded={menuOpen}
 						aria-haspopup="menu"
@@ -193,10 +215,10 @@ export function MemberCard({
 						}}
 					>
 						···
-					</button>
+					</IconButton>
 					{menuOpen && (
 						<div
-							className="member-more-popover"
+							className="absolute right-0 bottom-full mb-1.5 z-30 min-w-[148px] p-1 bg-card border border-line rounded-md shadow-md flex flex-col gap-0.5"
 							id={menuId}
 							role="menu"
 							aria-label={`${member.displayName} 操作`}
@@ -208,7 +230,7 @@ export function MemberCard({
 						>
 							<button
 								type="button"
-								className="member-more-item"
+								className={MENU_ITEM_CLS}
 								role="menuitem"
 								onClick={() => {
 									closeMenu();
@@ -220,7 +242,7 @@ export function MemberCard({
 							{!isPrimary && canSetPrimary && (
 								<button
 									type="button"
-									className="member-more-item"
+									className={MENU_ITEM_CLS}
 									role="menuitem"
 									onClick={() => {
 										closeMenu();
@@ -232,7 +254,7 @@ export function MemberCard({
 							)}
 							<button
 								type="button"
-								className="member-more-item"
+								className={MENU_ITEM_CLS}
 								role="menuitem"
 								onClick={() => {
 									closeMenu();
@@ -245,10 +267,11 @@ export function MemberCard({
 								!member.isPrimaryContact &&
 								canManage &&
 								(confirmDelete ? (
-									<div className="member-more-confirm">
+									<div className="border-t border-line mt-0.5 pt-0.5 flex flex-col">
 										<button
 											type="button"
-											className="member-more-item danger"
+											data-confirm-delete="true"
+											className={MENU_ITEM_DANGER_CLS}
 											role="menuitem"
 											disabled={deletingMember}
 											onClick={() => {
@@ -274,7 +297,7 @@ export function MemberCard({
 								) : (
 									<button
 										type="button"
-										className="member-more-item danger"
+										className={MENU_ITEM_DANGER_CLS}
 										role="menuitem"
 										onClick={() => setConfirmDelete(true)}
 									>
@@ -285,6 +308,6 @@ export function MemberCard({
 					)}
 				</div>
 			</div>
-		</div>
+		</Card>
 	);
 }

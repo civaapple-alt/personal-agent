@@ -1,7 +1,7 @@
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useId, useMemo, useState } from "react";
 import { type AccountUserDto, type CollaboratorDto, importMemberPackage, type OrganizationDto } from "../../api.ts";
 import { buildRoleScopeChoices } from "../../architectApi.ts";
-import { ModalDialog } from "../../primitives/ModalDialog.tsx";
+import { Button, FieldGroup, ModalDialog, Select, Textarea } from "../../primitives/index.ts";
 
 interface MemberPackageFormsProps {
 	showImportMember: boolean;
@@ -31,6 +31,7 @@ export function MemberPackageForms({
 	onNotice,
 	onError,
 }: MemberPackageFormsProps) {
+	const scopeSelectId = useId();
 	const [importMarkdown, setImportMarkdown] = useState("");
 	const [importing, setImporting] = useState(false);
 	const scopeChoices = useMemo(
@@ -106,41 +107,41 @@ export function MemberPackageForms({
 				onClose={closeImportModal}
 				footer={
 					<>
-						<button type="button" className="btn-pill-outline" disabled={importing} onClick={closeImportModal}>
+						<Button variant="secondary" size="sm" disabled={importing} onClick={closeImportModal}>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
+						</Button>
+						<Button
+							variant="primary"
+							size="sm"
 							disabled={importing || !importMarkdown.trim()}
 							onClick={() => void handleImportMember()}
 						>
 							{importing ? "导入中…" : "确认导入"}
-						</button>
+						</Button>
 					</>
 				}
 			>
-				<label className="identity-field">
-					<span className="identity-field-label">导入后的角色使用范围</span>
-					<select
-						className="input-field"
-						value={selectedScopeKey}
-						onChange={(e) => setSelectedScopeKey(e.target.value)}
-					>
+				<FieldGroup label="导入后的角色使用范围" htmlFor={scopeSelectId}>
+					<Select id={scopeSelectId} value={selectedScopeKey} onChange={(e) => setSelectedScopeKey(e.target.value)}>
 						{scopeChoices.map((choice) => (
 							<option key={choice.key} value={choice.key}>
 								{choice.label}
 							</option>
 						))}
-					</select>
-				</label>
-				<label className="file-upload-label">
+					</Select>
+				</FieldGroup>
+				<label className="flex items-center gap-2 flex-wrap text-xs text-ink-secondary cursor-pointer">
 					<span>选择本地 .md 文件：</span>
-					<input type="file" accept=".md,text/markdown" onChange={handleImportFileChange} />
+					<input
+						type="file"
+						accept=".md,text/markdown"
+						onChange={handleImportFileChange}
+						className="text-xs text-ink file:mr-2 file:px-2.5 file:py-1 file:rounded-xs file:border file:border-line file:bg-stage file:text-xs file:font-medium file:text-ink hover:file:bg-hover file:cursor-pointer"
+					/>
 				</label>
-				<textarea
+				<Textarea
 					rows={8}
-					className="composer-input mono-input"
+					mono
 					placeholder="粘贴角色模板 Markdown（含 --- frontmatter ---）…"
 					value={importMarkdown}
 					onChange={(e) => setImportMarkdown(e.target.value)}
@@ -155,12 +156,12 @@ export function MemberPackageForms({
 				onClose={onCloseExportedPackage}
 				footer={
 					<>
-						<button type="button" className="btn-pill-outline" onClick={onCloseExportedPackage}>
+						<Button variant="secondary" size="sm" onClick={onCloseExportedPackage}>
 							关闭
-						</button>
-						<button
-							type="button"
-							className="btn-pill-outline"
+						</Button>
+						<Button
+							variant="secondary"
+							size="sm"
 							onClick={() => {
 								if (!exportedPackage) return;
 								void navigator.clipboard.writeText(exportedPackage.markdown);
@@ -168,14 +169,14 @@ export function MemberPackageForms({
 							}}
 						>
 							复制内容
-						</button>
-						<button type="button" className="btn-pill-dark" onClick={handleDownloadExportedPackage}>
+						</Button>
+						<Button variant="primary" size="sm" onClick={handleDownloadExportedPackage}>
 							下载 .md 文件
-						</button>
+						</Button>
 					</>
 				}
 			>
-				<textarea rows={9} readOnly className="composer-input mono-input" value={exportedPackage?.markdown ?? ""} />
+				<Textarea rows={9} readOnly mono value={exportedPackage?.markdown ?? ""} />
 			</ModalDialog>
 		</>
 	);

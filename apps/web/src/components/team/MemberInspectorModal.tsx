@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
 	deleteMember,
 	fetchMemberSkillDetail,
 	type MemberSkillDetailDto,
 	type OrganizationDto,
+	type RoleScope,
 	type RoleTemplateDto,
 	type TeamMemberDto,
 	updateMemberIdentity,
@@ -11,9 +12,27 @@ import {
 } from "../../api.ts";
 import { getMemberScopeBadge, isArchitectMember } from "../../architectApi.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
-import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
-import { ModalDialog } from "../../primitives/ModalDialog.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	BotFaceIcon,
+	Button,
+	Card,
+	FieldGroup,
+	Input,
+	ModalDialog,
+	Tabs,
+	Textarea,
+} from "../../primitives/index.ts";
 import { defaultMemberGitName, formatMemberGitIdentity, getBotTheme } from "../../utils.ts";
+import { cn } from "../../utils/cn.ts";
+
+const SCOPE_BADGE_TONE: Record<RoleScope, BadgeTone> = {
+	global: "neutral",
+	org: "info",
+	personal: "observer",
+};
 
 function formatMemberSkillLabel(skillRef: string): string {
 	const roleLocal = skillRef.match(/^skills\/([^/]+)\/SKILL\.md$/);
@@ -81,6 +100,7 @@ export function MemberInspectorModal({
 	onNotice,
 	onError,
 }: MemberInspectorModalProps) {
+	const fieldBaseId = useId();
 	const [editDisplayName, setEditDisplayName] = useState("");
 	const [editRoleTitle, setEditRoleTitle] = useState("");
 	const [editGitName, setEditGitName] = useState("");
@@ -112,6 +132,7 @@ export function MemberInspectorModal({
 	const isArchitect = isArchitectMember(member) || template?.roleKind === "architect";
 	const effectiveIsPrimary = isPrimary ?? member.isPrimaryContact;
 	const canDeleteRole = canEditIdentity && !effectiveIsPrimary && !isArchitect;
+	const scopeBadge = getMemberScopeBadge(member, organizationName);
 
 	const handleOpenSkill = async (skillRef: string) => {
 		setPreviewSkillRef(skillRef);
@@ -177,94 +198,93 @@ export function MemberInspectorModal({
 		}
 	};
 
+	const displayNameId = `${fieldBaseId}-display-name`;
+	const roleTitleId = `${fieldBaseId}-role-title`;
+	const gitNameId = `${fieldBaseId}-git-name`;
+	const gitEmailId = `${fieldBaseId}-git-email`;
+	const summaryId = `${fieldBaseId}-summary`;
+
 	const detailBody = (
 		<>
-			<div className="team-detail-header">
-				<div className="member-ident">
+			<div className="flex items-start justify-between gap-3 flex-wrap pb-3 border-b border-line">
+				<div className="flex items-center gap-2.5 min-w-0 flex-1">
 					<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="lg" mood={isArchitect ? "thinking" : "idle"} />
-					<div className="member-ident-copy">
-						<div className="member-name-row">
-							<strong>{member.displayName}</strong>
+					<div className="min-w-0 flex-1">
+						<div className="flex items-center gap-1.5 flex-wrap">
+							<strong className="text-base font-semibold text-ink">{member.displayName}</strong>
 							{effectiveIsPrimary && (
-								<span className="pill live">{isPrimary !== undefined ? "主联系" : "默认主联系"}</span>
+								<Badge tone="success" dot>
+									{isPrimary !== undefined ? "主联系" : "默认主联系"}
+								</Badge>
 							)}
-							{isArchitect && <span className="pill">内置角色设计</span>}
+							{isArchitect && <Badge tone="neutral">内置角色设计</Badge>}
 							{(template?.roleKind === "solo" || member.id === "pi-default") && (
-								<span className="pill">单兵 Pi</span>
+								<Badge tone="neutral">单兵 Pi</Badge>
 							)}
-							<span className={`pill role-scope-pill is-${getMemberScopeBadge(member, organizationName).scope}`}>
-								{getMemberScopeBadge(member, organizationName).label}
-							</span>
+							<Badge tone={SCOPE_BADGE_TONE[scopeBadge.scope]}>{scopeBadge.label}</Badge>
 						</div>
-						<div className="member-sub">
+						<div className="mt-0.5 text-xs text-ink-muted truncate">
 							{member.roleTitle} · ID：{member.id}
 						</div>
 					</div>
 				</div>
-				{inline ? (
-					<div className="team-detail-actions">
+				{inline && (
+					<div className="flex items-center gap-2 flex-wrap shrink-0">
 						{canDispatch && onAssignTask && (
-							<button type="button" className="btn-pill-dark btn-xs" onClick={() => onAssignTask(member.id)}>
+							<Button variant="primary" size="xs" onClick={() => onAssignTask(member.id)}>
 								向 TA 派活
-							</button>
+							</Button>
 						)}
 						{onExportMember && (
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
-								onClick={() => void onExportMember(member.id)}
-							>
+							<Button variant="secondary" size="xs" onClick={() => void onExportMember(member.id)}>
 								导出角色包
-							</button>
+							</Button>
 						)}
 						{canSetPrimary && !effectiveIsPrimary && !isArchitect && onSetPrimary && (
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
-								onClick={() => void onSetPrimary(member.id)}
-							>
+							<Button variant="secondary" size="xs" onClick={() => void onSetPrimary(member.id)}>
 								{primaryActionLabel}
-							</button>
+							</Button>
 						)}
 						{canDeleteRole &&
 							(confirmingDelete ? (
 								<>
-									<button
-										type="button"
-										className="btn-danger-inline"
+									<Button
+										variant="danger"
+										size="xs"
 										disabled={deleting}
 										onClick={() => void handleDelete()}
 									>
 										{deleting ? "删除中…" : "确认删除"}
-									</button>
-									<button
-										type="button"
-										className="btn-inline btn-xs"
+									</Button>
+									<Button
+										variant="inline"
+										size="xs"
 										disabled={deleting}
 										onClick={() => setConfirmingDelete(false)}
 									>
 										取消
-									</button>
+									</Button>
 								</>
 							) : (
-								<button type="button" className="btn-danger-inline" onClick={() => setConfirmingDelete(true)}>
+								<Button
+									variant="ghost"
+									size="xs"
+									className="text-danger-text hover:bg-danger-bg hover:text-danger-text"
+									onClick={() => setConfirmingDelete(true)}
+								>
 									删除角色
-								</button>
+								</Button>
 							))}
 					</div>
-				) : (
-					<button type="button" className="btn-inline" onClick={onClose}>
-						关闭
-					</button>
 				)}
 			</div>
 
-			<div className="architect-form-body">
+			<div className="flex flex-col gap-3">
 				{template && (template.responsibilities || template.skills.length > 0 || template.keywords.length > 0) && (
-					<div className="architect-preview-pane">
-						<h4>核心职责与能力标签</h4>
+					<div className="rounded-md border border-line bg-sidebar p-3 flex flex-col gap-2">
+						<h4 className="m-0 text-xs font-semibold text-ink-secondary">核心职责与能力标签</h4>
 						{template.responsibilities && (
-							<p className="architect-preview-copy" style={{ whiteSpace: "pre-line" }}>
+							<p className="m-0 text-xs text-ink leading-relaxed whitespace-pre-line">
 								{extractCoreResponsibilities(
 									template.responsibilities,
 									Boolean(template.antiJobs && template.antiJobs.length > 0),
@@ -272,19 +292,16 @@ export function MemberInspectorModal({
 							</p>
 						)}
 						{template.skills.length > 0 && (
-							<div style={{ marginTop: 8 }}>
-								<div className="muted-tiny" style={{ marginBottom: 4 }}>
-									配套技能（点击浮窗查看 SKILL.md）
-								</div>
-								<div className="tag-list">
+							<div className="flex flex-col gap-1.5">
+								<div className="text-micro text-ink-muted">配套技能（点击浮窗查看 SKILL.md）</div>
+								<div className="flex flex-wrap gap-1.5">
 									{template.skills.map((sk) => (
 										<button
 											key={sk}
 											type="button"
-											className="tag-chip skill"
-											style={{ cursor: "pointer", border: "none" }}
 											title={`点击查看 ${sk}`}
 											onClick={() => void handleOpenSkill(sk)}
+											className="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill border border-accent-border bg-accent-soft text-accent text-micro font-medium cursor-pointer hover:bg-surface-accent transition-colors focus-visible:outline-2 focus-visible:outline-accent"
 										>
 											{formatMemberSkillLabel(sk)}
 										</button>
@@ -293,11 +310,11 @@ export function MemberInspectorModal({
 							</div>
 						)}
 						{template.keywords.length > 0 && (
-							<div className="tag-list" style={{ marginTop: 8 }}>
+							<div className="flex flex-wrap gap-1.5">
 								{template.keywords.map((kw) => (
-									<span key={kw} className="tag-chip">
+									<Badge key={kw} tone="neutral">
 										#{kw}
-									</span>
+									</Badge>
 								))}
 							</div>
 						)}
@@ -305,9 +322,9 @@ export function MemberInspectorModal({
 				)}
 
 				{template?.antiJobs && template.antiJobs.length > 0 && (
-					<div className="architect-preview-pane">
-						<h4>当前不做边界（Anti-Jobs）</h4>
-						<ul className="architect-preview-list">
+					<div className="rounded-md border border-line bg-sidebar p-3 flex flex-col gap-1.5">
+						<h4 className="m-0 text-xs font-semibold text-ink-secondary">当前不做边界（Anti-Jobs）</h4>
+						<ul className="m-0 pl-4 flex flex-col gap-1 text-micro text-ink-secondary leading-relaxed list-disc">
 							{template.antiJobs.map((rule) => (
 								<li key={rule}>{rule}</li>
 							))}
@@ -315,11 +332,11 @@ export function MemberInspectorModal({
 					</div>
 				)}
 
-				<div className="identity-form-hint">
+				<div className="text-xs text-ink-muted leading-relaxed">
 					{activeOrg?.useRoleGitIdentity ? (
 						<>
 							当前组织「{activeOrg.name}」已启用角色 Git 署名：提交 Author 为{" "}
-							<strong>{gitIdentity.formatted}</strong>
+							<strong className="font-semibold text-ink">{gitIdentity.formatted}</strong>
 							{activeWorkspace?.repoGitUser
 								? `，Committer 保留仓库真实用户（${activeWorkspace.repoGitUser.name} <${activeWorkspace.repoGitUser.email}>）`
 								: "，未检测到仓库 Git 配置时 Committer 回退为角色署名"}
@@ -337,76 +354,73 @@ export function MemberInspectorModal({
 					)}
 				</div>
 
-				<div className="form-grid">
-					<label className="identity-field">
-						<span className="identity-field-label">团队显示名</span>
-						<input
-							className="input-field"
+				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+					<FieldGroup label="团队显示名" htmlFor={displayNameId}>
+						<Input
+							id={displayNameId}
 							disabled={!canEditIdentity}
 							value={editDisplayName}
 							onChange={(e) => setEditDisplayName(e.target.value)}
 						/>
-					</label>
-					<label className="identity-field">
-						<span className="identity-field-label">职位头衔</span>
-						<input
-							className="input-field"
+					</FieldGroup>
+					<FieldGroup label="职位头衔" htmlFor={roleTitleId}>
+						<Input
+							id={roleTitleId}
 							disabled={!canEditIdentity}
 							value={editRoleTitle}
 							onChange={(e) => setEditRoleTitle(e.target.value)}
 						/>
-					</label>
-					<label className="identity-field">
-						<span className="identity-field-label">Git Author 名称</span>
-						<input
-							className="input-field"
+					</FieldGroup>
+					<FieldGroup label="Git Author 名称" htmlFor={gitNameId}>
+						<Input
+							id={gitNameId}
 							disabled={!canEditIdentity}
 							placeholder="如：R&D Lead"
 							value={editGitName}
 							onChange={(e) => setEditGitName(e.target.value)}
 						/>
-					</label>
-					<label className="identity-field">
-						<span className="identity-field-label">Git Author 邮箱</span>
-						<input
-							className="input-field"
+					</FieldGroup>
+					<FieldGroup label="Git Author 邮箱" htmlFor={gitEmailId}>
+						<Input
+							id={gitEmailId}
 							disabled={!canEditIdentity}
 							placeholder="如：rd@acme.dev"
 							value={editGitEmail}
 							onChange={(e) => setEditGitEmail(e.target.value)}
 						/>
-					</label>
+					</FieldGroup>
 				</div>
 
-				<label className="identity-field">
-					<span className="identity-field-label">角色定位与专长补充（私有，不随公开模板导出）</span>
-					<textarea
+				<FieldGroup label="角色定位与专长补充（私有，不随公开模板导出）" htmlFor={summaryId}>
+					<Textarea
+						id={summaryId}
 						rows={3}
-						className="input-field identity-textarea"
 						disabled={!canEditIdentity}
 						placeholder="补充该角色在当前团队/项目中的分工偏好、关注重点或边界说明"
 						value={editIdentitySummary}
 						onChange={(e) => setEditIdentitySummary(e.target.value)}
 					/>
-				</label>
+				</FieldGroup>
 
-				<div className="form-footer">
-					<span className="muted-tiny">运行工具：共享 Pi 默认工具（边界由职责与 Anti-Jobs 约束）</span>
-					<div className="ui-row-actions">
+				<div className="pt-2 border-t border-line-subtle flex items-center justify-between gap-2.5 flex-wrap">
+					<span className="text-micro text-ink-muted">
+						运行工具：共享 Pi 默认工具（边界由职责与 Anti-Jobs 约束）
+					</span>
+					<div className="flex items-center gap-2 flex-wrap">
 						{!inline && onClose && (
-							<button type="button" className="btn-pill-outline" onClick={onClose}>
+							<Button variant="secondary" size="xs" onClick={onClose}>
 								{canEditIdentity ? "取消" : "关闭"}
-							</button>
+							</Button>
 						)}
 						{canEditIdentity && (
-							<button
-								type="button"
-								className="btn-pill-dark btn-xs"
+							<Button
+								variant="primary"
+								size="xs"
 								disabled={savingIdentity}
 								onClick={() => void handleSaveIdentity()}
 							>
 								{savingIdentity ? "保存中…" : "保存身份"}
-							</button>
+							</Button>
 						)}
 					</div>
 				</div>
@@ -422,84 +436,88 @@ export function MemberInspectorModal({
 			size="lg"
 			onClose={() => setPreviewSkillRef(null)}
 			footer={
-				<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewSkillRef(null)}>
+				<Button variant="secondary" size="xs" onClick={() => setPreviewSkillRef(null)}>
 					关闭
-				</button>
+				</Button>
 			}
 		>
 			{loadingSkill ? (
-				<p className="muted-sm">正在读取 SKILL.md 内容…</p>
+				<p className="m-0 text-xs text-ink-secondary">正在读取 SKILL.md 内容…</p>
 			) : skillError ? (
-				<div className="approval-card" role="alert">
-					读取失败：{skillError}
-				</div>
+				<Banner tone="danger">读取失败：{skillError}</Banner>
 			) : previewSkillDetail ? (
-				<div className="skills-preview-split">
-					<aside className="skills-preview-nav" aria-label="Skill 目录文件">
-						<div className="skills-preview-group">
-							<span className="skills-preview-group-label">入口定义</span>
+				<div className="grid grid-cols-1 md:grid-cols-[204px_minmax(0,1fr)] gap-3.5 items-start min-h-[360px]">
+					<aside
+						className="flex flex-col gap-2.5 md:pr-3 md:border-r border-b md:border-b-0 pb-2.5 md:pb-0 border-line max-h-[180px] md:max-h-[62vh] overflow-y-auto"
+						aria-label="Skill 目录文件"
+					>
+						<div className="flex flex-col gap-0.5">
+							<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">入口定义</span>
 							<button
 								type="button"
-								className={`skills-preview-file-btn ${previewSkillTab === "SKILL.md" ? "active" : ""}`}
+								className={cn(
+									"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors focus-visible:outline-2 focus-visible:outline-accent",
+									previewSkillTab === "SKILL.md"
+										? "bg-accent-soft text-accent font-semibold"
+										: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+								)}
 								onClick={() => setPreviewSkillTab("SKILL.md")}
 							>
-								<span>SKILL.md</span>
+								<span className="truncate">SKILL.md</span>
 							</button>
 						</div>
 						{previewSkillDetail.scripts.length > 0 && (
-							<div className="skills-preview-group">
-								<span className="skills-preview-group-label">
+							<div className="flex flex-col gap-0.5">
+								<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">
 									scripts/ ({previewSkillDetail.scripts.length})
 								</span>
 								{previewSkillDetail.scripts.map((script) => (
 									<button
 										key={script.path}
 										type="button"
-										className={`skills-preview-file-btn ${previewSkillTab === script.path ? "active" : ""}`}
+										className={cn(
+											"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors focus-visible:outline-2 focus-visible:outline-accent",
+											previewSkillTab === script.path
+												? "bg-accent-soft text-accent font-semibold"
+												: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+										)}
 										onClick={() => setPreviewSkillTab(script.path)}
 										title={script.path}
 									>
-										<span>{script.path.replace(/^scripts\//, "")}</span>
+										<span className="truncate">{script.path.replace(/^scripts\//, "")}</span>
 									</button>
 								))}
 							</div>
 						)}
 					</aside>
-					<div className="skills-preview-content">
-						<div className="skills-preview-filebar">
-							<code className="skills-preview-filepath">{previewSkillTab}</code>
+					<div className="flex flex-col gap-2 min-w-0">
+						<div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-line">
+							<code className="px-2 py-0.5 rounded-sm bg-subtle font-mono text-xs text-ink">
+								{previewSkillTab}
+							</code>
 							{previewSkillTab === "SKILL.md" && (
-								<div className="skills-preview-mode-toggle" role="tablist" aria-label="查看模式">
-									<button
-										type="button"
-										role="tab"
-										aria-selected={previewSkillMode === "rendered"}
-										className={`choice-chip ${previewSkillMode === "rendered" ? "active" : ""}`}
-										onClick={() => setPreviewSkillMode("rendered")}
-									>
-										渲染
-									</button>
-									<button
-										type="button"
-										role="tab"
-										aria-selected={previewSkillMode === "raw"}
-										className={`choice-chip ${previewSkillMode === "raw" ? "active" : ""}`}
-										onClick={() => setPreviewSkillMode("raw")}
-									>
-										源码
-									</button>
-								</div>
+								<Tabs
+									variant="pill"
+									size="sm"
+									ariaLabel="查看模式"
+									value={previewSkillMode}
+									onChange={(id) => setPreviewSkillMode(id as "rendered" | "raw")}
+									items={[
+										{ id: "rendered", label: "渲染" },
+										{ id: "raw", label: "源码" },
+									]}
+								/>
 							)}
 						</div>
-						<div className="skills-preview-viewer">
+						<div className="max-h-[58vh] overflow-y-auto min-w-0">
 							{previewSkillTab === "SKILL.md" && previewSkillMode === "rendered" ? (
-								<div className="skills-preview-markdown">
+								<div className="px-1.5 pt-1 pb-3 text-sm leading-relaxed text-ink">
 									<MarkdownView
 										content={previewSkillDetail.content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/, "")}
 									/>
 								</div>
 							) : (
-								<pre className="pa-viz-code skills-modal-code">
+								<pre className="m-0 p-3 rounded-sm border border-line bg-sidebar font-mono text-xs text-ink leading-relaxed max-h-[58vh] overflow-auto whitespace-pre-wrap break-words">
 									<code>
 										{previewSkillTab === "SKILL.md"
 											? previewSkillDetail.content
@@ -516,20 +534,26 @@ export function MemberInspectorModal({
 
 	if (inline) {
 		return (
-			<div className="ui-card team-detail-card">
+			<Card padding="md" className="flex flex-col gap-3.5 shadow-sm">
 				{detailBody}
 				{skillPreviewModal}
-			</div>
+			</Card>
 		);
 	}
 
 	return (
-		<div className="architect-modal-backdrop">
-			<button type="button" className="architect-modal-scrim" aria-label="关闭弹窗" onClick={onClose} />
-			<div className="architect-modal-card" role="dialog" aria-modal="true" aria-label="成员详情管理">
+		<>
+			<ModalDialog
+				open={Boolean(member)}
+				title={member.displayName}
+				subtitle={`${member.roleTitle} · ID：${member.id}`}
+				ariaLabel="成员详情管理"
+				size="lg"
+				onClose={onClose ?? (() => {})}
+			>
 				{detailBody}
-			</div>
+			</ModalDialog>
 			{skillPreviewModal}
-		</div>
+		</>
 	);
 }
