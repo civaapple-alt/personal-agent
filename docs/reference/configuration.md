@@ -98,10 +98,10 @@
 
 | 维度 | SQLite (`personal-agent.db`) | `.data/` 磁盘位置 | 权限与隔离边界 |
 | --- | --- | --- | --- |
-| **组织 (Org)** | `organizations`、`organization_members`、`organization_invites`、`organization_ai_roles`、`member_memories(company_private)` | `spaces/orgs/<orgId>/`、`roles/orgs/<orgId>/`、`skills/orgs/<orgId>/`、`team-workspaces/<orgSlug>/` | 组织成员 RBAC（`org_owner`/`org_admin`/`org_member`/`org_viewer`） |
-| **仓库 (Workspace)** | `workspace_links`、`workspace_members`、`member_memories(project_private)` | 远程克隆仓在 `team-workspaces/<orgSlug>/<repo>/`（本地绑定仓在宿主外部路径）；配套空间在 `spaces/workspaces/<wsId>/` | 仓库可见性 `org` / `restricted` 成员名单 |
-| **人类用户 (User)** | `users`、`user_sessions`、`collaborators`、`audit_logs` | `spaces/users/<userId>/`、`roles/users/<userId>/`、`skills/users/<userId>/` | 严格本人隔离（个人空间与 `personal` 角色连超管也不可访问他人数据） |
-| **AI 成员角色 (Member)** | `team_members`、`member_memories`、`worker_sessions` | 自定义定义在 `roles/`、`roles/orgs/`、`roles/users/`；配套空间在 `spaces/members/<memberId>/`；模型上下文在 `pi-sessions/--<encoded-cwd>--/*.jsonl` | 按 `role_scope` 隔离定义，会话键包含组织、仓库、事项与触发用户 |
+| **组织 (Org)** | `organizations`、`organization_members`、`organization_invites`、`organization_ai_roles`、`skill_trust_policies` | `spaces/orgs/<orgId>/`、`roles/orgs/<orgId>/`、`skills/orgs/<orgId>/`、`team-workspaces/<orgSlug>/` | 组织成员 RBAC（`org_owner`/`org_admin`/`org_member`/`org_viewer`） |
+| **仓库 (Workspace)** | `workspace_links`、`workspace_folders`、`workspace_members`、`skill_trust_policies` | 远程克隆仓在 `team-workspaces/<orgSlug>/<repo>/`（本地绑定仓在宿主外部路径）；配套空间在 `spaces/workspaces/<wsId>/`；工作区技能在 `skills/workspaces/<wsId>/` | 仓库可见性 `org` / `restricted` 成员名单 |
+| **人类用户 (User)** | `users`、`user_sessions`、`user_access_tokens`、`audit_logs` | `spaces/users/<userId>/`、`roles/users/<userId>/`、`skills/users/<userId>/` | 严格本人隔离（个人空间与 `personal` 角色连超管也不可访问他人数据） |
+| **AI 成员角色 (Member)** | `team_members`、`removed_role_templates`、`worker_sessions` | 自定义定义在 `roles/`、`roles/orgs/`、`roles/users/`；配套空间在 `spaces/members/<memberId>/`；模型上下文在 `pi-sessions/--<encoded-cwd>--/*.jsonl` | 按 `role_scope` 隔离定义，会话键包含组织、仓库、事项与触发用户 |
 | **事项 (Matter)** | `matters`、`matter_messages`、`space_documents`（索引）、`uploads_index` | 无独立事项目录：空间文档落入目标默认空间 Git 仓库（私密事项→发起人 `spaces/users/<userId>/`、非私密→`spaces/workspaces/<wsId>/` 或 `spaces/orgs/<orgId>/`）；附件按月落 `uploads/YYYY-MM/` | 按事项 `visibility`（`org`/`private`）与组织/仓库 ACL 控制 |
 
 启动初始化规则：
@@ -126,7 +126,7 @@
 
 个人版回环免密所有者可选择继承完整的本机 Pi 资源，Pi 根据现有信任记录处理仓库资源。未选择继承时，PA 使用 `--no-extensions --no-approve`：扩展由 PA 显式装配，Pi 仍发现服务账号启用的用户级 Skills，但不会自动信任项目资源。托管克隆同样不自动信任项目；PA 配置的附加目录 Skills 仍按工作区配置显式装配。团队服务使用服务账号的用户级 Skills，应将它们视为供该服务岗位使用的共享资源。Pi 对已禁用资源的设置仍生效。
 
-pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与经验提炼继续使用各自的调用配置。
+pstack 与其他方法包一样由 Pi 安装、启停，已启用的 Skills 通过通用目录发现。独立的类型化决策与只读辅助调用继续使用各自的调用配置。
 
 工作进程使用匹配当前事项、工作区、组织、执行模式与资源策略的会话。继承本机资源的会话与显式装配的会话独立保存。接续前核对会话首行的 ID 和真实 `cwd`，确认后传入 `--session <sessionFile>`。 [会话文件核对](../../packages/server/src/orchestrator/execution/execution-context.ts)
 
@@ -142,11 +142,11 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
 | `--no-extensions` | 关闭 Pi 的扩展自动发现与内置扩展默认加载；但**显式通过 `--extension <path>` 传入的扩展仍会生效** | 团队多租户模式、托管克隆仓、`PA_LOCAL_PI_RESOURCES=0` 及只读辅助通道传入，确保只加载 PA 显式批准的扩展，避免宿主机任意扩展串入多租户环境 |
 | `--extension <path\|builtin:name>` | 显式**追加**加载单个扩展入口文件或 Pi 内置扩展（如 `builtin:mcp`），可重复传入多次；**单独传入不会屏蔽** `pi install` 已安装包或 `~/.pi` 自动发现的扩展（与已发现扩展合并加载），仅在同时传入 `--no-extensions` 时才变为「只加载显式指定的扩展」 | 常规岗位固定挂载 PA 团队工具、角色护栏、`skill-catalog`、`role-skills`、`visualize`、`next-steps`、`workflow`、`builtin:mcp` 及 `PA_PI_EXTENSIONS` 指定扩展 |
 | `--skill <path>` | 显式**追加**加载一个 Skill 文件或目录，可重复传入多次；**单独传入不会屏蔽**用户级/项目级已发现的 Skills，仅在同时传入 `--no-skills` 时才关闭自动发现 | 按角色作用域与工作区附加目录显式挂载角色 Skills、`pa-extensions/*/skills` 等（即使开了 `--no-extensions` 也能按需装配） |
-| `--no-skills` | 关闭 Pi 对用户级和项目级 Skills 的自动发现与加载 | 仅用于纯模型目录查询（`model-catalog`）、无工具类型化决策（`pi-decision`）、只读经验提炼或隔离评测脚本 |
-| `--no-mcp` | 禁用 Pi 内置 MCP 支持，不连接任何 MCP 服务器也不注册 MCP 工具 | 用于类型化决策与只读经验提炼等轻量辅助调用，避免拉起外部 MCP 连接 |
+| `--no-skills` | 关闭 Pi 对用户级和项目级 Skills 的自动发现与加载 | 仅用于纯模型目录查询（`model-catalog`）、无工具类型化决策（`pi-decision`）或隔离评测脚本 |
+| `--no-mcp` | 禁用 Pi 内置 MCP 支持，不连接任何 MCP 服务器也不注册 MCP 工具 | 用于类型化决策等轻量辅助调用，避免拉起外部 MCP 连接 |
 | `--no-context-files` | 禁用 Pi 自动读取工作目录下的 `AGENTS.md` 和 `CLAUDE.md` | 用于模型目录查询、类型化决策等与代码仓约定无关的辅助调用，降低上下文噪音 |
 | `--tools <list\|*\|"">` / `--no-tools` | 指定允许启用的工具白名单（`*` 表示开放已注册的全部内置/扩展工具，空串 `""` 表示无工具）；`--no-tools` 关闭所有内置与扩展工具 | 常规岗位传 `--tools *`（配合扩展护栏与工作区边界）；只读决策按需传 `--tools ""` 或 `--tools read`；模型目录查询传 `--no-tools` |
-| `--session <path>` / `--session-dir <dir>` / `--no-session` | `--session` 恢复指定 JSONL 会话文件；`--session-dir` 指定新会话落盘目录；`--no-session` 禁用会话持久化（一次性临时运行） | 常规事项/委托/旁听按事项与成员持久化到 `.data/pi-sessions/` 并用 `--session` 接续；模型目录查询、类型化决策、经验提炼使用 `--no-session` |
+| `--session <path>` / `--session-dir <dir>` / `--no-session` | `--session` 恢复指定 JSONL 会话文件；`--session-dir` 指定新会话落盘目录；`--no-session` 禁用会话持久化（一次性临时运行） | 常规事项/委托/旁听按事项与成员持久化到 `.data/pi-sessions/` 并用 `--session` 接续；模型目录查询与类型化决策使用 `--no-session` |
 | `--provider <name>` / `--model <id>` | 指定本次会话使用的模型供应商与模型 ID | 当事项、岗位或平台配置了覆盖模型时由 `PiRpcWorker` 传入；省略时沿用本机 Pi 默认模型 |
 
 #### 常见运行场景的实际参数组合
@@ -156,7 +156,7 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
 | 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **已绑定本地工作区** | `--mode rpc --offline --approve`（若 `~/.pi/agent/trust.json` 明确拒绝则为 `--no-approve`）`--extension <PA扩展>... --skill <作用域Skills>... --tools *` | 继承 `~/.pi`（含 `pi install` 包）与 `~/.agents`，并自动发现该本地工作区下的 `.pi/` 与 `.agents/`（尊重 `trust.json` 中的显式 `false` 拒绝记录） |
 | 本地个人版（`PA_LOCAL_PI_RESOURCES=auto`）+ **未绑定工作区** | `--mode rpc --offline --extension <PA扩展>... --skill <作用域Skills>... --tools *`（`cwd` 为 `~/.pa/workspaces/default`） | 继承用户级 `~/.pi` 与 `~/.agents`；工作目录隔离在 `~/.pa/workspaces/default`，不会把 `personal-agent` 源码仓误当成业务项目，也不会向上读到宿主仓库的 `AGENTS.md` |
 | 团队多租户 / 托管克隆仓 / `PA_LOCAL_PI_RESOURCES=0` | `--mode rpc --no-extensions --no-approve --extension <PA扩展>... --skill <作用域Skills>... --tools *` | 不自动发现宿主机扩展、不信任克隆仓项目本地文件；仅运行 PA 显式挂载的扩展、作用域 Skills 及服务账号已启用的用户级 Skills |
-| 轻量辅助调用（类型化决策 / 经验提炼 / 模型查询） | `--mode rpc --no-session --no-approve --no-extensions --no-skills --no-mcp --no-context-files --tools ""`（或 `--no-tools` / `--tools read`） | 纯无状态、隔离外部插件与上下文文件，避免污染会话或误触写操作 |
+| 轻量辅助调用（类型化决策 / 模型查询） | `--mode rpc --no-session --no-approve --no-extensions --no-skills --no-mcp --no-context-files --tools ""`（或 `--no-tools` / `--tools read`） | 纯无状态、隔离外部插件与上下文文件，避免污染会话或误触写操作 |
 
 > 可在工作台「设置 → 运行配置」（`#/settings/config`）查看当前实例实际生效的参数策略；源码组装逻辑见 [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts) 与 [pi-rpc-worker.ts](../../packages/pi-rpc/src/pi-rpc-worker.ts)。
 
@@ -232,7 +232,7 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
 | 内部委托调用链深度 | 最多 `3` 名成员 | `chain.length >= 3` 时拒绝，且禁止自委托与环形委托（调用祖先） |
 | 单轮内部委托次数 | 最多 `8` 次不同委托 | 超出后拒绝新委托；同轮同参数成功委托会复用结果，失败则清除缓存允许重试 |
 | 成员切换有界背景 | 最多 `12` 条 / `20000` 字符 | 仅对新会话或成员切换后 `afterCursor` 之后的同事项、同工作区 `user` 频道增量生效 |
-| 私有记忆注入规则 | 按 `scope` 过滤 | `role_general` 跨项目注入；`company_private` 与 `project_private` 仅在匹配当前 `workspaceId` 时注入 |
+| 技能沉淀与信任作用域 | 按 `storage_scope` 隔离 | `global` / `org` / `personal` / `workspace` 四层目录通过 `--skill` 隔离装载，`skill_trust_policies` 独立控制脚本执行权限 |
 | 新事项默认标题 | 首条提问前 `60` 字符 | 调用方未显式传 `title` 时取 `prompt.slice(0, 60)` |
 | 事项摘要（`matter.summary`） | 主回复前 `200` 字符 | 每轮结束更新为 `replyText.slice(0, 200)` |
 
@@ -250,20 +250,16 @@ Personal Agent 不在 Pi 之外自造 Agent 运行时，而是通过原生 `pi` 
     - 整体控制在 **`6000` 字符**总预算内（并至少为消息摘录保留 `1200` 字符）。
     - 后续轮次仅按 `messageCursor` 增量传入新增交流，不回放 `internal_collab` 或 `notice` 全量日志。
 
-### 私有记忆与 RSI 经验提炼边界
+### Skills 沉淀、信任四步与提交反馈边界
 
-- **状态流转与范围隔离**：
-  - `member_memories.status` 区分四类状态：`candidate`（待核验，不视为定稿）、`verified`（已验证）、`superseded`（已被新规替代并退出注入）与 `rejected`（人工忽略）。
-  - `role_general` 强制保持 `workspaceId = null` 跨项目注入；`company_private` 与 `project_private` 仅在匹配当前范围时注入，且永不导出至 `roles/*.md`。
-- **执行期经验提案**：
-  - 非旁听成员可调用 `propose_experience`，单条 `content` 与 `rationale` 各自上限 `1200` 字符（暂存后仅在整轮无中止正常完成时写入 `"candidate"`）。
-  - 旁听成员固定注入 `PA_CAN_EXPERIENCE="false"` 禁止提案。
-- **只读 AI 复盘提炼**（`TeamOrchestrator.distillExperiences`）：
-  - 以 `noSession: true` 及 `--no-extensions --no-skills --no-mcp --tools ""` 启动只读反思 worker，单次默认超时 `120000` ms（2 分钟）。
-  - 最多读取前 `8` 条候选并校验范围、成员和去重（可选 `supersedesMemoryId` 仅能指向同成员、同 scope/工作区旧规则，且不能成环）。
-- **应用与验收评估幂等计数**（`memory_applications`）：
-  - 每轮被注入提示词的经验记录一次 `applied` 与 `applied_count + 1`；当前版本只评价 `space_document_memory_applications` 中与文档提交精确关联的注入记录。
-  - `space_document_memory_votes` 按文档提交、评价人及经验计票；相同票幂等，改票替换、`neutral` 撤回。卡片手动评价独立累计。
+- **四层磁盘作用域与信任策略**（`skill_trust_policies`）：
+  - `storage_scope` 分为 `global`（`.data/skills/global/`）、`org`（`.data/skills/orgs/<orgId>/`）、`personal`（`.data/skills/users/<userId>/`）与 `workspace`（`.data/skills/workspaces/<workspaceId>/` 或工作区原生 `.agents/skills/`），不随可分享 `roles/*.md` 导出。
+  - `trust_level` 区分三态：`confirm`（默认，脚本执行前经 `DialogBroker` 确认）、`autonomous`（自主放行）与 `disabled`（拦截禁止）。
+- **执行期 Skill 沉淀提案**（`propose_skill`）：
+  - 正式执行中的主责或内部协作者可调用 `propose_skill` 提交 `SKILL.md` 与可选 `scripts/*` 草案（`description` 上限 `500` 字符）；草案先暂存，整轮无中止正常完成时随回复保存，由用户审核落盘（审核通过的提案默认设为 `autonomous`）。
+  - 旁听成员运行时关闭 `propose_skill`，不能提出沉淀草案。
+- **提交粒度资料反馈**（`space_document_feedback`）：
+  - 针对资料空间文档的审阅反馈按 `(document_id, commit_hash, actor_id)` 唯一保存，支持 `positive` / `negative` / `neutral` / `NULL` 评分。
 
 ### 工具载荷、日志、SSE 与预览管理限制
 

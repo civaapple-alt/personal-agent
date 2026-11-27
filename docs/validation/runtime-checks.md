@@ -19,7 +19,7 @@ npm run check:startup
 - 真实扩展到桥接的调用、长耗时桥接免受 HTTP 300s `headersTimeout` / `requestTimeout` 中断。
 - 同轮失败可重新委托、重复调用与委托边界、宿主桥接期间暂停空闲超时、子成员进度转发与轮次委托展示。
 - 取消子树、阻塞对话关闭、连续多轮过程交流不归档、带变化依据的正式版本、内部成员发布权限、失败草稿丢弃、能力缺失与 HTTP 409。
-- Phase 4 RSI 闭环：`propose_experience` 暂存与异常丢弃、旁听禁权、`distillExperiences` 只读提炼与去重、按版本关联的验收反馈与改票、`supersedesMemoryId` 自动替代及对应 HTTP/SSE 路由。
+- Phase 4 / 0.8.x RSI 与信任闭环：`propose_skill` 暂存与异常丢弃、旁听禁权、信任四步（`confirm` 弹窗确认 / 升级 `autonomous` / `disabled` 拦截）、确定性 `session-insights`、团队协作体检与 `space_document_feedback` 提交评价。
 - 测试中的模型响应是受控 fixture，不据此宣称岗位能力或长期成长效果已经得到真实模型验证。
 
 实机脚本使用服务账号的 Pi 配置调用模型，默认选择 Pi 已配置的模型。
@@ -28,7 +28,7 @@ npm run check:startup
 npm run demo:team
 # 或验证构建后的扩展路径与产物
 node dist/demo/team-smoke.js
-# 单独验证实际经验提案及无工具复盘
+# 单独验证实际 Skill 沉淀提案与信任四步闭环
 npm run demo:rsi
 ```
 

@@ -1,6 +1,6 @@
 # 运行与协作参考
 
-维护者可在这里查找会话范围、委托与停止语义、成果归档以及经验数据的生命周期。模块和数据流见[架构](../concepts/architecture-and-plan.md)，安装与操作见[文档索引](../README.md)。
+维护者可在这里查找会话范围、委托与停止语义、成果归档以及 Skills 沉淀与信任四步边界。模块和数据流见[架构](../concepts/architecture-and-plan.md)，安装与操作见[文档索引](../README.md)。
 
 ## 从用户消息到结果
 
@@ -92,17 +92,13 @@
 - 会话记录中的 `message_cursor` 避免每轮重复加入历史，同成员连续追问直接依赖 Pi 原会话。
 - 背景只补充尚未进入当前会话的交流，委托方仍需在任务中给出相关决策和约束。
 
-组织、工作区记忆与 Git 身份隔离如下：
+组织、工作区作用域与 Git 身份隔离如下：
 
-- `company_private` 支持两种绑定模式：
-  - 工作区已归属某个 `Organization` 时，该组织下所有工作区按 `orgId` 共享同一组织的经验与记忆，并按组织可选的 `gitEmailDomain` 派生默认 Git 邮箱。
-  - 工作区尚未归属任何组织时，按单一 `workspaceId` 注入与隔离。
-- `project_private` 无论是否同属一个组织，都严格绑定当前工作区 `workspaceId`。
-- 无工作区与无组织的旧私有记忆继续保存并可查看，但不会在所有项目执行中加载。
-- `role_general` 用于跨组织、跨工作区通用的岗位经验与方法论。
-- 每次执行向 Pi Worker 注入对应岗位的 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`，并将当前仓库有效
-  `git config user.name/email` 作为 `GIT_COMMITTER_NAME`、`GIT_COMMITTER_EMAIL`（未配置真实用户时回退至岗位身份）。
-  - 从而在同一本地仓库内既保留真实用户提交者留痕，又区分不同角色产生的 Git Author 归属，而无需改写 `.git/config`。
+- 组织与工作区作用域：
+  - 磁盘 Skill 与资料空间按组织（`orgId`）、工作区（`workspaceId`）、用户（`userId`）与全局（`global`）四层边界隔离；历史旧版 SQLite `member_memories` 体系已在 `0.8.0` 移除。
+- Git 署名规则：
+  - 默认（`organization.useRoleGitIdentity !== true` 或独立无组织仓库）不注入 `GIT_AUTHOR_*` / `GIT_COMMITTER_*`，保持 `git commit` 使用目标仓库目录自身的 `git config user.name/email`。
+  - 仅当所属组织显式启用 `useRoleGitIdentity` 时，才向 Pi Worker 注入对应岗位的 `GIT_AUTHOR_NAME`、`GIT_AUTHOR_EMAIL`，并将当前仓库有效 `git config user.name/email` 作为 `GIT_COMMITTER_NAME`、`GIT_COMMITTER_EMAIL`（未配置真实用户时回退至岗位身份），从而在不改写 `.git/config` 的前提下兼顾真实提交人留痕与角色归因。
 - 启动时保证存在默认组织（`org-default` / `默认组织`），通过 API 省略 `orgId` 新建的项目仓库默认归入当前默认组织；
   团队成员池保持全局跨组织协作。
 
@@ -136,13 +132,13 @@
 
 - 角色 `skills` 中的名称解析到内置 Pi 包 `pi-extensions/role-skills/skills/<name>/SKILL.md`，或解析角色包中的 `skills/<name>/SKILL.md` 相对路径。
 - 角色声明对应实际 Pi Skill 文件（含内置 `deliverable-writing`），并通过原生 `role-skills` 包及 `--skill` 装载；缺失 Skill 会在模型请求前失败。
-- 分享角色定义不会把私有记忆打包，也不会自动安装其引用的 Skills 或插件。
+- 分享角色定义不会把组织、工作区或个人私有数据打包，也不会自动安装其引用的 Skills 或插件。
 
 扩展与工具清单装配如下：
 
 - 团队执行显式装配扩展与角色 Skills。仅监听回环地址的个人版允许本机所有者的常规岗位执行沿用 Pi 用户配置及受信任仓库的资源。具体范围见[启动与能力装配](configuration.md#cli-启动与能力装配)。
-- 主/内部角色 `tools` 加上委托、经验提案工具形成清单；直接负责用户交流的主成员还装配成果发布工具。
-- 旁听与独立验收共享基础工具、已配置的扩展与 MCP，可按任务运行命令和测试。Pi 以服务账号权限运行，不是操作系统沙箱。独立 RSI 复盘不加载工具、扩展和 Skills。
+- 主/内部角色 `tools` 加上委托、`propose_skill` 沉淀工具形成清单；直接负责用户交流的主成员还装配空间文档保存工具。
+- 旁听与独立验收共享基础工具、已配置的扩展与 MCP，可按任务运行命令和测试。Pi 以服务账号权限运行，不是操作系统沙箱。
 - 内部成员不能直接发布用户成果，宿主也会拒绝伪造的发布请求。
 - `mcp` 只是历史声明分类；具体 MCP 需求由 `mcpDependencies` 的服务器名指定，使用现有 Pi 配置。
 
@@ -178,8 +174,8 @@
   - 整轮可选总上限由 `timeoutMs` 控制（默认 `0` 不设固定墙钟硬上限以支持 Goal/Plan 长任务，支持 `PA_TURN_TIMEOUT_MS` / `PA_PROMPT_TIMEOUT_MS` 设正整数覆写）。
 - 单次委托失败后会从本轮成功去重表移除，允许调用方同参数重试；超时属于未完成错误，用户主动停止生成停止回复。
 - 启动失败、阻塞对话、模型错误和进程异常均会进入清理路径。
-- 服务关闭先停止接收请求、取消对话，再同时取消主执行树和复盘，等待所有 Worker 及复盘结果清理完成后关闭数据库。
-- 复盘直到清理结束才移出追踪；取消后的部分 JSON 不提交，新的执行请求也不能在 shutdown 过程中启动。
+- 服务关闭先停止接收请求、取消对话，再取消主执行树，等待所有 Worker 清理完成后关闭数据库。
+- 取消后的部分结果不提交，新的执行请求也不能在 shutdown 过程中启动。
 
 并发冲突与故障语义：
 
@@ -192,56 +188,42 @@
 - 提请必须为 `channel=user`、`sender_type=user`、`mode=ai_request`、`aiRequestStatus=pending`。存储层以条件 UPDATE 原子认领为 `approved` 或 `dismissed`，并保留处理人和时间；其他消息及已处理提请返回 409。
 - 批准先加载附件、校验组织/仓库来源和 AI 成员，再认领并派发。切换范围后的旧提请返回 409，失效附件返回 410，错误成员返回 404，均不提前标为已批准。
 - 上传和读取请求体之后，派发入口再次检查事项运行状态。重叠请求返回 409，不覆盖既有进度、不生成伪失败消息。
-- 运行中的仓库不能经 PATCH 或同路径 upsert 改归属组织。复盘提交前也重新核对有效组织与仓库；期间发生变化则丢弃结果。
+- 运行中的仓库不能经 PATCH 或同路径 upsert 改归属组织。
 - `approved` 表示所有者已安排执行，并非执行成功；状态转换与外部模型调用不在统一事务内。当前没有崩溃后的自动重派或跨宿主 exactly-once 保证。
 
 ## 成果归档
 
 空间以「每个空间一个独立 Git 仓库」（`<dataDir>/spaces/<spaceId>/`）保存计划与过程资料，覆盖组织默认空间、仓库默认空间、人类用户个人空间、AI 角色空间与自定义空间。私密事项默认路由至发起人的个人空间实现物理隔离；非私密事项按仓库优先、其次组织默认空间路由。主责可以调用 `save_space_page` 在目标空间创建或更新 Markdown 文档，每次保存生成标准 Git 提交；传入 `sourcePath` 时同时记录文档与组织、仓库及相对路径的关联；更新已有文档需提供当前修订号，遇到并发修改返回冲突提示。
 
-岗位通过 `write`、`edit` 修改业务代码仓库中的文件时，改动保留在业务仓库自身与事项工具事件中，不再复制正文到空间仓库，也不再生成重复的 `deliverables` 副本。经验复盘（RSI）直接读取事项对话与关联空间文档摘录。
+岗位通过 `write`、`edit` 修改业务代码仓库中的文件时，改动保留在业务仓库自身与事项工具事件中，不再复制正文到空间仓库，也不再生成重复的 `deliverables` 副本。
 
 `save_space_page` 的文件来源按真实路径校验，文档最大 1 MiB。保存时读取文件快照并立即写入空间 Git 仓库；之后对业务文件的修改不会自动更新空间文档。需要更新时再次保存。
 
 空间文档是即时保存的独立资料，回复中的 `spaceDocuments` 记录本轮保存的版本。空间文档、工作区文件和外部操作不会在回合失败时自动回滚。
 
-空间反馈按文档 ID、Git 提交和评价人保存。同一评价人可更新该提交的意见；正面和负面评价只计入该次成功回合实际注入并关联该提交的经验，中立或不评分会撤回该评价人的计数。反馈保存和经验复盘是独立操作。
+空间反馈保存在 `space_document_feedback`，按文档 ID、Git 提交哈希和评价人唯一记录。同一评价人可更新该提交的意见与评分（`positive` / `negative` / `neutral` / `NULL`）。
 
 主责负责汇总交互成果。内部成员和旁听不能直接调用 `save_space_page`，内部成员的文件工作可随成功的协作回合收录。等待人类决定时事项状态为 `waiting_user`，普通成功回合保持 `open`。
 
-## RSI 经验提炼与生命周期
+## Skills 沉淀、信任四步与版本反馈
 
-成员经验分为三层作用域，全部本地私有保存，不随可分享模板 `roles/*.md` 导出：
+可复用流程与脚本不再存入旧版 SQLite 记忆表，而是直接沉淀为磁盘标准 `SKILL.md` + `scripts/*`，按四层作用域隔离，不随可分享模板 `roles/*.md` 导出：
 
-- `role_general`：跨组织、跨工作区通用的岗位经验与工作习惯（`orgId = null`、`workspaceId = null`）。
-- `company_private`：若所在工作区已绑定组织则按 `orgId` 跨同组织仓库共享，否则按 `workspaceId` 绑定单个工作区。
-- `project_private`：严格绑定当前 `workspaceId`，不跨仓库共享。
+- `global`：平台通用技能（`.data/skills/global/`）。
+- `org`：组织内多工作区共享技能（`.data/skills/orgs/<orgId>/`）。
+- `personal`：个人私有技能（`.data/skills/users/<userId>/`）。
+- `workspace`：工作区技能（由 PA 托管于 `.data/skills/workspaces/<workspaceId>/` 或工作区原生 `.agents/skills/`），多目录工作区共享而不污染业务 Git 工作树。
 
-执行中的候选与事后复盘采用同一保存边界，但证据来源不同：
+执行期沉淀与信任四步（Four-Step Trust）边界：
 
-- `propose_experience` 将候选写入当前分支的 `ExecutionEffects`（若工作区归属组织，`company_private` 自动归入 `orgId`）。
-  - 同事返回有效答案后，effects 才逐层返回主成员；主成员失败时，不会因为同事已经成功就提前落库。
-  - 主执行成功后，候选及本轮经验应用与空间文档提交的关联在同一事务中保存；空间文档本身即时写入 Git。
-- `distillExperiences` 使用 `noSession: true`、`--no-extensions --no-skills --no-mcp --tools ""` 运行。
-  - 只处理宿主提供的有界证据（有组织绑定时将 `company_private` 候选落入 `orgId`）。
-  - 工作区 ID、路径和明确用户消息锚点共同筛选对话/内部协作/异常；不从事项当前绑定反推所有旧记录的归属。
-  - 使用当前事项中有权访问的空间文档及其版本反馈；工作区空间和关联路径须属于当前工作区。
-- 复盘输出最多读取前 8 条候选，非法、越界角色及重复项不落库。
-  - 候选归属限于该证据范围内实际参与的角色及显式目标，不会因为数据库中存在某个成员就接受其 ID。
-  - 复盘返回后再次核对取消和工作区是否变化，再批量提交候选。
-
-核验、替代链与归属边界：
-
-- 核验通过会将候选改为 `verified`；`supersedesMemoryId` 只允许同成员、同 scope、同组织（`orgId`）、同工作区（`workspaceId`）的无环关系。
-- 已经确立的替代链不能清空链接或移动任一端来绕过隔离，旧规则保留为 `superseded` 供追溯；独立、未建立替代关系的记录仍可按用户判断调整归属。
-- 提示词区分 `[已验证]` 与 `[待验证]`，但候选当前仍会被注入用于验证，不能把它当作已确认事实或隐私审计。
-
-注入追踪与版本反馈：
-
-- `memory_applications` 中的 `applied` 表示该次执行的当前上下文包含这条经验，`applied_count` 统计适用轮次，不证明模型采纳或能力改善。
-- 成功分支的注入 ID 经调用树收集，并与该回合保存的空间文档 Git 提交关联；失败分支和之后的旁听注入不计入该提交。
-- 反馈按文档、提交和评价人保存。相同评价幂等，正负改票撤销上一票再计新票，`neutral` 或不评分撤销该评价人的贡献；反馈与计数在事务中更新。
-- 团队卡片手动 `+1/-1` 是独立人工计数。计数不代表因果学习评估；经验复盘由用户单独触发。
+- `propose_skill` 将草案写入当前分支的 `ExecutionEffects`：
+  - 同事返回有效答案后，effects 才逐层返回主成员；主成员失败或被取消时，不会提前落盘或保留提案。
+  - 主执行成功后，草案挂载在回复消息 `metadata.skillProposals` 中供用户审阅；用户确认应用后写入目标作用域磁盘，并默认在 `skill_trust_policies` 中登记为 `autonomous`。
+- Pi 原生 `tool_call` Hook 在执行 Skill 脚本前查询 `skill_trust_policies`：
+  - 未显式授权的磁盘 Skill 默认处于 `confirm`，通过 `ctx.ui` / `DialogBroker` 弹窗请求用户确认（支持一键升级为 `autonomous`）；`disabled` 直接阻断。
+  - 每次执行写回 `run_count`、`last_run_at` 与 `last_outcome` 遥测；遥测次数不证明长期能力改善。
+- 确定性 `session-insights` 扫描 Pi JSONL 会话生成只读运行洞察，并与信任遥测一起按组织/个人/工作区隔离注入 `team-health.ts` 供 `Role Architect` 体检。
+- `space_document_feedback` 按 `(document_id, commit_hash, actor_id)` 独立记录审阅意见与评分，校验 `commit_hash` 确属该文档的 Git 提交历史。
 
 ## 验证入口
 

@@ -46,8 +46,8 @@ Personal Agent 采用**三环硬边界多包架构**（由 [check-module-boundar
 | 运行与语言 | Node.js ≥ 22.19、严格 TypeScript、npm workspaces | `apps/cli/src/main.ts` 可由 Node 原生运行，也可通过 `npm run build:cli` 打包为自包含 `apps/cli/dist/main.js` |
 | 前端 | React、esbuild、原生 CSS | 双栏工作台，使用 `HashRouter`、`MarkdownView`；含「团队委托 / 过程事件 / 经验复盘」浮层、进度快照卡片与「本版重点 + 过程脉络」精简成果视图；未集成早期设想的 Pi UI 组件或 Mermaid 消息渲染 |
 | 用户通信 | Node HTTP API 与 SSE | HTTP 发起消息、停止（含运行停止与提炼取消）、旁听调整和配置操作；SSE 推送文本、进度、对话卡片、旁听插话与收尾事件；`GET /api/bootstrap` 与 `/api/matters/:id` 附带进行中运行快照以支持刷新恢复；没有 WebSocket |
-| 编排 | `TeamOrchestrator` | 负责事项范围、成员选择、执行所有权、委托树、会议旁听评估、只读经验复盘及成果收尾 |
-| 执行 | 本机 `pi --mode rpc` | 主成员、内部成员、旁听评估及无工具只读经验复盘均按需启动独立 Pi 进程；主/内/旁听会话通过确切 `--session` 恢复，经验复盘使用 `noSession: true` 无工具执行 |
+| 编排 | `TeamOrchestrator` | 负责事项范围、成员选择、执行所有权、委托树、会议旁听评估与成果收尾 |
+| 执行 | 本机 `pi --mode rpc` | 主成员、内部成员与旁听评估按需启动独立 Pi 进程，通过确切 `--session` 恢复；类型化决策与 `architect-aux` 使用无状态 `noSession` 只读执行 |
 | 模型工具桥接 | Pi 扩展与每个执行专属的 loopback HTTP bridge | 扩展向模型注册团队工具，bridge 校验 bearer token 并把调用交给编排核 |
 | 持久状态 | `node:sqlite` 与 Pi JSONL 会话文件 | SQLite 保存领域记录、会话映射和事项执行占用；模型历史在 Pi 会话文件中 |
 | 角色与 Skills | Markdown 定义与实际 `SKILL.md` 文件 | 定义可导入导出；依赖需要已安装，导入不会自动安装 Skills、扩展或 MCP 服务 |
@@ -63,7 +63,7 @@ flowchart TB
     UI["双栏工作台<br/>React / HashRouter / MarkdownView"]
     API["Node HTTP API"]
     O["TeamOrchestrator<br/>事项范围 / 执行树 / 成果收尾"]
-    DB[("SQLite<br/>事项 / 消息 / 记忆 / 成果<br/>会话映射 / 执行占用 / 经验应用与版本关联")]
+    DB[("SQLite<br/>事项 / 消息 / 空间索引<br/>会话映射 / 执行占用 / 信任策略与提交反馈")]
     Roles["角色 Markdown"]
     Skills["已安装 Skills / 批准的扩展"]
     Dialog["DialogBroker<br/>内存中的待答对话"]
@@ -72,25 +72,23 @@ flowchart TB
     R1["主成员 PiRpcWorker"]
     R2["内部成员 PiRpcWorker"]
     R3["旁听 PiRpcWorker<br/>observer 会话"]
-    R4["经验复盘 PiRpcWorker<br/>noSession / 无工具 / 无扩展"]
     B1["主执行专属 bridge<br/>loopback HTTP / bearer token"]
     B2["内部执行专属 bridge<br/>loopback HTTP / bearer token"]
     Files["Pi JSONL 会话文件"]
 
     subgraph MainProcess["本轮主成员 Pi 进程"]
         M["模型与工具循环"]
-        E1["团队扩展<br/>委托 / 成果 / 经验提案"]
+        E1["团队扩展<br/>委托 / 空间 / Skill 沉淀"]
         M <--> E1
     end
     subgraph ChildProcess["委托期间的内部成员 Pi 进程"]
         C["专业工作与工具循环"]
-        E2["团队扩展<br/>委托 / 经验提案（无发布）"]
+        E2["团队扩展<br/>委托 / Skill 沉淀（无发布）"]
         C <--> E2
     end
     subgraph ObserverProcess["旁听 Pi 进程"]
         OBS["专业评估：[SILENT] 或补充发言"]
     end
-    REF["独立经验复盘 Pi 进程<br/>仅处理宿主提供的复盘证据"]
 
     UI -->|"HTTP 请求"| API
     API -->|"SSE 事件"| UI
@@ -102,11 +100,9 @@ flowchart TB
     O --> R1
     O -->|"内部委托"| R2
     O -->|"旁听"| R3
-    O -->|"显式复盘请求"| R4
     R1 <-->|"stdin/stdout JSONL"| M
     R2 <-->|"stdin/stdout JSONL"| C
     R3 <-->|"stdin/stdout JSONL"| OBS
-    R4 <-->|"stdin/stdout JSONL"| REF
     E1 <--> B1
     E2 <--> B2
     B1 <--> O
@@ -126,8 +122,7 @@ flowchart TB
 
 - 每个 Pi 执行拥有自己的 Worker、身份、取消信号与（若启用的）bridge。
 - 内部成员可以在边界内继续委托（不具备发布成果权限）。
-- 旁听成员在 `observer` 作用域会话中禁用委托、发布与经验提案，但仍按角色装载允许的基础工具和 Skills，仅在需要风险补充时直接向用户发言。
-- AI 经验复盘采用无工具、无扩展的只读 `noSession` 执行并可随时取消。
+- 旁听成员在 `observer` 作用域会话中禁用委托、发布与 Skill 提案，但仍按角色装载允许的基础工具和 Skills，仅在需要风险补充时直接向用户发言。
 - 角色、SQLite、Pi 会话文件和预览进程承担不同责任，不能用其中一项的存在推断其他部分已经完成工作。
 
 ## 3. 模块与数据的所有权
@@ -183,43 +178,37 @@ flowchart TB
 | `Organization` | 组织关联成员及其权限、邀请、启用的 AI 角色和组织主联系人。仓库和事项按组织归属维护访问范围。组织可配置默认标记、Git 邮箱域名和简介 | 企业 SSO |
 | `RoleTemplate` | Markdown 定义职责、方法、`antiJobs`（不做边界）、工具依赖、协作和验证约定及多租户作用域（`global`/`org`/`personal`）；内置模板位于 `roles/`，工作台自建/调整角色及确认落盘的 Skill 按作用域持久化于 `.data/roles/`（含 `<roleId>/<roleId>.md` 角色包与包内 `skills/`）及 `.data/skills/`，内置 `role-architect` 作为系统元角色与业务池隔离 | 公开市场、自动依赖安装、分享内容的自动脱敏审计 |
 | `TeamMember` | SQLite 中的稳定成员 ID、角色定义关联、主要联系人标记与私有身份（`gitName`、`gitEmail`、`identitySummary`，模板导出自动脱敏）；非默认业务成员支持经 `DELETE /api/members/:id` 安全删除并联动清理记忆与旁听引用 | 完整入职生命周期；当前模板同步为同 ID 成员，多个独立实例需使用不同角色 ID |
-| `MemberMemory` | 成员经验与记忆支持岗位、组织、仓库三个作用域，记录类别、核验状态、来源、替代关系、注入次数和反馈。执行时按当前上下文筛选经验 | 后台定时复盘与工作区级记忆加密 |
+| `SkillTrustPolicy` | `skill_trust_policies` 记录（`storage_scope`、`scope_id`、`skill_name`、`trust_level` 及执行遥测）；`propose_skill` 沉淀标准 `SKILL.md` + `scripts/*` 至 `.data/skills/` 或工作区 `.agents/skills/` | 后台定时复盘与自动跨租户规则共享 |
 | `Matter` | 事项标题、摘要、组织/工作区、负责人、AI 参与模式与范围（支持 `solo` / `lead_consult` / `lead_review` / `human_first` 与按人 `observerMemberIds`）、旁听开关、人类协作名单与状态，用来承接交流和成果 | 跨项目任务图、持久任务队列；它不要求用户人工维护研发工单 |
 | `MatterMessage` | `user`、`internal_collab`、`notice` 三个通道及元数据（如 `observerIntervention`、`progressSnapshot`、截断安全的工具摘要 JSON） | 完整逐事件审计库；并非每个 Pi 流式事件都落入 SQLite |
 | `Deliverable` | 所属事项、发布成员、类型、正文或路径、链接、版本、反馈及 `feedbackRating` | 自动业务验收、统一文件托管、自动绑定 Git 提交或会话快照 |
 | `WorkspaceLink` | 工作区 ID、所属组织 `orgId`、仓库路径、默认分支等登记信息 | 动态 Git 状态快照或自动工作树管理 |
 | `WorkerSession` | 事项、成员、工作区、Pi session ID/文件、上下文键及消息游标 | 常驻进程；`active` 状态记录本身不能证明宿主仍存活 |
-| 成果与经验关联 | `space_document_memory_applications` 关联文档提交与成功执行的注入记录，`space_document_memory_votes` 保存每位评价人的当前评价 | 不从事项全历史推测归属，不证明经验被模型实际采用或导致结果改善 |
+| `SpaceDocumentFeedback` | `space_document_feedback` 按 `(document_id, commit_hash, actor_id)` 保存对空间文档特定 Git 提交的文字意见与评分（`positive` / `negative` / `neutral`） | 不自动触发模型重跑或替代人工质量验收 |
 | 事项执行占用 | SQLite 的 `matter_execution_leases` 保存宿主 PID 与占用者 ID | 分布式租约、对 PID 复用的防护 |
 
-### 经验、历史与运行状态
+### 能力沉淀、Git 署名与信任闭环
 
-三层记忆作用域与 Git 署名规则：
+四层磁盘 Skill 作用域与 Git 署名规则：
 
-- `role_general` 是可供该成员跨组织与跨工作区使用的岗位经验，但仍属于本地私有运行数据，不会随角色 Markdown 导出。
-- `company_private` 在工作区已归属某个 `Organization` 时按 `orgId` 跨同组织多仓库共享，在未归属组织时绑定单个工作区。
-- `project_private` 始终严格绑定当前工作区；无归属的旧私有记忆保留供查看，不作为全局背景。
-- 执行 Worker 保留目标仓库真实 `git config user.name/email` 作为 `GIT_COMMITTER_*`，将岗位有效署名注入 `GIT_AUTHOR_*`
-  （未配置真实用户时回退至角色身份），并附带身份提示段落以兼顾真实提交人留痕与角色归因。
+- `propose_skill` 确认后将可复用流程与脚本直接落盘为标准 `SKILL.md` + `scripts/*`，按 `global`（`.data/skills/global/`）、`org`（`.data/skills/orgs/<orgId>/`）、`personal`（`.data/skills/users/<userId>/`）与 `workspace`（`.data/skills/workspaces/<workspaceId>/` 或工作区原生 `.agents/skills/`）四层作用域隔离，不随可分享角色 Markdown 导出。
+- 历史旧版 SQLite `member_memories` / `memory_applications` 表已在 `0.8.0` 移除，所有运行态知识沉淀统一收口至原生 Pi `--skill` 发现与 `skill_trust_policies` 门禁。
+- 默认（`organization.useRoleGitIdentity !== true` 或独立无组织仓库）不注入 `GIT_AUTHOR_*` / `GIT_COMMITTER_*`，保持 `git commit` 使用目标仓库自身的 Git 配置；仅当所属组织显式启用 `useRoleGitIdentity` 时，才将角色有效署名注入 `GIT_AUTHOR_*` 并将目标仓库真实 `git config user.name/email` 作为 `GIT_COMMITTER_*`（未配置真实用户时回退至角色身份），兼顾真实提交人留痕与角色归因。
 
-当前 RSI 已有三条生产路径，但其证据与职责不同：
+当前 RSI 与能力沉淀的三条生产路径：
 
-1. 执行期主成员和内部成员通过 `propose_experience` 提出候选：
-   - 候选、正式成果草稿及成功执行的经验注入 ID 以 `ExecutionEffects` 沿调用树逐层返回。
-   - 同事成功不等于主任务成功，失败分支和主任务失败均不提交候选；主执行成功时才在同一事务中保存成果、候选与版本应用关联。
-2. 用户从对话或成果卡触发 `distillExperiences`，使用无工具、无扩展、无 Skill 的独立 Pi 复盘：
-   - 对话按当前组织、工作区 ID 和路径筛选；复盘读取有权访问且属于当前工作区的事项空间文档与版本反馈。
-   - 模型不能把候选归给未参与该范围工作的成员。
-3. 用户核验候选或编辑经验：
-   - `supersedesMemoryId` 必须同成员、同 scope、同工作区且无循环；已建立替代关系的任一端不能靠清空指针或重归属跨范围迁移。
-   - 成果反馈仅评价与该版本精确关联的注入记录，每个成果/经验保留一票当前评价，改票替换贡献、`neutral` 撤回贡献。
-   - 卡片手动 `+1/-1` 仍是独立人工评价，历史计数不会自动重算为新规则。
+1. **执行期 `propose_skill` 沉淀（步骤 2）**：
+   - 主成员和内部成员在执行期间通过 `propose_skill` 提出标准 `SKILL.md` 与可选 `scripts/*` 草案，暂存在调用树；失败分支和主任务失败均不保留草案，主执行成功后才随回复挂载提案卡片，由授权用户审核确认后落盘并默认设为 `autonomous` 信任等级。
+2. **信任四步脚本门禁（步骤 3 & 4）**：
+   - Pi 原生 `tool_call` Hook 查询 `skill_trust_policies`：未显式授权的磁盘 Skill 默认处于 `confirm`（每次执行脚本经 `DialogBroker` 弹窗确认，并支持一键升级为 `autonomous`），`disabled` 直接拦截；执行次数与结果遥测写回 `skill_trust_policies`。
+3. **确定性会话洞察与团队体检**：
+   - 本地确定性 `session-insights` 扫描 Pi JSONL 会话日志生成只读运行洞察，并与 `skill_trust_policies` 遥测一起按组织/个人/工作区隔离注入 `team-health.ts`，供 `Role Architect` 在体检对话中提出 `propose_role` 角色边界调整建议。
+   - 资料空间提交反馈保存在 `space_document_feedback`（按文档、Git 提交哈希与评价人唯一），与磁盘 Skill 沉淀独立维护。
 
-候选状态、注入计数与续接边界：
+续接与运行边界：
 
-- 对话、成果卡和团队库已提供候选筛查、核验、编辑与溯源入口。
-- `candidate` 与 `verified` 在系统上下文中分开标记；候选当前仍可被注入用于验证，状态标签不是自动正确性或隐私审计。
-- `appliedCount` 只表示宿主注入了该经验，不证明模型实际采用，更不等于因果评估或长期能力提升。
+- 对话卡片与「设置 → 技能与信任」「设置 → 运行洞察」已提供提案审核、Skill 源码预览、信任切换与会话洞察入口。
+- 技能被 `--skill` 挂载或 `run_count` 累加不代表模型每次都采纳，更不等于因果评估或长期能力提升。
 - 会话映射承接 Pi 历史，内存 `activeRuns` 支持同一宿主内网页刷新，失败/停止消息中的快照辅助下一轮显式续接；这些基础不构成重启后自动调度的持久后台任务。
 - 更详细的数据与会话边界见[运行说明](../reference/runtime-collaboration.md)。
 
@@ -243,7 +232,7 @@ flowchart TB
    - 找到历史映射时校验 Pi 文件首行的 session ID 与真实 `cwd`，再用确切 `--session` 路径启动；没有映射才建立新会话。
 4. 能力与上下文注入：
    - 显式加载角色 Skills（内置岗位方法包 `pi-extensions/role-skills`，含通用成果写作规范 [deliverable-writing](../../pi-extensions/role-skills/skills/deliverable-writing/SKILL.md)）、团队扩展和批准的扩展，核查实际注册的普通工具及 MCP 依赖。
-   - 当前岗位五段定义、适用私有记忆和团队信息进入系统上下文；若上次同作用域执行曾中止或失败，宿主一次性注入结构化的中断状态简报（停滞阶段、未完成委托及最近关键步骤）辅助续接。
+   - 当前岗位五段定义、作用域 Skills 与团队信息进入系统上下文；若上次同作用域执行曾中止或失败，宿主一次性注入结构化的中断状态简报（停滞阶段、未完成委托及最近关键步骤）辅助续接。
    - 主要历史由 Pi 原生会话承接，宿主只补充有界的新交流。
 5. 主成员需要其他岗位工作时调用 `delegate_to_member`：
    - bridge 将调用交给编排核，宿主绑定成员身份、事项、工作区和调用链，启动或恢复内部成员独立会话（期间暂停父级空闲看门狗）。
@@ -251,8 +240,8 @@ flowchart TB
 6. 主成员可把计划、过程与结果保存到资料空间。内部成员可返回专业判断，也可在职责范围内修改工作区文档。
 7. 回合收尾时核查本轮资料和工作区文档：
    - 已成功保存的空间页面即时可见。完成的 `write` / `edit` 产生的 Markdown 和文本文件，在成功回合中读取并收录。
-   - `recordTurnOutcome` 将交互成果、候选与经验应用关联写入事务。空间页面修订链接对应成果，历史成果继续保留。
-   - 失败或取消不会产生本轮成果记录，已经保存的页面和工作区文件仍然保留。
+   - `recordTurnOutcome` 将交互成果、待审 `propose_skill` / `propose_role` 草案落入消息元数据并记录状态。空间页面修订链接对应成果，历史成果继续保留。
+   - 失败或取消不会产生本轮成果记录与草案提案，已经保存的页面和工作区文件仍然保留。
 8. 保存主成员回复后，已配置的旁听席在 `runObservers` 中并行评估：
    - 关键补充写入独立 `user` 消息，无增量则 `[SILENT]`；这属于主结果之后的可选评估阶段，停止旁听不会撤销此前已提交的主结果。
    - 最后清理进程、bridge 与事项占用。
@@ -293,9 +282,9 @@ sequenceDiagram
     M-->>O: 经 Worker 收到 agent_settled
     alt 成功且有空间资料或文档
         O->>O: 再核查全部成果
-        O->>S: 事务提交成果、候选和应用关联，再记录回复与状态
+        O->>S: 提交空间文档关联与草案提案，再记录回复与状态
     else 成功但只有交流
-        O->>S: 提交候选（如有），保存回复，保持 open
+        O->>S: 挂载草案提案（如有），保存回复，保持 open
     else 取消或失败
         O->>S: 丢弃未提交 effects，记录停止或失败，保持 open
     end
@@ -306,7 +295,7 @@ sequenceDiagram
 收尾信号与事务边界：
 
 - `agent_settled` 是本轮执行收尾信号，不是交付信号；若 Pi 返回 `prompt` 的 `disposition: handled`，则立即结束该次等待，不等待不会出现的 settled。
-- 交互成果、候选和版本应用关联共同写入一个 SQLite 事务，回复和事项状态在其后记录；当前没有覆盖所有外部动作与整个收尾过程的统一事务。
+- 交互成果与草案提案挂载在成功回复的同轮收尾中保存，当前没有覆盖所有外部动作与整个收尾过程的统一事务。
 
 ### 用户通信与过程留存
 
@@ -324,7 +313,7 @@ sequenceDiagram
 | 会话缺失、损坏或路径不符 | 明确失败，不静默开空会话 |
 | 工作区与旁听变更 | 工作区空闲时可切换（运行中返回 409），切回原范围可恢复原会话；旁听成员列表（`observerMemberIds`）支持在空闲及运行中实时增减，旁听会话单独隔离并在首次加入时仅读取精简摘录 |
 | 并发 | 同事项由运行表和 SQLite 占用限制为一轮；不同事项可并行；同委托树中忙碌的同范围成员返回工具错误 |
-| 停止与失败 | 整轮默认 `0`，不设固定总时长；单 Worker 默认 15 分钟无活动看门狗，桥接等待时暂停父计时，可显式配置总上限。取消传到执行树，快照区分用户停止和服务关闭；复盘从注册到结果丢弃/提交及 Worker 清理全程被追踪，shutdown 等待其结束后才可关闭库 |
+| 停止与失败 | 整轮默认 `0`，不设固定总时长；单 Worker 默认 15 分钟无活动看门狗，桥接等待时暂停父计时，可显式配置总上限。取消传到执行树，快照区分用户停止和服务关闭，shutdown 等待所有 Worker 清理完成后才关闭库 |
 | 网页运行中纠偏 | 当前仍采用停止后发新消息（或运行中增减旁听席列席）；底层 `steer`、`follow_up` 等封装不构成已实现的网页实时插话 |
 | 委托边界 | 防止自身/祖先循环，限制深度与每轮数量，复用同轮相同委托；具体数值及错误约定见[运行说明](../reference/runtime-collaboration.md#并发失败与停止) |
 | 崩溃与去重 | 去重限于本轮内存；PID 占用用于单机防并发，不是跨崩溃 exactly-once。已写文件和外部操作不会因取消自动回滚 |
@@ -346,13 +335,13 @@ sequenceDiagram
 
 | 工作面 | 已有基础 | 验证边界 |
 | --- | --- | --- |
-| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../apps/web/src/primitives/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止/提炼取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
+| Pi 执行与工作台 | RPC、HTTP/SSE、双栏界面、F5 运行恢复、中断快照卡片、旁听控制、立项阵型评估、管理弹窗收口（[ModalDialog](../../apps/web/src/primitives/ModalDialog.tsx)）、慢速 LLM 操作二次确认、停止取消、验收与预览 API | 已有回归和源码/构建入口启动验证；不是持久后台运行系统 |
 | 上下文与协作 | 按范围恢复会话、中断断点简报、真实委托工具、单兵 `solo`/定向旁听运行时收窄、旁听评估、内部通道、取消与执行占用 | 最小真实 Pi 场景覆盖产品经理咨询研发、跨宿主接续；旁听及多岗长程协作稳定性仍依赖实机持续检验，不代表多日可靠性已验证 |
-| 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、多角色经验复盘/取消、上下文直接核验替代与效果回写 | 连续过程交流不新增交付、多角色 AI 提炼、取消与评估 API 均有离线测试覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
+| 成果记录与 RSI | 显式阶段发布、写作规范 Skill、重点+过程成果视图、`propose_skill` 沉淀、信任四步 `tool_call` 门禁、确定性 `session-insights`、团队体检与 `space_document_feedback` 提交评价 | 连续过程交流不新增交付、信任门禁、洞察与提交反馈均有离线及单轮冒烟覆盖；真实模型长期学习提升与夜间自主评估流水线仍待验证 |
 | 角色复用与建队 | Markdown 导入导出、`.data/roles/` 运行时隔离、不同角色 ID 组建与安全删除、内置 Meta-Bot「角色架构师」（对话建队、团队协作体检与事项中途介入补人）、实际 Skill 装载（含 `deliverable-writing`）与依赖核查 | 公开人才市场与自动依赖安装尚未实现 |
 | 团队账号与共享部署 | 注册审核、超管控制台、组织 RBAC、仓库与事项 ACL，角色和 Skill 按范围存储，个人角色配额及 Skill 草案确认 | 应用层权限有离线回归覆盖。Pi 子进程使用宿主的系统用户权限 |
 
-早期四阶段路线已产出上述基础，阶段四中的 **RSI 经验提炼—核验—应用—验收回写闭环** 已打通首版工程链路；仍未完成的部分明确为持久后台定时自驱循环、公开人才市场与自动依赖安装。下列顺序是后续工程建议，不是已实现承诺或本次功能范围。
+早期四阶段路线已产出上述基础，并已收敛为 **Roles + Skills & Scripts + RSI（Session Insights / Team Health / Four-Step Trust）** 的 Pi 原生三层闭环；仍未完成的部分明确为持久后台定时自驱循环、公开人才市场与自动依赖安装。下列顺序是后续工程建议，不是已实现承诺或本次功能范围。
 
 ### 下一阶段：检验日常协作和交付判断
 
@@ -378,8 +367,8 @@ sequenceDiagram
 | 方向 | 尚缺的关键设计与验证 |
 | --- | --- |
 | 持久后台任务与多日自主工作 | 持久任务状态、唤醒、恢复、取消、重试和外部动作去重，持续运行的资源与失败观测 |
-| 团队部署的隔离与运维 | 在已有账号、组织与项目访问控制基础上，评估 Pi 执行隔离、项目级记忆加密和长期运行的运维要求 |
-| RSI 持续成长 | 已有候选/核验/替代/注入/反馈基础；后续需要真实任务对照评估、验证候选效果和隐私分类，证明改善而非只累计命中或评分 |
+| 团队部署的隔离与运维 | 在已有账号、组织与项目访问控制基础上，评估 Pi 执行隔离与长期运行的运维要求 |
+| RSI 持续成长 | 已有 `propose_skill`、信任四步、确定性洞察与提交反馈基础；后续需要真实任务对照评估，证明实际改善而非只累计执行次数或评分 |
 | 完整人才市场 | 角色定义与成员私有背景的分享边界、可验证的包与依赖、安装/升级和发布机制；当前导入导出只是基础 |
 | 权限与运行环境 | 按实际使用风险设计命令授权和隔离环境，不能把本机 `cwd` 当作沙箱 |
 

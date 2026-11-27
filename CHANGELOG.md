@@ -4,6 +4,7 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Clean up stale legacy SQLite memory references (`member_memories`, `role_general`/`company_private`/`project_private`, `propose_experience`, `distillExperiences`, `memory_applications`, `supersedesMemoryId`) across active reference, concept, guide, validation, and extension docs (`docs/concepts/architecture-and-plan.md`, `docs/reference/configuration.md`, `docs/reference/runtime-collaboration.md`, `docs/guides/development.md`, `docs/validation/runtime-checks.md`, `packages/server/src/extensions/team-extension/README.md`) to align with disk-persisted Skills (`propose_skill`), `skill_trust_policies`, and `space_document_feedback`.
 - Document the complete SQLite database schema (`docs/reference/database-schema.md`, covering all 23 tables, ER diagram, 16 schema indexes plus `database.ts` backfill indexes, transaction/concurrency invariants, and schema maintenance workflow/changelog) and link it from `docs/README.md` and `packages/server/src/storage/README.md`.
 
 ## [0.8.3] - 2026-11-26
