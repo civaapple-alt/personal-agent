@@ -1,6 +1,6 @@
 # 运行与协作参考
 
-维护者可在这里查找会话范围、委托与停止语义、成果归档以及 Skills 沉淀与信任四步边界。模块和数据流见[架构](../concepts/architecture-and-plan.md)（含[全链路数据流示例](../concepts/architecture-and-plan.md#4-一轮交流内部协作与成果的数据流)），安装与操作见[文档索引](../README.md)。
+维护者可在这里查找会话范围、委托与停止语义、成果归档以及 Skills 沉淀与信任四步边界。模块和数据流见[架构](../concepts/architecture-and-plan.md)（含[统一业务主链路与双模式协同数据流](../concepts/architecture-and-plan.md#4-统一业务主链路与双模式协同数据流)），安装与操作见[文档索引](../README.md)。
 
 ## 从用户消息到结果
 

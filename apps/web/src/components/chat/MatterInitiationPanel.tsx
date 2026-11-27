@@ -167,8 +167,10 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 	const confidenceLabel =
 		assessment?.confidence === "high" ? "高把握" : assessment?.confidence === "low" ? "低把握" : "中把握";
 	const otherOrgMembers = orgMembers.filter((member) => member.userId !== initiatorId);
+	const isBoardMode = draftCollaborationMode === "board";
 	const showAssessmentBar =
-		assessment || modelAssessing || modelAssessmentError || confirmModel || onRequestModelAssessment;
+		!isBoardMode &&
+		Boolean(assessment || modelAssessing || modelAssessmentError || confirmModel || onRequestModelAssessment);
 
 	return (
 		<section className="initiation-panel" aria-label="新事项参与安排">
@@ -368,10 +370,10 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			{expanded && (
 				<div id={rosterId} className="initiation-roster-drawer compact">
 					<label className="initiation-lead-picker">
-						<span>主责</span>
+						<span>{isBoardMode ? "交付总控" : "主责"}</span>
 						<select
 							className="roster-row-select"
-							aria-label="新事项主责 AI"
+							aria-label={isBoardMode ? "新事项交付总控 AI" : "新事项主责 AI"}
 							value={selectedMemberId === "auto" ? "auto" : (leadId ?? "")}
 							onChange={(event) => {
 								const next = event.target.value;
@@ -393,36 +395,43 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 							))}
 						</select>
 					</label>
-					{business.length > 1 && (
-						<fieldset className="initiation-role-rows" aria-label="可委托成员设置">
-							{business
-								.filter((member) => member.id !== leadId)
-								.map((member) => {
-									const isConsult = consultIds.includes(member.id);
-									return (
-										<div key={member.id} className="initiation-role-row">
-											<span className="initiation-role-name">{member.displayName}</span>
-											<div className="initiation-role-toggles">
-												<button
-													type="button"
-													role="switch"
-													aria-checked={isConsult}
-													aria-label={`允许主责委托 ${member.displayName}`}
-													title={
-														isConsult
-															? `已允许主责委托 ${member.displayName}`
-															: `点击允许主责委托 ${member.displayName}`
-													}
-													className={`roster-switch ${isConsult ? "on" : ""}`}
-													onClick={() => setRoleFlag(member.id, "consult", !isConsult)}
-												>
-													<span className="roster-switch-thumb" />
-												</button>
+					{isBoardMode ? (
+						<p className="initiation-assess-note">
+							总控将按任务切片动态组建 Builder 与只读
+							Verifier（支持在看板中随时暂停、退场或待命热切换模型），无需预先勾选静态委托名单。
+						</p>
+					) : (
+						business.length > 1 && (
+							<fieldset className="initiation-role-rows" aria-label="可委托成员设置">
+								{business
+									.filter((member) => member.id !== leadId)
+									.map((member) => {
+										const isConsult = consultIds.includes(member.id);
+										return (
+											<div key={member.id} className="initiation-role-row">
+												<span className="initiation-role-name">{member.displayName}</span>
+												<div className="initiation-role-toggles">
+													<button
+														type="button"
+														role="switch"
+														aria-checked={isConsult}
+														aria-label={`允许主责委托 ${member.displayName}`}
+														title={
+															isConsult
+																? `已允许主责委托 ${member.displayName}`
+																: `点击允许主责委托 ${member.displayName}`
+														}
+														className={`roster-switch ${isConsult ? "on" : ""}`}
+														onClick={() => setRoleFlag(member.id, "consult", !isConsult)}
+													>
+														<span className="roster-switch-thumb" />
+													</button>
+												</div>
 											</div>
-										</div>
-									);
-								})}
-						</fieldset>
+										);
+									})}
+							</fieldset>
+						)
 					)}
 					<div className="initiation-compact-footer">
 						{otherOrgMembers.length > 0 && onUpdateDraftVisibility && (

@@ -15,7 +15,7 @@
 
 当前已实现范围与边界（`0.8.x` 已收敛为 **LTS 候选基线**，详见[0.8.x LTS 候选基线说明](../releases/v0.8-lts-baseline.md)）：
 
-- 已实现「**顺着 Pi 纹理生长**」三层闭环：**Roles 身份能力配置**（内置 4 个业务岗位 + `Pi Default` 单兵轨道 + `Role Architect`，职责与运行态主责/内部/旁听解耦）、**Skills & 脚本能力沉淀**（`propose_skill` 落盘标准 `SKILL.md` + `scripts/*`、紧凑分页 `skill-catalog` 按需读取、Git 资料空间承接正式成果与 `handoffDocumentIds` 委托预检）、**RSI 自我改进**（零模型成本确定性 `session-insights` + `Role Architect` 团队体检 + `tool_call` 信任四步脚本门禁）。
+- 已实现「**顺着 Pi 纹理生长**」三层闭环：**Roles 身份能力配置**（内置 4 个业务岗位 + `Pi Default` 独立单兵轨道 + `Role Architect`）、**双协作模式并行主链路**（`Lead` 轻量主责同步委托 + `0.9.0 Board` 公告板总控动态组队异步协同，支持同事项 `Lead ↔ Board` 切换与上下文无缝交接）、**Skills & 脚本能力沉淀**（`propose_skill` 落盘标准 `SKILL.md` + `scripts/*`、紧凑分页 `skill-catalog` 按需读取、Git 资料空间承接正式成果与 `handoffDocumentIds` 委托预检）与 **RSI 自我改进**（零模型成本确定性 `session-insights` + CoE Board 摩擦信号闭环 + `Role Architect` 团队体检 + `tool_call` 信任四步脚本门禁）。详情见 [0.9.0 存储拆表与事项公告板设计](v0.9-board-and-storage-design.md)。
 - 这里的“自主”指成员在一轮任务内自行使用工具、委托同事并整合结果，并在中断后可按快照简报续接；不代表已有跨重启自动运行的定时后台任务系统，也不代表操作系统级执行沙箱或无人值守长期演进已验证。
 - 产品依据见[产品方向确认稿](product-direction.md)与[产品讨论记录](../history/product-discussion.md)。本轮实现不涉及先前试用的业务项目，该项目只作为网页体验背景。
 
@@ -46,7 +46,7 @@ Personal Agent 采用**三环硬边界多包架构**（由 [check-module-boundar
 | 运行与语言 | Node.js ≥ 22.19、严格 TypeScript、npm workspaces | `apps/cli/src/main.ts` 可由 Node 原生运行，也可通过 `npm run build:cli` 打包为自包含 `apps/cli/dist/main.js` |
 | 前端 | React、esbuild、原生 CSS | 双栏工作台，使用 `HashRouter`、`MarkdownView`；含「团队委托 / 过程事件 / 经验复盘」浮层、进度快照卡片与「本版重点 + 过程脉络」精简成果视图；未集成早期设想的 Pi UI 组件或 Mermaid 消息渲染 |
 | 用户通信 | Node HTTP API 与 SSE | HTTP 发起消息、停止（含运行停止与提炼取消）、旁听调整和配置操作；SSE 推送文本、进度、对话卡片、旁听插话与收尾事件；`GET /api/bootstrap` 与 `/api/matters/:id` 附带进行中运行快照以支持刷新恢复；没有 WebSocket |
-| 编排 | `TeamOrchestrator` | 负责事项范围、成员选择、执行所有权、委托树、会议旁听评估与成果收尾 |
+| 编排 | `TeamOrchestrator` | 负责事项范围、成员选择、执行所有权、`Lead` 委托树 / `Board` 公告板异步协同（[board-runner.ts](../../packages/server/src/orchestrator/execution/board-runner.ts)）、同事项 `Lead ↔ Board` 交接（[mode-handoff.ts](../../packages/server/src/orchestrator/execution/mode-handoff.ts)）、旁听评估与成果收尾 |
 | 执行 | 本机 `pi --mode rpc` | 主成员、内部成员与旁听评估按需启动独立 Pi 进程，通过确切 `--session` 恢复；类型化决策与 `architect-aux` 使用无状态 `noSession` 只读执行 |
 | 模型工具桥接 | Pi 扩展与每个执行专属的 loopback HTTP bridge | 扩展向模型注册团队工具，bridge 校验 bearer token 并把调用交给编排核 |
 | 持久状态 | `node:sqlite` 与 Pi JSONL 会话文件 | SQLite 保存领域记录、会话映射和事项执行占用；模型历史在 Pi 会话文件中 |
@@ -130,13 +130,13 @@ flowchart TB
 | 源码入口 | 负责的事实与行为 |
 | --- | --- |
 | [`packages/server/src/server/app.ts`](../../packages/server/src/server/app.ts)、[`main.ts`](../../apps/cli/src/main.ts) | 装配服务与退出顺序；鉴权、SSE、上传、派发及路由分别由 [auth](../../packages/server/src/server/auth.ts)、[sse](../../packages/server/src/server/sse.ts)、[uploads](../../packages/server/src/server/uploads.ts)、[dispatch-runner](../../packages/server/src/server/dispatch-runner.ts) 与 [业务路由](../../packages/server/src/server/README.md#业务路由) 维护 |
-| [`team-orchestrator.ts`](../../packages/server/src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../packages/server/src/orchestrator/execution/matter-dispatch.ts) 持有单轮执行占用并处理消息、回复与成果收尾。[worker-runner](../../packages/server/src/orchestrator/execution/worker-runner.ts)、[delegation-runner](../../packages/server/src/orchestrator/execution/delegation-runner.ts) 与 [observer-runner](../../packages/server/src/orchestrator/execution/observer-runner.ts) 分别拥有执行、委托与旁听路径 |
+| [`team-orchestrator.ts`](../../packages/server/src/orchestrator/team-orchestrator.ts) | 装配事项执行，管理运行、中止及退出。[matter-dispatch](../../packages/server/src/orchestrator/execution/matter-dispatch.ts) 持有单轮执行占用并在非纯讨论场景下按 `collaborationMode` 分流至 `Lead` 路径或 `Board` 路径；[board-runner](../../packages/server/src/orchestrator/execution/board-runner.ts)、[mode-handoff](../../packages/server/src/orchestrator/execution/mode-handoff.ts)、[worker-runner](../../packages/server/src/orchestrator/execution/worker-runner.ts)、[delegation-runner](../../packages/server/src/orchestrator/execution/delegation-runner.ts) 与 [observer-runner](../../packages/server/src/orchestrator/execution/observer-runner.ts) 分别拥有公告板协同、模式交接、单轮执行、同步委托与旁听路径 |
 | [`matter-initiation.ts`](../../packages/server/src/orchestrator/architect/matter-initiation.ts)、[`pi-decision.ts`](../../packages/server/src/orchestrator/architect/pi-decision.ts)、[`meta-architect.ts`](../../packages/server/src/orchestrator/architect/meta-architect.ts)、[`role-architect.ts`](../../packages/server/src/roles/role-architect.ts) | 立项适配评估与职责缺口诊断（实时本地规则 + 类型化 Pi LLM 决策模型 `runTypedPiDecision`）；无工具只读 Meta-Bot 角色架构师（按工作流建队、团队协作体检与事项中途介入补人提案）；离线规则快速角色设计 |
 | [`execution-context.ts`](../../packages/server/src/orchestrator/execution/execution-context.ts)、[`matter-context.ts`](../../packages/server/src/orchestrator/runtime/matter-context.ts) | 前者处理 Skill/会话/成果文件校验；后者按组织、工作区和路径筛选证据及有来源关联的成果，供旁听与复盘使用 |
-| [`pa-extensions/*`](../../pa-extensions/README.md) | PA 宿主专有按需挂载扩展（`worker-runtime`、`workbench-help`、`space`、`delegation`、`skill-capture`） |
+| [`pa-extensions/*`](../../pa-extensions/README.md) | PA 宿主专有按需挂载扩展（`worker-runtime`、`space`、`delegation`、`board`（[pi/index.ts](../../pa-extensions/board/pi/index.ts)）、`skill-capture`、`human-question`、`next-steps`、`visualize`、`skill-catalog`） |
 | [`team-tool-bridge.ts`](../../packages/server/src/rpc/team-tool-bridge.ts) | bridge 鉴权、请求解析、调用 ID 去重、连接取消和清理 |
 | [`pi-rpc-worker.ts`](../../packages/server/src/rpc/pi-rpc-worker.ts)、[`jsonl.ts`](../../packages/server/src/rpc/jsonl.ts) | 子进程、LF 分帧 RPC、确切 session 参数、事件、对话回写与 settled 等待 |
-| [`storage/`](../../packages/server/src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../packages/server/src/storage/repos/matter-repo.ts)，拥有记录、事务、提请原子状态转换与单机执行占用 |
+| [`storage/`](../../packages/server/src/storage) | `PersonalAgentStore` 门面委托各域 [repos](../../packages/server/src/storage/repos/matter-repo.ts) 与 [board-repo](../../packages/server/src/storage/repos/board-repo.ts)，拥有记录、四表拆表存储（`matter_messages` / `matter_events` / `matter_board_posts` / `matter_board_members`）、提请原子状态转换与单机执行占用 |
 | [`dialog-broker.ts`](../../packages/server/src/server/dialog-broker.ts)、[`preview-manager.ts`](../../packages/server/src/server/preview-manager.ts) | 分别管理内存中的待答对话和预览服务，不是持久后台调度器 |
 
 ### 目录组织与源文件行数
@@ -222,10 +222,25 @@ flowchart TB
 - 图片与文本/折叠粘贴附件落盘是异步步骤。`dispatch-runner` 在更新运行视图或广播前统一拒绝重叠派发，避免两次上传完成后覆盖同一事项的运行记录。
 - 会话按组织和工作区隔离，切回已有范围时可续接。详见[数据与会话边界](../reference/runtime-collaboration.md#数据与会话边界)。
 
-## 4. 一轮交流、内部协作与成果的数据流
+## 4. 统一业务主链路与双模式协同数据流
 
-1. HTTP 接收请求：
+### 4.1 三轨边界与同事项 `Lead ↔ Board` 业务闭环
+
+为避免单一模式在轻量问答与多切片并行交付之间陷入两难，Personal Agent 在业务流程中严格区分 **Solo 独立单兵轨道**（`pi-default`，零委托、不混切）与 **团队双模式协同链路**（同事项内可自由切换 `Lead ↔ Board`）：
+
+| 协作模式 | 入口与适用范围 | 角色组织与通信机制 | 模式交接与统一收口 |
+| --- | --- | --- | --- |
+| **`Solo`（`pi-default`）** | 侧栏单兵角色入口；个人命令行式读写/自检，零多角色开销 | 独立 `roleKind: "solo"` 会话，禁用 `delegate_to_member` 与团队面板 | 保持独立轨道，不参与业务路由及 `Lead ↔ Board` 模式互转 |
+| **`Lead`（轻量主责）** | 立项默认轨道；需求澄清、PRD/方案撰写、单人或少轮同步请教 | 业务主责统筹，按白名单通过 `delegate_to_member` 同步获取同事回报 | 需求清晰待并行实施时，可一键**「升级为 Board 团队交付」**，自动把近期主对话结论与已存 Space 文档摘要交给总控开局 |
+| **`Board`（团队公告板）** | 立项显式选中或由 `Lead` 升级进入；多切片并行实现、必须独立只读验收的多轮交付 | 专职总控（Coordinator）经 `spawn_board_agent`（支持 `ownedScope` 与 `modelOverride`）动态生成 `Builder` / `Verifier`，通过 `matter_board_posts` `@mention` 与游标增量唤醒 | 交付收口时统一汇总用户回复、`spaceDocuments` 与 `skillProposals`；交付完成后也可**「切回轻量主责」**，Lead 自动继承看板名册、关键交接/验收帖与 Space 锚点继续轻量微调 |
+
+前端立项面板（[MatterInitiationPanel.tsx](../../apps/web/src/components/chat/MatterInitiationPanel.tsx)）严格按所选模式分流：选中 `轻量主责` 时展示「AI 阵型决策」与静态可委托开关；切换至 `团队公告板 (Board)` 时收起 `Lead` 专属静态委托开关与静态阵型建议，仅保留「交付总控」选择与可见性配置，由总控按任务结构动态组建看板成员。
+
+### 4.2 `Lead` 模式同步委托与成果数据流
+
+1. HTTP 接收请求（[matter-messages.ts](../../packages/server/src/server/routes/matter-messages.ts)）：
    - 新事项优先使用显式成员，否则按关键词初始路由，未命中时使用主要联系人；后续消息默认保留事项负责人和工作区，除非明确变更。
+   - 当事项从 `Board` 切回 `Lead` 时，[mode-handoff.ts](../../packages/server/src/orchestrator/execution/mode-handoff.ts) 提取有界的 `[Board -> Lead Handoff Context]`（看板成员、关键交接/验收帖与 Space 文档）注入本轮上下文。
 2. 编排核取得事项执行占用，记录带工作区范围的用户消息；已有同事项执行时拒绝重叠消息或工作区切换，HTTP 返回 409。
 3. 执行范围与会话恢复：
    - 由事项、成员、有效组织 ID、工作区 ID、绝对路径和主/内部/旁听模式共同确定。
@@ -319,7 +334,43 @@ sequenceDiagram
     O-->>U: SSE 推送收尾事件，刷新对话与成果
 ```
 
-典型场景与收尾边界（以「用户 `@Engineering Manager` 实现、`@QA Manager` 复核、产品经理主责收口、旁听列席」为例）：
+### 4.3 `Board` 模式动态组队与异步 `@mention` 数据流
+
+```mermaid
+sequenceDiagram
+    participant U as 用户工作台
+    participant A as HTTP/SSE 服务
+    participant D as dispatchMatterTurn
+    participant R as BoardRunner
+    participant S as SQLite (四表拆表)
+    participant CO as Coordinator Pi
+    participant B as Builder Pi
+    participant V as Verifier Pi (只读)
+
+    U->>A: POST /api/matters/conversation (collaborationMode="board")
+    A->>D: dispatchMatterTurn(interactionMode="conversation")
+    D->>S: 抢占 matter_execution_leases 并识别 isBoardTurn
+    D->>R: runBoardCollaborationTurn (跳过 Lead 意图路由器)
+    opt 由 Lead 升级而来
+        R->>S: buildLeadToBoardHandoffBlock (继承前序讨论与 Space 锚点)
+    end
+    R->>CO: 唤醒 Coordinator (首次附带 Lead 交接摘要)
+    CO->>R: spawn_board_agent(builder, ownedScope) & spawn_board_agent(verifier, modelOverride?)
+    CO->>R: post_to_board(assign -> @builder)
+    R->>S: INSERT matter_board_posts (#1) & PUSH SSE board_post_created
+    R->>B: 按 last_read_post_no 增量唤醒 Builder (独立 session + worktree/scope)
+    B->>R: 修改 ownedScope 并 post_to_board(handoff -> @verifier)
+    R->>V: 唤醒只读 Verifier (无 write/edit，可选独立 modelOverride)
+    V->>R: 运行校验；通过发 verify_pass -> @coordinator，未过发 verify_rework -> @builder
+    opt 异常或久未交接
+        R->>S: @monitor 写 monitor_alert 至 matter_events 并最多催促 2 次后 escalate @coordinator
+    end
+    CO->>R: post_to_board(summary) + 可选 save_space_page / propose_skill
+    R->>S: 落盘最终 user 回复 (关联 boardPostNo / spaceDocuments / skillProposals) & 释放租约
+    R-->>U: SSE 增量更新成员、板帖、关系图与主回复
+```
+
+典型场景与收尾边界（以 `Lead`「用户 `@Engineering Manager` 实现、`@QA Manager` 复核、产品经理主责收口、旁听列席」为例；`Board` 详细协议见 [0.9.0 设计草案](v0.9-board-and-storage-design.md)）：
 
 - **主责统筹 `@AI成员`**：已有业务主责时，显式 `@` 不直接跳过主责，而是由宿主临时放行被提及同事的委托权限，由主责结合完整上下文按序委托并在最后统一汇总。
 - **三通道落盘职责**：`user` 保存用户可见交流、主回复与旁听补充；`internal_collab` 保存委托请求、编号、验收任务与同事回报；`notice` 保存紧凑工具事件摘要与能力清单。

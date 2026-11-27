@@ -26,7 +26,7 @@
 
 | 推进阶段 | 对应提案 | 目标与前置依赖说明 |
 | --- | --- | --- |
-| **阶段 1：底座定型** | `P-0906`（M1/M2/M3/M4 已完成）、`P-0901`（已完成） | 已完成 `matter_events` / `matter_board_posts` / `matter_board_members` 拆表、`0.8.x` 无损回填迁移、懒加载 API（M1）、`@pa/contracts` 全量收口（`P-0901`）、Board 动态组队与 `@mention`/`@monitor` 异步编排（M2）、3 层看板 UI / HITL 控制 / `team-health` CoE RSI 证据闭环与 `demo:board`（M3），以及共享 SSE 收口、多轮退场去噪、Coordinator 防退场保护与 SVG `@mention` 关系图（M4） |
+| **阶段 1：底座定型** | `P-0906`（M1/M2/M3/M4/M5 已完成）、`P-0901`（已完成） | 已完成 `matter_events` / `matter_board_posts` / `matter_board_members` 拆表、`0.8.x` 无损回填迁移、懒加载 API（M1）、`@pa/contracts` 全量收口（`P-0901`）、Board 动态组队与 `@mention`/`@monitor` 异步编排（M2）、3 层看板 UI / HITL 控制 / `team-health` CoE RSI 证据闭环与 `demo:board`（M3）、共享 SSE 收口 / 多轮退场去噪 / Coordinator 防退场保护 / SVG `@mention` 关系图（M4），以及统一业务主链路、立项面板模式分流、单事项 `Lead ↔ Board` 双向无缝交接与 `spawn_board_agent` 模型覆盖（M5） |
 | **阶段 2：热点解耦** | `P-0902` | 基于稳定后的仓储接口与契约，按生命周期拆分 `worker-runner.ts`、`space-repo.ts`、`App.tsx`、`SpacePages.tsx` 与 `deliverables.css`，消除跨大块重构冲突 |
 | **阶段 3：体验增强** | `P-0904`、`P-0905` | 落地多端口 Cookie 隔离（`P-0904`），并基于 `P-0906` 的事件分页与委托摘要/懒加载推进长对话与工具事件交互打磨（`P-0905`） |
 | **阶段 4：量化验收** | `P-0903` | 在 0.9.0 架构与存储模型收敛后，运行多并发 Pi RPC 基准测试并输出可复现的内存/冷启动/租约竞争基线（`P-0903`） |

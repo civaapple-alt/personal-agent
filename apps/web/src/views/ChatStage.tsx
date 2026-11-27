@@ -574,6 +574,11 @@ export function ChatStage({
 										<button
 											type="button"
 											className="btn-inline board-mode-switch-btn"
+											title={
+												matterCollaborationMode === "board"
+													? "保留已有看板交付与结论，切回轻量主责继续追问或微调"
+													: "保留当前对话与资料空间文档，升级交由总控动态组建 Builder/Verifier 异步交付"
+											}
 											onClick={() =>
 												onUpdateCollaborationMode(
 													matterCollaborationMode === "board" ? "lead" : "board",
@@ -585,7 +590,7 @@ export function ChatStage({
 												)
 											}
 										>
-											{matterCollaborationMode === "board" ? "切回轻量主责" : "切换为 Board 公告板"}
+											{matterCollaborationMode === "board" ? "切回轻量主责" : "升级为 Board 团队交付"}
 										</button>
 									)}
 								{hasBoardActivity && (

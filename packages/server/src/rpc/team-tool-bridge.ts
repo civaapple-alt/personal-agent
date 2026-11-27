@@ -16,6 +16,7 @@ import {
 	type SkillTrustScope,
 } from "@pa/contracts/skill-trust";
 import type { SpaceDocumentType, SpaceEntryKind } from "../storage/repos/space-repo.ts";
+import { type ModelSelection, parseModelSelection } from "./model-selection.ts";
 import type { VerificationRequest } from "./team-verification.ts";
 
 export type TeamToolCall =
@@ -60,6 +61,7 @@ export type TeamToolCall =
 			skills?: string[];
 			ownedScope?: string[];
 			acceptanceCriteria?: string;
+			modelOverride?: ModelSelection;
 	  }
 	| {
 			tool: "post_to_board";
@@ -226,7 +228,7 @@ function parseOptionalFiles(value: unknown): Array<{ path: string; content: stri
 	});
 }
 
-function parseCall(value: unknown): TeamToolCall {
+export function parseCall(value: unknown): TeamToolCall {
 	if (!value || typeof value !== "object") throw new Error("Expected a tool request");
 	if (!("tool" in value) || !("callId" in value) || !("args" in value)) throw new Error("Invalid tool request");
 	const callId = requiredString(value.callId, "callId", 256);
@@ -570,6 +572,10 @@ function parseCall(value: unknown): TeamToolCall {
 		const skills = "skills" in args ? parseOptionalStringList(args.skills, "skills", 16, 120) : undefined;
 		const ownedScope =
 			"ownedScope" in args ? parseOptionalStringList(args.ownedScope, "ownedScope", 24, 300) : undefined;
+		const modelOverride =
+			"modelOverride" in args && args.modelOverride !== undefined && args.modelOverride !== null
+				? (parseModelSelection(args.modelOverride) ?? undefined)
+				: undefined;
 		return {
 			tool: "spawn_board_agent",
 			callId,
@@ -581,6 +587,7 @@ function parseCall(value: unknown): TeamToolCall {
 			...(skills ? { skills } : {}),
 			...(ownedScope ? { ownedScope } : {}),
 			...(acceptanceCriteria ? { acceptanceCriteria } : {}),
+			...(modelOverride ? { modelOverride } : {}),
 		};
 	}
 	if (value.tool === "post_to_board") {

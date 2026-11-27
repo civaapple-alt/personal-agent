@@ -50,6 +50,20 @@ export default function boardExtension(pi: PiHostToolExtensionApi): void {
 						type: "string",
 						description: "Explicit acceptance checklist used by Coordinator/Verifier.",
 					},
+					modelOverride: {
+						type: "object",
+						properties: {
+							provider: { type: "string" },
+							model: { type: "string" },
+							thinkingLevel: {
+								type: "string",
+								enum: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+							},
+						},
+						required: ["provider", "model"],
+						additionalProperties: false,
+						description: "Optional explicit provider/model override (e.g. heterogeneous cross-model Verifier).",
+					},
 				},
 				required: ["agentId", "boardRole", "brief"],
 				additionalProperties: false,

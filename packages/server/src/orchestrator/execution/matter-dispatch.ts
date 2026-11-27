@@ -25,6 +25,7 @@ import {
 	resolveTurnTimeoutMs,
 } from "../types.ts";
 import { runBoardCollaborationTurn } from "./board-runner.ts";
+import { buildBoardToLeadHandoffBlock } from "./mode-handoff.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { resolveDiscussionMentionTargets } from "./prompts.ts";
 import { createTurnMonitor, type StalledMember } from "./turn-monitor.ts";
@@ -489,7 +490,9 @@ export async function dispatchMatterTurn(
 						"As the matter lead holding full context, do NOT bypass or answer on their behalf without involving them. Call `delegate_to_member` for each mentioned teammate with concrete context, file paths, and acceptance criteria from this matter (pass `verification` when asking them to verify, check, or review; when multiple teammates are mentioned in one turn, orchestrate them in logical order such as execution then verification), then integrate their evidence and reply to the user.",
 					].join("\n")
 				: "";
-		const effectiveTaskPrompt = [basePromptText, formattedFilesBlock, mentionRoutingNote]
+		const boardHandoffNote =
+			!isDiscussionTurn && !assignedIsArchitect ? buildBoardToLeadHandoffBlock(deps.store, matter.id) : "";
+		const effectiveTaskPrompt = [basePromptText, formattedFilesBlock, boardHandoffNote, mentionRoutingNote]
 			.filter(Boolean)
 			.join("\n\n");
 		let result: PromptRunResult;

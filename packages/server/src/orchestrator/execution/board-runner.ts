@@ -12,6 +12,7 @@ import {
 	type MatterRun,
 	truncateInline,
 } from "../types.ts";
+import { buildLeadToBoardHandoffBlock } from "./mode-handoff.ts";
 import type { BoardWorkerToolCall, ExecuteWorkerInput } from "./worker-runner.ts";
 
 export interface BoardRunnerDeps {
@@ -376,7 +377,7 @@ export async function runBoardCollaborationTurn(
 				status: existing?.status === "stopped" || existing?.status === "retired" ? existing.status : "waiting",
 				lastReadPostNo: existing?.lastReadPostNo ?? 0,
 				activePostNo: existing?.activePostNo ?? null,
-				modelOverride: existing?.modelOverride ?? null,
+				modelOverride: call.modelOverride ?? existing?.modelOverride ?? null,
 			});
 			emitMember(spawned);
 			return { spawned: true, member: toBoardMemberDto(spawned) };
@@ -460,9 +461,14 @@ export async function runBoardCollaborationTurn(
 			"Use `read_board_post` to inspect full post details when `hasBody` is indicated, and `post_to_board` to communicate asynchronously via `@mention`.",
 		].join("\n");
 
+		const leadHandoffContext =
+			agentId === "coordinator" && memberRow.lastReadPostNo === 0 && unreadSummaries.length === 0
+				? buildLeadToBoardHandoffBlock(deps.store, matter.id, run.userMessageId)
+				: "";
+		const baseInitialPrompt = input.prompt.trim() || "Coordinate this matter on the collaboration board.";
 		const taskPrompt =
 			agentId === "coordinator" && unreadSummaries.length === 0
-				? input.prompt.trim() || "Coordinate this matter on the collaboration board."
+				? [baseInitialPrompt, leadHandoffContext].filter(Boolean).join("\n\n")
 				: `Process your board wakeup for unread posts since #${memberRow.lastReadPostNo}.${agentId === "coordinator" && input.prompt.trim() ? `\n\n[User Request Context]\n${input.prompt.trim()}` : ""}`;
 
 		emitDispatchProgress({
@@ -686,6 +692,8 @@ export async function runBoardCollaborationTurn(
 				orgId: effectiveOrgId,
 				sourceUserMessageId: run.userMessageId,
 				...(lastSummaryPost ? { boardPostNo: lastSummaryPost.postNo } : {}),
+				...(run.effects.savedDocuments.length > 0 ? { spaceDocuments: run.effects.savedDocuments } : {}),
+				...(run.effects.skillProposals.length > 0 ? { skillProposals: run.effects.skillProposals } : {}),
 				progressSnapshot: buildProgressSnapshot({
 					outcome: "completed",
 					progress: run.lastProgress,
