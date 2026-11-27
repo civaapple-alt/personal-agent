@@ -85,7 +85,9 @@ export function NewSkillsDraftSection({
 											aria-label="Skill 保存位置"
 											disabled={disabled || !checked}
 											value={effectiveScope}
-											onChange={(e) => updateItem(idx, { storageScope: e.target.value as SkillStorageScope })}
+											onChange={(e) =>
+												updateItem(idx, { storageScope: e.target.value as SkillStorageScope })
+											}
 										>
 											{allowedStorageOptions.map((opt) => (
 												<option key={opt.value} value={opt.value}>

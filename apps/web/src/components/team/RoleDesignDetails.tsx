@@ -16,7 +16,9 @@ export function RoleCapabilityDetails({ draft }: { draft: RoleArchitectDraftDto 
 	return (
 		<div className="flex flex-col gap-1.5 rounded-sm border border-line bg-sidebar px-3 py-2.5 text-xs text-ink-secondary leading-relaxed">
 			<p className="m-0">工作方法：{skillsSummary}</p>
-			{missing.length > 0 && <p className="m-0 text-warn-text">缺少技能文件：{missing.join("、")}，执行前需配置。</p>}
+			{missing.length > 0 && (
+				<p className="m-0 text-warn-text">缺少技能文件：{missing.join("、")}，执行前需配置。</p>
+			)}
 			{(draft.template.mcpDependencies?.length ?? 0) > 0 && (
 				<p className="m-0">外部集成：{draft.template.mcpDependencies?.join("、")}，待运行核查。</p>
 			)}

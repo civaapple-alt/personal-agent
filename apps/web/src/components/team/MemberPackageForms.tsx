@@ -122,7 +122,11 @@ export function MemberPackageForms({
 				}
 			>
 				<FieldGroup label="导入后的角色使用范围" htmlFor={scopeSelectId}>
-					<Select id={scopeSelectId} value={selectedScopeKey} onChange={(e) => setSelectedScopeKey(e.target.value)}>
+					<Select
+						id={scopeSelectId}
+						value={selectedScopeKey}
+						onChange={(e) => setSelectedScopeKey(e.target.value)}
+					>
 						{scopeChoices.map((choice) => (
 							<option key={choice.key} value={choice.key}>
 								{choice.label}

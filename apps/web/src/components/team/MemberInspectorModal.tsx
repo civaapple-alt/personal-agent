@@ -25,8 +25,8 @@ import {
 	Tabs,
 	Textarea,
 } from "../../primitives/index.ts";
-import { defaultMemberGitName, formatMemberGitIdentity, getBotTheme } from "../../utils.ts";
 import { cn } from "../../utils/cn.ts";
+import { defaultMemberGitName, formatMemberGitIdentity, getBotTheme } from "../../utils.ts";
 
 const SCOPE_BADGE_TONE: Record<RoleScope, BadgeTone> = {
 	global: "neutral",
@@ -248,12 +248,7 @@ export function MemberInspectorModal({
 						{canDeleteRole &&
 							(confirmingDelete ? (
 								<>
-									<Button
-										variant="danger"
-										size="xs"
-										disabled={deleting}
-										onClick={() => void handleDelete()}
-									>
+									<Button variant="danger" size="xs" disabled={deleting} onClick={() => void handleDelete()}>
 										{deleting ? "删除中…" : "确认删除"}
 									</Button>
 									<Button

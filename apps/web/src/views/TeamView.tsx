@@ -34,8 +34,8 @@ import {
 	type TabItem,
 	Tabs,
 } from "../primitives/index.ts";
-import { applyOrgAiRoleOverrides, getBotTheme, resolveEffectivePrimaryContactId } from "../utils.ts";
 import { cn } from "../utils/cn.ts";
+import { applyOrgAiRoleOverrides, getBotTheme, resolveEffectivePrimaryContactId } from "../utils.ts";
 
 interface TeamViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -292,7 +292,9 @@ export function TeamView({
 									</span>
 								)}
 							</h2>
-							<p className="m-0 text-xs text-ink-muted">左侧选择角色，右侧直接查看职责、技能、不做边界与身份档案</p>
+							<p className="m-0 text-xs text-ink-muted">
+								左侧选择角色，右侧直接查看职责、技能、不做边界与身份档案
+							</p>
 						</div>
 						<div className="flex items-center gap-2 flex-wrap">
 							{(scopeCounts.org > 0 || scopeCounts.personal > 0) && (

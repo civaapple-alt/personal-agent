@@ -123,7 +123,7 @@ export function MatterCollabDrawer({
 					) : (
 						<div className="collab-section">
 							<div className="collab-events-toolbar">
-								<div className="memory-filter-tabs">
+								<div className="flex flex-wrap items-center gap-1.5">
 									<button
 										type="button"
 										className={`choice-chip ${!eventsKeyOnly ? "active" : ""}`}
@@ -139,7 +139,7 @@ export function MatterCollabDrawer({
 										仅看关键/异常事件
 									</button>
 								</div>
-								<span className="inline-participants-note">按最新时间倒序</span>
+								<span className="text-xs text-ink-muted">按最新时间倒序</span>
 							</div>
 							{visibleNotices.length === 0 ? (
 								<p className="muted-hint">当前过滤条件下暂无关键或异常事件。</p>
