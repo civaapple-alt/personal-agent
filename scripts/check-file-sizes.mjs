@@ -1,20 +1,11 @@
 #!/usr/bin/env node
-// File-size health check gate: blocks new >=1000-line files and enforces baselines on legacy watchlist files.
+// File-size health check gate: blocks any source/CSS file reaching >=1000 lines with zero exemptions.
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(process.cwd());
 const SCAN_ROOTS = ["apps", "packages", "pa-extensions", "pi-extensions"];
 const EXT_RE = /\.(?:ts|tsx|css)$/;
-
-// Pre-existing 0.9.0 files not covered by P-0902; cannot grow past their recorded baseline.
-const WATCHLIST_MAX_LINES = new Map([
-	["apps/web/src/styles/board.css", 1245],
-	["apps/web/src/styles/shell.css", 1159],
-	["apps/web/src/styles/chat-cards.css", 1075],
-	["apps/web/src/components/chat/MatterBoardPane.tsx", 1075],
-	["packages/server/src/storage/repos/board-repo.ts", 1010],
-]);
 
 function parseLimit(argv) {
 	const idx = argv.indexOf("--limit");
@@ -54,19 +45,11 @@ for (const root of SCAN_ROOTS) {
 }
 
 const violations = [];
-const watchlistReport = [];
-
 for (const file of allFiles.sort()) {
 	const rel = relative(ROOT, file).replaceAll("\\", "/");
 	const content = await readFile(file, "utf8");
 	const lines = content === "" ? 0 : content.replace(/\n$/, "").split("\n").length;
-	const baseline = WATCHLIST_MAX_LINES.get(rel);
-	if (baseline !== undefined) {
-		watchlistReport.push({ rel, lines, baseline });
-		if (lines > baseline) {
-			violations.push(`${rel}: ${lines} lines exceeds watchlist baseline (${baseline})`);
-		}
-	} else if (lines >= limit) {
+	if (lines >= limit) {
 		violations.push(`${rel}: ${lines} lines (>= ${limit} limit)`);
 	}
 }
@@ -78,7 +61,5 @@ if (violations.length > 0) {
 	}
 	process.exitCode = 1;
 } else {
-	console.log(
-		`PASS file-sizes (${allFiles.length} source/CSS files checked, default limit <${limit} lines; ${watchlistReport.length} legacy watchlist items within baseline)`,
-	);
+	console.log(`PASS file-sizes (${allFiles.length} source/CSS files checked, all <${limit} lines, 0 exemptions)`);
 }

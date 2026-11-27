@@ -151,13 +151,12 @@ flowchart TB
 | `web/` | 59 → 79 | 26,293 → 26,618 | 22 → 21 | 4 → 0 |
 | 合计 | 145 → 172 | 51,235 → 51,691 | 38 → 37 | 7 → 0 |
 
-**0.9.x 热点拆分结果（`P-0902`）**：已将此前 ≥1,000 行的 5 个高频热点文件按生命周期与领域拆分至 `<1,000` 行，并纳入 `npm run check:sizes` 行数门禁：
+**0.9.x 热点拆分与 0 豁免门禁（`P-0902`）**：已将仓库内全部 ≥1,000 行的代码与样式文件拆分为职责清晰的模块，并将 `npm run check:sizes` 纳入 `npm run check`，全仓源码与样式文件均保持 `<1,000` 行（0 豁免）：
 
 - [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（拆出 `worker-setup.ts`、`worker-tool-handler.ts`、`worker-telemetry.ts`）
-- [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（拆出 `space-types.ts`）
-- [App.tsx](../../apps/web/src/App.tsx)（拆出 `AppStageRouter.tsx`）
-- [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）
-- [deliverables.css](../../apps/web/src/styles/deliverables.css)（拆出 `spaces.css` 与 `workspaces.css`）
+- [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（拆出 `space-types.ts`）与 [board-repo.ts](../../packages/server/src/storage/repos/board-repo.ts)（拆出 `board-types.ts`）
+- [App.tsx](../../apps/web/src/App.tsx)（拆出 `AppStageRouter.tsx`）、[SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）与 [MatterBoardPane.tsx](../../apps/web/src/components/chat/MatterBoardPane.tsx)（拆出 `BoardMembersTab.tsx`、`BoardPostsTab.tsx`）
+- 样式表：[deliverables.css](../../apps/web/src/styles/deliverables.css)（拆出 `spaces.css`、`workspaces.css`）、[board.css](../../apps/web/src/styles/board.css)（拆出 `board-feed.css`）、[chat-cards.css](../../apps/web/src/styles/chat-cards.css)（拆出 `chat-docks.css`）、[shell.css](../../apps/web/src/styles/shell.css)（拆出 `shell-nav.css`）
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |

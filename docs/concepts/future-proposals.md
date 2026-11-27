@@ -43,12 +43,14 @@
 ### P-0902：核心热点大文件按生命周期拆分与规模软门禁（优先级：P1 · 已完成）
 
 - **来源**：0.8.x 架构核验
-- **落地情况**：已按生命周期与领域边界完成 5 个热点文件拆分，均降至 `<1,000` 行，并新增 `npm run check:sizes`（[check-file-sizes.mjs](../../scripts/check-file-sizes.mjs)）门禁：
+- **落地情况**：已按生命周期与领域边界完成全部 5 个 `P-0902` 热点文件及其余 5 个 0.9.0 超千行文件拆分，全仓 350+ 源码/样式文件均 `<1,000` 行（0 豁免），并已将 `npm run check:sizes`（[check-file-sizes.mjs](../../scripts/check-file-sizes.mjs)）纳入 `npm run check`：
   - [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（1,486 → 744 行，拆出 `worker-setup.ts`、`worker-tool-handler.ts`、`worker-telemetry.ts`）
   - [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（1,040 → 858 行，拆出 `space-types.ts`）
+  - [board-repo.ts](../../packages/server/src/storage/repos/board-repo.ts)（1,010 → 703 行，拆出 `board-types.ts`）
   - [App.tsx](../../apps/web/src/App.tsx)（1,049 → 805 行，拆出 `AppStageRouter.tsx`）
   - [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（1,002 → 697 行，拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）
-  - [deliverables.css](../../apps/web/src/styles/deliverables.css)（1,811 → 675 行，拆出 `spaces.css` 与 `workspaces.css`）
+  - [MatterBoardPane.tsx](../../apps/web/src/components/chat/MatterBoardPane.tsx)（1,075 → 592 行，拆出 `BoardMembersTab.tsx`、`BoardPostsTab.tsx`）
+  - 样式表拆分：[deliverables.css](../../apps/web/src/styles/deliverables.css)（→ `spaces.css` / `workspaces.css`）、[board.css](../../apps/web/src/styles/board.css)（→ `board-feed.css`）、[chat-cards.css](../../apps/web/src/styles/chat-cards.css)（→ `chat-docks.css`）、[shell.css](../../apps/web/src/styles/shell.css)（→ `shell-nav.css`）
 
 ### P-0903：多并发 Pi RPC 进程模型基准测试与天花板量化（优先级：P2）
 
