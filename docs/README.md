@@ -7,7 +7,7 @@
 | 从预构建包启动个人工作台并发送第一条提问 | [安装与首次运行](tutorials/getting-started.md) |
 | 加入组织、安排事项、审阅成果或调整岗位模型 | [在工作台安排事项与验收成果](guides/user-guide.md) |
 | 查阅随版本发布的工作台功能说明 | [工作台功能速查](guides/agent-workbench.md) · [English](guides/agent-workbench.en.md) |
-| 下载已发布版本；了解升级要求与 0.8.x LTS 基线 | [0.8.x LTS 候选基线](releases/v0.8-lts-baseline.md) · [0.8.3 发布说明](releases/v0.8.3.md) · [0.8.2 发布说明](releases/v0.8.2.md) · [0.8.1 发布说明](releases/v0.8.1.md) · [0.8.0 发布说明](releases/v0.8.0.md) · [0.7.1 发布说明](releases/v0.7.1.md) · [0.7.0 发布说明](releases/v0.7.0.md) |
+| 下载已发布版本；了解升级要求与 0.8.x LTS 基线 | [0.9.0 发布说明](releases/v0.9.0.md) · [0.8.x LTS 候选基线](releases/v0.8-lts-baseline.md) · [0.8.3 发布说明](releases/v0.8.3.md) · [0.8.2 发布说明](releases/v0.8.2.md) · [0.8.1 发布说明](releases/v0.8.1.md) · [0.8.0 发布说明](releases/v0.8.0.md) · [0.7.1 发布说明](releases/v0.7.1.md) · [0.7.0 发布说明](releases/v0.7.0.md) |
 
 ## 部署与管理团队
 
