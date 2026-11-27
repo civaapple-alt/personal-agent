@@ -1,0 +1,27 @@
+@layer theme, base, legacy, components, utilities;
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./primitives.css" layer(legacy);
+@import "./shell.css" layer(legacy);
+@import "./shell-nav.css" layer(legacy);
+@import "./chat-stream.css" layer(legacy);
+@import "./matter-delegation.css" layer(legacy);
+@import "./chat-cards.css" layer(legacy);
+@import "./chat-docks.css" layer(legacy);
+@import "./chat-composer.css" layer(legacy);
+@import "./model-picker.css" layer(legacy);
+@import "./chat-roster.css" layer(legacy);
+@import "./deliverables.css" layer(legacy);
+@import "./spaces.css" layer(legacy);
+@import "./workspaces.css" layer(legacy);
+@import "./team.css" layer(legacy);
+@import "./role-architect.css" layer(legacy);
+@import "./settings.css" layer(legacy);
+@import "./account-admin.css" layer(legacy);
+@import "./board.css" layer(legacy);
+@import "./board-feed.css" layer(legacy);
+@import "./view-transitions.css" layer(legacy);
+@import "./responsive.css" layer(legacy);
+
+@source "../";
+@source "../../../../pa-extensions/*/web";

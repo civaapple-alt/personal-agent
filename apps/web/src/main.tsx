@@ -2,28 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { ErrorBoundary } from "./primitives/ErrorBoundary.tsx";
-import "./styles/tokens.css";
-import "./styles/primitives.css";
-import "./styles/shell.css";
-import "./styles/shell-nav.css";
-import "./styles/chat-stream.css";
-import "./styles/matter-delegation.css";
-import "./styles/chat-cards.css";
-import "./styles/chat-docks.css";
-import "./styles/chat-composer.css";
-import "./styles/model-picker.css";
-import "./styles/chat-roster.css";
-import "./styles/deliverables.css";
-import "./styles/spaces.css";
-import "./styles/workspaces.css";
-import "./styles/team.css";
-import "./styles/role-architect.css";
-import "./styles/settings.css";
-import "./styles/account-admin.css";
-import "./styles/board.css";
-import "./styles/board-feed.css";
-import "./styles/view-transitions.css";
-import "./styles/responsive.css";
 
 const container = document.getElementById("root");
 if (!container) {
