@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { BoardRepo } from "./repos/board-repo.ts";
 import { MatterRepo } from "./repos/matter-repo.ts";
 import { MemberRepo } from "./repos/member-repo.ts";
 import { OrgRbacRepo } from "./repos/org-rbac-repo.ts";
@@ -34,15 +35,17 @@ export class PersonalAgentStore {
 	readonly spaces: SpaceRepo;
 	readonly workspaceFolders: WorkspaceFolderRepo;
 	readonly skillTrust: SkillTrustRepo;
+	readonly board: BoardRepo;
 
 	constructor(db: DatabaseSync, options?: { spacesDir?: string }) {
 		this.spaces = new SpaceRepo(db, new SpaceGitStore(options?.spacesDir));
 		this.workspaceFolders = new WorkspaceFolderRepo(db);
 		this.skillTrust = new SkillTrustRepo(db);
+		this.board = new BoardRepo(db);
 		this.members = new MemberRepo(db);
 		this.orgs = new OrganizationRepo(db);
 		this.workspaces = new WorkspaceRepo(db, this.orgs);
-		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces);
+		this.matters = new MatterRepo(db, this.members, this.orgs, this.workspaces, this.board);
 		this.sessions = new SessionRepo(db);
 		this.userAuth = new UserAuthRepo(db);
 		this.orgRbac = new OrgRbacRepo(db, this.members);
@@ -179,6 +182,39 @@ export class PersonalAgentStore {
 	}
 	listMessages(matterId: string, channel?: Parameters<MatterRepo["listMessages"]>[1]) {
 		return this.matters.listMessages(matterId, channel);
+	}
+
+	// ---- Split Events & Matter Board ----
+	getMatterBoardMeta(matterId: string) {
+		return this.board.getMatterBoardMeta(matterId);
+	}
+	appendEvent(input: Parameters<BoardRepo["appendEvent"]>[0]) {
+		return this.board.appendEvent(input);
+	}
+	listEvents(matterId: string, options?: Parameters<BoardRepo["listEvents"]>[1]) {
+		return this.board.listEvents(matterId, options);
+	}
+	createBoardPost(input: Parameters<BoardRepo["createBoardPost"]>[0]) {
+		return this.board.createBoardPost(input);
+	}
+	listBoardPostSummaries(matterId: string, options?: Parameters<BoardRepo["listBoardPostSummaries"]>[1]) {
+		return this.board.listBoardPostSummaries(matterId, options);
+	}
+	getBoardPost(matterId: string, postNo: number) {
+		return this.board.getBoardPost(matterId, postNo);
+	}
+	upsertBoardMember(input: Parameters<BoardRepo["upsertBoardMember"]>[0]) {
+		return this.board.upsertBoardMember(input);
+	}
+	listBoardMembers(matterId: string) {
+		return this.board.listBoardMembers(matterId);
+	}
+	updateBoardMemberState(
+		matterId: string,
+		agentId: string,
+		patch: Parameters<BoardRepo["updateBoardMemberState"]>[2],
+	) {
+		return this.board.updateBoardMemberState(matterId, agentId, patch);
 	}
 
 	// ---- Worker Sessions & Leases ----

@@ -1,7 +1,65 @@
 export const MESSAGE_WORKSPACE_ID_SQL =
 	"CASE WHEN json_valid(metadata_json) THEN json_extract(metadata_json, '$.workspaceId') END";
 
-// The complete schema for newly created 0.7.0 databases.
+// The complete schema for Personal Agent databases (0.9.0 with 0.8.x backward-compatible columns/tables).
+export const MATTER_BOARD_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS matter_events (
+	id TEXT PRIMARY KEY,
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	run_id TEXT NOT NULL,
+	agent_id TEXT,
+	board_post_no INTEGER,
+	event_type TEXT NOT NULL,
+	payload_json TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS matter_board_posts (
+	id TEXT PRIMARY KEY,
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	post_no INTEGER NOT NULL,
+	author_type TEXT NOT NULL CHECK (author_type IN ('agent', 'user', 'monitor')),
+	author_id TEXT NOT NULL,
+	kind TEXT NOT NULL CHECK (kind IN ('assign', 'progress', 'handoff', 'verify_pass', 'verify_rework', 'escalate', 'clarification', 'summary')),
+	mentions_json TEXT NOT NULL DEFAULT '[]',
+	ref_post_nos_json TEXT NOT NULL DEFAULT '[]',
+	summary TEXT NOT NULL,
+	body TEXT NOT NULL DEFAULT '',
+	artifacts_json TEXT,
+	verification_json TEXT,
+	org_id TEXT,
+	workspace_id TEXT,
+	created_at TEXT NOT NULL,
+	UNIQUE (matter_id, post_no)
+);
+
+CREATE TABLE IF NOT EXISTS matter_board_members (
+	matter_id TEXT NOT NULL REFERENCES matters(id) ON DELETE CASCADE,
+	agent_id TEXT NOT NULL,
+	source_member_id TEXT REFERENCES team_members(id) ON DELETE SET NULL,
+	display_name TEXT NOT NULL,
+	board_role TEXT NOT NULL CHECK (board_role IN ('coordinator', 'builder', 'verifier')),
+	brief TEXT NOT NULL DEFAULT '',
+	skills_json TEXT NOT NULL DEFAULT '[]',
+	status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('working', 'waiting', 'blocked_human', 'stopped', 'retired')),
+	owned_scope_json TEXT NOT NULL DEFAULT '[]',
+	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	last_read_post_no INTEGER NOT NULL DEFAULT 0,
+	active_post_no INTEGER,
+	model_override_json TEXT,
+	worktree_path TEXT,
+	metrics_json TEXT,
+	updated_at TEXT NOT NULL,
+	PRIMARY KEY (matter_id, agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_matter_events_matter ON matter_events(matter_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_matter_events_post ON matter_events(matter_id, board_post_no, created_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_board_posts_matter ON matter_board_posts(matter_id, post_no DESC);
+`;
+
 export const SCHEMA_SQL = `
 CREATE TABLE audit_logs (
 	id TEXT PRIMARY KEY,
@@ -31,6 +89,9 @@ CREATE TABLE matter_messages (
 	sender_id TEXT NOT NULL,
 	content TEXT NOT NULL,
 	metadata_json TEXT,
+	kind TEXT NOT NULL DEFAULT 'chat' CHECK (kind IN ('chat', 'ai_request', 'human_decision', 'observer', 'system_summary')),
+	decision_status TEXT CHECK (decision_status IS NULL OR decision_status IN ('pending', 'approved', 'dismissed', 'answered')),
+	board_post_no INTEGER,
 	created_at TEXT NOT NULL
 );
 
@@ -40,6 +101,8 @@ CREATE TABLE matters (
 	summary TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'waiting_user', 'archived')),
 	lead_member_id TEXT REFERENCES team_members(id),
+	collaboration_mode TEXT NOT NULL DEFAULT 'lead' CHECK (collaboration_mode IN ('lead', 'board')),
+	coordinator_member_id TEXT REFERENCES team_members(id),
 	workspace_id TEXT REFERENCES workspace_links(id),
 	org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
 	ai_member_ids_json TEXT,
@@ -326,4 +389,7 @@ CREATE TABLE skill_trust_policies (
 );
 
 CREATE INDEX idx_skill_trust_policies_scope ON skill_trust_policies(storage_scope, scope_id);
+
+CREATE INDEX idx_matter_messages_decision_status ON matter_messages(matter_id, decision_status) WHERE decision_status IS NOT NULL;
+${MATTER_BOARD_SCHEMA_SQL}
 `;
