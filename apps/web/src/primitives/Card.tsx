@@ -64,7 +64,10 @@ export function CardBody({ className, children, ...props }: ComponentProps<"div"
 export function CardFooter({ className, children, ...props }: ComponentProps<"div">) {
 	return (
 		<div
-			className={cn("mt-3 pt-3 border-t border-line-subtle flex items-center justify-end gap-2 flex-wrap", className)}
+			className={cn(
+				"mt-3 pt-3 border-t border-line-subtle flex items-center justify-end gap-2 flex-wrap",
+				className,
+			)}
 			{...props}
 		>
 			{children}

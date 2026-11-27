@@ -18,10 +18,7 @@ const MAX_WIDTH_CLASS: Record<NonNullable<PageShellProps["maxWidth"]>, string> =
 export function PageShell({ maxWidth = "md", className, innerClassName, children }: PageShellProps) {
 	return (
 		<div
-			className={cn(
-				"flex-1 min-h-0 overflow-y-auto px-[var(--page-pad-x)] py-[var(--page-pad-y)] pb-9",
-				className,
-			)}
+			className={cn("flex-1 min-h-0 overflow-y-auto px-[var(--page-pad-x)] py-[var(--page-pad-y)] pb-9", className)}
 		>
 			<div className={cn("mx-auto w-full min-w-0", MAX_WIDTH_CLASS[maxWidth], innerClassName)}>{children}</div>
 		</div>

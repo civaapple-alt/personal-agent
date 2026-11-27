@@ -19,15 +19,7 @@ export interface TabsProps {
 }
 
 /** Accessible tablist supporting underline and pill styles with ArrowLeft/ArrowRight navigation. */
-export function Tabs({
-	items,
-	value,
-	onChange,
-	variant = "underline",
-	size = "md",
-	ariaLabel,
-	className,
-}: TabsProps) {
+export function Tabs({ items, value, onChange, variant = "underline", size = "md", ariaLabel, className }: TabsProps) {
 	const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
 	const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
