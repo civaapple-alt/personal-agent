@@ -349,6 +349,7 @@ export function App() {
 		setSelectedMemberId(inheritedLeadId);
 		setDraftModelSelection(currentMatter.modelSelection ?? null);
 		setDraftMatterVisibility(currentMatter.visibility ?? "org");
+		initiation.setDraftCollaborationMode(currentMatter.collaborationMode ?? "lead");
 		initiation.setDraftCollaboratorIds(currentMatter.collaboratorIds ?? []);
 		setDraftAiMemberIds(currentMatter.aiMemberIds ?? null);
 		initiation.syncDraftRoster(
@@ -489,6 +490,7 @@ export function App() {
 		draftObserverMemberIds: initiation.draftObserverMemberIds,
 		draftCollaboratorIds: initiation.draftCollaboratorIds,
 		draftVisibility: draftMatterVisibility,
+		draftCollaborationMode: initiation.draftCollaborationMode,
 		draftObserversEnabled,
 		draftModelSelection,
 		headerContact,
@@ -741,12 +743,14 @@ export function App() {
 									draftConsultMemberIds: initiation.draftConsultMemberIds,
 									draftCollaboratorIds: initiation.draftCollaboratorIds,
 									draftVisibility: draftMatterVisibility,
+									draftCollaborationMode: initiation.draftCollaborationMode,
 									assessment: initiation.assessment,
 									modelAssessing: initiation.modelAssessing,
 									modelAssessmentError: initiation.modelAssessmentError,
 									onUpdateDraftAiMemberIds: setDraftAiMemberIds,
 									onUpdateDraftCollaboratorIds: initiation.setDraftCollaboratorIds,
 									onUpdateDraftVisibility: setDraftMatterVisibility,
+									onUpdateDraftCollaborationMode: initiation.setDraftCollaborationMode,
 									onSetScopeMode: initiation.setScopeMode,
 									onToggleObserverPreset: () => actions.handleToggleObserversEnabled(!draftObserversEnabled),
 									onToggleDraftMemberConsult: initiation.toggleDraftMemberConsult,
@@ -798,6 +802,7 @@ export function App() {
 								onToggleObserversEnabled={actions.handleToggleObserversEnabled}
 								onUpdateMatterObservers={actions.handleUpdateMatterObservers}
 								onUpdateMatterCollaborators={actions.handleUpdateMatterCollaborators}
+								onUpdateCollaborationMode={actions.handleUpdateCollaborationMode}
 								onApproveAiRequest={(matterId, messageId) =>
 									void actions.handleApproveAiRequest(matterId, messageId)
 								}
