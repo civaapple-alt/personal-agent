@@ -146,13 +146,25 @@ function normalizeMonitorSilenceMs(explicitMs?: number): number {
 	return 30_000;
 }
 
+function normalizeMaxReworkRounds(explicitRounds?: number): number {
+	if (typeof explicitRounds === "number" && Number.isFinite(explicitRounds) && explicitRounds > 0) {
+		return Math.trunc(explicitRounds);
+	}
+	const rawEnv = process.env.PA_BOARD_MAX_REWORK_ROUNDS;
+	if (rawEnv) {
+		const parsed = Number(rawEnv);
+		if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed);
+	}
+	return 3;
+}
+
 /**
  * Orchestrates 0.9.0 Board collaboration mode:
  * - Dynamic Coordinator-driven agent spawning (`spawn_board_agent`)
  * - Asynchronous `@mention` wakeup with incremental cursor (`last_read_post_no`) & summary-only injection
  * - Observe-by-default Coordinator filtering (Builder<->Verifier loops do not wake Coordinator)
- * - Read/test-only Verifier boundary & anti-self-verification guard
- * - HITL `clarification @user` pause & `@monitor` stall detection
+ * - Read/test-only Verifier boundary, anti-self-verification guard, same-repo builder write serialization
+ * - HITL `clarification @user` pause, `verify_rework` circuit breaker, `@monitor` stall detection & fault escalation
  */
 export async function runBoardCollaborationTurn(
 	deps: BoardRunnerDeps,
@@ -161,6 +173,7 @@ export async function runBoardCollaborationTurn(
 	const { matter, workspace, coordinatorBaseMember, effectiveOrgId, input, run, emitDispatchProgress } = ctx;
 	const repoPath = resolve(workspace?.repoPath ?? deps.defaultCwd);
 	const silenceThresholdMs = normalizeMonitorSilenceMs(input.boardMonitorSilenceMs);
+	const maxReworkRounds = normalizeMaxReworkRounds(input.boardMaxReworkRounds);
 	const maxTotalSteps = 48;
 
 	const emitMember = (member: BoardMemberRecord) => {
@@ -186,24 +199,37 @@ export async function runBoardCollaborationTurn(
 			lastReadPostNo: 0,
 		});
 		emitMember(coordinatorRecord);
+	} else if (coordinatorRecord.status === "stopped") {
+		coordinatorRecord =
+			deps.store.updateBoardMemberState(matter.id, "coordinator", { status: "waiting" }) ?? coordinatorRecord;
+		emitMember(coordinatorRecord);
 	}
 
 	const wakeQueue: string[] = [];
 	const queuedSet = new Set<string>();
 	const pendingRewake = new Set<string>();
 	const activeWorkers = new Map<string, Promise<void>>();
+	const activeBuilderRepoPaths = new Map<string, string>();
 	const unresolvedTargets = new Set<string>();
 	const nudgeCounts = new Map<string, number>();
+	const reworkCounts = new Map<string, number>();
 
 	let pausedForHuman = false;
 	let clarificationSummary = "";
 	let coordinatorSummarized = false;
 	let needsCoordinatorSummary = false;
+	let coordinatorRetries = 0;
+	let coordinatorFailed = false;
+	let coordinatorError = "";
+	const workerFailures: Array<{ agentId: string; boardRole: string; error: string }> = [];
 	let lastCoordinatorResult: PromptRunResult | null = null;
 	let lastCoordinatorText = "";
 	const summaryState: { post: BoardPostRecord | null } = { post: null };
 	let lastActivityAt = Date.now();
 	let totalSteps = 0;
+
+	const resolveMemberRepoKey = (member: BoardMemberRecord): string =>
+		member.worktreePath?.trim() ? resolve(member.worktreePath) : repoPath;
 
 	const enqueueAgent = (agentId: string) => {
 		const normalized = agentId.trim().replace(/^@+/, "");
@@ -223,7 +249,7 @@ export async function runBoardCollaborationTurn(
 
 	const shouldWakeCoordinatorOnPost = (post: BoardPostRecord): boolean => {
 		if (post.authorType === "agent" && post.authorId === "coordinator") return false;
-		if (post.mentions.includes("coordinator") || post.mentions.includes("all")) return true;
+		if (post.mentions.includes("coordinator")) return true;
 		if (post.kind === "escalate" || post.kind === "summary") return true;
 		if (
 			post.kind === "clarification" &&
@@ -236,9 +262,29 @@ export async function runBoardCollaborationTurn(
 		return false;
 	};
 
+	const resolveReworkTarget = (post: BoardPostRecord, memberMap: Map<string, BoardMemberRecord>): string | null => {
+		const explicitAuthor = post.verification?.authorAgentId?.trim();
+		if (explicitAuthor && explicitAuthor !== "coordinator" && memberMap.has(explicitAuthor)) {
+			return explicitAuthor;
+		}
+		for (const mention of post.mentions) {
+			if (mention !== "coordinator" && mention !== "user" && mention !== "monitor" && memberMap.has(mention)) {
+				return mention;
+			}
+		}
+		const targetHint = post.verification?.target?.trim();
+		if (targetHint && targetHint !== "coordinator" && memberMap.has(targetHint)) {
+			return targetHint;
+		}
+		return null;
+	};
+
 	const routePostCreated = (post: BoardPostRecord) => {
 		lastActivityAt = Date.now();
 		emitPost(post);
+
+		const members = deps.store.listBoardMembers(matter.id);
+		const memberMap = new Map(members.map((m) => [m.agentId, m]));
 
 		if (post.authorType === "agent") {
 			if (
@@ -252,11 +298,52 @@ export async function runBoardCollaborationTurn(
 			}
 			if (post.kind === "verify_pass") {
 				needsCoordinatorSummary = true;
+				const passedTarget = post.verification?.authorAgentId?.trim() || post.verification?.target?.trim() || "";
+				if (passedTarget) reworkCounts.delete(passedTarget);
 			}
 			if (post.authorId === "coordinator" && post.kind === "summary") {
 				coordinatorSummarized = true;
 				needsCoordinatorSummary = false;
 				summaryState.post = post;
+			}
+		}
+
+		if (post.kind === "verify_rework") {
+			const reworkTarget = resolveReworkTarget(post, memberMap);
+			if (reworkTarget) {
+				const nextReworkCount = (reworkCounts.get(reworkTarget) ?? 0) + 1;
+				reworkCounts.set(reworkTarget, nextReworkCount);
+				if (nextReworkCount >= maxReworkRounds) {
+					unresolvedTargets.delete(reworkTarget);
+					const alertEvent = deps.store.appendEvent({
+						matterId: matter.id,
+						runId: run.userMessageId || "board",
+						agentId: reworkTarget,
+						boardPostNo: post.postNo,
+						eventType: "monitor_alert",
+						payload: {
+							targetAgentId: reworkTarget,
+							reworkCount: nextReworkCount,
+							maxReworkRounds,
+							reason: "rework_limit_exceeded",
+						},
+					});
+					emitEvent(alertEvent);
+					const escalatePost = deps.store.createBoardPost({
+						matterId: matter.id,
+						authorType: "monitor",
+						authorId: "monitor",
+						kind: "escalate",
+						mentions: ["coordinator"],
+						refPostNos: [post.postNo],
+						summary: `@monitor 熔断告警：@${reworkTarget} 连续返工达到上限 (${nextReworkCount}/${maxReworkRounds})，已停止自动派发并升级 @coordinator 裁决。`,
+						body: "",
+						orgId: effectiveOrgId,
+						workspaceId: workspace?.id ?? null,
+					});
+					routePostCreated(escalatePost);
+					return;
+				}
 			}
 		}
 
@@ -303,9 +390,6 @@ export async function runBoardCollaborationTurn(
 			return;
 		}
 
-		const members = deps.store.listBoardMembers(matter.id);
-		const memberMap = new Map(members.map((m) => [m.agentId, m]));
-
 		if (post.kind === "assign" || post.kind === "handoff" || post.kind === "verify_rework") {
 			for (const target of post.mentions) {
 				const targetMember = memberMap.get(target);
@@ -316,24 +400,13 @@ export async function runBoardCollaborationTurn(
 		}
 
 		const targetsToWake = new Set<string>();
-		if (post.mentions.includes("all")) {
-			for (const member of members) {
-				if (member.agentId === post.authorId) continue;
-				if (member.agentId === "coordinator") {
-					if (shouldWakeCoordinatorOnPost(post)) targetsToWake.add("coordinator");
-				} else {
-					targetsToWake.add(member.agentId);
-				}
-			}
-		} else {
-			for (const mention of post.mentions) {
-				if (mention === "user") continue;
-				if (mention === post.authorId) continue;
-				if (mention === "coordinator") {
-					if (shouldWakeCoordinatorOnPost(post)) targetsToWake.add("coordinator");
-				} else if (memberMap.has(mention)) {
-					targetsToWake.add(mention);
-				}
+		for (const mention of post.mentions) {
+			if (mention === "user") continue;
+			if (mention === post.authorId) continue;
+			if (mention === "coordinator") {
+				if (shouldWakeCoordinatorOnPost(post)) targetsToWake.add("coordinator");
+			} else if (memberMap.has(mention)) {
+				targetsToWake.add(mention);
 			}
 		}
 		if (!targetsToWake.has("coordinator") && shouldWakeCoordinatorOnPost(post)) {
@@ -396,6 +469,10 @@ export async function runBoardCollaborationTurn(
 		if (!caller) {
 			throw new Error(`Unknown board agent: ${callerAgentId}`);
 		}
+		const normalizedMentions = call.mentions.map((m) => m.trim().replace(/^@+/, "")).filter(Boolean);
+		if (normalizedMentions.some((m) => m.toLowerCase() === "all")) {
+			throw new Error("Unrestricted @all mentions are forbidden; mention specific agentId(s) explicitly.");
+		}
 		const isVerificationKind: boolean =
 			call.kind === "verify_pass" || call.kind === "verify_rework" || Boolean(call.verification);
 		if (isVerificationKind) {
@@ -420,7 +497,7 @@ export async function runBoardCollaborationTurn(
 			authorType: "agent",
 			authorId: callerAgentId,
 			kind: call.kind as BoardPostKind,
-			mentions: call.mentions,
+			mentions: normalizedMentions,
 			refPostNos: call.refPostNos,
 			summary: call.summary,
 			body: call.body ?? "",
@@ -479,6 +556,8 @@ export async function runBoardCollaborationTurn(
 
 		const runPromise = (async () => {
 			const finalizedPostNo = maxSeenPostNo;
+			let shouldRetryCoordinator = false;
+			let workerErrored = false;
 			try {
 				const result = await deps.executeWithWorker({
 					matterId: matter.id,
@@ -516,24 +595,95 @@ export async function runBoardCollaborationTurn(
 						lastCoordinatorText = result.assistantText.trim();
 					}
 				}
+			} catch (error) {
+				if (!run.cancelled && !run.controller.signal.aborted) {
+					workerErrored = true;
+					const errMsg = error instanceof Error ? error.message : String(error);
+					workerFailures.push({ agentId, boardRole: memberRow.boardRole, error: errMsg });
+					const failEvent = deps.store.appendEvent({
+						matterId: matter.id,
+						runId: run.userMessageId || "board",
+						agentId,
+						eventType: "monitor_alert",
+						payload: {
+							agentId,
+							boardRole: memberRow.boardRole,
+							error: truncateInline(errMsg, 320),
+							reason: "worker_execution_failed",
+						},
+					});
+					emitEvent(failEvent);
+					if (agentId === "coordinator") {
+						if (coordinatorRetries < 1) {
+							coordinatorRetries += 1;
+							shouldRetryCoordinator = true;
+							const retryEvent = deps.store.appendEvent({
+								matterId: matter.id,
+								runId: run.userMessageId || "board",
+								agentId: "coordinator",
+								eventType: "monitor_alert",
+								payload: {
+									agentId: "coordinator",
+									retryCount: coordinatorRetries,
+									error: truncateInline(errMsg, 320),
+									reason: "coordinator_retry",
+								},
+							});
+							emitEvent(retryEvent);
+						} else {
+							coordinatorFailed = true;
+							coordinatorError = errMsg;
+							wakeQueue.length = 0;
+							queuedSet.clear();
+							pendingRewake.clear();
+						}
+					} else {
+						unresolvedTargets.delete(agentId);
+						const stoppedMember = deps.store.updateBoardMemberState(matter.id, agentId, { status: "stopped" });
+						if (stoppedMember) emitMember(stoppedMember);
+						const failPost = deps.store.createBoardPost({
+							matterId: matter.id,
+							authorType: "monitor",
+							authorId: "monitor",
+							kind: "escalate",
+							mentions: ["coordinator"],
+							summary: `@monitor 故障告警：@${agentId} (${memberRow.boardRole}) 执行异常已暂停，请 @coordinator 接管或重新分工。`,
+							body: `Error: ${errMsg}`,
+							orgId: effectiveOrgId,
+							workspaceId: workspace?.id ?? null,
+						});
+						routePostCreated(failPost);
+					}
+				}
 			} finally {
 				lastActivityAt = Date.now();
 				const latestMember = deps.store.getBoardMember(matter.id, agentId);
 				if (latestMember) {
-					const nextLastRead = Math.max(latestMember.lastReadPostNo, finalizedPostNo);
+					const nextLastRead = workerErrored
+						? latestMember.lastReadPostNo
+						: Math.max(latestMember.lastReadPostNo, finalizedPostNo);
 					const preserveStatus =
 						latestMember.status === "blocked_human" ||
 						latestMember.status === "stopped" ||
 						latestMember.status === "retired";
+					const nextStatus =
+						agentId === "coordinator" && coordinatorFailed
+							? "stopped"
+							: preserveStatus
+								? latestMember.status
+								: "waiting";
 					const settled = deps.store.updateBoardMemberState(matter.id, agentId, {
-						status: preserveStatus ? latestMember.status : "waiting",
+						status: nextStatus,
 						lastReadPostNo: nextLastRead,
 						activePostNo: null,
 					});
 					if (settled) emitMember(settled);
 				}
+				activeBuilderRepoPaths.delete(agentId);
 				activeWorkers.delete(agentId);
-				if (pendingRewake.delete(agentId) && !pausedForHuman) {
+				if (shouldRetryCoordinator && !pausedForHuman && !run.cancelled && !run.controller.signal.aborted) {
+					enqueueAgent("coordinator");
+				} else if (pendingRewake.delete(agentId) && !pausedForHuman && !coordinatorFailed) {
 					enqueueAgent(agentId);
 				}
 			}
@@ -615,8 +765,9 @@ export async function runBoardCollaborationTurn(
 		return true;
 	};
 
-	while (!run.cancelled && !run.controller.signal.aborted && totalSteps < maxTotalSteps) {
-		while (wakeQueue.length > 0 && !pausedForHuman && totalSteps < maxTotalSteps) {
+	while (!run.cancelled && !run.controller.signal.aborted && !coordinatorFailed && totalSteps < maxTotalSteps) {
+		const deferredBuilders: string[] = [];
+		while (wakeQueue.length > 0 && !pausedForHuman && !coordinatorFailed && totalSteps < maxTotalSteps) {
 			const nextAgentId = wakeQueue.shift()!;
 			queuedSet.delete(nextAgentId);
 			if (activeWorkers.has(nextAgentId)) {
@@ -632,8 +783,29 @@ export async function runBoardCollaborationTurn(
 			) {
 				continue;
 			}
+			if (memberRow.boardRole === "builder") {
+				const repoKey = resolveMemberRepoKey(memberRow);
+				let repoBusy = false;
+				for (const [busyAgentId, busyRepoKey] of activeBuilderRepoPaths.entries()) {
+					if (busyAgentId !== nextAgentId && busyRepoKey === repoKey) {
+						repoBusy = true;
+						break;
+					}
+				}
+				if (repoBusy) {
+					deferredBuilders.push(nextAgentId);
+					continue;
+				}
+				activeBuilderRepoPaths.set(nextAgentId, repoKey);
+			}
 			totalSteps += 1;
 			void launchBoardAgentTurn(nextAgentId);
+		}
+		for (const deferredId of deferredBuilders) {
+			if (!queuedSet.has(deferredId)) {
+				queuedSet.add(deferredId);
+				wakeQueue.push(deferredId);
+			}
 		}
 
 		if (activeWorkers.size > 0) {
@@ -642,7 +814,7 @@ export async function runBoardCollaborationTurn(
 			continue;
 		}
 
-		if (pausedForHuman) break;
+		if (pausedForHuman || coordinatorFailed) break;
 		if (wakeQueue.length > 0) continue;
 
 		if (unresolvedTargets.size === 0) {
@@ -663,11 +835,15 @@ export async function runBoardCollaborationTurn(
 	}
 
 	const lastSummaryPost = summaryState.post;
-	const summaryText =
-		lastCoordinatorText ||
-		(lastSummaryPost ? lastSummaryPost.body || lastSummaryPost.summary : "") ||
-		clarificationSummary ||
-		"已完成本轮看板协同。";
+	const hasUnhandledFailure =
+		coordinatorFailed || (workerFailures.length > 0 && !lastCoordinatorText && !lastSummaryPost);
+	const failureDetail = coordinatorError || workerFailures.at(-1)?.error || "未知执行异常";
+	const summaryText = hasUnhandledFailure
+		? `看板总控执行失败，未能完成本轮协同：${failureDetail}`
+		: lastCoordinatorText ||
+			(lastSummaryPost ? lastSummaryPost.body || lastSummaryPost.summary : "") ||
+			clarificationSummary ||
+			"已完成本轮看板协同。";
 
 	const replyText = pausedForHuman ? `需要你确认后再继续推进：${clarificationSummary}` : summaryText;
 
@@ -695,7 +871,7 @@ export async function runBoardCollaborationTurn(
 				...(run.effects.savedDocuments.length > 0 ? { spaceDocuments: run.effects.savedDocuments } : {}),
 				...(run.effects.skillProposals.length > 0 ? { skillProposals: run.effects.skillProposals } : {}),
 				progressSnapshot: buildProgressSnapshot({
-					outcome: "completed",
+					outcome: hasUnhandledFailure ? "failed" : run.cancelled ? "aborted" : "completed",
 					progress: run.lastProgress,
 					startedAtMs: run.startedAt,
 					leadMember: coordinatorBaseMember,

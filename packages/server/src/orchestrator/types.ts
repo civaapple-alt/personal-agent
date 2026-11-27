@@ -233,6 +233,7 @@ export interface DispatchMatterInput {
 	timeoutMs?: number;
 	resumeFromBoardPostNo?: number;
 	boardMonitorSilenceMs?: number;
+	boardMaxReworkRounds?: number;
 	onTextDelta?: (delta: string) => void;
 	onProgress?: (progress: DispatchProgressEvent) => void;
 	onBoardPostCreated?: (payload: { matterId: string; post: BoardPostSummaryDto }) => void;

@@ -21,6 +21,15 @@ export const LIVE_SCENARIO_CATALOG: readonly LiveScenarioDefinition[] = [
 		description: "0.9.0 Board dynamic spawning (Builder + Verifier), @mention loop, handoff & verdict",
 	},
 	{
+		id: "board-complex",
+		category: "board",
+		script: "packages/server/src/demo/board-complex-smoke.ts",
+		supportsDryRun: true,
+		requiresRealModel: true,
+		description:
+			"0.9.1 Board multi-slice parallel builders (serialized writes), ownedScope guard, and heterogeneous verification",
+	},
+	{
 		id: "mention-verify",
 		category: "collaboration",
 		script: "packages/server/src/demo/mention-verify-smoke.ts",

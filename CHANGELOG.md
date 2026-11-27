@@ -4,6 +4,13 @@ All notable changes to Personal Agent are documented in this file.
 
 ## [Unreleased]
 
+- Harden `0.9.1` Board governance and add complex multi-slice real-Pi live verification ([v0.9-board-and-storage-design.md](docs/concepts/v0.9-board-and-storage-design.md), [board-complex-verification.md](docs/validation/board-complex-verification.md)):
+  - Hard-block unrestricted `@all` mentions consistently across PA `board-runner.ts`, HTTP `POST /api/matters/:id/board/posts` (`400`), and portable `pi-extensions/board` (`LocalBoardStore.createPost` + tool schema description).
+  - Enforce `ownedScope` write boundaries at runtime via Pi `tool_call` hook ([pi-extensions/board/scope-guard.ts](pi-extensions/board/scope-guard.ts)) for both PA Bridge and standalone `builder` workers (`PA_BOARD_OWNED_SCOPE`), blocking out-of-scope `write`/`edit` and path traversal while allowing reads and non-path command hints; serialize same-repo `builder` turns in `board-runner.ts` (`activeBuilderRepoPaths`) without blocking read-only `verifier` checks.
+  - Add `verify_rework` circuit breaker (`boardMaxReworkRounds` / `PA_BOARD_MAX_REWORK_ROUNDS`, default `3` in `board-runner.ts`; `maxReworkRounds` in `LocalBoardEngine`) emitting `monitor_alert` (`rework_limit_exceeded`) and escalating to `@coordinator` instead of looping indefinitely.
+  - Add Coordinator & Worker fault governance in `board-runner.ts`: catch worker exceptions, mark crashed non-coordinator members `stopped` + emit `monitor_alert` + `@monitor` `escalate @coordinator`, auto-retry Coordinator once (`coordinator_retry`), and persist explicit `outcome: "failed"` error replies on persistent failure instead of falling back to `"已完成本轮看板协同。"`.
+  - Add comprehensive offline unit tests ([test/board-governance-hardening.test.ts](test/board-governance-hardening.test.ts)) and opt-in complex 2-slice + heterogeneous Verifier live verification `npm run demo:board:complex` / `e2e:live --scenario board-complex` ([board-complex-smoke.ts](packages/server/src/demo/board-complex-smoke.ts), verified in Run `008` with `maxConcurrentBuilders=1` and `3/3` independent host tests passing).
+
 ## [0.9.0] - 2026-11-27
 
 See the [0.9.0 release guide](docs/releases/v0.9.0.md) for downloads and upgrade instructions.

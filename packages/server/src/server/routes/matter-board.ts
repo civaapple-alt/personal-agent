@@ -138,6 +138,10 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 					.map((item) => item.trim().replace(/^@+/, ""))
 					.filter(Boolean)
 			: [];
+		if (mentions.some((item) => item.toLowerCase() === "all")) {
+			sendError(res, 400, "Unrestricted @all mentions are forbidden; mention specific agentId(s) explicitly.");
+			return true;
+		}
 		const refPostNos = Array.isArray(body.refPostNos)
 			? body.refPostNos.filter(
 					(item): item is number => typeof item === "number" && Number.isInteger(item) && item > 0,
@@ -176,10 +180,7 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 		}
 		const existingMembers = store.listBoardMembers(matterId);
 		for (const member of existingMembers) {
-			if (
-				member.status === "blocked_human" &&
-				(mentions.length === 0 || mentions.includes(member.agentId) || mentions.includes("all"))
-			) {
+			if (member.status === "blocked_human" && (mentions.length === 0 || mentions.includes(member.agentId))) {
 				const resumed = store.updateBoardMemberState(matterId, member.agentId, { status: "waiting" });
 				if (resumed) {
 					broadcast(
@@ -208,7 +209,7 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			matter.collaborationMode === "board" &&
 			!orchestrator.isMatterRunning(matterId) &&
 			!ctx.activeRuns.has(matterId) &&
-			existingMembers.some((m) => mentions.includes(m.agentId) || mentions.includes("all")) &&
+			existingMembers.some((m) => mentions.includes(m.agentId)) &&
 			canDispatchAiInOrg(store, actor, matter.orgId);
 		if (shouldAutoResume) {
 			if (!checkUserDispatchQuota(ctx, actor, res)) return true;

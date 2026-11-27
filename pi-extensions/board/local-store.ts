@@ -238,6 +238,9 @@ export class LocalBoardStore {
 		const summary = input.summary.trim();
 		if (!summary) throw new Error("post_to_board requires a non-empty summary");
 		const mentions = normalizeStringArray(input.mentions);
+		if (mentions.some((m) => m.replace(/^@+/, "").trim().toLowerCase() === "all")) {
+			throw new Error("Unrestricted @all mentions are forbidden; mention specific agentId(s) explicitly.");
+		}
 		const refPostNos = Array.isArray(input.refPostNos)
 			? Array.from(new Set(input.refPostNos.filter((n) => Number.isInteger(n) && n >= 1)))
 			: [];
@@ -299,16 +302,7 @@ export class LocalBoardStore {
 		const targets = new Set<string>();
 		for (const mention of mentions) {
 			const cleaned = mention.replace(/^@/, "").trim();
-			if (!cleaned || cleaned === "user" || cleaned === "coordinator") continue;
-			if (cleaned === "all") {
-				for (const member of members) {
-					if (member.boardRole === "coordinator") continue;
-					if (member.agentId === authorId) continue;
-					if (member.status === "stopped" || member.status === "done") continue;
-					targets.add(member.agentId);
-				}
-				continue;
-			}
+			if (!cleaned || cleaned === "user" || cleaned === "coordinator" || cleaned.toLowerCase() === "all") continue;
 			const match = members.find((member) => member.agentId === cleaned);
 			if (match && match.boardRole !== "coordinator" && match.agentId !== authorId) {
 				if (match.status !== "stopped" && match.status !== "done") {

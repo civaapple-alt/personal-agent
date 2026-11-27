@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { createTeamBridgeClient } from "../shared/team-bridge-client.ts";
 import { LocalBoardEngine } from "./local-engine.ts";
 import { sanitizeSlug } from "./local-store.ts";
+import { extractWriteTargetPath, isPathWithinOwnedScope, parseOwnedScopeEnv } from "./scope-guard.ts";
 import type {
 	BoardExtensionApi,
 	BoardRole,
@@ -98,7 +99,8 @@ const POST_TO_BOARD_PARAMETERS = {
 		mentions: {
 			type: "array",
 			items: { type: "string" },
-			description: "Target agent IDs (e.g. ['builder-1'], ['verifier'], ['coordinator'], ['user'], or ['all']).",
+			description:
+				"Explicit target agent IDs (e.g. ['builder-1'], ['verifier'], ['coordinator'], or ['user']). Unrestricted '@all' is forbidden.",
 		},
 		refPostNos: {
 			type: "array",
@@ -151,9 +153,34 @@ function toToolResult(value: unknown) {
 	return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value };
 }
 
+function registerOwnedScopeGuard(
+	pi: BoardExtensionApi,
+	env: Record<string, string | undefined>,
+	fallbackCwd: string,
+): void {
+	const boardRole = env.PA_BOARD_ROLE?.trim() || "";
+	if (boardRole !== "builder") return;
+	const ownedScope = parseOwnedScopeEnv(env.PA_BOARD_OWNED_SCOPE);
+	if (ownedScope.length === 0 || typeof pi.on !== "function") return;
+
+	pi.on("tool_call", (event, ctx) => {
+		const targetPath = extractWriteTargetPath(event.toolName, event.input);
+		if (!targetPath) return undefined;
+		const cwd = ctx?.cwd ?? fallbackCwd;
+		if (isPathWithinOwnedScope(targetPath, ownedScope, cwd)) {
+			return undefined;
+		}
+		return {
+			block: true,
+			reason: `Write blocked by board ownedScope: "${targetPath}" is outside [${ownedScope.join(", ")}].`,
+		};
+	});
+}
+
 function registerPaBridgeTools(pi: BoardExtensionApi, env: Record<string, string | undefined>): void {
 	const post = createTeamBridgeClient(env);
 	const boardRole = env.PA_BOARD_ROLE?.trim() || "";
+	registerOwnedScopeGuard(pi, env, process.cwd());
 
 	if (boardRole === "coordinator") {
 		pi.registerTool({
@@ -201,6 +228,7 @@ function registerStandaloneTools(pi: BoardExtensionApi, options: CreateBoardExte
 	const boardRole = (env.PA_BOARD_ROLE?.trim() || (isSubWorker ? "builder" : "coordinator")) as BoardRole;
 	const agentId = env.PA_BOARD_AGENT_ID?.trim() || "coordinator";
 	const extensionEntryPath = options.extensionEntryPath ?? fileURLToPath(import.meta.url);
+	registerOwnedScopeGuard(pi, env, cwd);
 
 	let activeBoardId = env.PA_LOCAL_BOARD_ID?.trim() || "default";
 	let explicitBoardDir = options.boardDir ?? (env.PA_LOCAL_BOARD_DIR?.trim() || undefined);

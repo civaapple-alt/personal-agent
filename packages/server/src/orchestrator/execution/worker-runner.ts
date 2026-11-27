@@ -991,6 +991,9 @@ export async function executeWithWorkerPass(
 				PA_MEMBER_ID: effectiveMember.id,
 				PA_MEMBER_NAME: effectiveMember.displayName,
 				PA_MEMBER_TITLE: effectiveMember.roleTitle,
+				...(boardCtx?.ownedScope && boardCtx.ownedScope.length > 0
+					? { PA_BOARD_OWNED_SCOPE: JSON.stringify(boardCtx.ownedScope) }
+					: {}),
 				...(organization ? { PA_ORG_ID: organization.id, PA_ORG_NAME: organization.name } : {}),
 			},
 		});

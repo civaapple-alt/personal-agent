@@ -152,4 +152,11 @@ export interface BoardExtensionApi {
 		},
 	): void;
 	sendUserMessage?(content: string): void;
+	on?(
+		event: "tool_call",
+		handler: (
+			event: { toolName: string; toolCallId?: string; input: Record<string, unknown> },
+			ctx?: { cwd?: string },
+		) => Promise<{ block: true; reason: string } | undefined> | { block: true; reason: string } | undefined,
+	): void;
 }

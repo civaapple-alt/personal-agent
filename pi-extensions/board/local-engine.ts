@@ -22,10 +22,12 @@ export interface LocalBoardEngineOptions {
 	isSubWorker?: boolean;
 	extensionEntryPath: string;
 	maxWakeupTurns?: number;
+	maxReworkRounds?: number;
 	executor?: LocalWorkerExecutor;
 }
 
 const DEFAULT_MAX_WAKEUP_TURNS = 16;
+const DEFAULT_MAX_REWORK_ROUNDS = 3;
 
 function formatSummaryLine(summary: BoardPostSummary): string {
 	const mentions = summary.mentions.map((m) => (m.startsWith("@") ? m : `@${m}`)).join(", ");
@@ -84,7 +86,9 @@ export class LocalBoardEngine {
 	readonly isSubWorker: boolean;
 	readonly extensionEntryPath: string;
 	readonly maxWakeupTurns: number;
+	readonly maxReworkRounds: number;
 	readonly executor: LocalWorkerExecutor;
+	private readonly reworkCounts = new Map<string, number>();
 
 	constructor(options: LocalBoardEngineOptions) {
 		this.cwd = options.cwd;
@@ -96,6 +100,7 @@ export class LocalBoardEngine {
 		this.isSubWorker = Boolean(options.isSubWorker);
 		this.extensionEntryPath = options.extensionEntryPath;
 		this.maxWakeupTurns = options.maxWakeupTurns ?? DEFAULT_MAX_WAKEUP_TURNS;
+		this.maxReworkRounds = options.maxReworkRounds ?? DEFAULT_MAX_REWORK_ROUNDS;
 		this.executor = options.executor ?? runLocalPiRpcWorker;
 
 		if (!this.isSubWorker && this.boardRole === "coordinator") {
@@ -147,6 +152,7 @@ export class LocalBoardEngine {
 		awaitingHuman?: boolean;
 		wakeupsExecuted?: number;
 		pendingMentions?: string[];
+		reworkLimitExceeded?: { agentId: string; count: number; maxReworkRounds: number };
 		recentPosts?: BoardPostSummary[];
 	}> {
 		signal?.throwIfAborted();
@@ -191,6 +197,7 @@ export class LocalBoardEngine {
 
 		const queue = this.store.resolveMentionTargets(post.mentions, this.agentId);
 		let wakeupsExecuted = 0;
+		let reworkLimitExceeded: { agentId: string; count: number; maxReworkRounds: number } | undefined;
 
 		while (queue.length > 0 && wakeupsExecuted < this.maxWakeupTurns) {
 			signal?.throwIfAborted();
@@ -227,6 +234,9 @@ export class LocalBoardEngine {
 							PA_LOCAL_BOARD_SUBWORKER: "1",
 							PA_BOARD_ROLE: member.boardRole,
 							PA_BOARD_AGENT_ID: targetId,
+							...(member.ownedScope.length > 0
+								? { PA_BOARD_OWNED_SCOPE: JSON.stringify(member.ownedScope) }
+								: {}),
 						},
 					},
 					signal,
@@ -244,6 +254,31 @@ export class LocalBoardEngine {
 
 			const newPosts = this.store.readPosts().filter((entry) => entry.postNo > beforePostNo);
 			for (const created of newPosts) {
+				if (created.kind === "verify_pass") {
+					const passedTarget =
+						created.verification?.authorAgentId?.trim() || created.verification?.target?.trim() || "";
+					if (passedTarget) this.reworkCounts.delete(passedTarget);
+				}
+				if (created.kind === "verify_rework") {
+					const resolvedTargets = this.store.resolveMentionTargets(created.mentions, created.authorId);
+					const reworkTarget =
+						created.verification?.authorAgentId?.trim() ||
+						resolvedTargets[0] ||
+						created.verification?.target?.trim() ||
+						"";
+					if (reworkTarget) {
+						const nextReworkCount = (this.reworkCounts.get(reworkTarget) ?? 0) + 1;
+						this.reworkCounts.set(reworkTarget, nextReworkCount);
+						if (nextReworkCount >= this.maxReworkRounds) {
+							reworkLimitExceeded = {
+								agentId: reworkTarget,
+								count: nextReworkCount,
+								maxReworkRounds: this.maxReworkRounds,
+							};
+							continue;
+						}
+					}
+				}
 				if (created.kind === "clarification" && created.mentions.some((m) => m.replace(/^@/, "") === "user")) {
 					if (ctx?.hasUI && ctx.ui?.input) {
 						const answer = await ctx.ui.input(`[Board @${created.authorId}] ${created.summary}`, created.body, {
@@ -273,6 +308,7 @@ export class LocalBoardEngine {
 					}
 				}
 			}
+			if (reworkLimitExceeded) break;
 		}
 
 		const latestPosts = this.store.listPostSummaries(post.postNo - 1, 10);
@@ -283,6 +319,7 @@ export class LocalBoardEngine {
 			post,
 			wakeupsExecuted,
 			pendingMentions: queue,
+			...(reworkLimitExceeded ? { reworkLimitExceeded } : {}),
 			recentPosts: latestPosts,
 		};
 	}

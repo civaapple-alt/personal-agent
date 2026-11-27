@@ -42,6 +42,7 @@
 | --- | --- |
 | 会话接续、真实委托与经验 | [协作链路验证](validation/runtime-checks.md) |
 | 旁听何时补充、保持静默或停止 | [旁听验证](validation/observer-demo.md) |
+| Board 双切片异构验收与同仓写串行实机记录 | [Board 复杂实机验证](validation/board-complex-verification.md) |
 | 发布前协作、文件一致性和独立正文质量 | [发布前复核验证](validation/publication-review.md) |
 | 角色创建后履职、模型决策与英文 Skill 对照 | [角色真实任务验证](validation/role-design-demo.md) |
 | pstack 是否读取指定方法，或能否从自然任务主动选方法 | [方法装载验证](validation/pstack-checks.md)、[自然任务选择验证](validation/pstack-selection.md) |

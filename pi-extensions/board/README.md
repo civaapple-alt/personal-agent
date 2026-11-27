@@ -7,7 +7,7 @@
 | 工具 / 命令 | 作用说明 | 作用域与硬边界 |
 | --- | --- | --- |
 | `spawn_board_agent` | 创建或更新 `builder` / `verifier` 成员，配置 `ownedScope`、`acceptanceCriteria`、`sourceMemberId` 与 `modelOverride` | **仅 Coordinator**（子 Worker 禁止调用） |
-| `post_to_board` | 发布 `assign`/`handoff`/`verify_pass`/`verify_rework`/`clarification` 等板帖并按 `@mention` 异步唤醒目标成员 | 全部 Board 成员可用；强制拦截自验证（`verify_pass`） |
+| `post_to_board` | 发布 `assign`/`handoff`/`verify_pass`/`verify_rework`/`clarification` 等板帖并按 `@mention` 异步唤醒目标成员 | 全部 Board 成员可用；强制拦截自验证（`verify_pass`）与无约束 `@all` 群发 |
 | `read_board_post` | 按 `postNo` 懒加载完整板帖正文与结构化 `artifacts` / `verification` | 全部 Board 成员可用 |
 | `/board` | 发起 Board 协作（`/board <目标>`）或管理协作板（`status` / `posts` / `new <id>`） | 仅独立终端 Root 会话可用；管理子命令不触发模型，传 `<目标>` 会作为总控任务发给模型 |
 | [board-collaboration](skills/board-collaboration/SKILL.md)（内置工作流 Skill） | 规范 Coordinator 拆解 `ownedScope`、异构 Verifier、返工闭环、防自验证与 `@user` 拍板的 SOP | 通过 [package.json](package.json) `pi.skills` 随包原生安装；终端亦可用 `/skill:board-collaboration` 显式调用 |
@@ -64,8 +64,8 @@ pi -e ./pi-extensions/board \
 ### 3. 本地数据落盘与运行机制
 
 - **本地数据落盘**：协作记录自动存入当前目录 `.pi/boards/<board-id>/`（含原子写入的 `members.json`、追加日志 `posts.jsonl` 与各成员独立会话 `sessions/<agent-id>.jsonl`）。
-- **子进程隔离参数**：插件按游标增量摘要唤醒被 `@mention` 成员；对于 `verifier`，通过 `--tools` 白名单仅开放只读工具与板帖工具并叠加 `--exclude-tools edit,write` 双重只读隔离；支持通过 `modelOverride` 为 `verifier` 指定异构验证模型。
-- **离线/实机验证**：`node --test test/pi-extension-board.test.ts` 验证双后端路由与完整异步闭环；`cross-verify` 实机验收流程见 [0.9.x 设计文档 P3 阶段](../../docs/concepts/v0.9-portable-pi-collaboration-design.md#4-分阶段演进里程碑)。
+- **子进程隔离参数与治理边界**：插件按游标增量摘要唤醒被 `@mention` 成员，并在连续 `verify_rework` 达到 `maxReworkRounds`（默认 `3`）时熔断停止继续自动返工、将控制权交回 Coordinator；对于 `builder`，当注入 `PA_BOARD_OWNED_SCOPE` 时通过 [scope-guard.ts](scope-guard.ts) 注册 `tool_call` 写边界拦截，阻止超出 `ownedScope` 的 `write`/`edit`；对于 `verifier`，通过 `--tools` 白名单仅开放只读工具与板帖工具并叠加 `--exclude-tools edit,write` 双重只读隔离；支持通过 `modelOverride` 为 `verifier` 指定异构验证模型。
+- **离线/实机验证**：`node --test test/pi-extension-board.test.ts` 与 `node --test test/board-governance-hardening.test.ts` 验证双后端路由、治理门禁与异步闭环；`cross-verify` 实机验收流程见 [0.9.x 设计文档 P3 阶段](../../docs/concepts/v0.9-portable-pi-collaboration-design.md#4-分阶段演进里程碑)。
 
 ---
 
