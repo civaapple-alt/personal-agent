@@ -34,7 +34,7 @@ export function Banner({ tone = "neutral", title, actions, onDismiss, className,
 		>
 			<div className="min-w-0 flex-1">
 				{title && <div className="font-semibold leading-snug">{title}</div>}
-				{children && <div className={cn(title && "mt-0.5")}>{children}</div>}
+				{children && <div className={cn(Boolean(title) && "mt-0.5")}>{children}</div>}
 			</div>
 			{(actions || onDismiss) && (
 				<div className="flex items-center gap-2 shrink-0">
