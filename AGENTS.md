@@ -25,7 +25,7 @@
 命令均在仓库根运行，脚本定义以 [package.json](package.json) 为准。
 
 - `npm install` 安装依赖并链接工作区包；`npm run start:web` 启动本地工作台，默认使用 `.data/` 中的用户数据；`npm run start:team:sandbox` 在临时目录启动预置多组织、全角色（`org_owner`/`org_admin`/`org_member`/`org_viewer`/`super_admin`）与带 Git 版本的资料空间文档的团队版隔离沙盒（`PA_REQUIRE_AUTH=1`，默认端口 `4399`，账号表见 [开发指南](docs/guides/development.md#团队版一键验证沙盒)）。
-- 代码改动选择相关离线测试，再运行 `npm run check`（含 `lint`、`typecheck` 与三环边界门禁 `check:boundaries`）、`npm run build`、`npm test`；首次运行涉及网页的测试前要构建网页资源；真实浏览器端到端检查运行 `npm run e2e`（不调用外部模型，也不触碰 `.data/`），显式实机场景通过 `npm run e2e:live -- --list` / `npm run e2e:live -- --scenario board --dry-run` 选择；手工交互排查可启动 `npm run start:team:sandbox`。
+- 代码改动选择相关离线测试，再运行 `npm run check`（含 `lint`、`typecheck` 与三环边界门禁 `check:boundaries`）、`npm run build`、`npm test`；首次运行涉及网页的测试前要构建网页资源；真实浏览器端到端检查运行 `npm run e2e`（不调用外部模型，也不触碰 `.data/`），显式实机场景通过 `npm run e2e:live -- --list` / `npm run e2e:live -- --scenario board --dry-run` 或全栈真机浏览器用例 `npm run e2e:browser:live`（测试产物留存于 `.data-e2e/`）选择；手工交互排查可启动 `npm run start:team:sandbox`。
 - `npm run check:startup` 需要已有构建，使用临时数据库检查源码入口（`apps/cli/src/main.ts`）和预构建入口（`apps/cli/dist/main.js`），不调用真实模型。
 - 文档改动使用 `npm run check:docs`；无需因此重跑整套应用测试或真实模型。
 - `demo:rpc`、`demo:team`、`demo:team:capabilities`、`demo:space`、`demo:rsi`（`demo:trust`）、`demo:pi-native`、`demo:solo`、`demo:review`、`demo:observer`、`demo:architect`、`demo:roles`、`demo:decision`、`demo:pstack`、`demo:pstack:selection` 会调用本机 Pi 与真实模型，按 [demo 说明](packages/server/src/demo/README.md)选择，不能把离线 fixture 通过当作真实岗位能力证明。

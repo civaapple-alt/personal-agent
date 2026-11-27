@@ -856,3 +856,95 @@ test("M2 Scenarios 4 & 5: waiting-only model hot-swap (409 on working), session 
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("Board matter created via Web conversation mode enters runBoardCollaborationTurn without conversation intent hijack", async () => {
+	const db = openPersonalAgentDatabase(":memory:");
+	const store = new PersonalAgentStore(db);
+	const templates = await loadRoleTemplatesFromDir(resolve(process.cwd(), "roles"));
+	for (const tpl of templates) {
+		store.upsertMember({
+			id: tpl.id,
+			templateId: tpl.id,
+			displayName: tpl.name,
+			roleTitle: tpl.title,
+			isPrimaryContact: tpl.isPrimaryContact,
+			keywords: tpl.keywords,
+		});
+	}
+	const org = store.ensureDefaultOrganization();
+
+	const { orchestrator, turnCounts } = createBoardTestOrchestrator({
+		store,
+		templates,
+		async onWorkerTurn({ agentId, turnIndex, callTool }) {
+			if (agentId === "coordinator" && turnIndex === 1) {
+				await callTool("spawn_board_agent", {
+					agentId: "builder-web",
+					boardRole: "builder",
+					brief: "Fix feature from Web conversation mode",
+					ownedScope: ["src/index.ts"],
+				});
+				await callTool("post_to_board", {
+					kind: "assign",
+					mentions: ["builder-web"],
+					summary: "Start web conversation task",
+				});
+				return;
+			}
+			if (agentId === "builder-web") {
+				await callTool("post_to_board", {
+					kind: "handoff",
+					mentions: ["coordinator"],
+					summary: "Task done",
+				});
+				return { assistantText: "Built via board mode" };
+			}
+			if (agentId === "coordinator" && turnIndex === 2) {
+				await callTool("post_to_board", {
+					kind: "summary",
+					mentions: [],
+					summary: "Final web board summary",
+				});
+				return { assistantText: "Final coordinator report" };
+			}
+		},
+	});
+
+	try {
+		const matter = store.createMatter({
+			title: "Web Conversation Board Test",
+			leadMemberId: null,
+			collaborationMode: "board",
+			coordinatorMemberId: "product-manager",
+			orgId: org.id,
+		});
+		const userMsg = store.appendMessage({
+			matterId: matter.id,
+			channel: "user",
+			senderType: "user",
+			senderId: "usr_local_owner",
+			content: "Start board collaboration from conversation endpoint",
+			metadata: {
+				mode: "conversation",
+				workspaceId: null,
+				repoPath: process.cwd(),
+			},
+		});
+
+		const result = await orchestrator.dispatchMatter({
+			matterId: matter.id,
+			interactionMode: "conversation",
+			existingUserMessageId: userMsg.id,
+			prompt: userMsg.content,
+		});
+
+		assert.equal(turnCounts.get("coordinator"), 2);
+		assert.equal(turnCounts.get("builder-web"), 1);
+		assert.equal(store.getMatter(matter.id)?.leadMemberId, "product-manager");
+		assert.ok(store.getBoardMember(matter.id, "coordinator"));
+		assert.ok(store.getBoardMember(matter.id, "builder-web"));
+		assert.equal(result.replyText, "Final coordinator report");
+	} finally {
+		db.close();
+	}
+});

@@ -265,6 +265,7 @@ export async function dispatchMatterTurn(
 				)
 			: undefined;
 	let assignedIsArchitect = deps.isArchitectMember(assignedMember);
+	const isBoardTurn = matter.collaborationMode === "board" && !isDiscussionTurn && !assignedIsArchitect;
 	const discussionMentionPool =
 		usesExistingRoster && !assignedIsArchitect
 			? (existingDiscussionRoster ?? deps.resolveMatterAiMembers(matter, effectiveUserId)).filter(
@@ -301,7 +302,7 @@ export async function dispatchMatterTurn(
 		let intent: ConversationIntent = "respond";
 		let workbenchHelpTopic: ConversationDecision["helpTopic"];
 		let architectHealthcheck: boolean | undefined;
-		if (isConversation) {
+		if (isConversation && !isBoardTurn) {
 			if (!existingUserMsg) throw new Error("Conversation routing requires a saved human message");
 			run.userMessageId = existingUserMsg.id;
 			emitDispatchProgress({ stage: "starting", label: "正在理解消息…" });
@@ -436,9 +437,12 @@ export async function dispatchMatterTurn(
 				},
 			});
 		run.userMessageId = message.id;
-		if (matter.collaborationMode === "board" && !usesExistingRoster) {
+		if (isBoardTurn) {
 			const coordinatorMember =
 				(matter.coordinatorMemberId ? deps.store.getMember(matter.coordinatorMemberId) : null) ?? assignedMember;
+			if (!matter.leadMemberId) {
+				matter = deps.store.updateMatterLead(matter.id, coordinatorMember.id);
+			}
 			speakerMemberId = coordinatorMember.id;
 			return await runBoardCollaborationTurn(
 				{

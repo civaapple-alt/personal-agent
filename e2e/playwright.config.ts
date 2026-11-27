@@ -3,13 +3,9 @@ import { resolveBrowserExecutablePath } from "./fixtures/browser.ts";
 
 export default defineConfig({
 	testDir: ".",
-	testMatch: /.*\.spec\.ts$/,
-	grepInvert: /@live/,
 	workers: 1,
 	fullyParallel: false,
 	retries: process.env.CI ? 1 : 0,
-	timeout: 45_000,
-	expect: { timeout: 10_000 },
 	reporter: [["list"], ["html", { open: "never", outputFolder: "../playwright-report" }]],
 	use: {
 		headless: true,
@@ -20,4 +16,20 @@ export default defineConfig({
 			executablePath: resolveBrowserExecutablePath(),
 		},
 	},
+	projects: [
+		{
+			name: "no-agent",
+			testMatch: /.*\.spec\.ts$/,
+			grepInvert: /@live/,
+			timeout: 45_000,
+			expect: { timeout: 10_000 },
+		},
+		{
+			name: "live",
+			testMatch: /.*\.live\.spec\.ts$/,
+			grep: /@live/,
+			timeout: 360_000,
+			expect: { timeout: 15_000 },
+		},
+	],
 });

@@ -11,6 +11,7 @@ e2e/live.config.json
 !.agents/skills/pa-matter-retrospective/
 !.agents/skills/pa-pi-runtime-tuning/
 .data/
+.data-e2e/
 .notes/
 .releases/
 *.tsbuildinfo

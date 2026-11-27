@@ -1,8 +1,9 @@
-import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { appendFileSync, createWriteStream, mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPiModelCatalog } from "@pa/pi-rpc/model-catalog";
+import { createE2eRunDir, type E2eRunDir } from "./fixtures/run-dir.ts";
 import { findLiveScenario, LIVE_SCENARIO_CATALOG, type LiveScenarioDefinition } from "./live/catalog.ts";
 import { buildLiveEnv, type ResolvedLiveModelConfig, resolveLiveModelConfig } from "./live/config.ts";
 
@@ -13,6 +14,8 @@ type Verdict = "PASS" | "REVIEW_PENDING" | "FAIL";
 
 interface LiveRunResult {
 	timestamp: string;
+	runId?: string;
+	runDir?: string;
 	scenario: string;
 	category: string;
 	dryRun: boolean;
@@ -52,7 +55,7 @@ function printHelp(): void {
 		[
 			"Usage: npm run e2e:live -- [options] [-- <scenario-args>]",
 			"",
-			"Opt-in live/real-Pi scenario runner with cost-controlled model profiles & verdict logging (e2e/.live-runs.jsonl).",
+			"Opt-in live/real-Pi scenario runner with cost-controlled model profiles & numbered .data-e2e/logs.",
 			"Never invoked automatically by `npm test` or no-agent `npm run e2e`.",
 			"",
 			"Options:",
@@ -169,7 +172,9 @@ async function showLocalModels(resolved: ResolvedLiveModelConfig, json: boolean)
 	}
 
 	console.log("=== Live E2E Cost & Model Configuration ===");
-	console.log(`  config file       : ${resolved.configPath ?? "(none — copy e2e/live.config.example.json -> e2e/live.config.json)"}`);
+	console.log(
+		`  config file       : ${resolved.configPath ?? "(none — copy e2e/live.config.example.json -> e2e/live.config.json)"}`,
+	);
 	console.log(`  active profile    : ${resolved.profileName ?? "(none)"}`);
 	console.log(
 		`  selected model    : ${resolved.provider && resolved.model ? `${resolved.provider}/${resolved.model}` : "(Pi default)"}${resolved.thinkingLevel ? ` (thinking=${resolved.thinkingLevel})` : ""}`,
@@ -184,7 +189,9 @@ async function showLocalModels(resolved: ResolvedLiveModelConfig, json: boolean)
 		`  Pi default model  : ${catalog.defaultModel ? `${catalog.defaultModel.provider}/${catalog.defaultModel.model} (thinking=${catalog.defaultModel.thinkingLevel ?? "default"})` : "(none)"}`,
 	);
 	console.log("");
-	console.log(`Available Local Pi Models (${visibleModels.length}${allowedSet ? `/${catalog.models.length} allowed` : ""}):`);
+	console.log(
+		`Available Local Pi Models (${visibleModels.length}${allowedSet ? `/${catalog.models.length} allowed` : ""}):`,
+	);
 	for (const item of visibleModels) {
 		const isDefault =
 			catalog.defaultModel?.provider === item.provider && catalog.defaultModel?.model === item.model ? " *" : "";
@@ -194,35 +201,92 @@ async function showLocalModels(resolved: ResolvedLiveModelConfig, json: boolean)
 	}
 }
 
-function runScenario(
+async function spawnWithOptionalTeeLog(
+	args: string[],
+	env: NodeJS.ProcessEnv,
+	logPath: string | null,
+): Promise<number> {
+	return new Promise((resolveCode, rejectErr) => {
+		const child = spawn(process.execPath, args, {
+			cwd: ROOT_DIR,
+			stdio: logPath ? ["ignore", "pipe", "pipe"] : "inherit",
+			env,
+		});
+		const stream = logPath ? createWriteStream(logPath, { flags: "a" }) : null;
+		child.stdout?.on("data", (chunk: Buffer) => {
+			process.stdout.write(chunk);
+			stream?.write(chunk);
+		});
+		child.stderr?.on("data", (chunk: Buffer) => {
+			process.stderr.write(chunk);
+			stream?.write(chunk);
+		});
+		child.once("error", (err) => {
+			stream?.end();
+			rejectErr(err);
+		});
+		child.once("exit", (code) => {
+			stream?.end();
+			resolveCode(code ?? 1);
+		});
+	});
+}
+
+async function runScenario(
 	entry: LiveScenarioDefinition,
 	dryRun: boolean,
 	resolved: ResolvedLiveModelConfig,
 	passthroughArgs: string[],
-): LiveRunResult {
+): Promise<LiveRunResult> {
 	if (dryRun && !entry.supportsDryRun) {
 		throw new Error(`Scenario "${entry.id}" does not support --dry-run`);
 	}
 
-	const args = [
-		entry.script,
-		...(entry.fixedArgs ?? []),
-		...(dryRun ? ["--dry-run"] : []),
-		...passthroughArgs,
-	];
+	const args = [entry.script, ...(entry.fixedArgs ?? []), ...(dryRun ? ["--dry-run"] : []), ...passthroughArgs];
 	const command = `node ${args.join(" ")}`;
+
+	let runDir: E2eRunDir | null = null;
+	if (!dryRun) {
+		runDir = createE2eRunDir(`live-${entry.id}`, ROOT_DIR, {
+			kind: "e2e:live",
+			profile: resolved.profileName,
+			provider: resolved.provider,
+			model: resolved.model,
+			thinkingLevel: resolved.thinkingLevel,
+			verifierProvider: resolved.verifierProvider,
+			verifierModel: resolved.verifierModel,
+			command,
+		});
+		console.log(`[e2e:live] Run #${runDir.seqLabel} (${runDir.runId}) -> ${runDir.dir}`);
+	}
+
+	const env = buildLiveEnv(process.env, resolved);
+	if (runDir) {
+		env.PA_E2E_RUN_DIR = runDir.dir;
+	}
+
 	const startedAt = Date.now();
-	const res = spawnSync(process.execPath, args, {
-		cwd: ROOT_DIR,
-		stdio: "inherit",
-		env: buildLiveEnv(process.env, resolved),
-	});
+	const logPath = runDir ? join(runDir.logsDir, "output.log") : null;
+	const exitCode = await spawnWithOptionalTeeLog(args, env, logPath);
 	const durationMs = Date.now() - startedAt;
-	const exitCode = res.status ?? 1;
 	const verdict: Verdict = exitCode === 0 ? "PASS" : exitCode === 2 ? "REVIEW_PENDING" : "FAIL";
+
+	runDir?.recordResult({
+		verdict,
+		exitCode,
+		durationMs,
+		profile: resolved.profileName,
+		provider: resolved.provider,
+		model: resolved.model,
+		thinkingLevel: resolved.thinkingLevel,
+		verifierProvider: resolved.verifierProvider,
+		verifierModel: resolved.verifierModel,
+		artifacts: logPath ? { outputLog: logPath } : undefined,
+	});
 
 	const record: LiveRunResult = {
 		timestamp: new Date().toISOString(),
+		...(runDir ? { runId: runDir.runId, runDir: runDir.dir } : {}),
 		scenario: entry.id,
 		category: entry.category,
 		dryRun,
@@ -297,7 +361,7 @@ async function main(): Promise<void> {
 
 	const results: LiveRunResult[] = [];
 	for (const scenario of selected) {
-		results.push(runScenario(scenario, opts.dryRun, resolvedConfig, opts.passthroughArgs));
+		results.push(await runScenario(scenario, opts.dryRun, resolvedConfig, opts.passthroughArgs));
 	}
 
 	if (opts.json) {
@@ -307,8 +371,9 @@ async function main(): Promise<void> {
 		console.log("=== Live E2E Verdict Summary ===");
 		for (const item of results) {
 			const modelTag = item.provider && item.model ? `, model=${item.provider}/${item.model}` : "";
+			const runTag = item.runId ? ` run=${item.runId}` : "";
 			console.log(
-				`  [${item.verdict}] ${item.scenario} (exit=${item.exitCode}, ${item.durationMs}ms${item.dryRun ? ", dry-run" : ""}${modelTag})`,
+				`  [${item.verdict}] ${item.scenario} (exit=${item.exitCode}, ${item.durationMs}ms${item.dryRun ? ", dry-run" : ""}${modelTag}${runTag})`,
 			);
 		}
 	}

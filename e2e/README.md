@@ -6,15 +6,14 @@ Personal Agent 将自动化测试划分为三个明确层级，确保日常快�
 | --- | --- | --- | --- |
 | 1. 离线单测与 HTTP 测试 | `npm test` | `node:test` + 桩 Worker，零模型消耗 | 存储拆表、ACL 权限、Board 编排闭环、CoE 信号与前端纯函数（[test](../test/README.md)） |
 | 2. 无模型真实浏览器 E2E | `npm run e2e` | 构建 `apps/web/dist` + 隔离临时服务 + 本机 Chrome 实测，零模型消耗 | 真实 SPA 渲染与导航、`0.9.0` 看板 UI 与 SSE 实时推送、团队版沙盒 RBAC |
-| 3. 按需真实 Pi E2E | `npm run e2e:live` | 启动真实 Pi CLI（`packages/server/src/demo/*`），除 `--dry-run` 外均消耗模型额度 | 真实模型工具调用、动态组队、信任四步、跨模型验收与角色决策（[demo](../packages/server/src/demo/README.md)） |
+| 3. 按需真实 Pi E2E | `npm run e2e:live` / `npm run e2e:browser:live` | 启动真实 Pi CLI（`packages/server/src/demo/*`）或真实浏览器全栈联调（`@live`），除 `--dry-run` 外均消耗模型额度 | 真实模型工具调用、动态组队、跨模型验收、`0.9.0` 看板全栈闭环与角色决策（[demo](../packages/server/src/demo/README.md)） |
 
-## 隔离保证
+## 隔离保证与 `.data-e2e/` 测试台账
 
-每次运行 `npm run e2e` 都会通过 [server.ts](fixtures/server.ts) 独立启动临时 PA 实例并在结束后彻底销毁：
-
-- 自动分配空闲 `127.0.0.1` 临时端口；
-- 为 SQLite（`PA_DB_PATH`）、Git 资料空间（`spaces/`）、工作区（`PA_WORKSPACES_ROOT`、`PA_DEFAULT_WORKSPACE_DIR`）与会话（`PA_SESSION_DIR`）创建独立的 `mkdtemp` 临时目录，不读写 `.data/`；
-- 通过 `PI_CODING_AGENT_DIR=<temp>/pi-agent`、`PI_OFFLINE=1` 与 `PA_LOCAL_PI_RESOURCES=0` 隔离 Pi 运行环境；
+- **无模型测试（`npm run e2e`）**：每次都会通过 [server.ts](fixtures/server.ts) 分配空闲 `127.0.0.1` 临时端口与一次性 `mkdtemp` 目录（`PI_OFFLINE=1`、`PA_LOCAL_PI_RESOURCES=0`），测试完毕立即删除，**绝不触碰 `.data/`**。
+- **实机有模型留痕测试（`npm run e2e:live` / `npm run e2e:browser:live`）**：通过 [run-dir.ts](fixtures/run-dir.ts) 在受 `.gitignore` 忽略的 `.data-e2e/` 下建立带自增序号的独立沙盒目录，绝不污染 `.data/`，方便跨测试用例对比核查：
+  - 总索引日志：`.data-e2e/runs.jsonl`（每条含 `seq`、`runId`、`profile`、`provider`、`model`、`verdict`、`durationMs`、`artifacts`）；
+  - 单次运行目录：`.data-e2e/runs/<NNN>-<scenario>-<时间戳>/`，集中保存该轮的 `db/`、`spaces/`、`sessions/`、`workspace/`、`logs/`（服务/脚本日志与浏览器截图）及 `run-meta.json`。
 - 监听浏览器 `page.on("pageerror")`，出现未捕获前端异常立即判失败。
 
 ## 浏览器自动解析
@@ -33,7 +32,7 @@ Personal Agent 将自动化测试划分为三个明确层级，确保日常快�
 - [board-ui.spec.ts](board-ui.spec.ts)：预置多轮 `0.9.0` Board 夹具，真实点击验证 `MatterBoardPane` 全部交互——Coordinator 置顶且无退场按钮、`隐藏非活跃` 切换、默认折叠 `已退场` 展开、`working` 禁用换模型、暂停/恢复、`waiting` 原地换模型弹窗、非 Coordinator 一键 `退场`、公告板筛选/搜索/Markdown 正文懒加载/发帖、SVG `@mention` 关系图与点击节点跳回过滤、游标分页事件与 `monitor_alert` 高亮，以及共享 `/api/events` SSE 不刷新实时推送。
 - [team-sandbox-rbac.spec.ts](team-sandbox-rbac.spec.ts)：在 `PA_REQUIRE_AUTH=1`（复用 [start-team-sandbox.mjs](../scripts/start-team-sandbox.mjs) `--seed-only`）下验证 `AuthGateView` 登录、多组织资料空间隔离（`org_viewer` 不可见其他组织文档）及看板只读权限边界（直接发帖返回 `403`）。
 
-可视调试可运行 `npm run e2e:headed`；失败用例会自动保存截图与 Trace，可通过 `npx playwright show-report playwright-report` 查看。
+可视调试可运行 `npm run e2e:headed`；带 `@live` 标签的真实模型 + 真实浏览器全栈测试位于 [board.live.spec.ts](board.live.spec.ts)，通过 `npm run e2e:browser:live`（或 `npm run e2e:browser:live:headed`）运行，测试结果、页面截图与工作区变更均留存在 `.data-e2e/runs/`。失败用例的 Playwright 报告与 Trace 可通过 `npx playwright show-report playwright-report` 查看。
 
 ## 真实模型工作流（`e2e:live`）与成本配置
 
