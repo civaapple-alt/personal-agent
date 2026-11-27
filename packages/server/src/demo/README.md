@@ -28,5 +28,6 @@
 
 `team-smoke` 保留临时证据目录，输出 `first.json`、`restart.json` 与数据库、空间仓库、会话的位置；样例是假设，不是业务需求确认，不访问已登记业务项目。模型和超时以脚本为准，不展示或索取密钥。
 
+- 无模型真实浏览器端到端回归见 [e2e](../../../../e2e/README.md)（`npm run e2e`）；上述真实模型脚本也可通过 `npm run e2e:live -- --list` / `--scenario <id>` 统一调度并记录 `.live-runs.jsonl`。
 - 隔离启动但不调用模型的方式见 [scripts](../../../../scripts/README.md)，离线验证选择见 [test](../../../../test/README.md)。
 - 已有有限实机证据见[运行说明](../../../../docs/reference/runtime-collaboration.md)。

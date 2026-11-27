@@ -64,7 +64,7 @@ npm run start:team:sandbox
 | 仅修改文档 | `npm run check:docs`，核对本地链接、章节锚点、命令名和导航可达性 |
 | 修改代码 | 依次运行 `npm run check`、`npm run build` 和 `npm test`。先构建网页资源，再运行依赖网页资源的测试 |
 | 修改服务入口或打包 | 构建后运行 `npm run check:startup`，用临时数据检查源码和编译后的入口 |
-| 修改工作台交互 | 启动上面的团队沙盒，实际走一遍受影响的页面和角色权限 |
+| 修改工作台交互 | 先运行 `npm run e2e` 完成[无模型真实浏览器端到端检查](../../e2e/README.md)；如需人工逐页排查，启动上面的团队沙盒实际走一遍受影响的页面和角色权限 |
 | 修改 Pi、工具调用或协作行为 | 先运行相关离线测试。需要验证真实模型调用时，再按下一节选择演示 |
 
 例如，要复跑会话接续与委托的离线测试，请在仓库根运行以下命令。
@@ -77,7 +77,7 @@ node --test test/continuity-collaboration.test.ts
 
 ## 按需运行真实模型验证
 
-安装本机 Pi CLI 并配置任务所用岗位的模型后，从[演示命令](../../packages/server/src/demo/README.md)中选择与改动对应的场景。以下命令验证真实委托、服务重启后接续会话及成果发布。
+安装本机 Pi CLI 并配置任务所用岗位的模型后，从[演示命令](../../packages/server/src/demo/README.md)中选择与改动对应的场景，或通过 `npm run e2e:live -- --list` / `npm run e2e:live -- --scenario board --dry-run` 统一调度。以下命令验证真实委托、服务重启后接续会话及成果发布。
 
 ```bash
 npm run demo:team

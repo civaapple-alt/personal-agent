@@ -26,7 +26,7 @@
 
 | 你要查什么 | 阅读入口 |
 | --- | --- |
-| 开发环境、隔离团队沙盒、测试与分发 | [开发指南](guides/development.md) |
+| 开发环境、隔离团队沙盒、测试与分发 | [开发指南](guides/development.md)、[端到端测试（E2E）](../e2e/README.md) |
 | 模块所有权、数据流和后续计划 | [当前架构与后续计划](concepts/architecture-and-plan.md)、[后端入口](../packages/server/src/README.md)、[前端入口](../apps/web/README.md)、[可运行示例](../examples/README.md) |
 | Git 资料空间、五类默认空间与仓库文件关联 | [资料空间设计](concepts/space-design.md) |
 | SQLite 23 张表结构、索引、约束与存储边界 | [SQLite 库表设计参考](reference/database-schema.md) |

@@ -14,8 +14,8 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "lint": "biome check apps packages pa-extensions pi-extensions test scripts",
-    "format": "biome check --write apps packages pa-extensions pi-extensions test scripts",
+    "lint": "biome check apps packages pa-extensions pi-extensions test scripts e2e",
+    "format": "biome check --write apps packages pa-extensions pi-extensions test scripts e2e",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "check:boundaries": "node scripts/check-module-boundaries.mjs",
     "check:css": "node scripts/check-css-classes.mjs",
@@ -26,6 +26,9 @@
     "start:web": "npm run build:web && node apps/cli/src/main.ts",
     "start:team:sandbox": "npm run build:web && node scripts/start-team-sandbox.mjs",
     "test": "node scripts/run-tests.mjs",
+    "e2e": "npm run build:web && npx playwright test -c e2e/playwright.config.ts",
+    "e2e:headed": "npm run build:web && npx playwright test -c e2e/playwright.config.ts --headed",
+    "e2e:live": "node e2e/run-live.ts",
     "demo:rpc": "node packages/server/src/demo/rpc-smoke.ts",
     "demo:team": "node packages/server/src/demo/team-smoke.ts",
     "demo:team:capabilities": "node packages/server/src/demo/team-capabilities-smoke.ts",
@@ -50,6 +53,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.5",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

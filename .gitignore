@@ -2,6 +2,9 @@ node_modules/
 dist/
 apps/*/dist/
 packages/*/dist/
+playwright-report/
+test-results/
+e2e/.live-runs.jsonl
 .pi/
 .agents/skills/*
 !.agents/skills/pa-matter-retrospective/

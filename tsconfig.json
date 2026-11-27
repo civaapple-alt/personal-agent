@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["apps/cli/src/**/*.ts", "packages/**/*.ts", "pa-extensions/**/server/**/*.ts", "test/**/*.ts"]
+  "include": ["apps/cli/src/**/*.ts", "packages/**/*.ts", "pa-extensions/**/server/**/*.ts", "test/**/*.ts", "e2e/**/*.ts"]
 }
