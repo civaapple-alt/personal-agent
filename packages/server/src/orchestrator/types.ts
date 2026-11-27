@@ -1,3 +1,4 @@
+import type { BoardMemberDto, BoardPostSummaryDto, MatterEventDto } from "@pa/contracts/board";
 import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
 import type { RoleTemplate } from "../roles/types.ts";
 import { PiRpcWorker, type PiRpcWorkerOptions, type PromptRunResult } from "../rpc/pi-rpc-worker.ts";
@@ -10,7 +11,15 @@ import type {
 	ThinkingLevel,
 } from "../rpc/types.ts";
 import type { PersonalAgentStore } from "../storage/repositories.ts";
-import type { CollaboratorRole, Matter, MatterMessage, TeamMember, WorkspaceLink } from "../storage/types.ts";
+import type {
+	CollaboratorRole,
+	Matter,
+	MatterCollaborationMode,
+	MatterMessage,
+	MatterStatus,
+	TeamMember,
+	WorkspaceLink,
+} from "../storage/types.ts";
 import type { MetaArchitectBlueprintProposal, MetaArchitectRoleAdjustment } from "./architect/meta-architect.ts";
 import type { DecisionClassifier } from "./architect/system-one.ts";
 import type { DraftVerification } from "./execution/independent-verification.ts";
@@ -203,6 +212,8 @@ export interface DispatchMatterInput {
 	images?: PromptImageAttachment[];
 	files?: PromptFileAttachment[];
 	preferredMemberId?: string;
+	collaborationMode?: MatterCollaborationMode;
+	coordinatorMemberId?: string | null;
 	workspaceId?: string;
 	orgId?: string | null;
 	actorUserId?: string | null;
@@ -220,8 +231,14 @@ export interface DispatchMatterInput {
 		permissionRole: CollaboratorRole;
 	};
 	timeoutMs?: number;
+	resumeFromBoardPostNo?: number;
+	boardMonitorSilenceMs?: number;
 	onTextDelta?: (delta: string) => void;
 	onProgress?: (progress: DispatchProgressEvent) => void;
+	onBoardPostCreated?: (payload: { matterId: string; post: BoardPostSummaryDto }) => void;
+	onBoardMemberUpdated?: (payload: { matterId: string; member: BoardMemberDto }) => void;
+	onMatterEventAppended?: (payload: { matterId: string; event: MatterEventDto }) => void;
+	onMatterStatusUpdated?: (payload: { matterId: string; status: MatterStatus; summary?: string }) => void;
 }
 
 export interface DispatchMatterResult {
@@ -342,6 +359,9 @@ const TOOL_LABELS: Record<string, string> = {
 	edit: "修改文件",
 	write: "写入文件",
 	delegate_to_member: "委托团队成员",
+	spawn_board_agent: "动态组队",
+	post_to_board: "发布公告板动态",
+	read_board_post: "读取公告板正文",
 	save_space_page: "保存资料",
 	propose_skill: "提议沉淀 Skill 与脚本",
 	read_team_roles: "读取团队角色名录",

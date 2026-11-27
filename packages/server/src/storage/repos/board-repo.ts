@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import type { BoardMemberMetrics, BoardPostArtifacts, BoardPostVerification } from "@pa/contracts/board";
+import type { ModelSelection } from "@pa/contracts/model-selection";
+import { readStoredModelSelection } from "../../rpc/model-selection.ts";
 import type { MatterMessage } from "../types.ts";
 import { normalizeUniqueIds, nowIso, parseUniqueIds } from "./helpers.ts";
 
@@ -68,8 +71,8 @@ export interface BoardPostSummaryRecord {
 	refPostNos: number[];
 	summary: string;
 	hasBody: boolean;
-	artifacts: unknown | null;
-	verification: Record<string, unknown> | null;
+	artifacts: BoardPostArtifacts | null;
+	verification: BoardPostVerification | null;
 	orgId: string | null;
 	workspaceId: string | null;
 	createdAt: string;
@@ -89,8 +92,8 @@ export interface CreateBoardPostInput {
 	refPostNos?: number[];
 	summary: string;
 	body?: string;
-	artifacts?: unknown | null;
-	verification?: Record<string, unknown> | null;
+	artifacts?: BoardPostArtifacts | unknown | null;
+	verification?: BoardPostVerification | Record<string, unknown> | null;
 	orgId?: string | null;
 	workspaceId?: string | null;
 	createdAt?: string;
@@ -116,9 +119,9 @@ export interface BoardMemberRecord {
 	acceptanceCriteria: string;
 	lastReadPostNo: number;
 	activePostNo: number | null;
-	modelOverride: Record<string, unknown> | null;
+	modelOverride: ModelSelection | null;
 	worktreePath: string | null;
-	metrics: Record<string, unknown> | null;
+	metrics: BoardMemberMetrics | null;
 	updatedAt: string;
 }
 
@@ -135,18 +138,18 @@ export interface UpsertBoardMemberInput {
 	acceptanceCriteria?: string;
 	lastReadPostNo?: number;
 	activePostNo?: number | null;
-	modelOverride?: Record<string, unknown> | null;
+	modelOverride?: ModelSelection | Record<string, unknown> | null;
 	worktreePath?: string | null;
-	metrics?: Record<string, unknown> | null;
+	metrics?: BoardMemberMetrics | Record<string, unknown> | null;
 }
 
 export interface UpdateBoardMemberStatePatch {
 	status?: BoardMemberStatus;
 	lastReadPostNo?: number;
 	activePostNo?: number | null;
-	modelOverride?: Record<string, unknown> | null;
+	modelOverride?: ModelSelection | Record<string, unknown> | null;
 	worktreePath?: string | null;
-	metrics?: Record<string, unknown> | null;
+	metrics?: BoardMemberMetrics | Record<string, unknown> | null;
 	brief?: string;
 	skills?: string[];
 	ownedScope?: string[];
@@ -200,15 +203,6 @@ function parseJsonObject(raw: unknown): Record<string, unknown> | null {
 		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
 			? (parsed as Record<string, unknown>)
 			: null;
-	} catch {
-		return null;
-	}
-}
-
-function parseJsonValue(raw: unknown): unknown | null {
-	if (typeof raw !== "string" || !raw.trim()) return null;
-	try {
-		return JSON.parse(raw) as unknown;
 	} catch {
 		return null;
 	}
@@ -312,8 +306,8 @@ function mapBoardPostSummaryRow(row: Record<string, unknown>): BoardPostSummaryR
 		refPostNos: parsePostNos(row.ref_post_nos_json),
 		summary: String(row.summary),
 		hasBody: Boolean(row.has_body ?? (typeof row.body === "string" && row.body.length > 0)),
-		artifacts: parseJsonValue(row.artifacts_json),
-		verification: parseJsonObject(row.verification_json),
+		artifacts: parseJsonObject(row.artifacts_json) as BoardPostArtifacts | null,
+		verification: parseJsonObject(row.verification_json) as BoardPostVerification | null,
 		orgId: row.org_id ? String(row.org_id) : null,
 		workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 		createdAt: String(row.created_at),
@@ -341,9 +335,9 @@ function mapBoardMemberRow(row: Record<string, unknown>): BoardMemberRecord {
 		acceptanceCriteria: typeof row.acceptance_criteria === "string" ? row.acceptance_criteria : "",
 		lastReadPostNo: Number(row.last_read_post_no ?? 0),
 		activePostNo: typeof row.active_post_no === "number" ? row.active_post_no : null,
-		modelOverride: parseJsonObject(row.model_override_json),
+		modelOverride: readStoredModelSelection(parseJsonObject(row.model_override_json)),
 		worktreePath: row.worktree_path ? String(row.worktree_path) : null,
-		metrics: parseJsonObject(row.metrics_json),
+		metrics: parseJsonObject(row.metrics_json) as BoardMemberMetrics | null,
 		updatedAt: String(row.updated_at),
 	};
 }
@@ -677,6 +671,20 @@ export class BoardRepo {
 		};
 	}
 
+	updateMatterBoardMeta(
+		matterId: string,
+		patch: { collaborationMode?: MatterCollaborationMode; coordinatorMemberId?: string | null },
+	): void {
+		const existing = this.getMatterBoardMeta(matterId);
+		if (!existing) throw new Error(`Matter not found: ${matterId}`);
+		const nextMode = patch.collaborationMode ?? existing.collaborationMode;
+		const nextCoordinatorId =
+			patch.coordinatorMemberId !== undefined ? patch.coordinatorMemberId : existing.coordinatorMemberId;
+		this.db
+			.prepare("UPDATE matters SET collaboration_mode = ?, coordinator_member_id = ?, updated_at = ? WHERE id = ?")
+			.run(nextMode === "board" ? "board" : "lead", nextCoordinatorId, nowIso(), matterId);
+	}
+
 	appendEvent(input: AppendMatterEventInput): MatterEventRecord {
 		const id = input.id ?? `mevt_${randomUUID()}`;
 		const createdAt = input.createdAt ?? nowIso();
@@ -853,6 +861,20 @@ export class BoardRepo {
 			.prepare("SELECT * FROM matter_board_posts WHERE matter_id = ? AND post_no = ?")
 			.get(matterId, postNo) as Record<string, unknown> | undefined;
 		return row ? mapBoardPostRow(row) : null;
+	}
+
+	getLatestBoardPostNo(matterId: string): number {
+		const row = this.db
+			.prepare("SELECT COALESCE(MAX(post_no), 0) AS latest_no FROM matter_board_posts WHERE matter_id = ?")
+			.get(matterId) as { latest_no?: number } | undefined;
+		return Number(row?.latest_no ?? 0);
+	}
+
+	getBoardMember(matterId: string, agentId: string): BoardMemberRecord | null {
+		const row = this.db
+			.prepare("SELECT * FROM matter_board_members WHERE matter_id = ? AND agent_id = ?")
+			.get(matterId, agentId) as Record<string, unknown> | undefined;
+		return row ? mapBoardMemberRow(row) : null;
 	}
 
 	upsertBoardMember(input: UpsertBoardMemberInput): BoardMemberRecord {

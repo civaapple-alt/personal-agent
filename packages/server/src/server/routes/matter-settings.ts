@@ -45,6 +45,8 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 		const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
 		const hasOrgUpdate = Object.hasOwn(body, "orgId");
 		const hasLeadUpdate = Object.hasOwn(body, "leadMemberId");
+		const hasCollaborationModeUpdate = Object.hasOwn(body, "collaborationMode");
+		const hasCoordinatorUpdate = Object.hasOwn(body, "coordinatorMemberId");
 		const hasAiMembersUpdate = Object.hasOwn(body, "aiMemberIds");
 		const hasConsultMembersUpdate = Object.hasOwn(body, "consultMemberIds");
 		const hasObserversEnabledUpdate = Object.hasOwn(body, "observersEnabled");
@@ -97,6 +99,32 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 				res,
 				nextLeadId ? 404 : 400,
 				nextLeadId ? `Member not found: ${nextLeadId}` : "leadMemberId is invalid",
+			);
+			return true;
+		}
+		const nextCollaborationMode =
+			body.collaborationMode === "lead" || body.collaborationMode === "board"
+				? (body.collaborationMode as "lead" | "board")
+				: undefined;
+		if (hasCollaborationModeUpdate && !nextCollaborationMode) {
+			sendError(res, 400, 'collaborationMode must be "lead" or "board"');
+			return true;
+		}
+		const nextCoordinatorMemberId =
+			body.coordinatorMemberId === null
+				? null
+				: typeof body.coordinatorMemberId === "string" && body.coordinatorMemberId.trim().length > 0
+					? body.coordinatorMemberId.trim()
+					: undefined;
+		if (
+			hasCoordinatorUpdate &&
+			body.coordinatorMemberId !== null &&
+			(!nextCoordinatorMemberId || !store.getMember(nextCoordinatorMemberId))
+		) {
+			sendError(
+				res,
+				nextCoordinatorMemberId ? 404 : 400,
+				nextCoordinatorMemberId ? `Member not found: ${nextCoordinatorMemberId}` : "coordinatorMemberId is invalid",
 			);
 			return true;
 		}
@@ -157,10 +185,19 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			}
 		}
 		if (
-			(hasModelSelectionUpdate || hasWorkspaceUpdate || hasOrgUpdate || hasLeadUpdate) &&
+			(hasModelSelectionUpdate ||
+				hasWorkspaceUpdate ||
+				hasOrgUpdate ||
+				hasLeadUpdate ||
+				hasCollaborationModeUpdate ||
+				hasCoordinatorUpdate) &&
 			orchestrator.isMatterRunning(matterId)
 		) {
-			sendError(res, 409, "Stop the active turn before switching workspaces, organizations, lead member, or model");
+			sendError(
+				res,
+				409,
+				"Stop the active turn before switching workspaces, organizations, lead member, collaboration mode, or model",
+			);
 			return true;
 		}
 		if (nextStatus === "archived" && orchestrator.isMatterRunning(matterId)) {
@@ -169,7 +206,7 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 		}
 		const rosterOrgId = targetWorkspace ? targetWorkspace.orgId : hasOrgUpdate ? nextOrgId : existing.orgId;
 		if (
-			!ensureOrgEnabledAiRequest(res, ctx, actor, rosterOrgId, nextLeadId, [
+			!ensureOrgEnabledAiRequest(res, ctx, actor, rosterOrgId, nextLeadId ?? nextCoordinatorMemberId ?? null, [
 				...(parsedAiMemberIds ?? []),
 				...(parsedConsultMemberIds ?? []),
 				...(observerMemberIds ?? []),
@@ -240,6 +277,21 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 					leadMemberId: updated.leadMemberId,
 					aiMemberIds: updated.aiMemberIds,
 					observerMemberIds: updated.observerMemberIds,
+				},
+				{ matterId },
+			);
+		}
+		if (hasCollaborationModeUpdate || hasCoordinatorUpdate) {
+			updated = store.updateMatterBoardMeta(matterId, {
+				...(nextCollaborationMode ? { collaborationMode: nextCollaborationMode } : {}),
+				...(nextCoordinatorMemberId !== undefined ? { coordinatorMemberId: nextCoordinatorMemberId } : {}),
+			});
+			broadcast(
+				"matter_updated",
+				{
+					matterId,
+					collaborationMode: updated.collaborationMode,
+					coordinatorMemberId: updated.coordinatorMemberId,
 				},
 				{ matterId },
 			);

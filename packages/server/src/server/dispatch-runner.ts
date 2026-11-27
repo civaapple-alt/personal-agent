@@ -40,6 +40,7 @@ export interface BackgroundDispatchInput {
 	orgId?: string | null;
 	observerMemberIds?: string[];
 	startedByUserId?: string | null;
+	resumeFromBoardPostNo?: number;
 	author?: {
 		collaboratorId: string;
 		name: string;
@@ -119,6 +120,52 @@ export function createDispatchRunner(deps: {
 				inheritLocalPiResources: input.interactionMode !== "discussion" && deps.inheritsLocalPiResources(actor),
 				observerMemberIds: input.observerMemberIds,
 				author: input.author,
+				resumeFromBoardPostNo: input.resumeFromBoardPostNo,
+				onBoardPostCreated: ({ matterId, post }) => {
+					broadcast(
+						"board_post_created",
+						{
+							matterId,
+							postNo: post.postNo,
+							kind: post.kind,
+							authorId: post.authorId,
+							mentions: post.mentions,
+							summary: post.summary,
+							createdAt: post.createdAt,
+						},
+						{ matterId },
+					);
+				},
+				onBoardMemberUpdated: ({ matterId, member }) => {
+					broadcast(
+						"board_member_updated",
+						{
+							matterId,
+							agentId: member.agentId,
+							status: member.status,
+							activePostNo: member.activePostNo,
+							metrics: member.metrics,
+							updatedAt: member.updatedAt,
+						},
+						{ matterId },
+					);
+				},
+				onMatterEventAppended: ({ matterId, event }) => {
+					broadcast(
+						"matter_event_appended",
+						{
+							matterId,
+							runId: event.runId,
+							agentId: event.agentId,
+							eventType: event.eventType,
+							createdAt: event.createdAt,
+						},
+						{ matterId },
+					);
+				},
+				onMatterStatusUpdated: (payload) => {
+					broadcast("matter_updated", payload, { matterId: payload.matterId });
+				},
 				onTextDelta: (delta) => {
 					accumulatedDelta += delta;
 					activeEntry.accumulatedDelta = accumulatedDelta;

@@ -188,6 +188,10 @@ export class PersonalAgentStore {
 	getMatterBoardMeta(matterId: string) {
 		return this.board.getMatterBoardMeta(matterId);
 	}
+	updateMatterBoardMeta(matterId: string, patch: Parameters<BoardRepo["updateMatterBoardMeta"]>[1]) {
+		this.board.updateMatterBoardMeta(matterId, patch);
+		return this.matters.getMatter(matterId)!;
+	}
 	appendEvent(input: Parameters<BoardRepo["appendEvent"]>[0]) {
 		return this.board.appendEvent(input);
 	}
@@ -203,8 +207,14 @@ export class PersonalAgentStore {
 	getBoardPost(matterId: string, postNo: number) {
 		return this.board.getBoardPost(matterId, postNo);
 	}
+	getLatestBoardPostNo(matterId: string) {
+		return this.board.getLatestBoardPostNo(matterId);
+	}
 	upsertBoardMember(input: Parameters<BoardRepo["upsertBoardMember"]>[0]) {
 		return this.board.upsertBoardMember(input);
+	}
+	getBoardMember(matterId: string, agentId: string) {
+		return this.board.getBoardMember(matterId, agentId);
 	}
 	listBoardMembers(matterId: string) {
 		return this.board.listBoardMembers(matterId);

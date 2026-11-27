@@ -187,6 +187,11 @@ export function mapMatterRow(row: Record<string, unknown>): Matter {
 		summary: String(row.summary),
 		status: row.status as MatterStatus,
 		leadMemberId: row.lead_member_id ? String(row.lead_member_id) : null,
+		collaborationMode: row.collaboration_mode === "board" ? "board" : "lead",
+		coordinatorMemberId:
+			typeof row.coordinator_member_id === "string" && row.coordinator_member_id.trim()
+				? row.coordinator_member_id.trim()
+				: null,
 		workspaceId: row.workspace_id ? String(row.workspace_id) : null,
 		orgId: row.org_id ? String(row.org_id) : null,
 		...(createdByUserId ? { createdByUserId } : {}),

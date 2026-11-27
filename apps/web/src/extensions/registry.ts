@@ -1,3 +1,4 @@
+import board from "@pa/ext-board/web";
 import delegation from "@pa/ext-delegation/web";
 import humanQuestion from "@pa/ext-human-question/web";
 import nextSteps from "@pa/ext-next-steps/web";
@@ -16,6 +17,7 @@ export const builtinWebExtensions: readonly PaWebExtension[] = [
 	workerRuntime,
 	space,
 	delegation,
+	board,
 	skillCapture,
 	humanQuestion,
 	skillCatalog,

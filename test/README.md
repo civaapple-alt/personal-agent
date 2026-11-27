@@ -5,6 +5,8 @@
 | 你改了什么 | 主要覆盖 |
 | --- | --- |
 | Pi RPC、JSONL、超时或退出 | [pi-rpc-worker.test.ts](pi-rpc-worker.test.ts) |
+| 存储拆表（`matter_events` / `matter_board_*`）、`0.8.x` 迁移与看板懒加载 ACL 接口 | [storage-board-m1.test.ts](storage-board-m1.test.ts) |
+| `0.9.0` Board 动态组队、`@mention` 异步闭环、安全边界、`@monitor`、`waiting` 热切模型与 HITL 恢复 | [board-orchestration-m2.test.ts](board-orchestration-m2.test.ts) |
 | GitHub 抓取来源、临时克隆失效、事件脱敏与展示 | [web-fetch-evidence.test.ts](web-fetch-evidence.test.ts) 和 [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |
 | 会话接续、委托、取消与成果语义 | [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |

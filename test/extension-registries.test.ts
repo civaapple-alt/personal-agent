@@ -15,6 +15,7 @@ test("server and web extension registries stay aligned and resolve declared buil
 		"worker-runtime",
 		"space",
 		"delegation",
+		"board",
 		"skill-capture",
 		"human-question",
 		"skill-catalog",

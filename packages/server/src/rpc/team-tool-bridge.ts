@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import type { BoardPostArtifacts, BoardPostKind, BoardPostVerification, BoardRole } from "@pa/contracts/board";
 import type { Clarification } from "@pa/contracts/human-decision";
 import {
 	isSkillStorageTarget,
@@ -47,6 +48,34 @@ export type TeamToolCall =
 			task: string;
 			handoffDocumentIds?: string[];
 			verification?: VerificationRequest;
+	  }
+	| {
+			tool: "spawn_board_agent";
+			callId: string;
+			agentId: string;
+			boardRole: BoardRole;
+			displayName?: string;
+			sourceMemberId?: string;
+			brief: string;
+			skills?: string[];
+			ownedScope?: string[];
+			acceptanceCriteria?: string;
+	  }
+	| {
+			tool: "post_to_board";
+			callId: string;
+			kind: BoardPostKind;
+			mentions: string[];
+			refPostNos?: number[];
+			summary: string;
+			body?: string;
+			artifacts?: BoardPostArtifacts | null;
+			verification?: BoardPostVerification | null;
+	  }
+	| {
+			tool: "read_board_post";
+			callId: string;
+			postNo: number;
 	  }
 	| {
 			tool: "propose_skill";
@@ -113,6 +142,26 @@ export type TeamToolCall =
 			workflowNote?: string;
 			rationale: string;
 	  };
+
+const VALID_BOARD_POST_KINDS = new Set<BoardPostKind>([
+	"assign",
+	"progress",
+	"handoff",
+	"verify_pass",
+	"verify_rework",
+	"escalate",
+	"clarification",
+	"summary",
+]);
+
+function parseOptionalStringList(raw: unknown, field: string, maxItems = 16, maxLen = 400): string[] | undefined {
+	if (raw === undefined) return undefined;
+	if (!Array.isArray(raw) || raw.length > maxItems) {
+		throw new Error(`${field} must be an array of at most ${maxItems} strings`);
+	}
+	const list = raw.map((item) => (typeof item === "string" ? item.trim().slice(0, maxLen) : "")).filter(Boolean);
+	return list.length > 0 ? list : undefined;
+}
 
 function requiredString(value: unknown, name: string, max = 64_000): string {
 	if (typeof value !== "string" || !value.trim() || value.length > max) {
@@ -495,6 +544,117 @@ function parseCall(value: unknown): TeamToolCall {
 			};
 		}
 		throw new Error("propose_role action must be 'create' or 'update'");
+	}
+	if (value.tool === "spawn_board_agent") {
+		if (!("agentId" in args) || !("boardRole" in args) || !("brief" in args)) {
+			throw new Error("spawn_board_agent requires agentId, boardRole, and brief");
+		}
+		const agentId = requiredString(args.agentId, "agentId", 120).replace(/^@+/, "");
+		const boardRole = args.boardRole;
+		if (boardRole !== "builder" && boardRole !== "verifier") {
+			throw new Error("spawn_board_agent boardRole must be 'builder' or 'verifier'");
+		}
+		const brief = requiredString(args.brief, "brief", 16_000);
+		const displayName =
+			"displayName" in args && typeof args.displayName === "string" && args.displayName.trim()
+				? args.displayName.trim().slice(0, 120)
+				: undefined;
+		const sourceMemberId =
+			"sourceMemberId" in args && typeof args.sourceMemberId === "string" && args.sourceMemberId.trim()
+				? args.sourceMemberId.trim().slice(0, 120)
+				: undefined;
+		const acceptanceCriteria =
+			"acceptanceCriteria" in args && typeof args.acceptanceCriteria === "string" && args.acceptanceCriteria.trim()
+				? args.acceptanceCriteria.trim().slice(0, 8000)
+				: undefined;
+		const skills = "skills" in args ? parseOptionalStringList(args.skills, "skills", 16, 120) : undefined;
+		const ownedScope =
+			"ownedScope" in args ? parseOptionalStringList(args.ownedScope, "ownedScope", 24, 300) : undefined;
+		return {
+			tool: "spawn_board_agent",
+			callId,
+			agentId,
+			boardRole,
+			brief,
+			...(displayName ? { displayName } : {}),
+			...(sourceMemberId ? { sourceMemberId } : {}),
+			...(skills ? { skills } : {}),
+			...(ownedScope ? { ownedScope } : {}),
+			...(acceptanceCriteria ? { acceptanceCriteria } : {}),
+		};
+	}
+	if (value.tool === "post_to_board") {
+		if (!("kind" in args) || !("mentions" in args) || !("summary" in args)) {
+			throw new Error("post_to_board requires kind, mentions, and summary");
+		}
+		const kind = args.kind;
+		if (typeof kind !== "string" || !VALID_BOARD_POST_KINDS.has(kind as BoardPostKind)) {
+			throw new Error("Unsupported board post kind");
+		}
+		if (!Array.isArray(args.mentions) || args.mentions.length > 20) {
+			throw new Error("mentions must be an array of at most 20 strings");
+		}
+		const mentions = args.mentions
+			.filter((item): item is string => typeof item === "string")
+			.map((item) => item.trim().replace(/^@+/, ""))
+			.filter(Boolean);
+		const summary = requiredString(args.summary, "summary", 1000);
+		const body = "body" in args && typeof args.body === "string" ? args.body.slice(0, 64_000) : undefined;
+		let refPostNos: number[] | undefined;
+		if ("refPostNos" in args && args.refPostNos !== undefined) {
+			if (!Array.isArray(args.refPostNos) || args.refPostNos.length > 20) {
+				throw new Error("refPostNos must be an array of positive integers");
+			}
+			refPostNos = args.refPostNos.filter(
+				(item): item is number => typeof item === "number" && Number.isInteger(item) && item > 0,
+			);
+		}
+		const artifacts =
+			"artifacts" in args && args.artifacts && typeof args.artifacts === "object" && !Array.isArray(args.artifacts)
+				? (args.artifacts as BoardPostArtifacts)
+				: undefined;
+		let verification: BoardPostVerification | undefined;
+		if ("verification" in args && args.verification !== undefined) {
+			const raw = args.verification;
+			if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+				throw new Error("verification must be an object");
+			}
+			const rec = raw as Record<string, unknown>;
+			if (rec.verdict !== "pass" && rec.verdict !== "rework" && rec.verdict !== "pending") {
+				throw new Error("verification.verdict must be 'pass', 'rework', or 'pending'");
+			}
+			verification = {
+				target: requiredString(rec.target, "verification.target", 2000),
+				verdict: rec.verdict,
+				...(typeof rec.criteria === "string" && rec.criteria.trim()
+					? { criteria: rec.criteria.trim().slice(0, 2000) }
+					: {}),
+				...(typeof rec.authorAgentId === "string" && rec.authorAgentId.trim()
+					? { authorAgentId: rec.authorAgentId.trim().slice(0, 120) }
+					: {}),
+			};
+		}
+		return {
+			tool: "post_to_board",
+			callId,
+			kind: kind as BoardPostKind,
+			mentions,
+			summary,
+			...(refPostNos && refPostNos.length > 0 ? { refPostNos } : {}),
+			...(body !== undefined ? { body } : {}),
+			...(artifacts ? { artifacts } : {}),
+			...(verification ? { verification } : {}),
+		};
+	}
+	if (value.tool === "read_board_post") {
+		if (!("postNo" in args) || typeof args.postNo !== "number" || !Number.isInteger(args.postNo) || args.postNo < 1) {
+			throw new Error("read_board_post requires a positive integer postNo");
+		}
+		return {
+			tool: "read_board_post",
+			callId,
+			postNo: args.postNo,
+		};
 	}
 	throw new Error("Unsupported tool or invalid arguments");
 }

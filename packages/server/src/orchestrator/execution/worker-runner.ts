@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import type { BoardRole } from "@pa/contracts/board";
+import type { ModelSelection } from "@pa/contracts/model-selection";
 import type { SkillProposalItem } from "@pa/contracts/skill-proposal";
 import { skillTrustPolicyKey } from "@pa/contracts/skill-trust";
 import { classifyGithubFetches } from "../../../../../pa-extensions/worker-runtime/pi/web-fetch-evidence.js";
@@ -16,6 +18,7 @@ import type { PromptRunResult } from "../../rpc/pi-rpc-worker.ts";
 import { summarizePromptUsage } from "../../rpc/prompt-usage.ts";
 import { abortable, createTeamToolBridge, type TeamToolCall } from "../../rpc/team-tool-bridge.ts";
 import type { ImageContent } from "../../rpc/types.ts";
+import type { MatterEventRecord } from "../../storage/repos/board-repo.ts";
 import { type PersonalAgentStore, resolveEffectiveGitIdentity } from "../../storage/repositories.ts";
 import type { Matter, TeamMember, WorkspaceLink } from "../../storage/types.ts";
 import {
@@ -99,6 +102,25 @@ export interface WorkerRunnerDeps {
 	) => Promise<DelegateResult>;
 }
 
+export type BoardWorkerToolCall = Extract<
+	TeamToolCall,
+	{ tool: "spawn_board_agent" | "post_to_board" | "read_board_post" }
+>;
+
+export interface BoardWorkerContext {
+	agentId: string;
+	boardRole: BoardRole;
+	displayName: string;
+	brief: string;
+	skills?: string[];
+	ownedScope?: string[];
+	acceptanceCriteria?: string;
+	modelOverride?: ModelSelection | null;
+	turnPromptContext?: string;
+	onToolCall: (call: BoardWorkerToolCall, signal: AbortSignal) => Promise<unknown>;
+	onEventAppended?: (event: MatterEventRecord) => void;
+}
+
 export interface ExecuteWorkerInput {
 	matterId: string;
 	member: TeamMember;
@@ -111,6 +133,7 @@ export interface ExecuteWorkerInput {
 	sessionMode?: WorkerSessionMode;
 	discussionMode?: boolean;
 	excludeMessageIds?: string[];
+	boardContext?: BoardWorkerContext;
 	run: MatterRun;
 	chain: string[];
 	signal: AbortSignal;
@@ -125,7 +148,11 @@ export async function executeWithWorkerPass(
 	input: ExecuteWorkerInput,
 ): Promise<PromptRunResult> {
 	input.signal.throwIfAborted();
-	const sessionMode = input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead");
+	const boardCtx = input.boardContext;
+	const sessionMode =
+		boardCtx?.boardRole === "verifier"
+			? "verifier"
+			: (input.sessionMode ?? (input.isInternalDelegation ? "internal" : "lead"));
 	const isDiscussionMode = Boolean(input.discussionMode);
 	const matter = deps.store.getMatter(input.matterId);
 	const isMatterLead = !matter?.leadMemberId || input.member.id === matter.leadMemberId;
@@ -154,6 +181,7 @@ export async function executeWithWorkerPass(
 		isSolo,
 		hasConsultTargets,
 		isMatterLead,
+		...(boardCtx ? { boardRole: boardCtx.boardRole, boardAgentId: boardCtx.agentId } : {}),
 	});
 	const { canSaveSpace, canDelegate, canCaptureSkill, canManageRoles } = teamExtension;
 	const humanQuestion = prepareHumanQuestion({
@@ -175,6 +203,7 @@ export async function executeWithWorkerPass(
 		"v2",
 		input.workspace?.id ?? null,
 		cwd,
+		...(boardCtx ? ["board", boardCtx.agentId, boardCtx.boardRole] : []),
 		isDiscussionMode ? `discussion-${sessionMode}` : sessionMode === "lead" ? "user" : sessionMode,
 		activeOrgId,
 		...(inheritsLocalResources ? ["local-pi"] : []),
@@ -233,7 +262,10 @@ export async function executeWithWorkerPass(
 			: deps.store.findWorkerSession(input.matterId, input.member.id, contextKey, input.workspace?.id ?? null);
 		const sessionFile = previous ? await validateSavedSession(previous, cwd) : undefined;
 		// Role declarations describe responsibilities, not the runtime tool allowlist.
-		const requestedTools = ["read", process.platform === "win32" ? "powershell" : "bash", "edit", "write"];
+		const canUseWriteTools = boardCtx?.boardRole !== "verifier" && boardCtx?.boardRole !== "coordinator";
+		const requestedTools = canUseWriteTools
+			? ["read", process.platform === "win32" ? "powershell" : "bash", "edit", "write"]
+			: ["read", process.platform === "win32" ? "powershell" : "bash"];
 		const webAccess = await prepareWebAccessForWorker({
 			store: deps.store,
 			envFilePath: resolve(deps.defaultCwd, ".env"),
@@ -638,6 +670,15 @@ export async function executeWithWorkerPass(
 				if (call.tool === "request_clarification") {
 					return humanQuestion.request(call);
 				}
+				if (call.tool === "spawn_board_agent" || call.tool === "post_to_board" || call.tool === "read_board_post") {
+					if (!boardCtx) {
+						throw new Error(`Tool '${call.tool}' is only available in board collaboration mode`);
+					}
+					if (call.tool === "spawn_board_agent" && boardCtx.boardRole !== "coordinator") {
+						throw new Error("Only the coordinator can invoke spawn_board_agent");
+					}
+					return await boardCtx.onToolCall(call, toolSignal);
+				}
 				if (call.tool === "propose_skill") {
 					if (!canCaptureSkill && !isDiscussionMode) {
 						throw new Error(
@@ -757,7 +798,8 @@ export async function executeWithWorkerPass(
 			(!(isArchitect || isDiscussionMode || input.run.keepMatterLead) || input.member.id === matter?.leadMemberId)
 				? matter?.modelSelection
 				: null;
-		const configuredModel = resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);
+		const configuredModel =
+			boardCtx?.modelOverride ?? resolveConfiguredModel(deps.store, activeOrgId, input.member.id, matterModel);
 		let selection = configuredModel;
 		if (!configuredModel || configuredModel.thinkingLevel === undefined) {
 			const piDefault = (await abortable(deps.readPiModels(configuredModel ?? undefined), signal)).defaultModel;
@@ -877,6 +919,34 @@ export async function executeWithWorkerPass(
 		for (const policy of deps.store.skillTrust.listPolicies()) {
 			trustPolicyMap[skillTrustPolicyKey(policy.scope, policy.scopeId, policy.skillName)] = policy.trustLevel;
 		}
+		const boardAssignmentPrompt = boardCtx
+			? [
+					"[Board Agent Assignment]",
+					`Agent ID: ${boardCtx.agentId} (${boardCtx.displayName})`,
+					`Board Role: ${boardCtx.boardRole}`,
+					`Mission Brief: ${boardCtx.brief}`,
+					...(boardCtx.ownedScope && boardCtx.ownedScope.length > 0
+						? [`Owned Scope: ${boardCtx.ownedScope.join(", ")}`]
+						: []),
+					...(boardCtx.acceptanceCriteria ? [`Acceptance Criteria: ${boardCtx.acceptanceCriteria}`] : []),
+					...(boardCtx.skills && boardCtx.skills.length > 0
+						? [`Assigned Skills: ${boardCtx.skills.join(", ")}`]
+						: []),
+					...(boardCtx.boardRole === "verifier"
+						? [
+								"Verifier Boundary: read/test-only (no write/edit tools). Verify independently from author and post verify_pass or verify_rework via post_to_board.",
+							]
+						: boardCtx.boardRole === "coordinator"
+							? [
+									"Coordinator Boundary: decompose tasks, spawn dynamic agents with spawn_board_agent, post @mentions, and escalate/summarize. Do not edit files directly.",
+								]
+							: [
+									"Builder Boundary: implement only within your ownedScope, verify locally with tests/commands, and report handoff via post_to_board.",
+								]),
+					...(boardCtx.turnPromptContext ? ["", boardCtx.turnPromptContext] : []),
+					"[/Board Agent Assignment]",
+				].join("\n")
+			: undefined;
 		signal.throwIfAborted();
 		worker = deps.workerFactory({
 			cwd,
@@ -899,7 +969,13 @@ export async function executeWithWorkerPass(
 					deploymentMode: input.run.inheritLocalPiResources ? "local" : "multi_tenant",
 					attachedContextFiles,
 					memberContext: [systemPrompt, architectContext?.systemPrompt],
-					turnContext: [turnContext, attachedFoldersPrompt, pendingDecisionsPrompt, architectContext?.turnContext],
+					turnContext: [
+						turnContext,
+						attachedFoldersPrompt,
+						pendingDecisionsPrompt,
+						architectContext?.turnContext,
+						boardAssignmentPrompt,
+					],
 				}),
 				...humanQuestion.env,
 				...webAccess?.env,
@@ -1000,27 +1076,45 @@ export async function executeWithWorkerPass(
 									: {}),
 							}
 						: undefined;
-				deps.store.appendMessage({
-					matterId: input.matterId,
-					channel: "notice",
-					senderType: "system",
-					senderId: input.member.id,
-					metadata: {
-						workspaceId: input.workspace?.id ?? null,
-						repoPath: cwd,
-						orgId: activeOrgId,
-						sourceUserMessageId: input.run.userMessageId,
-					},
-					content: JSON.stringify({
-						type: event.type,
-						toolCallId: event.toolCallId,
-						toolName,
-						...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
-						...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
-							? { isError: event.isError }
-							: {}),
-					}),
-				});
+				if (boardCtx) {
+					const appendedEvent = deps.store.appendEvent({
+						matterId: input.matterId,
+						runId: input.run.userMessageId || "board",
+						agentId: boardCtx.agentId,
+						eventType: event.type === "tool_execution_start" ? "tool_start" : "tool_end",
+						payload: {
+							toolCallId,
+							toolName,
+							...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
+							...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
+								? { isError: event.isError }
+								: {}),
+						},
+					});
+					boardCtx.onEventAppended?.(appendedEvent);
+				} else {
+					deps.store.appendMessage({
+						matterId: input.matterId,
+						channel: "notice",
+						senderType: "system",
+						senderId: input.member.id,
+						metadata: {
+							workspaceId: input.workspace?.id ?? null,
+							repoPath: cwd,
+							orgId: activeOrgId,
+							sourceUserMessageId: input.run.userMessageId,
+						},
+						content: JSON.stringify({
+							type: event.type,
+							toolCallId: event.toolCallId,
+							toolName,
+							...(compactArgs && Object.keys(compactArgs).length > 0 ? { args: compactArgs } : {}),
+							...(event.type === "tool_execution_end" && typeof event.isError === "boolean"
+								? { isError: event.isError }
+								: {}),
+						}),
+					});
+				}
 				if (toolName === "fetch_content" && event.type === "tool_execution_end") {
 					const inputArgs = fetchInputs.get(toolCallId);
 					fetchInputs.delete(toolCallId);
@@ -1317,6 +1411,20 @@ export async function executeWithWorkerPass(
 				input.onTextDelta?.(delta);
 			},
 		});
+		if (boardCtx) {
+			const summaryEvent = deps.store.appendEvent({
+				matterId: input.matterId,
+				runId: input.run.userMessageId || "board",
+				agentId: boardCtx.agentId,
+				eventType: "turn_summary",
+				payload: {
+					boardRole: boardCtx.boardRole,
+					aborted: result.aborted,
+					assistantTextPreview: result.assistantText.trim().slice(0, 240),
+				},
+			});
+			boardCtx.onEventAppended?.(summaryEvent);
+		}
 		const usage = summarizePromptUsage(result.assistantMessages);
 		if (usage) {
 			deps.store.appendMessage({

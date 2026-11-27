@@ -24,6 +24,7 @@ import {
 	type MatterRun,
 	resolveTurnTimeoutMs,
 } from "../types.ts";
+import { runBoardCollaborationTurn } from "./board-runner.ts";
 import { runObserversPass } from "./observer-runner.ts";
 import { resolveDiscussionMentionTargets } from "./prompts.ts";
 import { createTurnMonitor, type StalledMember } from "./turn-monitor.ts";
@@ -173,6 +174,9 @@ export async function dispatchMatterTurn(
 		deps.store.createMatter({
 			title: input.title ?? fallbackTitle,
 			leadMemberId: assignedMember.id,
+			collaborationMode: input.collaborationMode,
+			coordinatorMemberId:
+				input.coordinatorMemberId ?? (input.collaborationMode === "board" ? assignedMember.id : null),
 			workspaceId: workspace?.id,
 			orgId: effectiveOrgId,
 			createdByUserId: input.actorUserId ?? null,
@@ -432,6 +436,29 @@ export async function dispatchMatterTurn(
 				},
 			});
 		run.userMessageId = message.id;
+		if (matter.collaborationMode === "board" && !usesExistingRoster) {
+			const coordinatorMember =
+				(matter.coordinatorMemberId ? deps.store.getMember(matter.coordinatorMemberId) : null) ?? assignedMember;
+			speakerMemberId = coordinatorMember.id;
+			return await runBoardCollaborationTurn(
+				{
+					store: deps.store,
+					defaultCwd: deps.defaultCwd,
+					requireMatter: deps.requireMatter,
+					executeWithWorker: deps.executeWithWorker,
+				},
+				{
+					matter,
+					workspace,
+					coordinatorBaseMember: coordinatorMember,
+					effectiveOrgId,
+					input,
+					run,
+					emitDispatchProgress,
+					author: input.author,
+				},
+			);
+		}
 		emitDispatchProgress({
 			stage: "starting",
 			label: isConversation ? `${activeSpeaker.displayName}正在处理` : `正在接续${activeSpeaker.displayName}的工作`,

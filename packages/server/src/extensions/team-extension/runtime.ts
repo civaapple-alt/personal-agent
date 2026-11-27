@@ -1,3 +1,4 @@
+import type { BoardRole } from "@pa/contracts/board";
 import type { WorkerSessionMode } from "../../orchestrator/types.ts";
 import type { createTeamToolBridge, TeamToolCall } from "../../rpc/team-tool-bridge.ts";
 import { resolveBuiltinExtensionPath } from "../builtin-paths.ts";
@@ -6,6 +7,9 @@ export const TEAM_EXTENSION_TOOLS = [
 	"read_space",
 	"save_space_page",
 	"delegate_to_member",
+	"spawn_board_agent",
+	"post_to_board",
+	"read_board_post",
 	"propose_skill",
 	"read_team_roles",
 	"propose_role",
@@ -18,6 +22,8 @@ export function prepareTeamExtension({
 	isSolo = false,
 	hasConsultTargets,
 	isMatterLead = true,
+	boardRole,
+	boardAgentId,
 }: {
 	sessionMode: WorkerSessionMode;
 	discussionMode: boolean;
@@ -25,14 +31,19 @@ export function prepareTeamExtension({
 	isSolo?: boolean;
 	hasConsultTargets: boolean;
 	isMatterLead?: boolean;
+	boardRole?: BoardRole;
+	boardAgentId?: string;
 }) {
+	const isBoard = boardRole !== undefined;
 	const isLead = sessionMode === "lead";
 	const isInternal = sessionMode === "internal";
-	const canReadSpace = !isArchitect && (isLead || isInternal);
-	const canSaveSpace = !isArchitect && isLead && isMatterLead && !discussionMode;
-	const canDelegate = !isArchitect && !isSolo && (isInternal || (isLead && hasConsultTargets));
-	const canCaptureSkill = !isArchitect && !discussionMode && (isLead || isInternal);
-	const canManageRoles = isLead && !discussionMode;
+	const isVerifier = sessionMode === "verifier" || boardRole === "verifier";
+	const canReadSpace = !isArchitect && (isLead || isInternal || isBoard);
+	const canSaveSpace =
+		!isArchitect && (isLead || boardRole === "coordinator") && isMatterLead && !discussionMode && !isVerifier;
+	const canDelegate = !isBoard && !isArchitect && !isSolo && (isInternal || (isLead && hasConsultTargets));
+	const canCaptureSkill = !isArchitect && !discussionMode && !isVerifier && (isLead || isInternal || isBoard);
+	const canManageRoles = (isLead || boardRole === "coordinator") && !discussionMode;
 
 	const entries: string[] = [resolveBuiltinExtensionPath("worker-runtime")];
 	const tools: TeamToolCall["tool"][] = [];
@@ -47,6 +58,13 @@ export function prepareTeamExtension({
 	if (canDelegate) {
 		entries.push(resolveBuiltinExtensionPath("delegation"));
 		tools.push("delegate_to_member");
+	}
+	if (isBoard) {
+		entries.push(resolveBuiltinExtensionPath("board"));
+		if (boardRole === "coordinator") {
+			tools.push("spawn_board_agent");
+		}
+		tools.push("post_to_board", "read_board_post");
 	}
 	if (canCaptureSkill) {
 		entries.push(resolveBuiltinExtensionPath("skill-capture"));
@@ -85,6 +103,8 @@ export function prepareTeamExtension({
 				PA_TARGET_WORKSPACE_ROOT: workspaceRoot ?? "__none__",
 				...(paInstallRoot ? { PA_INSTALL_ROOT: paInstallRoot } : {}),
 				...(deploymentMode ? { PA_DEPLOYMENT_MODE: deploymentMode } : {}),
+				...(boardRole ? { PA_BOARD_ROLE: boardRole } : {}),
+				...(boardAgentId ? { PA_BOARD_AGENT_ID: boardAgentId } : {}),
 				...(attachedContextFiles && attachedContextFiles.length > 0
 					? { PA_ATTACHED_CONTEXT_FILES_JSON: JSON.stringify(attachedContextFiles) }
 					: {}),

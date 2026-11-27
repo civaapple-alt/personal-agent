@@ -71,6 +71,7 @@ export interface BoardPostSummaryDto {
 	mentions: string[];
 	refPostNos: number[];
 	summary: string;
+	hasBody?: boolean;
 	artifacts: BoardPostArtifacts | null;
 	verification: BoardPostVerification | null;
 	orgId: string | null;
@@ -129,4 +130,22 @@ export interface CreateBoardPostInput {
 	body?: string;
 	artifacts?: BoardPostArtifacts | null;
 	verification?: BoardPostVerification | null;
+}
+
+export interface SpawnBoardAgentInput {
+	agentId: string;
+	boardRole: BoardRole;
+	displayName?: string;
+	sourceMemberId?: string | null;
+	brief: string;
+	skills?: string[];
+	ownedScope?: string[];
+	acceptanceCriteria?: string;
+	modelOverride?: ModelSelection | null;
+}
+
+export interface UpdateBoardMemberControlInput {
+	action?: "pause" | "resume";
+	status?: BoardMemberStatus;
+	modelOverride?: ModelSelection | null;
 }

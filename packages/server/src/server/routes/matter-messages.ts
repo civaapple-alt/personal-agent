@@ -435,8 +435,35 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		}
 		const discussionAiEnabled = body.discussionAiEnabled === true;
 		const initialCollaboratorIds = [...requestedCollaboratorIds];
+		const requestedCollaborationMode = Object.hasOwn(body, "collaborationMode")
+			? body.collaborationMode === "board" || body.collaborationMode === "lead"
+				? body.collaborationMode
+				: undefined
+			: "lead";
+		if (!requestedCollaborationMode) {
+			sendError(res, 400, 'collaborationMode must be "lead" or "board"');
+			return true;
+		}
+		const requestedCoordinatorMemberId =
+			Object.hasOwn(body, "coordinatorMemberId") &&
+			typeof body.coordinatorMemberId === "string" &&
+			body.coordinatorMemberId.trim().length > 0
+				? body.coordinatorMemberId.trim()
+				: null;
 		if (
-			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, preferredMemberId, [
+			Object.hasOwn(body, "coordinatorMemberId") &&
+			body.coordinatorMemberId !== null &&
+			!requestedCoordinatorMemberId
+		) {
+			sendError(res, 400, "coordinatorMemberId must be a non-empty string or null");
+			return true;
+		}
+		if (requestedCoordinatorMemberId && !store.getMember(requestedCoordinatorMemberId)) {
+			sendError(res, 404, `Member not found: ${requestedCoordinatorMemberId}`);
+			return true;
+		}
+		if (
+			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, requestedCoordinatorMemberId ?? preferredMemberId, [
 				...(aiMemberIds ?? []),
 				...(consultMemberIds ?? []),
 				...(observerMemberIds ?? []),
@@ -477,6 +504,9 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const matter = store.createMatter({
 			title: title ?? fallbackTitle,
 			leadMemberId: mode === "conversation" && !preferredMemberId ? null : leadMember.id,
+			collaborationMode: requestedCollaborationMode,
+			coordinatorMemberId:
+				requestedCoordinatorMemberId ?? (requestedCollaborationMode === "board" ? leadMember.id : null),
 			workspaceId: workspaceId ?? null,
 			orgId,
 			createdByUserId: actor.user?.id ?? null,

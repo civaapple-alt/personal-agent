@@ -1,4 +1,5 @@
 import type { PaExtensionSummary } from "@pa/contracts/extensions";
+import board from "@pa/ext-board/server";
 import delegation from "@pa/ext-delegation/server";
 import humanQuestion from "@pa/ext-human-question/server";
 import nextSteps from "@pa/ext-next-steps/server";
@@ -22,6 +23,7 @@ export const builtinServerExtensions: readonly ServerExtensionEntry[] = [
 	{ specifier: "@pa/ext-worker-runtime/server", extension: workerRuntime },
 	{ specifier: "@pa/ext-space/server", extension: space },
 	{ specifier: "@pa/ext-delegation/server", extension: delegation },
+	{ specifier: "@pa/ext-board/server", extension: board },
 	{ specifier: "@pa/ext-skill-capture/server", extension: skillCapture },
 	{ specifier: "@pa/ext-human-question/server", extension: humanQuestion },
 	{ specifier: "@pa/ext-skill-catalog/server", extension: skillCatalog },
