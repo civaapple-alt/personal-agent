@@ -1,47 +1,17 @@
-import type { AccountUserDto, PlatformRole, RegistrationMode, UserStatus } from "./auth.ts";
+import type { ModelSelection } from "@pa/contracts/model-selection";
+import type {
+	AccountUserDto,
+	AdminOverviewPayload,
+	AdminUserRowDto,
+	AuditLogEntryDto,
+	PlatformRole,
+	PlatformSettingsDto,
+	RegistrationMode,
+	UserStatus,
+} from "@pa/contracts/organization";
 import { requestJson } from "./client.ts";
-import type { ModelSelection } from "./models.ts";
-import type { OrganizationDto, OrganizationMemberDto } from "./organizations.ts";
 
-export interface PlatformSettingsDto {
-	registrationMode: RegistrationMode;
-	workspacesRoot: string;
-	allowLocalWorkspacePath: boolean;
-	localWorkspaceAllowlist: string[];
-	allowCommandPreviews: boolean;
-	systemOneEnabled: boolean;
-	defaultMaxOrgs: number;
-	defaultMaxActiveDispatches: number;
-	defaultMaxPersonalRoles: number;
-	defaultModelSelection?: ModelSelection | null;
-	updatedAt: string;
-}
-
-export interface AuditLogEntryDto {
-	id: string;
-	actorUserId: string | null;
-	actorEmail: string | null;
-	action: string;
-	targetType: string;
-	targetId: string | null;
-	orgId: string | null;
-	detail: Record<string, unknown> | null;
-	ipAddress: string | null;
-	createdAt: string;
-}
-
-export interface AdminUserRowDto extends AccountUserDto {
-	ownedOrgCount: number;
-	orgMemberships: OrganizationMemberDto[];
-}
-
-export interface AdminOverviewPayload {
-	settings: PlatformSettingsDto;
-	users: AdminUserRowDto[];
-	organizations: OrganizationDto[];
-	activeRuns: Array<{ matterId: string; title: string; label: string; startedAt: number }>;
-	auditLogs: AuditLogEntryDto[];
-}
+export type { AdminOverviewPayload, AdminUserRowDto, AuditLogEntryDto, PlatformSettingsDto };
 
 export function fetchAdminOverview(): Promise<AdminOverviewPayload> {
 	return requestJson("/api/admin/overview");

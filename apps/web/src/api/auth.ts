@@ -1,49 +1,25 @@
+import type {
+	AccessTokenDto,
+	AccessTokenScope,
+	AccountUserDto,
+	AuthSessionPayload,
+	OrgInvitePreviewDto,
+	PlatformRole,
+	RegistrationMode,
+	UserStatus,
+} from "@pa/contracts/organization";
 import { requestJson } from "./client.ts";
-import type { CollaboratorDto, OrgMemberRole } from "./organizations.ts";
 
-export type PlatformRole = "super_admin" | "user";
-
-export type UserStatus = "active" | "pending_review" | "disabled";
-
-export type RegistrationMode = "open_auto" | "open_review" | "invite_only";
-
-export interface AccountUserDto {
-	id: string;
-	email: string;
-	displayName: string;
-	platformRole: PlatformRole;
-	status: UserStatus;
-	maxOrgs: number;
-	maxActiveDispatches: number;
-	maxPersonalRoles: number;
-	canDispatchAi: boolean;
-	createdAt: string;
-	updatedAt: string;
-	lastLoginAt: string | null;
-}
-
-export interface AuthSessionPayload {
-	authenticated: boolean;
-	requireAuth?: boolean;
-	permissionRequired: boolean;
-	revokedSession?: boolean;
-	pendingApproval?: boolean;
-	needsAdminSetup?: boolean;
-	registrationMode?: RegistrationMode;
-	authKind?: "session" | "loopback" | null;
-	currentUser: CollaboratorDto | null;
-	accountUser?: AccountUserDto | null;
-}
-
-export interface OrgInvitePreviewDto {
-	valid: boolean;
-	reason?: string;
-	orgId?: string;
-	orgName?: string;
-	orgRole?: OrgMemberRole;
-	alreadyMember?: boolean;
-	existingRole?: OrgMemberRole | null;
-}
+export type {
+	AccessTokenDto,
+	AccessTokenScope,
+	AccountUserDto,
+	AuthSessionPayload,
+	OrgInvitePreviewDto,
+	PlatformRole,
+	RegistrationMode,
+	UserStatus,
+};
 
 export function fetchAuthSession(): Promise<AuthSessionPayload> {
 	return requestJson<AuthSessionPayload>("/api/auth/session");
@@ -103,22 +79,6 @@ export function logoutAuthSession(): Promise<{ ok: boolean }> {
 		method: "POST",
 		body: "{}",
 	});
-}
-
-export type AccessTokenScope = "read" | "full";
-
-export interface AccessTokenDto {
-	id: string;
-	userId: string;
-	name: string;
-	tokenPrefix: string;
-	scope: AccessTokenScope;
-	allowedOrgIds: string[] | null;
-	allowedWorkspaceIds: string[] | null;
-	expiresAt: string | null;
-	lastUsedAt: string | null;
-	revokedAt: string | null;
-	createdAt: string;
 }
 
 export function listAccessTokens(): Promise<{ tokens: AccessTokenDto[] }> {

@@ -1,123 +1,46 @@
+import type { MatterDto, MatterMessageDto } from "@pa/contracts/matter";
+import type {
+	ApplyMatterRoleProposalsPayload,
+	ApplyMemberAdjustmentPayload,
+	CreateMemberPayload,
+	MemberSkillDetailDto,
+	MetaArchitectBlueprintProposalDto,
+	MetaArchitectChatResultDto,
+	MetaArchitectFormationSuggestionDto,
+	MetaArchitectHealthFindingDto,
+	MetaArchitectMessageDto,
+	MetaArchitectRoleAdjustmentDto,
+	NewSkillDraftDto,
+	RoleArchitectDraftDto,
+	RoleInteractionStyle,
+	RoleScope,
+	RoleTemplateDto,
+	RoleWorkspaceScope,
+	SkillStorageScope,
+	TeamMemberDto,
+} from "@pa/contracts/team";
 import { requestJson } from "./client.ts";
-import type { CollaborationPresetMode, MatterDto, MatterMessageDto } from "./matters.ts";
 
-export type RoleScope = "global" | "org" | "personal";
-
-export type SkillStorageScope = "role_local" | "global" | "org" | "personal";
-
-export interface NewSkillDraftDto {
-	name: string;
-	description: string;
-	body: string;
-	storageScope: SkillStorageScope;
-}
-
-export interface TeamMemberDto {
-	id: string;
-	templateId: string;
-	displayName: string;
-	roleTitle: string;
-	isPrimaryContact: boolean;
-	roleScope?: RoleScope;
-	ownerOrgId?: string | null;
-	ownerUserId?: string | null;
-	keywords: string[];
-	gitName: string;
-	gitEmail: string;
-	identitySummary: string;
-}
-
-export type RoleInteractionStyle = "lead_direct" | "consult_specialist" | "risk_observer" | "mixed";
-
-export type RoleWorkspaceScope = "read_write_code" | "read_only_repo" | "no_repo_docs";
-
-export interface RoleTemplateDto {
-	id: string;
-	name: string;
-	title: string;
-	roleKind?: "business" | "architect" | "solo";
-	roleScope?: RoleScope;
-	ownerOrgId?: string | null;
-	ownerUserId?: string | null;
-	version: string;
-	skills: string[];
-	mcpDependencies?: string[];
-	tools: string[];
-	keywords: string[];
-	shareable: boolean;
-	antiJobs?: string[];
-	responsibilities: string;
-}
-
-export interface RoleArchitectDraftDto {
-	template: RoleTemplateDto & {
-		isPrimaryContact: boolean;
-		sections: Record<string, string>;
-	};
-	markdown: string;
-	antiJobs: string[];
-	toolSummary: string;
-	recommendedParticipation: RoleInteractionStyle;
-	designNotes: string[];
-	newSkills?: NewSkillDraftDto[];
-	capabilityReport?: {
-		skills: Array<{ name: string; state: "file_present" | "missing" }>;
-		mcpDependencies: Array<{ name: string; state: "runtime_check_required" }>;
-	};
-	verificationPlanState?: "specified" | "missing";
-	designSource?: "rules" | "model";
-}
-
-export interface MetaArchitectMessageDto {
-	role: "user" | "assistant";
-	content: string;
-}
-
-export interface MetaArchitectBlueprintProposalDto {
-	draft: RoleArchitectDraftDto;
-	rationale: string;
-}
-
-export interface MetaArchitectFormationSuggestionDto {
-	mode: CollaborationPresetMode;
-	existingMemberIds: string[];
-	observerMemberIds: string[];
-	rationale: string;
-}
-
-export interface MetaArchitectHealthFindingDto {
-	status: "ok" | "warn";
-	title: string;
-	detail: string;
-	evidence?: Array<{
-		id: string;
-		kind: "role" | "message" | "feedback" | "memory";
-		sourceId: string;
-		matterId?: string;
-		label: string;
-		excerpt: string;
-	}>;
-}
-
-export interface MetaArchitectRoleAdjustmentDto {
-	memberId: string;
-	memberName: string;
-	currentTools: string[];
-	suggestedTools?: string[];
-	addAntiJobs?: string[];
-	workflowNote?: string;
-	rationale: string;
-}
-
-export interface MetaArchitectChatResultDto {
-	reply: string;
-	followUpQuestions: string[];
-	healthFindings?: MetaArchitectHealthFindingDto[];
-	roleAdjustments?: MetaArchitectRoleAdjustmentDto[];
-	blueprints: MetaArchitectBlueprintProposalDto[];
-	recommendedFormation?: MetaArchitectFormationSuggestionDto;
-	usedHealthcheck: boolean;
-}
+export type {
+	ApplyMatterRoleProposalsPayload,
+	ApplyMemberAdjustmentPayload,
+	CreateMemberPayload,
+	MemberSkillDetailDto,
+	MetaArchitectBlueprintProposalDto,
+	MetaArchitectChatResultDto,
+	MetaArchitectFormationSuggestionDto,
+	MetaArchitectHealthFindingDto,
+	MetaArchitectMessageDto,
+	MetaArchitectRoleAdjustmentDto,
+	NewSkillDraftDto,
+	RoleArchitectDraftDto,
+	RoleInteractionStyle,
+	RoleScope,
+	RoleTemplateDto,
+	RoleWorkspaceScope,
+	SkillStorageScope,
+	TeamMemberDto,
+};
 
 export function designRoleDraft(
 	input: {
@@ -167,26 +90,6 @@ export function chatWithRoleArchitect(
 	});
 }
 
-export interface CreateMemberPayload {
-	id?: string;
-	name: string;
-	title: string;
-	roleScope?: RoleScope;
-	ownerOrgId?: string | null;
-	responsibilities?: string;
-	keywords?: string[];
-	skills?: string[];
-	newSkills?: NewSkillDraftDto[];
-	mcpDependencies?: string[];
-	tools?: string[];
-	antiJobs?: string[];
-	sections?: Record<string, string>;
-	isPrimaryContact?: boolean;
-	gitName?: string;
-	gitEmail?: string;
-	identitySummary?: string;
-}
-
 export function createMember(input: CreateMemberPayload): Promise<{ member: TeamMemberDto }> {
 	return requestJson("/api/members", {
 		method: "POST",
@@ -201,13 +104,6 @@ export function createMembersBatch(members: CreateMemberPayload[]): Promise<{ me
 	});
 }
 
-export interface ApplyMemberAdjustmentPayload {
-	memberId: string;
-	tools?: string[];
-	addAntiJobs?: string[];
-	workflowNote?: string;
-}
-
 export function applyMemberAdjustments(
 	adjustments: ApplyMemberAdjustmentPayload[],
 ): Promise<{ members: TeamMemberDto[] }> {
@@ -215,13 +111,6 @@ export function applyMemberAdjustments(
 		method: "POST",
 		body: JSON.stringify({ adjustments }),
 	});
-}
-
-export interface ApplyMatterRoleProposalsPayload {
-	action?: "apply" | "dismiss";
-	members?: CreateMemberPayload[];
-	adjustments?: ApplyMemberAdjustmentPayload[];
-	matterJoinMode?: "none" | "consult" | "observer" | "lead";
 }
 
 export function applyMatterRoleProposals(
@@ -279,14 +168,6 @@ export function exportMemberPackage(memberId: string): Promise<{
 	markdown: string;
 }> {
 	return requestJson(`/api/members/${encodeURIComponent(memberId)}/export`);
-}
-
-export interface MemberSkillDetailDto {
-	name: string;
-	skillRef: string;
-	filePath: string;
-	content: string;
-	scripts: Array<{ path: string; content: string }>;
 }
 
 export function fetchMemberSkillDetail(memberId: string, skillRef: string): Promise<{ detail: MemberSkillDetailDto }> {

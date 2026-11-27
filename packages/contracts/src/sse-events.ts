@@ -1,3 +1,5 @@
+import type { BoardMemberMetrics, BoardMemberStatus, BoardPostKind, MatterEventType } from "./board.ts";
+
 /**
  * Centralized Server-Sent Events (`/api/events`) name & payload contract shared
  * between the HTTP SSE hub (`packages/server`) and browser listeners (`apps/web`).
@@ -13,6 +15,30 @@ export interface SseEventPayloadMap {
 	matter_aborted: { matterId: string; aborted?: boolean; [key: string]: unknown };
 	matter_message: { matterId: string; message?: unknown; matter?: unknown };
 	matter_updated: { matterId: string; [key: string]: unknown };
+	board_post_created: {
+		matterId: string;
+		postNo: number;
+		kind: BoardPostKind;
+		authorId: string;
+		mentions: string[];
+		summary: string;
+		createdAt: string;
+	};
+	board_member_updated: {
+		matterId: string;
+		agentId: string;
+		status: BoardMemberStatus;
+		activePostNo: number | null;
+		metrics: BoardMemberMetrics | null;
+		updatedAt: string;
+	};
+	matter_event_appended: {
+		matterId: string;
+		runId: string;
+		agentId: string | null;
+		eventType: MatterEventType;
+		createdAt: string;
+	};
 	dialog_requested: { type: "dialog_requested"; dialog: unknown };
 	dialog_resolved: { type: "dialog_resolved"; dialogId: string; matterId: string; payload: unknown };
 	workspace_updated: { id?: string; workspaceId?: string | null; matterId?: string; orgId?: string | null };

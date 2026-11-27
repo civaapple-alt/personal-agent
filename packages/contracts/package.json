@@ -6,16 +6,23 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./board": "./src/board.ts",
 		"./human-decision": "./src/human-decision.ts",
 		"./role-proposal-state": "./src/role-proposal-state.ts",
 		"./team-verification": "./src/team-verification.ts",
 		"./model-selection": "./src/model-selection.ts",
+		"./thinking-levels": "./src/thinking-levels.ts",
 		"./skill-proposal": "./src/skill-proposal.ts",
 		"./skill-trust": "./src/skill-trust.ts",
 		"./session-insights": "./src/session-insights.ts",
 		"./next-steps": "./src/next-steps.ts",
 		"./extensions": "./src/extensions.ts",
 		"./matter": "./src/matter.ts",
+		"./organization": "./src/organization.ts",
+		"./workspace": "./src/workspace.ts",
+		"./team": "./src/team.ts",
+		"./space": "./src/space.ts",
+		"./runtime": "./src/runtime.ts",
 		"./sse-events": "./src/sse-events.ts"
 	}
 }

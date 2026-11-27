@@ -1,92 +1,29 @@
-import type { UserStatus } from "./auth.ts";
+import type { ModelSelection } from "@pa/contracts/model-selection";
+import type {
+	CollaboratorDto,
+	CollaboratorRole,
+	OrganizationAiRoleConfigDto,
+	OrganizationDto,
+	OrganizationInviteDto,
+	OrganizationMemberDto,
+	OrgMemberRole,
+} from "@pa/contracts/organization";
+import type { TeamMemberDto } from "@pa/contracts/team";
+import type { WorkspaceDto, WorkspaceSourceType, WorkspaceVisibility } from "@pa/contracts/workspace";
 import { requestJson } from "./client.ts";
-import type { ModelSelection } from "./models.ts";
-import type { TeamMemberDto } from "./team.ts";
 
-export type OrgMemberRole = "org_owner" | "org_admin" | "org_member" | "org_viewer";
-
-export type WorkspaceSourceType = "local" | "cloned";
-
-export type WorkspaceVisibility = "org" | "restricted";
-
-export interface OrganizationMemberDto {
-	orgId: string;
-	userId: string;
-	orgRole: OrgMemberRole;
-	roleTitle: string;
-	createdAt: string;
-	updatedAt: string;
-	email?: string;
-	displayName?: string;
-	userStatus?: UserStatus;
-}
-
-export interface OrganizationInviteDto {
-	id: string;
-	orgId: string;
-	orgRole: OrgMemberRole;
-	createdByUserId: string;
-	maxUses: number;
-	usedCount: number;
-	expiresAt: string | null;
-	revokedAt: string | null;
-	createdAt: string;
-}
-
-export interface OrganizationAiRoleConfigDto {
-	orgId: string;
-	memberId: string;
-	enabled: boolean;
-	isPrimaryContact: boolean;
-	displayNameOverride: string | null;
-	providerOverride?: string | null;
-	modelOverride: string | null;
-	thinkingLevelOverride?: ModelSelection["thinkingLevel"] | null;
-	gitNameOverride?: string | null;
-	gitEmailOverride?: string | null;
-	updatedAt: string;
-}
-
-export interface OrganizationDto {
-	id: string;
-	name: string;
-	slug?: string;
-	gitEmailDomain: string;
-	useRoleGitIdentity?: boolean;
-	description: string;
-	isDefault?: boolean;
-	workspacesDir?: string | null;
-	createdByUserId?: string | null;
-	orgRole?: OrgMemberRole;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface WorkspaceDto {
-	id: string;
-	orgId: string | null;
-	name: string;
-	repoPath: string;
-	defaultBranch: string;
-	description: string;
-	sourceType?: "local" | "clone" | WorkspaceSourceType;
-	cloneUrl?: string | null;
-	visibility?: WorkspaceVisibility;
-	allowedUserIds?: string[];
-	repoGitUser?: { name: string; email: string } | null;
-}
-
-export type CollaboratorRole = "owner" | "collaborator";
-
-export interface CollaboratorDto {
-	id: string;
-	name: string;
-	roleTitle: string;
-	permissionRole: CollaboratorRole;
-	orgId: string | null;
-	createdAt: string;
-	updatedAt: string;
-}
+export type {
+	CollaboratorDto,
+	CollaboratorRole,
+	OrganizationAiRoleConfigDto,
+	OrganizationDto,
+	OrganizationInviteDto,
+	OrganizationMemberDto,
+	OrgMemberRole,
+	WorkspaceDto,
+	WorkspaceSourceType,
+	WorkspaceVisibility,
+};
 
 export function createOrganization(input: {
 	id?: string;

@@ -1,78 +1,35 @@
+import {
+	SPACE_DOC_TYPE_OPTIONS,
+	type SpaceDocumentDto,
+	type SpaceDocumentFeedbackDto,
+	type SpaceDocumentFileDto,
+	type SpaceDocumentMetaDto,
+	type SpaceDocumentType,
+	type SpaceDto,
+	type SpaceEntryKind,
+	type SpaceGitCommitDetailDto,
+	type SpaceGitCommitDto,
+	type SpaceKind,
+	type SpaceVisibility,
+	spaceDocTypeLabel,
+} from "@pa/contracts/space";
 import { requestJson } from "./client.ts";
 
-export type SpaceKind = "org" | "workspace" | "user" | "member" | "custom";
-export type SpaceVisibility = "org" | "private";
-export type SpaceDocumentType = "plan" | "spec" | "decision" | "rule" | "note";
-export type SpaceEntryKind = "file" | "folder";
-
-export interface SpaceDocumentFileDto {
-	path: string;
-	sizeBytes: number;
-}
-
-export const SPACE_DOC_TYPE_OPTIONS: Array<{ value: SpaceDocumentType; label: string; hint: string }> = [
-	{ value: "plan", label: "方案", hint: "实现计划、架构方案、落地路线图" },
-	{ value: "spec", label: "规格", hint: "PRD、需求规格、接口契约、验收标准" },
-	{ value: "decision", label: "决策", hint: "ADR、方案取舍结论、评审纪要与复盘" },
-	{ value: "rule", label: "规范", hint: "团队约定、SOP 手册、检查清单" },
-	{ value: "note", label: "资料", hint: "调研分析、参考资料、README 镜像与草稿" },
-];
-
-export function spaceDocTypeLabel(docType?: SpaceDocumentType | string | null): string {
-	const found = SPACE_DOC_TYPE_OPTIONS.find((item) => item.value === docType);
-	return found ? found.label : "资料";
-}
-
-export interface SpaceDto {
-	id: string;
-	kind: SpaceKind;
-	orgId: string | null;
-	workspaceId: string | null;
-	ownerUserId: string | null;
-	memberId: string | null;
-	name: string;
-	description: string;
-	visibility: SpaceVisibility;
-	createdBy: string;
-	createdAt: string;
-	updatedAt: string;
-	documentCount: number;
-	canWrite?: boolean;
-}
-
-export interface SpaceDocumentMetaDto {
-	id: string;
-	spaceId: string;
-	matterId: string | null;
-	filePath: string;
-	title: string;
-	docType: SpaceDocumentType;
-	entryKind: SpaceEntryKind;
-	linkedOrgId: string | null;
-	linkedWorkspaceId: string | null;
-	linkedFilePath: string | null;
-	headCommit: string;
-	revision: number;
-	createdBy: string;
-	updatedBy: string;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface SpaceDocumentDto extends SpaceDocumentMetaDto {
-	content: string;
-}
-
-export interface SpaceDocumentFeedbackDto {
-	documentId: string;
-	commitHash: string;
-	actorId: string;
-	actorName: string;
-	feedback: string;
-	rating: "positive" | "negative" | "neutral" | null;
-	createdAt: string;
-	updatedAt: string;
-}
+export {
+	SPACE_DOC_TYPE_OPTIONS,
+	type SpaceDocumentDto,
+	type SpaceDocumentFeedbackDto,
+	type SpaceDocumentFileDto,
+	type SpaceDocumentMetaDto,
+	type SpaceDocumentType,
+	type SpaceDto,
+	type SpaceEntryKind,
+	type SpaceGitCommitDetailDto,
+	type SpaceGitCommitDto,
+	type SpaceKind,
+	type SpaceVisibility,
+	spaceDocTypeLabel,
+};
 
 export function listSpaceDocumentFeedback(docId: string) {
 	return requestJson<{ feedback: SpaceDocumentFeedbackDto[] }>(
@@ -88,21 +45,6 @@ export function saveSpaceDocumentFeedback(
 		`/api/spaces/documents/${encodeURIComponent(docId)}/feedback`,
 		{ method: "POST", body: JSON.stringify(input) },
 	);
-}
-
-export interface SpaceGitCommitDto {
-	hash: string;
-	shortHash: string;
-	authorName: string;
-	authorEmail: string;
-	committedAt: string;
-	subject: string;
-}
-
-export interface SpaceGitCommitDetailDto {
-	commit: SpaceGitCommitDto;
-	diff: string;
-	content: string | null;
 }
 
 export function listSpaces() {

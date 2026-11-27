@@ -1,46 +1,70 @@
-import type { MatterDto, MatterMessageDto, MatterSendMode, MatterStatus, MatterVisibility } from "@pa/contracts/matter";
+import type {
+	ActiveDelegationDto,
+	ActiveRunSnapshotDto,
+	DecisionConfidence,
+	HumanDecisionAction,
+	InitiationAssessmentSource,
+	MatterCollaborationMode,
+	MatterDecisionStatus,
+	MatterDetailPayload,
+	MatterDto,
+	MatterInitiationAssessmentDto,
+	MatterInitiationCandidateDto,
+	MatterMessageDto,
+	MatterMessageKind,
+	MatterProgressDto,
+	MatterSendMode,
+	MatterStatus,
+	MatterVisibility,
+	MessageFileDto,
+	MessageImageDto,
+	PendingDialogDto,
+	ProgressActivityDto,
+	ProgressSnapshotDto,
+	RoleFitStatus,
+	RoleGapSuggestionDto,
+	UploadFilePayload,
+	UploadImagePayload,
+} from "@pa/contracts/matter";
+import type { ModelSelection } from "@pa/contracts/model-selection";
+import type { CollaborationPresetMode, TeamMemberDto } from "@pa/contracts/team";
 import { requestJson } from "./client.ts";
-import type { ModelSelection } from "./models.ts";
-import type { SpaceDocumentMetaDto, SpaceDto } from "./space.ts";
-import type { RoleInteractionStyle, RoleWorkspaceScope, TeamMemberDto } from "./team.ts";
 
-export type { MatterDto, MatterMessageDto, MatterSendMode, MatterStatus, MatterVisibility };
-
-export interface MessageImageDto {
-	url?: string;
-	mimeType: string;
-	name?: string;
-}
-
-export interface UploadImagePayload {
-	data: string;
-	mimeType: string;
-	name?: string;
-}
+export type {
+	ActiveDelegationDto,
+	ActiveRunSnapshotDto,
+	CollaborationPresetMode,
+	DecisionConfidence,
+	HumanDecisionAction,
+	InitiationAssessmentSource,
+	MatterCollaborationMode,
+	MatterDecisionStatus,
+	MatterDetailPayload,
+	MatterDto,
+	MatterInitiationAssessmentDto,
+	MatterInitiationCandidateDto,
+	MatterMessageDto,
+	MatterMessageKind,
+	MatterProgressDto,
+	MatterSendMode,
+	MatterStatus,
+	MatterVisibility,
+	MessageFileDto,
+	MessageImageDto,
+	PendingDialogDto,
+	ProgressActivityDto,
+	ProgressSnapshotDto,
+	RoleFitStatus,
+	RoleGapSuggestionDto,
+	UploadFilePayload,
+	UploadImagePayload,
+};
 
 export interface ComposerImageAttachment extends UploadImagePayload {
 	id: string;
 	name: string;
 	previewUrl: string;
 	sizeBytes: number;
-}
-
-export interface MessageFileDto {
-	url?: string;
-	kind?: "file" | "pasted_text";
-	name: string;
-	mimeType: string;
-	sizeBytes?: number;
-	lineCount?: number;
-	charCount?: number;
-	previewText?: string;
-}
-
-export interface UploadFilePayload {
-	kind: "file" | "pasted_text";
-	name: string;
-	mimeType: string;
-	content: string;
 }
 
 export interface ComposerFileAttachment extends UploadFilePayload {
@@ -51,149 +75,9 @@ export interface ComposerFileAttachment extends UploadFilePayload {
 	previewText: string;
 }
 
-export interface PendingDialogDto {
-	id: string;
-	matterId: string;
-	memberId: string;
-	memberName: string;
-	request: {
-		id: string;
-		method: "select" | "confirm" | "input" | "editor";
-		title: string;
-		message?: string;
-		options?: string[];
-		placeholder?: string;
-		prefill?: string;
-	};
-	createdAt: string;
-}
-
-export type CollaborationPresetMode = "solo" | "lead_consult" | "lead_review" | "human_first";
-
-export type RoleFitStatus = "matched" | "ambiguous" | "gap_detected";
-
-export interface MatterInitiationCandidateDto {
-	memberId: string;
-	displayName: string;
-	roleTitle: string;
-	score: number;
-	matchedSignals: string[];
-	tools: string[];
-}
-
-export interface RoleGapSuggestionDto {
-	missingRoleTitle: string;
-	suggestedJob: string;
-	suggestedAntiJobs: string[];
-	suggestedInteractionStyle: RoleInteractionStyle;
-	suggestedWorkspaceScope: RoleWorkspaceScope;
-	reason: string;
-}
-
-export type InitiationAssessmentSource = "rules" | "model";
-
-export type DecisionConfidence = "high" | "medium" | "low";
-
-export interface MatterInitiationAssessmentDto {
-	fitStatus: RoleFitStatus;
-	headline: string;
-	explanation: string;
-	recommendedMode: CollaborationPresetMode;
-	recommendedLeadId: string | null;
-	recommendedAiMemberIds: string[];
-	recommendedConsultIds?: string[];
-	recommendedObserverIds: string[];
-	candidates: MatterInitiationCandidateDto[];
-	gapSuggestion?: RoleGapSuggestionDto;
-	assessmentSource?: InitiationAssessmentSource;
-	confidence?: DecisionConfidence;
-	repoReadEnabled?: boolean;
-	repoReadPaths?: string[];
-	usedRepoRead?: boolean;
-}
-
-export interface ActiveDelegationDto {
-	memberId: string;
-	memberName: string;
-	stageLabel: string;
-	fromMemberId?: string;
-	fromMemberName?: string;
-	requestMessageId?: string;
-	parentRequestMessageId?: string;
-	delegationNumber?: number;
-	verification?: true;
-	kind?: "delegation" | "observer";
-}
-
-export interface ProgressActivityDto {
-	memberName: string;
-	memberId?: string;
-	toolCallId?: string;
-	toolName?: string;
-	toolStatus?: "running" | "success" | "error" | "unknown";
-	summary: string;
-	at: string;
-}
-
-export interface MatterProgressDto {
-	matterId: string;
-	stage: "starting" | "thinking" | "tool" | "waiting_user" | "finalizing";
-	label: string;
-	toolName?: string;
-	toolSummary?: string;
-	activeDelegations?: ActiveDelegationDto[];
-	recentLogs?: ProgressActivityDto[];
-	collabUpdated?: boolean;
-	stalledMembers?: Array<{
-		memberId: string;
-		memberName: string;
-		assignmentNumber?: number;
-		lastActivityAt: string;
-		lastAction: string;
-	}>;
-	sourceUserMessageId?: string;
-	speakerMemberId?: string;
-}
-
-export interface ProgressSnapshotDto {
-	outcome: "completed" | "failed" | "aborted";
-	stage: MatterProgressDto["stage"];
-	label: string;
-	toolName?: string;
-	toolSummary?: string;
-	startedAt: string;
-	capturedAt: string;
-	elapsedSeconds: number;
-	activeDelegations?: ActiveDelegationDto[];
-	recentLogs?: ProgressActivityDto[];
-	leadMemberId?: string;
-	leadMemberName?: string;
-}
-
-export interface ActiveRunSnapshotDto extends MatterProgressDto {
-	startedAt: number;
-	streamingDelta?: string;
-}
-
-export interface MatterDetailPayload {
-	matter: MatterDto;
-	userMessages: MatterMessageDto[];
-	internalCollabMessages: MatterMessageDto[];
-	noticeMessages: MatterMessageDto[];
-	defaultSpace?: SpaceDto | null;
-	spaceDocuments?: SpaceDocumentMetaDto[];
-	pendingDialogs: PendingDialogDto[];
-	activeRun?: ActiveRunSnapshotDto | null;
-}
-
 export function fetchMatterDetail(matterId: string): Promise<MatterDetailPayload> {
 	return requestJson<MatterDetailPayload>(`/api/matters/${encodeURIComponent(matterId)}`);
 }
-
-export type HumanDecisionAction =
-	| { action: "answer"; revision: number; answer: string }
-	| { action: "assign"; revision: number; assignedUserId: string }
-	| { action: "resume"; revision: number };
 
 export function actOnHumanDecision(matterId: string, messageId: string, input: HumanDecisionAction) {
 	return requestJson<{ message: MatterMessageDto; resumed: boolean }>(

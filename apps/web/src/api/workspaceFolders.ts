@@ -1,62 +1,19 @@
+import type {
+	DiscoveredRuleDto,
+	DiscoveredSkillDto,
+	WorkspaceCustomizationsReportDto,
+	WorkspaceFolderDto,
+	WorkspacePiTrustDto,
+} from "@pa/contracts/workspace";
 import { requestJson } from "./client.ts";
 
-export interface WorkspaceFolderDto {
-	id: string;
-	workspaceId: string;
-	label: string;
-	path: string;
-	sourceType: "local" | "cloned";
-	role: "primary" | "attached";
-	loadRules: boolean;
-	loadSkills: boolean;
-	sortOrder: number;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface DiscoveredRuleDto {
-	id: string;
-	folderId: string;
-	folderLabel: string;
-	folderRole: "primary" | "attached";
-	fileName: string;
-	filePath: string;
-	tokens: number;
-	preview: string;
-	mode: "full" | "pointer" | "disabled";
-}
-
-export interface DiscoveredSkillDto {
-	id: string;
-	name: string;
-	description: string;
-	folderId: string;
-	folderLabel: string;
-	folderRole: "primary" | "attached";
-	skillDir: string;
-	filePath: string;
-	tokens: number;
-	excluded: boolean;
-}
-
-export interface WorkspaceCustomizationsReportDto {
-	rulesBudgetTokens: number;
-	skillsBudgetTokens: number;
-	rulesTokensUsed: number;
-	rulesTotalTokens: number;
-	skillsTokensUsed: number;
-	skillsTotalTokens: number;
-	rules: DiscoveredRuleDto[];
-	skills: DiscoveredSkillDto[];
-}
-
-export interface WorkspacePiTrustDto {
-	eligible: boolean;
-	decision: boolean | null;
-	matchedPath: string | null;
-	effectiveTrusted: boolean;
-	canEdit: boolean;
-}
+export type {
+	DiscoveredRuleDto,
+	DiscoveredSkillDto,
+	WorkspaceCustomizationsReportDto,
+	WorkspaceFolderDto,
+	WorkspacePiTrustDto,
+};
 
 export function fetchWorkspaceCustomizations(workspaceId: string, folderId?: string) {
 	const query = folderId ? `?folderId=${encodeURIComponent(folderId)}` : "";
