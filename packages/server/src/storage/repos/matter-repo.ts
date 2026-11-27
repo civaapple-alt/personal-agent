@@ -11,6 +11,14 @@ import type {
 	MatterStatus,
 	MatterVisibility,
 } from "../types.ts";
+import {
+	BoardRepo,
+	deriveMessageLifecycleFields,
+	type MatterCollaborationMode,
+	mirrorInternalCollabMessageToBoardPost,
+	mirrorNoticeMessageToEvent,
+	runInImmediateTransaction,
+} from "./board-repo.ts";
 import { mapMatterRow, mapMessageRow, normalizeUniqueIds, nowIso } from "./helpers.ts";
 import type { MemberRepo } from "./member-repo.ts";
 import type { OrganizationRepo } from "./organization-repo.ts";
@@ -22,12 +30,20 @@ export class MatterRepo {
 	private readonly memberRepo: MemberRepo;
 	private readonly orgRepo: OrganizationRepo;
 	private readonly workspaceRepo: WorkspaceRepo;
+	private readonly boardRepo: BoardRepo;
 
-	constructor(db: DatabaseSync, memberRepo: MemberRepo, orgRepo: OrganizationRepo, workspaceRepo: WorkspaceRepo) {
+	constructor(
+		db: DatabaseSync,
+		memberRepo: MemberRepo,
+		orgRepo: OrganizationRepo,
+		workspaceRepo: WorkspaceRepo,
+		boardRepo = new BoardRepo(db),
+	) {
 		this.db = db;
 		this.memberRepo = memberRepo;
 		this.orgRepo = orgRepo;
 		this.workspaceRepo = workspaceRepo;
+		this.boardRepo = boardRepo;
 	}
 
 	private resolveEffectiveAiIds(aiMemberIds: string[] | null): string[] {
@@ -47,6 +63,8 @@ export class MatterRepo {
 		title: string;
 		summary?: string;
 		leadMemberId?: string | null;
+		collaborationMode?: MatterCollaborationMode;
+		coordinatorMemberId?: string | null;
 		workspaceId?: string | null;
 		orgId?: string | null;
 		createdByUserId?: string | null;
@@ -104,14 +122,17 @@ export class MatterRepo {
 		const collaboratorIds = normalizeUniqueIds(input.collaboratorIds);
 		const workspaceId = input.workspaceId ?? null;
 		const visibility: MatterVisibility = input.visibility === "private" ? "private" : "org";
+		const collaborationMode: MatterCollaborationMode = input.collaborationMode === "board" ? "board" : "lead";
+		const coordinatorMemberId = input.coordinatorMemberId ?? null;
 		this.db
 			.prepare(
 				`INSERT INTO matters (
-					id, title, summary, status, lead_member_id, workspace_id, org_id, created_by_user_id, visibility,
+					id, title, summary, status, lead_member_id, collaboration_mode, coordinator_member_id,
+					workspace_id, org_id, created_by_user_id, visibility,
 					ai_member_ids_json, consult_member_ids_json, observers_enabled, observer_ids_json, discussion_ai_enabled,
 					collaborator_ids_json, model_selection_json, created_at, updated_at
 				)
-				 VALUES (?, ?, ?, 'open', ?, ?,
+				 VALUES (?, ?, ?, 'open', ?, ?, ?, ?,
 						CASE WHEN ? IS NULL THEN ? ELSE (SELECT org_id FROM workspace_links WHERE id = ?) END,
 						?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
@@ -120,6 +141,8 @@ export class MatterRepo {
 				input.title,
 				input.summary ?? "",
 				input.leadMemberId ?? null,
+				collaborationMode,
+				coordinatorMemberId,
 				workspaceId,
 				workspaceId,
 				input.orgId ?? null,
@@ -403,22 +426,24 @@ export class MatterRepo {
 		if (!message) return null;
 		const metadata = { ...message.metadata, ...audit, aiRequestStatus: status };
 		const changed = this.db
-			.prepare(`UPDATE matter_messages SET metadata_json = ?
+			.prepare(`UPDATE matter_messages SET metadata_json = ?, decision_status = ?
 			WHERE id = ? AND channel = 'user' AND sender_type = 'user'
 			AND json_extract(metadata_json, '$.mode') = 'ai_request'
 			AND json_extract(metadata_json, '$.aiRequestStatus') = 'pending'`)
-			.run(JSON.stringify(metadata), messageId).changes;
+			.run(JSON.stringify(metadata), status, messageId).changes;
 		return changed ? this.getMessage(messageId) : null;
 	}
 
 	transitionHumanDecision(messageId: string, revision: number, decision: HumanDecision): MatterMessage | null {
+		const decisionStatus = decision.status === "answered" ? "answered" : "pending";
 		const changed = this.db
 			.prepare(`UPDATE matter_messages
-				SET metadata_json = json_set(metadata_json, '$.humanDecision', json(?))
+				SET metadata_json = json_set(metadata_json, '$.humanDecision', json(?)),
+					decision_status = ?
 				WHERE id = ? AND channel = 'user' AND sender_type = 'member'
 				AND json_extract(metadata_json, '$.humanDecision.status') = 'pending'
 				AND json_extract(metadata_json, '$.humanDecision.revision') = ?`)
-			.run(JSON.stringify(decision), messageId, revision).changes;
+			.run(JSON.stringify(decision), decisionStatus, messageId, revision).changes;
 		return changed ? this.getMessage(messageId) : null;
 	}
 
@@ -432,41 +457,56 @@ export class MatterRepo {
 	}): MatterMessage {
 		const id = `msg_${randomUUID()}`;
 		const timestamp = nowIso();
-		// Snapshot provenance when writing, never infer an old message's organization at read time.
-		const workspace =
-			typeof input.metadata?.workspaceId === "string"
-				? this.workspaceRepo.getWorkspace(input.metadata.workspaceId)
-				: null;
-		const metadata = {
-			orgId: workspace ? workspace.orgId : (this.getMatter(input.matterId)?.orgId ?? null),
-			...input.metadata,
-		};
-		this.db
-			.prepare(
-				`INSERT INTO matter_messages (id, matter_id, channel, sender_type, sender_id, content, metadata_json, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			)
-			.run(
+		return runInImmediateTransaction(this.db, () => {
+			// Snapshot provenance when writing, never infer an old message's organization at read time.
+			const workspace =
+				typeof input.metadata?.workspaceId === "string"
+					? this.workspaceRepo.getWorkspace(input.metadata.workspaceId)
+					: null;
+			const metadata = {
+				orgId: workspace ? workspace.orgId : (this.getMatter(input.matterId)?.orgId ?? null),
+				...input.metadata,
+			};
+			const lifecycle = deriveMessageLifecycleFields(input.channel, metadata);
+			this.db
+				.prepare(
+					`INSERT INTO matter_messages (
+						id, matter_id, channel, sender_type, sender_id, content, metadata_json,
+						kind, decision_status, board_post_no, created_at
+					)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				)
+				.run(
+					id,
+					input.matterId,
+					input.channel,
+					input.senderType,
+					input.senderId,
+					input.content,
+					JSON.stringify(metadata),
+					lifecycle.kind,
+					lifecycle.decisionStatus,
+					lifecycle.boardPostNo,
+					timestamp,
+				);
+			this.db.prepare("UPDATE matters SET updated_at = ? WHERE id = ?").run(timestamp, input.matterId);
+			const message: MatterMessage = {
 				id,
-				input.matterId,
-				input.channel,
-				input.senderType,
-				input.senderId,
-				input.content,
-				JSON.stringify(metadata),
-				timestamp,
-			);
-		this.db.prepare("UPDATE matters SET updated_at = ? WHERE id = ?").run(timestamp, input.matterId);
-		return {
-			id,
-			matterId: input.matterId,
-			channel: input.channel,
-			senderType: input.senderType,
-			senderId: input.senderId,
-			content: input.content,
-			metadata,
-			createdAt: timestamp,
-		};
+				matterId: input.matterId,
+				channel: input.channel,
+				senderType: input.senderType,
+				senderId: input.senderId,
+				content: input.content,
+				metadata,
+				createdAt: timestamp,
+			};
+			if (input.channel === "notice") {
+				mirrorNoticeMessageToEvent(this.db, this.boardRepo, message);
+			} else if (input.channel === "internal_collab") {
+				mirrorInternalCollabMessageToBoardPost(this.db, this.boardRepo, message, { skipMatterUpdatedAt: true });
+			}
+			return message;
+		});
 	}
 
 	listMessages(matterId: string, channel?: MatterMessageChannel): MatterMessage[] {
