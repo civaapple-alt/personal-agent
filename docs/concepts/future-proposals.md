@@ -90,6 +90,7 @@
   - **结构化拆分内部委托（`internal_collab`）**：独立为 `matter_delegations` 等结构化表，显式建模 `from_member_id`、`to_member_id`、`parent_id`、`delegation_number`、`status` 与独立验收字段，长篇委托/回报正文支持摘要与按需懒加载；
   - **收口状态机与升级兼容**：评估将需要原子流转的 `ai_request` / `human_decisions` 从 `metadata_json` 剥离为显式列或独立表；明确 `0.8.x`（`0x50413730`）向 `0.9.0` 的幂等迁移脚本与回滚校验；
   - **同步更新库表文档**：落地时按 [SQLite 库表设计参考](../reference/database-schema.md#6-维护流程与变更记录) 同步更新 ER 图、字段定义、索引清单与变更记录。
+- **完整设计草案**：见 [0.9.0 存储拆表与事项公告板协作设计草案](v0.9-board-and-storage-design.md)（合入 `matter_events` / `matter_board_posts` / `matter_board_members` 拆表、`Coordinator` + 定向 `@mention` 异步唤醒、`@monitor` 停滞检测及 Human-in-the-Loop 三层可观测设计）。
 - **验收标准**：`matter_messages` 仅保留核心用户对话与必要消息引用；事项详情首屏加载不再携带海量过程事件与全量内部委托正文；存量 `0.8.x` 数据库可无损迁移至 `0.9.0` 并通过全量离线回归及 `demo:team` / `demo:mention-verify`。
 
 ---
