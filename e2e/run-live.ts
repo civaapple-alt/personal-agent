@@ -2,7 +2,9 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readPiModelCatalog } from "@pa/pi-rpc/model-catalog";
 import { findLiveScenario, LIVE_SCENARIO_CATALOG, type LiveScenarioDefinition } from "./live/catalog.ts";
+import { buildLiveEnv, type ResolvedLiveModelConfig, resolveLiveModelConfig } from "./live/config.ts";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIVE_LOG_PATH = resolve(ROOT_DIR, "e2e/.live-runs.jsonl");
@@ -14,6 +16,12 @@ interface LiveRunResult {
 	scenario: string;
 	category: string;
 	dryRun: boolean;
+	profile: string | null;
+	provider?: string;
+	model?: string;
+	thinkingLevel?: string;
+	verifierProvider?: string;
+	verifierModel?: string;
 	command: string;
 	durationMs: number;
 	exitCode: number;
@@ -23,28 +31,46 @@ interface LiveRunResult {
 interface ParsedCliOptions {
 	help: boolean;
 	list: boolean;
+	showModels: boolean;
 	dryRun: boolean;
 	json: boolean;
 	scenarios: string[];
 	category?: string;
+	configPath?: string;
+	profile?: string;
+	provider?: string;
+	model?: string;
+	thinkingLevel?: string;
+	verifierProvider?: string;
+	verifierModel?: string;
+	allowProviders?: string;
 	passthroughArgs: string[];
 }
 
 function printHelp(): void {
 	console.log(
 		[
-			"Usage: npm run e2e:live -- [--list] [--scenario <id>] [--category <cat>] [--dry-run] [--json] [-- <scenario-args>]",
+			"Usage: npm run e2e:live -- [options] [-- <scenario-args>]",
 			"",
-			"Opt-in live/real-Pi scenario runner with deterministic verdict logging (e2e/.live-runs.jsonl).",
+			"Opt-in live/real-Pi scenario runner with cost-controlled model profiles & verdict logging (e2e/.live-runs.jsonl).",
 			"Never invoked automatically by `npm test` or no-agent `npm run e2e`.",
 			"",
 			"Options:",
-			"  --list              List all cataloged live scenarios and exit",
-			"  --scenario <id>     Run a specific scenario by id (repeatable)",
-			"  --category <cat>    Run all scenarios in category: board|collaboration|runtime|roles|pstack",
-			"  --dry-run           Run in offline dry-run mode (only scenarios supporting --dry-run)",
-			"  --json              Emit machine-readable JSON summary",
-			"  --help, -h          Show this help text",
+			"  --list                      List all cataloged live scenarios and exit",
+			"  --show-models               Inspect local Pi models (filtered by allowlist) & effective profile (0 tokens)",
+			"  --scenario <id>             Run a specific scenario by id (repeatable)",
+			"  --category <cat>            Run all scenarios in category: board|collaboration|runtime|roles|pstack",
+			"  --dry-run                   Run in offline dry-run mode (only scenarios supporting --dry-run)",
+			"  --profile <name>            Select profile from e2e/live.config.json (or PA_E2E_PROFILE)",
+			"  --provider <id>             Override Pi provider (requires --model)",
+			"  --model <id>                Override Pi model (requires --provider)",
+			"  --thinking <level>          Override thinking level (off|minimal|low|medium|high|xhigh|max)",
+			"  --verifier-provider <id>    Override verifier provider (requires --verifier-model)",
+			"  --verifier-model <id>       Override verifier model (requires --verifier-provider)",
+			"  --allow-providers <list>    Comma-separated provider allowlist (fail closed on unapproved providers)",
+			"  --config <path>             Custom JSON config file path (defaults to e2e/live.config.json if present)",
+			"  --json                      Emit machine-readable JSON summary",
+			"  --help, -h                  Show this help text",
 		].join("\n"),
 	);
 }
@@ -57,23 +83,50 @@ function parseArgs(argv: string[]): ParsedCliOptions {
 	const opts: ParsedCliOptions = {
 		help: ownArgs.includes("--help") || ownArgs.includes("-h"),
 		list: ownArgs.includes("--list"),
+		showModels: ownArgs.includes("--show-models"),
 		dryRun: ownArgs.includes("--dry-run"),
 		json: ownArgs.includes("--json"),
 		scenarios: [],
 		passthroughArgs,
 	};
 
+	const readPair = (index: number, flag: string): string => {
+		const value = ownArgs[index + 1];
+		if (!value) throw new Error(`${flag} requires a value`);
+		return value;
+	};
+
 	for (let i = 0; i < ownArgs.length; i += 1) {
 		const token = ownArgs[i];
 		if (token === "--scenario") {
-			const value = ownArgs[i + 1];
-			if (!value) throw new Error("--scenario requires a scenario id");
-			opts.scenarios.push(value);
+			opts.scenarios.push(readPair(i, token));
 			i += 1;
 		} else if (token === "--category") {
-			const value = ownArgs[i + 1];
-			if (!value) throw new Error("--category requires a category name");
-			opts.category = value;
+			opts.category = readPair(i, token);
+			i += 1;
+		} else if (token === "--config") {
+			opts.configPath = readPair(i, token);
+			i += 1;
+		} else if (token === "--profile") {
+			opts.profile = readPair(i, token);
+			i += 1;
+		} else if (token === "--provider") {
+			opts.provider = readPair(i, token);
+			i += 1;
+		} else if (token === "--model") {
+			opts.model = readPair(i, token);
+			i += 1;
+		} else if (token === "--thinking") {
+			opts.thinkingLevel = readPair(i, token);
+			i += 1;
+		} else if (token === "--verifier-provider") {
+			opts.verifierProvider = readPair(i, token);
+			i += 1;
+		} else if (token === "--verifier-model") {
+			opts.verifierModel = readPair(i, token);
+			i += 1;
+		} else if (token === "--allow-providers") {
+			opts.allowProviders = readPair(i, token);
 			i += 1;
 		}
 	}
@@ -92,7 +145,61 @@ function printCatalog(): void {
 	}
 }
 
-function runScenario(entry: LiveScenarioDefinition, dryRun: boolean, passthroughArgs: string[]): LiveRunResult {
+async function showLocalModels(resolved: ResolvedLiveModelConfig, json: boolean): Promise<void> {
+	const catalog = await readPiModelCatalog(ROOT_DIR);
+	const allowedSet = resolved.allowedProviders ? new Set(resolved.allowedProviders) : null;
+	const visibleModels = allowedSet
+		? catalog.models.filter((item) => allowedSet.has(item.provider))
+		: catalog.models;
+
+	if (json) {
+		console.log(
+			JSON.stringify(
+				{
+					resolvedConfig: resolved,
+					piDefaultModel: catalog.defaultModel,
+					totalCatalogCount: catalog.models.length,
+					models: visibleModels,
+				},
+				null,
+				2,
+			),
+		);
+		return;
+	}
+
+	console.log("=== Live E2E Cost & Model Configuration ===");
+	console.log(`  config file       : ${resolved.configPath ?? "(none — copy e2e/live.config.example.json -> e2e/live.config.json)"}`);
+	console.log(`  active profile    : ${resolved.profileName ?? "(none)"}`);
+	console.log(
+		`  selected model    : ${resolved.provider && resolved.model ? `${resolved.provider}/${resolved.model}` : "(Pi default)"}${resolved.thinkingLevel ? ` (thinking=${resolved.thinkingLevel})` : ""}`,
+	);
+	console.log(
+		`  verifier model    : ${resolved.verifierProvider && resolved.verifierModel ? `${resolved.verifierProvider}/${resolved.verifierModel}` : "(same / role default)"}`,
+	);
+	console.log(
+		`  allowed providers : ${resolved.allowedProviders ? resolved.allowedProviders.join(", ") : "(unrestricted)"}`,
+	);
+	console.log(
+		`  Pi default model  : ${catalog.defaultModel ? `${catalog.defaultModel.provider}/${catalog.defaultModel.model} (thinking=${catalog.defaultModel.thinkingLevel ?? "default"})` : "(none)"}`,
+	);
+	console.log("");
+	console.log(`Available Local Pi Models (${visibleModels.length}${allowedSet ? `/${catalog.models.length} allowed` : ""}):`);
+	for (const item of visibleModels) {
+		const isDefault =
+			catalog.defaultModel?.provider === item.provider && catalog.defaultModel?.model === item.model ? " *" : "";
+		console.log(
+			`  ${item.provider.padEnd(14)} | ${item.model.padEnd(28)} | thinking=[${item.thinkingLevels.join(",")}]${isDefault}`,
+		);
+	}
+}
+
+function runScenario(
+	entry: LiveScenarioDefinition,
+	dryRun: boolean,
+	resolved: ResolvedLiveModelConfig,
+	passthroughArgs: string[],
+): LiveRunResult {
 	if (dryRun && !entry.supportsDryRun) {
 		throw new Error(`Scenario "${entry.id}" does not support --dry-run`);
 	}
@@ -108,7 +215,7 @@ function runScenario(entry: LiveScenarioDefinition, dryRun: boolean, passthrough
 	const res = spawnSync(process.execPath, args, {
 		cwd: ROOT_DIR,
 		stdio: "inherit",
-		env: process.env,
+		env: buildLiveEnv(process.env, resolved),
 	});
 	const durationMs = Date.now() - startedAt;
 	const exitCode = res.status ?? 1;
@@ -119,6 +226,12 @@ function runScenario(entry: LiveScenarioDefinition, dryRun: boolean, passthrough
 		scenario: entry.id,
 		category: entry.category,
 		dryRun,
+		profile: resolved.profileName,
+		...(resolved.provider ? { provider: resolved.provider } : {}),
+		...(resolved.model ? { model: resolved.model } : {}),
+		...(resolved.thinkingLevel ? { thinkingLevel: resolved.thinkingLevel } : {}),
+		...(resolved.verifierProvider ? { verifierProvider: resolved.verifierProvider } : {}),
+		...(resolved.verifierModel ? { verifierModel: resolved.verifierModel } : {}),
 		command,
 		durationMs,
 		exitCode,
@@ -130,7 +243,7 @@ function runScenario(entry: LiveScenarioDefinition, dryRun: boolean, passthrough
 	return record;
 }
 
-function main(): void {
+async function main(): Promise<void> {
 	const opts = parseArgs(process.argv.slice(2));
 	if (opts.help) {
 		printHelp();
@@ -143,6 +256,23 @@ function main(): void {
 		} else {
 			printCatalog();
 		}
+		return;
+	}
+
+	const resolvedConfig = resolveLiveModelConfig({
+		rootDir: ROOT_DIR,
+		configPath: opts.configPath,
+		profile: opts.profile,
+		provider: opts.provider,
+		model: opts.model,
+		thinkingLevel: opts.thinkingLevel,
+		verifierProvider: opts.verifierProvider,
+		verifierModel: opts.verifierModel,
+		allowProviders: opts.allowProviders,
+	});
+
+	if (opts.showModels) {
+		await showLocalModels(resolvedConfig, opts.json);
 		return;
 	}
 
@@ -162,22 +292,23 @@ function main(): void {
 		}
 		selected.push(...matches);
 	} else {
-		throw new Error("Pass --list, --scenario <id>, or --category <cat> (see --help).");
+		throw new Error("Pass --list, --show-models, --scenario <id>, or --category <cat> (see --help).");
 	}
 
 	const results: LiveRunResult[] = [];
 	for (const scenario of selected) {
-		results.push(runScenario(scenario, opts.dryRun, opts.passthroughArgs));
+		results.push(runScenario(scenario, opts.dryRun, resolvedConfig, opts.passthroughArgs));
 	}
 
 	if (opts.json) {
-		console.log(JSON.stringify({ results }, null, 2));
+		console.log(JSON.stringify({ resolvedConfig, results }, null, 2));
 	} else {
 		console.log("");
 		console.log("=== Live E2E Verdict Summary ===");
 		for (const item of results) {
+			const modelTag = item.provider && item.model ? `, model=${item.provider}/${item.model}` : "";
 			console.log(
-				`  [${item.verdict}] ${item.scenario} (exit=${item.exitCode}, ${item.durationMs}ms${item.dryRun ? ", dry-run" : ""})`,
+				`  [${item.verdict}] ${item.scenario} (exit=${item.exitCode}, ${item.durationMs}ms${item.dryRun ? ", dry-run" : ""}${modelTag})`,
 			);
 		}
 	}
@@ -189,9 +320,7 @@ function main(): void {
 	}
 }
 
-try {
-	main();
-} catch (error) {
+main().catch((error) => {
 	console.error(error instanceof Error ? error.message : String(error));
 	process.exitCode = 1;
-}
+});

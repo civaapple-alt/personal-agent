@@ -1,0 +1,40 @@
+{
+  "defaultProfile": "default",
+  "allowedProviders": ["kimi-coding", "opencode-go"],
+  "profiles": {
+    "default": {
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "thinkingLevel": "high"
+    },
+    "strong": {
+      "provider": "kimi-coding",
+      "model": "k3.1-pro",
+      "thinkingLevel": "high"
+    },
+    "budget": {
+      "provider": "opencode-go",
+      "model": "deepseek-v4.1-flash",
+      "thinkingLevel": "high"
+    },
+    "budget-alt": {
+      "provider": "opencode-go",
+      "model": "glm-5.3-flash",
+      "thinkingLevel": "high"
+    },
+    "budget-strong": {
+      "provider": "opencode-go",
+      "model": "glm-5.3",
+      "thinkingLevel": "high"
+    },
+    "cross-verify": {
+      "provider": "kimi-coding",
+      "model": "kimi-for-coding",
+      "thinkingLevel": "high",
+      "verifier": {
+        "provider": "opencode-go",
+        "model": "deepseek-v4.1-flash"
+      }
+    }
+  }
+}

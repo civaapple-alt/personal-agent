@@ -17,7 +17,7 @@ import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
-import { selectDemoModel } from "./model-selection.ts";
+import { resolveVerifierModelFromEnv, selectDemoModel } from "./model-selection.ts";
 
 export interface BoardSmokeOptions {
 	help?: boolean;
@@ -370,6 +370,10 @@ export async function runBoardSmoke(options: BoardSmokeOptions = {}): Promise<Bo
 			workspaceDir,
 			options.provider && options.model ? { provider: options.provider, model: options.model } : {},
 		);
+		const resolvedVerifier = resolveVerifierModelFromEnv({
+			verifierProvider: options.verifierProvider,
+			verifierModel: options.verifierModel,
+		});
 
 		const matter = store.createMatter({
 			title: "Board smoke: clamp() fix & verification",
@@ -385,8 +389,8 @@ export async function runBoardSmoke(options: BoardSmokeOptions = {}): Promise<Bo
 		});
 
 		const verifierHint =
-			options.verifierProvider && options.verifierModel
-				? `（如需指定 verifier 模型，请使用 ${options.verifierProvider}/${options.verifierModel}）`
+			resolvedVerifier.verifierProvider && resolvedVerifier.verifierModel
+				? `（如需指定 verifier 模型，请使用 ${resolvedVerifier.verifierProvider}/${resolvedVerifier.verifierModel}）`
 				: "";
 
 		const prompt = [

@@ -21,7 +21,7 @@ import { loadRoleTemplatesFromDir } from "../roles/template-loader.ts";
 import { PiRpcWorker } from "../rpc/pi-rpc-worker.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
-import { selectDemoModel } from "./model-selection.ts";
+import { resolveVerifierModelFromEnv, selectDemoModel } from "./model-selection.ts";
 
 const argv = process.argv.slice(2);
 if (argv.includes("--help") || argv.includes("-h")) {
@@ -123,6 +123,7 @@ try {
 		workspaceDir,
 		leadProvider && leadModelArg ? { provider: leadProvider, model: leadModelArg } : {},
 	);
+	const resolvedVerifier = resolveVerifierModelFromEnv({ verifierProvider, verifierModel });
 	const org = store.ensureDefaultOrganization();
 	const workspace = store.upsertWorkspace({
 		orgId: org.id,
@@ -131,14 +132,14 @@ try {
 		defaultBranch: "main",
 	});
 
-	if (verifierProvider && verifierModel) {
+	if (resolvedVerifier.verifierProvider && resolvedVerifier.verifierModel) {
 		store.setOrgAiRolesBatch(org.id, [
 			{ memberId: "product-manager", enabled: true, isPrimaryContact: true },
 			{
 				memberId: "qa-manager",
 				enabled: true,
-				providerOverride: verifierProvider,
-				modelOverride: verifierModel,
+				providerOverride: resolvedVerifier.verifierProvider,
+				modelOverride: resolvedVerifier.verifierModel,
 			},
 			{ memberId: "engineering-manager", enabled: true },
 		]);

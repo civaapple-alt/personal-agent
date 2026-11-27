@@ -5,6 +5,7 @@ packages/*/dist/
 playwright-report/
 test-results/
 e2e/.live-runs.jsonl
+e2e/live.config.json
 .pi/
 .agents/skills/*
 !.agents/skills/pa-matter-retrospective/
