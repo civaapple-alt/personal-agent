@@ -775,6 +775,14 @@ test("M2 Scenarios 4 & 5: waiting-only model hot-swap (409 on working), session 
 		};
 		assert.equal(swapWaitingJson.member.modelOverride?.model, "gpt-5.2");
 
+		// Coordinator cannot be retired
+		const retireCoordinatorRes = await fetch(`${baseUrl}/api/matters/${matterId}/board/members/coordinator`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Cookie: ownerCookie },
+			body: JSON.stringify({ status: "retired" }),
+		});
+		assert.equal(retireCoordinatorRes.status, 400);
+
 		// Release builder-swap so it posts clarification @user and pauses the board run
 		releaseBuilderWait();
 

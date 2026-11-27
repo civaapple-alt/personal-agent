@@ -1067,6 +1067,169 @@
 	color: var(--text-secondary);
 }
 
+.board-members-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.board-group-header-right {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* Board Mention Graph */
+.board-graph-tab {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.board-graph-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.board-graph-caption {
+	font-size: var(--text-micro);
+	color: var(--text-muted);
+}
+
+.board-graph-canvas-wrap {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	background: var(--bg-subtle);
+	padding: 8px;
+	overflow-x: auto;
+}
+
+.board-graph-svg {
+	width: 100%;
+	height: auto;
+	display: block;
+}
+
+.board-graph-node {
+	cursor: pointer;
+}
+
+.board-graph-node.is-dimmed {
+	opacity: 0.52;
+}
+
+.board-graph-node-box {
+	fill: var(--bg-card);
+	stroke: var(--border-strong);
+	stroke-width: 1.5;
+}
+
+.board-graph-node.is-working .board-graph-node-box {
+	stroke: var(--accent);
+	stroke-width: 2;
+}
+
+.board-graph-node.is-blocked_human .board-graph-node-box {
+	stroke: var(--warn-border);
+	stroke-width: 2;
+}
+
+.board-graph-node.is-retired .board-graph-node-box,
+.board-graph-node.is-stopped .board-graph-node-box {
+	stroke-dasharray: 4 3;
+}
+
+.board-graph-node-title {
+	font-size: 11px;
+	font-weight: 600;
+	fill: var(--text-primary);
+}
+
+.board-graph-node-sub {
+	font-size: 9.5px;
+	font-family: var(--font-mono);
+	fill: var(--text-muted);
+}
+
+.board-graph-edge.is-normal path {
+	stroke: var(--border-strong);
+}
+
+.board-graph-edge.is-rework path {
+	stroke: var(--warn-border);
+}
+
+.board-graph-edge.is-pass path {
+	stroke: var(--accent);
+}
+
+.board-graph-edge.is-escalate path {
+	stroke: var(--danger-text);
+}
+
+.board-graph-marker-normal {
+	fill: var(--border-strong);
+}
+
+.board-graph-marker-rework {
+	fill: var(--warn-border);
+}
+
+.board-graph-marker-pass {
+	fill: var(--accent);
+}
+
+.board-graph-marker-escalate {
+	fill: var(--danger-text);
+}
+
+.board-graph-edge-label {
+	font-size: 10px;
+	font-weight: 600;
+	fill: var(--text-secondary);
+}
+
+.board-graph-node-filters {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.board-graph-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	font-size: var(--text-micro);
+	color: var(--text-secondary);
+}
+
+.board-graph-legend-item::before {
+	content: "";
+	display: inline-block;
+	width: 12px;
+	height: 2px;
+	margin-right: 5px;
+	vertical-align: middle;
+	background: var(--border-strong);
+}
+
+.board-graph-legend-item.is-rework::before {
+	background: var(--warn-border);
+}
+
+.board-graph-legend-item.is-pass::before {
+	background: var(--accent);
+}
+
+.board-graph-legend-item.is-escalate::before {
+	background: var(--danger-text);
+}
+
 @media (max-width: 960px) {
 	.chat-stage.has-board-pane {
 		grid-template-columns: 1fr;

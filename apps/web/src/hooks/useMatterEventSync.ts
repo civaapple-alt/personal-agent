@@ -2,6 +2,22 @@ import { SSE_SYNC_EVENT_NAMES, type SseEventPayloadMap } from "@pa/contracts/sse
 import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto, resolveApiUrl } from "../api.ts";
 
+export interface BoardSseSubscriber {
+	onBoardPostCreated?: (event: SseEventPayloadMap["board_post_created"]) => void;
+	onBoardMemberUpdated?: (event: SseEventPayloadMap["board_member_updated"]) => void;
+	onMatterEventAppended?: (event: SseEventPayloadMap["matter_event_appended"]) => void;
+}
+
+const boardSseSubscribers = new Set<BoardSseSubscriber>();
+
+/** Subscribes a caller to Board SSE events delivered over the main `/api/events` stream. */
+export function subscribeBoardSseEvents(subscriber: BoardSseSubscriber): () => void {
+	boardSseSubscribers.add(subscriber);
+	return () => {
+		boardSseSubscribers.delete(subscriber);
+	};
+}
+
 interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
 	selectedMatterIdRef: MutableRefObject<string | null>;
@@ -112,6 +128,30 @@ export function useMatterEventSync({
 		for (const evtName of SSE_SYNC_EVENT_NAMES) {
 			es.addEventListener(evtName, handleSync);
 		}
+		es.addEventListener("board_post_created", (ev) => {
+			try {
+				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["board_post_created"];
+				for (const sub of boardSseSubscribers) sub.onBoardPostCreated?.(data);
+			} catch {
+				// Ignore malformed event payloads.
+			}
+		});
+		es.addEventListener("board_member_updated", (ev) => {
+			try {
+				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["board_member_updated"];
+				for (const sub of boardSseSubscribers) sub.onBoardMemberUpdated?.(data);
+			} catch {
+				// Ignore malformed event payloads.
+			}
+		});
+		es.addEventListener("matter_event_appended", (ev) => {
+			try {
+				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_event_appended"];
+				for (const sub of boardSseSubscribers) sub.onMatterEventAppended?.(data);
+			} catch {
+				// Ignore malformed event payloads.
+			}
+		});
 		es.addEventListener("auth_revoked", () => {
 			es.close();
 			applyRevokedSession("当前账号会话已失效，请重新登录或联系管理员");

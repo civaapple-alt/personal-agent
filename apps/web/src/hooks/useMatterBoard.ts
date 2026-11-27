@@ -6,6 +6,7 @@ import {
 	type BoardPostDto,
 	type BoardPostKind,
 	type BoardPostSummaryDto,
+	type BoardRole,
 	type CreateBoardPostInput,
 	createBoardPost,
 	fetchBoardPost,
@@ -15,10 +16,10 @@ import {
 	type MatterCollaborationMode,
 	type MatterEventDto,
 	type MatterEventType,
-	resolveApiUrl,
 	type UpdateBoardMemberControlInput,
 	updateBoardMemberControl,
 } from "../api.ts";
+import { subscribeBoardSseEvents } from "./useMatterEventSync.ts";
 
 export interface BoardMemberGroup {
 	status: BoardMemberStatus;
@@ -177,13 +178,13 @@ export function applyBoardPostCreatedEvent(
 		id: `sse-post-${event.matterId}-${event.postNo}`,
 		matterId: event.matterId,
 		postNo: event.postNo,
-		authorType: event.authorId === "system_monitor" ? "monitor" : "agent",
+		authorType: event.authorType ?? (event.authorId === "monitor" ? "monitor" : "agent"),
 		authorId: event.authorId,
 		kind: event.kind,
 		mentions: event.mentions,
 		refPostNos: [],
 		summary: event.summary,
-		hasBody: true,
+		hasBody: event.hasBody ?? false,
 		artifacts: null,
 		verification: null,
 		orgId: null,
@@ -255,6 +256,210 @@ export function formatBoardEventPayload(event: MatterEventDto): string {
 		return str("summary") || str("message") || str("stage") || "执行轮次完成";
 	}
 	return str("summary") || str("message") || JSON.stringify(payload).slice(0, 160);
+}
+
+/** Filters visible board members while always preserving the persistent Coordinator. */
+export function filterVisibleBoardMembers(
+	members: readonly BoardMemberDto[],
+	options: { hideInactive: boolean },
+): BoardMemberDto[] {
+	if (!options.hideInactive) return [...members];
+	return members.filter(
+		(member) => member.boardRole === "coordinator" || (member.status !== "retired" && member.status !== "stopped"),
+	);
+}
+
+/** Builds active `@mention` composer chips (excluding retired round-1 agents). */
+export function buildActiveMentionCandidates(members: readonly BoardMemberDto[]): string[] {
+	const ids: string[] = [];
+	for (const member of members) {
+		if (member.status === "retired" && member.boardRole !== "coordinator") continue;
+		if (!ids.includes(member.agentId)) ids.push(member.agentId);
+	}
+	if (!ids.includes("coordinator")) ids.unshift("coordinator");
+	if (!ids.includes("all")) ids.push("all");
+	return ids;
+}
+
+export interface BoardMentionGraphNode {
+	agentId: string;
+	displayName: string;
+	role: BoardRole | "monitor" | "user";
+	status: BoardMemberStatus | "active";
+	x: number;
+	y: number;
+	postCount: number;
+}
+
+export interface BoardMentionGraphEdge {
+	from: string;
+	to: string;
+	count: number;
+	tone: "normal" | "rework" | "pass" | "escalate";
+	latestPostNo: number;
+}
+
+export interface BoardMentionGraph {
+	width: number;
+	height: number;
+	nodes: BoardMentionGraphNode[];
+	edges: BoardMentionGraphEdge[];
+}
+
+function layoutGraphRow(count: number, width: number, y: number, idx: number): { x: number; y: number } {
+	if (count <= 1) return { x: Math.round(width / 2), y };
+	const pad = 76;
+	const usable = Math.max(120, width - pad * 2);
+	const step = usable / (count - 1);
+	return { x: Math.round(pad + idx * step), y };
+}
+
+/** Builds a clean `@mention` topology projection from board members and posts. */
+export function buildBoardMentionGraph(
+	members: readonly BoardMemberDto[],
+	posts: readonly BoardPostSummaryDto[],
+	options: { hideInactive?: boolean } = {},
+): BoardMentionGraph {
+	const hideInactive = Boolean(options.hideInactive);
+	const visibleMembers = filterVisibleBoardMembers(members, { hideInactive });
+
+	const postCounts = new Map<string, number>();
+	let hasMonitorPost = false;
+	let hasUserInteraction = false;
+	for (const post of posts) {
+		postCounts.set(post.authorId, (postCounts.get(post.authorId) ?? 0) + 1);
+		if (post.authorType === "monitor" || post.authorId === "monitor") hasMonitorPost = true;
+		if (post.authorType === "user" || post.mentions.includes("user")) hasUserInteraction = true;
+	}
+
+	const coordMembers = visibleMembers.filter((m) => m.boardRole === "coordinator");
+	const builderMembers = visibleMembers.filter((m) => m.boardRole === "builder" && m.status !== "retired");
+	const verifierAndInactiveMembers = visibleMembers.filter(
+		(m) => m.boardRole === "verifier" || (m.boardRole === "builder" && m.status === "retired"),
+	);
+
+	const rawRow2: Array<{
+		agentId: string;
+		displayName: string;
+		role: BoardMentionGraphNode["role"];
+		status: BoardMentionGraphNode["status"];
+	}> = builderMembers.map((m) => ({
+		agentId: m.agentId,
+		displayName: m.displayName,
+		role: m.boardRole,
+		status: m.status,
+	}));
+	const rawRow3: Array<{
+		agentId: string;
+		displayName: string;
+		role: BoardMentionGraphNode["role"];
+		status: BoardMentionGraphNode["status"];
+	}> = verifierAndInactiveMembers.map((m) => ({
+		agentId: m.agentId,
+		displayName: m.displayName,
+		role: m.boardRole,
+		status: m.status,
+	}));
+	if (hasMonitorPost) {
+		rawRow3.push({ agentId: "monitor", displayName: "@monitor", role: "monitor", status: "active" });
+	}
+	if (hasUserInteraction && !hideInactive) {
+		rawRow3.push({ agentId: "user", displayName: "用户", role: "user", status: "active" });
+	}
+
+	const maxCols = Math.max(1, coordMembers.length, rawRow2.length, rawRow3.length);
+	const width = Math.max(440, maxCols * 140);
+	const nodes: BoardMentionGraphNode[] = [];
+
+	const row1Nodes =
+		coordMembers.length > 0
+			? coordMembers
+			: [
+					{
+						agentId: "coordinator",
+						displayName: "Coordinator",
+						boardRole: "coordinator" as const,
+						status: "waiting" as const,
+					},
+				];
+	row1Nodes.forEach((m, idx) => {
+		const pos = layoutGraphRow(row1Nodes.length, width, 46, idx);
+		nodes.push({
+			agentId: m.agentId,
+			displayName: m.displayName,
+			role: "coordinator",
+			status: m.status,
+			x: pos.x,
+			y: pos.y,
+			postCount: postCounts.get(m.agentId) ?? 0,
+		});
+	});
+
+	rawRow2.forEach((m, idx) => {
+		const pos = layoutGraphRow(rawRow2.length, width, 148, idx);
+		nodes.push({
+			...m,
+			x: pos.x,
+			y: pos.y,
+			postCount: postCounts.get(m.agentId) ?? 0,
+		});
+	});
+
+	const row3Y = rawRow2.length > 0 ? 250 : 148;
+	rawRow3.forEach((m, idx) => {
+		const pos = layoutGraphRow(rawRow3.length, width, row3Y, idx);
+		nodes.push({
+			...m,
+			x: pos.x,
+			y: pos.y,
+			postCount: postCounts.get(m.agentId) ?? 0,
+		});
+	});
+
+	const visibleIds = new Set(nodes.map((n) => n.agentId));
+	const edgeMap = new Map<string, BoardMentionGraphEdge>();
+	for (const post of posts) {
+		const from = post.authorType === "monitor" ? "monitor" : post.authorType === "user" ? "user" : post.authorId;
+		if (!visibleIds.has(from)) continue;
+		const targets = post.mentions.includes("all")
+			? [...visibleIds].filter((id) => id !== from && id !== "monitor" && id !== "user")
+			: post.mentions;
+		for (const rawTarget of targets) {
+			const to = rawTarget.replace(/^@+/, "");
+			if (!visibleIds.has(to) || to === from) continue;
+			const key = `${from}->${to}`;
+			const existing = edgeMap.get(key);
+			const nextTone: BoardMentionGraphEdge["tone"] =
+				post.kind === "escalate" || post.authorType === "monitor"
+					? "escalate"
+					: post.kind === "verify_rework"
+						? "rework"
+						: post.kind === "verify_pass"
+							? "pass"
+							: "normal";
+			if (!existing) {
+				edgeMap.set(key, { from, to, count: 1, tone: nextTone, latestPostNo: post.postNo });
+			} else {
+				existing.count += 1;
+				existing.latestPostNo = Math.max(existing.latestPostNo, post.postNo);
+				if (
+					nextTone === "escalate" ||
+					nextTone === "rework" ||
+					(nextTone === "pass" && existing.tone === "normal")
+				) {
+					existing.tone = nextTone;
+				}
+			}
+		}
+	}
+
+	const height = rawRow3.length > 0 ? row3Y + 54 : rawRow2.length > 0 ? 204 : 104;
+	return {
+		width,
+		height,
+		nodes,
+		edges: [...edgeMap.values()],
+	};
 }
 
 interface UseMatterBoardParams {
@@ -371,22 +576,15 @@ export function useMatterBoard({
 		await loadEventsPage("more", eventsCursor);
 	}, [eventsCursor, eventsHasMore, eventsLoading, loadEventsPage]);
 
-	// Subscribe to board SSE events for incremental state patching without full matter reloads.
+	// Subscribe to board SSE events via the shared EventSource in useMatterEventSync.
 	useEffect(() => {
 		if (!shouldLoadBoard || !matterId) return;
-		const es = new EventSource(resolveApiUrl("/api/events"));
-		es.addEventListener("board_post_created", (ev) => {
-			try {
-				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["board_post_created"];
+		return subscribeBoardSseEvents({
+			onBoardPostCreated: (data) => {
 				if (data.matterId !== matterIdRef.current) return;
 				setSnapshot((prev) => applyBoardPostCreatedEvent(prev, data));
-			} catch {
-				// Ignore malformed event payloads.
-			}
-		});
-		es.addEventListener("board_member_updated", (ev) => {
-			try {
-				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["board_member_updated"];
+			},
+			onBoardMemberUpdated: (data) => {
 				if (data.matterId !== matterIdRef.current) return;
 				let needsRefresh = false;
 				setSnapshot((prev) => {
@@ -397,22 +595,14 @@ export function useMatterBoard({
 				if (needsRefresh) {
 					void refreshBoard();
 				}
-			} catch {
-				// Ignore malformed event payloads.
-			}
-		});
-		es.addEventListener("matter_event_appended", (ev) => {
-			try {
-				const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_event_appended"];
+			},
+			onMatterEventAppended: (data) => {
 				if (data.matterId !== matterIdRef.current) return;
 				if (eventsTabActiveRef.current) {
 					void loadEventsPage("reset");
 				}
-			} catch {
-				// Ignore malformed event payloads.
-			}
+			},
 		});
-		return () => es.close();
 	}, [shouldLoadBoard, matterId, refreshBoard, loadEventsPage]);
 
 	const loadPostBody = useCallback(

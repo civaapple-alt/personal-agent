@@ -14,8 +14,10 @@ import type {
 	UpdateBoardMemberControlInput,
 } from "../../api.ts";
 import {
+	buildActiveMentionCandidates,
 	canSwapBoardMemberModel,
 	filterBoardPosts,
+	filterVisibleBoardMembers,
 	formatBoardEventPayload,
 	groupBoardMembers,
 	summarizeBoardStatus,
@@ -25,6 +27,7 @@ import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
 import { ModalDialog } from "../../primitives/ModalDialog.tsx";
 import { getBotTheme, type RoleMood } from "../../utils.ts";
 import { useModelCatalog } from "../ModelPicker.tsx";
+import { BoardMentionGraph } from "./BoardMentionGraph.tsx";
 
 type ModelThinkingLevel = NonNullable<ModelSelection["thinkingLevel"]>;
 
@@ -34,7 +37,7 @@ function formatTime(iso: string): string {
 	return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-export type BoardPaneTab = "members" | "board" | "events";
+export type BoardPaneTab = "members" | "board" | "graph" | "events";
 
 interface MatterBoardPaneProps {
 	matterId: string;
@@ -199,6 +202,8 @@ export function MatterBoardPane({
 	const [postQuery, setPostQuery] = useState("");
 	const [postKindFilter, setPostKindFilter] = useState<BoardPostKind | "all">("all");
 	const [expandedPostNos, setExpandedPostNos] = useState<Record<number, boolean>>({});
+	const [hideInactive, setHideInactive] = useState(false);
+	const [showRetiredGroup, setShowRetiredGroup] = useState(false);
 
 	// Board direct-post composer state
 	const [composeKind, setComposeKind] = useState<BoardPostKind>("clarification");
@@ -220,22 +225,17 @@ export function MatterBoardPane({
 
 	const members = snapshot?.members ?? [];
 	const posts = snapshot?.posts ?? [];
+	const retiredCount = useMemo(() => members.filter((member) => member.status === "retired").length, [members]);
+	const activeMemberCount = members.length - retiredCount;
+	const visibleMembers = useMemo(() => filterVisibleBoardMembers(members, { hideInactive }), [members, hideInactive]);
 	const statusSummary = useMemo(() => summarizeBoardStatus(members, posts.length), [members, posts.length]);
-	const { coordinator, groups } = useMemo(() => groupBoardMembers(members), [members]);
+	const { coordinator, groups } = useMemo(() => groupBoardMembers(visibleMembers), [visibleMembers]);
 	const filteredPosts = useMemo(
 		() => filterBoardPosts(posts, { query: postQuery, kind: postKindFilter }),
 		[posts, postQuery, postKindFilter],
 	);
 
-	const mentionCandidates = useMemo(() => {
-		const ids: string[] = [];
-		for (const member of members) {
-			if (!ids.includes(member.agentId)) ids.push(member.agentId);
-		}
-		if (!ids.includes("coordinator")) ids.unshift("coordinator");
-		if (!ids.includes("all")) ids.push("all");
-		return ids;
-	}, [members]);
+	const mentionCandidates = useMemo(() => buildActiveMentionCandidates(members), [members]);
 
 	const modelOptions = catalog?.models ?? [];
 	const selectedSwapModelOption = useMemo(() => {
@@ -261,6 +261,20 @@ export function MatterBoardPane({
 		try {
 			await onControlMember(member.agentId, { action });
 			onNotice?.(action === "pause" ? `已暂停成员 @${member.agentId}` : `已恢复成员 @${member.agentId} 为待命`);
+		} catch (err: unknown) {
+			setMemberActionError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusyAgentId(null);
+		}
+	};
+
+	const handleRetireMember = async (member: BoardMemberDto) => {
+		if (busyAgentId || member.boardRole === "coordinator" || member.status === "working") return;
+		setBusyAgentId(member.agentId);
+		setMemberActionError(null);
+		try {
+			await onControlMember(member.agentId, { status: "retired" });
+			onNotice?.(`已将成员 @${member.agentId} 标记为退场`);
 		} catch (err: unknown) {
 			setMemberActionError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -428,6 +442,17 @@ export function MatterBoardPane({
 						>
 							切换模型
 						</button>
+						{member.boardRole !== "coordinator" && member.status !== "working" && (
+							<button
+								type="button"
+								className="btn-pill-outline btn-xs"
+								disabled={isBusy}
+								title="将该成员标记为退场，保留历史记录并默认折叠"
+								onClick={() => void handleRetireMember(member)}
+							>
+								退场
+							</button>
+						)}
 						{member.status === "working" && <span className="board-swap-hint">执行中不可换模型</span>}
 					</div>
 				)}
@@ -466,7 +491,9 @@ export function MatterBoardPane({
 					onClick={() => onSelectTab("members")}
 				>
 					<span>成员</span>
-					<span className="board-tab-count">{members.length}</span>
+					<span className="board-tab-count">
+						{retiredCount > 0 ? `${activeMemberCount}/${members.length}` : members.length}
+					</span>
 				</button>
 				<button
 					type="button"
@@ -477,6 +504,15 @@ export function MatterBoardPane({
 				>
 					<span>公告板</span>
 					<span className="board-tab-count">{posts.length}</span>
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={activeTab === "graph"}
+					className={`board-pane-tab${activeTab === "graph" ? " active" : ""}`}
+					onClick={() => onSelectTab("graph")}
+				>
+					<span>关系图</span>
 				</button>
 				<button
 					type="button"
@@ -519,25 +555,55 @@ export function MatterBoardPane({
 							</div>
 						) : (
 							<>
+								<div className="board-members-toolbar">
+									<span className="board-pane-subtitle">
+										活跃 {activeMemberCount} 人{retiredCount > 0 ? ` · 已退场 ${retiredCount} 人` : ""}
+									</span>
+									<button
+										type="button"
+										className={`board-filter-pill${hideInactive ? " active" : ""}`}
+										aria-pressed={hideInactive}
+										onClick={() => setHideInactive((prev) => !prev)}
+									>
+										{hideInactive ? "已隐藏非活跃成员" : "隐藏非活跃"}
+									</button>
+								</div>
 								{coordinator && (
 									<section className="board-member-group" aria-label="交付总控">
 										<header className="board-group-header">
-											<span>交付总控 · Coordinator</span>
+											<span>交付总控 · Coordinator（常驻）</span>
 										</header>
 										<div className="board-member-grid">{renderMemberCard(coordinator, 0)}</div>
 									</section>
 								)}
-								{groups.map((group) => (
-									<section key={group.status} className="board-member-group" aria-label={group.label}>
-										<header className="board-group-header">
-											<span>{group.label}</span>
-											<span className="board-group-count">{group.members.length}</span>
-										</header>
-										<div className="board-member-grid">
-											{group.members.map((member, idx) => renderMemberCard(member, idx + 1))}
-										</div>
-									</section>
-								))}
+								{groups.map((group) => {
+									const isRetiredGroup = group.status === "retired";
+									const collapsed = isRetiredGroup && !showRetiredGroup && activeMemberCount > 1;
+									return (
+										<section key={group.status} className="board-member-group" aria-label={group.label}>
+											<header className="board-group-header">
+												<span>{group.label}</span>
+												<div className="board-group-header-right">
+													<span className="board-group-count">{group.members.length}</span>
+													{isRetiredGroup && activeMemberCount > 1 && (
+														<button
+															type="button"
+															className="btn-inline"
+															onClick={() => setShowRetiredGroup((prev) => !prev)}
+														>
+															{collapsed ? "展开" : "收起"}
+														</button>
+													)}
+												</div>
+											</header>
+											{!collapsed && (
+												<div className="board-member-grid">
+													{group.members.map((member, idx) => renderMemberCard(member, idx + 1))}
+												</div>
+											)}
+										</section>
+									);
+								})}
 							</>
 						)}
 
@@ -820,6 +886,20 @@ export function MatterBoardPane({
 							</form>
 						)}
 					</div>
+				)}
+
+				{activeTab === "graph" && (
+					<BoardMentionGraph
+						members={members}
+						posts={posts}
+						hideInactive={hideInactive}
+						onToggleHideInactive={() => setHideInactive((prev) => !prev)}
+						onSelectAgent={(agentId) => {
+							setPostKindFilter("all");
+							setPostQuery(`@${agentId}`);
+							onSelectTab("board");
+						}}
+					/>
 				)}
 
 				{activeTab === "events" && (

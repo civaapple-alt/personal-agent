@@ -161,9 +161,11 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 				matterId,
 				postNo: post.postNo,
 				kind: post.kind,
+				authorType: post.authorType,
 				authorId: post.authorId,
 				mentions: post.mentions,
 				summary: post.summary,
+				hasBody: Boolean(post.body && post.body.length > 0),
 				createdAt: post.createdAt,
 			},
 			{ matterId },
@@ -285,6 +287,10 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 				return true;
 			}
 			nextStatus = body.status;
+		}
+		if (existingMember.boardRole === "coordinator" && nextStatus === "retired") {
+			sendError(res, 400, "Coordinator cannot be retired");
+			return true;
 		}
 		const validatedModel = hasModelOverride
 			? body.modelOverride === null

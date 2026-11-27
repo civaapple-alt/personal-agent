@@ -4,8 +4,11 @@ import type { BoardMemberDto, BoardPostSummaryDto, MatterBoardSnapshotDto, Matte
 import {
 	applyBoardMemberUpdatedEvent,
 	applyBoardPostCreatedEvent,
+	buildActiveMentionCandidates,
+	buildBoardMentionGraph,
 	canSwapBoardMemberModel,
 	filterBoardPosts,
+	filterVisibleBoardMembers,
 	formatBoardEventPayload,
 	groupBoardMembers,
 	summarizeBoardStatus,
@@ -264,5 +267,127 @@ describe("board UI projections & SSE reducers", () => {
 			createdAt: "2026-11-27T08:13:00.000Z",
 		};
 		assert.equal(formatBoardEventPayload(toolEvent), "bash · npm test · [ok]");
+	});
+
+	it("applyBoardPostCreatedEvent respects explicit authorType and hasBody from SSE", () => {
+		const base: MatterBoardSnapshotDto = {
+			matterId: "matter-1",
+			collaborationMode: "board",
+			coordinatorMemberId: "em",
+			members: [],
+			posts: [],
+			latestPostNo: 0,
+		};
+
+		const userPost = applyBoardPostCreatedEvent(base, {
+			matterId: "matter-1",
+			postNo: 1,
+			kind: "clarification",
+			authorType: "user",
+			authorId: "owner",
+			mentions: ["coordinator"],
+			summary: "Clarified requirement",
+			hasBody: false,
+			createdAt: "2026-11-27T08:15:00.000Z",
+		});
+		assert.equal(userPost?.posts[0]?.authorType, "user");
+		assert.equal(userPost?.posts[0]?.hasBody, false);
+
+		const monitorPost = applyBoardPostCreatedEvent(userPost, {
+			matterId: "matter-1",
+			postNo: 2,
+			kind: "escalate",
+			authorId: "monitor",
+			mentions: ["coordinator"],
+			summary: "Silent stall alert",
+			hasBody: true,
+			createdAt: "2026-11-27T08:16:00.000Z",
+		});
+		assert.equal(monitorPost?.posts[1]?.authorType, "monitor");
+		assert.equal(monitorPost?.posts[1]?.hasBody, true);
+	});
+
+	it("filterVisibleBoardMembers and buildActiveMentionCandidates hide retired round-1 agents while keeping coordinator", () => {
+		const members: BoardMemberDto[] = [
+			makeMember({ agentId: "coordinator", boardRole: "coordinator", status: "waiting" }),
+			makeMember({ agentId: "m1-builder", status: "retired" }),
+			makeMember({ agentId: "paused-builder", status: "stopped" }),
+			makeMember({ agentId: "m2-builder", status: "working" }),
+			makeMember({ agentId: "m2-verifier", boardRole: "verifier", status: "waiting" }),
+		];
+
+		const visibleOnly = filterVisibleBoardMembers(members, { hideInactive: true });
+		assert.deepEqual(
+			visibleOnly.map((m) => m.agentId),
+			["coordinator", "m2-builder", "m2-verifier"],
+		);
+
+		assert.deepEqual(buildActiveMentionCandidates(members), [
+			"coordinator",
+			"paused-builder",
+			"m2-builder",
+			"m2-verifier",
+			"all",
+		]);
+	});
+
+	it("buildBoardMentionGraph aggregates directional edges, tones, hideInactive filtering, and de-noises silent monitor", () => {
+		const members: BoardMemberDto[] = [
+			makeMember({ agentId: "coordinator", boardRole: "coordinator", status: "waiting" }),
+			makeMember({ agentId: "old-slice", status: "retired" }),
+			makeMember({ agentId: "ui-slice", status: "working" }),
+			makeMember({ agentId: "verifier", boardRole: "verifier", status: "waiting" }),
+		];
+		const posts: BoardPostSummaryDto[] = [
+			makePost({ postNo: 1, authorId: "coordinator", kind: "assign", mentions: ["old-slice"] }),
+			makePost({ postNo: 2, authorId: "coordinator", kind: "assign", mentions: ["ui-slice"] }),
+			makePost({ postNo: 3, authorId: "ui-slice", kind: "handoff", mentions: ["verifier"] }),
+			makePost({ postNo: 4, authorId: "verifier", kind: "verify_rework", mentions: ["ui-slice"] }),
+			makePost({ postNo: 5, authorId: "ui-slice", kind: "handoff", mentions: ["verifier"] }),
+			makePost({ postNo: 6, authorId: "verifier", kind: "verify_pass", mentions: ["coordinator"] }),
+		];
+
+		const activeGraph = buildBoardMentionGraph(members, posts, { hideInactive: true });
+		assert.equal(
+			activeGraph.nodes.some((n) => n.agentId === "old-slice"),
+			false,
+		);
+		assert.equal(
+			activeGraph.nodes.some((n) => n.agentId === "monitor"),
+			false,
+		);
+		const uiToVerifier = activeGraph.edges.find((e) => e.from === "ui-slice" && e.to === "verifier");
+		assert.equal(uiToVerifier?.count, 2);
+		assert.equal(uiToVerifier?.tone, "normal");
+		const verifierToUi = activeGraph.edges.find((e) => e.from === "verifier" && e.to === "ui-slice");
+		assert.equal(verifierToUi?.tone, "rework");
+		const verifierToCoord = activeGraph.edges.find((e) => e.from === "verifier" && e.to === "coordinator");
+		assert.equal(verifierToCoord?.tone, "pass");
+
+		// When @monitor actually posts an escalation, it appears with an escalate edge
+		const withMonitor = buildBoardMentionGraph(
+			members,
+			[
+				...posts,
+				makePost({
+					postNo: 7,
+					authorType: "monitor",
+					authorId: "monitor",
+					kind: "escalate",
+					mentions: ["coordinator"],
+				}),
+			],
+			{ hideInactive: false },
+		);
+		assert.equal(
+			withMonitor.nodes.some((n) => n.agentId === "old-slice"),
+			true,
+		);
+		assert.equal(
+			withMonitor.nodes.some((n) => n.agentId === "monitor"),
+			true,
+		);
+		const monitorEdge = withMonitor.edges.find((e) => e.from === "monitor" && e.to === "coordinator");
+		assert.equal(monitorEdge?.tone, "escalate");
 	});
 });

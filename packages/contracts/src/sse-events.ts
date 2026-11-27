@@ -1,4 +1,10 @@
-import type { BoardMemberMetrics, BoardMemberStatus, BoardPostKind, MatterEventType } from "./board.ts";
+import type {
+	BoardMemberMetrics,
+	BoardMemberStatus,
+	BoardPostAuthorType,
+	BoardPostKind,
+	MatterEventType,
+} from "./board.ts";
 
 /**
  * Centralized Server-Sent Events (`/api/events`) name & payload contract shared
@@ -19,9 +25,11 @@ export interface SseEventPayloadMap {
 		matterId: string;
 		postNo: number;
 		kind: BoardPostKind;
+		authorType?: BoardPostAuthorType;
 		authorId: string;
 		mentions: string[];
 		summary: string;
+		hasBody?: boolean;
 		createdAt: string;
 	};
 	board_member_updated: {
