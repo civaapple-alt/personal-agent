@@ -4,9 +4,10 @@
 	"private": true,
 	"license": "MIT",
 	"type": "module",
-	"description": "Portable dual-backend Pi extension for Lead delegation and Board asynchronous multi-agent collaboration (standalone local Pi RPC + PA Host Bridge)",
+	"description": "Portable dual-backend Pi package for Board asynchronous multi-agent collaboration (extension + workflow skill)",
 	"keywords": ["pi-package", "pi", "board", "coordination", "multi-agent", "personal-agent"],
 	"pi": {
-		"extensions": ["./index.ts"]
+		"extensions": ["./index.ts"],
+		"skills": ["./skills"]
 	}
 }

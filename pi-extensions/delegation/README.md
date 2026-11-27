@@ -4,7 +4,7 @@
 
 将 Personal Agent 的 **Lead 同步跨岗委托原语（`delegate_to_member`）** 独立打包为可移植扩展，支持双后端自动路由：
 
-- **独立终端 Pi**：根据 `memberId` 拉起独立 `pi --mode rpc --session .pi/delegations/sessions/<memberId>.jsonl` 子进程完成专职任务并带回结果；支持携带 `verification` 触发只读独立验收（`--exclude-tools edit,write`）与 `modelOverride` 异构模型指定。
+- **独立终端 Pi**：根据 `memberId` 拉起独立 `pi --mode rpc --session .pi/delegations/sessions/<memberId>.jsonl` 子进程完成专职任务并带回结果；支持携带 `verification` 触发只读独立验收（`--exclude-tools edit,write`）与 `modelOverride` 异构模型指定；同时随包内嵌工作流方法 [lead-delegation](skills/lead-delegation/SKILL.md)（[package.json](package.json) `pi.skills` 声明，终端亦支持 `/skill:lead-delegation`）。
 - **PA 宿主**：无缝桥接 PA 团队编排器，复用组织花名册 ACL、Git 资料空间文档预检（`handoffDocumentIds`）与轮次交接板（`assignmentNumber`）。
 
 ---
@@ -24,10 +24,12 @@
 
 ### 1. 启动扩展
 
+> 推荐传包目录 `-e ./pi-extensions/delegation`（或用 `pi install ./pi-extensions/delegation` 安装），`pi` 会自动同时加载扩展与内置工作流 Skill [lead-delegation](skills/lead-delegation/SKILL.md)；若只传 `.../index.ts` 单文件，则不会加载 `package.json` 中声明的 `pi.skills`。
+
 ```bash
 # 推荐组合：跨岗委托 + 默认岗位资产 + 内置岗位 Skills + 人工澄清
-pi -e ./pi-extensions/delegation/index.ts \
-   -e ./pi-extensions/roles/index.ts \
+pi -e ./pi-extensions/delegation \
+   -e ./pi-extensions/roles \
    -e ./pi-extensions/role-skills \
    -e ./pi-extensions/human-question/index.ts
 ```

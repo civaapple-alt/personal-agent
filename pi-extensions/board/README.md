@@ -10,6 +10,7 @@
 | `post_to_board` | 发布 `assign`/`handoff`/`verify_pass`/`verify_rework`/`clarification` 等板帖并按 `@mention` 异步唤醒目标成员 | 全部 Board 成员可用；强制拦截自验证（`verify_pass`） |
 | `read_board_post` | 按 `postNo` 懒加载完整板帖正文与结构化 `artifacts` / `verification` | 全部 Board 成员可用 |
 | `/board` | 发起 Board 协作（`/board <目标>`）或管理协作板（`status` / `posts` / `new <id>`） | 仅独立终端 Root 会话可用；管理子命令不触发模型，传 `<目标>` 会作为总控任务发给模型 |
+| [board-collaboration](skills/board-collaboration/SKILL.md)（内置工作流 Skill） | 规范 Coordinator 拆解 `ownedScope`、异构 Verifier、返工闭环、防自验证与 `@user` 拍板的 SOP | 通过 [package.json](package.json) `pi.skills` 随包原生安装；终端亦可用 `/skill:board-collaboration` 显式调用 |
 
 详细架构与里程碑见 [0.9.x 便携 Pi 协作扩展设计](../../docs/concepts/v0.9-portable-pi-collaboration-design.md)。
 
@@ -32,15 +33,15 @@
 
 ### 1. 启动扩展
 
-在任意目标仓库目录直接加载（或 `pi install ./pi-extensions/board` 安装后使用）：
+在任意目标仓库目录直接加载包目录（或 `pi install ./pi-extensions/board` 安装后使用）；传包目录时 `pi` 会自动同时注册扩展与内置工作流 Skill [board-collaboration](skills/board-collaboration/SKILL.md)：
 
 ```bash
 # 基础用法（纯动态组队）
-pi -e ./pi-extensions/board/index.ts
+pi -e ./pi-extensions/board
 
 # 推荐组合（支持 sourceMemberId 继承 4 个默认岗位 + 岗位方法 + 人工澄清）
-pi -e ./pi-extensions/board/index.ts \
-   -e ./pi-extensions/roles/index.ts \
+pi -e ./pi-extensions/board \
+   -e ./pi-extensions/roles \
    -e ./pi-extensions/role-skills \
    -e ./pi-extensions/human-question/index.ts
 ```

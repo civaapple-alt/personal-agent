@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -331,6 +331,17 @@ test("Standalone board extension runs async Coordinator -> Builder <-> Verifier 
 		// /board new switches isolated board storage cleanly.
 		const switched = await root.commands.get("board")!.handler("new sprint-2");
 		assert.match(switched ?? "", /Board: sprint-2/);
+
+		// Verify pi-extensions/board bundles workflow SKILL.md cleanly in its package manifest.
+		const manifest = JSON.parse(readFileSync(join(process.cwd(), "pi-extensions/board/package.json"), "utf8")) as {
+			pi?: { extensions?: string[]; skills?: string[] };
+		};
+		assert.deepEqual(manifest.pi, { extensions: ["./index.ts"], skills: ["./skills"] });
+		const skillMd = readFileSync(
+			join(process.cwd(), "pi-extensions/board/skills/board-collaboration/SKILL.md"),
+			"utf8",
+		);
+		assert.match(skillMd, /^---\nname: board-collaboration\ndescription: /);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

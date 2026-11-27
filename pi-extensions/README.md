@@ -10,8 +10,8 @@
 
 | 扩展（Pi 包名） | 核心能力与工具 | 内部代码依赖 | 运行时依赖与推荐搭配 | PA 宿主加载范围 | 原生 `pi` 独立用法 |
 | --- | --- | --- | --- | --- | --- |
-| [board](board/README.md)（`pa-board`） | Board 异步协作：`spawn_board_agent`、`post_to_board`、`read_board_post` 与 `/board` | [team-bridge-client.ts](shared/team-bridge-client.ts)、[local-rpc-worker.ts](shared/local-rpc-worker.ts)、可选 [roles/loader.ts](roles/loader.ts) | 独立模式需本机 `pi` CLI；推荐搭配 `roles` + `role-skills` + `human-question` | Board 模式显式挂载（双后端路由 PA Bridge） | `pi -e ./pi-extensions/board/index.ts` |
-| [delegation](delegation/README.md)（`pa-delegation`） | Lead 跨岗同步委托：`delegate_to_member`（支持只读独立验收）与 `/delegate` | [team-bridge-client.ts](shared/team-bridge-client.ts)、[local-rpc-worker.ts](shared/local-rpc-worker.ts)、可选 [roles/loader.ts](roles/loader.ts) | 独立模式需本机 `pi` CLI；推荐搭配 `roles` + `role-skills` + `human-question` | 具备委托权限的 Lead 岗位挂载（`PA_TEAM_BRIDGE_URL`） | `pi -e ./pi-extensions/delegation/index.ts` |
+| [board](board/README.md)（`pa-board`） | Board 异步协作：`spawn_board_agent`、`post_to_board`、`read_board_post`、`/board` 与工作流 Skill `board-collaboration` | [team-bridge-client.ts](shared/team-bridge-client.ts)、[local-rpc-worker.ts](shared/local-rpc-worker.ts)、可选 [roles/loader.ts](roles/loader.ts) | 独立模式需本机 `pi` CLI；推荐搭配 `roles` + `role-skills` + `human-question` | Board 模式显式挂载（双后端路由 PA Bridge） | `pi install ./pi-extensions/board` 或 `pi -e ./pi-extensions/board` |
+| [delegation](delegation/README.md)（`pa-delegation`） | Lead 跨岗同步委托：`delegate_to_member`（支持只读独立验收）、`/delegate` 与工作流 Skill `lead-delegation` | [team-bridge-client.ts](shared/team-bridge-client.ts)、[local-rpc-worker.ts](shared/local-rpc-worker.ts)、可选 [roles/loader.ts](roles/loader.ts) | 独立模式需本机 `pi` CLI；推荐搭配 `roles` + `role-skills` + `human-question` | 具备委托权限的 Lead 岗位挂载（`PA_TEAM_BRIDGE_URL`） | `pi install ./pi-extensions/delegation` 或 `pi -e ./pi-extensions/delegation` |
 | [roles](roles/README.md)（`pa-roles`） | 4 个默认业务岗位定义（单一事实源）与 `list_roles` / `/roles` | 零外部依赖（仅 Node 标准库） | 常与 `delegation`、`board`、`role-skills` 搭配 | PA 宿主通过 [template-loader.ts](../packages/server/src/roles/template-loader.ts) 合并其资产，工具入口自动静默让位于组织花名册 | `pi -e ./pi-extensions/roles/index.ts` |
 | [role-skills](role-skills/README.md)（`pa-role-skills`） | 内置 17 个岗位方法论 `SKILL.md` | 零代码与外部依赖（纯 Skills 包） | 配合 `skill-catalog` 索引检索，配合 `roles` 匹配岗位方法 | 所有岗位与建筑师进程原生挂载 | `pi install ./pi-extensions/role-skills` 或 `pi -e ./pi-extensions/role-skills` |
 | [skill-catalog](skill-catalog/README.md) | 额外/手动 Skill 索引注入、`list_available_skills`、`load_available_skill` | 零外部依赖（仅 Node 标准库） | 依赖 Pi 运行时 `before_agent_start` 与 Skill 发现（如 `role-skills`、`pstack`） | 岗位主程与 `Role Architect` 挂载 | `pi -e ./pi-extensions/skill-catalog/index.ts` |
@@ -45,15 +45,15 @@ pi -e ./pi-extensions/role-skills \
    -e ./pi-extensions/visualize/index.ts \
    -e ./pi-extensions/next-steps/index.ts
 
-# 2. Lead 同步跨岗委托（单一主责 + 按角色定义临时请专家 / 独立只读验收）
-pi -e ./pi-extensions/delegation/index.ts \
-   -e ./pi-extensions/roles/index.ts \
+# 2. Lead 同步跨岗委托（单一主责 + 按角色定义临时请专家 / 独立只读验收；传包目录自动带出 lead-delegation Skill）
+pi -e ./pi-extensions/delegation \
+   -e ./pi-extensions/roles \
    -e ./pi-extensions/role-skills \
    -e ./pi-extensions/human-question/index.ts
 
-# 3. Board 多 Agent 异步协作（Coordinator + Builder / Verifier + 异构模型验证）
-pi -e ./pi-extensions/board/index.ts \
-   -e ./pi-extensions/roles/index.ts \
+# 3. Board 多 Agent 异步协作（Coordinator + Builder / Verifier + 异构模型验证；传包目录自动带出 board-collaboration Skill）
+pi -e ./pi-extensions/board \
+   -e ./pi-extensions/roles \
    -e ./pi-extensions/role-skills \
    -e ./pi-extensions/human-question/index.ts
 ```

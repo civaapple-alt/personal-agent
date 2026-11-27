@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -242,6 +242,17 @@ test("pi-extensions/delegation routes PA Bridge vs standalone Lead delegate_to_m
 		assert.match(localHarness.sentMessages[0]!, /engineering-manager/);
 		assert.match(localHarness.sentMessages[0]!, /qa-manager/);
 		assert.match(localHarness.sentMessages[0]!, /verification/);
+
+		// Verify pi-extensions/delegation bundles workflow SKILL.md cleanly in its package manifest.
+		const manifest = JSON.parse(
+			readFileSync(join(process.cwd(), "pi-extensions/delegation/package.json"), "utf8"),
+		) as { pi?: { extensions?: string[]; skills?: string[] } };
+		assert.deepEqual(manifest.pi, { extensions: ["./index.ts"], skills: ["./skills"] });
+		const skillMd = readFileSync(
+			join(process.cwd(), "pi-extensions/delegation/skills/lead-delegation/SKILL.md"),
+			"utf8",
+		);
+		assert.match(skillMd, /^---\nname: lead-delegation\ndescription: /);
 	} finally {
 		await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 		rmSync(dir, { recursive: true, force: true });
