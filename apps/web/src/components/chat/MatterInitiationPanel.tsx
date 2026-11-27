@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type {
 	CollaborationPresetMode,
+	MatterCollaborationMode,
 	MatterInitiationAssessmentDto,
 	MatterVisibility,
 	OrganizationMemberDto,
@@ -16,6 +17,7 @@ interface MatterInitiationPanelProps {
 	initiatorId?: string;
 	initiatorName?: string;
 	draftVisibility?: MatterVisibility;
+	draftCollaborationMode?: MatterCollaborationMode;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	selectedMemberId: string;
 	observersEnabled?: boolean;
@@ -38,6 +40,7 @@ interface MatterInitiationPanelProps {
 	onUpdateDraftObserverIds: (ids: string[]) => void;
 	onUpdateDraftCollaboratorIds: (ids: string[]) => void;
 	onUpdateDraftVisibility?: (visibility: MatterVisibility) => void;
+	onUpdateDraftCollaborationMode?: (mode: MatterCollaborationMode) => void;
 	onApplyRecommendation: () => void;
 	onRequestModelAssessment?: (options?: { readRepo?: boolean }) => void;
 	onCancelModelAssessment?: () => void;
@@ -81,7 +84,9 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 		initiatorId,
 		initiatorName,
 		draftVisibility = "org",
+		draftCollaborationMode = "lead",
 		onUpdateDraftVisibility,
+		onUpdateDraftCollaborationMode,
 	} = props;
 	if (
 		!isOwner ||
@@ -170,9 +175,19 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 			<div className="initiation-current-row">
 				<div className="initiation-current-copy">
 					<strong>
-						{selectedMemberId === "auto" ? "主责自动匹配" : `${lead?.displayName ?? "主联系人"}负责`}
+						{draftCollaborationMode === "board"
+							? selectedMemberId === "auto"
+								? "团队公告板 · 自动匹配总控"
+								: `团队公告板 · ${lead?.displayName ?? "主联系人"}总控`
+							: selectedMemberId === "auto"
+								? "主责自动匹配"
+								: `${lead?.displayName ?? "主联系人"}负责`}
 					</strong>
-					<span>{teamSummary}</span>
+					<span>
+						{draftCollaborationMode === "board"
+							? "由 Coordinator 动态切分任务并组建 Builder / Verifier 通过公告板异步协同。"
+							: teamSummary}
+					</span>
 				</div>
 				<button
 					type="button"
@@ -184,6 +199,29 @@ export function MatterInitiationPanel(props: MatterInitiationPanelProps) {
 					{expanded ? "收起设置" : "调整参与方式"}
 				</button>
 			</div>
+			{onUpdateDraftCollaborationMode && (
+				<fieldset className="initiation-mode-row" aria-label="协作模式">
+					<span className="initiation-mini-label">协作模式</span>
+					<div className="initiation-mode-toggle">
+						<button
+							type="button"
+							className={`choice-chip ${draftCollaborationMode === "lead" ? "active" : ""}`}
+							aria-pressed={draftCollaborationMode === "lead"}
+							onClick={() => onUpdateDraftCollaborationMode("lead")}
+						>
+							轻量主责
+						</button>
+						<button
+							type="button"
+							className={`choice-chip ${draftCollaborationMode === "board" ? "active" : ""}`}
+							aria-pressed={draftCollaborationMode === "board"}
+							onClick={() => onUpdateDraftCollaborationMode("board")}
+						>
+							团队公告板 (Board)
+						</button>
+					</div>
+				</fieldset>
+			)}
 			{showAssessmentBar && (
 				<section
 					className={`initiation-assessment-bar${assessment?.fitStatus === "gap_detected" ? " is-gap" : ""}`}

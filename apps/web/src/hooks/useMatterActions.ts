@@ -10,12 +10,14 @@ import {
 	type ComposerImageAttachment,
 	createMatter,
 	dismissAiRequest,
+	type MatterCollaborationMode,
 	type MatterSendMode,
 	type MatterVisibility,
 	postMatterMessage,
 	type TeamMemberDto,
 	type UploadFilePayload,
 	updateMatterAiMembers,
+	updateMatterCollaborationMode,
 	updateMatterCollaborators,
 	updateMatterConsultMembers,
 	updateMatterLead,
@@ -84,6 +86,7 @@ interface UseMatterActionsParams {
 	draftObserverMemberIds?: string[];
 	draftCollaboratorIds?: string[];
 	draftVisibility?: MatterVisibility;
+	draftCollaborationMode?: MatterCollaborationMode;
 	draftObserversEnabled: boolean;
 	draftModelSelection: ModelSelection | null;
 	headerContact: TeamMemberDto | null;
@@ -128,6 +131,7 @@ export function useMatterActions({
 	draftObserverMemberIds = [],
 	draftCollaboratorIds = [],
 	draftVisibility = "org",
+	draftCollaborationMode = "lead",
 	draftObserversEnabled,
 	draftModelSelection,
 	headerContact,
@@ -220,6 +224,12 @@ export function useMatterActions({
 					collaboratorIds: draftCollaboratorIds.length > 0 ? draftCollaboratorIds : undefined,
 					visibility: draftVisibility,
 					modelSelection: isOwner ? draftModelSelection : null,
+					...(!isArchitectCreate && draftCollaborationMode === "board"
+						? {
+								collaborationMode: "board" as const,
+								coordinatorMemberId: preferredForCreate ?? headerContact?.id ?? null,
+							}
+						: {}),
 				});
 				targetMatterId = created.matter.id;
 				explicitNewMatterRef.current = false;
@@ -562,6 +572,26 @@ export function useMatterActions({
 			});
 	};
 
+	const handleUpdateCollaborationMode = (
+		collaborationMode: MatterCollaborationMode,
+		coordinatorMemberId?: string | null,
+	) => {
+		if (!selectedMatterId) return;
+		const targetMatterId = selectedMatterId;
+		void updateMatterCollaborationMode(targetMatterId, collaborationMode, coordinatorMemberId)
+			.then(async () => {
+				setNoticeBanner(
+					collaborationMode === "board" ? "已切换为团队公告板模式（Board）" : "已切换为轻量主责模式（Lead）",
+				);
+				await refreshBootstrap();
+				await refreshDetail(targetMatterId);
+			})
+			.catch((err: unknown) => {
+				setErrorBanner(err instanceof Error ? err.message : String(err));
+				void refreshDetail(targetMatterId).catch(() => {});
+			});
+	};
+
 	return {
 		handleSendPrompt,
 		handleSendQuickPrompt,
@@ -580,5 +610,6 @@ export function useMatterActions({
 		handleToggleObserversEnabled,
 		handleUpdateMatterObservers,
 		handleUpdateMatterVisibility,
+		handleUpdateCollaborationMode,
 	};
 }

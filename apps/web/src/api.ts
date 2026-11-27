@@ -1,5 +1,6 @@
 export * from "./api/admin.ts";
 export * from "./api/auth.ts";
+export * from "./api/board.ts";
 export * from "./api/bootstrap.ts";
 export { getApiBaseUrl, resolveApiUrl, setApiBaseUrl, setAuthRevokedHandler } from "./api/client.ts";
 export * from "./api/deliverables.ts";

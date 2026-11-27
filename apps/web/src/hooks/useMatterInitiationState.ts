@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	assessMatterInitiation,
 	type CollaborationPresetMode,
+	type MatterCollaborationMode,
 	type MatterInitiationAssessmentDto,
 	type TeamMemberDto,
 } from "../api.ts";
@@ -39,6 +40,7 @@ export function useMatterInitiationState({
 	setDraftAiMemberIds,
 	setDraftObserversEnabled,
 }: UseMatterInitiationParams) {
+	const [draftCollaborationMode, setDraftCollaborationMode] = useState<MatterCollaborationMode>("lead");
 	const [draftPresetMode, setDraftPresetMode] = useState<CollaborationPresetMode>("lead_consult");
 	const [draftConsultMemberIds, setDraftConsultMemberIds] = useState<string[] | null>(null);
 	const [draftObserverMemberIds, setDraftObserverMemberIds] = useState<string[]>([]);
@@ -323,6 +325,7 @@ export function useMatterInitiationState({
 		modelSeqRef.current += 1;
 		modelControllerRef.current?.abort();
 		modelControllerRef.current = null;
+		setDraftCollaborationMode("lead");
 		setDraftPresetMode("lead_consult");
 		setDraftAiMemberIds(null);
 		setDraftConsultMemberIds(null);
@@ -335,6 +338,7 @@ export function useMatterInitiationState({
 	}, [setDraftAiMemberIds, setDraftObserversEnabled]);
 
 	return {
+		draftCollaborationMode,
 		draftAiMemberIds,
 		draftPresetMode,
 		draftConsultMemberIds,
@@ -343,6 +347,7 @@ export function useMatterInitiationState({
 		assessment,
 		modelAssessing,
 		modelAssessmentError,
+		setDraftCollaborationMode,
 		setDraftConsultMemberIds,
 		setDraftObserverMemberIds,
 		setDraftCollaboratorIds,

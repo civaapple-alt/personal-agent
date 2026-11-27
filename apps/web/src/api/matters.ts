@@ -123,6 +123,8 @@ export function createMatter(input: {
 	collaboratorIds?: string[];
 	visibility?: MatterVisibility;
 	title?: string;
+	collaborationMode?: MatterCollaborationMode;
+	coordinatorMemberId?: string | null;
 }): Promise<{
 	matter: MatterDto;
 	assignedMember: TeamMemberDto;
@@ -288,5 +290,19 @@ export function updateMatterStatus(matterId: string, status: "archived" | "open"
 	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
 		method: "PATCH",
 		body: JSON.stringify({ status }),
+	});
+}
+
+export function updateMatterCollaborationMode(
+	matterId: string,
+	collaborationMode: MatterCollaborationMode,
+	coordinatorMemberId?: string | null,
+): Promise<{ matter: MatterDto }> {
+	return requestJson(`/api/matters/${encodeURIComponent(matterId)}`, {
+		method: "PATCH",
+		body: JSON.stringify({
+			collaborationMode,
+			...(coordinatorMemberId !== undefined ? { coordinatorMemberId } : {}),
+		}),
 	});
 }

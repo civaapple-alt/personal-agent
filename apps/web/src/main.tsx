@@ -16,6 +16,7 @@ import "./styles/team.css";
 import "./styles/role-architect.css";
 import "./styles/settings.css";
 import "./styles/account-admin.css";
+import "./styles/board.css";
 import "./styles/view-transitions.css";
 import "./styles/responsive.css";
 

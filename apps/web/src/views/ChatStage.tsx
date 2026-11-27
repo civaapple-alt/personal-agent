@@ -7,7 +7,9 @@ import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
 	CollaboratorDto,
+	MatterCollaborationMode,
 	MatterDetailPayload,
+	MatterEventType,
 	MatterProgressDto,
 	OrganizationDto,
 	OrganizationMemberDto,
@@ -21,6 +23,7 @@ import { AttachmentPreviewModals, useAttachmentPreview } from "../components/cha
 import { ChatStageHeader } from "../components/chat/ChatStageHeader.tsx";
 import { ComposerDock } from "../components/chat/ComposerDock.tsx";
 import { FloatingClarificationDock } from "../components/chat/FloatingClarificationDock.tsx";
+import { type BoardPaneTab, MatterBoardPane } from "../components/chat/MatterBoardPane.tsx";
 import { MatterCollabDrawer, type MatterCollabTab } from "../components/chat/MatterCollabDrawer.tsx";
 import {
 	type DelegationScope,
@@ -34,6 +37,7 @@ import { MessageFeed } from "../components/chat/MessageFeed.tsx";
 import { useActiveClarification } from "../hooks/useActiveClarification.ts";
 import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
+import { summarizeBoardStatus, useMatterBoard } from "../hooks/useMatterBoard.ts";
 import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
 import { ViewFade } from "../primitives/ViewTransitions.tsx";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
@@ -58,12 +62,14 @@ type MatterInitiationProps = Pick<
 	| "draftConsultMemberIds"
 	| "draftCollaboratorIds"
 	| "draftVisibility"
+	| "draftCollaborationMode"
 	| "assessment"
 	| "modelAssessing"
 	| "modelAssessmentError"
 	| "onUpdateDraftAiMemberIds"
 	| "onUpdateDraftCollaboratorIds"
 	| "onUpdateDraftVisibility"
+	| "onUpdateDraftCollaborationMode"
 	| "onSetScopeMode"
 	| "onToggleObserverPreset"
 	| "onToggleDraftMemberConsult"
@@ -115,6 +121,7 @@ interface ChatStageProps {
 	onToggleObserversEnabled?: (enabled: boolean) => void;
 	onUpdateMatterObservers: (observerIds: string[]) => void;
 	onUpdateMatterCollaborators?: (collaboratorIds: string[]) => void;
+	onUpdateCollaborationMode?: (mode: MatterCollaborationMode, coordinatorMemberId?: string | null) => void;
 	onToggleArchiveMatter?: (matterId: string, archived: boolean) => void;
 	onApproveAiRequest?: (matterId: string, messageId: string) => void;
 	onDismissAiRequest?: (matterId: string, messageId: string) => void;
@@ -179,6 +186,7 @@ export function ChatStage({
 	onToggleObserversEnabled,
 	onUpdateMatterObservers,
 	onUpdateMatterCollaborators,
+	onUpdateCollaborationMode,
 	onToggleArchiveMatter,
 	onApproveAiRequest,
 	onDismissAiRequest,
@@ -208,8 +216,13 @@ export function ChatStage({
 	const [rosterMode, setRosterMode] = useState<"view" | "add" | "remove">("view");
 	const [rosterSearch, setRosterSearch] = useState("");
 	const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+	const [boardPaneOpen, setBoardPaneOpen] = useState(false);
+	const [boardPaneTab, setBoardPaneTab] = useState<BoardPaneTab>("members");
+	const [boardEventAgentId, setBoardEventAgentId] = useState("");
+	const [boardEventType, setBoardEventType] = useState<MatterEventType | "all">("all");
 	const handleSideDocOpened = useCallback(() => {
 		setCollabMatterId(null);
+		setBoardPaneOpen(false);
 		collabTriggerRef.current = null;
 	}, []);
 	const sideDocs = useMatterSideDocs({
@@ -217,6 +230,52 @@ export function ChatStage({
 		matterDetail,
 		onOpened: handleSideDocOpened,
 	});
+
+	useEffect(() => {
+		setBoardPaneOpen(false);
+		setBoardPaneTab("members");
+		setBoardEventAgentId("");
+		setBoardEventType("all");
+	}, [selectedMatterId]);
+
+	const matterCollaborationMode: MatterCollaborationMode = matterDetail?.matter.collaborationMode ?? "lead";
+	const board = useMatterBoard({
+		matterId: selectedMatterId,
+		collaborationMode: matterCollaborationMode,
+		paneOpen: boardPaneOpen,
+		eventsTabActive: boardPaneOpen && boardPaneTab === "events",
+		eventFilterAgentId: boardEventAgentId,
+		eventFilterType: boardEventType,
+	});
+	const boardStatus = useMemo(
+		() => summarizeBoardStatus(board.snapshot?.members ?? [], board.snapshot?.posts.length ?? 0),
+		[board.snapshot],
+	);
+	const hasBoardActivity =
+		matterCollaborationMode === "board" ||
+		(board.snapshot?.members.length ?? 0) > 0 ||
+		(board.snapshot?.posts.length ?? 0) > 0;
+	const showBoardPane = Boolean(boardPaneOpen && selectedMatterId && matterDetail && !sideDocs.activeDocId);
+	const toggleBoardPane = useCallback(
+		(targetTab?: BoardPaneTab) => {
+			if (targetTab) {
+				sideDocs.closePane();
+				setCollabMatterId(null);
+				setBoardPaneTab(targetTab);
+				setBoardPaneOpen(true);
+				return;
+			}
+			setBoardPaneOpen((open) => {
+				const next = !open;
+				if (next) {
+					sideDocs.closePane();
+					setCollabMatterId(null);
+				}
+				return next;
+			});
+		},
+		[sideDocs],
+	);
 
 	const moreMenuWrapRef = useRef<HTMLDivElement | null>(null);
 	const collabPanelRef = useRef<HTMLDivElement | null>(null);
@@ -428,7 +487,7 @@ export function ChatStage({
 
 	return (
 		<div
-			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${sideDocs.activeDocId ? " has-doc-pane" : ""}`}
+			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${sideDocs.activeDocId ? " has-doc-pane" : ""}${showBoardPane ? " has-board-pane" : ""}`}
 		>
 			<div className="chat-stage-main">
 				<ChatStageHeader
@@ -471,6 +530,77 @@ export function ChatStage({
 					}}
 					onSelectMorePanel={toggleMorePanel}
 				/>
+
+				{activeLoadedId &&
+					matterDetail &&
+					(hasBoardActivity ||
+						(canManageMatter && !isArchitectMode && matterDetail.matter.status !== "archived")) && (
+						<section className="board-status-strip" aria-label="公告板协作状态">
+							<div className="board-status-strip-left">
+								{hasBoardActivity ? (
+									<>
+										<button
+											type="button"
+											className={`board-status-pill is-${boardStatus.tone}${showBoardPane ? " active" : ""}`}
+											aria-expanded={showBoardPane}
+											onClick={() => toggleBoardPane()}
+										>
+											<span className={`board-status-dot is-${boardStatus.tone}`} aria-hidden="true" />
+											<span>{boardStatus.label}</span>
+										</button>
+										{board.snapshot && board.snapshot.posts.length > 0 && (
+											<button
+												type="button"
+												className="board-strip-latest"
+												title="打开公告板查看最新交接"
+												onClick={() => toggleBoardPane("board")}
+											>
+												#{board.snapshot.posts[board.snapshot.posts.length - 1]!.postNo} @
+												{board.snapshot.posts[board.snapshot.posts.length - 1]!.authorId} ·{" "}
+												{board.snapshot.posts[board.snapshot.posts.length - 1]!.summary}
+											</button>
+										)}
+									</>
+								) : (
+									<span className="board-pane-subtitle">当前为轻量主责模式（Lead）</span>
+								)}
+							</div>
+							<div className="board-status-strip-actions">
+								{canManageMatter &&
+									!isTurnRunning &&
+									!isArchitectMode &&
+									matterDetail.matter.status !== "archived" &&
+									onUpdateCollaborationMode && (
+										<button
+											type="button"
+											className="btn-inline board-mode-switch-btn"
+											onClick={() =>
+												onUpdateCollaborationMode(
+													matterCollaborationMode === "board" ? "lead" : "board",
+													matterCollaborationMode === "board"
+														? null
+														: (matterDetail.matter.coordinatorMemberId ??
+																matterDetail.matter.leadMemberId ??
+																null),
+												)
+											}
+										>
+											{matterCollaborationMode === "board" ? "切回轻量主责" : "切换为 Board 公告板"}
+										</button>
+									)}
+								{hasBoardActivity && (
+									<button
+										type="button"
+										className={`btn-pill-outline btn-xs${showBoardPane ? " active" : ""}`}
+										aria-expanded={showBoardPane}
+										onClick={() => toggleBoardPane()}
+									>
+										{showBoardPane ? "收起看板" : "打开看板"}
+									</button>
+								)}
+							</div>
+						</section>
+					)}
 
 				{rosterOpen && (
 					<ViewFade type="panel">
@@ -776,6 +906,39 @@ export function ChatStage({
 					onNotice={onNotice}
 				/>
 			</div>
+			{showBoardPane && activeLoadedId && matterDetail && (
+				<MatterBoardPane
+					matterId={activeLoadedId}
+					matterTitle={matterDetail.matter.title}
+					collaborationMode={matterCollaborationMode}
+					canControlMembers={Boolean(isOwner || canManageMatter)}
+					canPostToBoard={Boolean(matterDetail.matter.status !== "archived")}
+					snapshot={board.snapshot}
+					loading={board.loading}
+					error={board.error}
+					activeTab={boardPaneTab}
+					onSelectTab={setBoardPaneTab}
+					onClose={() => setBoardPaneOpen(false)}
+					onRefreshBoard={() => void board.refreshBoard()}
+					postBodiesByNo={board.postBodiesByNo}
+					loadingPostNos={board.loadingPostNos}
+					postBodyErrors={board.postBodyErrors}
+					onLoadPostBody={board.loadPostBody}
+					onSubmitPost={board.submitPost}
+					onControlMember={board.controlMember}
+					events={board.events}
+					eventsHasMore={board.eventsHasMore}
+					eventsLoading={board.eventsLoading}
+					eventsError={board.eventsError}
+					eventFilterAgentId={boardEventAgentId}
+					eventFilterType={boardEventType}
+					onChangeEventFilterAgentId={setBoardEventAgentId}
+					onChangeEventFilterType={setBoardEventType}
+					onRefreshEvents={board.refreshEvents}
+					onLoadMoreEvents={() => void board.loadMoreEvents()}
+					onNotice={onNotice}
+				/>
+			)}
 			{sideDocs.activeDocId && (
 				<MatterDocSidePane
 					openDocIds={sideDocs.openDocIds}
