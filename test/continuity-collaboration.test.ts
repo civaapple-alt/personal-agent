@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
 import skillCaptureExtension from "../pa-extensions/skill-capture/pi/index.ts";
 import spaceExtension from "../pa-extensions/space/pi/index.ts";
 import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
@@ -37,6 +36,7 @@ import { PreviewManager } from "../packages/server/src/server/preview-manager.ts
 import { openPersonalAgentDatabase } from "../packages/server/src/storage/database.ts";
 import { PersonalAgentStore } from "../packages/server/src/storage/repositories.ts";
 import type { Matter, MatterMessage } from "../packages/server/src/storage/types.ts";
+import delegationExtension from "../pi-extensions/delegation/index.ts";
 import humanQuestionExtension from "../pi-extensions/human-question/index.ts";
 import { invokeTool } from "./worker-helpers.ts";
 

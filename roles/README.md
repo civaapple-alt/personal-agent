@@ -5,10 +5,10 @@
 | 初始资产 | 主要职责 |
 | --- | --- |
 | [pi-default.md](pi-default.md) | 原汁原味单兵 Pi 助手（`roleKind: solo`）：不挂载多角色委托，保留 `space` / `propose_skill` / `visualize` / `human-question` / `next-steps` / `propose_role` 等 PA 扩展能力，适合「先单兵跑透、后专业化拆岗」 |
-| [product-manager.md](product-manager.md) | 澄清需求、组织专业意见、定义范围与验收；新安装时的默认主要联系人 |
-| [engineering-manager.md](engineering-manager.md) | 核查仓库事实、技术设计和授权范围内的实现 |
-| [qa-manager.md](qa-manager.md) | 验证计划、回归影响和实际验收证据 |
-| [marketing-lead.md](marketing-lead.md) | 市场、竞品、价值表达与发布内容 |
+| [product-manager.md](../pi-extensions/roles/roles/product-manager.md) | 澄清需求、组织专业意见、定义范围与验收；新安装时的默认主要联系人（单一事实源位于便携包 [pi-extensions/roles](../pi-extensions/roles/README.md)） |
+| [engineering-manager.md](../pi-extensions/roles/roles/engineering-manager.md) | 核查仓库事实、技术设计和授权范围内的实现（单一事实源位于便携包 [pi-extensions/roles](../pi-extensions/roles/README.md)） |
+| [qa-manager.md](../pi-extensions/roles/roles/qa-manager.md) | 验证计划、回归影响和实际验收证据（单一事实源位于便携包 [pi-extensions/roles](../pi-extensions/roles/README.md)） |
+| [marketing-lead.md](../pi-extensions/roles/roles/marketing-lead.md) | 市场、竞品、价值表达与发布内容（单一事实源位于便携包 [pi-extensions/roles](../pi-extensions/roles/README.md)） |
 | [role-architect.md](role-architect.md) | 按真实工作流拆解角色职责、边界与协作体检（`roleKind: architect`，不参与普通业务自动路由或自动旁听） |
 
 新增角色可参考现有文件的 frontmatter 和五个正文标题，不必固定为上述四个岗位。`id` 决定注册身份，当前通过不同 ID 组合成员；修改已有 ID 会影响成员与运行历史的对应。

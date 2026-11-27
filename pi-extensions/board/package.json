@@ -1,0 +1,12 @@
+{
+	"name": "pa-board",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Portable dual-backend Pi extension for Lead delegation and Board asynchronous multi-agent collaboration (standalone local Pi RPC + PA Host Bridge)",
+	"keywords": ["pi-package", "pi", "board", "coordination", "multi-agent", "personal-agent"],
+	"pi": {
+		"extensions": ["./index.ts"]
+	}
+}

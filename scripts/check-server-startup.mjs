@@ -54,6 +54,11 @@ try {
 			join(cwd, "apps/web/dist"),
 			process.platform === "win32" ? "junction" : "dir",
 		);
+		await symlink(
+			resolve("pi-extensions"),
+			join(cwd, "pi-extensions"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
 		const child = spawn(process.execPath, [resolve(entry)], {
 			cwd,
 			env: {

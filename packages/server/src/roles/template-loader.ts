@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { RoleScope, RoleTemplate, RoleTemplateSections } from "./types.ts";
 
 const ROLE_SECTION_HEADINGS = [
@@ -220,16 +220,10 @@ export function parseRoleTemplateMarkdown(
 	};
 }
 
-/**
- * Load `.md` role templates from a single directory (supporting both `<id>.md` and `<id>/<id>.md` role packages).
- */
-export async function loadRoleTemplatesFromDir(
+async function collectRoleFileCandidates(
 	dirPath: string,
-	options?: {
-		explicitScope?: { roleScope: RoleScope; ownerOrgId?: string | null; ownerUserId?: string | null };
-		excludeDirs?: Set<string>;
-	},
-): Promise<RoleTemplate[]> {
+	excludeDirs?: Set<string>,
+): Promise<Array<{ sortKey: string; fullPath: string }>> {
 	const entries = await readdir(dirPath, { withFileTypes: true }).catch(() => []);
 	const fileCandidates: Array<{ sortKey: string; fullPath: string }> = [];
 	for (const entry of entries) {
@@ -238,7 +232,7 @@ export async function loadRoleTemplatesFromDir(
 			continue;
 		}
 		if (entry.isDirectory()) {
-			if (options?.excludeDirs?.has(entry.name)) continue;
+			if (excludeDirs?.has(entry.name)) continue;
 			const packageFile = join(dirPath, entry.name, `${entry.name}.md`);
 			if (existsSync(packageFile)) {
 				fileCandidates.push({ sortKey: entry.name, fullPath: packageFile });
@@ -246,13 +240,47 @@ export async function loadRoleTemplatesFromDir(
 		}
 	}
 	fileCandidates.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+	return fileCandidates;
+}
 
-	const templates: RoleTemplate[] = [];
-	for (const item of fileCandidates) {
+function resolveSiblingPortableRolesDir(dirPath: string): string | undefined {
+	const resolved = resolve(dirPath);
+	if (basename(resolved) !== "roles") return undefined;
+	const portableDir = join(dirname(resolved), "pi-extensions", "roles", "roles");
+	return existsSync(portableDir) ? portableDir : undefined;
+}
+
+/**
+ * Load `.md` role templates from a single directory (supporting both `<id>.md` and `<id>/<id>.md` role packages).
+ * When loading the repository/installation baseline `roles/` directory, also merges the single-source-of-truth
+ * portable business roles from sibling `pi-extensions/roles/roles/` (with entries in `dirPath` taking precedence).
+ */
+export async function loadRoleTemplatesFromDir(
+	dirPath: string,
+	options?: {
+		explicitScope?: { roleScope: RoleScope; ownerOrgId?: string | null; ownerUserId?: string | null };
+		excludeDirs?: Set<string>;
+	},
+): Promise<RoleTemplate[]> {
+	const merged = new Map<string, RoleTemplate>();
+	for (const item of await collectRoleFileCandidates(dirPath, options?.excludeDirs)) {
 		const content = await readFile(item.fullPath, "utf8");
-		templates.push(parseRoleTemplateMarkdown(content, item.fullPath, options?.explicitScope));
+		const tpl = parseRoleTemplateMarkdown(content, item.fullPath, options?.explicitScope);
+		merged.set(tpl.id, tpl);
 	}
-	return templates;
+	if (!options?.excludeDirs) {
+		const portableDir = resolveSiblingPortableRolesDir(dirPath);
+		if (portableDir) {
+			for (const item of await collectRoleFileCandidates(portableDir)) {
+				const content = await readFile(item.fullPath, "utf8");
+				const tpl = parseRoleTemplateMarkdown(content, item.fullPath, options?.explicitScope);
+				if (!merged.has(tpl.id)) {
+					merged.set(tpl.id, tpl);
+				}
+			}
+		}
+	}
+	return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**

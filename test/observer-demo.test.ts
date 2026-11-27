@@ -83,7 +83,7 @@ async function runFixture(t: test.TestContext, fault: "none" | "empty" | "failed
 						} else reply = leadCount === 4 ? "5人小组由负责人手动录入反馈。" : "已确认，无新增需求。";
 					} else {
 						assert.equal(
-							options.args?.some((arg) => arg.endsWith("pa-extensions/delegation/pi/index.ts")),
+							options.args?.some((arg) => arg.endsWith("pi-extensions/delegation/index.ts")),
 							false,
 						);
 						assert.equal(

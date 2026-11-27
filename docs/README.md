@@ -31,7 +31,7 @@
 | Git 资料空间、五类默认空间与仓库文件关联 | [资料空间设计](concepts/space-design.md) |
 | SQLite 23 张表结构、索引、约束与存储边界 | [SQLite 库表设计参考](reference/database-schema.md) |
 | 会话范围、委托、取消、成果归档与经验生命周期 | [运行与协作参考](reference/runtime-collaboration.md) |
-| 内置岗位的职责、能力报告与角色作用域 | [内置角色与能力参考](reference/role-design.md)、[单兵模式与团队协作模式](concepts/solo-and-team-modes.md)、[角色定义](../roles/README.md)、[内置岗位 Skills 包](../pi-extensions/role-skills/README.md) |
+| 内置岗位的职责、能力报告与角色作用域 | [内置角色与能力参考](reference/role-design.md)、[单兵模式与团队协作模式](concepts/solo-and-team-modes.md)、[0.9.x 便携 Pi 协作扩展设计](concepts/v0.9-portable-pi-collaboration-design.md)、[角色定义](../roles/README.md)、[内置岗位 Skills 包](../pi-extensions/role-skills/README.md) |
 | Pi Skill 目录工具的参数与使用范围 | [pstack 方法工具参考](reference/pstack-tools.md) |
 
 ## 复核实现与证据

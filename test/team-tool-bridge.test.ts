@@ -4,7 +4,6 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import delegationExtension from "../pa-extensions/delegation/pi/index.ts";
 import type { PiHostToolExtensionApi } from "../pa-extensions/worker-runtime/pi/bridge-client.ts";
 import workerRuntimeExtension, {
 	buildPaDocumentationSection,
@@ -14,6 +13,7 @@ import workerRuntimeExtension, {
 import { resolvePaDocumentationPaths } from "../packages/server/src/extensions/builtin-paths.ts";
 import { resolveEffectiveWebSearchProvider } from "../packages/server/src/extensions/web-access/runtime.ts";
 import { createTeamToolBridge } from "../packages/server/src/rpc/team-tool-bridge.ts";
+import delegationExtension from "../pi-extensions/delegation/index.ts";
 
 test("managed web search forces direct results and removes per-call proxy overrides", (t) => {
 	const original = process.env.PA_WEB_SEARCH_ENABLED;

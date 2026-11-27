@@ -1,0 +1,12 @@
+{
+	"name": "pa-roles",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Portable default PA business role definitions (PM, Engineering Manager, QA Manager, Marketing Lead) and role resolver for standalone Pi",
+	"keywords": ["pi-package", "pi", "roles", "personal-agent"],
+	"pi": {
+		"extensions": ["./index.ts"]
+	}
+}

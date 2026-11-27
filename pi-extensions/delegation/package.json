@@ -1,0 +1,12 @@
+{
+	"name": "pa-delegation",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Portable dual-backend Pi extension exposing delegate_to_member for PA Host Bridge and standalone native Pi Lead delegation",
+	"keywords": ["pi-package", "pi", "delegation", "lead", "verification", "personal-agent"],
+	"pi": {
+		"extensions": ["./index.ts"]
+	}
+}

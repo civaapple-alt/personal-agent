@@ -93,6 +93,19 @@
 - **完整设计草案**：见 [0.9.0 存储拆表与事项公告板协作设计草案](v0.9-board-and-storage-design.md)（合入 `matter_events` / `matter_board_posts` / `matter_board_members` 拆表、`Coordinator` + 定向 `@mention` 异步唤醒、`@monitor` 停滞检测及 Human-in-the-Loop 三层可观测设计）。
 - **验收标准**：`matter_messages` 仅保留核心用户对话与必要消息引用；事项详情首屏加载不再携带海量过程事件与全量内部委托正文；存量 `0.8.x` 数据库可无损迁移至 `0.9.0` 并通过全量离线回归及 `demo:team` / `demo:mention-verify`。
 
+### P-0907：便携 Pi 协作扩展家族（`board` + `delegation` + `roles`）（优先级：P1）
+
+- **来源**：0.9.0 M5 架构复盘（依据「喂养而不自造 / Influence by feeding, never by assembling」）
+- **背景**：`role-skills`、`skill-catalog`、`human-question`、`visualize` 与 `next-steps` 已可在原生终端 `pi` 独立使用，而 Lead 委托与 Board 公告板异步协同此前仍强依赖 PA Server 桥接扩展，导致原生 `pi` console 脱离宿主后无法直接复用同等的多 Agent 协同能力。
+- **方案要点**：
+  - 将团队工具拆分为三个职责单一的便携扩展包，通过 **双后端适配器**（有 `PA_TEAM_BRIDGE_URL` 走 PA 宿主桥接，否则走本地轻量存储与 `pi --mode rpc` 子进程）统一终端原生 `pi` 与 PA 宿主工具协议：
+    - [pi-extensions/board](../../pi-extensions/board/README.md)：Board 异步公告板协作（`spawn_board_agent` / `post_to_board` / `read_board_post` + `/board`）；
+    - [pi-extensions/delegation](../../pi-extensions/delegation/README.md)：Lead 同步跨岗委托（`delegate_to_member`，自动加载岗位人格并在 `verification` 时切为只读模式）；
+    - [pi-extensions/roles](../../pi-extensions/roles/README.md)：便携打包 4 个默认业务岗位定义（PM / 研发 / QA / 市场），并提供 `list_roles` 与 `/roles` 查询。
+  - 保留硬边界不变量（总控专属组队、`verifier` / `delegate_to_member(verification)` 无写/改工具、防自验证、异构 `modelOverride` 透传、增量游标摘要唤醒与 `ctx.ui` 澄清回写）；
+  - PA 工作台的 `solo`（`Pi Default`）轨道默认保持零额外工具注入，避免干扰轻量单兵边界。
+- **完整设计**：见 [0.9.x 便携 Pi 协作扩展设计](v0.9-portable-pi-collaboration-design.md)（`board` / `delegation` / `roles` 双后端合流、单测与 P3 终端原生 `pi --extension` `cross-verify` 实机联调 `005` 均已验证通过）。
+
 ---
 
 ## 3. `1.0+` 远期探索提案

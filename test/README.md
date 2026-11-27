@@ -10,6 +10,8 @@
 | `0.9.0` 前端看板投影、状态分组、`waiting` 热切守卫、SSE 增量归并（含真实 `authorType`/`hasBody`）、多轮隐藏非活跃筛选与 `@mention` 关系图 | [board-ui-utils.test.ts](board-ui-utils.test.ts) |
 | `0.9.0` CoE Board 摩擦信号收集（ACL 隔离、`verify_rework`/`escalate`/`monitor_alert`）与 `demo:board` 离线参数/dry-run 验证 | [board-coe-rsi-m3.test.ts](board-coe-rsi-m3.test.ts) |
 | `0.9.0` M5 单事项 `Lead ↔ Board` 双向交接、`spawn_board_agent` 模型覆盖透传与看板收口文档/Skill 提案收敛 | [board-mode-handoff-m5.test.ts](board-mode-handoff-m5.test.ts) |
+| `0.9.x` 便携 `pi-extensions/board` 双后端路由（PA Bridge 与独立本地 Pi RPC 异步闭环、只读 Verifier、防自验证、`@user` HITL 与 `/board`） | [pi-extension-board.test.ts](pi-extension-board.test.ts) |
+| `0.9.x` 便携 `pi-extensions/delegation` 与 `pi-extensions/roles`（4 岗位一致性、自动喂养、Lead 只读验收与双后端路由） | [pi-extension-delegation-and-roles.test.ts](pi-extension-delegation-and-roles.test.ts) |
 | Live E2E 成本防线白名单（`allowedProviders`）、`live.config.json` 配置优先级与成对模型/Verifier 参数校验 | [e2e-live-config.test.ts](e2e-live-config.test.ts) |
 | GitHub 抓取来源、临时克隆失效、事件脱敏与展示 | [web-fetch-evidence.test.ts](web-fetch-evidence.test.ts) 和 [continuity-collaboration.test.ts](continuity-collaboration.test.ts) |
 | 扩展/bridge 鉴权、重试与能力清单 | [team-tool-bridge.test.ts](team-tool-bridge.test.ts) |

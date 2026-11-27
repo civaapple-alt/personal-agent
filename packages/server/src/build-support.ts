@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 export const builtinExtensionPaths = {
 	"worker-runtime": "pa-extensions/worker-runtime/pi/index.ts",
 	space: "pa-extensions/space/pi/index.ts",
-	delegation: "pa-extensions/delegation/pi/index.ts",
-	board: "pa-extensions/board/pi/index.ts",
+	delegation: "pi-extensions/delegation/index.ts",
+	board: "pi-extensions/board/index.ts",
 	"skill-capture": "pa-extensions/skill-capture/pi/index.ts",
 	workflow: "pa-extensions/workflow/pi/index.ts",
 	"skill-catalog": "pi-extensions/skill-catalog/index.ts",
@@ -32,6 +32,7 @@ export const PA_RUNTIME_ASSET_MANIFEST = {
 	legacyWebDistDir: "web/dist",
 	workflowSkillsDir: "pa-extensions/workflow/skills",
 	selfInspectSkillsDir: "pa-extensions/self-inspect/skills",
+	portableRolesDir: "pi-extensions/roles/roles",
 	builtinSkillsDir: "pi-extensions/role-skills/skills",
 	builtinExtensions: builtinExtensionPaths,
 } as const;

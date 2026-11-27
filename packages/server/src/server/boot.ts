@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { parseEnv } from "node:util";
-import { PA_RUNTIME_ASSET_MANIFEST, resolveRepoRoot } from "../build-support.ts";
+import { PA_RUNTIME_ASSET_MANIFEST, resolveRepoAssetPath, resolveRepoRoot } from "../build-support.ts";
 import { listServerExtensionSummaries } from "../extensions/registry.ts";
 import { closeLogging, createLogger, initLogging } from "../log/index.ts";
 import { createSystemOneClassifier } from "../orchestrator/architect/system-one.ts";
@@ -16,7 +16,7 @@ import {
 } from "../orchestrator/runtime/runtime-info.ts";
 import { TeamOrchestrator } from "../orchestrator/team-orchestrator.ts";
 import { BUILTIN_ROLE_ARCHITECT_TEMPLATE } from "../roles/role-architect.ts";
-import { loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
+import { loadRoleTemplatesFromDir, loadRoleTemplatesWithCustomDir } from "../roles/template-loader.ts";
 import { openPersonalAgentDatabase } from "../storage/database.ts";
 import { PersonalAgentStore } from "../storage/repositories.ts";
 import { createPersonalAgentServer } from "./app.ts";
@@ -245,9 +245,20 @@ export async function bootHost(options: BootHostOptions = {}): Promise<BootedHos
 	const customRolesDir = temporaryRolesDir ?? resolve(dirname(resolve(dbPath)), "roles");
 	const customSkillsDir = temporarySkillsDir ?? resolve(dirname(resolve(dbPath)), "skills");
 	const loadedTemplates = await loadRoleTemplatesWithCustomDir(builtinRolesDir, customRolesDir);
-	const templates = loadedTemplates.some((tpl) => tpl.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
-		? loadedTemplates
-		: [...loadedTemplates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
+	const fallbackPortableRolesDir = resolveRepoAssetPath(PA_RUNTIME_ASSET_MANIFEST.portableRolesDir, import.meta.url);
+	const portableTemplates =
+		!existsSync(resolve(rootDir, PA_RUNTIME_ASSET_MANIFEST.portableRolesDir)) && existsSync(fallbackPortableRolesDir)
+			? await loadRoleTemplatesFromDir(fallbackPortableRolesDir, {
+					explicitScope: { roleScope: "global", ownerOrgId: null, ownerUserId: null },
+				})
+			: [];
+	const combinedTemplates = [
+		...loadedTemplates,
+		...portableTemplates.filter((tpl) => !loadedTemplates.some((existing) => existing.id === tpl.id)),
+	];
+	const templates = combinedTemplates.some((tpl) => tpl.id === BUILTIN_ROLE_ARCHITECT_TEMPLATE.id)
+		? combinedTemplates
+		: [...combinedTemplates, BUILTIN_ROLE_ARCHITECT_TEMPLATE];
 	const dialogBroker = new DialogBroker();
 	const previewManager = new PreviewManager();
 

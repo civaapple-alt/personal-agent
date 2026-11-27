@@ -39,7 +39,7 @@ const catalog: PiModelCatalog = {
 };
 
 test("shared role definitions accept legacy fields and omit execution settings on export", async () => {
-	const raw = await readFile(resolve("roles/engineering-manager.md"), "utf8");
+	const raw = await readFile(resolve("pi-extensions/roles/roles/engineering-manager.md"), "utf8");
 	assert.doesNotMatch(raw, /^(defaultProvider|defaultModel|thinkingLevel):/m);
 	const legacy = raw.replace(/^---\n/, "---\ndefaultProvider: old\ndefaultModel: custom\nthinkingLevel: high\n");
 	const modern = parseRoleTemplateMarkdown(raw);
