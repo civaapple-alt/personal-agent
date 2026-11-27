@@ -250,52 +250,81 @@ flowchart TB
 sequenceDiagram
     participant U as 用户工作台
     participant A as HTTP/SSE 服务
-    participant O as 编排核
+    participant O as TeamOrchestrator
     participant S as SQLite
-    participant M as 主成员 Pi
-    participant B as 主执行工具 bridge
-    participant C as 内部成员 Pi
+    participant PM as 主责 Pi (PM)
+    participant B as Loopback Bridge
+    participant EM as 协作者 Pi (EM)
+    participant QA as 验收 Pi (QA)
+    participant ML as 旁听 Pi (ML)
 
-    U->>A: 新需求或同事项后续消息
-    A->>O: 派发，保留后续负责人和工作区
-    O->>S: 取得执行占用，记录用户消息，查找会话
+    U->>A: POST /api/matters/mat_101/messages<br/>("@Engineering Manager 实现限流，再请 @QA Manager 复核")
+    A->>O: dispatchMatter(content, mentions=[EM, QA])
+    O->>S: 1. INSERT matter_execution_leases (抢占单机锁)
+    O->>S: 2. INSERT matter_messages (channel=user, 快照 orgId/workspaceId)
+    O->>S: 3. SELECT worker_sessions (查 PM 的 --session)
     opt 已有匹配的 Pi 会话
-        O->>O: 核查 session ID、文件和 cwd
+        O->>O: 核查 session ID、文件与真实 cwd
     end
-    O->>M: 经 Worker 启动进程，恢复会话并发送本轮消息
-    opt 主成员需要专业协作
-        M->>B: delegate_to_member
-        B->>O: 鉴权后的调用，身份和范围由宿主绑定
-        O->>S: 记录 internal_collab 请求
-        O->>C: 经独立 Worker 执行，使用内部会话
-        C-->>O: 专业答案或执行错误
-        O->>S: 记录内部结果
-        O-->>B: 工具结果
-        B-->>M: 返回同事结果，主成员整合
+    O->>PM: 经 Worker 启动 pi --mode rpc --session pm.jsonl<br/>(注入上下文 + 本轮临时放行 EM/QA 委托权)
+    PM-->>O: 流式事件 (tool_call -> 写 notice / text_delta)
+    O-->>U: SSE 推送实时进度
+
+    opt 主责调用同事实现 (delegate_to_member)
+        PM->>B: delegate_to_member(EM, task="实现登录限流")
+        B->>O: 校验 bearer token + 绑定调用链 [PM->EM]（暂停 PM 空闲看门狗）
+        O->>S: 4. INSERT matter_messages (channel=internal_collab, 委托#1)
+        O->>EM: 启动独立 pi --mode rpc --session em_internal.jsonl
+        EM-->>O: 读代码 / edit / 跑单测 -> 返回结论与文件证据
+        O->>S: 5. INSERT matter_messages (channel=internal_collab, 回报#1)
+        O-->>B: 返回 EM 结论（恢复 PM 看门狗）
+        B-->>PM: 工具结果返回 PM
     end
-    opt 主成员保存空间资料
-        M->>B: save_space_page
-        B->>O: 校验内容或来源路径
-        O->>S: 即时保存页面及修订
-        B-->>M: 返回页面
+
+    opt 主责发起独立验收 (verification)
+        PM->>B: delegate_to_member(QA, verification={assignmentNumber:1})
+        B->>O: 校验验收者(QA) != 执行者(EM)
+        O->>S: 6. INSERT matter_messages (channel=internal_collab, 验收#2)
+        O->>QA: 启动独立 pi --mode rpc --session qa_verify.jsonl
+        QA-->>O: 核查文件与测试 -> 返回 verdict=OK
+        O->>S: 7. INSERT matter_messages (channel=internal_collab, 验收结论#2)
+        O-->>B: 返回 QA 验收结论
+        B-->>PM: 工具结果返回 PM
     end
-    M-->>O: 经 Worker 收到 agent_settled
+
+    opt 主责保存空间资料 (save_space_page)
+        PM->>B: save_space_page(title, content/sourcePath)
+        B->>O: 校验内容/来源路径，SpaceGitStore 按 spaceId 串行提交 Git
+        O->>S: 更新 space_documents (head_commit, revision)
+        B-->>PM: 返回页面版本信息
+    end
+
+    PM-->>O: 主回复正文 + 经 Worker 收到 agent_settled
     alt 成功且有空间资料或文档
         O->>O: 再核查全部成果
-        O->>S: 提交空间文档关联与草案提案，再记录回复与状态
+        O->>S: 8. INSERT matter_messages (channel=user, 绑定 spaceDocuments 与草案提案)
     else 成功但只有交流
-        O->>S: 挂载草案提案（如有），保存回复，保持 open
+        O->>S: 8. 挂载草案提案（如有），保存回复，保持 open
     else 取消或失败
-        O->>S: 丢弃未提交 effects，记录停止或失败，保持 open
+        O->>S: 丢弃未提交 effects，记录停止/失败与 progressSnapshot，保持 open
     end
-    O->>O: 清理执行进程、bridge 与事项占用
-    A-->>U: SSE 收尾事件，刷新对话与成果
+    O-->>U: SSE 推送主回复与成果卡片
+
+    opt 主回复正常完成后触发旁听 (observersEnabled=true)
+        O->>ML: 并行触发未在本轮被@委托的旁听 (ml_obs.jsonl)
+        ML-->>O: 无增量输出 [SILENT]；有关键风险则写入 user 补充消息
+    end
+
+    O->>S: 9. DELETE matter_execution_leases (清理进程/bridge 并释放租约)
+    O-->>U: SSE 推送收尾事件，刷新对话与成果
 ```
 
-收尾信号与事务边界：
+典型场景与收尾边界（以「用户 `@Engineering Manager` 实现、`@QA Manager` 复核、产品经理主责收口、旁听列席」为例）：
 
-- `agent_settled` 是本轮执行收尾信号，不是交付信号；若 Pi 返回 `prompt` 的 `disposition: handled`，则立即结束该次等待，不等待不会出现的 settled。
-- 交互成果与草案提案挂载在成功回复的同轮收尾中保存，当前没有覆盖所有外部动作与整个收尾过程的统一事务。
+- **主责统筹 `@AI成员`**：已有业务主责时，显式 `@` 不直接跳过主责，而是由宿主临时放行被提及同事的委托权限，由主责结合完整上下文按序委托并在最后统一汇总。
+- **三通道落盘职责**：`user` 保存用户可见交流、主回复与旁听补充；`internal_collab` 保存委托请求、编号、验收任务与同事回报；`notice` 保存紧凑工具事件摘要与能力清单。
+- **旁听去重与独立会话**：本轮已被显式 `@` 委托过的同事不会在 `runObservers` 中重复作为旁听发言；其余旁听成员使用独立 `observer` 会话，且禁用委托、空间保存与 `propose_skill`。
+- **收尾信号与事务边界**：`agent_settled` 是本轮执行收尾信号，不是交付信号；若 Pi 返回 `prompt` 的 `disposition: handled`，则立即结束该次等待，不等待不会出现的 settled。交互成果与草案提案挂载在成功回复的同轮收尾中保存，当前没有覆盖所有外部动作与整个收尾过程的统一事务。
 
 ### 用户通信与过程留存
 
