@@ -1,16 +1,29 @@
 import { existsSync } from "node:fs";
+import type { SessionInsightBoardSignals } from "@pa/contracts/session-insights";
 import { isArchitectRoleTemplate, isSoloRoleTemplate } from "../../roles/role-architect.ts";
 import type { RoleTemplate } from "../../roles/types.ts";
 import type { PersonalAgentStore } from "../../storage/repositories.ts";
-import { buildSessionInsightsReport, type SessionInsightSource } from "../runtime/session-insights.ts";
+import type { Matter } from "../../storage/types.ts";
+import {
+	buildSessionInsightsReport,
+	redactInsightText,
+	type SessionInsightBoardSignalInput,
+	type SessionInsightSource,
+} from "../runtime/session-insights.ts";
 
 export interface TeamHealthEvidence {
 	id: string;
-	kind: "role" | "message" | "feedback" | "insight" | "skill_trust";
+	kind: "role" | "message" | "feedback" | "insight" | "skill_trust" | "board_friction";
 	sourceId: string;
 	matterId?: string;
 	label: string;
 	excerpt: string;
+}
+
+export interface BoardFrictionCollection {
+	evidence: TeamHealthEvidence[];
+	boardInputs: SessionInsightBoardSignalInput[];
+	summary: SessionInsightBoardSignals;
 }
 
 export interface TeamHealthScopeFilter {
@@ -59,9 +72,211 @@ export function collectTeamHealthFeedback(store: PersonalAgentStore, scope?: Tea
 }
 
 /**
+ * Deterministically collects board collaboration friction (`verify_rework`, `escalate`, `monitor_alert`)
+ * strictly from pre-filtered ACL-visible matters and maps recurring patterns to the 4 CoE asset categories.
+ */
+export function collectBoardFrictionSignals(
+	store: PersonalAgentStore,
+	scopedMatters: Matter[],
+): BoardFrictionCollection {
+	const reworkItems: TeamHealthEvidence[] = [];
+	const escalateItems: TeamHealthEvidence[] = [];
+	const monitorItems: TeamHealthEvidence[] = [];
+	const boardInputs: SessionInsightBoardSignalInput[] = [];
+
+	let totalRework = 0;
+	let totalEscalate = 0;
+	let totalMonitorAlerts = 0;
+	const mattersWithFriction = new Set<string>();
+	const reworkTargets = new Map<string, number>();
+	const stalledAgents = new Map<string, number>();
+	const escalateAuthors = new Map<string, number>();
+
+	for (const matter of scopedMatters.slice(0, 24)) {
+		const reworkPosts: SessionInsightBoardSignalInput["reworkPosts"] = [];
+		const escalatePosts: SessionInsightBoardSignalInput["escalatePosts"] = [];
+		const monitorAlerts: SessionInsightBoardSignalInput["monitorAlerts"] = [];
+
+		const posts = store.listBoardPostSummaries(matter.id, { order: "desc", limit: 100 });
+		for (const post of posts) {
+			if (post.kind !== "verify_rework" && post.kind !== "escalate") continue;
+			if (post.workspaceId && post.workspaceId !== matter.workspaceId) {
+				const postWs = store.getWorkspace(post.workspaceId);
+				if (!postWs || postWs.visibility === "restricted") continue;
+			}
+			const cleanSummary = redactInsightText(post.summary).replace(/\s+/g, " ").trim();
+			const mentionText = post.mentions.length > 0 ? post.mentions.map((m) => `@${m}`).join(",") : "无";
+
+			if (post.kind === "verify_rework") {
+				totalRework += 1;
+				mattersWithFriction.add(matter.id);
+				const target = post.verification?.target?.trim() || undefined;
+				const criteria = post.verification?.criteria?.trim() || undefined;
+				const authorAgentId = post.verification?.authorAgentId?.trim() || undefined;
+				if (target) reworkTargets.set(target, (reworkTargets.get(target) ?? 0) + 1);
+				reworkPosts.push({
+					postNo: post.postNo,
+					authorId: post.authorId,
+					mentions: post.mentions,
+					summary: cleanSummary,
+					...(target ? { target } : {}),
+					...(criteria ? { criteria } : {}),
+					...(authorAgentId ? { authorAgentId } : {}),
+				});
+				if (reworkItems.length < 6) {
+					const verParts = [
+						target ? `target=${target}` : null,
+						criteria ? `criteria=${redactInsightText(criteria)}` : null,
+						authorAgentId ? `author=${authorAgentId}` : null,
+					].filter(Boolean);
+					const verText = verParts.length > 0 ? `；验收[${verParts.join(" | ")}]` : "";
+					reworkItems.push({
+						id: `board_friction:rework:${matter.id}:${post.postNo}`,
+						kind: "board_friction",
+						sourceId: post.id,
+						matterId: matter.id,
+						label: `[公告板返工] ${matter.title} · #${post.postNo} (${post.authorId})`,
+						excerpt:
+							`post#${post.postNo} by ${post.authorId} -> ${mentionText}${verText}；摘要：${cleanSummary}`.slice(
+								0,
+								360,
+							),
+					});
+				}
+			} else if (post.kind === "escalate") {
+				totalEscalate += 1;
+				mattersWithFriction.add(matter.id);
+				escalateAuthors.set(post.authorId, (escalateAuthors.get(post.authorId) ?? 0) + 1);
+				escalatePosts.push({
+					postNo: post.postNo,
+					authorId: post.authorId,
+					mentions: post.mentions,
+					summary: cleanSummary,
+				});
+				if (escalateItems.length < 4) {
+					escalateItems.push({
+						id: `board_friction:escalate:${matter.id}:${post.postNo}`,
+						kind: "board_friction",
+						sourceId: post.id,
+						matterId: matter.id,
+						label: `[公告板升级] ${matter.title} · #${post.postNo} (${post.authorId})`,
+						excerpt: `post#${post.postNo} by ${post.authorId} -> ${mentionText}；摘要：${cleanSummary}`.slice(
+							0,
+							360,
+						),
+					});
+				}
+			}
+		}
+
+		const eventsPage = store.listEvents(matter.id, { eventType: "monitor_alert", order: "desc", limit: 50 });
+		for (const ev of eventsPage.events) {
+			totalMonitorAlerts += 1;
+			mattersWithFriction.add(matter.id);
+			const targetAgentId =
+				typeof ev.payload.targetAgentId === "string" && ev.payload.targetAgentId.trim()
+					? ev.payload.targetAgentId.trim()
+					: (ev.agentId ?? "unknown");
+			const nudgeCount =
+				typeof ev.payload.nudgeCount === "number" && Number.isFinite(ev.payload.nudgeCount)
+					? ev.payload.nudgeCount
+					: 1;
+			const rawReason =
+				typeof ev.payload.reason === "string" && ev.payload.reason.trim()
+					? ev.payload.reason.trim()
+					: typeof ev.payload.message === "string" && ev.payload.message.trim()
+						? ev.payload.message.trim()
+						: "monitor_alert";
+			const cleanReason = redactInsightText(rawReason).replace(/\s+/g, " ").trim();
+			stalledAgents.set(targetAgentId, (stalledAgents.get(targetAgentId) ?? 0) + 1);
+			monitorAlerts.push({ targetAgentId, nudgeCount, reason: cleanReason });
+			if (monitorItems.length < 4) {
+				monitorItems.push({
+					id: `board_friction:monitor:${matter.id}:${ev.id}`,
+					kind: "board_friction",
+					sourceId: ev.id,
+					matterId: matter.id,
+					label: `[停滞告警] ${matter.title} · @${targetAgentId}`,
+					excerpt: `targetAgentId=${targetAgentId}，nudgeCount=${nudgeCount}，reason=${cleanReason}`.slice(0, 360),
+				});
+			}
+		}
+
+		if (reworkPosts.length > 0 || escalatePosts.length > 0 || monitorAlerts.length > 0) {
+			boardInputs.push({
+				matterId: matter.id,
+				matterTitle: matter.title,
+				reworkPosts,
+				escalatePosts,
+				monitorAlerts,
+			});
+		}
+	}
+
+	const summary: SessionInsightBoardSignals = {
+		reworkCount: totalRework,
+		escalateCount: totalEscalate,
+		monitorAlertCount: totalMonitorAlerts,
+		mattersWithBoardFriction: mattersWithFriction.size,
+	};
+
+	const evidence: TeamHealthEvidence[] = [];
+	if (totalRework > 0 || totalEscalate > 0 || totalMonitorAlerts > 0) {
+		const assetRecommendations: string[] = [];
+		if (totalRework > 0) {
+			const topTargets = [...reworkTargets.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 2)
+				.map(([t, c]) => `${t}(${c})`)
+				.join("、");
+			assetRecommendations.push(
+				`[Execution Skills] 通过 propose_skill 沉淀执行规范与脚本${topTargets ? `（高频目标：${topTargets}）` : ""}`,
+			);
+			assetRecommendations.push("[Verifier checklists] 将高频返工 criteria 固化为可复用验收清单与校验脚本");
+		}
+		if (totalEscalate > 0 || totalRework >= 2) {
+			const topEsc = [...escalateAuthors.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 2)
+				.map(([a, c]) => `${a}(${c})`)
+				.join("、");
+			assetRecommendations.push(
+				`[Role-Skill bindings] 通过 propose_role 补齐动态角色模板与 Skills 关联${topEsc ? `（升级来源：${topEsc}）` : ""}`,
+			);
+		}
+		if (totalMonitorAlerts > 0 || totalEscalate > 0) {
+			const topStalled = [...stalledAgents.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 2)
+				.map(([a, c]) => `@${a}(${c})`)
+				.join("、");
+			assetRecommendations.push(
+				`[Coordinator orchestration Skills] 沉淀任务切片、ownedScope 边界与授权规则${topStalled ? `（卡点成员：${topStalled}）` : ""}`,
+			);
+		}
+
+		evidence.push({
+			id: "board_friction:coe_summary",
+			kind: "board_friction",
+			sourceId: "board_coe_summary",
+			label: `[CoE 沉淀信号] 公告板摩擦汇总（${mattersWithFriction.size} 个事项）`,
+			excerpt:
+				`返工 ${totalRework} 次、升级 ${totalEscalate} 次、停滞告警 ${totalMonitorAlerts} 次；建议沉淀：${assetRecommendations.join("；")}`.slice(
+					0,
+					480,
+				),
+		});
+		evidence.push(...reworkItems, ...escalateItems, ...monitorItems);
+	}
+
+	return { evidence, boardInputs, summary };
+}
+
+/**
  * Bounded source records, separate from the model's interpretation of their cause or importance.
  * Feeds static role definitions, recent matter friction, negative space feedback, deterministic
- * Pi session-insights findings, and Four-Step Trust skill telemetry into Role Architect / RSI healthchecks.
+ * Pi session-insights findings, board collaboration friction, and Four-Step Trust skill telemetry
+ * into Role Architect / RSI healthchecks.
  */
 export function collectTeamHealthEvidence(
 	store: PersonalAgentStore,
@@ -133,6 +348,10 @@ export function collectTeamHealthEvidence(
 		});
 	}
 
+	// Board collaboration friction signals (verify_rework, escalate, monitor_alert) strictly from scopedMatters.
+	const boardFriction = collectBoardFrictionSignals(store, scopedMatters);
+	sources.push(...boardFriction.evidence);
+
 	// Deterministic Pi session-insights findings (zero LLM calls, strictly scoped to visible matters & members).
 	const seenSessionFiles = new Set<string>();
 	const insightSources: SessionInsightSource[] = [];
@@ -151,8 +370,10 @@ export function collectTeamHealthEvidence(
 		});
 	}
 	if (insightSources.length > 0) {
-		const report = buildSessionInsightsReport(insightSources);
-		for (const finding of report.findings.slice(0, 6)) {
+		const report = buildSessionInsightsReport(insightSources, {
+			boardInputs: boardFriction.boardInputs,
+		});
+		for (const finding of report.findings.filter((item) => item.kind !== "board_friction").slice(0, 6)) {
 			sources.push({
 				id: `insight:${finding.kind}:${finding.id}`,
 				kind: "insight",
@@ -204,7 +425,7 @@ export function collectTeamHealthEvidence(
 		});
 	}
 
-	return sources.slice(0, 48);
+	return sources.slice(0, 64);
 }
 
 export function formatTeamHealthEvidence(sources: TeamHealthEvidence[]): string {

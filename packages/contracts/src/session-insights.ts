@@ -7,7 +7,15 @@ export type SessionInsightKind =
 	| "repeated_tool_call"
 	| "cost_outlier"
 	| "unverified_claim"
-	| "repeated_instruction";
+	| "repeated_instruction"
+	| "board_friction";
+
+export interface SessionInsightBoardSignals {
+	reworkCount: number;
+	escalateCount: number;
+	monitorAlertCount: number;
+	mattersWithBoardFriction: number;
+}
 
 export interface SessionInsightFinding {
 	id: string;
@@ -74,5 +82,6 @@ export interface SessionInsightsReport {
 	};
 	findings: SessionInsightFinding[];
 	recentSessions: SessionInsightSessionSummary[];
+	boardSignals?: SessionInsightBoardSignals;
 	privacyNote: string;
 }

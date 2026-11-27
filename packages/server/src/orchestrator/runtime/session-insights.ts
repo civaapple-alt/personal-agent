@@ -8,6 +8,7 @@ import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from "no
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type {
+	SessionInsightBoardSignals,
 	SessionInsightFinding,
 	SessionInsightSessionSummary,
 	SessionInsightsReport,
@@ -20,6 +21,31 @@ export interface SessionInsightSource {
 	memberId?: string | null;
 	memberName?: string | null;
 	updatedAt?: string;
+}
+
+export interface SessionInsightBoardSignalInput {
+	matterId: string;
+	matterTitle?: string;
+	reworkPosts: Array<{
+		postNo: number;
+		authorId: string;
+		mentions: string[];
+		summary: string;
+		target?: string;
+		criteria?: string;
+		authorAgentId?: string;
+	}>;
+	escalatePosts: Array<{
+		postNo: number;
+		authorId: string;
+		mentions: string[];
+		summary: string;
+	}>;
+	monitorAlerts: Array<{
+		targetAgentId: string;
+		nudgeCount: number;
+		reason: string;
+	}>;
 }
 
 interface ParsedToolCall {
@@ -405,7 +431,11 @@ function median(values: number[]): number {
 /** Aggregate deterministic operational insights across one or more Pi session transcripts. */
 export function buildSessionInsightsReport(
 	sources: SessionInsightSource[],
-	scope: { matterId?: string | null; memberId?: string | null } = {},
+	scope: {
+		matterId?: string | null;
+		memberId?: string | null;
+		boardInputs?: SessionInsightBoardSignalInput[];
+	} = {},
 ): SessionInsightsReport {
 	const seenFiles = new Set<string>();
 	const parsedSessions: ParsedSession[] = [];
@@ -616,6 +646,95 @@ export function buildSessionInsightsReport(
 		}
 	}
 
+	// 5. Optional deterministic board collaboration friction signals (verify_rework, escalate, monitor_alert)
+	let boardSignals: SessionInsightBoardSignals | undefined;
+	if (scope.boardInputs) {
+		let reworkCount = 0;
+		let escalateCount = 0;
+		let monitorAlertCount = 0;
+		const frictionMatters = new Set<string>();
+		const reworkEvidence: string[] = [];
+		const escalateEvidence: string[] = [];
+		const monitorEvidence: string[] = [];
+
+		for (const item of scope.boardInputs) {
+			const matterLabel = item.matterTitle?.trim() || item.matterId;
+			const matterFriction = item.reworkPosts.length + item.escalatePosts.length + item.monitorAlerts.length;
+			if (matterFriction > 0) frictionMatters.add(item.matterId);
+
+			for (const post of item.reworkPosts) {
+				reworkCount += 1;
+				if (reworkEvidence.length < 4) {
+					const target = post.target ? ` target=${post.target}` : "";
+					reworkEvidence.push(
+						`${matterLabel} #${post.postNo} (${post.authorId}${target}): ${truncateLine(redactInsightText(post.summary), 90)}`,
+					);
+				}
+			}
+			for (const post of item.escalatePosts) {
+				escalateCount += 1;
+				if (escalateEvidence.length < 4) {
+					escalateEvidence.push(
+						`${matterLabel} #${post.postNo} (${post.authorId}): ${truncateLine(redactInsightText(post.summary), 90)}`,
+					);
+				}
+			}
+			for (const alert of item.monitorAlerts) {
+				monitorAlertCount += 1;
+				if (monitorEvidence.length < 4) {
+					monitorEvidence.push(
+						`${matterLabel} @${alert.targetAgentId} (nudge #${alert.nudgeCount}, ${truncateLine(redactInsightText(alert.reason), 60)})`,
+					);
+				}
+			}
+		}
+
+		boardSignals = {
+			reworkCount,
+			escalateCount,
+			monitorAlertCount,
+			mattersWithBoardFriction: frictionMatters.size,
+		};
+
+		if (reworkCount > 0) {
+			findings.push({
+				id: `board-rework:${frictionMatters.size}:${reworkCount}`,
+				kind: "board_friction",
+				severity: reworkCount >= 2 ? "error" : "warn",
+				title: `公告板验收返工 ${reworkCount} 次（涉及 ${frictionMatters.size} 个事项）`,
+				detail:
+					"高频 verify_rework 表明执行规范或前置校验存在缺口；建议通过 propose_skill 沉淀专业执行 Skill 与 Verifier 验收清单。",
+				evidence: reworkEvidence,
+				count: reworkCount,
+				suggestSkillCapture: true,
+			});
+		}
+		if (escalateCount > 0) {
+			findings.push({
+				id: `board-escalate:${frictionMatters.size}:${escalateCount}`,
+				kind: "board_friction",
+				severity: escalateCount >= 2 ? "error" : "warn",
+				title: `公告板协作升级 ${escalateCount} 次`,
+				detail: "成员多次 escalate 至总控；建议复盘 Role–Skill 关联（propose_role）与 Coordinator 编排授权规则。",
+				evidence: escalateEvidence,
+				count: escalateCount,
+				suggestSkillCapture: true,
+			});
+		}
+		if (monitorAlertCount > 0) {
+			findings.push({
+				id: `board-monitor:${frictionMatters.size}:${monitorAlertCount}`,
+				kind: "board_friction",
+				severity: "warn",
+				title: `公告板停滞告警 ${monitorAlertCount} 次`,
+				detail: "@monitor 触发静默催促或升级；建议沉淀 Coordinator 切片粒度与 ownedScope 划分经验为编排类 Skill。",
+				evidence: monitorEvidence,
+				count: monitorAlertCount,
+				suggestSkillCapture: true,
+			});
+		}
+	}
+
 	const severityOrder = { error: 0, warn: 1, info: 2 };
 	findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity] || (b.count ?? 0) - (a.count ?? 0));
 
@@ -645,6 +764,7 @@ export function buildSessionInsightsReport(
 		},
 		findings: findings.slice(0, 30),
 		recentSessions: parsedSessions.slice(0, 20).map((s) => s.summary),
+		...(boardSignals ? { boardSignals } : {}),
 		privacyNote: "仅在本机只读分析 Pi 会话文件，无模型调用、无网络请求；路径与凭据已做脱敏处理。",
 	};
 }
@@ -659,6 +779,16 @@ export function formatSessionInsightsMarkdown(report: SessionInsightsReport): st
 	lines.push(
 		`- 用量统计：Input ${report.usage.inputTokens} / Output ${report.usage.outputTokens} / CacheRead ${report.usage.cacheReadTokens} · Pi 记录成本 $${report.usage.totalCostUsd.toFixed(4)}`,
 	);
+	if (
+		report.boardSignals &&
+		(report.boardSignals.reworkCount > 0 ||
+			report.boardSignals.escalateCount > 0 ||
+			report.boardSignals.monitorAlertCount > 0)
+	) {
+		lines.push(
+			`- 公告板协同摩擦：返工 ${report.boardSignals.reworkCount} 次 · 升级 ${report.boardSignals.escalateCount} 次 · 停滞告警 ${report.boardSignals.monitorAlertCount} 次（涉及 ${report.boardSignals.mattersWithBoardFriction} 个事项）`,
+		);
+	}
 	if (report.findings.length === 0) {
 		lines.push("- 异常发现：未命中高风险规则（无反复失败命令、无僵尸 Skill、无高频返工或重复死循环）。");
 	} else {
