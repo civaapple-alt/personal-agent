@@ -23,6 +23,7 @@
 		"./team": "./src/team.ts",
 		"./space": "./src/space.ts",
 		"./runtime": "./src/runtime.ts",
-		"./sse-events": "./src/sse-events.ts"
+		"./sse-events": "./src/sse-events.ts",
+		"./schemas": "./src/schemas/index.ts"
 	}
 }

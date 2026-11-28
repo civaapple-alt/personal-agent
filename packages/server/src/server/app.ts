@@ -21,6 +21,7 @@ import type { DialogBroker } from "./dialog-broker.ts";
 import { createDispatchRunner } from "./dispatch-runner.ts";
 import { HttpRequestError, isAllowedMutatingOrigin, sendError, serveStaticAsset } from "./http.ts";
 import type { PreviewManager } from "./preview-manager.ts";
+import { createApiRouter, dispatchHonoRequest, requireAuthMiddleware } from "./router.ts";
 import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth.ts";
 import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
@@ -215,6 +216,10 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 		dataDir: options.dataDir,
 	};
 
+	const publicApiRouter = createApiRouter();
+	const apiRouter = createApiRouter();
+	apiRouter.use("/api/*", requireAuthMiddleware);
+
 	const handlers = [
 		handleModelSettingsRoutes,
 		handleAdminRoutes,
@@ -256,6 +261,16 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 				return;
 			}
 
+			if (
+				pathname.startsWith("/api/") &&
+				(await dispatchHonoRequest(publicApiRouter, req, res, {
+					routeCtx,
+					actor,
+					requireAuth,
+				}))
+			) {
+				return;
+			}
 			if (await handleAdminAndAuthRoutes(routeCtx, req, res, method, pathname, actor, requireAuth)) {
 				return;
 			}
@@ -280,6 +295,17 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					return;
 				}
 				await handleUploadGet(res, filename, uploadsDir, memoryUploads);
+				return;
+			}
+
+			if (
+				pathname.startsWith("/api/") &&
+				(await dispatchHonoRequest(apiRouter, req, res, {
+					routeCtx,
+					actor,
+					requireAuth,
+				}))
+			) {
 				return;
 			}
 

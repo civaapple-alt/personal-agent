@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve } from "node:path";
 
 const MAX_JSON_BODY_BYTES = 36 * 1024 * 1024;
+const rawBodyCache = new WeakMap<IncomingMessage, Buffer>();
 
 export const MIME_TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -21,14 +22,19 @@ export const MIME_TYPES: Record<string, string> = {
 /** HTTP error with explicit status code propagated to JSON error responses. */
 export class HttpRequestError extends Error {
 	statusCode: number;
+	code?: string;
 
-	constructor(statusCode: number, message: string) {
+	constructor(statusCode: number, message: string, code?: string) {
 		super(message);
 		this.statusCode = statusCode;
+		if (code) this.code = code;
 	}
 }
 
-export async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+/** Read and memoize the raw request body (capped at 36MB) so multiple adapters can inspect it safely. */
+export async function readRawBody(req: IncomingMessage): Promise<Buffer> {
+	const cached = rawBodyCache.get(req);
+	if (cached) return cached;
 	const chunks: Buffer[] = [];
 	let totalBytes = 0;
 	for await (const chunk of req) {
@@ -39,7 +45,14 @@ export async function readJsonBody(req: IncomingMessage): Promise<Record<string,
 		}
 		chunks.push(buf);
 	}
-	const raw = Buffer.concat(chunks).toString("utf8").trim();
+	const combined = Buffer.concat(chunks);
+	rawBodyCache.set(req, combined);
+	return combined;
+}
+
+export async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+	const rawBuffer = await readRawBody(req);
+	const raw = rawBuffer.toString("utf8").trim();
 	if (raw.length === 0) return {};
 	let parsed: unknown;
 	try {
@@ -53,7 +66,7 @@ export async function readJsonBody(req: IncomingMessage): Promise<Record<string,
 	return parsed as Record<string, unknown>;
 }
 
-const BASE_SECURITY_HEADERS: Record<string, string> = {
+export const BASE_SECURITY_HEADERS: Record<string, string> = {
 	"X-Content-Type-Options": "nosniff",
 	"X-Frame-Options": "DENY",
 	"Referrer-Policy": "no-referrer",
