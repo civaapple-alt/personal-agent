@@ -20,7 +20,7 @@
 | 设置、Agent 底座、技能与洞察视图 | [SettingsView](views/SettingsView.tsx) 展示 Pi 底座、扩展及运行配置；[WebAccessSettings](components/WebAccessSettings.tsx) 与 [SystemOneSettings](components/SystemOneSettings.tsx) 管理各自扩展；[SkillsTrustPanel](components/SkillsTrustPanel.tsx)（`#/settings/skills`）管理信任四步策略并在左右分栏浮层中只读预览 PA 托管与 Pi 原生发现技能的完整目录文件（`SKILL.md`、`scripts/*`、`references/*` 等安全 UTF-8 文件，支持 Markdown 渲染/源码切换）；[SessionInsightsPanel](components/SessionInsightsPanel.tsx)（`#/settings/insights`）与设置页字号/卡片原语对齐（4 列指标卡 + 3 列单行截断会话表 + 重新扫描二次确认与耗时显示），展示本地零模型运行洞察并支持一键「去沉淀为 Skill / 发起排查」与跳转事项；[Sidebar](components/Sidebar.tsx) 底部设置菜单提供直达快捷入口 |
 | 账号门禁与超级管理员控制台 | [AuthGateView](views/AuthGateView.tsx)（超管首次初始化、邮箱密码登录/开放注册、待审核提示及 `?invite=` / `orginv_` 加入组织）、[AdminView](views/AdminView.tsx)（对应 `#/admin`，管理用户审核/配额含 `maxPersonalRoles`/`defaultMaxPersonalRoles`、注册策略、克隆主目录、运行任务紧急中止与审计日志） |
 
-视图与组件样式已全面收敛为 Tailwind v4 语义工具类与 [primitives/](primitives/index.ts) 原语，禁止在 TSX 中使用 raw hex 硬编码色值；全局 Markdown 排版位于 [markdown.css](styles/markdown.css)，扩展卡片位于 [extensions.css](styles/extensions.css)，拟人头像动画位于 [bot-avatar.css](styles/bot-avatar.css)。
+视图与组件样式已全面收敛为 Tailwind v4 语义工具类与 [primitives/](primitives/index.ts) 原语，完整 Token 速查、排版阶梯、原语选用指南与门禁约束见 [UI 设计系统与组件规范](../../../docs/reference/ui-design-system.md)；全局 Markdown 排版位于 [markdown.css](styles/markdown.css)，扩展卡片位于 [extensions.css](styles/extensions.css)，拟人头像动画位于 [bot-avatar.css](styles/bot-avatar.css)。
 [RoleDesignDetails](components/team/RoleDesignDetails.tsx) 在角色候选卡片显示 Skills、依赖状态与验证约定，并在体检卡片展示经过宿主核对的来源。创建路径保留能力声明，未关联来源或尚待运行核查时不显示为能力已验证。
 
 [useHashRouteNav](hooks/useHashRouteNav.ts) 将页签和路由选项一起更新。跨页、成果详情与协作浮层分别使用 [ViewFade](primitives/ViewTransitions.tsx) 淡入淡出。资料空间根路由显示资料，旧成果链接仍可打开对应版本，`#/space/:id` 打开资料。减少动态效果或浏览器缺少 View Transitions 时即时切换。

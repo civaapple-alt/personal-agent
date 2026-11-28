@@ -12,7 +12,7 @@
 | --- | --- |
 | 后端引擎与跨模块改动 | [packages/server/src/README.md](packages/server/src/README.md)、[packages/pi-rpc/README.md](packages/pi-rpc/README.md) |
 | 共享 Wire 契约与扩展 SDK | [packages/contracts/README.md](packages/contracts/README.md)、[packages/extension-api/README.md](packages/extension-api/README.md)、[packages/extension-sdk/README.md](packages/extension-sdk/README.md) |
-| 网页工作台交互与展示 | [apps/web/README.md](apps/web/README.md) → [前端源码](apps/web/src/README.md) |
+| 网页工作台交互与展示 | [apps/web/README.md](apps/web/README.md) → [前端源码](apps/web/src/README.md)；UI 规范见 [UI 设计系统与组件规范](docs/reference/ui-design-system.md) |
 | CLI 薄启动器 | [apps/cli/README.md](apps/cli/README.md) |
 | 宿主扩展与便携 Pi 扩展 | [pa-extensions/README.md](pa-extensions/README.md)、[pi-extensions/README.md](pi-extensions/README.md) |
 | 角色定义或 Skill | [roles/README.md](roles/README.md)、[pi-extensions/role-skills/README.md](pi-extensions/role-skills/README.md)；解析代码在 [packages/server/src/roles/](packages/server/src/roles/README.md) |
