@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ModelCatalogDto, ModelSelection } from "../api/models.ts";
+import { Input, Select } from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 interface ModelCatalogChoicesProps {
 	models: ModelCatalogDto["models"];
@@ -8,6 +10,9 @@ interface ModelCatalogChoicesProps {
 	disabled?: boolean;
 	onChange: (value: ModelSelection | null) => void;
 }
+
+const OPTION_BASE_CLASSES =
+	"flex flex-wrap items-baseline justify-between gap-x-2 w-full min-h-8 px-2 py-1.5 rounded-sm border text-left text-sm transition-colors cursor-pointer disabled:opacity-45 disabled:pointer-events-none [overflow-wrap:anywhere]";
 
 export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onChange }: ModelCatalogChoicesProps) {
 	const panelId = useId();
@@ -32,15 +37,15 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 	});
 
 	return (
-		<div className="model-choices-panel">
-			<div className="model-choices-filters">
-				<div className="identity-field">
-					<label className="identity-field-label" htmlFor={`${panelId}-provider`}>
+		<div className="grid gap-2 min-w-0">
+			<div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+				<div className="flex flex-col gap-1 min-w-0">
+					<label className="text-xs font-medium text-ink-secondary" htmlFor={`${panelId}-provider`}>
 						供应商
 					</label>
-					<select
+					<Select
 						id={`${panelId}-provider`}
-						className="input-field"
+						size="sm"
 						value={provider}
 						disabled={disabled}
 						onChange={(event) => {
@@ -57,16 +62,16 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 								{option}
 							</option>
 						))}
-					</select>
+					</Select>
 				</div>
-				<div className="identity-field">
-					<label className="identity-field-label" htmlFor={`${panelId}-search`}>
+				<div className="flex flex-col gap-1 min-w-0">
+					<label className="text-xs font-medium text-ink-secondary" htmlFor={`${panelId}-search`}>
 						搜索模型
 					</label>
-					<input
+					<Input
 						ref={search}
 						id={`${panelId}-search`}
-						className="input-field"
+						size="sm"
 						type="search"
 						name="model-search"
 						autoComplete="off"
@@ -94,7 +99,12 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 			</div>
 			<button
 				type="button"
-				className="model-choices-option model-choices-inherit"
+				className={cn(
+					OPTION_BASE_CLASSES,
+					!value
+						? "bg-subtle border-line text-ink font-medium"
+						: "bg-transparent border-line text-ink hover:bg-hover/60",
+				)}
 				aria-pressed={!value}
 				disabled={disabled}
 				onClick={() => {
@@ -107,30 +117,41 @@ export function ModelCatalogChoices({ models, value, inheritLabel, disabled, onC
 				{inheritLabel}
 			</button>
 			{results.length > 0 ? (
-				<ul className="model-choices-results" aria-label="可选模型">
-					{results.map((option, index) => (
-						<li key={JSON.stringify([option.provider, option.model])}>
-							<button
-								ref={index === 0 ? firstResult : undefined}
-								type="button"
-								className="model-choices-option"
-								aria-pressed={value?.provider === option.provider && value.model === option.model}
-								disabled={disabled}
-								onClick={() => {
-									querySyncedFromSelection.current = true;
-									setProvider(option.provider);
-									setQuery(option.name);
-									onChange({ provider: option.provider, model: option.model });
-								}}
-							>
-								<span>{option.name}</span>
-								<small>{option.provider}</small>
-							</button>
-						</li>
-					))}
+				<ul
+					className="grid gap-0.5 max-h-[min(34vh,232px)] overflow-y-auto overscroll-contain list-none m-0 p-0.5"
+					aria-label="可选模型"
+				>
+					{results.map((option, index) => {
+						const isSelected = value?.provider === option.provider && value.model === option.model;
+						return (
+							<li key={JSON.stringify([option.provider, option.model])}>
+								<button
+									ref={index === 0 ? firstResult : undefined}
+									type="button"
+									className={cn(
+										OPTION_BASE_CLASSES,
+										isSelected
+											? "bg-subtle border-line text-ink font-medium"
+											: "bg-transparent border-transparent text-ink hover:bg-hover/60 hover:border-line",
+									)}
+									aria-pressed={isSelected}
+									disabled={disabled}
+									onClick={() => {
+										querySyncedFromSelection.current = true;
+										setProvider(option.provider);
+										setQuery(option.name);
+										onChange({ provider: option.provider, model: option.model });
+									}}
+								>
+									<span>{option.name}</span>
+									<small className="text-xs text-ink-secondary">{option.provider}</small>
+								</button>
+							</li>
+						);
+					})}
 				</ul>
 			) : (
-				<output className="model-choices-empty">没有符合筛选条件的模型</output>
+				<output className="p-2 text-xs text-ink-secondary">没有符合筛选条件的模型</output>
 			)}
 		</div>
 	);

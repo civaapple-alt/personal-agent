@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { fetchModelDefault, fetchModels, type ModelCatalogDto, type ModelSelection } from "../api/models.ts";
+import { Button, FieldGroup, Select } from "../primitives/index.ts";
 import { ModelCatalogChoices } from "./ModelCatalogChoices.tsx";
 import { ModelPopover } from "./ModelPopover.tsx";
 
@@ -91,13 +92,13 @@ export function ModelPicker(props: ModelPickerProps) {
 	const effective = useEffectiveModel(value ?? inheritModel);
 	const label = value ? modelLabel(effective ?? value) : inheritedLabel(inheritLabel, effective ?? inheritModel);
 	return (
-		<div className="model-choices">
-			<span className="identity-field-label">供应商与模型</span>
+		<div className="grid gap-1.5 min-w-0">
+			<span className="text-xs font-medium text-ink-secondary">供应商与模型</span>
 			<ModelPopover
 				label={label}
 				panelLabel="供应商与模型"
 				accessibleLabel={`供应商与模型 · ${label}`}
-				buttonClassName="input-field model-choices-trigger"
+				buttonClassName="w-full min-h-9 px-3 py-1.5 text-sm bg-stage text-ink border border-line rounded-sm hover:border-line-strong"
 				disabled={disabled}
 			>
 				{() => <ModelPickerPanel {...props} />}
@@ -118,7 +119,7 @@ function ModelPickerPanel({ value, onChange, inheritLabel, inheritModel, disable
 		? `${inheritLabel} · ${modelLabel(value ? inheritModel : (effective ?? inheritModel))}`
 		: inheritLabel;
 	return (
-		<div className="model-picker">
+		<div className="grid gap-2 min-w-0">
 			<ModelCatalogChoices
 				models={options}
 				value={value}
@@ -127,10 +128,9 @@ function ModelPickerPanel({ value, onChange, inheritLabel, inheritModel, disable
 				onChange={onChange}
 			/>
 			{value && (
-				<label className="identity-field">
-					<span className="identity-field-label">思考等级</span>
-					<select
-						className="input-field"
+				<FieldGroup label="思考等级">
+					<Select
+						size="sm"
 						value={value.thinkingLevel ?? ""}
 						disabled={disabled || !selected}
 						onChange={(event) =>
@@ -148,18 +148,20 @@ function ModelPickerPanel({ value, onChange, inheritLabel, inheritModel, disable
 								{level}
 							</option>
 						))}
-					</select>
-				</label>
+					</Select>
+				</FieldGroup>
 			)}
 			{error && (
-				<div className="model-picker-error">
+				<div className="flex flex-wrap items-center gap-2 text-xs text-danger-text">
 					<output>{error}</output>
-					<button type="button" className="btn-pill-outline btn-xs" onClick={reload}>
+					<Button variant="secondary" size="xs" className="rounded-pill" onClick={reload}>
 						重新读取
-					</button>
+					</Button>
 				</div>
 			)}
-			{catalog && !options.length && <p className="muted-hint">在运行工作台的系统账号下登录 Pi，添加可用模型。</p>}
+			{catalog && !options.length && (
+				<p className="m-0 text-xs text-ink-muted leading-normal">在运行工作台的系统账号下登录 Pi，添加可用模型。</p>
+			)}
 		</div>
 	);
 }
@@ -209,11 +211,11 @@ export function MatterModelControl({
 	};
 
 	return (
-		<div className="composer-model-control">
+		<div className="min-w-0 max-w-[min(38ch,42vw)]">
 			<ModelPopover
 				label={buttonLabel}
 				panelLabel={label}
-				buttonClassName="btn-pill-outline btn-xs model-choices-trigger"
+				buttonClassName="max-w-full h-8 px-2.5 text-xs bg-stage text-ink-secondary border border-line rounded-pill hover:bg-hover hover:border-line-strong hover:text-ink"
 				align="end"
 				disabled={disabled}
 				closeDisabled={saving}
@@ -233,20 +235,21 @@ export function MatterModelControl({
 							disabled={saving}
 						/>
 						{error && (
-							<p className="muted-hint" role="alert">
+							<p className="m-0 text-xs text-danger-text leading-normal" role="alert">
 								{error}
 							</p>
 						)}
 						{!immediate && (
-							<div className="model-popover-actions">
-								<button
-									type="button"
-									className="btn-pill-dark btn-xs"
+							<div className="flex justify-end">
+								<Button
+									variant="primary"
+									size="xs"
+									className="rounded-pill"
 									disabled={saving || disabled}
 									onClick={() => void save(close)}
 								>
 									{saving ? "保存中…" : "应用"}
-								</button>
+								</Button>
 							</div>
 						)}
 					</>

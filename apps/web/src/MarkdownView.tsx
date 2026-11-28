@@ -106,6 +106,12 @@ function splitTableRow(rawLine: string): string[] {
 
 type CellAlign = "left" | "center" | "right";
 
+function alignClass(align: CellAlign | undefined): string {
+	if (align === "center") return "text-center";
+	if (align === "right") return "text-right";
+	return "text-left";
+}
+
 function parseTableAlignments(separatorLine: string): CellAlign[] | null {
 	const trimmed = separatorLine.trim();
 	if (!trimmed.includes("|") || !trimmed.includes("-")) return null;
@@ -216,7 +222,7 @@ export function MarkdownView(props: { content: string }): ReactNode {
 						<thead>
 							<tr>
 								{normalizedHeaders.map((cell, colIdx) => (
-									<th key={`th-${keyIndex++}`} style={{ textAlign: alignments[colIdx] }}>
+									<th key={`th-${keyIndex++}`} className={alignClass(alignments[colIdx])}>
 										{renderTableCell(cell)}
 									</th>
 								))}
@@ -227,7 +233,7 @@ export function MarkdownView(props: { content: string }): ReactNode {
 								{bodyRows.map((row) => (
 									<tr key={`tr-${keyIndex++}`}>
 										{row.map((cell, colIdx) => (
-											<td key={`td-${keyIndex++}`} style={{ textAlign: alignments[colIdx] }}>
+											<td key={`td-${keyIndex++}`} className={alignClass(alignments[colIdx])}>
 												{renderTableCell(cell)}
 											</td>
 										))}

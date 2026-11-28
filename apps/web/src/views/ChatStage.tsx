@@ -39,9 +39,64 @@ import { useChatScroll } from "../hooks/useChatScroll.ts";
 import { useChatStageParticipants } from "../hooks/useChatStageParticipants.ts";
 import { summarizeBoardStatus, useMatterBoard } from "../hooks/useMatterBoard.ts";
 import { useMatterSideDocs } from "../hooks/useMatterSideDocs.ts";
+import { Badge, Button } from "../primitives/index.ts";
 import { ViewFade } from "../primitives/ViewTransitions.tsx";
+import { cn } from "../utils/cn.ts";
 import { buildMatterDelegations } from "../utils/matterDelegations.ts";
 import { transitionView } from "../viewTransitions.ts";
+
+function collectPendingDecisions(matterDetail: MatterDetailPayload | null): Array<{ id: string; label: string }> {
+	if (!matterDetail || matterDetail.matter.status === "archived") return [];
+	const items: Array<{ id: string; label: string }> = [];
+	const seenRoleProposals = new Set<string>();
+	const messages = matterDetail.userMessages;
+	for (const [index, message] of messages.entries()) {
+		if (message.senderType !== "member") continue;
+		const decision = readHumanDecision(message.metadata);
+		if (
+			decision?.status === "pending" &&
+			isCurrentHumanDecision(message, decision, matterDetail.matter, messages.slice(index + 1))
+		) {
+			items.push({ id: message.id, label: decision.requests[0]?.question ?? "答复澄清" });
+		}
+	}
+	for (const message of messages.toReversed()) {
+		if (message.senderType !== "member" || seenRoleProposals.has(message.senderId)) continue;
+		const roleProposals = message.metadata?.roleProposals;
+		const hasActions = hasRoleProposalActions(roleProposals);
+		const hasClarification = readHumanDecision(message.metadata)?.kind === "role_clarification";
+		if (!hasActions && !hasClarification) continue;
+		seenRoleProposals.add(message.senderId);
+		if (
+			hasActions &&
+			!hasClarification &&
+			roleProposals &&
+			typeof roleProposals === "object" &&
+			"status" in roleProposals &&
+			roleProposals.status === "pending" &&
+			message.metadata?.orgId === (matterDetail.matter.orgId ?? null) &&
+			message.metadata?.workspaceId === matterDetail.matter.workspaceId
+		) {
+			items.push({ id: message.id, label: "确认角色提案" });
+		}
+	}
+	return items;
+}
+
+const BOARD_PILL_BASE_CLASSES =
+	"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill border text-xs font-semibold cursor-pointer shrink-0 transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent";
+const NEXT_STEP_CHIP_BASE_CLASSES =
+	"px-2.5 py-1 rounded-pill border bg-stage text-ink text-xs leading-snug cursor-pointer transition-colors hover:border-accent hover:bg-accent-soft disabled:opacity-45 disabled:pointer-events-none";
+const BOARD_PILL_TONES: Record<"working" | "blocked" | "idle", string> = {
+	working: "border-accent-border bg-surface-accent text-accent",
+	blocked: "border-warn-border bg-warn-bg text-warn-text",
+	idle: "border-line bg-stage text-ink-secondary",
+};
+const BOARD_DOT_TONES: Record<"working" | "blocked" | "idle", string> = {
+	working: "bg-accent",
+	blocked: "bg-warn-text",
+	idle: "bg-ink-muted",
+};
 
 type ComposerDraftProps = Pick<
 	ComponentProps<typeof ComposerDock>,
@@ -146,65 +201,39 @@ interface ChatStageProps {
 }
 
 /** Coordinates the active matter workspace: header bar, participant/collab popovers, scrollable stream, and composer. */
-export function ChatStage({
-	composerDraft,
-	initiation,
-	currentUser,
-	accountUser = null,
-	isSuperAdmin = false,
-	canDispatchAi,
-	canManageMatter,
-	orgMembersByOrgId = {},
-	orgEffectiveMemberIds = null,
-	selectedWorkspace,
-	selectedWorkspaceId,
-	selectedOrgId,
-	workspaces,
-	organizations,
-	members,
-	selectedMemberId,
-	headerContact,
-	headerTheme,
-	selectedMatterId,
-	matterDetail,
-	activeDialogs,
-	activeMatterProgress,
-	progressStartedAt,
-	streamingDelta,
-	submitting,
-	templateByRoleId,
-	memberName,
-	onSelectOrganization,
-	onSelectWorkspace,
-	matterAiMemberIds,
-	matterConsultMemberIds = null,
-	observerMemberIds,
-	observersEnabled,
-	onChangeLeadMember,
-	onUpdateMatterAiMembers,
-	onUpdateMatterConsultMembers,
-	onToggleObserversEnabled,
-	onUpdateMatterObservers,
-	onUpdateMatterCollaborators,
-	onUpdateCollaborationMode,
-	onToggleArchiveMatter,
-	onApproveAiRequest,
-	onDismissAiRequest,
-	onApplyRoleProposals,
-	onDismissRoleProposals,
-	onSendQuickPrompt,
-	onConsultArchitect,
-	onLaunchWithNewRoles,
-	modelControl,
-	onSendPrompt,
-	onAbortMatter,
-	onNewMatter,
-	onOpenDeliverables,
-	onOpenTeam,
-	onOpenSkillTrust,
-	onRefresh,
-	onNotice,
-}: ChatStageProps) {
+export function ChatStage(props: ChatStageProps) {
+	const {
+		composerDraft,
+		initiation,
+		currentUser,
+		accountUser = null,
+		isSuperAdmin = false,
+		canDispatchAi,
+		canManageMatter,
+		orgMembersByOrgId = {},
+		orgEffectiveMemberIds = null,
+		selectedWorkspace,
+		selectedWorkspaceId,
+		selectedOrgId,
+		workspaces,
+		organizations,
+		members,
+		selectedMemberId,
+		headerContact,
+		selectedMatterId,
+		matterDetail,
+		activeMatterProgress,
+		templateByRoleId,
+		memberName,
+		matterAiMemberIds,
+		observerMemberIds,
+		observersEnabled,
+		onChangeLeadMember,
+		onUpdateMatterObservers,
+		onSendQuickPrompt,
+		onOpenDeliverables,
+		onRefresh,
+	} = props;
 	const { onExpandPastedFile, ...dockDraft } = composerDraft;
 	const { composerText, pendingFiles } = dockDraft;
 	const [collabMatterId, setCollabMatterId] = useState<string | null>(null);
@@ -375,7 +404,7 @@ export function ChatStage({
 	const loadedMatterId = matterDetail?.matter.id ?? null;
 	const activeLoadedId = selectedMatterId && loadedMatterId === selectedMatterId ? loadedMatterId : null;
 	const messageCount = matterDetail?.userMessages.length ?? 0;
-	const streamLen = streamingDelta.length;
+	const streamLen = props.streamingDelta.length;
 
 	const { chatScrollRef, chatStreamInnerRef, messagesEndRef, handleStreamScroll } = useChatScroll({
 		activeLoadedId,
@@ -439,41 +468,7 @@ export function ChatStage({
 						matterDetail.matter.collaboratorIds?.includes(userId)),
 			)
 		: [];
-	const pendingDecisions: Array<{ id: string; label: string }> = [];
-	if (matterDetail && matterDetail.matter.status !== "archived") {
-		const seenRoleProposals = new Set<string>();
-		const messages = matterDetail.userMessages;
-		for (const [index, message] of messages.entries()) {
-			if (message.senderType !== "member") continue;
-			const decision = readHumanDecision(message.metadata);
-			if (
-				decision?.status === "pending" &&
-				isCurrentHumanDecision(message, decision, matterDetail.matter, messages.slice(index + 1))
-			) {
-				pendingDecisions.push({ id: message.id, label: decision.requests[0]?.question ?? "答复澄清" });
-			}
-		}
-		for (const message of messages.toReversed()) {
-			if (message.senderType !== "member" || seenRoleProposals.has(message.senderId)) continue;
-			const roleProposals = message.metadata?.roleProposals;
-			const hasActions = hasRoleProposalActions(roleProposals);
-			const hasClarification = readHumanDecision(message.metadata)?.kind === "role_clarification";
-			if (!hasActions && !hasClarification) continue;
-			seenRoleProposals.add(message.senderId);
-			if (
-				hasActions &&
-				!hasClarification &&
-				roleProposals &&
-				typeof roleProposals === "object" &&
-				"status" in roleProposals &&
-				roleProposals.status === "pending" &&
-				message.metadata?.orgId === (matterDetail.matter.orgId ?? null) &&
-				message.metadata?.workspaceId === matterDetail.matter.workspaceId
-			) {
-				pendingDecisions.push({ id: message.id, label: "确认角色提案" });
-			}
-		}
-	}
+	const pendingDecisions = collectPendingDecisions(matterDetail);
 
 	const activeFloatingClarification = useActiveClarification({
 		matterDetail,
@@ -485,15 +480,64 @@ export function ChatStage({
 		memberName,
 	});
 
+	const isNewMatter = !selectedMatterId && !isArchitectMode;
+	const latestBoardPost = board.snapshot?.posts.at(-1);
+	const stageClass = cn(
+		"relative flex-1 min-h-0",
+		sideDocs.activeDocId
+			? "grid grid-cols-1 min-[960px]:grid-cols-[minmax(380px,1fr)_minmax(360px,1fr)] h-full overflow-hidden"
+			: showBoardPane
+				? "grid grid-cols-1 min-[960px]:grid-cols-[minmax(380px,1fr)_minmax(380px,460px)] h-full overflow-hidden"
+				: isNewMatter
+					? "flex flex-col overflow-y-auto pb-10"
+					: "flex flex-col",
+	);
+	const boardPillToneClass = showBoardPane
+		? "border-accent bg-accent-soft text-accent"
+		: BOARD_PILL_TONES[boardStatus.tone];
+	const boardDotToneClass = BOARD_DOT_TONES[boardStatus.tone];
+	const isArchived = matterDetail?.matter.status === "archived";
+	const nextSteps =
+		!activeFloatingClarification && !isTurnRunning && matterDetail?.userMessages.at(-1)?.senderType === "member"
+			? readNextStepsFromMetadata(matterDetail.userMessages.at(-1)!.metadata)
+			: [];
+	const canSwitchBoardMode = Boolean(
+		canManageMatter &&
+			!isTurnRunning &&
+			!isArchitectMode &&
+			matterDetail &&
+			!isArchived &&
+			props.onUpdateCollaborationMode,
+	);
+	const showBoardStrip = Boolean(
+		activeLoadedId && matterDetail && (hasBoardActivity || (canManageMatter && !isArchitectMode && !isArchived)),
+	);
+	const mentionMembers = [
+		...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(({ id, displayName, roleTitle }) => ({
+			id,
+			displayName,
+			roleTitle,
+			kind: "ai" as const,
+		})),
+		...allActiveHumans
+			.filter(
+				(person) =>
+					person.id !== currentUser?.id &&
+					(person.id === matterDetail?.matter.createdByUserId ||
+						assignedCollabIds.includes(person.id) ||
+						(person.id === ownerCollab?.id &&
+							(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
+			)
+			.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
+	];
+
 	return (
-		<div
-			className={`chat-stage${!selectedMatterId && !isArchitectMode ? " is-new-matter" : ""}${sideDocs.activeDocId ? " has-doc-pane" : ""}${showBoardPane ? " has-board-pane" : ""}`}
-		>
-			<div className="chat-stage-main">
+		<div className={stageClass}>
+			<div className={cn("flex flex-col flex-1 min-w-0 min-h-0 relative", isNewMatter ? "h-auto" : "h-full")}>
 				<ChatStageHeader
 					selectedOrganization={selectedOrganization}
 					selectedWorkspace={selectedWorkspace}
-					headerTheme={headerTheme}
+					headerTheme={props.headerTheme}
 					contactLabel={
 						!selectedMatterId && selectedMemberId === "auto"
 							? "新事项"
@@ -531,81 +575,79 @@ export function ChatStage({
 					onSelectMorePanel={toggleMorePanel}
 				/>
 
-				{activeLoadedId &&
-					matterDetail &&
-					(hasBoardActivity ||
-						(canManageMatter && !isArchitectMode && matterDetail.matter.status !== "archived")) && (
-						<section className="board-status-strip" aria-label="公告板协作状态">
-							<div className="board-status-strip-left">
-								{hasBoardActivity ? (
-									<>
-										<button
-											type="button"
-											className={`board-status-pill is-${boardStatus.tone}${showBoardPane ? " active" : ""}`}
-											aria-expanded={showBoardPane}
-											onClick={() => toggleBoardPane()}
-										>
-											<span className={`board-status-dot is-${boardStatus.tone}`} aria-hidden="true" />
-											<span>{boardStatus.label}</span>
-										</button>
-										{board.snapshot && board.snapshot.posts.length > 0 && (
-											<button
-												type="button"
-												className="board-strip-latest"
-												title="打开公告板查看最新交接"
-												onClick={() => toggleBoardPane("board")}
-											>
-												#{board.snapshot.posts[board.snapshot.posts.length - 1]!.postNo} @
-												{board.snapshot.posts[board.snapshot.posts.length - 1]!.authorId} ·{" "}
-												{board.snapshot.posts[board.snapshot.posts.length - 1]!.summary}
-											</button>
-										)}
-									</>
-								) : (
-									<span className="board-pane-subtitle">当前为轻量主责模式（Lead）</span>
-								)}
-							</div>
-							<div className="board-status-strip-actions">
-								{canManageMatter &&
-									!isTurnRunning &&
-									!isArchitectMode &&
-									matterDetail.matter.status !== "archived" &&
-									onUpdateCollaborationMode && (
-										<button
-											type="button"
-											className="btn-inline board-mode-switch-btn"
-											title={
-												matterCollaborationMode === "board"
-													? "保留已有看板交付与结论，切回轻量主责继续追问或微调"
-													: "保留当前对话与资料空间文档，升级交由总控动态组建 Builder/Verifier 异步交付"
-											}
-											onClick={() =>
-												onUpdateCollaborationMode(
-													matterCollaborationMode === "board" ? "lead" : "board",
-													matterCollaborationMode === "board"
-														? null
-														: (matterDetail.matter.coordinatorMemberId ??
-																matterDetail.matter.leadMemberId ??
-																null),
-												)
-											}
-										>
-											{matterCollaborationMode === "board" ? "切回轻量主责" : "升级为 Board 团队交付"}
-										</button>
-									)}
-								{hasBoardActivity && (
+				{showBoardStrip && matterDetail && (
+					<section
+						className="flex items-center justify-between gap-2.5 px-4 py-1.5 border-b border-line bg-subtle shrink-0 min-h-[38px]"
+						aria-label="公告板协作状态"
+					>
+						<div className="flex items-center gap-2.5 min-w-0 flex-1">
+							{hasBoardActivity ? (
+								<>
 									<button
 										type="button"
-										className={`btn-pill-outline btn-xs${showBoardPane ? " active" : ""}`}
+										className={cn(BOARD_PILL_BASE_CLASSES, boardPillToneClass)}
 										aria-expanded={showBoardPane}
 										onClick={() => toggleBoardPane()}
 									>
-										{showBoardPane ? "收起看板" : "打开看板"}
+										<span
+											className={cn("size-2 rounded-full shrink-0", boardDotToneClass)}
+											aria-hidden="true"
+										/>
+										<span>{boardStatus.label}</span>
 									</button>
-								)}
-							</div>
-						</section>
-					)}
+									{latestBoardPost && (
+										<button
+											type="button"
+											className="border-0 bg-transparent px-1 py-0.5 text-xs text-ink-secondary text-left truncate min-w-0 cursor-pointer hover:text-ink hover:underline"
+											title="打开公告板查看最新交接"
+											onClick={() => toggleBoardPane("board")}
+										>
+											#{latestBoardPost.postNo} @{latestBoardPost.authorId} · {latestBoardPost.summary}
+										</button>
+									)}
+								</>
+							) : (
+								<span className="text-xs text-ink-muted truncate">当前为轻量主责模式（Lead）</span>
+							)}
+						</div>
+						<div className="flex items-center gap-2 shrink-0">
+							{canSwitchBoardMode && (
+								<Button
+									variant="inline"
+									size="xs"
+									title={
+										matterCollaborationMode === "board"
+											? "保留已有看板交付与结论，切回轻量主责继续追问或微调"
+											: "保留当前对话与资料空间文档，升级交由总控动态组建 Builder/Verifier 异步交付"
+									}
+									onClick={() =>
+										props.onUpdateCollaborationMode?.(
+											matterCollaborationMode === "board" ? "lead" : "board",
+											matterCollaborationMode === "board"
+												? null
+												: (matterDetail.matter.coordinatorMemberId ??
+														matterDetail.matter.leadMemberId ??
+														null),
+										)
+									}
+								>
+									{matterCollaborationMode === "board" ? "切回轻量主责" : "升级为 Board 团队交付"}
+								</Button>
+							)}
+							{hasBoardActivity && (
+								<Button
+									variant="secondary"
+									size="xs"
+									className={cn("rounded-pill", showBoardPane && "border-accent bg-accent-soft text-accent")}
+									aria-expanded={showBoardPane}
+									onClick={() => toggleBoardPane()}
+								>
+									{showBoardPane ? "收起看板" : "打开看板"}
+								</Button>
+							)}
+						</div>
+					</section>
+				)}
 
 				{rosterOpen && (
 					<ViewFade type="panel">
@@ -629,18 +671,18 @@ export function ChatStage({
 							observersEnabled={observersEnabled}
 							observerAis={observerAis}
 							matterAiMemberIds={matterAiMemberIds}
-							matterConsultMemberIds={matterConsultMemberIds}
+							matterConsultMemberIds={props.matterConsultMemberIds ?? null}
 							onSearchChange={setRosterSearch}
 							onModeChange={setRosterMode}
 							onClose={closeRoster}
-							onOpenTeam={onOpenTeam}
+							onOpenTeam={props.onOpenTeam}
 							onChangeLeadMember={onChangeLeadMember}
-							onUpdateMatterAiMembers={onUpdateMatterAiMembers}
-							onUpdateMatterConsultMembers={onUpdateMatterConsultMembers}
-							onToggleObserversEnabled={onToggleObserversEnabled}
+							onUpdateMatterAiMembers={props.onUpdateMatterAiMembers}
+							onUpdateMatterConsultMembers={props.onUpdateMatterConsultMembers}
+							onToggleObserversEnabled={props.onToggleObserversEnabled}
 							onUpdateMatterObservers={onUpdateMatterObservers}
-							onUpdateMatterCollaborators={onUpdateMatterCollaborators}
-							onConsultArchitect={onConsultArchitect}
+							onUpdateMatterCollaborators={props.onUpdateMatterCollaborators}
+							onConsultArchitect={props.onConsultArchitect}
 						/>
 					</ViewFade>
 				)}
@@ -687,14 +729,17 @@ export function ChatStage({
 				)}
 
 				{pendingDecisions.length > 0 && (
-					<details className="human-decision-jump" key={selectedMatterId}>
-						<summary>待人类决定 · {pendingDecisions.length}</summary>
-						<ul>
+					<details className="px-4 py-1 border-b border-line bg-stage" key={selectedMatterId}>
+						<summary className="cursor-pointer w-fit py-1 text-sm font-semibold text-ink">
+							待人类决定 · {pendingDecisions.length}
+						</summary>
+						<ul className="list-none p-0 m-0 mb-1.5 max-h-40 overflow-y-auto">
 							{pendingDecisions.map(({ id, label }) => (
 								<li key={id}>
-									<button
-										type="button"
-										className="btn-inline"
+									<Button
+										variant="inline"
+										size="xs"
+										className="text-left"
 										onClick={() => {
 											const target = document.getElementById(`matter-message-${id}`);
 											target?.focus({ preventScroll: true });
@@ -702,7 +747,7 @@ export function ChatStage({
 										}}
 									>
 										{label}
-									</button>
+									</Button>
 								</li>
 							))}
 						</ul>
@@ -717,16 +762,17 @@ export function ChatStage({
 					selectedMatterId={selectedMatterId}
 					selectedMemberId={selectedMemberId}
 					headerContact={headerContact}
-					headerTheme={headerTheme}
+					headerTheme={props.headerTheme}
 					selectedOrganization={selectedOrganization}
 					selectedWorkspace={selectedWorkspace}
 					templateByRoleId={templateByRoleId}
 					matterDetail={matterDetail}
 					activeMatterProgress={activeMatterProgress}
-					activeDialogs={activeDialogs}
+					activeDialogs={props.activeDialogs}
 					floatingClarificationMessageId={activeFloatingClarification?.messageId ?? null}
-					progressStartedAt={progressStartedAt}
-					streamingDelta={streamingDelta}
+					progressStartedAt={props.progressStartedAt}
+					streamingDelta={props.streamingDelta}
+					isNewMatter={isNewMatter}
 					isOwner={isOwner}
 					canManageMatter={canManageMatter}
 					decisionAssignees={decisionAssignees}
@@ -743,41 +789,44 @@ export function ChatStage({
 					onPreviewFile={openFilePreview}
 					onOpenDeliverables={onOpenDeliverables}
 					onOpenSideDoc={sideDocs.openDoc}
-					onApproveAiRequest={matterDetail?.matter.status === "archived" ? undefined : onApproveAiRequest}
-					onDismissAiRequest={matterDetail?.matter.status === "archived" ? undefined : onDismissAiRequest}
-					onApplyRoleProposals={matterDetail?.matter.status === "archived" ? undefined : onApplyRoleProposals}
-					onDismissRoleProposals={matterDetail?.matter.status === "archived" ? undefined : onDismissRoleProposals}
-					onSendQuickPrompt={matterDetail?.matter.status === "archived" ? undefined : onSendQuickPrompt}
+					onApproveAiRequest={isArchived ? undefined : props.onApproveAiRequest}
+					onDismissAiRequest={isArchived ? undefined : props.onDismissAiRequest}
+					onApplyRoleProposals={isArchived ? undefined : props.onApplyRoleProposals}
+					onDismissRoleProposals={isArchived ? undefined : props.onDismissRoleProposals}
+					onSendQuickPrompt={isArchived ? undefined : onSendQuickPrompt}
 					onFillComposer={(text) => {
 						dockDraft.onComposerTextChange(text);
 						dockDraft.composerRef.current?.focus();
 					}}
-					onLaunchWithNewRoles={onLaunchWithNewRoles}
+					onLaunchWithNewRoles={props.onLaunchWithNewRoles}
 					onSkillProposalDone={() => void onRefresh()}
-					onOpenSkillTrust={onOpenSkillTrust}
-					onNotice={onNotice}
-					onAbortMatter={onAbortMatter}
+					onOpenSkillTrust={props.onOpenSkillTrust}
+					onNotice={props.onNotice}
+					onAbortMatter={props.onAbortMatter}
 				/>
 
-				{matterDetail?.matter.status === "archived" ? (
-					<div className="archived-matter-bar">
-						<div className="archived-matter-bar-copy">
-							<span className="pill">已归档</span>
+				{isArchived && matterDetail ? (
+					<div className="w-[min(760px,calc(100%-32px))] mx-auto mb-4 px-4 py-3 border border-line rounded-lg bg-subtle flex items-center justify-between gap-3 flex-wrap shrink-0">
+						<div className="inline-flex items-center gap-2.5 text-xs text-ink-secondary">
+							<Badge tone="neutral" size="sm">
+								已归档
+							</Badge>
 							<span>该事项已归档，当前为只读状态，不能继续发送消息。</span>
 						</div>
-						<div className="archived-matter-bar-actions">
-							{onToggleArchiveMatter && (
-								<button
-									type="button"
-									className="btn-pill-dark btn-xs"
-									onClick={() => onToggleArchiveMatter(matterDetail.matter.id, false)}
+						<div className="inline-flex items-center gap-2 shrink-0">
+							{props.onToggleArchiveMatter && (
+								<Button
+									variant="primary"
+									size="xs"
+									className="rounded-pill"
+									onClick={() => props.onToggleArchiveMatter?.(matterDetail.matter.id, false)}
 								>
 									恢复事项
-								</button>
+								</Button>
 							)}
-							<button type="button" className="btn-pill-outline btn-xs" onClick={onNewMatter}>
+							<Button variant="secondary" size="xs" className="rounded-pill" onClick={props.onNewMatter}>
 								+ 新建事项
-							</button>
+							</Button>
 						</div>
 					</div>
 				) : (
@@ -794,45 +843,46 @@ export function ChatStage({
 							/>
 						)}
 
-						{!activeFloatingClarification &&
-							!isTurnRunning &&
-							matterDetail &&
-							(() => {
-								const latestMsg = matterDetail.userMessages[matterDetail.userMessages.length - 1];
-								const suggestions =
-									latestMsg?.senderType === "member" ? readNextStepsFromMetadata(latestMsg.metadata) : [];
-								if (suggestions.length === 0) return null;
-								return (
-									<section className="next-steps-bar" aria-label="建议的下一步">
-										<span className="next-steps-label">下一步</span>
-										<div className="next-steps-chips">
-											{suggestions.map((item) => (
-												<button
-													key={item.prompt}
-													type="button"
-													className={`next-step-chip${item.kind ? ` is-${item.kind}` : ""}`}
-													title={`${item.prompt}\n（点击直接发送，Shift+点击填入输入框编辑）`}
-													disabled={submitting}
-													onClick={(ev) => {
-														if (ev.shiftKey || !onSendQuickPrompt) {
-															dockDraft.onComposerTextChange(item.prompt);
-															dockDraft.composerRef.current?.focus();
-															return;
-														}
-														void onSendQuickPrompt(item.prompt);
-													}}
-												>
-													{item.label}
-												</button>
-											))}
-										</div>
-									</section>
-								);
-							})()}
+						{nextSteps.length > 0 && (
+							<section
+								className="flex items-center gap-2 flex-wrap max-w-[820px] w-full mx-auto mb-2 px-3"
+								aria-label="建议的下一步"
+							>
+								<span className="text-micro font-semibold text-ink-muted whitespace-nowrap">下一步</span>
+								<div className="flex items-center gap-1.5 flex-wrap">
+									{nextSteps.map((item) => (
+										<button
+											key={item.prompt}
+											type="button"
+											className={cn(
+												NEXT_STEP_CHIP_BASE_CLASSES,
+												item.kind === "capture"
+													? "border-success-border"
+													: item.kind === "verify"
+														? "border-observer-border"
+														: "border-line",
+											)}
+											title={`${item.prompt}\n（点击直接发送，Shift+点击填入输入框编辑）`}
+											disabled={props.submitting}
+											onClick={(ev) => {
+												if (ev.shiftKey || !onSendQuickPrompt) {
+													dockDraft.onComposerTextChange(item.prompt);
+													dockDraft.composerRef.current?.focus();
+													return;
+												}
+												void onSendQuickPrompt(item.prompt);
+											}}
+										>
+											{item.label}
+										</button>
+									))}
+								</div>
+							</section>
+						)}
 
 						<ComposerDock
 							{...dockDraft}
-							modelControl={modelControl}
+							modelControl={props.modelControl}
 							initiationPanel={
 								!selectedMatterId ? (
 									<MatterInitiationPanel
@@ -857,45 +907,26 @@ export function ChatStage({
 							}
 							composerDockRef={composerDockRef}
 							isOwner={isOwner}
-							mentionMembers={[
-								...filterBusinessMembers(inGroupAiMembers, templateByRoleId).map(
-									({ id, displayName, roleTitle }) => ({
-										id,
-										displayName,
-										roleTitle,
-										kind: "ai" as const,
-									}),
-								),
-								...allActiveHumans
-									.filter(
-										(person) =>
-											person.id !== currentUser?.id &&
-											(person.id === matterDetail?.matter.createdByUserId ||
-												assignedCollabIds.includes(person.id) ||
-												(person.id === ownerCollab?.id &&
-													(matterDetail?.matter.visibility ?? initiation.draftVisibility) !== "private")),
-									)
-									.map(({ id, name }) => ({ id, displayName: name, kind: "human" as const })),
-							]}
+							mentionMembers={mentionMembers}
 							leadMemberId={leadAi?.id ?? null}
 							observerMemberIds={observerAis.map(({ id }) => id)}
 							allowUnboundOrg={isSuperAdmin || organizations.length === 0}
 							isArchitectMode={isArchitectMode}
 							isTurnRunning={isTurnRunning}
-							submitting={submitting}
+							submitting={props.submitting}
 							effectiveOrgId={effectiveOrgId}
 							selectedWorkspaceId={selectedWorkspaceId}
 							selectedMatterId={selectedMatterId}
 							activeMatterProgress={activeMatterProgress}
-							progressStartedAt={progressStartedAt}
+							progressStartedAt={props.progressStartedAt}
 							organizations={organizations}
 							orgFilteredWorkspaces={orgFilteredWorkspaces}
 							onCloseRoster={closeRoster}
-							onSelectOrganization={onSelectOrganization}
-							onSelectWorkspace={onSelectWorkspace}
-							onNewMatter={onNewMatter}
-							onSendPrompt={onSendPrompt}
-							onAbortMatter={onAbortMatter}
+							onSelectOrganization={props.onSelectOrganization}
+							onSelectWorkspace={props.onSelectWorkspace}
+							onNewMatter={props.onNewMatter}
+							onSendPrompt={props.onSendPrompt}
+							onAbortMatter={props.onAbortMatter}
 							onOpenLightbox={setLightboxImage}
 							onPreviewFile={openFilePreview}
 						/>
@@ -908,7 +939,7 @@ export function ChatStage({
 					onCloseLightbox={() => setLightboxImage(null)}
 					onCloseFilePreview={closeFilePreview}
 					onExpandPastedFile={onExpandPastedFile}
-					onNotice={onNotice}
+					onNotice={props.onNotice}
 				/>
 			</div>
 			{showBoardPane && activeLoadedId && matterDetail && (
@@ -917,7 +948,7 @@ export function ChatStage({
 					matterTitle={matterDetail.matter.title}
 					collaborationMode={matterCollaborationMode}
 					canControlMembers={Boolean(isOwner || canManageMatter)}
-					canPostToBoard={Boolean(matterDetail.matter.status !== "archived")}
+					canPostToBoard={!isArchived}
 					snapshot={board.snapshot}
 					loading={board.loading}
 					error={board.error}
@@ -941,7 +972,7 @@ export function ChatStage({
 					onChangeEventFilterType={setBoardEventType}
 					onRefreshEvents={board.refreshEvents}
 					onLoadMoreEvents={() => void board.loadMoreEvents()}
-					onNotice={onNotice}
+					onNotice={props.onNotice}
 				/>
 			)}
 			{sideDocs.activeDocId && (

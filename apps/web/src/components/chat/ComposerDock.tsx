@@ -23,8 +23,15 @@ import {
 	MAX_COMPOSER_IMAGES,
 	shouldFoldPastedText,
 } from "../../imageAttachments.ts";
-import { ElapsedTimer } from "../../primitives/ElapsedTimer.tsx";
+import { Badge, type BadgeTone, Button, ElapsedTimer, IconButton, Select } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { formatByteSize, STAGE_LABELS } from "../../utils.ts";
+
+function stageBadgeTone(stage: MatterProgressDto["stage"]): BadgeTone {
+	if (stage === "waiting_user") return "warn";
+	if (stage === "finalizing") return "success";
+	return "accent";
+}
 
 export interface PreviewableTextAttachment {
 	id?: string;
@@ -376,20 +383,31 @@ export function ComposerDock({
 	const placeholder = isArchitectMode ? "描述你们的工作流程或角色缺口…" : "说说想法、安排工作，或 @ 成员…";
 
 	return (
-		<div className="composer-dock">
+		<div
+			className={cn(
+				"shrink-0 px-[var(--page-pad-x)]",
+				isNewMatter ? "flex-none pt-1.5 pb-4" : "pt-2.5 pb-[18px] bg-gradient-to-b from-transparent to-stage",
+			)}
+		>
 			<section
 				ref={composerDockRef}
 				aria-label="统一输入与配置区"
-				className={`composer-dock-inner${dragOverComposer ? " drag-over" : ""}`}
+				className={cn(
+					"mx-auto relative flex flex-col gap-2",
+					isNewMatter ? "max-w-[760px]" : "max-w-[var(--content-max-w)]",
+				)}
 				onDragEnter={handleComposerDragEnter}
 				onDragOver={handleComposerDragOver}
 				onDragLeave={handleComposerDragLeave}
 				onDrop={handleComposerDrop}
 			>
 				{dragOverComposer && (
-					<div className="composer-drop-overlay" aria-hidden="true">
-						<strong>松开即可添加文件或图片</strong>
-						<span>
+					<div
+						className="absolute -inset-1.5 z-20 rounded-xl border-2 border-dashed border-accent bg-accent-soft/95 backdrop-blur-xs flex flex-col items-center justify-center gap-1 text-accent pointer-events-none"
+						aria-hidden="true"
+					>
+						<strong className="text-base">松开即可添加文件或图片</strong>
+						<span className="text-xs text-ink-secondary">
 							支持文本/代码/Markdown/JSON/CSV（最多 {MAX_COMPOSER_FILES} 个）与 PNG/JPG/WebP/GIF（最多{" "}
 							{MAX_COMPOSER_IMAGES} 张）
 						</span>
@@ -397,36 +415,52 @@ export function ComposerDock({
 				)}
 
 				<div
-					className={`composer-card${isNewMatter ? " is-new" : ""}${isTurnRunning ? " is-running" : ""}${isMultiline ? " is-multiline" : ""}`}
+					className={cn(
+						"relative flex flex-col bg-stage border rounded-xl shadow-sm transition-colors focus-within:border-line-strong",
+						isNewMatter ? "gap-3 p-3.5 sm:p-4" : "gap-2.5 px-3.5 py-3",
+						dragOverComposer
+							? "border-accent ring-2 ring-accent/20"
+							: isTurnRunning
+								? "border-accent-border"
+								: "border-line",
+					)}
 				>
 					{selectedMatterId && activeMatterProgress && (
-						<output className="composer-run-banner" aria-live="polite">
-							<div className="composer-run-info">
-								<span className="composer-run-dot" aria-hidden="true" />
-								<span className={`exploring-stage stage-${activeMatterProgress.stage}`}>
+						<output
+							className="flex items-center justify-between gap-3 px-3 py-2 border border-accent-border rounded-md bg-surface-accent text-xs"
+							aria-live="polite"
+						>
+							<div className="inline-flex items-center gap-2 min-w-0 flex-wrap">
+								<span
+									className="size-2 rounded-full bg-accent shrink-0 animate-pulse motion-reduce:animate-none"
+									aria-hidden="true"
+								/>
+								<Badge tone={stageBadgeTone(activeMatterProgress.stage)} size="xs">
 									{STAGE_LABELS[activeMatterProgress.stage]}
-								</span>
-								<span className="composer-run-label">{activeMatterProgress.label}</span>
-								<ElapsedTimer className="composer-run-elapsed" startedAt={progressStartedAt} />
+								</Badge>
+								<span className="text-ink font-medium truncate">{activeMatterProgress.label}</span>
+								<ElapsedTimer className="text-ink-muted tabular-nums shrink-0" startedAt={progressStartedAt} />
 							</div>
-							<div className="composer-run-actions">
+							<div className="inline-flex items-center gap-2 shrink-0">
 								{isOwner && (
-									<button
-										type="button"
-										className="btn-stop-pill"
+									<Button
+										variant="danger"
+										size="xs"
+										className="rounded-pill"
 										onClick={() => onAbortMatter(selectedMatterId)}
 									>
 										停止执行
-									</button>
+									</Button>
 								)}
 							</div>
 						</output>
 					)}
 
-					<div className="composer-top-bar">
-						<div className="composer-top-right">
-							<select
-								className="composer-ctx-select"
+					<div className="flex items-center justify-between gap-x-3.5 gap-y-2 flex-wrap min-w-0">
+						<div className="flex items-center gap-2 flex-wrap min-w-0 ml-auto">
+							<Select
+								size="sm"
+								className="w-auto max-w-[210px] rounded-pill bg-transparent border-transparent text-ink-secondary hover:bg-subtle hover:border-line hover:text-ink"
 								aria-label="所属组织"
 								value={effectiveOrgId ?? ""}
 								disabled={isTurnRunning || !isOwner}
@@ -450,9 +484,10 @@ export function ComposerDock({
 										{organizations.length === 0 ? "暂无组织（请先在「我的团队」新建）" : "不归属组织"}
 									</option>
 								)}
-							</select>
-							<select
-								className="composer-ctx-select"
+							</Select>
+							<Select
+								size="sm"
+								className="w-auto max-w-[210px] rounded-pill bg-transparent border-transparent text-ink-secondary hover:bg-subtle hover:border-line hover:text-ink"
 								aria-label="项目仓库"
 								value={selectedWorkspaceId}
 								disabled={isTurnRunning || !isOwner}
@@ -475,32 +510,41 @@ export function ComposerDock({
 										仓库：{ws.name}
 									</option>
 								))}
-							</select>
+							</Select>
 							{selectedMatterId && (
-								<button type="button" className="composer-ctx-btn" onClick={onNewMatter}>
+								<Button variant="secondary" size="xs" className="rounded-pill" onClick={onNewMatter}>
 									+ 新事项
-								</button>
+								</Button>
 							)}
 						</div>
 					</div>
 
 					{hasAttachments && (
-						<div className="composer-attachments-strip">
+						<div className="flex flex-col gap-2">
 							{pendingImages.length > 0 && (
-								<ul className="composer-image-strip" aria-label="待发送图片">
+								<ul
+									className="flex items-center flex-wrap gap-2 px-1 pt-1 m-0 list-none"
+									aria-label="待发送图片"
+								>
 									{pendingImages.map((img) => (
-										<li key={img.id} className="composer-image-chip" title={img.name}>
+										<li key={img.id} className="relative size-[58px] shrink-0" title={img.name}>
 											<button
 												type="button"
-												className="composer-image-preview"
+												className="w-full h-full p-0 border border-line rounded-lg overflow-hidden bg-subtle cursor-zoom-in block"
 												onClick={() => onOpenLightbox({ src: img.previewUrl, alt: img.name })}
 												aria-label={`预览图片 ${img.name}`}
 											>
-												<img src={img.previewUrl} alt={img.name} width={58} height={58} />
+												<img
+													src={img.previewUrl}
+													alt={img.name}
+													width={58}
+													height={58}
+													className="w-full h-full object-cover block"
+												/>
 											</button>
 											<button
 												type="button"
-												className="composer-image-remove"
+												className="absolute -top-1.5 -right-1.5 size-5 rounded-full border border-stage bg-cta text-stage text-sm leading-none grid place-items-center cursor-pointer shadow-sm hover:bg-danger-text hover:text-white"
 												onClick={() => onRemoveImage(img.id)}
 												aria-label={`移除图片 ${img.name}`}
 												title="移除图片"
@@ -513,14 +557,22 @@ export function ComposerDock({
 							)}
 
 							{pendingFiles.length > 0 && (
-								<ul className="composer-file-strip" aria-label="待发送文件与粘贴文本">
+								<ul className="flex flex-wrap gap-2 list-none m-0 p-0" aria-label="待发送文件与粘贴文本">
 									{pendingFiles.map((file) => {
 										const isPasted = file.kind === "pasted_text";
 										return (
-											<li key={file.id} className={`composer-file-chip${isPasted ? " is-pasted" : ""}`}>
+											<li
+												key={file.id}
+												className={cn(
+													"inline-flex items-center gap-1 max-w-[min(320px,100%)] border rounded-md py-0.5 pr-1 pl-2 min-w-0 transition-colors",
+													isPasted
+														? "border-dashed bg-accent-soft/60 border-accent-border"
+														: "border-line bg-subtle hover:border-line-strong",
+												)}
+											>
 												<button
 													type="button"
-													className="composer-file-open"
+													className="inline-flex items-center gap-1.5 min-w-0 border-0 bg-transparent py-0.5 pr-1 pl-0 text-ink text-left cursor-pointer"
 													onClick={() =>
 														onPreviewFile({
 															id: file.id,
@@ -535,27 +587,30 @@ export function ComposerDock({
 													}
 													title="点击查看完整内容"
 												>
-													<span className="composer-file-icon" aria-hidden="true">
+													<span className="text-sm leading-none shrink-0" aria-hidden="true">
 														{isPasted ? "¶" : "📄"}
 													</span>
-													<span className="composer-file-copy">
-														<strong>{isPasted ? `粘贴文本 · ${file.lineCount} 行` : file.name}</strong>
-														<small>
+													<span className="flex flex-col min-w-0 gap-px">
+														<strong className="text-xs font-semibold truncate">
+															{isPasted ? `粘贴文本 · ${file.lineCount} 行` : file.name}
+														</strong>
+														<small className="text-micro text-ink-secondary tabular-nums truncate">
 															{isPasted
 																? `${file.charCount} 字 · ${file.previewText}`
 																: `${formatByteSize(file.sizeBytes)} · ${file.lineCount} 行`}
 														</small>
 													</span>
 												</button>
-												<button
-													type="button"
-													className="composer-file-remove"
+												<IconButton
+													variant="ghost"
+													size="xs"
+													className="size-[22px] rounded-full text-ink-muted"
 													onClick={() => onRemoveFile(file.id)}
 													aria-label={`移除附件 ${file.name}`}
 													title="移除附件"
 												>
 													×
-												</button>
+												</IconButton>
 											</li>
 										);
 									})}
@@ -564,17 +619,17 @@ export function ComposerDock({
 						</div>
 					)}
 
-					<div className="composer-input-shell">
+					<div className="relative flex flex-col gap-1.5 border border-line-strong rounded-lg bg-stage px-3 pt-2.5 pb-2 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15">
 						{showMentionPicker && (
 							<div
 								ref={mentionMenuRef}
 								id={mentionListId}
-								className="composer-mention-menu"
+								className="absolute left-2.5 right-2.5 bottom-[calc(100%+6px)] max-w-[360px] max-h-[220px] overflow-y-auto overscroll-contain bg-card border border-line-strong rounded-md shadow-lg p-1 z-30 flex flex-col gap-0.5"
 								role="listbox"
 								aria-label="选择要 @ 的成员"
 							>
 								{filteredMentionMembers.length === 0 ? (
-									<div className="composer-mention-empty">没有匹配的成员</div>
+									<div className="px-2.5 py-2 text-xs text-ink-muted">没有匹配的成员</div>
 								) : (
 									filteredMentionMembers.map((member, idx) => {
 										const roleTag =
@@ -591,12 +646,17 @@ export function ComposerDock({
 												type="button"
 												role="option"
 												aria-selected={idx === mentionIdx}
-												className={`composer-mention-item ${idx === mentionIdx ? "active" : ""}`}
+												className={cn(
+													"flex items-center justify-between gap-2.5 w-full border-0 rounded-sm px-2.5 py-1.5 text-xs text-left cursor-pointer transition-colors",
+													idx === mentionIdx
+														? "bg-info-bg text-info-text"
+														: "bg-transparent text-ink hover:bg-hover",
+												)}
 												onMouseDown={(e) => e.preventDefault()}
 												onClick={() => insertMentionMember(member)}
 											>
 												<strong>@{member.displayName}</strong>
-												<span className="composer-mention-tag">{roleTag}</span>
+												<span className="text-micro text-ink-muted shrink-0">{roleTag}</span>
 											</button>
 										);
 									})
@@ -620,11 +680,14 @@ export function ComposerDock({
 						<textarea
 							ref={composerRef}
 							rows={isNewMatter ? 3 : 1}
-							className="composer-textarea"
+							className={cn(
+								"w-full resize-none border-0 outline-none focus-visible:outline-none bg-transparent font-sans text-base leading-relaxed text-ink p-0 placeholder:text-ink-muted",
+								isNewMatter ? "min-h-[76px] max-sm:min-h-[68px] max-h-[240px]" : "min-h-[26px] max-h-[220px]",
+							)}
 							value={composerText}
 							onChange={(e) => {
 								onComposerTextChange(e.target.value);
-								handleMentionInput(e.target.value, e.target.selectionStart);
+								handleMentionInput(e.target.value, e.currentTarget.selectionStart);
 							}}
 							onClick={(e) => {
 								if (showMentionPicker) setMentionState(null);
@@ -639,11 +702,11 @@ export function ComposerDock({
 							onPaste={handleComposerPaste}
 							placeholder={placeholder}
 						/>
-						<div className="composer-toolbar">
-							<div className="composer-toolbar-left">
-								<button
-									type="button"
-									className="composer-plus-btn"
+						<div className="flex items-center justify-between gap-2.5 min-w-0">
+							<div className="inline-flex items-center gap-2 min-w-0">
+								<IconButton
+									size="sm"
+									className="rounded-full"
 									aria-label="上传文件或图片"
 									title="上传文件或图片（支持拖拽、截图粘贴与大段文本自动折叠）"
 									disabled={submitting || uploadLimitReached}
@@ -653,12 +716,13 @@ export function ComposerDock({
 									}}
 								>
 									+
-								</button>
+								</IconButton>
 								{canMention && mentionMembers.length > 0 && (
-									<button
-										type="button"
+									<Button
 										ref={mentionTriggerRef}
-										className="composer-at-btn"
+										variant="secondary"
+										size="xs"
+										className="rounded-pill bg-info-bg/70 border-info-border text-info-text hover:bg-info-bg"
 										aria-label="@ 成员"
 										aria-expanded={showMentionPicker}
 										aria-controls={showMentionPicker ? mentionListId : undefined}
@@ -666,23 +730,24 @@ export function ComposerDock({
 										onClick={toggleMentionPicker}
 									>
 										@成员
-									</button>
+									</Button>
 								)}
-								<span className="composer-toolbar-hint">
+								<span className="text-xs text-ink-muted truncate">
 									{isMultiline ? "Shift+Enter 换行" : "支持文件和图片"}
 								</span>
 							</div>
-							<div className="composer-toolbar-actions">
+							<div className="flex items-center gap-2 min-w-0 ml-auto">
 								{modelControl}
-								<button
-									type="button"
-									className="pill-send-btn pill-send-labeled dispatch"
+								<Button
+									variant="primary"
+									size="md"
+									className="h-8 min-w-[68px] px-3.5 rounded-pill text-xs font-semibold"
 									aria-label={isArchitectMode ? "发送给架构师" : "发送"}
 									disabled={!canSend}
 									onClick={onSendPrompt}
 								>
 									{submitting ? "发送中…" : "发送"}
-								</button>
+								</Button>
 							</div>
 						</div>
 					</div>

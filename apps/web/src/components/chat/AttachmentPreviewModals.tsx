@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { copyTextToClipboard } from "../../clipboard.ts";
-import { ModalDialog } from "../../primitives/ModalDialog.tsx";
+import { Button, ModalDialog } from "../../primitives/index.ts";
 import { formatByteSize } from "../../utils/formatters.ts";
 import type { PreviewableTextAttachment } from "./ComposerDock.tsx";
 
@@ -117,15 +117,29 @@ export function AttachmentPreviewModals({
 	return (
 		<>
 			{lightboxImage && (
-				<div className="image-lightbox-backdrop">
-					<button type="button" className="image-lightbox-scrim" aria-label="关闭预览" onClick={onCloseLightbox} />
-					<div className="image-lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-						<img src={lightboxImage.src} alt={lightboxImage.alt} />
-						<div className="image-lightbox-footer">
-							<span>{lightboxImage.alt}</span>
-							<button type="button" className="btn-inline" onClick={onCloseLightbox}>
+				<div className="fixed inset-0 z-60 bg-black/75 flex items-center justify-center p-6">
+					<button
+						type="button"
+						className="absolute inset-0 border-0 p-0 m-0 bg-transparent cursor-pointer"
+						aria-label="关闭预览"
+						onClick={onCloseLightbox}
+					/>
+					<div
+						className="relative z-10 bg-card border border-line rounded-lg p-3 max-w-[min(92vw,960px)] max-h-[90vh] flex flex-col gap-2.5 shadow-lg"
+						role="dialog"
+						aria-modal="true"
+						aria-label="图片预览"
+					>
+						<img
+							src={lightboxImage.src}
+							alt={lightboxImage.alt}
+							className="max-w-full max-h-[calc(90vh-76px)] object-contain rounded-md bg-subtle"
+						/>
+						<div className="flex items-center justify-between gap-3 text-sm text-ink-secondary">
+							<span className="truncate">{lightboxImage.alt}</span>
+							<Button variant="inline" size="xs" onClick={onCloseLightbox}>
 								关闭
-							</button>
+							</Button>
 						</div>
 					</div>
 				</div>
@@ -154,9 +168,9 @@ export function AttachmentPreviewModals({
 					previewFile ? (
 						<>
 							{previewFile.file.pendingPastedId && (
-								<button
-									type="button"
-									className="btn-inline"
+								<Button
+									variant="inline"
+									size="xs"
 									onClick={() => {
 										const id = previewFile.file.pendingPastedId;
 										onCloseFilePreview();
@@ -164,32 +178,34 @@ export function AttachmentPreviewModals({
 									}}
 								>
 									放回输入框
-								</button>
+								</Button>
 							)}
 							{typeof previewFile.file.content === "string" && (
-								<button
-									type="button"
-									className="btn-inline"
+								<Button
+									variant="inline"
+									size="xs"
 									onClick={() => {
 										void copyTextToClipboard(previewFile.file.content ?? "", "附件文本", onNotice);
 									}}
 								>
 									复制内容
-								</button>
+								</Button>
 							)}
-							<button type="button" className="btn-inline" onClick={onCloseFilePreview}>
+							<Button variant="inline" size="xs" onClick={onCloseFilePreview}>
 								关闭
-							</button>
+							</Button>
 						</>
 					) : undefined
 				}
 			>
 				{previewFile?.loading ? (
-					<div className="muted small">正在读取文件内容…</div>
+					<div className="text-xs text-ink-muted">正在读取文件内容…</div>
 				) : previewFile?.error ? (
-					<div className="error-text small">{previewFile.error}</div>
+					<div className="text-xs text-danger-text">{previewFile.error}</div>
 				) : (
-					<pre className="composer-file-preview-pre">{previewFile?.file.content ?? ""}</pre>
+					<pre className="m-0 px-3.5 py-3 border border-line rounded-md bg-subtle font-mono text-xs leading-relaxed text-ink max-h-[min(62vh,520px)] overflow-auto whitespace-pre-wrap break-words">
+						{previewFile?.file.content ?? ""}
+					</pre>
 				)}
 			</ModalDialog>
 		</>

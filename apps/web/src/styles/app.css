@@ -4,9 +4,6 @@
 @import "./markdown.css" layer(components);
 @import "./extensions.css" layer(components);
 @import "./primitives.css" layer(legacy);
-@import "./chat-stream.css" layer(legacy);
-@import "./chat-composer.css" layer(legacy);
-@import "./model-picker.css" layer(legacy);
 @import "./view-transitions.css" layer(legacy);
 
 @source "../";

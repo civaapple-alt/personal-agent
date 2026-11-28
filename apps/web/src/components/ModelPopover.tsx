@@ -1,11 +1,12 @@
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "../utils/cn.ts";
 
 interface ModelPopoverProps {
 	label: string;
 	panelLabel: string;
 	accessibleLabel?: string;
-	buttonClassName: string;
+	buttonClassName?: string;
 	align?: "start" | "end";
 	disabled?: boolean;
 	closeDisabled?: boolean;
@@ -111,7 +112,10 @@ export function ModelPopover({
 			<button
 				ref={trigger}
 				type="button"
-				className={buttonClassName}
+				className={cn(
+					"inline-flex items-center justify-between gap-2 min-w-0 text-left cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-45 disabled:pointer-events-none",
+					buttonClassName,
+				)}
 				title={label}
 				aria-label={accessibleLabel ?? label}
 				aria-expanded={open}
@@ -127,15 +131,28 @@ export function ModelPopover({
 					}
 				}}
 			>
-				<span>{label}</span>
-				<span className="model-choices-chevron" aria-hidden="true" />
+				<span className="truncate">{label}</span>
+				<svg
+					viewBox="0 0 16 16"
+					fill="none"
+					aria-hidden="true"
+					className={cn("size-3.5 shrink-0 text-ink-muted transition-transform", open && "rotate-180")}
+				>
+					<path
+						d="M4 6l4 4 4-4"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					/>
+				</svg>
 			</button>
 			{open &&
 				createPortal(
 					<div
 						id={id}
 						ref={popup}
-						className="model-popover"
+						className="fixed z-60 grid gap-2 p-3 box-border overflow-auto overscroll-contain bg-card border border-line rounded-lg shadow-lg text-sm text-ink"
 						role="dialog"
 						aria-label={panelLabel}
 						style={position}

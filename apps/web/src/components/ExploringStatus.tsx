@@ -7,8 +7,8 @@ import type {
 	TeamMemberDto,
 } from "../api.ts";
 import { getToolDisplay, getToolRenderer } from "../extensions/registry.ts";
-import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
-import { ElapsedTimer } from "../primitives/ElapsedTimer.tsx";
+import { Badge, type BadgeTone, BotFaceIcon, Button, ElapsedTimer } from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 import { liveDelegationEdges } from "../utils/matterDelegations.ts";
 import type { TurnToolCall } from "../utils/matterStream.ts";
 import {
@@ -21,6 +21,18 @@ import {
 	STAGE_ORDER,
 } from "../utils.ts";
 import { DelegationGraph } from "./chat/DelegationGraph.tsx";
+
+function stageBadgeTone(stage: MatterProgressDto["stage"]): BadgeTone {
+	if (stage === "waiting_user") return "warn";
+	if (stage === "finalizing") return "success";
+	return "accent";
+}
+
+function toolStatusClass(status: TurnToolCall["status"]): string {
+	if (status === "error") return "text-danger-text";
+	if (status === "success") return "text-accent";
+	return "text-ink-muted";
+}
 
 function toolStatusLabel(status: TurnToolCall["status"], toolName?: string): string {
 	if (status === "success" && toolName) {
@@ -80,9 +92,9 @@ function ProgressDetails({
 
 	return (
 		<>
-			<div className="exploring-stepper">
+			<div className="mt-2.5 grid grid-cols-5 gap-1.5">
 				{STAGE_ORDER.map((stepStage, idx) => {
-					const stateClass = completedMode
+					const stepState = completedMode
 						? "done"
 						: idx < activeIndex
 							? "done"
@@ -90,20 +102,38 @@ function ProgressDetails({
 								? stoppedMode
 									? "stopped"
 									: "active"
-								: "";
+								: "pending";
 					return (
-						<div key={stepStage} className={`exploring-step ${stateClass}`}>
-							<span className="exploring-seg" />
-							<span className="exploring-step-name">{SHORT_STAGE_LABELS[stepStage]}</span>
+						<div key={stepStage} className="flex flex-col gap-1">
+							<span
+								className={cn(
+									"h-1 rounded-pill transition-colors",
+									stepState === "done" && "bg-accent/60",
+									stepState === "active" && "bg-accent animate-pulse motion-reduce:animate-none",
+									stepState === "stopped" && "bg-warn-text",
+									stepState === "pending" && "bg-line",
+								)}
+							/>
+							<span
+								className={cn(
+									"text-micro text-center",
+									stepState === "done" && "text-ink-secondary",
+									stepState === "active" && "text-accent font-semibold",
+									stepState === "stopped" && "text-warn-text font-semibold",
+									stepState === "pending" && "text-ink-muted",
+								)}
+							>
+								{SHORT_STAGE_LABELS[stepStage]}
+							</span>
 						</div>
 					);
 				})}
 			</div>
 
 			{toolCalls.length > 0 && (
-				<section className="exploring-tool-records" aria-label="工具与 Skill 记录">
-					<div className="exploring-section-head">工具与 Skill 记录 · {toolCalls.length}</div>
-					<div className="exploring-tool-list">
+				<section className="mt-2.5 pt-2 border-t border-dashed border-line" aria-label="工具与 Skill 记录">
+					<div className="text-micro font-semibold text-ink-muted">工具与 Skill 记录 · {toolCalls.length}</div>
+					<div className="flex flex-col gap-1.5 max-h-[240px] overflow-y-auto mt-1.5">
 						{toolCalls.map((call) => {
 							const cleanSkillName = call.skillName?.replace(/^\/?skill:/u, "") ?? null;
 							const toolDisplay = getToolDisplay(call.toolName);
@@ -126,28 +156,45 @@ function ProgressDetails({
 									})
 								: null;
 							return (
-								<div key={call.id} className="exploring-tool-entry">
-									<div className="exploring-tool-item">
-										<span className="exploring-feed-time">{formatClockTime(call.at)}</span>
-										<strong className="exploring-tool-member">
+								<div key={call.id} className="flex flex-col gap-1.5">
+									<div className="flex items-baseline flex-nowrap gap-1.5 min-w-0 text-micro leading-snug group">
+										<span className="text-ink-muted tabular-nums shrink-0">{formatClockTime(call.at)}</span>
+										<strong className="shrink-0 whitespace-nowrap text-ink">
 											{members?.find((member) => member.id === call.memberId)?.displayName ?? call.memberId}
 										</strong>
 										{cleanSkillName && (
-											<span className="exploring-skill-badge">Skill · {cleanSkillName}</span>
+											<Badge tone="accent" size="xs" className="shrink-0">
+												Skill · {cleanSkillName}
+											</Badge>
 										)}
-										<code className="exploring-tool-name" title={toolDisplay?.label ?? call.toolName}>
+										<code
+											className="shrink-0 whitespace-nowrap rounded-xs px-1.5 py-0.5 bg-stage border border-line-subtle text-ink-secondary font-mono text-micro"
+											title={toolDisplay?.label ?? call.toolName}
+										>
 											{call.toolName}
 										</code>
 										{showDetail && (
-											<span className="exploring-tool-detail" title={formattedDetail}>
+											<span
+												className="flex-1 min-w-0 break-words text-ink-secondary line-clamp-1 group-hover:line-clamp-4"
+												title={formattedDetail}
+											>
 												{formattedDetail}
 											</span>
 										)}
-										<span className={`exploring-tool-status is-${call.status}`}>
+										<span
+											className={cn(
+												"shrink-0 whitespace-nowrap text-micro font-medium",
+												toolStatusClass(call.status),
+											)}
+										>
 											{toolStatusLabel(call.status, call.toolName)}
 										</span>
 									</div>
-									{renderedCard && <div className="exploring-tool-card">{renderedCard}</div>}
+									{renderedCard && (
+										<div className="ml-3 p-2.5 border border-line rounded-md bg-subtle/60">
+											{renderedCard}
+										</div>
+									)}
 								</div>
 							);
 						})}
@@ -156,18 +203,13 @@ function ProgressDetails({
 			)}
 
 			{activeDelegations && activeDelegations.length > 0 && (
-				<div className="exploring-delegations">
-					<div className="exploring-section-head delegation-live-heading">
+				<div className="mt-2.5 pt-2 border-t border-dashed border-line flex flex-col gap-1.5">
+					<div className="flex items-center justify-between gap-2 text-micro font-semibold text-ink-muted">
 						<span>{delegationHeading}</span>
 						{onOpenDelegations && activeDelegations.some((entry) => entry.kind === "delegation") && (
-							<button
-								type="button"
-								className="btn-inline btn-xs"
-								data-open-delegations
-								onClick={onOpenDelegations}
-							>
+							<Button variant="inline" size="xs" data-open-delegations onClick={onOpenDelegations}>
 								查看本轮关系图
-							</button>
+							</Button>
 						)}
 					</div>
 					<DelegationGraph edges={liveDelegationEdges(activeDelegations, stoppedMode ? "failed" : "running")} />
@@ -175,21 +217,39 @@ function ProgressDetails({
 			)}
 
 			{displayLogs && displayLogs.length > 0 && (
-				<div ref={feedRef} className="exploring-feed">
+				<div
+					ref={feedRef}
+					className="mt-2 pt-2 pr-1 border-t border-dashed border-line flex flex-col gap-1.5 text-micro text-ink-secondary max-h-[220px] overflow-y-auto overscroll-contain"
+				>
 					{displayLogs.map((entry, idx) => {
 						const logMember = members?.find((m) => m.displayName === entry.memberName);
 						const logColor = logMember ? getMemberThemeById(members, logMember.id).bg : getBotTheme(idx).bg;
 						return (
-							<div key={`${entry.at}-${entry.memberName}-${idx}`} className="exploring-feed-item">
-								<span className="exploring-feed-dot" style={{ background: logColor }} />
-								<span className="exploring-feed-time">{formatClockTime(entry.at)}</span>
-								<strong>{entry.memberName}</strong>
-								<span className="exploring-feed-text" title={entry.summary}>
+							<div
+								key={`${entry.at}-${entry.memberName}-${idx}`}
+								className="flex items-start gap-1.5 min-w-0 leading-snug group"
+							>
+								<span className="size-1.5 mt-1.5 rounded-full shrink-0" style={{ background: logColor }} />
+								<span className="text-ink-muted tabular-nums shrink-0">{formatClockTime(entry.at)}</span>
+								<strong className="text-ink shrink-0">{entry.memberName}</strong>
+								<span
+									className="flex-1 min-w-0 break-words line-clamp-1 group-hover:line-clamp-4"
+									title={entry.summary}
+								>
 									{entry.summary}
 								</span>
-								{entry.toolName && <code className="exploring-tool-name">{entry.toolName}</code>}
+								{entry.toolName && (
+									<code className="shrink-0 whitespace-nowrap rounded-xs px-1.5 py-0.5 bg-stage border border-line-subtle text-ink-secondary font-mono text-micro">
+										{entry.toolName}
+									</code>
+								)}
 								{entry.toolStatus && (
-									<span className={`exploring-tool-status is-${entry.toolStatus}`}>
+									<span
+										className={cn(
+											"shrink-0 whitespace-nowrap text-micro font-medium",
+											toolStatusClass(entry.toolStatus),
+										)}
+									>
 										{toolStatusLabel(entry.toolStatus, entry.toolName)}
 									</span>
 								)}
@@ -226,28 +286,35 @@ export function ExploringStatus({
 		leadDisplayName ?? members?.find((member) => member.id === leadMemberId)?.displayName ?? "主负责同事";
 
 	return (
-		<div className="exploring-block">
-			<div className="exploring-hero">
+		<div className="self-start p-3.5 rounded-lg bg-sidebar border border-line w-[min(100%,660px)] min-w-0 shadow-sm">
+			<div className="flex items-center gap-3">
 				<BotFaceIcon bg={leadTheme.bg} tilt={leadTheme.tilt} size="md" mood={progress.stage} />
-				<div className="exploring-main">
-					<div className="exploring-row">
-						<span className="exploring-actor">{leadName}</span>
-						<span className={`exploring-stage stage-${progress.stage}`}>{STAGE_LABELS[progress.stage]}</span>
-						<ElapsedTimer className="exploring-time" startedAt={startedAt} />
+				<div className="flex-1 min-w-0 flex flex-col gap-0.5">
+					<div className="flex items-center gap-2 text-sm flex-wrap">
+						<span className="font-semibold text-ink">{leadName}</span>
+						<Badge tone={stageBadgeTone(progress.stage)} size="xs">
+							{STAGE_LABELS[progress.stage]}
+						</Badge>
+						<ElapsedTimer className="ml-auto text-xs tabular-nums text-ink-muted" startedAt={startedAt} />
 						{onAbort && (
-							<button type="button" className="btn-stop-pill" onClick={onAbort}>
+							<Button variant="danger" size="xs" className="rounded-pill" onClick={onAbort}>
 								停止
-							</button>
+							</Button>
 						)}
 					</div>
-					<div className="exploring-label">{progress.label}</div>
+					<div className="text-ink-secondary text-xs leading-snug break-words line-clamp-1 hover:line-clamp-4">
+						{progress.label}
+					</div>
 				</div>
 			</div>
 			{progress.stalledMembers && progress.stalledMembers.length > 0 && (
-				<ul className="exploring-stall-notices" aria-live="polite">
+				<ul
+					className="list-none mt-2.5 mb-0 px-2.5 py-2 rounded-md bg-warn-bg border border-warn-border text-warn-text text-xs flex flex-col gap-1"
+					aria-live="polite"
+				>
 					{progress.stalledMembers.map(
 						({ memberId, memberName, assignmentNumber, lastActivityAt, lastAction }) => (
-							<li key={`${memberId}:${assignmentNumber ?? "turn"}`}>
+							<li key={`${memberId}:${assignmentNumber ?? "turn"}`} className="flex flex-wrap gap-x-2.5 gap-y-1">
 								<strong>
 									{assignmentNumber ? `#${assignmentNumber} · ` : ""}
 									{memberName}长时间无进展
@@ -298,29 +365,49 @@ export function ProgressSnapshotCard({
 	const isCompleted = snapshot.outcome === "completed";
 	const outcomeTitle = isCompleted ? "执行过程" : snapshot.outcome === "aborted" ? "中止前进度" : "异常前进度";
 	const logCount = snapshot.recentLogs?.length ?? 0;
+	const badgeTone: BadgeTone = isCompleted ? "accent" : snapshot.outcome === "aborted" ? "neutral" : "warn";
+	const warnStyle = !isCompleted && snapshot.outcome !== "aborted";
 	return (
-		<div className={`progress-snapshot-card is-${snapshot.outcome}`}>
-			<button type="button" className="progress-snapshot-toggle" onClick={onToggle}>
-				<span className="progress-snapshot-summary">
-					<span className={`progress-snapshot-badge is-${snapshot.outcome}`}>{outcomeTitle}</span>
-					{leadName && <strong>{leadName}</strong>}
+		<div
+			className={cn(
+				"self-start mt-1 w-[min(100%,660px)] max-w-[min(88%,740px)] max-md:max-w-full border rounded-lg overflow-hidden",
+				warnStyle ? "border-warn-border bg-warn-bg/40" : "border-line bg-sidebar",
+			)}
+		>
+			<button
+				type="button"
+				className="w-full border-0 bg-transparent px-3 py-2 flex items-center justify-between gap-3 text-xs text-ink-secondary cursor-pointer text-left hover:bg-hover/60 transition-colors"
+				onClick={onToggle}
+			>
+				<span className="inline-flex items-center gap-2 flex-wrap min-w-0">
+					<Badge tone={badgeTone} size="xs">
+						{outcomeTitle}
+					</Badge>
+					{leadName && <strong className="text-ink">{leadName}</strong>}
 					{!isCompleted && (
-						<span className={`exploring-stage stage-${snapshot.stage}`}>{STAGE_LABELS[snapshot.stage]}</span>
+						<Badge tone={stageBadgeTone(snapshot.stage)} size="xs">
+							{STAGE_LABELS[snapshot.stage]}
+						</Badge>
 					)}
-					<span className="progress-snapshot-duration">
+					<span className="text-ink-muted tabular-nums">
 						{isCompleted ? "耗时 " : "已运行 "}
 						{formatElapsedDuration(snapshot.elapsedSeconds)}
 						{logCount > 0 ? ` · ${logCount} 条活动` : ""}
 					</span>
 				</span>
-				<span className="progress-snapshot-toggle-text">
+				<span className="text-accent font-semibold whitespace-nowrap">
 					{expanded ? "收起" : isCompleted ? "查看过程" : "查看进度"}
 				</span>
 			</button>
 			{expanded && (
-				<div className="progress-snapshot-body">
+				<div
+					className={cn(
+						"border-t border-dashed px-3 py-2.5 flex flex-col gap-1 bg-stage",
+						warnStyle ? "border-warn-border" : "border-line",
+					)}
+				>
 					{!isCompleted && (
-						<div className="exploring-label">
+						<div className="text-ink-secondary text-xs leading-snug break-words">
 							{snapshot.label}
 							{snapshot.capturedAt ? ` · 停于 ${formatClockTime(snapshot.capturedAt)}` : ""}
 						</div>
