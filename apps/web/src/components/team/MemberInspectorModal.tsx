@@ -1,8 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import {
 	deleteMember,
 	fetchMemberSkillDetail,
-	type MemberSkillDetailDto,
 	type OrganizationDto,
 	type RoleScope,
 	type RoleTemplateDto,
@@ -25,6 +25,7 @@ import {
 	Tabs,
 	Textarea,
 } from "../../primitives/index.ts";
+import { queryKeys } from "../../queries/index.ts";
 import { cn } from "../../utils/cn.ts";
 import { defaultMemberGitName, formatMemberGitIdentity, getBotTheme } from "../../utils.ts";
 
@@ -110,11 +111,21 @@ export function MemberInspectorModal({
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [previewSkillRef, setPreviewSkillRef] = useState<string | null>(null);
-	const [previewSkillDetail, setPreviewSkillDetail] = useState<MemberSkillDetailDto | null>(null);
 	const [previewSkillTab, setPreviewSkillTab] = useState<string>("SKILL.md");
 	const [previewSkillMode, setPreviewSkillMode] = useState<"rendered" | "raw">("rendered");
-	const [loadingSkill, setLoadingSkill] = useState(false);
-	const [skillError, setSkillError] = useState<string | null>(null);
+
+	const skillDetailQuery = useQuery({
+		queryKey: queryKeys.team.memberSkill(member?.id ?? "", previewSkillRef ?? ""),
+		queryFn: async () => (await fetchMemberSkillDetail(member?.id ?? "", previewSkillRef ?? "")).detail,
+		enabled: Boolean(member && previewSkillRef),
+	});
+	const previewSkillDetail = skillDetailQuery.data ?? null;
+	const loadingSkill = skillDetailQuery.isFetching;
+	const skillError = skillDetailQuery.error
+		? skillDetailQuery.error instanceof Error
+			? skillDetailQuery.error.message
+			: String(skillDetailQuery.error)
+		: null;
 
 	useEffect(() => {
 		if (!member) return;
@@ -134,21 +145,10 @@ export function MemberInspectorModal({
 	const canDeleteRole = canEditIdentity && !effectiveIsPrimary && !isArchitect;
 	const scopeBadge = getMemberScopeBadge(member, organizationName);
 
-	const handleOpenSkill = async (skillRef: string) => {
-		setPreviewSkillRef(skillRef);
-		setPreviewSkillDetail(null);
+	const handleOpenSkill = (skillRef: string) => {
 		setPreviewSkillTab("SKILL.md");
 		setPreviewSkillMode("rendered");
-		setSkillError(null);
-		setLoadingSkill(true);
-		try {
-			const { detail } = await fetchMemberSkillDetail(member.id, skillRef);
-			setPreviewSkillDetail(detail);
-		} catch (err) {
-			setSkillError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setLoadingSkill(false);
-		}
+		setPreviewSkillRef(skillRef);
 	};
 
 	const handleDelete = async () => {
@@ -295,7 +295,7 @@ export function MemberInspectorModal({
 											key={sk}
 											type="button"
 											title={`点击查看 ${sk}`}
-											onClick={() => void handleOpenSkill(sk)}
+											onClick={() => handleOpenSkill(sk)}
 											className="inline-flex items-center gap-1 px-2 py-0.5 rounded-pill border border-accent-border bg-accent-soft text-accent text-micro font-medium cursor-pointer hover:bg-surface-accent transition-colors focus-visible:outline-2 focus-visible:outline-accent"
 										>
 											{formatMemberSkillLabel(sk)}

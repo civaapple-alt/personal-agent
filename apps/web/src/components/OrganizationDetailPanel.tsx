@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { ModelSelection } from "../api/models.ts";
 import { organizationRoleModel } from "../api/organizations.ts";
@@ -21,8 +22,11 @@ import {
 } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
 import { Badge, Button, Card, EmptyState, Input, Select, Tabs } from "../primitives/index.ts";
+import { queryKeys } from "../queries/index.ts";
 import { formatMemberGitIdentity } from "../utils.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
+
+const EMPTY_INVITES: OrganizationInviteDto[] = [];
 
 export const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_owner: "组织所有者",
@@ -65,13 +69,13 @@ export function OrganizationDetailPanel({
 	onNotice,
 	onError,
 }: OrganizationDetailPanelProps) {
+	const queryClient = useQueryClient();
 	const [subTab, setSubTab] = useState<"members" | "roles" | "workspaces">("members");
 
 	// Human members & invites state
 	const [addMemberEmail, setAddMemberEmail] = useState("");
 	const [addMemberRole, setAddMemberRole] = useState<OrgMemberRole>("org_member");
 	const [addMemberTitle, setAddMemberTitle] = useState("");
-	const [invites, setInvites] = useState<OrganizationInviteDto[]>([]);
 	const [newInviteRole, setNewInviteRole] = useState<OrgMemberRole>("org_member");
 	const [latestInviteToken, setLatestInviteToken] = useState<string | null>(null);
 	const [memberBusy, setMemberBusy] = useState(false);
@@ -106,25 +110,17 @@ export function OrganizationDetailPanel({
 		[workspaces, organization.id],
 	);
 
-	// Reset invites & sync AI draft whenever organization or its server config changes
+	const invitesQuery = useQuery({
+		queryKey: queryKeys.organizations.invites(organization.id),
+		queryFn: async () => (await fetchOrgInvites(organization.id)).invites,
+		enabled: canManageOrg,
+	});
+	const invites = canManageOrg ? (invitesQuery.data ?? EMPTY_INVITES) : EMPTY_INVITES;
+
+	// Reset ephemeral raw invite token when active organization changes
 	useEffect(() => {
 		setLatestInviteToken(null);
-		if (!canManageOrg) {
-			setInvites([]);
-			return;
-		}
-		let cancelled = false;
-		void fetchOrgInvites(organization.id)
-			.then((res) => {
-				if (!cancelled) setInvites(res.invites);
-			})
-			.catch(() => {
-				if (!cancelled) setInvites([]);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [organization.id, canManageOrg]);
+	}, [organization.id]);
 
 	useEffect(() => {
 		const enabledIds = orgAiRoles ? orgAiRoles.effectiveMemberIds : eligibleAiMembers.map((m) => m.id);
@@ -187,8 +183,7 @@ export function OrganizationDetailPanel({
 				expiresInHours: 168,
 			});
 			setLatestInviteToken(res.rawToken);
-			const refreshed = await fetchOrgInvites(organization.id);
-			setInvites(refreshed.invites);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.organizations.invites(organization.id) });
 			onNotice("已生成组织邀请码（请立即复制，仅本次明文展示）");
 		} catch (err: unknown) {
 			onError(err instanceof Error ? err.message : String(err));
@@ -490,8 +485,9 @@ export function OrganizationDetailPanel({
 															onClick={async () => {
 																try {
 																	await revokeOrgInvite(organization.id, inv.id);
-																	const refreshed = await fetchOrgInvites(organization.id);
-																	setInvites(refreshed.invites);
+																	await queryClient.invalidateQueries({
+																		queryKey: queryKeys.organizations.invites(organization.id),
+																	});
 																	onNotice("已吊销该邀请码");
 																} catch (err: unknown) {
 																	onError(err instanceof Error ? err.message : String(err));

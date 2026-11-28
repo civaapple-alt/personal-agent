@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { resolveApiUrl } from "../api/client.ts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	createCustomSpace,
 	createSpaceDocument,
@@ -11,13 +11,11 @@ import {
 	listSpaces,
 	promoteSpaceDocumentToFolder,
 	SPACE_DOC_TYPE_OPTIONS,
-	type SpaceDocumentDto,
 	type SpaceDocumentFileDto,
 	type SpaceDocumentMetaDto,
 	type SpaceDocumentType,
 	type SpaceDto,
 	type SpaceEntryKind,
-	type SpaceGitCommitDetailDto,
 	type SpaceGitCommitDto,
 	type SpaceKind,
 	type SpaceVisibility,
@@ -38,9 +36,14 @@ import {
 	type TabItem,
 	Tabs,
 } from "../primitives/index.ts";
+import { queryKeys } from "../queries/index.ts";
 import { cn } from "../utils/cn.ts";
 
 const RECENT_SPACE_ID = "__recent__";
+const EMPTY_SPACES: SpaceDto[] = [];
+const EMPTY_DOCS: SpaceDocumentMetaDto[] = [];
+const EMPTY_DOC_FILES: SpaceDocumentFileDto[] = [];
+const EMPTY_COMMITS: SpaceGitCommitDto[] = [];
 
 const SPACE_KIND_SECTIONS: Array<{ kind: SpaceKind; label: string }> = [
 	{ kind: "org", label: "组织空间" },
@@ -69,16 +72,11 @@ export function SpacePages({
 	memberName: (id: string) => string;
 	onOpenMatter: (id: string) => void;
 }) {
-	const [spaces, setSpaces] = useState<SpaceDto[]>([]);
+	const queryClient = useQueryClient();
+	const appliedPageIdRef = useRef<string | null>(null);
 	const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
-	const [documents, setDocuments] = useState<SpaceDocumentMetaDto[]>([]);
-	const [selectedDoc, setSelectedDoc] = useState<SpaceDocumentDto | null>(null);
-	const [docFiles, setDocFiles] = useState<SpaceDocumentFileDto[]>([]);
-	const [docPreviewPath, setDocPreviewPath] = useState<string | null>(null);
-	const [docCanWrite, setDocCanWrite] = useState(false);
-	const [commits, setCommits] = useState<SpaceGitCommitDto[]>([]);
+	const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
 	const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
-	const [commitDetail, setCommitDetail] = useState<SpaceGitCommitDetailDto | null>(null);
 
 	const [editing, setEditing] = useState(false);
 	const [navCollapsed, setNavCollapsed] = useState(false);
@@ -103,6 +101,51 @@ export function SpacePages({
 	const [error, setError] = useState("");
 	const [busy, setBusy] = useState(false);
 
+	const spacesQuery = useQuery({
+		queryKey: queryKeys.spaces.list(),
+		queryFn: async () => (await listSpaces()).spaces,
+	});
+	const documentsQuery = useQuery({
+		queryKey: queryKeys.spaces.documents(selectedSpaceId ?? ""),
+		queryFn: async () =>
+			selectedSpaceId === RECENT_SPACE_ID
+				? (await listRecentSpaceDocuments({ limit: 80 })).documents
+				: (await listSpaceDocuments(selectedSpaceId ?? "")).documents,
+		enabled: Boolean(selectedSpaceId),
+	});
+	const docDetailQuery = useQuery({
+		queryKey: queryKeys.spaces.document(selectedDocId ?? ""),
+		queryFn: () => getSpaceDocument(selectedDocId ?? ""),
+		enabled: Boolean(selectedDocId),
+	});
+	const commitsQuery = useQuery({
+		queryKey: queryKeys.spaces.documentCommits(selectedDocId ?? ""),
+		queryFn: async () => (await listSpaceDocumentCommits(selectedDocId ?? "")).commits,
+		enabled: Boolean(selectedDocId),
+	});
+	const commitDetailQuery = useQuery({
+		queryKey: queryKeys.spaces.commitDetail(selectedDocId ?? "", selectedCommitHash ?? ""),
+		queryFn: async () => (await getSpaceDocumentCommitDetail(selectedDocId ?? "", selectedCommitHash ?? "")).detail,
+		enabled: Boolean(selectedDocId && selectedCommitHash),
+	});
+
+	const spaces = spacesQuery.data ?? EMPTY_SPACES;
+	const documents = documentsQuery.data ?? EMPTY_DOCS;
+	const selectedDoc = selectedDocId ? (docDetailQuery.data?.document ?? null) : null;
+	const docFiles = selectedDocId ? (docDetailQuery.data?.files ?? EMPTY_DOC_FILES) : EMPTY_DOC_FILES;
+	const docPreviewPath = selectedDocId ? (docDetailQuery.data?.previewEntryPath ?? null) : null;
+	const docCanWrite = selectedDocId ? Boolean(docDetailQuery.data?.canWrite) : false;
+	const commits = selectedDocId ? (commitsQuery.data ?? EMPTY_COMMITS) : EMPTY_COMMITS;
+	const commitDetail = selectedCommitHash ? (commitDetailQuery.data ?? null) : null;
+	const queryError =
+		spacesQuery.error ??
+		documentsQuery.error ??
+		docDetailQuery.error ??
+		commitsQuery.error ??
+		commitDetailQuery.error;
+	const displayError =
+		error || (queryError instanceof Error ? queryError.message : queryError ? String(queryError) : "");
+
 	const isRecentView = selectedSpaceId === RECENT_SPACE_ID;
 	const selectedSpace = useMemo(
 		() => (isRecentView ? null : (spaces.find((s) => s.id === selectedSpaceId) ?? null)),
@@ -125,146 +168,85 @@ export function SpacePages({
 		[bootstrap, memberName],
 	);
 
-	const loadSpaceContents = useCallback(async (spaceId: string) => {
-		if (spaceId === RECENT_SPACE_ID) {
-			const res = await listRecentSpaceDocuments({ limit: 80 });
-			setDocuments(res.documents);
-			return res;
-		}
-		const res = await listSpaceDocuments(spaceId);
-		setDocuments(res.documents);
-		return res;
-	}, []);
-
-	const openDocument = useCallback(async (docId: string) => {
+	const openDocument = useCallback((docId: string) => {
 		setError("");
 		setEditing(false);
 		setSelectedCommitHash(null);
-		setCommitDetail(null);
-		const [docRes, commitsRes] = await Promise.all([getSpaceDocument(docId), listSpaceDocumentCommits(docId)]);
-		setSelectedDoc(docRes.document);
-		setDocFiles(docRes.files ?? []);
-		setDocPreviewPath(docRes.previewEntryPath ?? null);
-		setDocCanWrite(docRes.canWrite);
-		setCommits(commitsRes.commits);
-	}, []);
-
-	const refreshSpaces = useCallback(async () => {
-		const { spaces: loaded } = await listSpaces();
-		setSpaces(loaded);
-		return loaded;
+		setSelectedDocId(docId);
 	}, []);
 
 	// Initial load & deep-link support (pageId can be a doc_... or spc_...)
 	useEffect(() => {
-		let cancelled = false;
-		void (async () => {
-			try {
-				const loaded = await refreshSpaces();
-				if (cancelled) return;
-				if (pageId?.startsWith("spc_")) {
-					const target = loaded.find((s) => s.id === pageId);
-					if (target) {
-						setSelectedSpaceId(target.id);
-						setSelectedDoc(null);
-						return;
-					}
-				}
-				if (pageId) {
-					try {
-						const docRes = await getSpaceDocument(pageId);
-						if (cancelled) return;
-						setSelectedSpaceId(docRes.document.spaceId);
-						setSelectedDoc(docRes.document);
-						setDocFiles(docRes.files ?? []);
-						setDocPreviewPath(docRes.previewEntryPath ?? null);
-						setDocCanWrite(docRes.canWrite);
-						const commitsRes = await listSpaceDocumentCommits(pageId);
-						if (!cancelled) setCommits(commitsRes.commits);
-						return;
-					} catch {
-						// Fallback to first available space
-					}
-				}
-				// Default to cross-space "最近修改" when opening 资料空间 without a deep-link
-				if (loaded.some((s) => s.documentCount > 0)) {
-					setSelectedSpaceId(RECENT_SPACE_ID);
-					return;
-				}
-				const preferred = loaded.find((s) => s.kind === "workspace") ?? loaded[0] ?? null;
-				if (preferred) setSelectedSpaceId(preferred.id);
-			} catch (err) {
-				if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+		if (!spacesQuery.isSuccess) return;
+		const selectDefaultSpace = () => {
+			if (spaces.some((s) => s.documentCount > 0)) {
+				setSelectedSpaceId(RECENT_SPACE_ID);
+				return;
 			}
-		})();
-		return () => {
-			cancelled = true;
+			const preferred = spaces.find((s) => s.kind === "workspace") ?? spaces[0] ?? null;
+			if (preferred) setSelectedSpaceId(preferred.id);
 		};
-	}, [pageId, refreshSpaces]);
-
-	// Load documents & refs when active space changes
-	useEffect(() => {
-		if (!selectedSpaceId) return;
+		if (!pageId) {
+			appliedPageIdRef.current = null;
+			if (!selectedSpaceId) selectDefaultSpace();
+			return;
+		}
+		if (appliedPageIdRef.current === pageId) return;
+		if (pageId.startsWith("spc_")) {
+			const target = spaces.find((s) => s.id === pageId);
+			if (target) {
+				appliedPageIdRef.current = pageId;
+				setSelectedSpaceId(target.id);
+				setSelectedDocId(null);
+				setSelectedCommitHash(null);
+				return;
+			}
+		}
 		let cancelled = false;
-		void loadSpaceContents(selectedSpaceId)
-			.then((res) => {
-				if (cancelled) return;
-				let needsAutoOpen = false;
-				setSelectedDoc((prev) => {
-					if (prev && (selectedSpaceId === RECENT_SPACE_ID || prev.spaceId === selectedSpaceId)) return prev;
-					needsAutoOpen = res.documents.length > 0;
-					return null;
-				});
-				if (needsAutoOpen && res.documents[0]) {
-					void openDocument(res.documents[0].id).catch(() => {});
-				}
+		void queryClient
+			.fetchQuery({
+				queryKey: queryKeys.spaces.document(pageId),
+				queryFn: () => getSpaceDocument(pageId),
 			})
-			.catch((err: unknown) => {
-				if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+			.then((docRes) => {
+				if (cancelled) return;
+				appliedPageIdRef.current = pageId;
+				setSelectedSpaceId(docRes.document.spaceId);
+				setSelectedDocId(docRes.document.id);
+				setSelectedCommitHash(null);
+			})
+			.catch(() => {
+				if (cancelled || selectedSpaceId) return;
+				appliedPageIdRef.current = pageId;
+				selectDefaultSpace();
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedSpaceId, loadSpaceContents, openDocument]);
+	}, [pageId, spacesQuery.isSuccess, spaces, selectedSpaceId, queryClient]);
 
-	// Live SSE sync
+	// Auto-open the first document when active space documents load or change
 	useEffect(() => {
-		const events = new EventSource(resolveApiUrl("/api/events"));
-		let cancelled = false;
-		const sync = () => {
-			void refreshSpaces().catch(() => {});
-			if (selectedSpaceId) {
-				void loadSpaceContents(selectedSpaceId).catch(() => {});
-			}
-			if (selectedDoc?.id && !editing) {
-				void openDocument(selectedDoc.id).catch(() => {});
-			}
-		};
-		events.addEventListener("space_updated", sync);
-		events.addEventListener("space_page_updated", sync);
-		events.addEventListener("matter_settled", sync);
-		return () => {
-			cancelled = true;
-			void cancelled;
-			events.close();
-		};
-	}, [selectedSpaceId, selectedDoc?.id, editing, refreshSpaces, loadSpaceContents, openDocument]);
-
-	const handleToggleCommit = async (hash: string) => {
-		if (!selectedDoc) return;
-		if (selectedCommitHash === hash) {
+		if (!selectedSpaceId || !documentsQuery.data || editing) return;
+		const loadedDocs = documentsQuery.data;
+		if (selectedDocId) {
+			const belongsToActiveSpace =
+				selectedSpaceId === RECENT_SPACE_ID || loadedDocs.some((doc) => doc.id === selectedDocId);
+			if (belongsToActiveSpace) return;
+		}
+		const firstDoc = loadedDocs[0];
+		if (firstDoc) {
+			setSelectedDocId(firstDoc.id);
 			setSelectedCommitHash(null);
-			setCommitDetail(null);
-			return;
+		} else if (selectedDocId) {
+			setSelectedDocId(null);
+			setSelectedCommitHash(null);
 		}
-		setSelectedCommitHash(hash);
-		setCommitDetail(null);
-		try {
-			const res = await getSpaceDocumentCommitDetail(selectedDoc.id, hash);
-			setCommitDetail(res.detail);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
-		}
+	}, [selectedSpaceId, documentsQuery.data, selectedDocId, editing]);
+
+	const handleToggleCommit = (hash: string) => {
+		if (!selectedDoc) return;
+		setSelectedCommitHash((prev) => (prev === hash ? null : hash));
 	};
 
 	const handleCreateCustomSpace = async (event: React.FormEvent) => {
@@ -283,9 +265,10 @@ export function SpacePages({
 			setCreatingSpace(false);
 			setNewSpaceName("");
 			setNewSpaceDesc("");
-			await refreshSpaces();
+			await queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
 			setSelectedSpaceId(space.id);
-			setSelectedDoc(null);
+			setSelectedDocId(null);
+			setSelectedCommitHash(null);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -294,7 +277,8 @@ export function SpacePages({
 	};
 
 	const startNewDocument = () => {
-		setSelectedDoc(null);
+		setSelectedDocId(null);
+		setSelectedCommitHash(null);
 		setTitle("");
 		setDocType(docTypeFilter === "all" ? "note" : docTypeFilter);
 		setEntryKind("file");
@@ -314,8 +298,8 @@ export function SpacePages({
 		setError("");
 		try {
 			await promoteSpaceDocumentToFolder(selectedDoc.id);
-			await loadSpaceContents(selectedSpaceId);
-			await openDocument(selectedDoc.id);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
+			openDocument(selectedDoc.id);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -342,8 +326,8 @@ export function SpacePages({
 					linkedFilePath: linkedFilePath.trim() || null,
 					commitMessage: commitMessage.trim() || undefined,
 				});
-				await loadSpaceContents(selectedSpaceId);
-				await openDocument(document.id);
+				await queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
+				openDocument(document.id);
 			} else {
 				const validExtraFiles =
 					entryKind === "folder"
@@ -361,9 +345,8 @@ export function SpacePages({
 					linkedFilePath: linkedFilePath.trim() || null,
 					commitMessage: commitMessage.trim() || undefined,
 				});
-				await refreshSpaces();
-				await loadSpaceContents(selectedSpaceId);
-				await openDocument(document.id);
+				await queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
+				openDocument(document.id);
 			}
 			setEditing(false);
 			setCommitMessage("");
@@ -407,9 +390,9 @@ export function SpacePages({
 
 	return (
 		<section className="mt-4">
-			{error && (
+			{displayError && (
 				<Banner tone="danger" className="mb-3">
-					{error}
+					{displayError}
 				</Banner>
 			)}
 
@@ -502,7 +485,6 @@ export function SpacePages({
 										setSelectedSpaceId(RECENT_SPACE_ID);
 										setEditing(false);
 										setSelectedCommitHash(null);
-										setCommitDetail(null);
 									}}
 								>
 									<span className="min-w-0 truncate">最近修改</span>
@@ -543,7 +525,6 @@ export function SpacePages({
 													setSelectedSpaceId(space.id);
 													setEditing(false);
 													setSelectedCommitHash(null);
-													setCommitDetail(null);
 												}}
 											>
 												<span className="min-w-0 truncate">{space.name}</span>
@@ -637,7 +618,7 @@ export function SpacePages({
 												? "bg-subtle border-line-strong text-ink"
 												: "bg-transparent border-transparent text-ink hover:bg-hover/60",
 										)}
-										onClick={() => void openDocument(doc.id)}
+										onClick={() => openDocument(doc.id)}
 									>
 										<div className="flex items-center gap-1.5 w-full min-w-0">
 											<Badge tone={DOC_TYPE_TONE[doc.docType]} dot size="xs">
@@ -736,10 +717,10 @@ export function SpacePages({
 							}}
 							onOpenMatter={onOpenMatter}
 							onReloadFolderFiles={async () => {
-								if (selectedSpaceId) await loadSpaceContents(selectedSpaceId);
-								await openDocument(selectedDoc.id);
+								await queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
+								openDocument(selectedDoc.id);
 							}}
-							onToggleCommit={(hash) => void handleToggleCommit(hash)}
+							onToggleCommit={handleToggleCommit}
 						/>
 					) : (
 						<EmptyState

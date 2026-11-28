@@ -1,73 +1,73 @@
-import { useCallback, useRef, useState } from "react";
-import {
-	type AdminOverviewPayload,
-	abortAdminMatter,
-	fetchAdminOverview,
-	updateAdminSettings,
-	updateAdminUser,
-} from "../api/admin.ts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type SetStateAction, useCallback, useState } from "react";
+import { abortAdminMatter, fetchAdminOverview, updateAdminSettings, updateAdminUser } from "../api/admin.ts";
 import { fetchRuntimeOverview, type RuntimeOverviewDto } from "../api/runtime.ts";
+import { queryKeys } from "../queries/index.ts";
 
-/** Owns runtime and admin panel data, including lazy loading and session resets. */
+function toErrorMessage(error: unknown): string | null {
+	if (!error) return null;
+	return error instanceof Error ? error.message : String(error);
+}
+
+/** Owns runtime and admin panel data via TanStack Query, including lazy activation and session resets. */
 export function useWorkbenchPanels(refreshBootstrap: () => Promise<void>) {
-	const [runtimeOverview, setRuntimeOverview] = useState<RuntimeOverviewDto | null>(null);
-	const [runtimeLoading, setRuntimeLoading] = useState(false);
-	const [runtimeError, setRuntimeError] = useState<string | null>(null);
-	const [adminOverview, setAdminOverview] = useState<AdminOverviewPayload | null>(null);
-	const [adminLoading, setAdminLoading] = useState(false);
-	const [adminError, setAdminError] = useState<string | null>(null);
-	const runtimeAutoFetchedRef = useRef(false);
-	const adminAutoFetchedRef = useRef(false);
+	const queryClient = useQueryClient();
+	const [runtimeEnabled, setRuntimeEnabled] = useState(false);
+	const [adminEnabled, setAdminEnabled] = useState(false);
+
+	const runtimeQuery = useQuery({
+		queryKey: queryKeys.runtime.overview(),
+		queryFn: fetchRuntimeOverview,
+		enabled: runtimeEnabled,
+	});
+	const adminQuery = useQuery({
+		queryKey: queryKeys.admin.overview(),
+		queryFn: fetchAdminOverview,
+		enabled: adminEnabled,
+	});
 
 	const refreshRuntimeOverview = useCallback(async () => {
-		setRuntimeLoading(true);
-		setRuntimeError(null);
-		try {
-			const data = await fetchRuntimeOverview();
-			setRuntimeOverview(data);
-		} catch (err: unknown) {
-			setRuntimeError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setRuntimeLoading(false);
-		}
-	}, []);
+		setRuntimeEnabled(true);
+		await queryClient.invalidateQueries({ queryKey: queryKeys.runtime.overview() });
+		await runtimeQuery.refetch();
+	}, [queryClient, runtimeQuery]);
 
 	const refreshAdminOverview = useCallback(async () => {
-		setAdminLoading(true);
-		setAdminError(null);
-		try {
-			const data = await fetchAdminOverview();
-			setAdminOverview(data);
-		} catch (err: unknown) {
-			setAdminError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setAdminLoading(false);
-		}
-	}, []);
+		setAdminEnabled(true);
+		await queryClient.invalidateQueries({ queryKey: queryKeys.admin.overview() });
+		await adminQuery.refetch();
+	}, [queryClient, adminQuery]);
+
+	const setRuntimeOverviewCache = useCallback(
+		(next: SetStateAction<RuntimeOverviewDto | null>) => {
+			queryClient.setQueryData<RuntimeOverviewDto | null>(queryKeys.runtime.overview(), (prev) =>
+				typeof next === "function" ? next(prev ?? null) : next,
+			);
+		},
+		[queryClient],
+	);
 
 	const clearAdminOverview = useCallback(() => {
-		setAdminOverview(null);
-		adminAutoFetchedRef.current = false;
-	}, []);
+		setAdminEnabled(false);
+		queryClient.removeQueries({ queryKey: queryKeys.admin.all });
+	}, [queryClient]);
 
 	const clearPanels = useCallback(() => {
-		runtimeAutoFetchedRef.current = false;
-		clearAdminOverview();
-		setRuntimeOverview(null);
-		setRuntimeError(null);
-		setAdminError(null);
-	}, [clearAdminOverview]);
+		setRuntimeEnabled(false);
+		setAdminEnabled(false);
+		queryClient.clear();
+	}, [queryClient]);
 
 	const openRuntimePanel = useCallback(() => {
-		if (runtimeAutoFetchedRef.current) return;
-		runtimeAutoFetchedRef.current = true;
-		void refreshRuntimeOverview();
-	}, [refreshRuntimeOverview]);
+		setRuntimeEnabled(true);
+	}, []);
+
 	const openAdminPanel = useCallback(() => {
-		if (adminAutoFetchedRef.current) return;
-		adminAutoFetchedRef.current = true;
-		void refreshAdminOverview();
-	}, [refreshAdminOverview]);
+		setAdminEnabled(true);
+	}, []);
+
+	const runtimeOverview = runtimeEnabled ? (runtimeQuery.data ?? null) : null;
+	const adminOverview = adminEnabled ? (adminQuery.data ?? null) : null;
 
 	return {
 		runtimeOverview,
@@ -77,15 +77,15 @@ export function useWorkbenchPanels(refreshBootstrap: () => Promise<void>) {
 		openAdminPanel,
 		settingsProps: {
 			overview: runtimeOverview,
-			loading: runtimeLoading,
-			error: runtimeError,
+			loading: runtimeQuery.isFetching,
+			error: toErrorMessage(runtimeQuery.error),
 			onRefresh: refreshRuntimeOverview,
-			onOverviewChange: setRuntimeOverview,
+			onOverviewChange: setRuntimeOverviewCache,
 		},
 		adminProps: {
 			overview: adminOverview,
-			loading: adminLoading,
-			error: adminError,
+			loading: adminQuery.isFetching,
+			error: toErrorMessage(adminQuery.error),
 			onRefresh: refreshAdminOverview,
 			onSaveSettings: async (input: Parameters<typeof updateAdminSettings>[0]) => {
 				await updateAdminSettings(input);

@@ -36,7 +36,7 @@ test("team sandbox enforces auth gate, org isolation in Spaces, and read-only vi
 
 	await ownerPage.goto(`${activeServer.baseUrl}/#/deliverables`);
 	await expect(ownerPage.getByRole("heading", { name: "资料空间", level: 1 })).toBeVisible();
-	await expect(ownerPage.getByText("Q4 发布计划与架构方案")).toBeVisible();
+	await expect(ownerPage.getByRole("button", { name: /^资料 Q4 发布计划与架构方案/ })).toBeVisible();
 
 	await ownerPage.goto(`${activeServer.baseUrl}/#/chats/${encodeURIComponent(matterId)}`);
 	await ownerPage.getByRole("button", { name: "打开看板" }).click();
@@ -59,7 +59,7 @@ test("team sandbox enforces auth gate, org isolation in Spaces, and read-only vi
 	await expect(viewerPage.getByRole("button", { name: "展开工作台与设置菜单" })).toBeVisible();
 
 	await viewerPage.goto(`${activeServer.baseUrl}/#/deliverables`);
-	await expect(viewerPage.getByText("Q4 发布计划与架构方案")).toBeVisible();
+	await expect(viewerPage.getByRole("button", { name: /^资料 Q4 发布计划与架构方案/ })).toBeVisible();
 	await expect(viewerPage.getByText("Beta 开放平台接口规范")).toHaveCount(0);
 
 	// Verify org_viewer read-only Board access + 403 server guard on direct post attempt.

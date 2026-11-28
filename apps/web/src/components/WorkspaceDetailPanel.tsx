@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { listSpaceDocuments, type SpaceDocumentMetaDto } from "../api/space.ts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { listSpaceDocuments } from "../api/space.ts";
 import {
 	addWorkspaceFolder,
 	fetchWorkspaceCustomizations,
 	removeWorkspaceFolder,
 	updateWorkspaceFolder,
 	updateWorkspacePiTrust,
-	type WorkspaceCustomizationsReportDto,
 	type WorkspaceFolderDto,
-	type WorkspacePiTrustDto,
 } from "../api/workspaceFolders.ts";
 import type { MatterDto, OrganizationDto, WorkspaceDto } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
@@ -24,9 +23,12 @@ import {
 	Select,
 	Tabs,
 } from "../primitives/index.ts";
+import { queryKeys } from "../queries/index.ts";
 import { cn } from "../utils/cn.ts";
 import { formatClockTime, stripMarkdownFormatting } from "../utils.ts";
 import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
+
+const EMPTY_FOLDERS: WorkspaceFolderDto[] = [];
 
 interface WorkspaceDetailPanelProps {
 	workspace: WorkspaceDto;
@@ -105,11 +107,8 @@ export function WorkspaceDetailPanel({
 	onNotice,
 	onChanged,
 }: WorkspaceDetailPanelProps) {
+	const queryClient = useQueryClient();
 	const [subTab, setSubTab] = useState<"config" | "activity">("config");
-	const [folders, setFolders] = useState<WorkspaceFolderDto[]>([]);
-	const [piTrust, setPiTrust] = useState<WorkspacePiTrustDto | null>(null);
-	const [report, setReport] = useState<WorkspaceCustomizationsReportDto | null>(null);
-	const [spaceDocs, setSpaceDocs] = useState<SpaceDocumentMetaDto[]>([]);
 	const [folderFilter, setFolderFilter] = useState<string>("");
 	const [showRulesBreakdown, setShowRulesBreakdown] = useState(true);
 	const [showSkillsBreakdown, setShowSkillsBreakdown] = useState(false);
@@ -118,35 +117,34 @@ export function WorkspaceDetailPanel({
 	const [browsingDirectory, setBrowsingDirectory] = useState(false);
 	const [newPath, setNewPath] = useState("");
 	const [newLabel, setNewLabel] = useState("");
-	const [loading, setLoading] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
 
 	const workspaceSpaceId = `spc_ws_${workspace.id}`;
+	const customizationsQuery = useQuery({
+		queryKey: queryKeys.workspaces.customizations(workspace.id, folderFilter),
+		queryFn: () => fetchWorkspaceCustomizations(workspace.id, folderFilter || undefined),
+	});
+	const spaceDocsQuery = useQuery({
+		queryKey: queryKeys.spaces.documents(workspaceSpaceId),
+		queryFn: async () => {
+			try {
+				const res = await listSpaceDocuments(workspaceSpaceId);
+				return res.documents;
+			} catch {
+				return [];
+			}
+		},
+	});
 
-	const loadCustomizations = useCallback(async (wsId: string, filterId?: string) => {
-		setLoading(true);
-		setError("");
-		try {
-			const res = await fetchWorkspaceCustomizations(wsId, filterId || undefined);
-			setFolders(res.folders);
-			setPiTrust(res.piTrust ?? null);
-			setReport(res.report);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
-		} finally {
-			setLoading(false);
-		}
-	}, []);
-
-	const loadSpaceDocs = useCallback(async (wsId: string) => {
-		try {
-			const res = await listSpaceDocuments(`spc_ws_${wsId}`);
-			setSpaceDocs(res.documents);
-		} catch {
-			setSpaceDocs([]);
-		}
-	}, []);
+	const folders = customizationsQuery.data?.folders ?? EMPTY_FOLDERS;
+	const piTrust = customizationsQuery.data?.piTrust ?? null;
+	const report = customizationsQuery.data?.report ?? null;
+	const spaceDocs = spaceDocsQuery.data ?? [];
+	const loading = customizationsQuery.isFetching;
+	const queryError = customizationsQuery.error;
+	const displayError =
+		error || (queryError instanceof Error ? queryError.message : queryError ? String(queryError) : "");
 
 	useEffect(() => {
 		setFolderFilter("");
@@ -154,9 +152,8 @@ export function WorkspaceDetailPanel({
 		setBrowsingDirectory(false);
 		setNewPath("");
 		setNewLabel("");
-		void loadCustomizations(workspace.id);
-		void loadSpaceDocs(workspace.id);
-	}, [workspace.id, loadCustomizations, loadSpaceDocs]);
+		setError("");
+	}, [workspace.id]);
 
 	const workspaceMatters = matters
 		.filter((m) => m.workspaceId === workspace.id && m.status !== "archived")
@@ -164,7 +161,6 @@ export function WorkspaceDetailPanel({
 
 	const handleFilterChange = (nextFilter: string) => {
 		setFolderFilter(nextFilter);
-		void loadCustomizations(workspace.id, nextFilter);
 	};
 
 	const handleAddFolder = async (event: React.FormEvent) => {
@@ -180,7 +176,7 @@ export function WorkspaceDetailPanel({
 			setAddingFolder(false);
 			setNewPath("");
 			setNewLabel("");
-			await loadCustomizations(workspace.id, folderFilter);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 			await onChanged?.();
 			onNotice("已向工作区添加目录");
 		} catch (err) {
@@ -195,7 +191,7 @@ export function WorkspaceDetailPanel({
 		setError("");
 		try {
 			await updateWorkspaceFolder(workspace.id, folder.id, { [key]: !folder[key] });
-			await loadCustomizations(workspace.id, folderFilter);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 			await onChanged?.();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -210,8 +206,8 @@ export function WorkspaceDetailPanel({
 		setBusy(true);
 		setError("");
 		try {
-			const res = await updateWorkspacePiTrust(workspace.id, nextTrusted);
-			setPiTrust(res.piTrust);
+			await updateWorkspacePiTrust(workspace.id, nextTrusted);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 			await onChanged?.();
 			onNotice(
 				nextTrusted
@@ -232,7 +228,7 @@ export function WorkspaceDetailPanel({
 			await removeWorkspaceFolder(workspace.id, folder.id);
 			const nextFilter = folderFilter === folder.id ? "" : folderFilter;
 			setFolderFilter(nextFilter);
-			await loadCustomizations(workspace.id, nextFilter);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
 			await onChanged?.();
 			onNotice(`已移除目录 ${folder.label}`);
 		} catch (err) {
@@ -341,7 +337,7 @@ export function WorkspaceDetailPanel({
 				</div>
 			</div>
 
-			{error && <Banner tone="danger">{error}</Banner>}
+			{displayError && <Banner tone="danger">{displayError}</Banner>}
 
 			{subTab === "config" ? (
 				<div className="flex flex-col gap-6">
