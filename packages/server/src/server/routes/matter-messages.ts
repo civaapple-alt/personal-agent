@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { Hono } from "hono";
 import { looksLikeWorkRequest } from "../../orchestrator/architect/conversation-intent.ts";
 import { PiDecisionError } from "../../orchestrator/architect/pi-decision.ts";
 import { resolveDiscussionMentionTargets } from "../../orchestrator/execution/prompts.ts";
@@ -17,7 +18,8 @@ import {
 	canParticipateInMatter,
 } from "../acl.ts";
 import { isSuperAdminActor, type RequestActor, requireActiveActor, toDispatchAuthor } from "../auth.ts";
-import { readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
+import { HttpRequestError, responseCancellation, sendError } from "../http.ts";
+import { type ApiRouteContext, type ApiRouterEnv, parseJsonBody } from "../router.ts";
 import {
 	loadStoredFilesFromRefs,
 	loadStoredImagesFromRefs,
@@ -27,13 +29,7 @@ import {
 	persistUploadedImages,
 	recordStoredUploadsAcl,
 } from "../uploads.ts";
-import {
-	auditActorAction,
-	parseCollaboratorIds,
-	parseObserverMemberIds,
-	type RouteRequest,
-	type ServerRouteContext,
-} from "./context.ts";
+import { auditActorAction, parseCollaboratorIds, parseObserverMemberIds, type ServerRouteContext } from "./context.ts";
 import { ensureActorAllowedMembers, ensureOrgEnabledAiRequest, replyWithCurrentMatterRoster } from "./matter-roster.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
@@ -236,14 +232,15 @@ async function startAiForMessage(
 	return { aiDiscussionTriggered: true };
 }
 
-/** Assess new matters, accept messages, and dispatch or approve AI requests. */
-export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, uploadsDir, memoryUploads, runDispatchInBackground, broadcast } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	if (method === "POST" && pathname === "/api/matters/assess") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+/** Register matter assessment, creation, messaging, and AI approval routes. */
+export function registerMatterMessageRoutes(app: Hono<ApiRouterEnv>): void {
+	app.post("/api/matters/assess", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const res = c.var.nodeRes!;
+		const actor = c.var.actor;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const mode = body.mode === "model" || body.useModel === true ? "model" : "rules";
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const workspaceId =
@@ -255,29 +252,24 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				: undefined;
 		const ws = workspaceId ? store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !ws) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+			throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 		}
 		if (ws && !canAccessWorkspace(store, actor, ws)) {
-			sendError(res, 403, "无权访问所选项目仓库");
-			return true;
+			throw new HttpRequestError(403, "无权访问所选项目仓库");
 		}
 		const effectiveOrgId = ws?.orgId ?? explicitOrgId ?? resolveActorDefaultOrgId(ctx, actor);
 		if (effectiveOrgId && !canAccessOrganization(store, actor, effectiveOrgId)) {
-			sendError(res, 403, "无权访问所选组织");
-			return true;
+			throw new HttpRequestError(403, "无权访问所选组织");
 		}
 		if (!ensureActorAllowedMembers(res, ctx, actor, [preferredMemberId])) {
-			return true;
+			return c.body(null);
 		}
 		if (mode === "model") {
 			if (!canDispatchAiInOrg(store, actor, effectiveOrgId)) {
-				sendError(res, 403, "无权在此组织调用 AI 模型预判");
-				return true;
+				throw new HttpRequestError(403, "无权在此组织调用 AI 模型预判");
 			}
 			if (!prompt) {
-				sendError(res, 400, "prompt is required when mode is model");
-				return true;
+				throw new HttpRequestError(400, "prompt is required when mode is model");
 			}
 			const cancellation = responseCancellation(res);
 			try {
@@ -291,20 +283,18 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 					readRepo: body.readRepo === true,
 					signal: cancellation.signal,
 				});
-				if (res.destroyed || cancellation.signal.aborted) return true;
-				sendJson(res, 200, assessment);
+				if (res.destroyed || cancellation.signal.aborted) return c.body(null);
+				return c.json(assessment);
 			} catch (err) {
-				if (res.destroyed || cancellation.signal.aborted) return true;
+				if (res.destroyed || cancellation.signal.aborted) return c.body(null);
 				if (err instanceof PiDecisionError) {
-					sendError(res, err.kind === "aborted" ? 499 : 502, err.message);
-					return true;
+					throw new HttpRequestError(err.kind === "aborted" ? 499 : 502, err.message);
 				}
 				const message = err instanceof Error ? err.message : String(err);
-				sendError(res, 502, message);
+				throw new HttpRequestError(502, message);
 			} finally {
 				cancellation.dispose();
 			}
-			return true;
 		}
 		const assessment = orchestrator.assessInitiation({
 			prompt,
@@ -314,25 +304,26 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			orgId: effectiveOrgId,
 			actorUserId: actor.user?.id ?? null,
 		});
-		sendJson(res, 200, assessment);
-		return true;
-	}
+		return c.json(assessment);
+	});
 
-	if (method === "POST" && (pathname === "/api/matters" || pathname === "/api/matters/conversation")) {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
-		const requestedMode =
-			pathname === "/api/matters/conversation"
-				? "conversation"
-				: body.mode === "discussion" || body.mode === "ai_request" || body.mode === "conversation"
-					? body.mode
-					: "dispatch";
+	const handleCreateMatter = async (c: ApiRouteContext, forceConversation: boolean) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, uploadsDir, memoryUploads, runDispatchInBackground } = ctx;
+		const res = c.var.nodeRes!;
+		const actor = c.var.actor;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
+		const requestedMode = forceConversation
+			? "conversation"
+			: body.mode === "discussion" || body.mode === "ai_request" || body.mode === "conversation"
+				? body.mode
+				: "dispatch";
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const parsedImages = parseIncomingImages(body.images);
 		const parsedFiles = parseIncomingFiles(body.files);
 		if (!prompt && parsedImages.length === 0 && parsedFiles.length === 0) {
-			sendError(res, 400, "prompt, images, or files is required");
-			return true;
+			throw new HttpRequestError(400, "prompt, images, or files is required");
 		}
 		const preferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
@@ -344,22 +335,18 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			typeof body.workspaceId === "string" && body.workspaceId.length > 0 ? body.workspaceId : undefined;
 		const boundWorkspace = workspaceId ? store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !boundWorkspace) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+			throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 		}
 		if (boundWorkspace && !canAccessWorkspace(store, actor, boundWorkspace)) {
-			sendError(res, 403, "无权在此项目仓库内发起事项");
-			return true;
+			throw new HttpRequestError(403, "无权在此项目仓库内发起事项");
 		}
 		const hasExplicitOrg = Object.hasOwn(body, "orgId");
 		if (hasExplicitOrg && body.orgId !== null && typeof body.orgId !== "string") {
-			sendError(res, 400, "orgId must be a string or null");
-			return true;
+			throw new HttpRequestError(400, "orgId must be a string or null");
 		}
 		const requestedOrgId = typeof body.orgId === "string" && body.orgId.trim().length > 0 ? body.orgId.trim() : null;
 		if (requestedOrgId && !store.getOrganization(requestedOrgId)) {
-			sendError(res, 404, `Organization not found: ${requestedOrgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${requestedOrgId}`);
 		}
 		const orgId = boundWorkspace
 			? boundWorkspace.orgId
@@ -369,12 +356,10 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 					? null
 					: resolveActorDefaultOrgId(ctx, actor);
 		if (orgId && !canAccessOrganization(store, actor, orgId)) {
-			sendError(res, 403, "无权在非所属组织内创建事项");
-			return true;
+			throw new HttpRequestError(403, "无权在非所属组织内创建事项");
 		}
 		if (!orgId && actor.authKind === "session" && !isSuperAdminActor(actor)) {
-			sendError(res, 403, "请先创建或加入一个组织后再创建事项");
-			return true;
+			throw new HttpRequestError(403, "请先创建或加入一个组织后再创建事项");
 		}
 		const requestedCollaboratorIds = (parseCollaboratorIds(body.collaboratorIds, store) ?? []).filter(
 			(id) => id !== actor.user?.id,
@@ -398,17 +383,13 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				: requestedMode;
 		if (mode === "dispatch") {
 			if (!canDispatchAiInOrg(store, actor, orgId)) {
-				sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
-				return true;
+				throw new HttpRequestError(403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
 			}
-			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
-		} else {
-			if (orgId && actor.authKind === "session") {
-				const orgRole = ctx.store.getOrgMembership(orgId, actor.user!.id)?.orgRole;
-				if (orgRole === "org_viewer") {
-					sendError(res, 403, "只读成员（org_viewer）不能发起事项或讨论");
-					return true;
-				}
+			if (!checkUserDispatchQuota(ctx, actor, res)) return c.body(null);
+		} else if (orgId && actor.authKind === "session") {
+			const orgRole = ctx.store.getOrgMembership(orgId, actor.user!.id)?.orgRole;
+			if (orgRole === "org_viewer") {
+				throw new HttpRequestError(403, "只读成员（org_viewer）不能发起事项或讨论");
 			}
 		}
 
@@ -424,14 +405,12 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				: parseObserverMemberIds(body.consultMemberIds, store)
 			: undefined;
 		if (Object.hasOwn(body, "consultMemberIds") && body.consultMemberIds !== null && consultMemberIds === undefined) {
-			sendError(res, 400, "consultMemberIds must be null or an array of member IDs");
-			return true;
+			throw new HttpRequestError(400, "consultMemberIds must be null or an array of member IDs");
 		}
 		const observersEnabled = typeof body.observersEnabled === "boolean" ? body.observersEnabled : undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		if (Object.hasOwn(body, "discussionAiEnabled") && typeof body.discussionAiEnabled !== "boolean") {
-			sendError(res, 400, "discussionAiEnabled must be a boolean");
-			return true;
+			throw new HttpRequestError(400, "discussionAiEnabled must be a boolean");
 		}
 		const discussionAiEnabled = body.discussionAiEnabled === true;
 		const initialCollaboratorIds = [...requestedCollaboratorIds];
@@ -441,8 +420,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				: undefined
 			: "lead";
 		if (!requestedCollaborationMode) {
-			sendError(res, 400, 'collaborationMode must be "lead" or "board"');
-			return true;
+			throw new HttpRequestError(400, 'collaborationMode must be "lead" or "board"');
 		}
 		const requestedCoordinatorMemberId =
 			Object.hasOwn(body, "coordinatorMemberId") &&
@@ -455,12 +433,10 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			body.coordinatorMemberId !== null &&
 			!requestedCoordinatorMemberId
 		) {
-			sendError(res, 400, "coordinatorMemberId must be a non-empty string or null");
-			return true;
+			throw new HttpRequestError(400, "coordinatorMemberId must be a non-empty string or null");
 		}
 		if (requestedCoordinatorMemberId && !store.getMember(requestedCoordinatorMemberId)) {
-			sendError(res, 404, `Member not found: ${requestedCoordinatorMemberId}`);
-			return true;
+			throw new HttpRequestError(404, `Member not found: ${requestedCoordinatorMemberId}`);
 		}
 		if (
 			!ensureOrgEnabledAiRequest(res, ctx, actor, orgId, requestedCoordinatorMemberId ?? preferredMemberId, [
@@ -469,11 +445,10 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				...(observerMemberIds ?? []),
 			])
 		) {
-			return true;
+			return c.body(null);
 		}
 		if (body.modelSelection != null && !canDispatchAiInOrg(store, actor, orgId)) {
-			sendError(res, 403, "无权为此事项配置模型");
-			return true;
+			throw new HttpRequestError(403, "无权为此事项配置模型");
 		}
 		const modelSelection = Object.hasOwn(body, "modelSelection")
 			? await validateModelSelection(ctx, body.modelSelection)
@@ -542,8 +517,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				mode === "ai_request"
 					? {}
 					: await startAiForMessage(ctx, actor, refreshedMatter, message, images, files, preferredMemberId);
-			sendJson(res, 201, { matter: refreshedMatter, message, mode, assignedMember: leadMember, ...discussion });
-			return true;
+			return c.json({ matter: refreshedMatter, message, mode, assignedMember: leadMember, ...discussion }, 201);
 		}
 
 		runDispatchInBackground(
@@ -562,42 +536,43 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			actor,
 		);
 
-		sendJson(res, 202, { matter, assignedMember: leadMember, mode });
-		return true;
-	}
+		return c.json({ matter, assignedMember: leadMember, mode }, 202);
+	};
 
-	const matterApproveAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/approve-ai$/);
-	if (method === "POST" && matterApproveAiMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(matterApproveAiMatch[1]!);
-		const messageId = decodeURIComponent(matterApproveAiMatch[2]!);
+	app.post("/api/matters", (c) => handleCreateMatter(c, false));
+	app.post("/api/matters/conversation", (c) => handleCreateMatter(c, true));
+
+	app.post("/api/matters/:matterId/messages/:messageId/approve-ai", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, uploadsDir, memoryUploads, runDispatchInBackground, broadcast } = ctx;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const actor = c.var.actor;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterId = c.req.param("matterId");
+		const messageId = c.req.param("messageId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 		if (!canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
-			return true;
+			throw new HttpRequestError(403, "无权访问该事项");
 		}
 		if (
 			!isSuperAdminActor(actor) &&
 			!(actor.authKind === "session" && canManageOrganization(store, actor, matter.orgId))
 		) {
-			sendError(res, 403, "仅所有者或组织管理员可审批并派发 AI 提请");
-			return true;
+			throw new HttpRequestError(403, "仅所有者或组织管理员可审批并派发 AI 提请");
 		}
 		if (orchestrator.isMatterRunning(matterId)) {
-			sendError(res, 409, "Matter already has an active turn");
-			return true;
+			throw new HttpRequestError(409, "Matter already has an active turn");
 		}
 		const targetMsg = store.getMessage(messageId);
 		if (!targetMsg || targetMsg.matterId !== matterId) {
-			sendError(res, 404, `Message not found: ${messageId}`);
-			return true;
+			throw new HttpRequestError(404, `Message not found: ${messageId}`);
 		}
-		if (!checkUserDispatchQuota(ctx, actor, res)) return true;
-		const body = await readJsonBody(req);
+		if (!checkUserDispatchQuota(ctx, actor, res)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const requesterName =
 			typeof targetMsg.metadata?.authorName === "string" && targetMsg.metadata.authorName.trim()
 				? targetMsg.metadata.authorName.trim()
@@ -634,8 +609,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 		const currentWorkspace = currentMatter.workspaceId ? store.getWorkspace(currentMatter.workspaceId) : null;
 		const effectiveOrgId = currentWorkspace ? currentWorkspace.orgId : currentMatter.orgId;
 		if (workspaceId && !store.getWorkspace(workspaceId)) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+			throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 		}
 		if (
 			(workspaceId ?? null) !== currentMatter.workspaceId ||
@@ -645,30 +619,29 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				repoPath: resolve(currentWorkspace?.repoPath ?? orchestrator.getDefaultCwd()),
 			})
 		) {
-			sendError(res, 409, "AI request scope changed; submit a new request in the current organization/workspace");
-			return true;
+			throw new HttpRequestError(
+				409,
+				"AI request scope changed; submit a new request in the current organization/workspace",
+			);
 		}
 		if (!ensureOrgEnabledAiRequest(res, ctx, actor, effectiveOrgId, preferredMemberId, observerMemberIds)) {
-			return true;
+			return c.body(null);
 		}
 		if (
 			preferredMemberId &&
 			currentMatter.aiMemberIds !== null &&
 			!currentMatter.aiMemberIds.includes(preferredMemberId)
 		) {
-			sendError(res, 409, "Requested AI member is no longer in this matter");
-			return true;
+			throw new HttpRequestError(409, "Requested AI member is no longer in this matter");
 		}
 		if (
 			(Array.isArray(targetMsg.metadata?.images) && images.length !== targetMsg.metadata.images.length) ||
 			(Array.isArray(targetMsg.metadata?.files) && files.length !== targetMsg.metadata.files.length)
 		) {
-			sendError(res, 410, "Request attachments are no longer available; submit the request again");
-			return true;
+			throw new HttpRequestError(410, "Request attachments are no longer available; submit the request again");
 		}
 		if (orchestrator.isMatterRunning(matterId)) {
-			sendError(res, 409, "Matter already has an active turn");
-			return true;
+			throw new HttpRequestError(409, "Matter already has an active turn");
 		}
 		const updatedMsg = store.transitionAiRequest(messageId, "approved", {
 			approvedById: actor.collaborator.id,
@@ -676,8 +649,7 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			approvedAt: new Date().toISOString(),
 		});
 		if (!updatedMsg) {
-			sendError(res, 409, "Only a pending AI request can be approved");
-			return true;
+			throw new HttpRequestError(409, "Only a pending AI request can be approved");
 		}
 		auditActorAction(ctx, req, actor, {
 			action: "matter.approve_ai_request",
@@ -704,35 +676,32 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			actor,
 		);
 
-		sendJson(res, 202, { accepted: true, matterId: matter.id, approvedMessageId: messageId });
-		return true;
-	}
+		return c.json({ accepted: true, matterId: matter.id, approvedMessageId: messageId }, 202);
+	});
 
-	const matterDismissAiMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages\/([^/]+)\/dismiss-ai$/);
-	if (method === "POST" && matterDismissAiMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(matterDismissAiMatch[1]!);
-		const messageId = decodeURIComponent(matterDismissAiMatch[2]!);
+	app.post("/api/matters/:matterId/messages/:messageId/dismiss-ai", (c) => {
+		const { store, broadcast } = c.var.routeCtx;
+		const res = c.var.nodeRes!;
+		const actor = c.var.actor;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterId = c.req.param("matterId");
+		const messageId = c.req.param("messageId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 		if (!canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
-			return true;
+			throw new HttpRequestError(403, "无权访问该事项");
 		}
 		if (
 			!isSuperAdminActor(actor) &&
 			!(actor.authKind === "session" && canManageOrganization(store, actor, matter.orgId))
 		) {
-			sendError(res, 403, "仅所有者或组织管理员可忽略 AI 提请");
-			return true;
+			throw new HttpRequestError(403, "仅所有者或组织管理员可忽略 AI 提请");
 		}
 		const targetMsg = store.getMessage(messageId);
 		if (!targetMsg || targetMsg.matterId !== matterId) {
-			sendError(res, 404, `Message not found: ${messageId}`);
-			return true;
+			throw new HttpRequestError(404, `Message not found: ${messageId}`);
 		}
 		const updatedMsg = store.transitionAiRequest(messageId, "dismissed", {
 			dismissedById: actor.collaborator.id,
@@ -740,39 +709,35 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			dismissedAt: new Date().toISOString(),
 		});
 		if (!updatedMsg) {
-			sendError(res, 409, "Only a pending AI request can be dismissed");
-			return true;
+			throw new HttpRequestError(409, "Only a pending AI request can be dismissed");
 		}
 		broadcast("matter_message", { matterId, message: updatedMsg, matter }, { matterId });
-		sendJson(res, 200, { ok: true, message: updatedMsg });
-		return true;
-	}
+		return c.json({ ok: true, message: updatedMsg });
+	});
 
-	const matterMsgMatch = pathname.match(/^\/api\/matters\/([^/]+)\/messages(\/conversation)?$/);
-	if (method === "POST" && matterMsgMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(matterMsgMatch[1]!);
+	const handlePostMatterMessage = async (c: ApiRouteContext, matterId: string, forceConversation: boolean) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, uploadsDir, memoryUploads, runDispatchInBackground } = ctx;
+		const res = c.var.nodeRes!;
+		const actor = c.var.actor;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 		if (!canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
-			return true;
+			throw new HttpRequestError(403, "无权访问该事项");
 		}
 		if (!canParticipateInMatter(store, actor, matter)) {
-			sendError(res, 403, "只读成员（org_viewer）不能在该事项内发言或触发操作");
-			return true;
+			throw new HttpRequestError(403, "只读成员（org_viewer）不能在该事项内发言或触发操作");
 		}
 		if (matter.status === "archived") {
-			sendError(res, 409, "该事项已归档，请先恢复为活跃事项后再继续对话");
-			return true;
+			throw new HttpRequestError(409, "该事项已归档，请先恢复为活跃事项后再继续对话");
 		}
-		const body = await readJsonBody(req);
+		const body = await parseJsonBody(c);
 		const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
 		const mode =
-			matterMsgMatch[2] || body.mode === "conversation"
+			forceConversation || body.mode === "conversation"
 				? conversationModeForActor(
 						ctx,
 						actor,
@@ -784,14 +749,12 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 					? body.mode
 					: "dispatch";
 		if (mode === "dispatch" && !canDispatchAiInOrg(store, actor, matter.orgId)) {
-			sendError(res, 403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
-			return true;
+			throw new HttpRequestError(403, "当前账号无权直接向 AI 派发任务，可使用「团队聊天讨论」或「提请 AI 处理」");
 		}
 		const parsedImages = parseIncomingImages(body.images);
 		const parsedFiles = parseIncomingFiles(body.files);
 		if (!prompt && parsedImages.length === 0 && parsedFiles.length === 0) {
-			sendError(res, 400, "prompt, images, or files is required");
-			return true;
+			throw new HttpRequestError(400, "prompt, images, or files is required");
 		}
 		const explicitPreferredMemberId =
 			typeof body.preferredMemberId === "string" && body.preferredMemberId.length > 0
@@ -806,21 +769,19 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 				: undefined);
 		const requestedWorkspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
 		if (requestedWorkspaceId && requestedWorkspaceId !== matter.workspaceId) {
-			sendError(res, 409, "请先通过事项设置切换工作区，再发送消息");
-			return true;
+			throw new HttpRequestError(409, "请先通过事项设置切换工作区，再发送消息");
 		}
 		const workspaceId = matter.workspaceId ?? undefined;
 		const observerMemberIds = parseObserverMemberIds(body.observerMemberIds, store);
 		if (!ensureOrgEnabledAiRequest(res, ctx, actor, matter.orgId, preferredMemberId, observerMemberIds)) {
-			return true;
+			return c.body(null);
 		}
 		if (mode === "dispatch") {
 			await settleMatterObserverPass(ctx, matterId);
 			if (orchestrator.isMatterRunning(matterId) || ctx.activeRuns.has(matterId)) {
-				sendError(res, 409, "Matter already has an active turn");
-				return true;
+				throw new HttpRequestError(409, "Matter already has an active turn");
 			}
-			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
+			if (!checkUserDispatchQuota(ctx, actor, res)) return c.body(null);
 		}
 		const images = await persistUploadedImages(parsedImages, uploadsDir, memoryUploads);
 		const files = await persistUploadedFiles(parsedFiles, uploadsDir, memoryUploads);
@@ -855,14 +816,16 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 							files,
 							explicitPreferredMemberId ?? undefined,
 						);
-			sendJson(res, 201, {
-				accepted: discussion?.aiDiscussionTriggered ?? false,
-				mode,
-				message,
-				matter: refreshedMatter,
-				...discussion,
-			});
-			return true;
+			return c.json(
+				{
+					accepted: discussion?.aiDiscussionTriggered ?? false,
+					mode,
+					message,
+					matter: refreshedMatter,
+					...discussion,
+				},
+				201,
+			);
 		}
 
 		runDispatchInBackground(
@@ -881,9 +844,11 @@ export async function handleMatterMessageRoutes(ctx: ServerRouteContext, r: Rout
 			actor,
 		);
 
-		sendJson(res, 202, { accepted: true, matterId: matter.id, mode });
-		return true;
-	}
+		return c.json({ accepted: true, matterId: matter.id, mode }, 202);
+	};
 
-	return false;
+	app.post("/api/matters/:matterId/messages/conversation", (c) =>
+		handlePostMatterMessage(c, c.req.param("matterId"), true),
+	);
+	app.post("/api/matters/:matterId/messages", (c) => handlePostMatterMessage(c, c.req.param("matterId"), false));
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
@@ -192,4 +193,10 @@ test("Hono API router maps middleware auth, Valibot 400s, domain errors, cookies
 	} finally {
 		await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
 	}
+});
+
+test("server composition root dispatches all HTTP API routes declaratively via Hono", () => {
+	const appSource = readFileSync("packages/server/src/server/app.ts", "utf8");
+	assert.equal(appSource.includes("createApiRouter"), true);
+	assert.equal(/handle[A-Z][a-zA-Z]+Routes/.test(appSource), false);
 });

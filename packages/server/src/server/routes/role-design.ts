@@ -1,3 +1,4 @@
+import type { Hono } from "hono";
 import type { MetaArchitectMessage } from "../../orchestrator/architect/meta-architect.ts";
 import { PiDecisionError } from "../../orchestrator/architect/pi-decision.ts";
 import { assessRoleCapabilities, validateSkillReference } from "../../roles/capabilities.ts";
@@ -16,19 +17,19 @@ import {
 	resolveActorAccessibleOrgIds,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
-import { HttpRequestError, readJsonBody, responseCancellation, sendError, sendJson } from "../http.ts";
-import type { RouteRequest, ServerRouteContext } from "./context.ts";
-
+import { HttpRequestError, responseCancellation } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
 import { resolveMemberTargetScope } from "./role-packages.ts";
 
-/** Run role design and architect chats. */
-export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	if (method === "POST" && pathname === "/api/members/architect/chat") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+/** Register role design and Role Architect conversation routes on the Hono API router. */
+export function registerRoleDesignRoutes(app: Hono<ApiRouterEnv>): void {
+	app.post("/api/members/architect/chat", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const rawMessages = Array.isArray(body.messages) ? body.messages : [];
 		const messages: MetaArchitectMessage[] = rawMessages
 			.map((item) => {
@@ -40,33 +41,27 @@ export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRe
 			})
 			.filter((m): m is MetaArchitectMessage => m !== null);
 		if (messages.length === 0) {
-			sendError(res, 400, "messages array with at least one message is required");
-			return true;
+			throw new HttpRequestError(400, "messages array with at least one message is required");
 		}
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
 		const workspace = workspaceId ? store.getWorkspace(workspaceId) : null;
 		if (workspaceId && !workspace) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+			throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 		}
 		if (workspace && !canAccessWorkspace(store, actor, workspace)) {
-			sendError(res, 403, "无权访问所选项目仓库");
-			return true;
+			throw new HttpRequestError(403, "无权访问所选项目仓库");
 		}
 		const explicitOrgId = typeof body.orgId === "string" && body.orgId.trim().length > 0 ? body.orgId.trim() : null;
 		if (explicitOrgId && !store.getOrganization(explicitOrgId)) {
-			sendError(res, 404, `Organization not found: ${explicitOrgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${explicitOrgId}`);
 		}
 		const effectiveOrgId = explicitOrgId ?? workspace?.orgId ?? null;
 		if (effectiveOrgId && !canAccessOrganization(store, actor, effectiveOrgId)) {
-			sendError(res, 403, "无权访问所选组织");
-			return true;
+			throw new HttpRequestError(403, "无权访问所选组织");
 		}
 		if (isViewerInAllOrgsOrTarget(store, actor, effectiveOrgId)) {
-			sendError(res, 403, "只读成员或访客口令不支持调用角色架构师");
-			return true;
+			throw new HttpRequestError(403, "只读成员或访客口令不支持调用角色架构师");
 		}
 		const targetScope = resolveMemberTargetScope(ctx, actor, body, effectiveOrgId);
 		const canRunOrgHealthcheck =
@@ -93,22 +88,24 @@ export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRe
 				includeHealthcheck: body.includeHealthcheck === true && canRunOrgHealthcheck,
 				signal: cancellation.signal,
 			});
-			if (res.destroyed || cancellation.signal.aborted) return true;
-			sendJson(res, 200, result);
+			if (res.destroyed || cancellation.signal.aborted) return c.body(null);
+			return c.json(result);
 		} finally {
 			cancellation.dispose();
 		}
-		return true;
-	}
+	});
 
-	if (method === "POST" && pathname === "/api/members/design") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+	app.post("/api/members/design", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const targetScope = resolveMemberTargetScope(ctx, actor, body);
 		const oneJob = typeof body.oneJob === "string" ? body.oneJob.trim() : "";
 		if (!oneJob) {
-			sendError(res, 400, "oneJob is required");
-			return true;
+			throw new HttpRequestError(400, "oneJob is required");
 		}
 		const antiJobs = Array.isArray(body.antiJobs)
 			? body.antiJobs.map(String).filter(Boolean)
@@ -179,31 +176,25 @@ export async function handleRoleDesignRoutes(ctx: ServerRouteContext, r: RouteRe
 					allowedOrgIds: resolveActorAccessibleOrgIds(store, actor),
 					signal: cancellation.signal,
 				});
-				if (res.destroyed || cancellation.signal.aborted) return true;
-				sendJson(res, 200, draft);
-				return true;
+				if (res.destroyed || cancellation.signal.aborted) return c.body(null);
+				return c.json(draft);
 			} catch (err) {
-				if (res.destroyed || cancellation.signal.aborted) return true;
+				if (res.destroyed || cancellation.signal.aborted) return c.body(null);
 				if (err instanceof PiDecisionError && err.kind === "aborted") {
-					sendError(res, 499, err.message);
-					return true;
+					throw new HttpRequestError(499, err.message);
 				}
 				if (!(err instanceof PiDecisionError)) {
-					sendError(res, 502, "角色设计暂不可用");
-					return true;
+					throw new HttpRequestError(502, "角色设计暂不可用");
 				}
 			} finally {
 				cancellation.dispose();
 			}
 		}
 		const draft = buildRoleDesignDraft(designInput);
-		sendJson(res, 200, {
+		return c.json({
 			...draft,
 			designSource: "rules",
 			capabilityReport: await assessRoleCapabilities(draft.template, { skillsDir: ctx.skillsDir }),
 		});
-		return true;
-	}
-
-	return false;
+	});
 }
