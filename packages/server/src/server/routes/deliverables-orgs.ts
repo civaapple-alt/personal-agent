@@ -1,3 +1,4 @@
+import type { Hono } from "hono";
 import type { WorkspaceVisibility } from "../../storage/types.ts";
 import {
 	canAccessMatter,
@@ -9,8 +10,9 @@ import {
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor, requireOwner, requireSuperAdmin } from "../auth.ts";
 import { cloneGitWorkspaceIntoOrgRoot, resolveOrgWorkspacesDir } from "../git-clone.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import { auditActorAction, formatWorkspaceForActor, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
+import { auditActorAction, formatWorkspaceForActor, type ServerRouteContext } from "./context.ts";
 
 function workspaceHasActiveTurn(ctx: ServerRouteContext, workspaceId: string): boolean {
 	return ctx.store
@@ -23,31 +25,36 @@ function parseUserIdList(raw: unknown): string[] {
 	return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((s) => s.trim());
 }
 
-/** Handle self-serve organizations, cloned/local workspaces, and preview services. */
-export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, previewManager, broadcast } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	if (method === "GET" && pathname === "/api/organizations") {
-		if (!requireActiveActor(res, actor)) return true;
+/** Register routes for self-serve organizations, cloned/local workspaces, and preview services. */
+export function registerDeliverableOrgPreviewRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/organizations", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		const orgs = store.listOrganizations().filter((org) => canAccessOrganization(store, actor, org.id));
-		sendJson(res, 200, { organizations: orgs });
-		return true;
-	}
+		return c.json({ organizations: orgs });
+	});
 
-	if (method === "POST" && pathname === "/api/organizations") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+	app.post("/api/organizations", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const name = typeof body.name === "string" ? body.name.trim() : "";
 		if (!name) {
-			sendError(res, 400, "name is required");
-			return true;
+			throw new HttpRequestError(400, "name is required");
 		}
 		if (actor.authKind === "session" && actor.user && !isSuperAdminActor(actor)) {
 			const owned = store.countOwnedOrganizations(actor.user.id);
 			if (owned >= actor.user.maxOrgs) {
-				sendError(res, 403, `当前账号最多可创建 ${actor.user.maxOrgs} 个组织，如需扩容请联系超级管理员`);
-				return true;
+				throw new HttpRequestError(
+					403,
+					`当前账号最多可创建 ${actor.user.maxOrgs} 个组织，如需扩容请联系超级管理员`,
+				);
 			}
 		}
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
@@ -95,7 +102,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 				enabled: enabledSet.has(m.id),
 				isPrimaryContact: primaryId ? m.id === primaryId : Boolean(m.isPrimaryContact && enabledSet.has(m.id)),
 			}));
-			if (configs.some((c) => c.enabled)) {
+			if (configs.some((cfg) => cfg.enabled)) {
 				store.setOrgAiRolesBatch(orgWithDir.id, configs);
 			}
 		}
@@ -107,33 +114,35 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			detail: { name: orgWithDir.name },
 		});
 		broadcast("organization_updated", { organization: orgWithDir }, { orgId: orgWithDir.id });
-		sendJson(res, 201, { organization: orgWithDir });
-		return true;
-	}
+		return c.json({ organization: orgWithDir }, 201);
+	});
 
-	const orgDefaultMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/default$/);
-	if (method === "POST" && orgDefaultMatch) {
-		if (!requireOwner(res, actor)) return true;
-		const orgId = decodeURIComponent(orgDefaultMatch[1]!);
+	app.post("/api/organizations/:orgId/default", (c) => {
+		const { store, broadcast } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireOwner(res, actor)) return c.body(null);
+		const orgId = c.req.param("orgId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
 		const organization = store.setDefaultOrganization(orgId);
 		broadcast("organization_updated", { organization }, { orgId: organization.id });
-		sendJson(res, 200, { organization });
-		return true;
-	}
+		return c.json({ organization });
+	});
 
-	const orgPatchMatch = pathname.match(/^\/api\/organizations\/([^/]+)$/);
-	if (method === "PATCH" && orgPatchMatch) {
-		const orgId = decodeURIComponent(orgPatchMatch[1]!);
+	app.patch("/api/organizations/:orgId", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
-		if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-		const body = await readJsonBody(req);
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const isDefaultUpdate =
 			typeof body.isDefault === "boolean" && isSuperAdminActor(actor) ? body.isDefault : undefined;
 		const organization = store.updateOrganization(orgId, {
@@ -150,25 +159,27 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			orgId,
 		});
 		broadcast("organization_updated", { organization }, { orgId });
-		sendJson(res, 200, { organization });
-		return true;
-	}
+		return c.json({ organization });
+	});
 
-	if (method === "POST" && pathname === "/api/workspaces") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+	app.post("/api/workspaces", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const name = typeof body.name === "string" ? body.name.trim() : "";
 		const rawCloneUrl = typeof body.cloneUrl === "string" ? body.cloneUrl.trim() : "";
 		const rawRepoPath = typeof body.repoPath === "string" ? body.repoPath.trim() : "";
 		const requestedSourceType =
 			body.sourceType === "clone" || body.sourceType === "cloned" || rawCloneUrl ? "clone" : "local";
 		if (!name) {
-			sendError(res, 400, "项目名称不能为空");
-			return true;
+			throw new HttpRequestError(400, "项目名称不能为空");
 		}
 		if (requestedSourceType === "local" && !rawRepoPath) {
-			sendError(res, 400, "name and repoPath are required");
-			return true;
+			throw new HttpRequestError(400, "name and repoPath are required");
 		}
 		let orgId: string | null | undefined =
 			body.orgId === null
@@ -177,8 +188,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					? body.orgId.trim()
 					: undefined;
 		if (orgId && !store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
 		if (orgId === undefined) {
 			if (actor.authKind === "session" && actor.user && !isSuperAdminActor(actor)) {
@@ -191,12 +201,10 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 		}
 		if (orgId === null) {
 			if (!isSuperAdminActor(actor)) {
-				sendError(res, 403, "非超级管理员必须将项目绑定到有管理权限的组织");
-				return true;
+				throw new HttpRequestError(403, "非超级管理员必须将项目绑定到有管理权限的组织");
 			}
 		} else if (!canManageOrganization(store, actor, orgId)) {
-			sendError(res, 403, "仅组织所有者或管理员可在该组织内登记或克隆项目");
-			return true;
+			throw new HttpRequestError(403, "仅组织所有者或管理员可在该组织内登记或克隆项目");
 		}
 
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
@@ -215,8 +223,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 
 		if (requestedSourceType === "clone") {
 			if (!targetOrg) {
-				sendError(res, 400, "从 Git 地址克隆仓库前必须选定目标组织");
-				return true;
+				throw new HttpRequestError(400, "从 Git 地址克隆仓库前必须选定目标组织");
 			}
 			const cloned = await cloneGitWorkspaceIntoOrgRoot({
 				workspacesRoot: settings.workspacesRoot,
@@ -229,31 +236,26 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			defaultBranch = cloned.detectedBranch;
 			sourceType = "cloned";
 			cloneUrl = rawCloneUrl;
-		} else {
-			if (!isGlobalUnscopedActor(actor)) {
-				try {
-					resolvedRepoPath = validateLocalWorkspaceBindingPath({
-						rawPath: rawRepoPath,
-						settings,
-						actor,
-						dataDir: ctx.dataDir,
-					});
-				} catch (err) {
-					sendError(res, 403, err instanceof Error ? err.message : String(err));
-					return true;
-				}
+		} else if (!isGlobalUnscopedActor(actor)) {
+			try {
+				resolvedRepoPath = validateLocalWorkspaceBindingPath({
+					rawPath: rawRepoPath,
+					settings,
+					actor,
+					dataDir: ctx.dataDir,
+				});
+			} catch (err) {
+				throw new HttpRequestError(403, err instanceof Error ? err.message : String(err));
 			}
 		}
 
 		const existingWorkspace = store.listWorkspaces().find((ws) => ws.repoPath === resolvedRepoPath);
 		if (existingWorkspace) {
 			if (!canManageOrganization(store, actor, existingWorkspace.orgId) && !isSuperAdminActor(actor)) {
-				sendError(res, 403, "无权覆盖已登记的项目仓库");
-				return true;
+				throw new HttpRequestError(403, "无权覆盖已登记的项目仓库");
 			}
 			if (existingWorkspace.orgId !== orgId && workspaceHasActiveTurn(ctx, existingWorkspace.id)) {
-				sendError(res, 409, "Stop active workspace turns before changing its organization");
-				return true;
+				throw new HttpRequestError(409, "Stop active workspace turns before changing its organization");
 			}
 		}
 		const savedWs = store.upsertWorkspace({
@@ -276,20 +278,22 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			detail: { name: ws.name, sourceType, visibility },
 		});
 		broadcast("workspace_updated", { id: ws.id, orgId: ws.orgId }, { workspaceId: ws.id });
-		sendJson(res, 201, { workspace: ws });
-		return true;
-	}
+		return c.json({ workspace: ws }, 201);
+	});
 
-	const wsPatchMatch = pathname.match(/^\/api\/workspaces\/([^/]+)$/);
-	if (method === "PATCH" && wsPatchMatch) {
-		const workspaceId = decodeURIComponent(wsPatchMatch[1]!);
-		const body = await readJsonBody(req);
+	app.patch("/api/workspaces/:workspaceId", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const workspaceId = c.req.param("workspaceId");
+		const body = await parseJsonBody(c);
 		const existingWs = store.getWorkspace(workspaceId);
 		if (!existingWs) {
-			sendError(res, 404, `Workspace not found: ${workspaceId}`);
-			return true;
+			throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 		}
-		if (!requireOrgAdmin(res, store, actor, existingWs.orgId)) return true;
+		if (!requireOrgAdmin(res, store, actor, existingWs.orgId)) return c.body(null);
 		const orgId =
 			body.orgId === null
 				? null
@@ -297,20 +301,16 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					? body.orgId.trim()
 					: undefined;
 		if (orgId && !store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
 		if (orgId === null && !isSuperAdminActor(actor)) {
-			sendError(res, 403, "非超级管理员不能将项目设为无组织状态");
-			return true;
+			throw new HttpRequestError(403, "非超级管理员不能将项目设为无组织状态");
 		}
 		if (orgId !== undefined && orgId !== null && !canManageOrganization(store, actor, orgId)) {
-			sendError(res, 403, "无权把项目移入未管理的组织");
-			return true;
+			throw new HttpRequestError(403, "无权把项目移入未管理的组织");
 		}
 		if (orgId !== undefined && orgId !== existingWs.orgId && workspaceHasActiveTurn(ctx, workspaceId)) {
-			sendError(res, 409, "Stop active workspace turns before changing its organization");
-			return true;
+			throw new HttpRequestError(409, "Stop active workspace turns before changing its organization");
 		}
 		const nextVisibility: WorkspaceVisibility | undefined =
 			body.visibility === "restricted" ? "restricted" : body.visibility === "org" ? "org" : undefined;
@@ -331,31 +331,36 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			detail: { visibility: ws.visibility ?? "org" },
 		});
 		broadcast("workspace_updated", { id: ws.id, orgId: ws.orgId }, { workspaceId: ws.id });
-		sendJson(res, 200, { workspace: ws });
-		return true;
-	}
+		return c.json({ workspace: ws });
+	});
 
-	if (method === "GET" && pathname === "/api/previews") {
-		if (!requireActiveActor(res, actor)) return true;
+	app.get("/api/previews", (c) => {
+		const { store, previewManager } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		const isAdmin = isSuperAdminActor(actor);
 		const previews = previewManager.listPreviews().filter((preview) => {
 			if (!preview.matterId) return isAdmin;
 			const matter = store.getMatter(preview.matterId);
 			return matter ? canAccessMatter(store, actor, matter) : isAdmin;
 		});
-		sendJson(res, 200, { previews });
-		return true;
-	}
+		return c.json({ previews });
+	});
 
-	if (method === "POST" && pathname === "/api/previews") {
-		if (!requireActiveActor(res, actor)) return true;
-		const body = await readJsonBody(req);
+	app.post("/api/previews", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, previewManager, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const body = await parseJsonBody(c);
 		const title = typeof body.title === "string" ? body.title.trim() : "独立预览服务";
 		const matterId = typeof body.matterId === "string" && body.matterId.trim() ? body.matterId.trim() : null;
 		const matter = matterId ? store.getMatter(matterId) : null;
 		if (matterId && !matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 
 		if (typeof body.url === "string" && body.url.trim().length > 0) {
@@ -365,8 +370,7 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 					!canAccessMatter(store, actor, matter) ||
 					!canManageOrganization(store, actor, matter.orgId)
 				) {
-					sendError(res, 403, "仅所有者（Owner）或对应组织管理员可登记预览链接");
-					return true;
+					throw new HttpRequestError(403, "仅所有者（Owner）或对应组织管理员可登记预览链接");
 				}
 			}
 			const info = previewManager.registerExternalPreview({
@@ -375,15 +379,13 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 				matterId,
 			});
 			broadcast("preview_updated", info);
-			sendJson(res, 201, { preview: info });
-			return true;
+			return c.json({ preview: info }, 201);
 		}
 
-		if (!requireSuperAdmin(res, actor)) return true;
+		if (!requireSuperAdmin(res, actor)) return c.body(null);
 		const command = typeof body.command === "string" ? body.command.trim() : "";
 		if (!command) {
-			sendError(res, 400, "command or url is required");
-			return true;
+			throw new HttpRequestError(400, "command or url is required");
 		}
 		const args = Array.isArray(body.args) ? body.args.map(String) : [];
 		const cwd = typeof body.cwd === "string" && body.cwd.length > 0 ? body.cwd : process.cwd();
@@ -404,18 +406,18 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 			detail: { title, command },
 		});
 		broadcast("preview_updated", info);
-		sendJson(res, 201, { preview: info });
-		return true;
-	}
+		return c.json({ preview: info }, 201);
+	});
 
-	const previewStopMatch = pathname.match(/^\/api\/previews\/([^/]+)\/stop$/);
-	if (method === "POST" && previewStopMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const previewId = decodeURIComponent(previewStopMatch[1]!);
+	app.post("/api/previews/:previewId/stop", async (c) => {
+		const { store, previewManager, broadcast } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const previewId = c.req.param("previewId");
 		const existingPreview = previewManager.listPreviews().find((item) => item.id === previewId);
 		if (!existingPreview) {
-			sendError(res, 404, `Preview not found: ${previewId}`);
-			return true;
+			throw new HttpRequestError(404, `Preview not found: ${previewId}`);
 		}
 		if (!(isGlobalUnscopedActor(actor) || isSuperAdminActor(actor))) {
 			const linkedMatter = existingPreview.matterId ? store.getMatter(existingPreview.matterId) : null;
@@ -424,19 +426,14 @@ export async function handleDeliverableOrgPreviewRoutes(ctx: ServerRouteContext,
 				!canAccessMatter(store, actor, linkedMatter) ||
 				!canManageOrganization(store, actor, linkedMatter.orgId)
 			) {
-				sendError(res, 403, "仅所有者或对应组织管理员可停止该预览服务");
-				return true;
+				throw new HttpRequestError(403, "仅所有者或对应组织管理员可停止该预览服务");
 			}
 		}
 		const info = await previewManager.stopPreview(previewId);
 		if (!info) {
-			sendError(res, 404, `Preview not found: ${previewId}`);
-			return true;
+			throw new HttpRequestError(404, `Preview not found: ${previewId}`);
 		}
 		broadcast("preview_updated", info);
-		sendJson(res, 200, { preview: info });
-		return true;
-	}
-
-	return false;
+		return c.json({ preview: info });
+	});
 }

@@ -22,10 +22,10 @@ import { createDispatchRunner } from "./dispatch-runner.ts";
 import { HttpRequestError, isAllowedMutatingOrigin, sendError, serveStaticAsset } from "./http.ts";
 import type { PreviewManager } from "./preview-manager.ts";
 import { createApiRouter, dispatchHonoRequest, requireAuthMiddleware } from "./router.ts";
-import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth.ts";
-import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
+import { registerAdminRoutes, registerPublicAuthRoutes } from "./routes/admin-auth.ts";
+import { registerBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
-import { handleDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
+import { registerDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
 import { registerHumanDecisionRoutes } from "./routes/human-decisions.ts";
 import { registerMatterBoardRoutes } from "./routes/matter-board.ts";
 import { handleMatterMessageRoutes } from "./routes/matter-messages.ts";
@@ -33,9 +33,10 @@ import { registerMatterSettingsRoutes } from "./routes/matter-settings.ts";
 import { registerMatterRoutes } from "./routes/matters.ts";
 import { registerModelSettingsRoutes } from "./routes/model-settings.ts";
 import { handleRoleDesignRoutes } from "./routes/role-design.ts";
-import { handleSkillTrustRoutes } from "./routes/skill-trust.ts";
-import { handleSpaceRoutes } from "./routes/spaces.ts";
+import { registerSkillTrustRoutes } from "./routes/skill-trust.ts";
+import { registerSpaceRoutes } from "./routes/spaces.ts";
 import { handleTeamRoutes } from "./routes/team.ts";
+import { registerWebAccessRoutes } from "./routes/web-access.ts";
 import { registerWorkspaceFolderRoutes } from "./routes/workspace-folders.ts";
 import { createSseHub, type SseBroadcastFn } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
@@ -217,25 +218,24 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	};
 
 	const publicApiRouter = createApiRouter();
+	registerPublicAuthRoutes(publicApiRouter);
+
 	const apiRouter = createApiRouter();
 	apiRouter.use("/api/*", requireAuthMiddleware);
 	registerModelSettingsRoutes(apiRouter);
+	registerWebAccessRoutes(apiRouter);
+	registerAdminRoutes(apiRouter);
+	registerBootstrapAndCollaboratorRoutes(apiRouter);
 	registerMatterRoutes(apiRouter);
 	registerMatterBoardRoutes(apiRouter);
 	registerMatterSettingsRoutes(apiRouter);
 	registerHumanDecisionRoutes(apiRouter);
+	registerSpaceRoutes(apiRouter);
 	registerWorkspaceFolderRoutes(apiRouter);
+	registerDeliverableOrgPreviewRoutes(apiRouter);
+	registerSkillTrustRoutes(apiRouter);
 
-	const handlers = [
-		handleAdminRoutes,
-		handleBootstrapAndCollaboratorRoutes,
-		handleMatterMessageRoutes,
-		handleSpaceRoutes,
-		handleDeliverableOrgPreviewRoutes,
-		handleRoleDesignRoutes,
-		handleSkillTrustRoutes,
-		handleTeamRoutes,
-	];
+	const handlers = [handleMatterMessageRoutes, handleRoleDesignRoutes, handleTeamRoutes];
 
 	const server = createServer(async (req, res) => {
 		const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -269,9 +269,6 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 					requireAuth,
 				}))
 			) {
-				return;
-			}
-			if (await handleAdminAndAuthRoutes(routeCtx, req, res, method, pathname, actor, requireAuth)) {
 				return;
 			}
 

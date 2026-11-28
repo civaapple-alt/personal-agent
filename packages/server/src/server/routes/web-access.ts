@@ -1,3 +1,4 @@
+import type { Hono } from "hono";
 import {
 	isManagedEnvKey,
 	type ManagedEnvKey,
@@ -12,26 +13,26 @@ import {
 } from "../../extensions/web-access/runtime.ts";
 import { choice, createSystemOneClassifier } from "../../orchestrator/architect/system-one.ts";
 import { buildRuntimeOverview } from "../../orchestrator/runtime/runtime-info.ts";
-import type { RequestActor } from "../auth.ts";
-import { HttpRequestError, readJsonBody, sendJson } from "../http.ts";
-import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody, requireSuperAdminMiddleware } from "../router.ts";
+import { auditActorAction, type ServerRouteContext } from "./context.ts";
 
-/** Settings routes called only after the platform administrator check. */
-export async function handleWebAccessRoutes(
-	ctx: ServerRouteContext,
-	{ req, res, method, pathname }: RouteRequest,
-	actor: RequestActor,
-): Promise<boolean> {
-	const installing = method === "POST" && pathname === "/api/admin/runtime/web-access/install";
-	const testingWebAccess = method === "POST" && pathname === "/api/admin/runtime/web-access/test";
-	const testingSystemOne = method === "POST" && pathname === "/api/admin/runtime/system-one/test";
-	const configuring = method === "PATCH" && pathname === "/api/admin/runtime/web-access";
-	const updatingEnv = method === "PATCH" && pathname === "/api/admin/runtime/env";
-	if (!installing && !testingWebAccess && !testingSystemOne && !configuring && !updatingEnv) return false;
+async function buildAdminRuntimeOverview(ctx: ServerRouteContext) {
+	return buildRuntimeOverview({
+		config: ctx.orchestrator.getRuntimeConfig(),
+		serverConfig: ctx.getServerRuntimeConfig?.(),
+		activeMembers: ctx.store.listMembers(),
+		isOwner: true,
+		probePiCli: ctx.probePiCli,
+	});
+}
 
-	const { store, orchestrator } = ctx;
-	if (testingWebAccess) {
-		const body = await readJsonBody(req);
+/** Register platform administrator runtime/extension routes on the Hono API router. */
+export function registerWebAccessRoutes(app: Hono<ApiRouterEnv>): void {
+	app.post("/api/admin/runtime/web-access/test", requireSuperAdminMiddleware, async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const body = await parseJsonBody(c);
 		const query =
 			typeof body.query === "string" && body.query.trim() ? body.query.trim().slice(0, 120) : "DeepSeek API";
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
@@ -43,13 +44,12 @@ export async function handleWebAccessRoutes(
 		const provider = resolveEffectiveWebSearchProvider(requestedProvider, dotEnvWeb);
 		const startedAt = Date.now();
 		if (!provider) {
-			sendJson(res, 200, {
+			return c.json({
 				ok: false,
 				provider: null,
 				latencyMs: Date.now() - startedAt,
 				error: "未检测到任何已配置的网页检索密钥（EXA_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY）",
 			});
-			return true;
 		}
 		const keyMap = {
 			deepseek: process.env.DEEPSEEK_API_KEY?.trim() || dotEnvWeb.DEEPSEEK_API_KEY?.trim() || "",
@@ -58,13 +58,12 @@ export async function handleWebAccessRoutes(
 		};
 		const apiKey = keyMap[provider];
 		if (!apiKey) {
-			sendJson(res, 200, {
+			return c.json({
 				ok: false,
 				provider,
 				latencyMs: Date.now() - startedAt,
 				error: `当前选择的供应商 ${provider} 未配置对应 API Key`,
 			});
-			return true;
 		}
 		try {
 			const signal = AbortSignal.timeout(15_000);
@@ -80,17 +79,16 @@ export async function handleWebAccessRoutes(
 				});
 				if (!resp.ok) {
 					const errText = (await resp.text()).slice(0, 240);
-					sendJson(res, 200, {
+					return c.json({
 						ok: false,
 						provider,
 						latencyMs: Date.now() - startedAt,
 						error: `HTTP ${resp.status}${errText ? `: ${errText}` : ""}`,
 					});
-					return true;
 				}
 				const data = (await resp.json()) as { results?: Array<{ title?: string; url?: string }> };
 				const results = Array.isArray(data.results) ? data.results : [];
-				sendJson(res, 200, {
+				return c.json({
 					ok: true,
 					provider,
 					latencyMs: Date.now() - startedAt,
@@ -99,7 +97,6 @@ export async function handleWebAccessRoutes(
 						.slice(0, 3)
 						.map((r) => (typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url || "（无标题）")),
 				});
-				return true;
 			}
 			if (provider === "exa") {
 				const resp = await fetch("https://api.exa.ai/search", {
@@ -113,17 +110,16 @@ export async function handleWebAccessRoutes(
 				});
 				if (!resp.ok) {
 					const errText = (await resp.text()).slice(0, 240);
-					sendJson(res, 200, {
+					return c.json({
 						ok: false,
 						provider,
 						latencyMs: Date.now() - startedAt,
 						error: `HTTP ${resp.status}${errText ? `: ${errText}` : ""}`,
 					});
-					return true;
 				}
 				const data = (await resp.json()) as { results?: Array<{ title?: string; url?: string }> };
 				const results = Array.isArray(data.results) ? data.results : [];
-				sendJson(res, 200, {
+				return c.json({
 					ok: true,
 					provider,
 					latencyMs: Date.now() - startedAt,
@@ -132,9 +128,7 @@ export async function handleWebAccessRoutes(
 						.slice(0, 3)
 						.map((r) => (typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url || "（无标题）")),
 				});
-				return true;
 			}
-			// Moonshot / Kimi key connectivity verification
 			const resp = await fetch("https://api.moonshot.cn/v1/models", {
 				method: "GET",
 				headers: { Authorization: `Bearer ${apiKey}` },
@@ -142,49 +136,47 @@ export async function handleWebAccessRoutes(
 			});
 			if (!resp.ok) {
 				const errText = (await resp.text()).slice(0, 240);
-				sendJson(res, 200, {
+				return c.json({
 					ok: false,
 					provider,
 					latencyMs: Date.now() - startedAt,
 					error: `HTTP ${resp.status}${errText ? `: ${errText}` : ""}`,
 				});
-				return true;
 			}
 			const data = (await resp.json()) as { data?: Array<{ id?: string }> };
 			const count = Array.isArray(data.data) ? data.data.length : 0;
-			sendJson(res, 200, {
+			return c.json({
 				ok: true,
 				provider,
 				latencyMs: Date.now() - startedAt,
 				resultCount: count,
 				sampleTitles: [`Moonshot API 鉴权通过（可用模型 ${count} 个）`],
 			});
-			return true;
 		} catch (error) {
-			sendJson(res, 200, {
+			return c.json({
 				ok: false,
 				provider,
 				latencyMs: Date.now() - startedAt,
 				error: error instanceof Error ? error.message : String(error),
 			});
-			return true;
 		}
-	}
+	});
 
-	if (testingSystemOne) {
+	app.post("/api/admin/runtime/system-one/test", requireSuperAdminMiddleware, async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
 		const envPath = resolveEnvFilePath(orchestrator.getRuntimeConfig().defaultCwd);
 		const dotEnv = await readDotEnvMap(envPath);
 		const apiKey = process.env.TYPESAFE_API_KEY?.trim() || dotEnv.TYPESAFE_API_KEY?.trim() || "";
 		const startedAt = Date.now();
 		if (!apiKey) {
-			sendJson(res, 200, {
+			return c.json({
 				ok: false,
 				enabled: settings.systemOneEnabled,
 				latencyMs: Date.now() - startedAt,
 				error: "未配置 TYPESAFE_API_KEY，请先保存密钥再测试",
 			});
-			return true;
 		}
 		try {
 			const classifier = createSystemOneClassifier(apiKey);
@@ -198,25 +190,28 @@ export async function handleWebAccessRoutes(
 				AbortSignal.timeout(10_000),
 			);
 			const picked = answers.ping?.type === "choice" ? answers.ping.choice : "ok";
-			sendJson(res, 200, {
+			return c.json({
 				ok: true,
 				enabled: settings.systemOneEnabled,
 				latencyMs: Date.now() - startedAt,
 				answer: picked,
 			});
-			return true;
 		} catch (error) {
-			sendJson(res, 200, {
+			return c.json({
 				ok: false,
 				enabled: settings.systemOneEnabled,
 				latencyMs: Date.now() - startedAt,
 				error: error instanceof Error ? error.message : String(error),
 			});
-			return true;
 		}
-	}
-	if (updatingEnv) {
-		const body = await readJsonBody(req);
+	});
+
+	app.patch("/api/admin/runtime/env", requireSuperAdminMiddleware, async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const body = await parseJsonBody(c);
 		const rawValues = body.values;
 		if (!rawValues || typeof rawValues !== "object" || Array.isArray(rawValues)) {
 			throw new HttpRequestError(400, "请提供要更新的环境变量键值映射");
@@ -254,7 +249,13 @@ export async function handleWebAccessRoutes(
 			targetId: ".env",
 			detail: { keys: auditSummary },
 		});
-	} else if (installing) {
+		return c.json({ overview: await buildAdminRuntimeOverview(ctx) });
+	});
+
+	app.post("/api/admin/runtime/web-access/install", requireSuperAdminMiddleware, async (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
 		try {
 			const installed = await ctx.installWebAccess();
 			auditActorAction(ctx, req, actor, {
@@ -267,27 +268,24 @@ export async function handleWebAccessRoutes(
 			if (error instanceof HttpRequestError) throw error;
 			throw new HttpRequestError(502, error instanceof Error ? error.message : String(error));
 		}
-	} else {
-		const { provider } = await readJsonBody(req);
+		return c.json({ overview: await buildAdminRuntimeOverview(ctx) });
+	});
+
+	app.patch("/api/admin/runtime/web-access", requireSuperAdminMiddleware, async (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const { provider } = await parseJsonBody(c);
 		if (!isWebSearchProviderPreference(provider)) {
 			throw new HttpRequestError(400, "不支持的网页检索默认供应商（可选 auto / deepseek / exa / kimi）");
 		}
-		store.updatePlatformSettings({ webSearchProvider: provider }, ctx.defaultWorkspacesRoot);
+		ctx.store.updatePlatformSettings({ webSearchProvider: provider }, ctx.defaultWorkspacesRoot);
 		auditActorAction(ctx, req, actor, {
 			action: "admin.web_access_configure",
 			targetType: "runtime_extension",
 			targetId: "pi-web-access",
 			detail: { provider },
 		});
-	}
-
-	const overview = await buildRuntimeOverview({
-		config: orchestrator.getRuntimeConfig(),
-		serverConfig: ctx.getServerRuntimeConfig?.(),
-		activeMembers: store.listMembers(),
-		isOwner: true,
-		probePiCli: ctx.probePiCli,
+		return c.json({ overview: await buildAdminRuntimeOverview(ctx) });
 	});
-	sendJson(res, 200, { overview });
-	return true;
 }

@@ -1,3 +1,5 @@
+import { JoinOrgSchema } from "@pa/contracts/schemas";
+import type { Hono } from "hono";
 import { buildRuntimeOverview } from "../../orchestrator/runtime/runtime-info.ts";
 import { buildSessionInsightsReport, type SessionInsightSource } from "../../orchestrator/runtime/session-insights.ts";
 import { isThinkingLevel } from "../../rpc/model-selection.ts";
@@ -14,8 +16,9 @@ import {
 	requireOrgAdmin,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import { auditActorAction, formatWorkspaceForActor, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
+import { auditActorAction, formatWorkspaceForActor } from "./context.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
 function parseOrgMemberRole(raw: unknown): OrgMemberRole | null {
@@ -25,13 +28,14 @@ function parseOrgMemberRole(raw: unknown): OrgMemberRole | null {
 	return null;
 }
 
-/** Handle `/api/bootstrap`, `/api/runtime`, per-org member/invite/AI-role routes. */
-export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, dialogBroker, previewManager, activeRuns, broadcast } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	if (method === "GET" && pathname === "/api/bootstrap") {
-		if (!requireActiveActor(res, actor)) return true;
+/** Register `/api/bootstrap`, `/api/runtime`, and per-org member/invite/AI-role routes. */
+export function registerBootstrapAndCollaboratorRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/bootstrap", (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, dialogBroker, previewManager, activeRuns } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		const liveTemplates = orchestrator.listTemplates();
 		const settings = store.getPlatformSettings(ctx.defaultWorkspacesRoot);
 		const scopedOrgs = store
@@ -82,7 +86,7 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		const visibleMembers = store.listMembers().filter((m) => canActorUseMember(store, actor, m));
 		const visibleTemplateIds = new Set(visibleMembers.map((m) => m.templateId));
 
-		sendJson(res, 200, {
+		return c.json({
 			unifiedConversation: true,
 			authKind: actor.authKind,
 			currentUser: actor.collaborator,
@@ -122,11 +126,14 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			previews: scopedPreviews,
 			activeRuns: scopedActiveRuns,
 		});
-		return true;
-	}
+	});
 
-	if (method === "GET" && pathname === "/api/runtime") {
-		if (!requireActiveActor(res, actor)) return true;
+	app.get("/api/runtime", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		const visibleMembers = store.listMembers().filter((m) => canActorUseMember(store, actor, m));
 		const overview = await buildRuntimeOverview({
 			config: orchestrator.getRuntimeConfig(),
@@ -135,27 +142,26 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			isOwner: isSuperAdminActor(actor),
 			probePiCli: ctx.probePiCli,
 		});
-		sendJson(res, 200, overview);
-		return true;
-	}
+		return c.json(overview);
+	});
 
-	if (method === "GET" && pathname === "/api/runtime/insights") {
-		if (!requireActiveActor(res, actor)) return true;
-		const searchParams = new URL(req.url ?? pathname, "http://127.0.0.1").searchParams;
-		const matterIdParam = searchParams.get("matterId")?.trim() || undefined;
-		const memberIdParam = searchParams.get("memberId")?.trim() || undefined;
-		const limitParam = Number(searchParams.get("limit") ?? "40");
+	app.get("/api/runtime/insights", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterIdParam = c.req.query("matterId")?.trim() || undefined;
+		const memberIdParam = c.req.query("memberId")?.trim() || undefined;
+		const limitParam = Number(c.req.query("limit") ?? "40");
 		const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(100, Math.floor(limitParam))) : 40;
 
 		if (matterIdParam) {
 			const matter = store.getMatter(matterIdParam);
 			if (!matter) {
-				sendError(res, 404, `Matter not found: ${matterIdParam}`);
-				return true;
+				throw new HttpRequestError(404, `Matter not found: ${matterIdParam}`);
 			}
 			if (!canAccessMatter(store, actor, matter)) {
-				sendError(res, 403, "无权访问该事项");
-				return true;
+				throw new HttpRequestError(403, "无权访问该事项");
 			}
 		}
 
@@ -190,29 +196,26 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			matterId: matterIdParam ?? null,
 			memberId: memberIdParam ?? null,
 		});
-		sendJson(res, 200, report);
-		return true;
-	}
+		return c.json(report);
+	});
 
-	// ---- Organization Membership & Invites ----
-	if (method === "POST" && pathname === "/api/organizations/join") {
-		if (!requireActiveActor(res, actor)) return true;
+	// Register `/api/organizations/join` before parameterized `/api/organizations/:orgId/*` routes.
+	app.post("/api/organizations/join", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
 		if (!actor.user) {
-			sendError(res, 400, "请先使用个人账号登录后再加入组织");
-			return true;
+			throw new HttpRequestError(400, "请先使用个人账号登录后再加入组织");
 		}
-		const body = await readJsonBody(req);
-		const inviteToken = typeof body.inviteToken === "string" ? body.inviteToken.trim() : "";
-		if (!inviteToken) {
-			sendError(res, 400, "inviteToken is required");
-			return true;
-		}
+		const { inviteToken } = await parseJsonBody(c, JoinOrgSchema);
 		let result: ReturnType<typeof store.consumeOrgInviteByToken>;
 		try {
 			result = store.consumeOrgInviteByToken(inviteToken, actor.user.id);
 		} catch (err) {
-			sendError(res, 400, err instanceof Error ? err.message : String(err));
-			return true;
+			throw new HttpRequestError(400, err instanceof Error ? err.message : String(err));
 		}
 		const org = store.getOrganization(result.invite.orgId);
 		auditActorAction(ctx, req, actor, {
@@ -225,192 +228,208 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 		if (org) {
 			broadcast("organization_updated", { organization: org }, { orgId: org.id });
 		}
-		sendJson(res, 200, { ok: true, organization: org, membership: result.membership });
-		return true;
-	}
+		return c.json({ ok: true, organization: org, membership: result.membership });
+	});
 
-	const orgMembersMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/members$/);
-	if (orgMembersMatch) {
-		const orgId = decodeURIComponent(orgMembersMatch[1]!);
+	app.get("/api/organizations/:orgId/members", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
-		if (method === "GET") {
-			if (!requireOrgAccess(res, store, actor, orgId)) return true;
-			const canAdminOrg = canManageOrganization(store, actor, orgId);
-			sendJson(res, 200, {
-				members: store.listOrgMembers(orgId),
-				invites: canAdminOrg ? store.listOrgInvites(orgId) : [],
-			});
-			return true;
-		}
-		if (method === "POST") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			const body = await readJsonBody(req);
-			const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-			const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-			const targetUser = email ? store.getUserByEmail(email) : userId ? store.getUserById(userId) : null;
-			if (!targetUser) {
-				sendError(res, 404, "未找到该注册账号，请确认对方已完成邮箱注册或改用组织邀请链接");
-				return true;
-			}
-			if (targetUser.status === "disabled") {
-				sendError(res, 400, "该用户账号已被停用");
-				return true;
-			}
-			const orgRole = parseOrgMemberRole(body.orgRole) ?? "org_member";
-			const actorRole = getActorOrgRole(store, actor, orgId);
-			if (orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
-				sendError(res, 403, "仅组织所有者或超级管理员可授予 org_owner 角色");
-				return true;
-			}
-			const membership = store.upsertOrgMember({
-				orgId,
-				userId: targetUser.id,
-				orgRole,
-				roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : undefined,
-			});
-			auditActorAction(ctx, req, actor, {
-				action: "org.add_member",
-				targetType: "user",
-				targetId: targetUser.id,
-				orgId,
-				detail: { orgRole, email: targetUser.email },
-			});
-			const org = store.getOrganization(orgId)!;
-			broadcast("organization_updated", { organization: org }, { orgId });
-			sendJson(res, 201, { member: membership });
-			return true;
-		}
-	}
+		if (!requireOrgAccess(res, store, actor, orgId)) return c.body(null);
+		const canAdminOrg = canManageOrganization(store, actor, orgId);
+		return c.json({
+			members: store.listOrgMembers(orgId),
+			invites: canAdminOrg ? store.listOrgInvites(orgId) : [],
+		});
+	});
 
-	const orgMemberItemMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/members\/([^/]+)$/);
-	if (orgMemberItemMatch) {
-		const orgId = decodeURIComponent(orgMemberItemMatch[1]!);
-		const targetUserId = decodeURIComponent(orgMemberItemMatch[2]!);
+	app.post("/api/organizations/:orgId/members", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
-		if (method === "PATCH") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			const existing = store.getOrgMembership(orgId, targetUserId);
-			if (!existing) {
-				sendError(res, 404, "成员不属于当前组织");
-				return true;
-			}
-			const body = await readJsonBody(req);
-			const nextRole = body.orgRole !== undefined ? parseOrgMemberRole(body.orgRole) : existing.orgRole;
-			if (!nextRole) {
-				sendError(res, 400, "无效的 orgRole");
-				return true;
-			}
-			const actorRole = getActorOrgRole(store, actor, orgId);
-			if (
-				(existing.orgRole === "org_owner" || nextRole === "org_owner") &&
-				actorRole !== "org_owner" &&
-				!isSuperAdminActor(actor)
-			) {
-				sendError(res, 403, "仅组织所有者或超级管理员可变更 org_owner 权限");
-				return true;
-			}
-			const updated = store.upsertOrgMember({
-				orgId,
-				userId: targetUserId,
-				orgRole: nextRole,
-				roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : existing.roleTitle,
-			});
-			auditActorAction(ctx, req, actor, {
-				action: "org.update_member",
-				targetType: "user",
-				targetId: targetUserId,
-				orgId,
-				detail: { orgRole: updated.orgRole },
-			});
-			broadcast("organization_updated", { organization: store.getOrganization(orgId)! }, { orgId });
-			sendJson(res, 200, { member: updated });
-			return true;
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const body = await parseJsonBody(c);
+		const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+		const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+		const targetUser = email ? store.getUserByEmail(email) : userId ? store.getUserById(userId) : null;
+		if (!targetUser) {
+			throw new HttpRequestError(404, "未找到该注册账号，请确认对方已完成邮箱注册或改用组织邀请链接");
 		}
-		if (method === "DELETE") {
-			if (!requireActiveActor(res, actor)) return true;
-			const isSelf = actor.user?.id === targetUserId;
-			if (!isSelf && !canManageOrganization(store, actor, orgId)) {
-				sendError(res, 403, "无权移出组织成员");
-				return true;
-			}
-			const existing = store.getOrgMembership(orgId, targetUserId);
-			if (!existing) {
-				sendError(res, 404, "成员不属于当前组织");
-				return true;
-			}
-			const actorRole = getActorOrgRole(store, actor, orgId);
-			if (!isSelf && existing.orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
-				sendError(res, 403, "仅组织所有者或超级管理员可移出组织所有者");
-				return true;
-			}
-			store.removeOrgMember(orgId, targetUserId);
-			auditActorAction(ctx, req, actor, {
-				action: "org.remove_member",
-				targetType: "user",
-				targetId: targetUserId,
-				orgId,
-			});
-			broadcast("organization_updated", { organization: store.getOrganization(orgId)! }, { orgId });
-			sendJson(res, 200, { ok: true, removedUserId: targetUserId });
-			return true;
+		if (targetUser.status === "disabled") {
+			throw new HttpRequestError(400, "该用户账号已被停用");
 		}
-	}
+		const orgRole = parseOrgMemberRole(body.orgRole) ?? "org_member";
+		const actorRole = getActorOrgRole(store, actor, orgId);
+		if (orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
+			throw new HttpRequestError(403, "仅组织所有者或超级管理员可授予 org_owner 角色");
+		}
+		const membership = store.upsertOrgMember({
+			orgId,
+			userId: targetUser.id,
+			orgRole,
+			roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : undefined,
+		});
+		auditActorAction(ctx, req, actor, {
+			action: "org.add_member",
+			targetType: "user",
+			targetId: targetUser.id,
+			orgId,
+			detail: { orgRole, email: targetUser.email },
+		});
+		const org = store.getOrganization(orgId)!;
+		broadcast("organization_updated", { organization: org }, { orgId });
+		return c.json({ member: membership }, 201);
+	});
 
-	const orgInvitesMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/invites$/);
-	if (orgInvitesMatch) {
-		const orgId = decodeURIComponent(orgInvitesMatch[1]!);
+	app.patch("/api/organizations/:orgId/members/:targetUserId", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		const targetUserId = c.req.param("targetUserId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
-		if (method === "GET") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			sendJson(res, 200, { invites: store.listOrgInvites(orgId) });
-			return true;
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const existing = store.getOrgMembership(orgId, targetUserId);
+		if (!existing) {
+			throw new HttpRequestError(404, "成员不属于当前组织");
 		}
-		if (method === "POST") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			const body = await readJsonBody(req);
-			const orgRole = parseOrgMemberRole(body.orgRole) ?? "org_member";
-			const actorRole = getActorOrgRole(store, actor, orgId);
-			if (orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
-				sendError(res, 403, "仅组织所有者或超级管理员可生成 org_owner 邀请");
-				return true;
-			}
-			const { rawToken, invite } = store.createOrgInvite({
-				orgId,
-				orgRole,
-				createdByUserId: actor.user?.id ?? actor.collaborator.id,
-				maxUses: typeof body.maxUses === "number" ? body.maxUses : 20,
-				expiresInHours: typeof body.expiresInHours === "number" ? body.expiresInHours : 168,
-			});
-			auditActorAction(ctx, req, actor, {
-				action: "org.create_invite",
-				targetType: "org_invite",
-				targetId: invite.id,
-				orgId,
-				detail: { orgRole, maxUses: invite.maxUses },
-			});
-			sendJson(res, 201, { invite, rawToken });
-			return true;
+		const body = await parseJsonBody(c);
+		const nextRole = body.orgRole !== undefined ? parseOrgMemberRole(body.orgRole) : existing.orgRole;
+		if (!nextRole) {
+			throw new HttpRequestError(400, "无效的 orgRole");
 		}
-	}
+		const actorRole = getActorOrgRole(store, actor, orgId);
+		if (
+			(existing.orgRole === "org_owner" || nextRole === "org_owner") &&
+			actorRole !== "org_owner" &&
+			!isSuperAdminActor(actor)
+		) {
+			throw new HttpRequestError(403, "仅组织所有者或超级管理员可变更 org_owner 权限");
+		}
+		const updated = store.upsertOrgMember({
+			orgId,
+			userId: targetUserId,
+			orgRole: nextRole,
+			roleTitle: typeof body.roleTitle === "string" ? body.roleTitle : existing.roleTitle,
+		});
+		auditActorAction(ctx, req, actor, {
+			action: "org.update_member",
+			targetType: "user",
+			targetId: targetUserId,
+			orgId,
+			detail: { orgRole: updated.orgRole },
+		});
+		broadcast("organization_updated", { organization: store.getOrganization(orgId)! }, { orgId });
+		return c.json({ member: updated });
+	});
 
-	const orgInviteRevokeMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/invites\/([^/]+)\/revoke$/);
-	if (method === "POST" && orgInviteRevokeMatch) {
-		const orgId = decodeURIComponent(orgInviteRevokeMatch[1]!);
-		const inviteId = decodeURIComponent(orgInviteRevokeMatch[2]!);
-		if (!requireOrgAdmin(res, store, actor, orgId)) return true;
+	app.delete("/api/organizations/:orgId/members/:targetUserId", (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		const targetUserId = c.req.param("targetUserId");
+		if (!store.getOrganization(orgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
+		}
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const isSelf = actor.user?.id === targetUserId;
+		if (!isSelf && !canManageOrganization(store, actor, orgId)) {
+			throw new HttpRequestError(403, "无权移出组织成员");
+		}
+		const existing = store.getOrgMembership(orgId, targetUserId);
+		if (!existing) {
+			throw new HttpRequestError(404, "成员不属于当前组织");
+		}
+		const actorRole = getActorOrgRole(store, actor, orgId);
+		if (!isSelf && existing.orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
+			throw new HttpRequestError(403, "仅组织所有者或超级管理员可移出组织所有者");
+		}
+		store.removeOrgMember(orgId, targetUserId);
+		auditActorAction(ctx, req, actor, {
+			action: "org.remove_member",
+			targetType: "user",
+			targetId: targetUserId,
+			orgId,
+		});
+		broadcast("organization_updated", { organization: store.getOrganization(orgId)! }, { orgId });
+		return c.json({ ok: true, removedUserId: targetUserId });
+	});
+
+	app.get("/api/organizations/:orgId/invites", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		if (!store.getOrganization(orgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
+		}
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		return c.json({ invites: store.listOrgInvites(orgId) });
+	});
+
+	app.post("/api/organizations/:orgId/invites", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		if (!store.getOrganization(orgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
+		}
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const body = await parseJsonBody(c);
+		const orgRole = parseOrgMemberRole(body.orgRole) ?? "org_member";
+		const actorRole = getActorOrgRole(store, actor, orgId);
+		if (orgRole === "org_owner" && actorRole !== "org_owner" && !isSuperAdminActor(actor)) {
+			throw new HttpRequestError(403, "仅组织所有者或超级管理员可生成 org_owner 邀请");
+		}
+		const { rawToken, invite } = store.createOrgInvite({
+			orgId,
+			orgRole,
+			createdByUserId: actor.user?.id ?? actor.collaborator.id,
+			maxUses: typeof body.maxUses === "number" ? body.maxUses : 20,
+			expiresInHours: typeof body.expiresInHours === "number" ? body.expiresInHours : 168,
+		});
+		auditActorAction(ctx, req, actor, {
+			action: "org.create_invite",
+			targetType: "org_invite",
+			targetId: invite.id,
+			orgId,
+			detail: { orgRole, maxUses: invite.maxUses },
+		});
+		return c.json({ invite, rawToken }, 201);
+	});
+
+	app.post("/api/organizations/:orgId/invites/:inviteId/revoke", (c) => {
+		const ctx = c.var.routeCtx;
+		const { store } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		const inviteId = c.req.param("inviteId");
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
 		const revoked = store.revokeOrgInvite(orgId, inviteId);
 		if (!revoked) {
-			sendError(res, 404, "邀请链接不存在或已失效");
-			return true;
+			throw new HttpRequestError(404, "邀请链接不存在或已失效");
 		}
 		auditActorAction(ctx, req, actor, {
 			action: "org.revoke_invite",
@@ -418,142 +437,148 @@ export async function handleBootstrapAndCollaboratorRoutes(ctx: ServerRouteConte
 			targetId: inviteId,
 			orgId,
 		});
-		sendJson(res, 200, { ok: true, inviteId });
-		return true;
-	}
+		return c.json({ ok: true, inviteId });
+	});
 
-	const orgAiRolesMatch = pathname.match(/^\/api\/organizations\/([^/]+)\/ai-roles$/);
-	if (orgAiRolesMatch) {
-		const orgId = decodeURIComponent(orgAiRolesMatch[1]!);
+	app.get("/api/organizations/:orgId/ai-roles", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
 		if (!store.getOrganization(orgId)) {
-			sendError(res, 404, `Organization not found: ${orgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
 		}
-		if (method === "GET") {
-			if (!requireOrgAccess(res, store, actor, orgId)) return true;
-			sendJson(res, 200, {
-				configured: store.hasOrgAiRolesConfigured(orgId),
-				configs: store.listOrgAiRoleConfigs(orgId),
-				effectiveMembers: store.resolveEffectiveOrgMembers(orgId),
-			});
-			return true;
-		}
-		if (method === "PATCH") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			const body = await readJsonBody(req);
-			const memberId = typeof body.primaryMemberId === "string" ? body.primaryMemberId.trim() : "";
-			if (!memberId || !store.setOrgAiPrimaryContact(orgId, memberId)) {
-				sendError(res, 400, "请选择本组织已启用的业务 AI 角色");
-				return true;
-			}
-			auditActorAction(ctx, req, actor, {
-				action: "org.update_ai_primary",
-				targetType: "organization",
-				targetId: orgId,
-				orgId,
-				detail: { memberId },
-			});
-			broadcast("team_updated", { orgId }, { orgId });
-			sendJson(res, 200, { primaryMemberId: memberId });
-			return true;
-		}
-		if (method === "PUT") {
-			if (!requireOrgAdmin(res, store, actor, orgId)) return true;
-			const body = await readJsonBody(req);
-			if (
-				!Array.isArray(body.roles) ||
-				body.roles.some((item) => !item || typeof item !== "object" || typeof item.enabled !== "boolean")
-			) {
-				sendError(res, 400, "roles 必须是包含启用状态的角色配置数组");
-				return true;
-			}
-			const parsedRoles = await Promise.all(
-				body.roles
-					.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-					.map(async (item) => {
-						const selection = Object.hasOwn(item, "modelSelection")
-							? await validateModelSelection(ctx, item.modelSelection)
-							: undefined;
-						return {
-							memberId: typeof item.memberId === "string" ? item.memberId.trim() : "",
-							enabled: Boolean(item.enabled),
-							isPrimaryContact: Boolean(item.isPrimaryContact),
-							displayNameOverride:
-								typeof item.displayNameOverride === "string" ? item.displayNameOverride.trim() || null : null,
-							providerOverride:
-								selection !== undefined
-									? (selection?.provider ?? null)
-									: typeof item.providerOverride === "string"
-										? item.providerOverride.trim() || null
-										: null,
-							modelOverride:
-								selection !== undefined
-									? (selection?.model ?? null)
-									: typeof item.modelOverride === "string"
-										? item.modelOverride.trim() || null
-										: null,
-							thinkingLevelOverride:
-								selection !== undefined
-									? (selection?.thinkingLevel ?? null)
-									: isThinkingLevel(item.thinkingLevelOverride)
-										? item.thinkingLevelOverride
-										: null,
-							gitNameOverride:
-								typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
-							gitEmailOverride:
-								typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
-						};
-					}),
-			);
-			if (new Set(parsedRoles.map((role) => role.memberId)).size !== parsedRoles.length) {
-				sendError(res, 400, "每个角色只能配置一次");
-				return true;
-			}
-			if (!parsedRoles.some((role) => role.enabled)) {
-				sendError(res, 400, "每个组织至少需要启用 1 位 AI 角色");
-				return true;
-			}
-			for (const role of parsedRoles) {
-				const target = store.getMember(role.memberId);
-				if (!target) {
-					sendError(res, 400, "角色配置包含不存在的成员");
-					return true;
-				}
-				if (target.roleScope === "personal") {
-					sendError(res, 400, "个人私有 AI 角色不能加入组织共享角色配置");
-					return true;
-				}
-				if (target.roleScope === "org" && target.ownerOrgId !== orgId) {
-					sendError(res, 403, `角色 ${target.displayName} 属于其他组织，无法在本组织启用`);
-					return true;
-				}
-			}
-			const useRoleGitIdentity = typeof body.useRoleGitIdentity === "boolean" ? body.useRoleGitIdentity : undefined;
-			const configs = store.setOrgAiRolesBatch(orgId, parsedRoles, useRoleGitIdentity);
-			const updatedOrganization = useRoleGitIdentity === undefined ? null : store.getOrganization(orgId);
-			const effectiveMembers = store.resolveEffectiveOrgMembers(orgId);
-			auditActorAction(ctx, req, actor, {
-				action: "org.update_ai_roles",
-				targetType: "organization",
-				targetId: orgId,
-				orgId,
-				detail: {
-					enabledMemberIds: effectiveMembers.map((m) => m.id),
-					...(typeof body.useRoleGitIdentity === "boolean" ? { useRoleGitIdentity: body.useRoleGitIdentity } : {}),
-				},
-			});
-			if (updatedOrganization) {
-				broadcast("organization_updated", { organization: updatedOrganization }, { orgId });
-			}
-			broadcast("team_updated", { orgId }, { orgId });
-			sendJson(res, 200, {
-				...(updatedOrganization ? { organization: updatedOrganization } : {}),
-				configs,
-				effectiveMembers,
-			});
-			return true;
-		}
-	}
+		if (!requireOrgAccess(res, store, actor, orgId)) return c.body(null);
+		return c.json({
+			configured: store.hasOrgAiRolesConfigured(orgId),
+			configs: store.listOrgAiRoleConfigs(orgId),
+			effectiveMembers: store.resolveEffectiveOrgMembers(orgId),
+		});
+	});
 
-	return false;
+	app.patch("/api/organizations/:orgId/ai-roles", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		if (!store.getOrganization(orgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
+		}
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const body = await parseJsonBody(c);
+		const memberId = typeof body.primaryMemberId === "string" ? body.primaryMemberId.trim() : "";
+		if (!memberId || !store.setOrgAiPrimaryContact(orgId, memberId)) {
+			throw new HttpRequestError(400, "请选择本组织已启用的业务 AI 角色");
+		}
+		auditActorAction(ctx, req, actor, {
+			action: "org.update_ai_primary",
+			targetType: "organization",
+			targetId: orgId,
+			orgId,
+			detail: { memberId },
+		});
+		broadcast("team_updated", { orgId }, { orgId });
+		return c.json({ primaryMemberId: memberId });
+	});
+
+	app.put("/api/organizations/:orgId/ai-roles", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		const res = c.var.nodeRes!;
+		const orgId = c.req.param("orgId");
+		if (!store.getOrganization(orgId)) {
+			throw new HttpRequestError(404, `Organization not found: ${orgId}`);
+		}
+		if (!requireOrgAdmin(res, store, actor, orgId)) return c.body(null);
+		const body = await parseJsonBody(c);
+		if (
+			!Array.isArray(body.roles) ||
+			body.roles.some((item) => !item || typeof item !== "object" || typeof item.enabled !== "boolean")
+		) {
+			throw new HttpRequestError(400, "roles 必须是包含启用状态的角色配置数组");
+		}
+		const parsedRoles = await Promise.all(
+			body.roles
+				.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+				.map(async (item) => {
+					const selection = Object.hasOwn(item, "modelSelection")
+						? await validateModelSelection(ctx, item.modelSelection)
+						: undefined;
+					return {
+						memberId: typeof item.memberId === "string" ? item.memberId.trim() : "",
+						enabled: Boolean(item.enabled),
+						isPrimaryContact: Boolean(item.isPrimaryContact),
+						displayNameOverride:
+							typeof item.displayNameOverride === "string" ? item.displayNameOverride.trim() || null : null,
+						providerOverride:
+							selection !== undefined
+								? (selection?.provider ?? null)
+								: typeof item.providerOverride === "string"
+									? item.providerOverride.trim() || null
+									: null,
+						modelOverride:
+							selection !== undefined
+								? (selection?.model ?? null)
+								: typeof item.modelOverride === "string"
+									? item.modelOverride.trim() || null
+									: null,
+						thinkingLevelOverride:
+							selection !== undefined
+								? (selection?.thinkingLevel ?? null)
+								: isThinkingLevel(item.thinkingLevelOverride)
+									? item.thinkingLevelOverride
+									: null,
+						gitNameOverride:
+							typeof item.gitNameOverride === "string" ? item.gitNameOverride.trim() || null : null,
+						gitEmailOverride:
+							typeof item.gitEmailOverride === "string" ? item.gitEmailOverride.trim() || null : null,
+					};
+				}),
+		);
+		if (new Set(parsedRoles.map((role) => role.memberId)).size !== parsedRoles.length) {
+			throw new HttpRequestError(400, "每个角色只能配置一次");
+		}
+		if (!parsedRoles.some((role) => role.enabled)) {
+			throw new HttpRequestError(400, "每个组织至少需要启用 1 位 AI 角色");
+		}
+		for (const role of parsedRoles) {
+			const target = store.getMember(role.memberId);
+			if (!target) {
+				throw new HttpRequestError(400, "角色配置包含不存在的成员");
+			}
+			if (target.roleScope === "personal") {
+				throw new HttpRequestError(400, "个人私有 AI 角色不能加入组织共享角色配置");
+			}
+			if (target.roleScope === "org" && target.ownerOrgId !== orgId) {
+				throw new HttpRequestError(403, `角色 ${target.displayName} 属于其他组织，无法在本组织启用`);
+			}
+		}
+		const useRoleGitIdentity = typeof body.useRoleGitIdentity === "boolean" ? body.useRoleGitIdentity : undefined;
+		const configs = store.setOrgAiRolesBatch(orgId, parsedRoles, useRoleGitIdentity);
+		const updatedOrganization = useRoleGitIdentity === undefined ? null : store.getOrganization(orgId);
+		const effectiveMembers = store.resolveEffectiveOrgMembers(orgId);
+		auditActorAction(ctx, req, actor, {
+			action: "org.update_ai_roles",
+			targetType: "organization",
+			targetId: orgId,
+			orgId,
+			detail: {
+				enabledMemberIds: effectiveMembers.map((m) => m.id),
+				...(typeof body.useRoleGitIdentity === "boolean" ? { useRoleGitIdentity: body.useRoleGitIdentity } : {}),
+			},
+		});
+		if (updatedOrganization) {
+			broadcast("organization_updated", { organization: updatedOrganization }, { orgId });
+		}
+		broadcast("team_updated", { orgId }, { orgId });
+		return c.json({
+			...(updatedOrganization ? { organization: updatedOrganization } : {}),
+			configs,
+			effectiveMembers,
+		});
+	});
 }

@@ -87,13 +87,11 @@ export const requireAuthMiddleware: MiddlewareHandler<ApiRouterEnv> = async (c, 
 	if (!actor) {
 		throw new HttpRequestError(401, "未认证，请登录或通过有效邀请进入工作台");
 	}
-	if (actor.authKind === "session" && actor.user) {
-		if (actor.user.status === "pending_review") {
-			throw new HttpRequestError(403, "账号正在等待管理员审核");
-		}
-		if (actor.user.status === "disabled") {
-			throw new HttpRequestError(403, "当前账号已被禁用，请联系管理员");
-		}
+	if (actor.user?.status === "pending_review") {
+		throw new HttpRequestError(403, "账号已注册，正等待超级管理员审核开通后方可使用");
+	}
+	if (actor.user?.status === "disabled") {
+		throw new HttpRequestError(403, "当前账号已被管理员停用");
 	}
 	await next();
 };
@@ -101,7 +99,7 @@ export const requireAuthMiddleware: MiddlewareHandler<ApiRouterEnv> = async (c, 
 /** Middleware requiring a platform super_admin (or loopback owner when auth is off). */
 export const requireSuperAdminMiddleware: MiddlewareHandler<ApiRouterEnv> = async (c, next) => {
 	if (!isSuperAdminActor(c.var.actor)) {
-		throw new HttpRequestError(403, "仅超级管理员可执行此操作");
+		throw new HttpRequestError(403, "仅系统超级管理员（Admin）可执行此操作");
 	}
 	await next();
 };

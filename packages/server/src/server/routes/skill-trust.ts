@@ -13,10 +13,12 @@ import {
 	type SkillTrustScope,
 	skillTrustPolicyKey,
 } from "@pa/contracts/skill-trust";
+import type { Hono } from "hono";
 import { canAccessOrganization, canAccessWorkspace, canManageOrganization } from "../acl.ts";
 import { isSuperAdminActor, type RequestActor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import { auditActorAction, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
+import { auditActorAction, type ServerRouteContext } from "./context.ts";
 
 const MAX_SKILL_PREVIEW_CHARS = 64 * 1024;
 const MAX_SKILL_PREVIEW_FILES = 40;
@@ -304,52 +306,36 @@ function resolveSkillScopeRoots(ctx: ServerRouteContext, scope: SkillTrustScope,
 	return [];
 }
 
-/** Handles `GET /api/skills/trust`, `GET /api/skills/trust/detail`, and `PATCH /api/skills/trust` for Four-Step Trust skill management. */
-export async function handleSkillTrustRoutes(
-	ctx: ServerRouteContext,
-	{ req, res, method, pathname, actor }: RouteRequest,
-) {
-	if (
-		pathname !== "/api/skills/trust" &&
-		pathname !== "/api/skills/trust/detail" &&
-		pathname !== "/api/skills/trust/native-detail"
-	) {
-		return false;
-	}
-	if (!actor) {
-		sendError(res, 401, "未认证");
-		return true;
-	}
-
-	if (pathname === "/api/skills/trust/detail" && method === "GET") {
-		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
-		const scope = parsedUrl.searchParams.get("scope");
-		const scopeId = (parsedUrl.searchParams.get("scopeId") ?? "").trim();
-		const skillName = (parsedUrl.searchParams.get("skillName") ?? "").trim();
+/** Register Four-Step Trust skill discovery, read-only detail preview, and trust policy routes. */
+export function registerSkillTrustRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/skills/trust/detail", (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		if (!actor) {
+			throw new HttpRequestError(401, "未认证");
+		}
+		const scope = c.req.query("scope") ?? null;
+		const scopeId = (c.req.query("scopeId") ?? "").trim();
+		const skillName = (c.req.query("skillName") ?? "").trim();
 		if (!isValidSkillTrustScope(scope)) {
-			sendError(res, 400, "scope 必须为 global、org、personal 或 workspace");
-			return true;
+			throw new HttpRequestError(400, "scope 必须为 global、org、personal 或 workspace");
 		}
 		if (!skillName || !SKILL_PROPOSAL_NAME_RE.test(skillName)) {
-			sendError(res, 400, "skillName 格式无效");
-			return true;
+			throw new HttpRequestError(400, "skillName 格式无效");
 		}
 		if (!canViewSkillScope(ctx, actor, scope, scopeId)) {
-			sendError(res, 403, "无权查看该作用域下的 Skill 内容");
-			return true;
+			throw new HttpRequestError(403, "无权查看该作用域下的 Skill 内容");
 		}
 		const rootDirs = resolveSkillScopeRoots(ctx, scope, scopeId);
 		if (rootDirs.length === 0) {
-			sendError(res, 404, "未找到对应的 Skill 根目录");
-			return true;
+			throw new HttpRequestError(404, "未找到对应的 Skill 根目录");
 		}
 		let matchedSkillDir: string | null = null;
 		let matchedSkillMd: string | null = null;
 		for (const rootDir of rootDirs) {
 			const candidateDir = resolve(rootDir, skillName);
 			if (candidateDir !== rootDir && !candidateDir.startsWith(`${rootDir}${sep}`)) {
-				sendError(res, 400, "skillName 路径无效");
-				return true;
+				throw new HttpRequestError(400, "skillName 路径无效");
 			}
 			const candidateMd = join(candidateDir, "SKILL.md");
 			if (existsSync(candidateMd)) {
@@ -359,8 +345,7 @@ export async function handleSkillTrustRoutes(
 			}
 		}
 		if (!matchedSkillDir || !matchedSkillMd) {
-			sendError(res, 404, "未找到该 Skill 的 SKILL.md");
-			return true;
+			throw new HttpRequestError(404, "未找到该 Skill 的 SKILL.md");
 		}
 		const md = readBoundedUtf8(matchedSkillMd);
 		const scripts = readSkillFilesDetail(matchedSkillDir, listSkillScripts(matchedSkillDir));
@@ -375,21 +360,22 @@ export async function handleSkillTrustRoutes(
 			scripts,
 			files,
 		};
-		sendJson(res, 200, { detail });
-		return true;
-	}
+		return c.json({ detail });
+	});
 
-	if (pathname === "/api/skills/trust/native-detail" && method === "GET") {
-		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
-		const skillName = (parsedUrl.searchParams.get("name") ?? "").trim();
-		const source = (parsedUrl.searchParams.get("source") ?? "").trim();
+	app.get("/api/skills/trust/native-detail", async (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		if (!actor) {
+			throw new HttpRequestError(401, "未认证");
+		}
+		const skillName = (c.req.query("name") ?? "").trim();
+		const source = (c.req.query("source") ?? "").trim();
 		if (!skillName || !source) {
-			sendError(res, 400, "必须提供 name 与 source");
-			return true;
+			throw new HttpRequestError(400, "必须提供 name 与 source");
 		}
 		if (!ctx.readPiNativeSkills) {
-			sendError(res, 404, "当前运行环境不支持读取 Pi 原生技能详情");
-			return true;
+			throw new HttpRequestError(404, "当前运行环境不支持读取 Pi 原生技能详情");
 		}
 		const runtimeConfig = ctx.getServerRuntimeConfig?.();
 		const inheritLocalPiResources = Boolean(runtimeConfig?.inheritLocalPiResources);
@@ -397,8 +383,7 @@ export async function handleSkillTrustRoutes(
 		const discovered = await ctx.readPiNativeSkills({ inheritLocalPiResources, refresh: false });
 		const matched = discovered.find((item) => item.name === skillName && item.source === source);
 		if (!matched?.filePath || !existsSync(matched.filePath)) {
-			sendError(res, 404, "未找到对应的 Pi 原生技能文件");
-			return true;
+			throw new HttpRequestError(404, "未找到对应的 Pi 原生技能文件");
 		}
 		const matchedSkillDir = dirname(matched.filePath);
 		const md = readBoundedUtf8(matched.filePath);
@@ -411,13 +396,15 @@ export async function handleSkillTrustRoutes(
 			...(md.truncated ? { truncated: true } : {}),
 			files,
 		};
-		sendJson(res, 200, { detail });
-		return true;
-	}
+		return c.json({ detail });
+	});
 
-	if (pathname !== "/api/skills/trust") return false;
-
-	if (method === "GET") {
+	app.get("/api/skills/trust", async (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		if (!actor) {
+			throw new HttpRequestError(401, "未认证");
+		}
 		const policiesByKey = new Map(
 			ctx.store.skillTrust
 				.listPolicies()
@@ -487,8 +474,7 @@ export async function handleSkillTrustRoutes(
 			}
 		}
 
-		const parsedUrl = new URL(req.url ?? pathname, "http://127.0.0.1");
-		const refresh = parsedUrl.searchParams.get("refresh") === "1";
+		const refresh = c.req.query("refresh") === "1";
 		const runtimeConfig = ctx.getServerRuntimeConfig?.();
 		const inheritLocalPiResources = Boolean(runtimeConfig?.inheritLocalPiResources);
 		const isOwner = isSuperAdminActor(actor) || actor.authKind === "loopback";
@@ -506,32 +492,33 @@ export async function handleSkillTrustRoutes(
 			}
 		}
 
-		sendJson(res, 200, { skills, piNativeSkills, piNativeSkillsError });
-		return true;
-	}
+		return c.json({ skills, piNativeSkills, piNativeSkillsError });
+	});
 
-	if (method === "PATCH") {
-		const body = (await readJsonBody(req)) as Record<string, unknown>;
+	app.patch("/api/skills/trust", async (c) => {
+		const ctx = c.var.routeCtx;
+		const actor = c.var.actor;
+		const req = c.var.nodeReq!;
+		if (!actor) {
+			throw new HttpRequestError(401, "未认证");
+		}
+		const body = await parseJsonBody(c);
 		const scope = body.scope;
 		const scopeId = typeof body.scopeId === "string" ? body.scopeId.trim() : "";
 		const skillName = typeof body.skillName === "string" ? body.skillName.trim() : "";
 		const trustLevel = body.trustLevel;
 
 		if (!isValidSkillTrustScope(scope)) {
-			sendError(res, 400, "scope 必须为 global、org、personal 或 workspace");
-			return true;
+			throw new HttpRequestError(400, "scope 必须为 global、org、personal 或 workspace");
 		}
 		if (!skillName || !SKILL_PROPOSAL_NAME_RE.test(skillName)) {
-			sendError(res, 400, "skillName 格式无效");
-			return true;
+			throw new HttpRequestError(400, "skillName 格式无效");
 		}
 		if (!isValidSkillTrustLevel(trustLevel)) {
-			sendError(res, 400, "trustLevel 必须为 confirm、autonomous 或 disabled");
-			return true;
+			throw new HttpRequestError(400, "trustLevel 必须为 confirm、autonomous 或 disabled");
 		}
 		if (!canManageSkillScope(ctx, actor, scope, scopeId)) {
-			sendError(res, 403, "无权修改该作用域下的 Skill 信任策略");
-			return true;
+			throw new HttpRequestError(403, "无权修改该作用域下的 Skill 信任策略");
 		}
 
 		const policy = ctx.store.skillTrust.upsertPolicy({
@@ -548,9 +535,6 @@ export async function handleSkillTrustRoutes(
 			orgId: scope === "org" ? scopeId : null,
 			detail: { scope, scopeId, skillName, trustLevel },
 		});
-		sendJson(res, 200, { ok: true, policy });
-		return true;
-	}
-
-	return false;
+		return c.json({ ok: true, policy });
+	});
 }
