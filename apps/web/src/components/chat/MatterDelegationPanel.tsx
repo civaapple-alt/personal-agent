@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { MatterMessageDto, MatterProgressDto } from "../../api/matters.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import { Badge, type BadgeTone, Button, Select, Tabs } from "../../primitives/index.ts";
 import { formatClockTime, stripMarkdownFormatting } from "../../utils/formatters.ts";
 import {
 	type BoardFilter,
@@ -34,6 +35,13 @@ function describeTurn(message: MatterMessageDto) {
 	return label || "附件消息";
 }
 
+function resolvePostStatusTone(status: "running" | "completed" | "failed", verdict?: string): BadgeTone {
+	if (verdict) return verdict === "passed" ? "info" : "warn";
+	if (status === "running") return "accent";
+	if (status === "completed") return "info";
+	return "warn";
+}
+
 function BoardPost({
 	post,
 	memberName,
@@ -64,70 +72,67 @@ function BoardPost({
 			: `${verification ? "验收回报" : "回报"} #${assignment.number}`;
 
 	return (
-		<li className="delegation-board-post">
-			<div className="delegation-post-meta">
-				<span className="delegation-post-number">{title}</span>
+		<li className="border border-line rounded-md px-3 py-2.5 min-w-0 bg-stage">
+			<div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-ink break-words">
+				<span className="text-accent text-micro tabular-nums font-bold">{title}</span>
 				<strong>
 					{isAssignment || !recipient ? sender : recipient}
 					{recipient && <> → {isAssignment ? recipient : sender}</>}
 				</strong>
 				{(isAssignment || (kind === "reply" && verification?.verdict)) && (
-					<span
-						className={`delegation-status-tag ${verification?.verdict && verification.verdict !== "passed" ? "failed" : assignment.status}`}
-					>
+					<Badge tone={resolvePostStatusTone(assignment.status, verification?.verdict)} size="xs">
 						{verification?.verdict
 							? VERIFICATION_STATUS[verification.verdict]
 							: DELEGATION_STATUS[assignment.status]}
-					</span>
+					</Badge>
 				)}
-				<time dateTime={message.createdAt}>{formatClockTime(message.createdAt)}</time>
+				<time className="ml-auto text-ink-muted whitespace-nowrap" dateTime={message.createdAt}>
+					{formatClockTime(message.createdAt)}
+				</time>
 			</div>
 			{verification && isAssignment && (
-				<div className="delegation-review-target">
+				<div className="flex gap-x-2.5 gap-y-1 flex-wrap mt-1 text-ink-secondary break-words">
 					<span>
 						{verification.kind === "commit" ? "提交" : verification.kind === "file" ? "文件" : "文档草稿"}{" "}
-						<code>{verification.reference}</code>
+						<code className="font-mono">{verification.reference}</code>
 					</span>
 					{verification.kind !== "commit" && (
-						<code title={verification.digest}>SHA-256 {verification.digest.slice(0, 12)}</code>
+						<code className="font-mono" title={verification.digest}>
+							SHA-256 {verification.digest.slice(0, 12)}
+						</code>
 					)}
 				</div>
 			)}
 			{isAssignment && verification?.assignmentId && reviewedNumber !== undefined && (
-				<button
-					type="button"
-					className="btn-inline btn-xs delegation-post-reference"
+				<Button
+					variant="inline"
+					size="xs"
+					className="mt-1 px-0"
 					onClick={() => {
 						if (verification.assignmentId) onOpenAssignment(verification.assignmentId);
 					}}
 				>
 					验收任务 #{reviewedNumber}
-				</button>
+				</Button>
 			)}
 			{isAssignment && parentNumber !== undefined && parentId && (
-				<button
-					type="button"
-					className="btn-inline btn-xs delegation-post-reference"
-					onClick={() => onOpenAssignment(parentId)}
-				>
+				<Button variant="inline" size="xs" className="mt-1 px-0" onClick={() => onOpenAssignment(parentId)}>
 					转派自 #{parentNumber}
-				</button>
+				</Button>
 			)}
 			{!isAssignment && (
-				<button
-					type="button"
-					className="btn-inline btn-xs delegation-post-reference"
-					onClick={() => onOpenAssignment(assignment.id)}
-				>
+				<Button variant="inline" size="xs" className="mt-1 px-0" onClick={() => onOpenAssignment(assignment.id)}>
 					查看原委托 #{assignment.number}
-				</button>
+				</Button>
 			)}
 			<details
-				className="delegation-post-content"
+				className="mt-1 break-words [&[open]>.md-body]:mt-2 [&[open]>.md-body]:pt-2 [&[open]>.md-body]:border-t [&[open]>.md-body]:border-line"
 				id={isAssignment ? `delegation-request-${assignment.id}` : undefined}
 				onToggle={(event) => setExpanded(event.currentTarget.open)}
 			>
-				<summary>{preview}</summary>
+				<summary className="py-0.5 cursor-pointer leading-relaxed text-ink-secondary hover:text-ink">
+					{preview}
+				</summary>
 				{expanded && (
 					<MarkdownView
 						content={
@@ -163,6 +168,8 @@ export function MatterDelegationPanel({
 	onSelectView: (next: DelegationView) => void;
 	onLocateTurn: (turnId: string) => void;
 }) {
+	const scopeSelectId = useId();
+	const filterSelectId = useId();
 	const [openRequest, setOpenRequest] = useState<{ id: string } | null>(null);
 	const [selection, setSelection] = useState<{ scopeId: string | undefined; filter: BoardFilter }>();
 	const turns = messages.filter((message) => message.senderType === "user");
@@ -221,12 +228,14 @@ export function MatterDelegationPanel({
 	};
 
 	return (
-		<section className="delegation-panel" aria-label="按轮次查看团队委托">
-			<div className="delegation-round">
-				<label>
+		<section className="grid gap-2.5 min-w-0" aria-label="按轮次查看团队委托">
+			<div className="flex items-end gap-3">
+				<label htmlFor={scopeSelectId} className="grid flex-1 min-w-0 gap-1 font-semibold text-ink">
 					<span>对话轮次</span>
-					<select
-						className="input-field"
+					<Select
+						id={scopeSelectId}
+						size="sm"
+						className="text-ellipsis"
 						value={scope}
 						onChange={(event) => {
 							const value = event.target.value;
@@ -246,44 +255,51 @@ export function MatterDelegationPanel({
 								</option>
 							))}
 						{delegations.history.assignments.length > 0 && <option value="history">历史记录 · 轮次未确认</option>}
-					</select>
+					</Select>
 				</label>
 				{selectedTurn && (
-					<button type="button" className="btn-inline btn-xs" onClick={() => onLocateTurn(selectedTurn.id)}>
+					<Button variant="inline" size="xs" onClick={() => onLocateTurn(selectedTurn.id)}>
 						定位消息
-					</button>
+					</Button>
 				)}
 			</div>
 			{selectedTurn && (
-				<div className="delegation-round-context">
-					<strong title={selectedTurn.content}>{describeTurn(selectedTurn)}</strong>
-					<time dateTime={selectedTurn.createdAt}>{formatRoundTime(selectedTurn.createdAt)}</time>
-					{isLive && <span className="delegation-status-tag running">本轮运行中</span>}
+				<div className="flex items-center flex-wrap gap-x-2.5 gap-y-1.5 bg-sidebar border border-line rounded-md px-2.5 py-2">
+					<strong className="break-words text-ink" title={selectedTurn.content}>
+						{describeTurn(selectedTurn)}
+					</strong>
+					<time className="text-ink-muted" dateTime={selectedTurn.createdAt}>
+						{formatRoundTime(selectedTurn.createdAt)}
+					</time>
+					{isLive && (
+						<Badge tone="accent" size="xs">
+							本轮运行中
+						</Badge>
+					)}
 				</div>
 			)}
-			<fieldset className="delegation-view" aria-label="委托视图">
-				<button
-					type="button"
-					className={`choice-chip ${view === "board" ? "active" : ""}`}
-					aria-pressed={view === "board"}
-					onClick={() => onSelectView("board")}
-				>
-					交接公告板
-				</button>
-				<button
-					type="button"
-					className={`choice-chip ${view === "graph" ? "active" : ""}`}
-					aria-pressed={view === "graph"}
-					onClick={() => onSelectView("graph")}
-				>
-					委托关系图
-				</button>
-			</fieldset>
+			<div className="flex items-center flex-wrap gap-2">
+				<Tabs
+					variant="pill"
+					size="sm"
+					ariaLabel="委托视图"
+					value={view}
+					onChange={(id) => {
+						if (id === "board" || id === "graph") onSelectView(id);
+					}}
+					items={[
+						{ id: "board", label: "交接公告板" },
+						{ id: "graph", label: "委托关系图" },
+					]}
+				/>
+			</div>
 			{assignments.length > 0 && (
-				<label className="delegation-board-filter">
+				<label htmlFor={filterSelectId} className="flex items-center gap-2 flex-wrap font-semibold text-ink">
 					<span>筛选交接记录</span>
-					<select
-						className="input-field"
+					<Select
+						id={filterSelectId}
+						size="sm"
+						className="w-auto min-w-0 max-w-full"
 						value={filter}
 						onChange={(event) => {
 							const value = event.target.value;
@@ -315,19 +331,19 @@ export function MatterDelegationPanel({
 								))}
 							</optgroup>
 						)}
-					</select>
+					</Select>
 				</label>
 			)}
 			{view === "graph" ? (
 				edges.length + extraEdges.length > 0 ? (
 					<DelegationGraph edges={[...edges, ...extraEdges]} onOpenAssignment={openAssignment} />
 				) : (
-					<p className="muted-hint">
+					<p className="m-0 text-xs text-ink-muted">
 						{filter === "all" ? "这一轮暂无委托关系。" : "当前筛选没有匹配的委托关系。"}
 					</p>
 				)
 			) : board?.posts.length && shown.length > 0 ? (
-				<ol className="delegation-board-list">
+				<ol className="list-none m-0 p-0 grid gap-2.5 min-w-0">
 					{board.posts
 						.filter((post) => shownIds.has(post.assignment.id))
 						.map((post) => (
@@ -350,7 +366,7 @@ export function MatterDelegationPanel({
 						))}
 				</ol>
 			) : (
-				<p className="muted-hint">
+				<p className="m-0 text-xs text-ink-muted">
 					{filter !== "all"
 						? "当前筛选没有匹配的交接记录。"
 						: isLive

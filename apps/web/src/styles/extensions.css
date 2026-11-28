@@ -1,0 +1,114 @@
+/* Shared styling for portable web extension cards (`@pa/ext-visualize/web`, `@pa/ext-skill-capture/web`) and inline code blocks. */
+
+.pa-viz-diagram,
+.pa-viz-file,
+.pa-viz-comparison {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pa-viz-card-head,
+.pa-viz-file,
+.pa-viz-option-head {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.pa-viz-badge,
+.pa-viz-rec-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 7px;
+	border-radius: var(--radius-pill);
+	border: 1px solid var(--accent-border);
+	background: var(--bg-accent-soft);
+	color: var(--accent);
+	font-size: var(--text-micro);
+	font-weight: 600;
+	line-height: 1.25;
+	white-space: nowrap;
+}
+
+.pa-viz-title {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--text-primary);
+	line-height: 1.4;
+}
+
+.pa-viz-path {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	background: var(--bg-subtle);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-xs);
+	padding: 1px 6px;
+	overflow-wrap: anywhere;
+}
+
+.pa-viz-code {
+	margin: 6px 0 0;
+	padding: 10px 12px;
+	border-radius: var(--radius-md);
+	background: var(--bg-stage);
+	border: 1px solid var(--border);
+	color: var(--text-primary);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	line-height: 1.55;
+	overflow-x: auto;
+}
+
+.pa-viz-option-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 10px;
+	margin-top: 6px;
+}
+
+.pa-viz-option-card {
+	padding: 10px 12px;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--border);
+	background: var(--bg-card);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.pa-viz-option-card.is-recommended {
+	border-color: var(--accent-border);
+	background: var(--surface-accent);
+}
+
+.pa-viz-option-desc {
+	margin: 0;
+	font-size: var(--text-xs);
+	color: var(--text-secondary);
+	line-height: 1.45;
+}
+
+.pa-viz-list {
+	margin: 0;
+	padding-left: 16px;
+	font-size: var(--text-xs);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	line-height: 1.45;
+}
+
+.pa-viz-list.is-pros {
+	color: var(--success-text);
+}
+
+.pa-viz-list.is-cons {
+	color: var(--danger-text);
+}

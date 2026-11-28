@@ -1,3 +1,5 @@
+import { Badge, type BadgeTone } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import type { DelegationEdge } from "../../utils/matterDelegations.ts";
 
 export const DELEGATION_STATUS = {
@@ -11,6 +13,13 @@ export const VERIFICATION_STATUS = {
 	changes_requested: "需返工",
 	inconclusive: "待复验",
 };
+
+function resolveStatusTone(edge: DelegationEdge): BadgeTone {
+	if (edge.verdict) return edge.verdict === "passed" ? "info" : "warn";
+	if (edge.status === "running") return "accent";
+	if (edge.status === "completed") return "info";
+	return "warn";
+}
 
 /** A directed call tree. Each branch represents one call, including repeated calls to the same role. */
 export function DelegationGraph({
@@ -29,30 +38,39 @@ export function DelegationGraph({
 		siblings.push(edge);
 		children.set(parentId, siblings);
 	}
-	function renderBranches(branches: DelegationEdge[]) {
+	function renderBranches(branches: DelegationEdge[], depth = 0) {
 		return (
-			<ul className="delegation-graph-list">
+			<ul
+				className={cn("list-none m-0 p-0 grid gap-1.5", depth > 0 && "mt-1.5 ml-2.5 pl-2.5 border-l-2 border-line")}
+			>
 				{branches.map((edge) => {
 					const nested = children.get(edge.id);
 					const path = (
-						<span className="delegation-graph-path">
-							{edge.number !== undefined && <span className="delegation-graph-number">#{edge.number}</span>}
+						<span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 break-words">
+							{edge.number !== undefined && (
+								<span className="text-accent text-micro tabular-nums font-bold">#{edge.number}</span>
+							)}
 							{edge.from && (
 								<>
 									<span>{edge.from}</span>
-									<span className="delegation-graph-arrow">→</span>
+									<span className="text-accent font-bold">→</span>
 								</>
 							)}
 							<strong>{edge.to}</strong>
 						</span>
 					);
 					return (
-						<li key={edge.id} className="delegation-graph-branch">
-							<div className={`delegation-graph-edge ${edge.status}`}>
+						<li key={edge.id} className="min-w-0">
+							<div
+								className={cn(
+									"flex items-center flex-wrap gap-x-2 gap-y-1 min-w-0 bg-stage border rounded-md px-2.5 py-1.5 text-ink text-xs",
+									edge.status === "running" ? "border-accent-border" : "border-line",
+								)}
+							>
 								{onOpenAssignment ? (
 									<button
 										type="button"
-										className="delegation-graph-link"
+										className="min-w-0 border-0 p-0.5 bg-transparent text-xs text-inherit text-start cursor-pointer hover:text-accent transition-colors"
 										onClick={() => onOpenAssignment(edge.id)}
 									>
 										{path}
@@ -60,9 +78,7 @@ export function DelegationGraph({
 								) : (
 									path
 								)}
-								<span
-									className={`delegation-status-tag ${edge.verdict && edge.verdict !== "passed" ? "failed" : edge.status}`}
-								>
+								<Badge tone={resolveStatusTone(edge)} size="xs" className="whitespace-nowrap">
 									{edge.verdict
 										? VERIFICATION_STATUS[edge.verdict]
 										: edge.observer
@@ -70,15 +86,15 @@ export function DelegationGraph({
 											: edge.verification && edge.status === "running"
 												? "验收中"
 												: DELEGATION_STATUS[edge.status]}
-								</span>
-								{edge.stageLabel && <span className="delegation-graph-stage">{edge.stageLabel}</span>}
+								</Badge>
+								{edge.stageLabel && <span className="text-ink-secondary break-words">{edge.stageLabel}</span>}
 							</div>
-							{nested && renderBranches(nested)}
+							{nested && renderBranches(nested, depth + 1)}
 						</li>
 					);
 				})}
 			</ul>
 		);
 	}
-	return <div className="delegation-graph">{renderBranches(children.get(undefined) ?? [])}</div>;
+	return <div className="min-w-0">{renderBranches(children.get(undefined) ?? [])}</div>;
 }

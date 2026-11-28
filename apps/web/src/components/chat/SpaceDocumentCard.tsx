@@ -1,4 +1,5 @@
 import { type SpaceDocumentType, spaceDocTypeLabel } from "../../api/space.ts";
+import { Badge, type BadgeTone, Button, Card } from "../../primitives/index.ts";
 
 export interface ChatSpaceDocumentItem {
 	id: string;
@@ -10,6 +11,14 @@ export interface ChatSpaceDocumentItem {
 	headCommit?: string;
 	summary?: string;
 }
+
+const DOC_TYPE_TONE: Record<SpaceDocumentType, BadgeTone> = {
+	plan: "accent",
+	spec: "info",
+	decision: "warn",
+	rule: "observer",
+	note: "neutral",
+};
 
 /** Actionable card rendered under an AI reply for a saved Space document, supporting right-pane content, Git diff, and plan-only proceed. */
 export function SpaceDocumentCard({
@@ -26,33 +35,42 @@ export function SpaceDocumentCard({
 	const resolvedType: SpaceDocumentType = doc.docType ?? "note";
 	const showProceed = canProceed && resolvedType === "plan" && Boolean(onProceed);
 	return (
-		<div className="space-doc-card">
-			<button type="button" className="space-doc-card-main" onClick={() => onOpen(false)}>
-				<div className="space-doc-card-head">
-					<span className={`space-doc-type-pill is-${resolvedType}`}>{spaceDocTypeLabel(resolvedType)}</span>
-					<strong className="space-doc-card-title">{doc.title}</strong>
-					<span className="space-doc-card-rev">
+		<Card
+			padding="none"
+			className="mt-2.5 rounded-xl bg-surface overflow-hidden transition-all hover:border-accent-border hover:shadow-sm"
+		>
+			<button
+				type="button"
+				className="flex flex-col gap-1.5 w-full px-4 pt-3 pb-2.5 border-0 bg-transparent text-inherit text-left cursor-pointer"
+				onClick={() => onOpen(false)}
+			>
+				<div className="flex items-center flex-wrap gap-2">
+					<Badge tone={DOC_TYPE_TONE[resolvedType]} size="xs">
+						{spaceDocTypeLabel(resolvedType)}
+					</Badge>
+					<strong className="text-sm font-semibold text-ink">{doc.title}</strong>
+					<span className="text-micro text-ink-muted font-mono">
 						{doc.spaceName ? `${doc.spaceName} · ` : ""}rev {doc.revision}
 						{doc.headCommit ? ` · ${doc.headCommit.slice(0, 7)}` : ""}
 					</span>
 				</div>
-				{doc.summary && <p className="space-doc-card-summary">{doc.summary}</p>}
+				{doc.summary && <p className="m-0 text-xs text-ink-secondary leading-normal line-clamp-2">{doc.summary}</p>}
 			</button>
-			<div className="space-doc-card-actions">
+			<div className="flex items-center gap-2.5 px-4 pb-3">
 				{showProceed && onProceed && (
-					<button type="button" className="btn-pill-dark btn-xs" onClick={onProceed}>
+					<Button variant="primary" size="xs" onClick={onProceed}>
 						确认并推进
-					</button>
+					</Button>
 				)}
-				<button type="button" className="btn-pill-outline btn-xs" onClick={() => onOpen(false)}>
+				<Button variant="secondary" size="xs" onClick={() => onOpen(false)}>
 					查看全文
-				</button>
+				</Button>
 				{doc.revision > 1 && (
-					<button type="button" className="btn-inline" onClick={() => onOpen(true)}>
+					<Button variant="inline" size="xs" onClick={() => onOpen(true)}>
 						查看变更
-					</button>
+					</Button>
 				)}
 			</div>
-		</div>
+		</Card>
 	);
 }

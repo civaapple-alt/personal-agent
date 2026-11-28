@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
 	getSpaceDocument,
 	getSpaceDocumentCommitDetail,
@@ -14,6 +14,19 @@ import {
 } from "../../api/space.ts";
 import { resolveApiUrl, type WorkspaceDto } from "../../api.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	FieldGroup,
+	IconButton,
+	Input,
+	Select,
+	Tabs,
+	Textarea,
+} from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { SpaceDocumentFeedback } from "../SpaceDocumentFeedback.tsx";
 import { SpaceFolderFilesPanel } from "../SpaceFolderFilesPanel.tsx";
 
@@ -30,6 +43,14 @@ interface MatterDocSidePaneProps {
 	onClosePane: () => void;
 	onOpenFullSpace: (docId: string) => void;
 }
+
+const DOC_TYPE_TONE: Record<SpaceDocumentType, BadgeTone> = {
+	plan: "accent",
+	spec: "info",
+	decision: "warn",
+	rule: "observer",
+	note: "neutral",
+};
 
 /** Right-hand split document pane inside a matter conversation: supports multi-tab docs, live SSE refresh, inline editing, and Git diff. */
 export function MatterDocSidePane({
@@ -64,6 +85,13 @@ export function MatterDocSidePane({
 	const [linkedFilePath, setLinkedFilePath] = useState("");
 	const [commitMessage, setCommitMessage] = useState("");
 	const [saving, setSaving] = useState(false);
+
+	const titleInputId = useId();
+	const typeInputId = useId();
+	const contentInputId = useId();
+	const wsInputId = useId();
+	const fileInputId = useId();
+	const commitMsgId = useId();
 
 	const loadDoc = useCallback(async (docId: string, expandLatestDiff: boolean) => {
 		setLoading(true);
@@ -178,30 +206,41 @@ export function MatterDocSidePane({
 	};
 
 	return (
-		<aside className="matter-doc-side-pane" aria-label="空间文档侧栏">
-			<div className="matter-doc-pane-tabs">
-				<div className="matter-doc-tab-strip" role="tablist" aria-label="已打开文档">
+		<aside
+			className="flex flex-col min-w-0 min-h-0 h-full border-l border-line bg-surface overflow-hidden max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:border-l-0 max-lg:shadow-lg"
+			aria-label="空间文档侧栏"
+		>
+			<div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-line bg-stage shrink-0">
+				<div className="flex items-center gap-1 min-w-0 overflow-x-auto" role="tablist" aria-label="已打开文档">
 					{openDocIds.map((id) => {
 						const tabTitle = (doc?.id === id ? doc.title : docTitlesById.get(id)) || `文档 ${id.slice(-6)}`;
 						const isActive = id === activeDocId;
 						return (
-							<div key={id} className={`matter-doc-tab ${isActive ? "active" : ""}`}>
+							<div
+								key={id}
+								className={cn(
+									"inline-flex items-center max-w-[220px] rounded-md border text-xs transition-colors",
+									isActive
+										? "bg-surface border-line font-semibold text-ink"
+										: "bg-transparent border-transparent text-ink-secondary hover:text-ink",
+								)}
+							>
 								<button
 									type="button"
 									role="tab"
 									aria-selected={isActive}
-									className="matter-doc-tab-btn"
+									className="inline-flex items-center gap-1.5 border-0 bg-transparent text-inherit py-1 pl-2 pr-1 cursor-pointer min-w-0"
 									onClick={() => onSelectDoc(id)}
 									title={tabTitle}
 								>
-									<span className="matter-doc-tab-icon" aria-hidden="true">
+									<span className="shrink-0 text-micro opacity-75" aria-hidden="true">
 										📄
 									</span>
-									<span className="matter-doc-tab-label">{tabTitle}</span>
+									<span className="truncate">{tabTitle}</span>
 								</button>
 								<button
 									type="button"
-									className="matter-doc-tab-close"
+									className="border-0 bg-transparent text-ink-muted py-1 pr-1.5 pl-0.5 cursor-pointer text-sm leading-none hover:text-ink"
 									aria-label={`关闭 ${tabTitle}`}
 									onClick={() => onCloseDoc(id)}
 								>
@@ -211,62 +250,60 @@ export function MatterDocSidePane({
 						);
 					})}
 				</div>
-				<div className="matter-doc-pane-controls">
-					<button
-						type="button"
-						className="btn-icon-ghost"
+				<div className="inline-flex items-center gap-0.5 shrink-0">
+					<IconButton
+						variant="ghost"
+						size="sm"
 						title="刷新最新内容"
 						aria-label="刷新最新内容"
 						onClick={() => void loadDoc(activeDocId, false)}
 					>
 						↻
-					</button>
-					<button
-						type="button"
-						className="btn-icon-ghost"
+					</IconButton>
+					<IconButton
+						variant="ghost"
+						size="sm"
 						title="在完整资料空间打开"
 						aria-label="在完整资料空间打开"
 						onClick={() => onOpenFullSpace(activeDocId)}
 					>
 						↗
-					</button>
-					<button
-						type="button"
-						className="btn-icon-ghost"
+					</IconButton>
+					<IconButton
+						variant="ghost"
+						size="sm"
 						title="收起右侧文档面板"
 						aria-label="收起右侧文档面板"
 						onClick={onClosePane}
 					>
 						×
-					</button>
+					</IconButton>
 				</div>
 			</div>
 
-			<div className="matter-doc-pane-body">
+			<div className="flex-1 overflow-y-auto px-6 pt-5 pb-8 overscroll-contain">
 				{error && (
-					<p role="alert" className="space-error">
+					<Banner tone="danger" className="mb-3">
 						{error}
-					</p>
+					</Banner>
 				)}
 				{loading && !doc ? (
-					<p className="muted-hint">正在加载文档…</p>
+					<p className="m-0 text-xs text-ink-muted">正在加载文档…</p>
 				) : editing && doc ? (
-					<form className="space-editor-form" onSubmit={(e) => void handleSave(e)}>
-						<div className="space-create-row">
-							<label style={{ flex: 2 }}>
-								标题
-								<input
-									className="input-field"
+					<form className="flex flex-col gap-4" onSubmit={(e) => void handleSave(e)}>
+						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+							<FieldGroup label="标题" htmlFor={titleInputId} className="sm:col-span-2">
+								<Input
+									id={titleInputId}
 									value={title}
 									onChange={(e) => setTitle(e.target.value)}
 									maxLength={200}
 									required
 								/>
-							</label>
-							<label style={{ flex: 1 }}>
-								内容类型
-								<select
-									className="input-field"
+							</FieldGroup>
+							<FieldGroup label="内容类型" htmlFor={typeInputId}>
+								<Select
+									id={typeInputId}
 									value={docType}
 									onChange={(e) => setDocType(e.target.value as SpaceDocumentType)}
 								>
@@ -275,23 +312,22 @@ export function MatterDocSidePane({
 											{opt.label}
 										</option>
 									))}
-								</select>
-							</label>
+								</Select>
+							</FieldGroup>
 						</div>
-						<label>
-							正文（Markdown）
-							<textarea
-								className="input-field space-page-editor"
+						<FieldGroup label="正文（Markdown）" htmlFor={contentInputId}>
+							<Textarea
+								id={contentInputId}
+								className="min-h-[360px]"
 								value={content}
 								onChange={(e) => setContent(e.target.value)}
 								placeholder="支持 Markdown"
 							/>
-						</label>
-						<div className="space-create-row">
-							<label style={{ flex: 1 }}>
-								关联仓库
-								<select
-									className="input-field"
+						</FieldGroup>
+						<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+							<FieldGroup label="关联仓库" htmlFor={wsInputId}>
+								<Select
+									id={wsInputId}
 									value={linkedWorkspaceId}
 									onChange={(e) => setLinkedWorkspaceId(e.target.value)}
 								>
@@ -301,73 +337,66 @@ export function MatterDocSidePane({
 											{ws.name}
 										</option>
 									))}
-								</select>
-							</label>
-							<label style={{ flex: 2 }}>
-								关联文件相对路径或链接
-								<input
-									className="input-field"
+								</Select>
+							</FieldGroup>
+							<FieldGroup label="关联文件相对路径或链接" htmlFor={fileInputId} className="sm:col-span-2">
+								<Input
+									id={fileInputId}
 									value={linkedFilePath}
 									onChange={(e) => setLinkedFilePath(e.target.value)}
 									placeholder="如 docs/plan.md"
 									maxLength={300}
 								/>
-							</label>
+							</FieldGroup>
 						</div>
-						<label>
-							提交说明（可选）
-							<input
-								className="input-field"
+						<FieldGroup label="提交说明（可选）" htmlFor={commitMsgId}>
+							<Input
+								id={commitMsgId}
 								value={commitMessage}
 								onChange={(e) => setCommitMessage(e.target.value)}
 								placeholder={`Update ${title || doc.title}`}
 								maxLength={200}
 							/>
-						</label>
-						<div className="space-page-actions">
-							<button type="submit" className="btn-pill-dark btn-xs" disabled={saving}>
+						</FieldGroup>
+						<div className="flex items-center gap-2.5 pt-1">
+							<Button type="submit" variant="primary" size="xs" disabled={saving}>
 								{saving ? "提交中…" : "保存并提交 Git"}
-							</button>
-							<button
-								type="button"
-								className="btn-secondary btn-xs"
-								onClick={() => setEditing(false)}
-								disabled={saving}
-							>
+							</Button>
+							<Button variant="secondary" size="xs" onClick={() => setEditing(false)} disabled={saving}>
 								取消
-							</button>
+							</Button>
 						</div>
 					</form>
 				) : doc ? (
 					<>
-						<div className="matter-doc-pane-header">
-							<div className="matter-doc-pane-title-wrap">
-								<h2>{doc.title}</h2>
-								<div className="space-doc-meta">
-									<span className={`space-doc-type-pill is-${doc.docType}`}>
+						<div className="flex items-start justify-between gap-3 pb-3.5 border-b border-line">
+							<div className="min-w-0 flex-1">
+								<h2 className="m-0 text-lg font-semibold leading-snug text-ink">{doc.title}</h2>
+								<div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
+									<Badge tone={DOC_TYPE_TONE[doc.docType]} size="xs">
 										{spaceDocTypeLabel(doc.docType)}
-									</span>
-									<span className="pill">
-										rev {doc.revision} · <code>{doc.headCommit.slice(0, 7)}</code>
-									</span>
+									</Badge>
+									<Badge tone="neutral" size="xs">
+										rev {doc.revision} · <code className="font-mono">{doc.headCommit.slice(0, 7)}</code>
+									</Badge>
 									{doc.linkedFilePath && (
-										<span className="pill">
+										<Badge tone="neutral" size="xs">
 											关联：
 											{doc.linkedWorkspaceId
 												? `${workspaces.find((w) => w.id === doc.linkedWorkspaceId)?.name ?? doc.linkedWorkspaceId} / `
 												: ""}
-											<code>{doc.linkedFilePath}</code>
-										</span>
+											<code className="font-mono">{doc.linkedFilePath}</code>
+										</Badge>
 									)}
-									<span className="muted-hint">
+									<span className="text-xs text-ink-muted">
 										{resolveLabel(doc.updatedBy)} · {new Date(doc.updatedAt).toLocaleString()}
 									</span>
 								</div>
 							</div>
 							{canWrite && (
-								<button
-									type="button"
-									className="btn-secondary btn-xs"
+								<Button
+									variant="secondary"
+									size="xs"
 									onClick={() => {
 										setTitle(doc.title);
 										setDocType(doc.docType);
@@ -379,30 +408,25 @@ export function MatterDocSidePane({
 									}}
 								>
 									编辑
-								</button>
+								</Button>
 							)}
 						</div>
 
 						{commits.length > 0 && (
-							<div className="matter-doc-pane-modebar" role="tablist" aria-label="文档视图">
-								<button
-									type="button"
-									role="tab"
-									aria-selected={viewMode === "content"}
-									className={viewMode === "content" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-									onClick={() => void handleSwitchMode("content")}
-								>
-									正文
-								</button>
-								<button
-									type="button"
-									role="tab"
-									aria-selected={viewMode === "diff"}
-									className={viewMode === "diff" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-									onClick={() => void handleSwitchMode("diff")}
-								>
-									变更对比（{commits.length}）
-								</button>
+							<div className="mt-3.5">
+								<Tabs
+									variant="pill"
+									size="sm"
+									ariaLabel="文档视图"
+									value={viewMode}
+									onChange={(id) => {
+										if (id === "content" || id === "diff") void handleSwitchMode(id);
+									}}
+									items={[
+										{ id: "content", label: "正文" },
+										{ id: "diff", label: "变更对比", count: commits.length },
+									]}
+								/>
 							</div>
 						)}
 
@@ -423,30 +447,35 @@ export function MatterDocSidePane({
 									onChanged={() => loadDoc(activeDocId, false)}
 								/>
 							) : (
-								<div className="matter-doc-pane-markdown">
+								<div className="mt-4">
 									<MarkdownView content={doc.content || "（空白）"} />
 								</div>
 							)
 						) : (
-							<div className="matter-doc-pane-diff-view">
-								<ul className="space-commit-list">
+							<div className="mt-3.5">
+								<ul className="list-none m-0 mt-2.5 p-0 flex flex-col gap-1.5">
 									{commits.map((commit) => (
-										<li key={commit.hash} className="space-commit-item">
+										<li key={commit.hash} className="flex flex-col gap-1">
 											<button
 												type="button"
-												className={`space-commit-btn ${selectedCommitHash === commit.hash ? "active" : ""}`}
+												className={cn(
+													"flex flex-wrap items-center gap-2 w-full px-2.5 py-2 border rounded-md text-left text-xs cursor-pointer transition-colors",
+													selectedCommitHash === commit.hash
+														? "bg-stage border-accent text-ink"
+														: "bg-transparent border-line text-ink hover:bg-hover/40",
+												)}
 												onClick={() => void handleToggleCommit(commit.hash)}
 											>
-												<code className="space-commit-hash">{commit.shortHash}</code>
-												<span className="space-commit-subject">{commit.subject}</span>
-												<span className="space-commit-meta">
+												<code className="font-mono font-semibold text-accent">{commit.shortHash}</code>
+												<span className="flex-1 font-medium">{commit.subject}</span>
+												<span className="text-ink-muted">
 													{resolveLabel(commit.authorName)} ·{" "}
 													{new Date(commit.committedAt).toLocaleString()}
 												</span>
 											</button>
 											{selectedCommitHash === commit.hash && commitDetail && (
-												<div className="space-commit-diff-box">
-													<pre className="space-diff-pre">
+												<div className="mt-1.5 rounded-md overflow-hidden border border-line">
+													<pre className="space-diff-pre m-0 px-3 py-2.5 bg-zinc-950 text-zinc-100 font-mono text-xs overflow-x-auto leading-relaxed">
 														{(commitDetail.diff || "（无文本差异）").split("\n").map((line, index) => (
 															<span
 																key={`${commit.hash}-${index}`}

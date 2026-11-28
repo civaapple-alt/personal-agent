@@ -1,6 +1,7 @@
 import type { SessionInsightFinding, SessionInsightsReport } from "@pa/contracts/session-insights";
 import { useCallback, useEffect, useState } from "react";
 import { fetchRuntimeInsights } from "../api/runtime.ts";
+import { Badge, type BadgeTone, Banner, Button, Card, CardBody, CardHeader, EmptyState } from "../primitives/index.ts";
 
 interface SessionInsightsPanelProps {
 	onStartMatterWithPrompt?: (prompt: string) => void;
@@ -21,10 +22,10 @@ function formatCompactNumber(n: number): string {
 	return String(n);
 }
 
-const SEVERITY_BADGE: Record<"error" | "warn" | "info", { label: string; className: string }> = {
-	error: { label: "异常", className: "rsi-status-rejected" },
-	warn: { label: "提醒", className: "rsi-status-candidate" },
-	info: { label: "洞察", className: "rsi-status-verified" },
+const SEVERITY_BADGE: Record<"error" | "warn" | "info", { label: string; tone: BadgeTone }> = {
+	error: { label: "异常", tone: "danger" },
+	warn: { label: "提醒", tone: "warn" },
+	info: { label: "洞察", tone: "accent" },
 };
 
 export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: SessionInsightsPanelProps) {
@@ -55,179 +56,193 @@ export function SessionInsightsPanel({ onStartMatterWithPrompt, onOpenMatter }: 
 	}, [load]);
 
 	return (
-		<section className="ui-section">
-			<div className="ui-section-head">
-				<div className="ui-section-heading">
-					<h2 className="ui-section-title">运行洞察（Session Insights）</h2>
-					<p className="ui-section-desc">
+		<section className="flex flex-col gap-3">
+			<div className="flex items-start justify-between gap-3 flex-wrap">
+				<div className="flex flex-col min-w-0">
+					<h2 className="m-0 text-lg font-semibold leading-snug text-ink">运行洞察（Session Insights）</h2>
+					<p className="mt-0.5 mb-0 text-xs leading-normal text-ink-muted">
 						仅在本机只读分析当前账号有权访问的 Pi 会话记录，零模型调用、零网络请求
 						{lastScanMs !== null ? ` · 本次扫描耗时 ${lastScanMs}ms` : ""}
 					</p>
 				</div>
-				<div className="ui-section-actions">
+				<div className="flex items-center gap-2 flex-wrap">
 					{confirmingRescan ? (
-						<div className="insights-confirm-bar">
-							<span className="insights-confirm-text">
+						<div className="inline-flex items-center gap-2 flex-wrap px-2.5 py-1 border border-line rounded-md bg-sidebar">
+							<span className="text-xs text-ink-secondary">
 								确认重新扫描最近 40 个本机会话？（零模型调用，约 &lt;100ms）
 							</span>
-							<button
-								type="button"
-								className="btn-pill-dark btn-xs"
-								onClick={() => void load()}
-								disabled={loading}
-							>
+							<Button variant="primary" size="xs" onClick={() => void load()} disabled={loading}>
 								确认扫描
-							</button>
-							<button
-								type="button"
-								className="btn-inline btn-xs"
-								onClick={() => setConfirmingRescan(false)}
-								disabled={loading}
-							>
+							</Button>
+							<Button variant="inline" size="xs" onClick={() => setConfirmingRescan(false)} disabled={loading}>
 								取消
-							</button>
+							</Button>
 						</div>
 					) : (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => setConfirmingRescan(true)}
-							disabled={loading}
-						>
+						<Button variant="secondary" size="xs" onClick={() => setConfirmingRescan(true)} disabled={loading}>
 							{loading ? "分析中…" : "重新扫描"}
-						</button>
+						</Button>
 					)}
 				</div>
 			</div>
 
-			{error && <div className="ui-banner error">{error}</div>}
+			{error && <Banner tone="danger">{error}</Banner>}
 
 			{!report && loading ? (
-				<div className="ui-card insights-empty">正在扫描本地 Pi 会话文件…</div>
+				<Card padding="md" className="text-xs text-ink-secondary">
+					正在扫描本地 Pi 会话文件…
+				</Card>
 			) : report ? (
-				<div className="insights-stack">
-					<div className="insights-stats-grid">
-						<div className="insights-stat-card">
-							<span className="insights-stat-label">分析会话</span>
-							<strong className="insights-stat-val">{report.usage.sessions}</strong>
-							<span className="insights-stat-sub">{report.usage.turns} 轮对话</span>
-						</div>
-						<div className="insights-stat-card">
-							<span className="insights-stat-label">工具调用</span>
-							<strong className="insights-stat-val">{report.usage.toolCalls}</strong>
-							<span className="insights-stat-sub">失败 {report.usage.toolErrors} 次</span>
-						</div>
-						<div className="insights-stat-card">
-							<span className="insights-stat-label">Token 用量</span>
-							<strong className="insights-stat-val">
+				<div className="flex flex-col gap-3">
+					<div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+						<Card padding="sm" className="bg-stage flex flex-col gap-1">
+							<span className="text-xs font-medium text-ink-muted">分析会话</span>
+							<strong className="text-xl leading-tight font-bold text-ink tabular-nums">
+								{report.usage.sessions}
+							</strong>
+							<span className="text-micro text-ink-secondary">{report.usage.turns} 轮对话</span>
+						</Card>
+						<Card padding="sm" className="bg-stage flex flex-col gap-1">
+							<span className="text-xs font-medium text-ink-muted">工具调用</span>
+							<strong className="text-xl leading-tight font-bold text-ink tabular-nums">
+								{report.usage.toolCalls}
+							</strong>
+							<span className="text-micro text-ink-secondary">失败 {report.usage.toolErrors} 次</span>
+						</Card>
+						<Card padding="sm" className="bg-stage flex flex-col gap-1">
+							<span className="text-xs font-medium text-ink-muted">Token 用量</span>
+							<strong className="text-xl leading-tight font-bold text-ink tabular-nums">
 								{formatCompactNumber(report.usage.inputTokens + report.usage.outputTokens)}
 							</strong>
-							<span className="insights-stat-sub">
+							<span className="text-micro text-ink-secondary">
 								缓存命中 {formatCompactNumber(report.usage.cacheReadTokens)}
 							</span>
-						</div>
-						<div className="insights-stat-card">
-							<span className="insights-stat-label">Pi 记录成本</span>
-							<strong className="insights-stat-val">${report.usage.totalCostUsd.toFixed(2)}</strong>
-							<span className="insights-stat-sub">{report.usage.byModel.length} 个模型</span>
-						</div>
+						</Card>
+						<Card padding="sm" className="bg-stage flex flex-col gap-1">
+							<span className="text-xs font-medium text-ink-muted">Pi 记录成本</span>
+							<strong className="text-xl leading-tight font-bold text-ink tabular-nums">
+								${report.usage.totalCostUsd.toFixed(2)}
+							</strong>
+							<span className="text-micro text-ink-secondary">{report.usage.byModel.length} 个模型</span>
+						</Card>
 					</div>
 
-					<div className="ui-card insights-card">
-						<h3 className="insights-card-title">确定性规则发现（{report.findings.length}）</h3>
-						{report.findings.length === 0 ? (
-							<p className="insights-muted">未发现反复失败命令、未加载的僵尸 Skill、高频返工或重复死循环。</p>
-						) : (
-							<div className="insights-findings-list">
-								{report.findings.map((item) => {
-									const badge = SEVERITY_BADGE[item.severity];
-									return (
-										<div key={item.id} className="insights-finding-item">
-											<div className="insights-finding-head">
-												<div className="insights-finding-title-row">
-													<span className={`pill ${badge.className}`}>{badge.label}</span>
-													<strong className="insights-finding-title">{item.title}</strong>
-													{item.suggestSkillCapture && (
-														<span className="tag-chip skill">建议沉淀为 Skill</span>
+					<Card padding="md">
+						<CardHeader
+							title={<span className="text-sm font-semibold">确定性规则发现（{report.findings.length}）</span>}
+							className="mb-2.5"
+						/>
+						<CardBody>
+							{report.findings.length === 0 ? (
+								<EmptyState
+									compact
+									title="暂无异常发现"
+									description="未发现反复失败命令、未加载的僵尸 Skill、高频返工或重复死循环。"
+								/>
+							) : (
+								<div className="flex flex-col gap-2">
+									{report.findings.map((item) => {
+										const badge = SEVERITY_BADGE[item.severity];
+										return (
+											<div
+												key={item.id}
+												className="p-2.5 border border-line rounded-md bg-sidebar flex flex-col gap-1.5"
+											>
+												<div className="flex items-center justify-between gap-2.5 flex-wrap">
+													<div className="flex items-center gap-1.5 flex-wrap min-w-0">
+														<Badge tone={badge.tone} size="xs">
+															{badge.label}
+														</Badge>
+														<strong className="text-sm font-semibold text-ink">{item.title}</strong>
+														{item.suggestSkillCapture && (
+															<Badge tone="accent" size="xs">
+																建议沉淀为 Skill
+															</Badge>
+														)}
+													</div>
+													{onStartMatterWithPrompt && (
+														<Button
+															variant={item.suggestSkillCapture ? "primary" : "secondary"}
+															size="xs"
+															onClick={() => onStartMatterWithPrompt(buildFindingPrompt(item))}
+														>
+															{item.suggestSkillCapture ? "去沉淀为 Skill →" : "发起排查 →"}
+														</Button>
 													)}
 												</div>
-												{onStartMatterWithPrompt && (
-													<button
-														type="button"
-														className={
-															item.suggestSkillCapture
-																? "btn-pill-dark btn-xs"
-																: "btn-pill-outline btn-xs"
-														}
-														onClick={() => onStartMatterWithPrompt(buildFindingPrompt(item))}
-													>
-														{item.suggestSkillCapture ? "去沉淀为 Skill →" : "发起排查 →"}
-													</button>
+												<p className="m-0 text-xs text-ink-secondary leading-normal">{item.detail}</p>
+												{item.evidence && item.evidence.length > 0 && (
+													<div className="text-micro font-mono text-ink-muted leading-normal break-words">
+														{item.evidence.join(" · ")}
+													</div>
 												)}
 											</div>
-											<p className="insights-finding-detail">{item.detail}</p>
-											{item.evidence && item.evidence.length > 0 && (
-												<div className="insights-finding-evidence mono-wrap">
-													{item.evidence.join(" · ")}
-												</div>
-											)}
-										</div>
-									);
-								})}
-							</div>
-						)}
-					</div>
+										);
+									})}
+								</div>
+							)}
+						</CardBody>
+					</Card>
 
 					{report.usage.byTool.length > 0 && (
-						<div className="ui-card insights-card">
-							<h3 className="insights-card-title">高频工具分布</h3>
-							<div className="insights-tool-chips">
+						<Card padding="md">
+							<CardHeader
+								title={<span className="text-sm font-semibold">高频工具分布</span>}
+								className="mb-2.5"
+							/>
+							<CardBody className="flex flex-wrap gap-1.5">
 								{report.usage.byTool.slice(0, 12).map((item) => (
-									<span key={item.tool} className="pill">
-										<code>{item.tool}</code> · {item.calls}
+									<Badge key={item.tool} tone="neutral" size="sm">
+										<code className="font-mono">{item.tool}</code> · {item.calls}
 										{item.errors > 0 ? ` (错 ${item.errors})` : ""}
-									</span>
+									</Badge>
 								))}
-							</div>
-						</div>
+							</CardBody>
+						</Card>
 					)}
 
 					{report.recentSessions.length > 0 && (
-						<div className="ui-card insights-card">
-							<h3 className="insights-card-title">最近会话（{report.recentSessions.length}）</h3>
-							<div className="insights-session-list">
-								{report.recentSessions.slice(0, 10).map((session) => (
-									<div key={session.sessionId} className="insights-session-row">
-										<div className="insights-session-meta">
-											<code>{session.sessionId.slice(0, 8)}</code>
-											<span className="insights-session-member">
+						<Card padding="md">
+							<CardHeader
+								title={
+									<span className="text-sm font-semibold">最近会话（{report.recentSessions.length}）</span>
+								}
+								className="mb-2"
+							/>
+							<CardBody className="flex flex-col">
+								{report.recentSessions.slice(0, 10).map((session, idx, arr) => (
+									<div
+										key={session.sessionId}
+										className={`grid grid-cols-1 md:grid-cols-[minmax(150px,auto)_minmax(0,1fr)_auto] items-center gap-1 md:gap-3 py-2 text-xs ${
+											idx < arr.length - 1 ? "border-b border-dashed border-line" : ""
+										}`}
+									>
+										<div className="flex items-center gap-1.5 min-w-0 whitespace-nowrap">
+											<code className="font-mono text-ink">{session.sessionId.slice(0, 8)}</code>
+											<span className="text-ink-secondary font-medium">
 												{session.memberName ?? session.memberId ?? "未知岗位"}
 											</span>
 										</div>
-										<div className="insights-session-title" title={session.title ?? "无标题"}>
+										<div className="min-w-0 text-ink truncate" title={session.title ?? "无标题"}>
 											{session.title ?? "无标题"}
 										</div>
-										<div className="insights-session-stats">
+										<div className="flex items-center gap-2 text-ink-muted whitespace-nowrap tabular-nums">
 											<span>
 												{session.turns} 轮 · {session.toolCalls} 工具 · ${session.costUsd.toFixed(3)}
 											</span>
 											{session.matterId && onOpenMatter && (
-												<button
-													type="button"
-													className="btn-inline btn-xs"
-													onClick={() => onOpenMatter(session.matterId!)}
-												>
+												<Button variant="inline" size="xs" onClick={() => onOpenMatter(session.matterId!)}>
 													打开事项 →
-												</button>
+												</Button>
 											)}
 										</div>
 									</div>
 								))}
-							</div>
-						</div>
+							</CardBody>
+						</Card>
 					)}
 
-					<p className="insights-footnote">{report.privacyNote}</p>
+					<p className="m-0 text-micro text-ink-muted">{report.privacyNote}</p>
 				</div>
 			) : null}
 		</section>

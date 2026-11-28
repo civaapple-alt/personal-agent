@@ -1,7 +1,8 @@
 import { type RefObject, useId, useState } from "react";
 import type { CollaboratorDto, TeamMemberDto } from "../../api.ts";
 import { filterBusinessMembers, isArchitectMember } from "../../architectApi.ts";
-import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
+import { BotFaceIcon, Button, Input, Select } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { getMemberThemeById } from "../../utils.ts";
 
 interface MatterRosterPopoverProps {
@@ -100,14 +101,14 @@ export function MatterRosterPopover({
 			ref={panelRef}
 			role="dialog"
 			aria-label="协作成员"
-			className="collab-dock-panel unified-roster-panel roster-panel"
+			className="absolute top-16 right-6 max-lg:right-4 max-lg:w-[calc(100%-32px)] w-[min(348px,calc(100%-48px))] max-h-[min(76vh,calc(100%-88px))] z-30 flex flex-col gap-3 border border-line rounded-xl bg-stage shadow-lg p-3.5 overflow-hidden"
 		>
 			{rosterMode === "add" && isOwner ? (
 				<>
-					<div className="roster-nav">
+					<div className="flex items-center justify-between gap-2">
 						<button
 							type="button"
-							className="roster-nav-btn"
+							className="border-0 bg-transparent text-xs text-ink-secondary px-1 py-0.5 cursor-pointer hover:text-ink"
 							onClick={() => {
 								onModeChange("view");
 								onSearchChange("");
@@ -115,10 +116,10 @@ export function MatterRosterPopover({
 						>
 							‹ 返回
 						</button>
-						<strong className="roster-nav-title">添加协作成员</strong>
+						<strong className="text-sm font-semibold text-ink">添加协作成员</strong>
 						<button
 							type="button"
-							className="roster-nav-btn primary"
+							className="border-0 bg-transparent text-xs text-accent font-semibold px-1 py-0.5 cursor-pointer hover:text-accent-hover"
 							onClick={() => {
 								onModeChange("view");
 								onSearchChange("");
@@ -128,31 +129,32 @@ export function MatterRosterPopover({
 						</button>
 					</div>
 
-					<input
+					<Input
 						type="search"
-						className="roster-search"
+						size="sm"
+						className="bg-sidebar"
 						placeholder="搜索同事或 AI 角色"
 						value={rosterSearch}
 						onChange={(e) => onSearchChange(e.target.value)}
 					/>
 
-					<div className="roster-add-scroll">
-						<div className="roster-add-group">
-							<div className="roster-add-head">
+					<div className="flex flex-col gap-3 max-h-[320px] overflow-y-auto overscroll-contain">
+						<div className="flex flex-col gap-1.5">
+							<div className="flex items-center justify-between gap-2 text-micro font-semibold text-ink-muted">
 								<span>人类同事</span>
-								<button
-									type="button"
-									className="btn-inline"
+								<Button
+									variant="inline"
+									size="xs"
 									onClick={() => {
 										onClose();
 										onOpenTeam();
 									}}
 								>
 									团队页新增 ›
-								</button>
+								</Button>
 							</div>
 							{filteredCollabCandidates.length === 0 ? (
-								<div className="roster-empty-row">
+								<div className="text-xs text-ink-muted py-1 px-0.5">
 									{nonOwnerCollaborators.length === 0 ? "暂无协同同事，可在团队页新增" : "无匹配同事"}
 								</div>
 							) : (
@@ -160,11 +162,14 @@ export function MatterRosterPopover({
 									const inMatter = assignedCollabIds.includes(col.id);
 									const canToggle = Boolean(selectedMatterId && onUpdateMatterCollaborators);
 									return (
-										<div key={col.id} className="roster-pick-row">
+										<div
+											key={col.id}
+											className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-sidebar border border-transparent text-left"
+										>
 											{canToggle ? (
 												<button
 													type="button"
-													className="roster-pick-main roster-pick-toggle"
+													className="flex items-center gap-2 min-w-0 flex-1 border-0 bg-transparent p-0 text-left cursor-pointer"
 													aria-pressed={inMatter}
 													aria-label={`邀请 ${col.name} 参与本事项`}
 													onClick={() => {
@@ -175,25 +180,32 @@ export function MatterRosterPopover({
 														onUpdateMatterCollaborators(nextIds);
 													}}
 												>
-													<span className={`roster-check-box ${inMatter ? "checked" : ""}`}>
+													<span
+														className={cn(
+															"size-4 rounded-xs border grid place-items-center text-micro font-bold shrink-0",
+															inMatter
+																? "bg-accent border-accent text-white"
+																: "bg-stage border-line-strong text-transparent",
+														)}
+													>
 														{inMatter ? "✓" : ""}
 													</span>
-													<span className="roster-mini-avatar human">
+													<span className="size-6 rounded-sm bg-info-bg text-info-text grid place-items-center text-micro font-bold shrink-0">
 														{col.name.slice(0, 1).toUpperCase()}
 													</span>
-													<span className="roster-pick-text">
-														<strong>{col.name}</strong>
-														<small>{col.roleTitle}</small>
+													<span className="flex flex-col min-w-0">
+														<strong className="text-xs text-ink truncate">{col.name}</strong>
+														<small className="text-micro text-ink-muted truncate">{col.roleTitle}</small>
 													</span>
 												</button>
 											) : (
-												<div className="roster-pick-main">
-													<span className="roster-mini-avatar human">
+												<div className="flex items-center gap-2 min-w-0 flex-1">
+													<span className="size-6 rounded-sm bg-info-bg text-info-text grid place-items-center text-micro font-bold shrink-0">
 														{col.name.slice(0, 1).toUpperCase()}
 													</span>
-													<span className="roster-pick-text">
-														<strong>{col.name}</strong>
-														<small>{col.roleTitle}</small>
+													<span className="flex flex-col min-w-0">
+														<strong className="text-xs text-ink truncate">{col.name}</strong>
+														<small className="text-micro text-ink-muted truncate">{col.roleTitle}</small>
 													</span>
 												</div>
 											)}
@@ -203,23 +215,23 @@ export function MatterRosterPopover({
 							)}
 						</div>
 
-						<div className="roster-add-group">
-							<div className="roster-add-head">
+						<div className="flex flex-col gap-1.5">
+							<div className="flex items-center justify-between gap-2 text-micro font-semibold text-ink-muted">
 								<span>可添回的 AI 角色</span>
 								{removableBusinessPool.length > 0 && (
-									<button
-										type="button"
-										className="btn-inline"
+									<Button
+										variant="inline"
+										size="xs"
 										onClick={() => onUpdateMatterAiMembers(allBusinessMemberIds)}
 									>
 										全部添回
-									</button>
+									</Button>
 								)}
 							</div>
 							{removableBusinessPool.length === 0 ? (
-								<div className="roster-empty-row">全部业务 AI 角色已参与当前事项</div>
+								<div className="text-xs text-ink-muted py-1 px-0.5">全部业务 AI 角色已参与当前事项</div>
 							) : filteredRemovedAi.length === 0 ? (
-								<div className="roster-empty-row">无匹配 AI 角色</div>
+								<div className="text-xs text-ink-muted py-1 px-0.5">无匹配 AI 角色</div>
 							) : (
 								filteredRemovedAi.map((peer) => {
 									const theme = getMemberThemeById(members, peer.id);
@@ -227,15 +239,17 @@ export function MatterRosterPopover({
 										<button
 											key={peer.id}
 											type="button"
-											className="roster-pick-row clickable"
+											className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-sidebar border border-transparent text-left w-full cursor-pointer hover:bg-hover transition-colors"
 											onClick={() => onUpdateMatterAiMembers([...matterAiMemberIds, peer.id])}
 										>
-											<span className="roster-pick-main">
-												<span className="roster-check-box">+</span>
+											<span className="flex items-center gap-2 min-w-0 flex-1">
+												<span className="size-4 rounded-xs border border-line-strong bg-stage text-ink-secondary grid place-items-center text-micro font-bold shrink-0">
+													+
+												</span>
 												<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="xs" mood="idle" />
-												<span className="roster-pick-text">
-													<strong>{peer.displayName}</strong>
-													<small>{peer.roleTitle}</small>
+												<span className="flex flex-col min-w-0">
+													<strong className="text-xs text-ink truncate">{peer.displayName}</strong>
+													<small className="text-micro text-ink-muted truncate">{peer.roleTitle}</small>
 												</span>
 											</span>
 										</button>
@@ -247,20 +261,26 @@ export function MatterRosterPopover({
 				</>
 			) : (
 				<>
-					<input
+					<Input
 						type="search"
-						className="roster-search"
+						size="sm"
+						className="bg-sidebar"
 						placeholder="搜索协作成员 / AI"
 						value={rosterSearch}
 						onChange={(e) => onSearchChange(e.target.value)}
 					/>
 
-					<div className="roster-member-grid">
+					<div className="grid grid-cols-4 gap-x-2 gap-y-3 max-h-[290px] overflow-y-auto overscroll-contain py-0.5">
 						{showOwnerTile && (
-							<div className="roster-member-tile" title={`${ownerLabel} · 所有者`}>
-								<div className="roster-avatar-box owner">{ownerLabel.slice(0, 1).toUpperCase()}</div>
-								<span className="roster-tile-name">{ownerLabel}</span>
-								<span className="roster-tile-tag">
+							<div
+								className="flex flex-col items-center gap-0.5 w-full min-w-0 overflow-hidden text-center"
+								title={`${ownerLabel} · 所有者`}
+							>
+								<div className="relative size-11.5 rounded-lg grid place-items-center text-base font-bold bg-cta text-stage">
+									{ownerLabel.slice(0, 1).toUpperCase()}
+								</div>
+								<span className="text-micro text-ink max-w-full truncate">{ownerLabel}</span>
+								<span className="text-micro text-ink-muted leading-tight max-w-full truncate">
 									所有者{!ownerCollab || currentUser?.id === ownerCollab.id ? " · 我" : ""}
 								</span>
 							</div>
@@ -273,7 +293,10 @@ export function MatterRosterPopover({
 								<button
 									key={`human-${col.id}`}
 									type="button"
-									className={`roster-member-tile ${canRemoveHuman ? "interactive" : ""}`}
+									className={cn(
+										"group flex flex-col items-center gap-0.5 w-full min-w-0 overflow-hidden bg-transparent border-0 p-0 text-center",
+										canRemoveHuman && "cursor-pointer",
+									)}
 									title={canRemoveHuman ? `移出 ${col.name}` : `${col.name} · ${col.roleTitle}`}
 									onClick={() => {
 										if (canRemoveHuman && onUpdateMatterCollaborators) {
@@ -281,12 +304,23 @@ export function MatterRosterPopover({
 										}
 									}}
 								>
-									<div className="roster-avatar-box human">
+									<div
+										className={cn(
+											"relative size-11.5 rounded-lg grid place-items-center text-base font-bold bg-info-bg text-info-text transition-all",
+											canRemoveHuman && "group-hover:-translate-y-0.5 group-hover:shadow-md",
+										)}
+									>
 										{col.name.slice(0, 1).toUpperCase()}
-										{canRemoveHuman && <span className="roster-remove-badge">−</span>}
+										{canRemoveHuman && (
+											<span className="absolute -top-1 -right-1 size-4.5 rounded-full bg-danger-text text-white border border-stage text-xs font-bold leading-none grid place-items-center">
+												−
+											</span>
+										)}
 									</div>
-									<span className="roster-tile-name">{col.name}</span>
-									<span className="roster-tile-tag">{currentUser?.id === col.id ? "我" : col.roleTitle}</span>
+									<span className="text-micro text-ink max-w-full truncate">{col.name}</span>
+									<span className="text-micro text-ink-muted leading-tight max-w-full truncate">
+										{currentUser?.id === col.id ? "我" : col.roleTitle}
+									</span>
 								</button>
 							);
 						})}
@@ -298,12 +332,17 @@ export function MatterRosterPopover({
 							const canRemoveAi = rosterMode === "remove" && isOwner && !isLead;
 							const canConfigure = rosterMode === "view" && isOwner && !isLead;
 							const tagLabel = isLead ? "负责人" : isObs ? "旁听" : "成员";
-							const tagClass = isLead ? "lead" : isObs ? "observer" : "";
 							return (
-								<div key={`ai-${ai.id}`} className="roster-member-tile-wrap">
+								<div
+									key={`ai-${ai.id}`}
+									className="flex flex-col items-center gap-1 w-full min-w-0 overflow-hidden"
+								>
 									<button
 										type="button"
-										className={`roster-member-tile ${canRemoveAi || canConfigure ? "interactive" : ""}`}
+										className={cn(
+											"group flex flex-col items-center gap-0.5 w-full min-w-0 overflow-hidden bg-transparent border-0 p-0 text-center",
+											(canRemoveAi || canConfigure) && "cursor-pointer",
+										)}
 										aria-pressed={canConfigure ? selectedMember?.id === ai.id : undefined}
 										title={
 											canRemoveAi
@@ -322,12 +361,34 @@ export function MatterRosterPopover({
 											}
 										}}
 									>
-										<div className={`roster-avatar-box ai ${isLead ? "is-lead" : ""}`}>
+										<div
+											className={cn(
+												"relative size-11.5 grid place-items-center transition-all",
+												isLead ? "ring-2 ring-accent rounded-xl" : "rounded-lg",
+												(canRemoveAi || canConfigure) &&
+													"group-hover:-translate-y-0.5 group-hover:shadow-md",
+											)}
+										>
 											<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood="idle" />
-											{canRemoveAi && <span className="roster-remove-badge">−</span>}
+											{canRemoveAi && (
+												<span className="absolute -top-1 -right-1 size-4.5 rounded-full bg-danger-text text-white border border-stage text-xs font-bold leading-none grid place-items-center">
+													−
+												</span>
+											)}
 										</div>
-										<span className="roster-tile-name">{ai.displayName}</span>
-										<span className={`roster-tile-tag ${tagClass}`}>{tagLabel}</span>
+										<span className="text-micro text-ink max-w-full truncate">{ai.displayName}</span>
+										<span
+											className={cn(
+												"text-micro leading-tight max-w-full truncate",
+												isLead
+													? "text-accent font-semibold"
+													: isObs
+														? "text-observer-text"
+														: "text-ink-muted",
+											)}
+										>
+											{tagLabel}
+										</span>
 									</button>
 								</div>
 							);
@@ -336,37 +397,51 @@ export function MatterRosterPopover({
 						{isOwner && !query && (
 							<button
 								type="button"
-								className="roster-member-tile interactive"
+								className="group flex flex-col items-center gap-0.5 w-full min-w-0 overflow-hidden bg-transparent border-0 p-0 text-center cursor-pointer"
 								title="邀请同事或添回已移出的 AI 角色"
 								onClick={() => {
 									onSearchChange("");
 									onModeChange("add");
 								}}
 							>
-								<div className="roster-avatar-box action">+</div>
-								<span className="roster-tile-name">添加</span>
+								<div className="relative size-11.5 rounded-lg grid place-items-center bg-stage border-[1.5px] border-dashed border-line-strong text-ink-muted text-xl font-normal transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
+									+
+								</div>
+								<span className="text-micro text-ink max-w-full truncate">添加</span>
 							</button>
 						)}
 
 						{isOwner && !query && hasRemovable && (
 							<button
 								type="button"
-								className="roster-member-tile interactive"
+								className="group flex flex-col items-center gap-0.5 w-full min-w-0 overflow-hidden bg-transparent border-0 p-0 text-center cursor-pointer"
 								title={rosterMode === "remove" ? "完成移出" : "移出协同同事或非负责人 AI"}
 								onClick={() => onModeChange(rosterMode === "remove" ? "view" : "remove")}
 							>
-								<div className={`roster-avatar-box action ${rosterMode === "remove" ? "active" : ""}`}>−</div>
-								<span className="roster-tile-name">{rosterMode === "remove" ? "完成" : "移出"}</span>
+								<div
+									className={cn(
+										"relative size-11.5 rounded-lg grid place-items-center transition-all group-hover:-translate-y-0.5 group-hover:shadow-md",
+										rosterMode === "remove"
+											? "border border-danger-border text-danger-text bg-danger-bg text-xs font-semibold"
+											: "bg-stage border-[1.5px] border-dashed border-line-strong text-ink-muted text-xl font-normal",
+									)}
+								>
+									−
+								</div>
+								<span className="text-micro text-ink max-w-full truncate">
+									{rosterMode === "remove" ? "完成" : "移出"}
+								</span>
 							</button>
 						)}
 					</div>
 
-					<div className="roster-rows">
-						<div className="roster-row">
-							<span>事项负责人</span>
+					<div className="flex flex-col gap-2 pt-2.5 border-t border-line">
+						<div className="flex items-center justify-between gap-2.5 text-xs text-ink">
+							<span className="whitespace-nowrap shrink-0">事项负责人</span>
 							{isOwner ? (
-								<select
-									className="roster-row-select"
+								<Select
+									size="sm"
+									className="w-auto bg-sidebar"
 									aria-label="事项负责人"
 									value={leadAi?.id ?? ""}
 									disabled={isTurnRunning}
@@ -378,19 +453,20 @@ export function MatterRosterPopover({
 											{ai.displayName}
 										</option>
 									))}
-								</select>
+								</Select>
 							) : (
-								<span className="roster-row-val">{leadAi?.displayName ?? "默认"}</span>
+								<span className="text-xs text-ink-muted">{leadAi?.displayName ?? "默认"}</span>
 							)}
 						</div>
 						{selectedMember && isOwner && rosterMode === "view" && (
-							<fieldset className="roster-member-settings">
-								<legend>{selectedMember.displayName}</legend>
+							<fieldset className="m-0 min-w-0 px-2.5 py-1.5 border border-line rounded-md flex flex-col gap-1.5">
+								<legend className="px-1 font-semibold text-xs text-ink">{selectedMember.displayName}</legend>
 								{onUpdateMatterConsultMembers && (
-									<label className="roster-row">
-										<span>允许主责委托</span>
+									<label className="flex items-center justify-between gap-2.5 text-xs text-ink cursor-pointer">
+										<span className="whitespace-nowrap shrink-0">允许主责委托</span>
 										<input
 											type="checkbox"
+											className="size-3.5 accent-accent cursor-pointer"
 											checked={
 												matterConsultMemberIds == null || matterConsultMemberIds.includes(selectedMember.id)
 											}
@@ -406,10 +482,11 @@ export function MatterRosterPopover({
 									</label>
 								)}
 								{onUpdateMatterObservers && observersEnabled && (
-									<label className="roster-row">
-										<span>旁听补充</span>
+									<label className="flex items-center justify-between gap-2.5 text-xs text-ink cursor-pointer">
+										<span className="whitespace-nowrap shrink-0">旁听补充</span>
 										<input
 											type="checkbox"
+											className="size-3.5 accent-accent cursor-pointer"
 											checked={observerAis.some(({ id }) => id === selectedMember.id)}
 											onChange={(event) => {
 												const current = observerAis.map(({ id }) => id);
@@ -426,8 +503,8 @@ export function MatterRosterPopover({
 						)}
 						{onToggleObserversEnabled && (
 							<div>
-								<div className="roster-row">
-									<span>AI 旁听</span>
+								<div className="flex items-center justify-between gap-2.5 text-xs text-ink">
+									<span className="whitespace-nowrap shrink-0">AI 旁听</span>
 									{isOwner ? (
 										<button
 											type="button"
@@ -435,26 +512,34 @@ export function MatterRosterPopover({
 											aria-checked={observersEnabled}
 											aria-label="AI 旁听"
 											aria-describedby={observerHintId}
-											className={`roster-switch ${observersEnabled ? "on" : ""}`}
+											className={cn(
+												"relative w-9 h-5 rounded-pill border-0 p-0.5 cursor-pointer transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-accent",
+												observersEnabled ? "bg-accent" : "bg-line-strong",
+											)}
 											onClick={() => onToggleObserversEnabled(!observersEnabled)}
 										>
-											<span className="roster-switch-thumb" />
+											<span
+												className={cn(
+													"block size-4 rounded-full bg-white shadow-sm transition-transform",
+													observersEnabled && "translate-x-4",
+												)}
+											/>
 										</button>
 									) : (
-										<span className="roster-row-val">{observersEnabled ? "已开启" : "已关闭"}</span>
+										<span className="text-xs text-ink-muted">{observersEnabled ? "已开启" : "已关闭"}</span>
 									)}
 								</div>
-								<p className="roster-hint" id={observerHintId}>
+								<p className="mt-1 mb-0 text-xs text-ink-muted" id={observerHintId}>
 									协作 AI 可主动补充，主责照常回应和委托。
 								</p>
 							</div>
 						)}
 						{isOwner ? (
-							<div className="roster-row">
-								<span>团队同事</span>
+							<div className="flex items-center justify-between gap-2.5 text-xs text-ink">
+								<span className="whitespace-nowrap shrink-0">团队同事</span>
 								<button
 									type="button"
-									className="roster-row-action"
+									className="border-0 bg-transparent p-0 text-xs text-ink-muted cursor-pointer hover:text-ink"
 									onClick={() => {
 										if (nonOwnerCollaborators.length > 0) {
 											onSearchChange("");
@@ -472,17 +557,17 @@ export function MatterRosterPopover({
 								</button>
 							</div>
 						) : (
-							<div className="roster-row">
-								<span>协同权限</span>
-								<span className="roster-row-val">AI 执行需所有者确认</span>
+							<div className="flex items-center justify-between gap-2.5 text-xs text-ink">
+								<span className="whitespace-nowrap shrink-0">协同权限</span>
+								<span className="text-xs text-ink-muted">AI 执行需所有者确认</span>
 							</div>
 						)}
 						{isOwner && selectedMatterId && onConsultArchitect && !isArchitectMember(leadAi) && (
-							<div className="roster-row is-architect-row">
-								<span>缺少角色或需调整？</span>
+							<div className="flex items-center justify-between gap-2.5 text-xs text-ink pt-2 mt-0.5 border-t border-dashed border-line">
+								<span className="whitespace-nowrap shrink-0">缺少角色或需调整？</span>
 								<button
 									type="button"
-									className="roster-row-action"
+									className="border-0 bg-transparent p-0 text-xs text-ink-muted cursor-pointer hover:text-ink disabled:opacity-45 disabled:cursor-not-allowed"
 									disabled={isTurnRunning}
 									title={
 										isTurnRunning

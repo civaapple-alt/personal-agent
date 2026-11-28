@@ -2,7 +2,8 @@ import type { SkillProposalItem, SkillStorageTarget } from "@pa/contracts/skill-
 import { useState } from "react";
 import { actOnSkillProposal } from "../../api/team.ts";
 import { MarkdownView } from "../../MarkdownView.tsx";
-import { ModalDialog } from "../../primitives/ModalDialog.tsx";
+import { Badge, Banner, Button, Card, ModalDialog, Select, Tabs } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 
 const SCOPE_LABELS: Record<SkillStorageTarget, string> = {
 	workspace: "工作区专属",
@@ -107,33 +108,20 @@ export function SkillProposalCard({
 	};
 
 	return (
-		<div className="skill-proposal-stack">
-			{feedback && (
-				<output
-					style={{
-						display: "block",
-						fontSize: 12,
-						marginTop: 8,
-						color: feedback.kind === "err" ? "var(--danger, #b91c1c)" : "var(--success, #15803d)",
-					}}
-				>
-					{feedback.text}
-				</output>
-			)}
+		<div className="flex flex-col gap-2 mt-2">
+			{feedback && <Banner tone={feedback.kind === "err" ? "danger" : "success"}>{feedback.text}</Banner>}
 			{proposals.map((proposal) => {
 				const selectedScope = scopeOverrides[proposal.id] ?? proposal.storageScope;
 				const busy = busyId === proposal.id;
 				return (
-					<section
-						key={proposal.id}
-						className="ui-card skill-proposal-card"
-						style={{ padding: 14, marginTop: 10 }}
-					>
-						<div className="pa-viz-card-head" style={{ justifyContent: "space-between" }}>
-							<div className="pa-viz-card-head">
-								<span className="pa-viz-badge">Skill 提案</span>
-								<strong className="pa-viz-title">{proposal.name}</strong>
-								<span className="pa-viz-option-desc">
+					<Card key={proposal.id} padding="sm" className="mt-1 flex flex-col gap-2 shadow-sm">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<div className="flex items-center gap-2 flex-wrap">
+								<Badge tone="accent" size="xs">
+									Skill 提案
+								</Badge>
+								<strong className="text-sm font-semibold text-ink">{proposal.name}</strong>
+								<span className="text-xs text-ink-secondary">
 									{proposal.status === "applied"
 										? "已写入磁盘"
 										: proposal.status === "dismissed"
@@ -142,10 +130,10 @@ export function SkillProposalCard({
 								</span>
 							</div>
 							{proposal.status === "pending" && (
-								<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-									<select
-										className="input-field"
-										style={{ width: "auto", padding: "3px 8px", fontSize: 12 }}
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<Select
+										size="sm"
+										className="w-auto"
 										value={selectedScope}
 										disabled={busy}
 										onChange={(e) =>
@@ -159,59 +147,51 @@ export function SkillProposalCard({
 										<option value="personal">个人 Skill</option>
 										<option value="org">组织共享</option>
 										<option value="global">全局共享</option>
-									</select>
-									<button
-										type="button"
-										className="btn-pill-primary btn-xs"
+									</Select>
+									<Button
+										variant="accent"
+										size="xs"
 										disabled={busy}
 										onClick={() => void handleAction(proposal, "apply")}
 									>
 										{busy ? "写入中..." : "确认沉淀"}
-									</button>
-									<button
-										type="button"
-										className="btn-pill-ghost btn-xs"
+									</Button>
+									<Button
+										variant="ghost"
+										size="xs"
 										disabled={busy}
 										onClick={() => void handleAction(proposal, "dismiss")}
 									>
 										暂不采纳
-									</button>
+									</Button>
 								</div>
 							)}
 						</div>
-						<p style={{ margin: "6px 0 4px", fontSize: 13 }}>{proposal.description}</p>
-						<p style={{ margin: "0 0 8px", fontSize: 12, opacity: 0.8 }}>沉淀原因：{proposal.rationale}</p>
+						<p className="m-0 text-sm text-ink leading-normal">{proposal.description}</p>
+						<p className="m-0 text-xs text-ink-secondary leading-normal">沉淀原因：{proposal.rationale}</p>
 						<div>
-							<button type="button" className="btn-inline" onClick={() => openPreview(proposal)}>
+							<Button variant="inline" size="xs" onClick={() => openPreview(proposal)}>
 								查看 SKILL.md{proposal.scripts?.length ? ` 与 ${proposal.scripts.length} 个脚本` : ""} ↗
-							</button>
+							</Button>
 						</div>
 						{proposal.status === "applied" && (
-							<div
-								style={{
-									marginTop: 8,
-									fontSize: 12,
-									opacity: 0.9,
-									display: "flex",
-									flexWrap: "wrap",
-									alignItems: "center",
-									gap: 8,
-								}}
-							>
+							<div className="mt-1 text-xs text-ink-secondary flex flex-wrap items-center gap-2">
 								{proposal.writtenPaths && proposal.writtenPaths.length > 0 && (
 									<span>已写入：{proposal.writtenPaths.join("、")}</span>
 								)}
 								{proposal.scripts && proposal.scripts.length > 0 && (
-									<span className="pill rsi-status-verified">已默认信任 · 自主执行</span>
+									<Badge tone="accent" size="xs">
+										已默认信任 · 自主执行
+									</Badge>
 								)}
 								{onOpenSkillTrust && (
-									<button type="button" className="btn-inline" onClick={onOpenSkillTrust}>
+									<Button variant="inline" size="xs" onClick={onOpenSkillTrust}>
 										管理信任策略 →
-									</button>
+									</Button>
 								)}
 							</div>
 						)}
-					</section>
+					</Card>
 				);
 			})}
 			<ModalDialog
@@ -227,41 +207,49 @@ export function SkillProposalCard({
 				size="lg"
 				headerExtra={
 					previewProposal ? (
-						<span className="pa-viz-badge" style={{ whiteSpace: "nowrap", flexShrink: 0 }}>
+						<Badge tone="accent" size="xs">
 							{previewProposal.status === "applied"
 								? "已写入磁盘"
 								: previewProposal.status === "dismissed"
 									? "已忽略"
 									: "待确认提案"}
-						</span>
+						</Badge>
 					) : null
 				}
 				onClose={() => setPreviewProposalId(null)}
 				footer={
 					previewProposal ? (
-						<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewProposalId(null)}>
+						<Button variant="secondary" size="xs" onClick={() => setPreviewProposalId(null)}>
 							关闭
-						</button>
+						</Button>
 					) : undefined
 				}
 			>
 				{previewProposal && (
-					<div className="skills-preview-split">
-						<aside className="skills-preview-nav" aria-label="Skill 提案文件">
-							<div className="skills-preview-group">
-								<span className="skills-preview-group-label">入口定义</span>
+					<div className="grid grid-cols-1 md:grid-cols-[204px_minmax(0,1fr)] gap-3.5 items-start min-h-[360px]">
+						<aside
+							className="flex flex-col gap-2.5 md:pr-3 md:border-r md:border-b-0 border-b border-line pb-2.5 md:pb-0 max-h-[180px] md:max-h-[62vh] overflow-y-auto"
+							aria-label="Skill 提案文件"
+						>
+							<div className="flex flex-col gap-1">
+								<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">入口定义</span>
 								<button
 									type="button"
-									className={`skills-preview-file-btn ${previewFileTab === "SKILL.md" ? "active" : ""}`}
+									className={cn(
+										"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors",
+										previewFileTab === "SKILL.md"
+											? "bg-accent-soft text-accent font-semibold"
+											: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+									)}
 									onClick={() => setPreviewFileTab("SKILL.md")}
 									title="SKILL.md"
 								>
-									<span>SKILL.md</span>
+									<span className="truncate">SKILL.md</span>
 								</button>
 							</div>
 							{previewFileGroups.map(({ group, items }) => (
-								<div key={group} className="skills-preview-group">
-									<span className="skills-preview-group-label">
+								<div key={group} className="flex flex-col gap-1">
+									<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">
 										{group} ({items.length})
 									</span>
 									{items.map((script) => {
@@ -272,58 +260,62 @@ export function SkillProposalCard({
 											<button
 												key={script.path}
 												type="button"
-												className={`skills-preview-file-btn ${previewFileTab === script.path ? "active" : ""}`}
+												className={cn(
+													"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors",
+													previewFileTab === script.path
+														? "bg-accent-soft text-accent font-semibold"
+														: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+												)}
 												onClick={() => setPreviewFileTab(script.path)}
 												title={script.path}
 											>
-												<span>{displayName}</span>
+												<span className="truncate">{displayName}</span>
 											</button>
 										);
 									})}
 								</div>
 							))}
 						</aside>
-						<div className="skills-preview-content">
-							<div className="skills-preview-filebar">
-								<div className="row-wrap-gap">
-									<code className="skills-preview-filepath">{previewActiveFile?.path ?? previewFileTab}</code>
-									{previewActiveFile?.executable && <span className="pill">executable</span>}
+						<div className="flex flex-col gap-2 min-w-0">
+							<div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-line">
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<code className="text-xs font-mono text-ink bg-subtle px-2 py-0.5 rounded-sm">
+										{previewActiveFile?.path ?? previewFileTab}
+									</code>
+									{previewActiveFile?.executable && (
+										<Badge tone="neutral" size="xs">
+											executable
+										</Badge>
+									)}
 								</div>
 								{previewActiveIsMarkdown && (
-									<div className="skills-preview-mode-toggle" role="tablist" aria-label="查看模式">
-										<button
-											type="button"
-											role="tab"
-											aria-selected={previewMdMode === "rendered"}
-											className={`choice-chip ${previewMdMode === "rendered" ? "active" : ""}`}
-											onClick={() => setPreviewMdMode("rendered")}
-										>
-											渲染
-										</button>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={previewMdMode === "raw"}
-											className={`choice-chip ${previewMdMode === "raw" ? "active" : ""}`}
-											onClick={() => setPreviewMdMode("raw")}
-										>
-											源码
-										</button>
-									</div>
+									<Tabs
+										variant="pill"
+										size="sm"
+										ariaLabel="查看模式"
+										value={previewMdMode}
+										onChange={(id) => {
+											if (id === "rendered" || id === "raw") setPreviewMdMode(id);
+										}}
+										items={[
+											{ id: "rendered", label: "渲染" },
+											{ id: "raw", label: "源码" },
+										]}
+									/>
 								)}
 							</div>
-							<div className="skills-preview-viewer">
+							<div className="max-h-[58vh] overflow-y-auto min-w-0">
 								{previewActiveIsMarkdown && previewMdMode === "rendered" ? (
-									<div className="skills-preview-markdown">
+									<div className="px-1.5 pt-1 pb-3 text-sm leading-relaxed text-ink">
 										{previewSplitMd?.frontmatter && (
-											<pre className="pa-viz-code skills-modal-code" style={{ marginBottom: 14 }}>
+											<pre className="m-0 mb-3.5 p-2.5 rounded-md bg-stage border border-line font-mono text-xs leading-relaxed overflow-auto max-h-[58vh] whitespace-pre-wrap break-words">
 												<code>{previewSplitMd.frontmatter}</code>
 											</pre>
 										)}
 										<MarkdownView content={previewSplitMd?.body ?? previewActiveFile?.content ?? ""} />
 									</div>
 								) : (
-									<pre className="pa-viz-code skills-modal-code">
+									<pre className="m-0 p-2.5 rounded-md bg-stage border border-line font-mono text-xs leading-relaxed overflow-auto max-h-[58vh] whitespace-pre-wrap break-words">
 										<code>{previewActiveFile?.content ?? ""}</code>
 									</pre>
 								)}

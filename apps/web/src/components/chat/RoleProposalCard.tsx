@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import type {
 	AccountUserDto,
 	ApplyMatterRoleProposalsPayload,
@@ -13,6 +13,8 @@ import {
 	type RoleProposalPayloadDto,
 	resolveSkillStorageScopeForRole,
 } from "../../architectApi.ts";
+import { Badge, Banner, Button, Card, Select, Textarea } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { formatClockTime } from "../../utils.ts";
 import { NewSkillsDraftSection } from "../team/NewSkillsDraftSection.tsx";
 import { RoleCapabilityDetails, RoleFindingEvidence } from "../team/RoleDesignDetails.tsx";
@@ -77,6 +79,8 @@ export function RoleProposalCard({
 	onQuickReply,
 	onLaunchWithNewRoles,
 }: RoleProposalCardProps) {
+	const scopeSelectId = useId();
+	const joinSelectId = useId();
 	const [selectedBlueprintIndices, setSelectedBlueprintIndices] = useState<number[]>(() =>
 		proposals.blueprints.map((_, idx) => idx),
 	);
@@ -197,7 +201,7 @@ export function RoleProposalCard({
 	};
 
 	if (!current && proposals.status === "pending") {
-		return <div className="role-proposal-status-bar dismissed">此草案已有新版，请在最新提案中确认。</div>;
+		return <Banner tone="neutral">此草案已有新版，请在最新提案中确认。</Banner>;
 	}
 
 	const hasAnyProposalItems =
@@ -211,29 +215,31 @@ export function RoleProposalCard({
 		if (proposals.roleAdjustments?.length) summaryParts.push(`拟调整 ${proposals.roleAdjustments.length} 位现有角色`);
 		if (proposals.healthFindings?.length) summaryParts.push(`${proposals.healthFindings.length} 条诊断依据`);
 		return (
-			<div className="role-proposal-card">
-				<details className="architect-proposal-details">
-					<summary>初步草案预览（{summaryParts.join(" · ")} · 完成下方澄清后将生成最终确认卡）</summary>
-					<div style={{ marginTop: 8 }}>
+			<Card padding="sm" className="mt-2.5 flex flex-col gap-2.5 max-w-[720px]">
+				<details className="min-w-0 text-xs text-ink-secondary">
+					<summary className="cursor-pointer text-accent my-1">
+						初步草案预览（{summaryParts.join(" · ")} · 完成下方澄清后将生成最终确认卡）
+					</summary>
+					<div className="mt-2 flex flex-col gap-1">
 						{proposals.blueprints.map((bp, idx) => (
-							<p key={`${bp.draft.template.id}-${idx}`} className="human-decision-note">
-								• <strong>{bp.draft.template.name}</strong>：
+							<p key={`${bp.draft.template.id}-${idx}`} className="m-0 text-xs text-ink-secondary">
+								• <strong className="text-ink">{bp.draft.template.name}</strong>：
 								{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}
 							</p>
 						))}
 						{proposals.roleAdjustments?.map((adj) => (
-							<p key={adj.memberId} className="human-decision-note">
-								• 调整 <strong>{adj.memberName}</strong>：{adj.rationale}
+							<p key={adj.memberId} className="m-0 text-xs text-ink-secondary">
+								• 调整 <strong className="text-ink">{adj.memberName}</strong>：{adj.rationale}
 							</p>
 						))}
 						{proposals.healthFindings?.map((finding, idx) => (
-							<p key={`${finding.title}-${idx}`} className="human-decision-note">
-								• <strong>{finding.title}</strong>：{finding.detail}
+							<p key={`${finding.title}-${idx}`} className="m-0 text-xs text-ink-secondary">
+								• <strong className="text-ink">{finding.title}</strong>：{finding.detail}
 							</p>
 						))}
 					</div>
 				</details>
-			</div>
+			</Card>
 		);
 	}
 
@@ -248,11 +254,11 @@ export function RoleProposalCard({
 	};
 
 	return (
-		<div className="role-proposal-card">
+		<Card padding="sm" className="mt-2.5 flex flex-col gap-2.5 max-w-[720px]">
 			{!structuredClarification && proposals.status === "pending" && proposals.followUpQuestions.length > 0 && (
-				<div className="architect-clarification">
-					<strong>需要澄清</strong>
-					<ul>
+				<div className="text-xs leading-normal px-2.5 py-2 bg-sidebar rounded-sm">
+					<strong className="text-ink">需要澄清</strong>
+					<ul className="mt-1 mb-2 pl-5 break-words">
 						{proposals.followUpQuestions.map((question) => (
 							<li key={question}>{question}</li>
 						))}
@@ -261,7 +267,7 @@ export function RoleProposalCard({
 						onQuickReply &&
 						(isReplyEditorOpen ? (
 							<form
-								className="architect-clarification-form"
+								className="grid gap-1.5"
 								onSubmit={(event) => {
 									event.preventDefault();
 									if (!replyText.trim() || isTurnRunning || sendingReply) return;
@@ -276,51 +282,55 @@ export function RoleProposalCard({
 										.finally(() => setSendingReply(false));
 								}}
 							>
-								<textarea
+								<Textarea
 									ref={focusReply}
-									className="input-field"
 									rows={2}
 									aria-label="回复角色架构师"
 									value={replyText}
 									onChange={(event) => setReplyText(event.target.value)}
 								/>
-								<div className="role-proposal-actions">
-									<button
+								<div className="inline-flex items-center gap-2 ml-auto">
+									<Button
 										type="submit"
-										className="btn-pill-dark btn-xs"
+										variant="primary"
+										size="xs"
 										disabled={!replyText.trim() || isTurnRunning || sendingReply}
 									>
 										发送给架构师
-									</button>
-									<button
-										type="button"
-										className="btn-inline btn-xs"
-										onClick={() => setReplyEditorOpen(false)}
-									>
+									</Button>
+									<Button variant="inline" size="xs" onClick={() => setReplyEditorOpen(false)}>
 										收起
-									</button>
+									</Button>
 								</div>
 							</form>
 						) : (
-							<button type="button" className="btn-pill-outline btn-xs" onClick={() => setReplyEditorOpen(true)}>
+							<Button variant="secondary" size="xs" onClick={() => setReplyEditorOpen(true)}>
 								填写回复
-							</button>
+							</Button>
 						))}
 				</div>
 			)}
 			{proposals.healthFindings && proposals.healthFindings.length > 0 && (
-				<details className="architect-proposal-details">
-					<summary>诊断依据（{proposals.healthFindings.length}）</summary>
-					<div className="architect-findings-list">
+				<details className="min-w-0 text-xs text-ink-secondary">
+					<summary className="cursor-pointer text-accent my-1">
+						诊断依据（{proposals.healthFindings.length}）
+					</summary>
+					<div className="mt-1.5 flex flex-col gap-1.5">
 						{proposals.healthFindings.map((finding, idx) => (
-							<div key={`${finding.title}-${idx}`} className={`architect-finding-card is-${finding.status}`}>
-								<div className="architect-finding-head">
-									<span className={`architect-finding-badge is-${finding.status}`}>
+							<div
+								key={`${finding.title}-${idx}`}
+								className={cn(
+									"px-2.5 py-2 rounded-sm border",
+									finding.status === "warn" ? "border-warn-border bg-warn-bg" : "border-line bg-sidebar",
+								)}
+							>
+								<div className="flex items-center gap-2 text-xs">
+									<Badge tone={finding.status === "ok" ? "accent" : "warn"} size="xs">
 										{finding.status === "ok" ? "✓ 正常" : "! 需注意"}
-									</span>
-									<strong>{finding.title}</strong>
+									</Badge>
+									<strong className="text-ink">{finding.title}</strong>
 								</div>
-								<p>{finding.detail}</p>
+								<p className="mt-1 mb-0 text-xs text-ink-secondary leading-snug">{finding.detail}</p>
 								<RoleFindingEvidence finding={finding} />
 							</div>
 						))}
@@ -329,9 +339,9 @@ export function RoleProposalCard({
 			)}
 
 			{proposals.roleAdjustments && proposals.roleAdjustments.length > 0 && (
-				<div className="architect-blueprints">
-					<div className="architect-blueprints-head">
-						<strong>建议调整现有角色（勾选确认后生效）</strong>
+				<div className="flex flex-col gap-1.5">
+					<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+						<strong className="text-xs text-ink">建议调整现有角色（勾选确认后生效）</strong>
 					</div>
 					{proposals.roleAdjustments.map((adj) => {
 						const checked = canApplyAdjustments && selectedAdjustIds.includes(adj.memberId);
@@ -339,38 +349,44 @@ export function RoleProposalCard({
 						return (
 							<label
 								key={adj.memberId}
-								className={`architect-blueprint-card adjustment ${checked ? "selected" : ""}`}
+								className={cn(
+									"flex items-start gap-2.5 px-3 py-2.5 rounded-sm border cursor-pointer transition-colors",
+									checked ? "border-accent-border bg-surface-accent" : "border-line bg-sidebar",
+								)}
 							>
 								<input
 									type="checkbox"
+									className="mt-0.5 size-3.5 accent-accent cursor-pointer"
 									checked={checked}
 									disabled={disabled}
 									onChange={() => toggleAdjustment(adj.memberId)}
 								/>
-								<div className="architect-blueprint-body">
-									<div className="architect-blueprint-top">
-										<strong>{adj.memberName}</strong>
+								<div className="flex-1 min-w-0 flex flex-col gap-1">
+									<div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+										<strong className="text-ink">{adj.memberName}</strong>
 										{adj.suggestedTools && adj.suggestedTools.join("/") !== adj.currentTools.join("/") ? (
-											<span className="pill">
+											<Badge tone="neutral" size="xs">
 												{adj.currentTools.join(" / ") || "默认工具"} →{" "}
 												{adj.suggestedTools.join(" / ") || "默认工具"}
-											</span>
+											</Badge>
 										) : (
-											<span className="pill">职责与边界调整</span>
+											<Badge tone="neutral" size="xs">
+												职责与边界调整
+											</Badge>
 										)}
 									</div>
-									{adj.rationale && <p>{adj.rationale}</p>}
+									{adj.rationale && <p className="m-0 text-xs text-ink leading-snug">{adj.rationale}</p>}
 									{(Boolean(adj.addAntiJobs?.length) || adj.workflowNote) && (
-										<details className="architect-proposal-details">
-											<summary>调整详情</summary>
+										<details className="min-w-0 text-xs text-ink-secondary">
+											<summary className="cursor-pointer text-accent my-1">调整详情</summary>
 											{adj.addAntiJobs && adj.addAntiJobs.length > 0 && (
-												<div className="architect-blueprint-anti">
+												<div className="mt-1.5 text-micro text-ink-secondary leading-snug">
 													<strong>补充不做边界：</strong>
 													{adj.addAntiJobs.join("；")}
 												</div>
 											)}
 											{adj.workflowNote && (
-												<div className="architect-blueprint-anti">
+												<div className="mt-1.5 text-micro text-ink-secondary leading-snug">
 													<strong>新增协同约束：</strong>
 													{adj.workflowNote}
 												</div>
@@ -385,14 +401,19 @@ export function RoleProposalCard({
 			)}
 
 			{proposals.blueprints.length > 0 && (
-				<div className="architect-blueprints">
-					<div className="architect-blueprints-head">
-						<strong>拟创建角色（{proposals.blueprints.length}）</strong>
+				<div className="flex flex-col gap-1.5">
+					<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+						<strong className="text-xs text-ink">拟创建角色（{proposals.blueprints.length}）</strong>
 						{proposals.status === "pending" && selectedBlueprintIndices.length > 0 && scopeChoices.length > 0 && (
-							<label className="role-proposal-join-select">
+							<label
+								htmlFor={scopeSelectId}
+								className="inline-flex items-center gap-1.5 text-xs text-ink-secondary"
+							>
 								<span>本批角色可用范围</span>
-								<select
-									className="roster-row-select"
+								<Select
+									id={scopeSelectId}
+									size="sm"
+									className="w-auto bg-sidebar"
 									value={activeScopeChoice.key}
 									onChange={(event) => setSelectedScopeKey(event.target.value)}
 								>
@@ -401,7 +422,7 @@ export function RoleProposalCard({
 											{choice.label}
 										</option>
 									))}
-								</select>
+								</Select>
 							</label>
 						)}
 					</div>
@@ -413,64 +434,76 @@ export function RoleProposalCard({
 						return (
 							<div
 								key={`${bp.draft.template.id}-${idx}`}
-								className={`architect-blueprint-card ${checked ? "selected" : ""}`}
+								className={cn(
+									"flex items-start gap-2.5 px-3 py-2.5 rounded-sm border transition-colors",
+									checked ? "border-accent-border bg-surface-accent" : "border-line bg-sidebar",
+								)}
 							>
 								<input
 									type="checkbox"
+									className="mt-0.5 size-3.5 accent-accent cursor-pointer"
 									checked={checked}
 									disabled={disabled}
 									aria-label={`选择角色 ${bp.draft.template.name}`}
 									onChange={() => toggleBlueprint(idx)}
 								/>
-								<div className="architect-blueprint-body">
-									<div className="architect-blueprint-top">
-										<strong>
+								<div className="flex-1 min-w-0 flex flex-col gap-1">
+									<div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+										<strong className="text-ink">
 											{bp.draft.template.name}
-											<small> ({bp.draft.template.title})</small>
+											<small className="text-ink-secondary font-normal"> ({bp.draft.template.title})</small>
 										</strong>
-										<span className="pill">共享 Pi 工具</span>
+										<Badge tone="neutral" size="xs">
+											共享 Pi 工具
+										</Badge>
 									</div>
-									<p>{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}</p>
-									<details className="architect-proposal-details">
-										<summary>
+									<p className="m-0 text-xs text-ink leading-snug">
+										{extractOneJobSummary(bp.draft.template.sections.responsibilitiesAndBoundaries)}
+									</p>
+									<details className="min-w-0 text-xs text-ink-secondary">
+										<summary className="cursor-pointer text-accent my-1">
 											职责、边界与 Skill
 											{bpNewSkills.length > 0
 												? `（已选 ${bpSelectedSkillIndices.length} / ${bpNewSkills.length} 个 Skill）`
 												: ""}
 										</summary>
-										<RoleCapabilityDetails draft={bp.draft} />
-										{bp.draft.antiJobs.length > 0 && (
-											<div className="architect-blueprint-anti">
-												<strong>不做边界：</strong>
-												{bp.draft.antiJobs.join("；")}
-											</div>
-										)}
-										{bp.rationale && (
-											<div className="architect-blueprint-rationale">定位理由：{bp.rationale}</div>
-										)}
-										{checked && bpNewSkills.length > 0 && (
-											<NewSkillsDraftSection
-												skills={bpNewSkills}
-												selectedIndices={bpSelectedSkillIndices}
-												roleScope={activeScopeChoice.roleScope}
-												isSuperAdmin={isSuperAdmin}
-												disabled={disabled}
-												onToggle={(skillIdx) =>
-													setSelectedNewSkillsByBlueprint((prev) => {
-														const current = prev[idx] ?? [];
-														return {
-															...prev,
-															[idx]: current.includes(skillIdx)
-																? current.filter((item) => item !== skillIdx)
-																: [...current, skillIdx],
-														};
-													})
-												}
-												onChangeSkills={(next) =>
-													setNewSkillsByBlueprint((prev) => ({ ...prev, [idx]: next }))
-												}
-											/>
-										)}
+										<div className="mt-1.5 flex flex-col gap-1.5">
+											<RoleCapabilityDetails draft={bp.draft} />
+											{bp.draft.antiJobs.length > 0 && (
+												<div className="text-micro text-ink-secondary leading-snug">
+													<strong>不做边界：</strong>
+													{bp.draft.antiJobs.join("；")}
+												</div>
+											)}
+											{bp.rationale && (
+												<div className="text-micro text-ink-secondary leading-snug">
+													定位理由：{bp.rationale}
+												</div>
+											)}
+											{checked && bpNewSkills.length > 0 && (
+												<NewSkillsDraftSection
+													skills={bpNewSkills}
+													selectedIndices={bpSelectedSkillIndices}
+													roleScope={activeScopeChoice.roleScope}
+													isSuperAdmin={isSuperAdmin}
+													disabled={disabled}
+													onToggle={(skillIdx) =>
+														setSelectedNewSkillsByBlueprint((prev) => {
+															const current = prev[idx] ?? [];
+															return {
+																...prev,
+																[idx]: current.includes(skillIdx)
+																	? current.filter((item) => item !== skillIdx)
+																	: [...current, skillIdx],
+															};
+														})
+													}
+													onChangeSkills={(next) =>
+														setNewSkillsByBlueprint((prev) => ({ ...prev, [idx]: next }))
+													}
+												/>
+											)}
+										</div>
 									</details>
 								</div>
 							</div>
@@ -480,11 +513,11 @@ export function RoleProposalCard({
 			)}
 
 			{proposals.recommendedFormation && (
-				<details className="architect-formation-box architect-proposal-details">
-					<summary>
+				<details className="px-2.5 py-2 rounded-sm border border-dashed border-accent-border bg-surface-accent text-xs text-ink-secondary leading-snug">
+					<summary className="cursor-pointer text-accent my-0.5">
 						分工建议 · {MODE_LABELS[proposals.recommendedFormation.mode] ?? proposals.recommendedFormation.mode}
 					</summary>
-					<span>
+					<span className="block mt-1.5">
 						{proposals.recommendedFormation.rationale}
 						{proposals.recommendedFormation.existingMemberIds.length > 0 &&
 							`（可复用现有成员：${proposals.recommendedFormation.existingMemberIds.map(memberName).join("、")}）`}
@@ -493,18 +526,23 @@ export function RoleProposalCard({
 			)}
 
 			{structuredClarification && proposals.status === "pending" && (
-				<p className="human-decision-note">澄清完成后，请在架构师更新的提案中确认创建。</p>
+				<p className="m-0 text-xs text-ink-secondary">澄清完成后，请在架构师更新的提案中确认创建。</p>
 			)}
 			{!structuredClarification &&
 				proposals.status === "pending" &&
 				totalSelected > 0 &&
 				(canApplyBlueprints || canApplyAdjustments) && (
-					<div className="role-proposal-footer">
+					<div className="flex items-center justify-between gap-2.5 flex-wrap pt-2 border-t border-line">
 						{canJoinMatter && selectedBlueprintIndices.length > 0 && (
-							<label className="role-proposal-join-select">
+							<label
+								htmlFor={joinSelectId}
+								className="inline-flex items-center gap-1.5 text-xs text-ink-secondary"
+							>
 								<span>新角色在本事项中</span>
-								<select
-									className="roster-row-select"
+								<Select
+									id={joinSelectId}
+									size="sm"
+									className="w-auto bg-sidebar"
 									value={joinMode}
 									onChange={(e) => setJoinMode(e.target.value as MatterRoleJoinMode)}
 								>
@@ -512,13 +550,13 @@ export function RoleProposalCard({
 									<option value="observer">设为定向旁听</option>
 									<option value="lead">首个新角色接任主责</option>
 									<option value="none">仅存入团队库</option>
-								</select>
+								</Select>
 							</label>
 						)}
-						<div className="role-proposal-actions">
-							<button
-								type="button"
-								className="btn-pill-dark btn-xs"
+						<div className="inline-flex items-center gap-2 ml-auto">
+							<Button
+								variant="primary"
+								size="xs"
 								disabled={busy || sendingReply || isTurnRunning}
 								onClick={() => void handleConfirmApply()}
 							>
@@ -529,49 +567,40 @@ export function RoleProposalCard({
 										: selectedBlueprintIndices.length > 0
 											? "确认创建角色"
 											: "确认调整角色"}
-							</button>
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
-								disabled={busy}
-								onClick={() => void handleDismiss()}
-							>
+							</Button>
+							<Button variant="secondary" size="xs" disabled={busy} onClick={() => void handleDismiss()}>
 								暂不处理
-							</button>
+							</Button>
 						</div>
 					</div>
 				)}
 
 			{proposals.status === "applied" && (
-				<div className="role-proposal-status-bar applied">
-					<span>
-						✓ 已生效
-						{proposals.confirmation
-							? ` · ${proposals.confirmation.name} 于 ${formatClockTime(proposals.confirmation.at)} 确认`
-							: ""}
-						{proposals.appliedMemberIds?.length ? ` · 新建 ${proposals.appliedMemberIds.length} 位角色` : ""}
-						{proposals.appliedAdjustmentIds?.length
-							? ` · 调整 ${proposals.appliedAdjustmentIds.length} 位成员`
-							: ""}
-						{proposals.appliedMatterJoinMode && proposals.appliedMatterJoinMode !== "none"
-							? " · 已加入当前事项"
-							: ""}
-					</span>
-					{isArchitectMatter && appliedValidIds.length > 0 && onLaunchWithNewRoles && (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => onLaunchWithNewRoles(appliedValidIds)}
-						>
-							携新角色开新事项 →
-						</button>
-					)}
-				</div>
+				<Banner
+					tone="success"
+					actions={
+						isArchitectMatter && appliedValidIds.length > 0 && onLaunchWithNewRoles ? (
+							<Button variant="secondary" size="xs" onClick={() => onLaunchWithNewRoles(appliedValidIds)}>
+								携新角色开新事项 →
+							</Button>
+						) : undefined
+					}
+				>
+					✓ 已生效
+					{proposals.confirmation
+						? ` · ${proposals.confirmation.name} 于 ${formatClockTime(proposals.confirmation.at)} 确认`
+						: ""}
+					{proposals.appliedMemberIds?.length ? ` · 新建 ${proposals.appliedMemberIds.length} 位角色` : ""}
+					{proposals.appliedAdjustmentIds?.length ? ` · 调整 ${proposals.appliedAdjustmentIds.length} 位成员` : ""}
+					{proposals.appliedMatterJoinMode && proposals.appliedMatterJoinMode !== "none"
+						? " · 已加入当前事项"
+						: ""}
+				</Banner>
 			)}
 
 			{proposals.status === "dismissed" && (
-				<div className="role-proposal-status-bar dismissed">已忽略本条角色建议，可继续补充描述调整方案</div>
+				<Banner tone="neutral">已忽略本条角色建议，可继续补充描述调整方案</Banner>
 			)}
-		</div>
+		</Card>
 	);
 }

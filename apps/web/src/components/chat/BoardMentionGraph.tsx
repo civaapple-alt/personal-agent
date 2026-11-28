@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { BoardMemberDto, BoardPostSummaryDto } from "../../api.ts";
 import { buildBoardMentionGraph } from "../../hooks/useMatterBoard.ts";
+import { EmptyState } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 
 interface BoardMentionGraphProps {
 	members: readonly BoardMemberDto[];
@@ -9,6 +11,13 @@ interface BoardMentionGraphProps {
 	onToggleHideInactive: () => void;
 	onSelectAgent?: (agentId: string) => void;
 }
+
+const EDGE_COLOR_VAR: Record<"normal" | "rework" | "pass" | "escalate", string> = {
+	normal: "var(--border-strong)",
+	rework: "var(--warn-border)",
+	pass: "var(--accent)",
+	escalate: "var(--danger-text)",
+};
 
 /** Renders a lightweight interactive SVG `@mention` interaction graph for the active matter board. */
 export function BoardMentionGraph({
@@ -26,14 +35,19 @@ export function BoardMentionGraph({
 	const nodeMap = useMemo(() => new Map(graph.nodes.map((node) => [node.agentId, node])), [graph.nodes]);
 
 	return (
-		<div className="board-graph-tab">
-			<div className="board-graph-toolbar">
-				<span className="board-graph-caption">
+		<div className="flex flex-col gap-2.5">
+			<div className="flex items-center justify-between gap-2 flex-wrap">
+				<span className="text-micro text-ink-muted">
 					点击节点可筛选该成员板帖；默认过滤静默的后台巡检与历史退场节点。
 				</span>
 				<button
 					type="button"
-					className={`board-filter-pill${hideInactive ? " active" : ""}`}
+					className={cn(
+						"border rounded-pill px-2.5 py-0.5 text-micro cursor-pointer transition-colors",
+						hideInactive
+							? "border-accent bg-accent-soft text-accent font-semibold"
+							: "border-line bg-stage text-ink-secondary font-medium hover:border-line-strong hover:text-ink",
+					)}
 					aria-pressed={hideInactive}
 					onClick={onToggleHideInactive}
 				>
@@ -42,13 +56,11 @@ export function BoardMentionGraph({
 			</div>
 
 			{graph.nodes.length === 0 ? (
-				<div className="board-empty-state">
-					<p>暂无看板关系数据。</p>
-				</div>
+				<EmptyState compact title="暂无看板关系数据。" />
 			) : (
-				<div className="board-graph-canvas-wrap">
+				<div className="border border-line rounded-md bg-subtle p-2 overflow-x-auto">
 					<svg
-						className="board-graph-svg"
+						className="w-full h-auto block"
 						viewBox={`0 0 ${graph.width} ${graph.height}`}
 						role="img"
 						aria-label="团队 @mention 协作关系图"
@@ -63,7 +75,7 @@ export function BoardMentionGraph({
 								markerHeight="6"
 								orient="auto-start-reverse"
 							>
-								<path d="M 0 1 L 10 5 L 0 9 z" className="board-graph-marker-normal" />
+								<path d="M 0 1 L 10 5 L 0 9 z" fill="var(--border-strong)" />
 							</marker>
 							<marker
 								id="board-arrow-rework"
@@ -74,7 +86,7 @@ export function BoardMentionGraph({
 								markerHeight="6"
 								orient="auto-start-reverse"
 							>
-								<path d="M 0 1 L 10 5 L 0 9 z" className="board-graph-marker-rework" />
+								<path d="M 0 1 L 10 5 L 0 9 z" fill="var(--warn-border)" />
 							</marker>
 							<marker
 								id="board-arrow-pass"
@@ -85,7 +97,7 @@ export function BoardMentionGraph({
 								markerHeight="6"
 								orient="auto-start-reverse"
 							>
-								<path d="M 0 1 L 10 5 L 0 9 z" className="board-graph-marker-pass" />
+								<path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)" />
 							</marker>
 							<marker
 								id="board-arrow-escalate"
@@ -96,7 +108,7 @@ export function BoardMentionGraph({
 								markerHeight="6"
 								orient="auto-start-reverse"
 							>
-								<path d="M 0 1 L 10 5 L 0 9 z" className="board-graph-marker-escalate" />
+								<path d="M 0 1 L 10 5 L 0 9 z" fill="var(--danger-text)" />
 							</marker>
 						</defs>
 
@@ -123,14 +135,22 @@ export function BoardMentionGraph({
 							const cy = (y1 + y2) / 2 + ny * 1.4;
 							const strokeWidth = Math.min(4, 1.4 + edge.count * 0.5);
 							return (
-								<g key={`${edge.from}->${edge.to}`} className={`board-graph-edge is-${edge.tone}`}>
+								<g key={`${edge.from}->${edge.to}`}>
 									<path
 										d={`M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`}
+										stroke={EDGE_COLOR_VAR[edge.tone]}
 										strokeWidth={strokeWidth}
 										fill="none"
 										markerEnd={`url(#board-arrow-${edge.tone})`}
 									/>
-									<text x={cx} y={cy - 4} textAnchor="middle" className="board-graph-edge-label">
+									<text
+										x={cx}
+										y={cy - 4}
+										textAnchor="middle"
+										fontSize={10}
+										fontWeight={600}
+										fill="var(--text-secondary)"
+									>
 										{edge.count}
 									</text>
 								</g>
@@ -141,17 +161,48 @@ export function BoardMentionGraph({
 							const isRetired = node.status === "retired" || node.status === "stopped";
 							const label =
 								node.displayName.length > 14 ? `${node.displayName.slice(0, 13)}…` : node.displayName;
+							const boxStroke =
+								node.status === "working"
+									? "var(--accent)"
+									: node.status === "blocked_human"
+										? "var(--warn-border)"
+										: "var(--border-strong)";
+							const boxStrokeWidth = node.status === "working" || node.status === "blocked_human" ? 2 : 1.5;
 							return (
 								<g
 									key={node.agentId}
 									transform={`translate(${node.x}, ${node.y})`}
-									className={`board-graph-node is-${node.status}${isRetired ? " is-dimmed" : ""}`}
+									className={cn("board-graph-node cursor-pointer", isRetired && "opacity-50")}
 								>
-									<rect x={-56} y={-20} width={112} height={40} rx={12} className="board-graph-node-box" />
-									<text x={0} y={-2} textAnchor="middle" className="board-graph-node-title">
+									<rect
+										x={-56}
+										y={-20}
+										width={112}
+										height={40}
+										rx={12}
+										fill="var(--bg-card)"
+										stroke={boxStroke}
+										strokeWidth={boxStrokeWidth}
+										strokeDasharray={isRetired ? "4 3" : undefined}
+									/>
+									<text
+										x={0}
+										y={-2}
+										textAnchor="middle"
+										fontSize={11}
+										fontWeight={600}
+										fill="var(--text-primary)"
+									>
 										{label}
 									</text>
-									<text x={0} y={12} textAnchor="middle" className="board-graph-node-sub">
+									<text
+										x={0}
+										y={12}
+										textAnchor="middle"
+										fontSize={9.5}
+										className="font-mono"
+										fill="var(--text-muted)"
+									>
 										@{node.agentId} · {node.postCount}帖
 									</text>
 								</g>
@@ -162,13 +213,13 @@ export function BoardMentionGraph({
 			)}
 
 			{graph.nodes.length > 0 && onSelectAgent && (
-				<div className="board-graph-node-filters">
-					<span className="board-graph-caption">直达板帖：</span>
+				<div className="board-graph-node-filters flex items-center flex-wrap gap-1.5">
+					<span className="text-micro text-ink-muted">直达板帖：</span>
 					{graph.nodes.map((node) => (
 						<button
 							key={node.agentId}
 							type="button"
-							className="board-filter-pill"
+							className="border border-line bg-stage text-ink-secondary rounded-pill px-2.5 py-0.5 text-micro font-medium cursor-pointer transition-colors hover:border-line-strong hover:text-ink"
 							onClick={() => onSelectAgent(node.agentId)}
 						>
 							@{node.agentId}
@@ -177,11 +228,23 @@ export function BoardMentionGraph({
 				</div>
 			)}
 
-			<div className="board-graph-legend">
-				<span className="board-graph-legend-item is-normal">普通 @mention</span>
-				<span className="board-graph-legend-item is-rework">验收打回</span>
-				<span className="board-graph-legend-item is-pass">验收通过</span>
-				<span className="board-graph-legend-item is-escalate">升级 / @monitor</span>
+			<div className="flex flex-wrap gap-2.5 text-micro text-ink-secondary">
+				<span className="inline-flex items-center gap-1.5">
+					<span className="inline-block w-3 h-0.5 bg-line-strong" aria-hidden="true" />
+					普通 @mention
+				</span>
+				<span className="inline-flex items-center gap-1.5">
+					<span className="inline-block w-3 h-0.5 bg-warn-border" aria-hidden="true" />
+					验收打回
+				</span>
+				<span className="inline-flex items-center gap-1.5">
+					<span className="inline-block w-3 h-0.5 bg-accent" aria-hidden="true" />
+					验收通过
+				</span>
+				<span className="inline-flex items-center gap-1.5">
+					<span className="inline-block w-3 h-0.5 bg-danger-text" aria-hidden="true" />
+					升级 / @monitor
+				</span>
 			</div>
 		</div>
 	);

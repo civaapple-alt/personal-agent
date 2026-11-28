@@ -1,6 +1,8 @@
 import { type HumanDecision, readHumanDecision } from "@pa/contracts/human-decision";
 import { useState } from "react";
 import { actOnHumanDecision, type MatterDto } from "../../api/matters.ts";
+import { Banner, Button, IconButton } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 
 interface FloatingClarificationDockProps {
 	matter: MatterDto;
@@ -115,87 +117,124 @@ export function FloatingClarificationDock({
 
 	if (collapsed) {
 		return (
-			<div className="clarification-dock-collapsed">
-				<button type="button" className="clarification-collapsed-pill" onClick={() => setCollapsed(false)}>
-					<span className="clarification-q-icon" aria-hidden="true">
+			<div className="w-[min(760px,calc(100%-32px))] mx-auto mb-2.5 shrink-0">
+				<button
+					type="button"
+					className="flex items-center justify-between gap-2.5 w-full px-3.5 py-2 border border-line rounded-lg bg-surface text-xs text-ink cursor-pointer hover:border-line-strong transition-colors"
+					onClick={() => setCollapsed(false)}
+				>
+					<span
+						className="size-5.5 rounded-full border border-line inline-flex items-center justify-center text-xs font-bold text-accent shrink-0"
+						aria-hidden="true"
+					>
 						?
 					</span>
 					<span>{`${requestedBy} 有 ${total} 个待确认问题（已选 ${answeredCount}/${total}）`}</span>
-					<strong>展开作答 ↑</strong>
+					<strong className="text-accent">展开作答 ↑</strong>
 				</button>
 			</div>
 		);
 	}
 
 	return (
-		<section className="clarification-dock" aria-label="待确认问题">
-			<div className="clarification-dock-head">
-				<div className="clarification-dock-title">
-					<span className="clarification-q-icon" aria-hidden="true">
+		<section
+			className="w-[min(760px,calc(100%-32px))] mx-auto mb-2.5 shrink-0 border border-line rounded-xl bg-surface shadow-md px-4 pt-3.5 pb-3 flex flex-col gap-2.5"
+			aria-label="待确认问题"
+		>
+			<div className="flex items-center justify-between gap-2.5">
+				<div className="flex items-center gap-2 text-sm leading-snug text-ink min-w-0">
+					<span
+						className="size-5.5 rounded-full border border-line inline-flex items-center justify-center text-xs font-bold text-accent shrink-0"
+						aria-hidden="true"
+					>
 						?
 					</span>
 					<strong>{currentReq.question}</strong>
 				</div>
-				<div className="clarification-dock-nav">
+				<div className="inline-flex items-center gap-1 shrink-0">
 					{total > 1 && (
 						<>
-							<button
-								type="button"
-								className="btn-icon-ghost"
+							<IconButton
+								variant="ghost"
+								size="sm"
 								aria-label="上一题"
 								disabled={currentIndex === 0}
 								onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
 							>
 								←
-							</button>
-							<span className="clarification-step-counter">
+							</IconButton>
+							<span className="text-xs text-ink-muted min-w-7 text-center tabular-nums">
 								{currentIndex + 1}/{total}
 							</span>
-							<button
-								type="button"
-								className="btn-icon-ghost"
+							<IconButton
+								variant="ghost"
+								size="sm"
 								aria-label="下一题"
 								disabled={isLastStep}
 								onClick={() => setStepIndex((i) => Math.min(total - 1, i + 1))}
 							>
 								→
-							</button>
+							</IconButton>
 						</>
 					)}
-					<button
-						type="button"
-						className="btn-icon-ghost"
+					<IconButton
+						variant="ghost"
+						size="sm"
 						aria-label="收起问答条"
 						title="收起"
 						onClick={() => setCollapsed(true)}
 					>
 						⌄
-					</button>
+					</IconButton>
 				</div>
 			</div>
 
-			{currentReq.context && <p className="clarification-dock-context">{currentReq.context}</p>}
+			{currentReq.context && <p className="m-0 text-xs text-ink-secondary pl-7.5">{currentReq.context}</p>}
 
-			<div className="clarification-options-list">
+			<div className="flex flex-col gap-1.5">
 				{options.map((opt, idx) => {
 					const selected = !isOtherMode && currentAnswer === opt;
 					return (
 						<button
 							type="button"
 							key={`${idx}-${opt}`}
-							className={`clarification-option-row ${selected ? "selected" : ""}`}
+							className={cn(
+								"flex items-center gap-2.5 w-full px-2.5 py-2 border rounded-md text-left text-sm cursor-pointer transition-colors disabled:opacity-50",
+								selected
+									? "bg-accent-soft border-accent-border text-ink"
+									: "border-transparent bg-transparent text-ink hover:bg-hover/60",
+							)}
 							disabled={submitting || isRunning}
 							onClick={() => selectOption(opt)}
 						>
-							<span className="clarification-option-num">{idx + 1}</span>
-							<span className="clarification-option-text">{opt}</span>
+							<span
+								className={cn(
+									"size-5.5 rounded-sm border inline-flex items-center justify-center text-xs font-semibold shrink-0",
+									selected ? "bg-accent border-accent text-white" : "bg-stage border-line text-ink-secondary",
+								)}
+							>
+								{idx + 1}
+							</span>
+							<span className="leading-snug">{opt}</span>
 						</button>
 					);
 				})}
-				<div className={`clarification-option-row is-other ${isOtherMode ? "selected" : ""}`}>
-					<span className="clarification-option-num">{options.length + 1}</span>
+				<div
+					className={cn(
+						"flex items-center gap-2.5 w-full px-2.5 py-2 border rounded-md transition-colors focus-within:border-accent-border focus-within:bg-accent-soft/60",
+						isOtherMode ? "bg-accent-soft border-accent-border" : "border-transparent bg-transparent",
+					)}
+				>
+					<span
+						className={cn(
+							"size-5.5 rounded-sm border inline-flex items-center justify-center text-xs font-semibold shrink-0",
+							isOtherMode ? "bg-accent border-accent text-white" : "bg-stage border-line text-ink-secondary",
+						)}
+					>
+						{options.length + 1}
+					</span>
 					<input
-						className="clarification-other-input"
+						className="flex-1 min-w-0 border-0 bg-transparent text-ink text-sm placeholder:text-ink-muted focus:outline-none focus-visible:outline-none"
 						type="text"
 						value={isOtherMode ? currentAnswer : ""}
 						placeholder={options.length > 0 ? "其他（输入你的回答…）" : "输入你的回答…"}
@@ -212,26 +251,22 @@ export function FloatingClarificationDock({
 				</div>
 			</div>
 
-			{error && (
-				<p role="alert" className="clarification-dock-error">
-					{error}
-				</p>
-			)}
+			{error && <Banner tone="danger">{error}</Banner>}
 
-			<div className="clarification-dock-footer">
-				<span className="clarification-dock-source">来自 {requestedBy}</span>
-				<div className="clarification-dock-actions">
-					<button type="button" className="btn-inline" disabled={submitting || isRunning} onClick={handleSkip}>
+			<div className="flex items-center justify-between gap-3 pt-1">
+				<span className="text-xs text-ink-muted">来自 {requestedBy}</span>
+				<div className="inline-flex items-center gap-2.5">
+					<Button variant="inline" size="xs" disabled={submitting || isRunning} onClick={handleSkip}>
 						{isLastStep ? "暂不处理" : "跳过"}
-					</button>
-					<button
-						type="button"
-						className="btn-pill-dark btn-xs"
+					</Button>
+					<Button
+						variant="primary"
+						size="xs"
 						disabled={submitting || isRunning || (isLastStep && answeredCount === 0)}
 						onClick={handleNextOrSubmit}
 					>
 						{submitting ? "提交中…" : isLastStep ? "提交答复 ↵" : "继续 →"}
-					</button>
+					</Button>
 				</div>
 			</div>
 		</section>

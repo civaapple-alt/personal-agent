@@ -1,4 +1,6 @@
 import { useId, useState } from "react";
+import { Button, Textarea } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 
 export function DecisionAnswerForm({
 	options,
@@ -21,21 +23,26 @@ export function DecisionAnswerForm({
 
 	return (
 		<form
-			className="decision-answer-form"
+			className="grid gap-2"
 			onSubmit={(event) => {
 				event.preventDefault();
 				submitCurrent();
 			}}
 		>
 			{options.length > 0 && (
-				<fieldset className="decision-option-list" aria-label="选择答复">
+				<fieldset className="flex flex-wrap gap-1.5 m-0 p-0 border-0" aria-label="选择答复">
 					{options.map((option, index) => {
 						const active = selected === index && !trimmed;
 						return (
 							<button
 								key={option}
 								type="button"
-								className={`decision-option-btn${active ? " is-selected" : ""}`}
+								className={cn(
+									"appearance-none border rounded-pill px-3 py-1 text-xs leading-snug cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+									active
+										? "border-cta bg-cta text-stage font-medium hover:opacity-90"
+										: "border-line bg-stage text-ink hover:border-accent-border hover:bg-surface-accent",
+								)}
 								aria-pressed={active}
 								disabled={submitting}
 								onClick={() => {
@@ -53,10 +60,10 @@ export function DecisionAnswerForm({
 					})}
 				</fieldset>
 			)}
-			<div className="decision-input-row">
-				<textarea
+			<div className="flex items-end gap-2">
+				<Textarea
 					id={inputId}
-					className="input-field decision-textarea"
+					className="flex-1 min-w-0 min-h-[34px] py-1.5 text-sm"
 					rows={options.length > 0 ? 1 : 2}
 					value={answer}
 					maxLength={4000}
@@ -74,9 +81,9 @@ export function DecisionAnswerForm({
 						}
 					}}
 				/>
-				<button type="submit" className="btn-pill-dark btn-xs" disabled={!selectedAnswer || submitting}>
+				<Button type="submit" variant="primary" size="xs" disabled={!selectedAnswer || submitting}>
 					{submitting ? "提交中…" : "提交答案"}
-				</button>
+				</Button>
 			</div>
 		</form>
 	);
