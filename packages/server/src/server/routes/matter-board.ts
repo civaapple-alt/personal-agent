@@ -1,4 +1,5 @@
 import type { BoardMemberStatus, BoardPostKind } from "@pa/contracts/board";
+import type { Hono } from "hono";
 import type { BoardMemberRecord } from "../../storage/repos/board-repo.ts";
 import { InvalidEventsCursorError } from "../../storage/repos/board-repo.ts";
 import {
@@ -10,8 +11,8 @@ import {
 	requireMatterReadAccess,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor, toDispatchAuthor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import type { RouteRequest, ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
 import { checkUserDispatchQuota } from "./matter-messages.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
@@ -26,59 +27,44 @@ const VALID_BOARD_POST_KINDS = new Set<BoardPostKind>([
 	"summary",
 ]);
 
-function parseOptionalNonNegativeInt(raw: string | null, name: string): { value?: number; error?: string } {
-	if (raw === null || raw === "") return {};
-	if (!/^\d+$/.test(raw)) return { error: `${name} must be a non-negative integer` };
+function parseOptionalNonNegativeInt(raw: string | undefined, name: string): number | undefined {
+	if (raw === undefined || raw === "") return undefined;
+	if (!/^\d+$/.test(raw)) throw new HttpRequestError(400, `${name} must be a non-negative integer`);
 	const parsed = Number(raw);
-	if (!Number.isSafeInteger(parsed)) return { error: `${name} is out of range` };
-	return { value: parsed };
+	if (!Number.isSafeInteger(parsed)) throw new HttpRequestError(400, `${name} is out of range`);
+	return parsed;
 }
 
-function parseOptionalPositiveInt(raw: string | null, name: string): { value?: number; error?: string } {
-	if (raw === null || raw === "") return {};
-	if (!/^[1-9]\d*$/.test(raw)) return { error: `${name} must be a positive integer` };
+function parseOptionalPositiveInt(raw: string | undefined, name: string): number | undefined {
+	if (raw === undefined || raw === "") return undefined;
+	if (!/^[1-9]\d*$/.test(raw)) throw new HttpRequestError(400, `${name} must be a positive integer`);
 	const parsed = Number(raw);
-	if (!Number.isSafeInteger(parsed)) return { error: `${name} is out of range` };
-	return { value: parsed };
+	if (!Number.isSafeInteger(parsed)) throw new HttpRequestError(400, `${name} is out of range`);
+	return parsed;
 }
 
-function parseOptionalOrder(raw: string | null): { value?: "asc" | "desc"; error?: string } {
-	if (raw === null || raw === "") return {};
-	if (raw === "asc" || raw === "desc") return { value: raw };
-	return { error: "order must be 'asc' or 'desc'" };
+function parseOptionalOrder(raw: string | undefined): "asc" | "desc" | undefined {
+	if (raw === undefined || raw === "") return undefined;
+	if (raw === "asc" || raw === "desc") return raw;
+	throw new HttpRequestError(400, "order must be 'asc' or 'desc'");
 }
 
-/** ACL-enforced endpoints for matter board summaries, full posts, member control, and paginated events. */
-export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, broadcast, runDispatchInBackground } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	const boardMatch = pathname.match(/^\/api\/matters\/([^/]+)\/board$/);
-	if (method === "GET" && boardMatch) {
-		const matterId = decodeURIComponent(boardMatch[1]!);
+/** Register ACL-enforced endpoints for matter board summaries, full posts, member control, and paginated events. */
+export function registerMatterBoardRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/matters/:matterId/board", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const matterId = c.req.param("matterId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
-		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
+		if (!requireMatterReadAccess(res, store, actor, matter)) return c.body(null);
 
-		const searchParams = new URL(req.url ?? pathname, "http://127.0.0.1").searchParams;
-		const afterPostNo = parseOptionalNonNegativeInt(searchParams.get("afterPostNo"), "afterPostNo");
-		if (afterPostNo.error) {
-			sendError(res, 400, afterPostNo.error);
-			return true;
-		}
-		const limit = parseOptionalPositiveInt(searchParams.get("limit"), "limit");
-		if (limit.error) {
-			sendError(res, 400, limit.error);
-			return true;
-		}
-		const order = parseOptionalOrder(searchParams.get("order"));
-		if (order.error) {
-			sendError(res, 400, order.error);
-			return true;
-		}
+		const afterPostNo = parseOptionalNonNegativeInt(c.req.query("afterPostNo"), "afterPostNo");
+		const limit = parseOptionalPositiveInt(c.req.query("limit"), "limit");
+		const order = parseOptionalOrder(c.req.query("order"));
 
 		const meta = store.getMatterBoardMeta(matterId) ?? {
 			collaborationMode: "lead" as const,
@@ -86,12 +72,12 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 		};
 		const members = store.listBoardMembers(matterId);
 		const posts = store.listBoardPostSummaries(matterId, {
-			...(afterPostNo.value !== undefined ? { afterPostNo: afterPostNo.value } : {}),
-			...(limit.value !== undefined ? { limit: limit.value } : {}),
-			...(order.value !== undefined ? { order: order.value } : {}),
+			...(afterPostNo !== undefined ? { afterPostNo } : {}),
+			...(limit !== undefined ? { limit } : {}),
+			...(order !== undefined ? { order } : {}),
 		});
 		const latestPostNo = store.getLatestBoardPostNo(matterId);
-		sendJson(res, 200, {
+		return c.json({
 			matterId,
 			collaborationMode: meta.collaborationMode,
 			coordinatorMemberId: meta.coordinatorMemberId,
@@ -99,38 +85,35 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			posts,
 			latestPostNo,
 		});
-		return true;
-	}
+	});
 
-	const boardPostsCollectionMatch = pathname.match(/^\/api\/matters\/([^/]+)\/board\/posts$/);
-	if (method === "POST" && boardPostsCollectionMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(boardPostsCollectionMatch[1]!);
+	app.post("/api/matters/:matterId/board/posts", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, broadcast, runDispatchInBackground } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterId = c.req.param("matterId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
-		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
+		if (!requireMatterReadAccess(res, store, actor, matter)) return c.body(null);
 		if (!canParticipateInMatter(store, actor, matter)) {
-			sendError(res, 403, "只读成员（org_viewer）不能在公告板发帖");
-			return true;
+			throw new HttpRequestError(403, "只读成员（org_viewer）不能在公告板发帖");
 		}
 		if (matter.status === "archived") {
-			sendError(res, 409, "该事项已归档，请先恢复为活跃事项后再在公告板发言");
-			return true;
+			throw new HttpRequestError(409, "该事项已归档，请先恢复为活跃事项后再在公告板发言");
 		}
-		const body = await readJsonBody(req);
+		const body = await parseJsonBody(c);
 		const rawKind = typeof body.kind === "string" && body.kind.trim() ? body.kind.trim() : "clarification";
 		if (!VALID_BOARD_POST_KINDS.has(rawKind as BoardPostKind)) {
-			sendError(res, 400, `Unsupported board post kind: ${rawKind}`);
-			return true;
+			throw new HttpRequestError(400, `Unsupported board post kind: ${rawKind}`);
 		}
 		const rawSummary = typeof body.summary === "string" ? body.summary.trim() : "";
 		const rawBody = typeof body.body === "string" ? body.body : "";
 		if (!rawSummary && !rawBody.trim()) {
-			sendError(res, 400, "summary or body is required");
-			return true;
+			throw new HttpRequestError(400, "summary or body is required");
 		}
 		const mentions = Array.isArray(body.mentions)
 			? body.mentions
@@ -139,8 +122,10 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 					.filter(Boolean)
 			: [];
 		if (mentions.some((item) => item.toLowerCase() === "all")) {
-			sendError(res, 400, "Unrestricted @all mentions are forbidden; mention specific agentId(s) explicitly.");
-			return true;
+			throw new HttpRequestError(
+				400,
+				"Unrestricted @all mentions are forbidden; mention specific agentId(s) explicitly.",
+			);
 		}
 		const refPostNos = Array.isArray(body.refPostNos)
 			? body.refPostNos.filter(
@@ -212,7 +197,7 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			existingMembers.some((m) => mentions.includes(m.agentId)) &&
 			canDispatchAiInOrg(store, actor, matter.orgId);
 		if (shouldAutoResume) {
-			if (!checkUserDispatchQuota(ctx, actor, res)) return true;
+			if (!checkUserDispatchQuota(ctx, actor, res)) return c.body(null);
 			const coordinatorId = matter.coordinatorMemberId ?? matter.leadMemberId ?? undefined;
 			runDispatchInBackground(
 				{
@@ -228,23 +213,23 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 				actor,
 			);
 		}
-		sendJson(res, 201, { post });
-		return true;
-	}
+		return c.json({ post }, 201);
+	});
 
-	const boardMemberMatch = pathname.match(/^\/api\/matters\/([^/]+)\/board\/members\/([^/]+)$/);
-	if (method === "PATCH" && boardMemberMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(boardMemberMatch[1]!);
-		const agentId = decodeURIComponent(boardMemberMatch[2]!);
+	app.patch("/api/matters/:matterId/board/members/:agentId", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, broadcast } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterId = c.req.param("matterId");
+		const agentId = c.req.param("agentId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 		if (!canAccessMatter(store, actor, matter)) {
-			sendError(res, 403, "无权访问该事项");
-			return true;
+			throw new HttpRequestError(403, "无权访问该事项");
 		}
 		const canControlMember =
 			isGlobalUnscopedActor(actor) ||
@@ -253,28 +238,23 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			(actor.authKind === "session" && actor.user && matter.createdByUserId === actor.user.id) ||
 			canDispatchAiInOrg(store, actor, matter.orgId);
 		if (!canControlMember || !canParticipateInMatter(store, actor, matter)) {
-			sendError(res, 403, "当前账号无权调整看板成员状态或模型");
-			return true;
+			throw new HttpRequestError(403, "当前账号无权调整看板成员状态或模型");
 		}
 		const existingMember: BoardMemberRecord | null = store.getBoardMember(matterId, agentId);
 		if (!existingMember) {
-			sendError(res, 404, `Board member not found: ${agentId}`);
-			return true;
+			throw new HttpRequestError(404, `Board member not found: ${agentId}`);
 		}
-		const body = await readJsonBody(req);
+		const body = await parseJsonBody(c);
 		const hasModelOverride = Object.hasOwn(body, "modelOverride");
 		if (hasModelOverride) {
 			if (!canDispatchAiInOrg(store, actor, matter.orgId)) {
-				sendError(res, 403, "无权调整看板成员模型");
-				return true;
+				throw new HttpRequestError(403, "无权调整看板成员模型");
 			}
 			if (existingMember.status !== "waiting") {
-				sendError(
-					res,
+				throw new HttpRequestError(
 					409,
 					`Board member '${agentId}' can only swap model when waiting (current status: ${existingMember.status})`,
 				);
-				return true;
 			}
 		}
 		let nextStatus: BoardMemberStatus | undefined;
@@ -284,14 +264,12 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			nextStatus = "waiting";
 		} else if (Object.hasOwn(body, "status")) {
 			if (body.status !== "waiting" && body.status !== "stopped" && body.status !== "retired") {
-				sendError(res, 400, "status must be 'waiting', 'stopped', or 'retired'");
-				return true;
+				throw new HttpRequestError(400, "status must be 'waiting', 'stopped', or 'retired'");
 			}
 			nextStatus = body.status;
 		}
 		if (existingMember.boardRole === "coordinator" && nextStatus === "retired") {
-			sendError(res, 400, "Coordinator cannot be retired");
-			return true;
+			throw new HttpRequestError(400, "Coordinator cannot be retired");
 		}
 		const validatedModel = hasModelOverride
 			? body.modelOverride === null
@@ -303,8 +281,7 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			...(validatedModel !== undefined ? { modelOverride: validatedModel } : {}),
 		});
 		if (!updated) {
-			sendError(res, 404, `Board member not found: ${agentId}`);
-			return true;
+			throw new HttpRequestError(404, `Board member not found: ${agentId}`);
 		}
 		broadcast(
 			"board_member_updated",
@@ -318,86 +295,65 @@ export async function handleMatterBoardRoutes(ctx: ServerRouteContext, r: RouteR
 			},
 			{ matterId },
 		);
-		sendJson(res, 200, { member: updated });
-		return true;
-	}
+		return c.json({ member: updated });
+	});
 
-	if (method !== "GET") return false;
-
-	const boardPostMatch = pathname.match(/^\/api\/matters\/([^/]+)\/board\/posts\/([^/]+)$/);
-	if (boardPostMatch) {
-		const matterId = decodeURIComponent(boardPostMatch[1]!);
-		const rawPostNo = decodeURIComponent(boardPostMatch[2]!);
+	app.get("/api/matters/:matterId/board/posts/:postNo", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const matterId = c.req.param("matterId");
+		const rawPostNo = c.req.param("postNo");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
-		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
+		if (!requireMatterReadAccess(res, store, actor, matter)) return c.body(null);
 
 		const parsedPostNo = parseOptionalPositiveInt(rawPostNo, "postNo");
-		if (parsedPostNo.error || parsedPostNo.value === undefined) {
-			sendError(res, 400, parsedPostNo.error ?? "Invalid board post number");
-			return true;
+		if (parsedPostNo === undefined) {
+			throw new HttpRequestError(400, "Invalid board post number");
 		}
-		const post = store.getBoardPost(matterId, parsedPostNo.value);
+		const post = store.getBoardPost(matterId, parsedPostNo);
 		if (!post) {
-			sendError(res, 404, `Board post #${parsedPostNo.value} not found`);
-			return true;
+			throw new HttpRequestError(404, `Board post #${parsedPostNo} not found`);
 		}
-		sendJson(res, 200, { post });
-		return true;
-	}
+		return c.json({ post });
+	});
 
-	const eventsMatch = pathname.match(/^\/api\/matters\/([^/]+)\/events$/);
-	if (eventsMatch) {
-		const matterId = decodeURIComponent(eventsMatch[1]!);
+	app.get("/api/matters/:matterId/events", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		const matterId = c.req.param("matterId");
 		const matter = store.getMatter(matterId);
 		if (!matter) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
-		if (!requireMatterReadAccess(res, store, actor, matter)) return true;
+		if (!requireMatterReadAccess(res, store, actor, matter)) return c.body(null);
 
-		const searchParams = new URL(req.url ?? pathname, "http://127.0.0.1").searchParams;
-		const cursor = searchParams.get("cursor")?.trim() || undefined;
-		const agentId = searchParams.get("agentId")?.trim() || undefined;
-		const eventType = searchParams.get("eventType")?.trim() || undefined;
-		const limit = parseOptionalPositiveInt(searchParams.get("limit"), "limit");
-		if (limit.error) {
-			sendError(res, 400, limit.error);
-			return true;
-		}
-		const boardPostNo = parseOptionalPositiveInt(searchParams.get("boardPostNo"), "boardPostNo");
-		if (boardPostNo.error) {
-			sendError(res, 400, boardPostNo.error);
-			return true;
-		}
-		const order = parseOptionalOrder(searchParams.get("order"));
-		if (order.error) {
-			sendError(res, 400, order.error);
-			return true;
-		}
+		const cursor = c.req.query("cursor")?.trim() || undefined;
+		const agentId = c.req.query("agentId")?.trim() || undefined;
+		const eventType = c.req.query("eventType")?.trim() || undefined;
+		const limit = parseOptionalPositiveInt(c.req.query("limit"), "limit");
+		const boardPostNo = parseOptionalPositiveInt(c.req.query("boardPostNo"), "boardPostNo");
+		const order = parseOptionalOrder(c.req.query("order"));
 
 		try {
 			const result = store.listEvents(matterId, {
 				...(cursor ? { cursor } : {}),
-				...(limit.value !== undefined ? { limit: limit.value } : {}),
+				...(limit !== undefined ? { limit } : {}),
 				...(agentId ? { agentId } : {}),
-				...(boardPostNo.value !== undefined ? { boardPostNo: boardPostNo.value } : {}),
+				...(boardPostNo !== undefined ? { boardPostNo } : {}),
 				...(eventType ? { eventType } : {}),
-				...(order.value !== undefined ? { order: order.value } : {}),
+				...(order !== undefined ? { order } : {}),
 			});
-			sendJson(res, 200, { matterId, ...result });
+			return c.json({ matterId, ...result });
 		} catch (error) {
 			if (error instanceof InvalidEventsCursorError) {
-				sendError(res, 400, error.message);
-				return true;
+				throw new HttpRequestError(400, error.message);
 			}
 			throw error;
 		}
-		return true;
-	}
-
-	return false;
+	});
 }

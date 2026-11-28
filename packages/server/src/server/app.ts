@@ -26,17 +26,17 @@ import { handleAdminAndAuthRoutes, handleAdminRoutes } from "./routes/admin-auth
 import { handleBootstrapAndCollaboratorRoutes } from "./routes/auth-collaborators.ts";
 import type { RouteRequest, ServerRouteContext } from "./routes/context.ts";
 import { handleDeliverableOrgPreviewRoutes } from "./routes/deliverables-orgs.ts";
-import { handleHumanDecisionRoutes } from "./routes/human-decisions.ts";
-import { handleMatterBoardRoutes } from "./routes/matter-board.ts";
+import { registerHumanDecisionRoutes } from "./routes/human-decisions.ts";
+import { registerMatterBoardRoutes } from "./routes/matter-board.ts";
 import { handleMatterMessageRoutes } from "./routes/matter-messages.ts";
-import { handleMatterSettingsRoutes } from "./routes/matter-settings.ts";
-import { handleMatterRoutes } from "./routes/matters.ts";
-import { handleModelSettingsRoutes } from "./routes/model-settings.ts";
+import { registerMatterSettingsRoutes } from "./routes/matter-settings.ts";
+import { registerMatterRoutes } from "./routes/matters.ts";
+import { registerModelSettingsRoutes } from "./routes/model-settings.ts";
 import { handleRoleDesignRoutes } from "./routes/role-design.ts";
 import { handleSkillTrustRoutes } from "./routes/skill-trust.ts";
 import { handleSpaceRoutes } from "./routes/spaces.ts";
 import { handleTeamRoutes } from "./routes/team.ts";
-import { handleWorkspaceFolderRoutes } from "./routes/workspace-folders.ts";
+import { registerWorkspaceFolderRoutes } from "./routes/workspace-folders.ts";
 import { createSseHub, type SseBroadcastFn } from "./sse.ts";
 import { handleUploadGet } from "./uploads.ts";
 
@@ -219,18 +219,18 @@ export function createPersonalAgentServer(options: PersonalAgentServerOptions): 
 	const publicApiRouter = createApiRouter();
 	const apiRouter = createApiRouter();
 	apiRouter.use("/api/*", requireAuthMiddleware);
+	registerModelSettingsRoutes(apiRouter);
+	registerMatterRoutes(apiRouter);
+	registerMatterBoardRoutes(apiRouter);
+	registerMatterSettingsRoutes(apiRouter);
+	registerHumanDecisionRoutes(apiRouter);
+	registerWorkspaceFolderRoutes(apiRouter);
 
 	const handlers = [
-		handleModelSettingsRoutes,
 		handleAdminRoutes,
 		handleBootstrapAndCollaboratorRoutes,
-		handleMatterRoutes,
-		handleMatterBoardRoutes,
-		handleMatterSettingsRoutes,
 		handleMatterMessageRoutes,
-		handleHumanDecisionRoutes,
 		handleSpaceRoutes,
-		handleWorkspaceFolderRoutes,
 		handleDeliverableOrgPreviewRoutes,
 		handleRoleDesignRoutes,
 		handleSkillTrustRoutes,

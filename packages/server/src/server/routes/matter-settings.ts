@@ -1,3 +1,4 @@
+import type { Hono } from "hono";
 import type { MatterVisibility } from "../../storage/types.ts";
 import {
 	canAccessMatter,
@@ -8,28 +9,27 @@ import {
 	isGlobalUnscopedActor,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import { parseCollaboratorIds, parseObserverMemberIds, type RouteRequest, type ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
+import { parseCollaboratorIds, parseObserverMemberIds } from "./context.ts";
 import { ensureOrgEnabledAiRequest } from "./matter-roster.ts";
 import { validateModelSelection } from "./model-settings.ts";
 
-/** Update a matter’s workspace, visibility, and roster. */
-export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, orchestrator, broadcast } = ctx;
-	const { req, res, method, pathname, actor } = r;
-
-	const matterDetailMatch = pathname.match(/^\/api\/matters\/([^/]+)$/);
-	if (method === "PATCH" && matterDetailMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const matterId = decodeURIComponent(matterDetailMatch[1]!);
+/** Register route to update a matter’s workspace, visibility, and roster. */
+export function registerMatterSettingsRoutes(app: Hono<ApiRouterEnv>): void {
+	app.patch("/api/matters/:matterId", async (c) => {
+		const ctx = c.var.routeCtx;
+		const { store, orchestrator, broadcast } = ctx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const matterId = c.req.param("matterId");
 		const existing = store.getMatter(matterId);
 		if (!existing) {
-			sendError(res, 404, `Matter not found: ${matterId}`);
-			return true;
+			throw new HttpRequestError(404, `Matter not found: ${matterId}`);
 		}
 		if (!canAccessMatter(store, actor, existing)) {
-			sendError(res, 403, "无权访问该事项");
-			return true;
+			throw new HttpRequestError(403, "无权访问该事项");
 		}
 		const canModifyMatter =
 			isGlobalUnscopedActor(actor) ||
@@ -37,10 +37,9 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			canManageOrganization(store, actor, existing.orgId) ||
 			(actor.authKind === "session" && actor.user && existing.createdByUserId === actor.user.id);
 		if (!canModifyMatter) {
-			sendError(res, 403, "仅所有者、组织管理员或事项发起人可修改事项配置");
-			return true;
+			throw new HttpRequestError(403, "仅所有者、组织管理员或事项发起人可修改事项配置");
 		}
-		const body = await readJsonBody(req);
+		const body = await parseJsonBody(c);
 		const hasModelSelectionUpdate = Object.hasOwn(body, "modelSelection");
 		const hasWorkspaceUpdate = Object.hasOwn(body, "workspaceId");
 		const hasOrgUpdate = Object.hasOwn(body, "orgId");
@@ -58,20 +57,17 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 		const nextStatus =
 			body.status === "archived" || body.status === "open" ? (body.status as "archived" | "open") : undefined;
 		if (hasStatusUpdate && !nextStatus) {
-			sendError(res, 400, 'status must be "archived" or "open"');
-			return true;
+			throw new HttpRequestError(400, 'status must be "archived" or "open"');
 		}
 		const workspaceId =
 			typeof body.workspaceId === "string" && body.workspaceId.trim().length > 0 ? body.workspaceId.trim() : null;
 		const targetWorkspace = hasWorkspaceUpdate && workspaceId ? store.getWorkspace(workspaceId) : null;
 		if (hasWorkspaceUpdate && workspaceId) {
 			if (!targetWorkspace) {
-				sendError(res, 404, `Workspace not found: ${workspaceId}`);
-				return true;
+				throw new HttpRequestError(404, `Workspace not found: ${workspaceId}`);
 			}
 			if (!canAccessWorkspace(store, actor, targetWorkspace)) {
-				sendError(res, 403, "无权将事项切换到未授权的项目仓库");
-				return true;
+				throw new HttpRequestError(403, "无权将事项切换到未授权的项目仓库");
 			}
 		}
 		const nextOrgId =
@@ -81,34 +77,28 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 					? body.orgId.trim()
 					: null;
 		if (hasOrgUpdate && body.orgId !== null && typeof body.orgId !== "string") {
-			sendError(res, 400, "orgId must be a string or null");
-			return true;
+			throw new HttpRequestError(400, "orgId must be a string or null");
 		}
 		if (hasOrgUpdate && nextOrgId && !store.getOrganization(nextOrgId)) {
-			sendError(res, 404, `Organization not found: ${nextOrgId}`);
-			return true;
+			throw new HttpRequestError(404, `Organization not found: ${nextOrgId}`);
 		}
 		if (hasOrgUpdate && nextOrgId && !canAccessOrganization(store, actor, nextOrgId)) {
-			sendError(res, 403, "无权将事项转移到未加入的组织");
-			return true;
+			throw new HttpRequestError(403, "无权将事项转移到未加入的组织");
 		}
 		const nextLeadId =
 			typeof body.leadMemberId === "string" && body.leadMemberId.trim().length > 0 ? body.leadMemberId.trim() : null;
 		if (hasLeadUpdate && (!nextLeadId || !store.getMember(nextLeadId))) {
-			sendError(
-				res,
+			throw new HttpRequestError(
 				nextLeadId ? 404 : 400,
 				nextLeadId ? `Member not found: ${nextLeadId}` : "leadMemberId is invalid",
 			);
-			return true;
 		}
 		const nextCollaborationMode =
 			body.collaborationMode === "lead" || body.collaborationMode === "board"
 				? (body.collaborationMode as "lead" | "board")
 				: undefined;
 		if (hasCollaborationModeUpdate && !nextCollaborationMode) {
-			sendError(res, 400, 'collaborationMode must be "lead" or "board"');
-			return true;
+			throw new HttpRequestError(400, 'collaborationMode must be "lead" or "board"');
 		}
 		const nextCoordinatorMemberId =
 			body.coordinatorMemberId === null
@@ -121,12 +111,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			body.coordinatorMemberId !== null &&
 			(!nextCoordinatorMemberId || !store.getMember(nextCoordinatorMemberId))
 		) {
-			sendError(
-				res,
+			throw new HttpRequestError(
 				nextCoordinatorMemberId ? 404 : 400,
 				nextCoordinatorMemberId ? `Member not found: ${nextCoordinatorMemberId}` : "coordinatorMemberId is invalid",
 			);
-			return true;
 		}
 		const parsedAiMemberIds =
 			hasAiMembersUpdate && body.aiMemberIds === null
@@ -135,12 +123,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 					? parseObserverMemberIds(body.aiMemberIds, store)
 					: undefined;
 		if (hasAiMembersUpdate && parsedAiMemberIds === undefined) {
-			sendError(res, 400, "aiMemberIds must be null or an array of member IDs");
-			return true;
+			throw new HttpRequestError(400, "aiMemberIds must be null or an array of member IDs");
 		}
 		if (hasAiMembersUpdate && Array.isArray(parsedAiMemberIds) && parsedAiMemberIds.length === 0) {
-			sendError(res, 400, "At least one AI member must remain in the matter");
-			return true;
+			throw new HttpRequestError(400, "At least one AI member must remain in the matter");
 		}
 		const parsedConsultMemberIds =
 			hasConsultMembersUpdate && body.consultMemberIds === null
@@ -149,26 +135,21 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 					? parseObserverMemberIds(body.consultMemberIds, store)
 					: undefined;
 		if (hasConsultMembersUpdate && parsedConsultMemberIds === undefined) {
-			sendError(res, 400, "consultMemberIds must be null or an array of member IDs");
-			return true;
+			throw new HttpRequestError(400, "consultMemberIds must be null or an array of member IDs");
 		}
 		if (hasObserversEnabledUpdate && typeof body.observersEnabled !== "boolean") {
-			sendError(res, 400, "observersEnabled must be a boolean");
-			return true;
+			throw new HttpRequestError(400, "observersEnabled must be a boolean");
 		}
 		if (hasDiscussionAiUpdate && typeof body.discussionAiEnabled !== "boolean") {
-			sendError(res, 400, "discussionAiEnabled must be a boolean");
-			return true;
+			throw new HttpRequestError(400, "discussionAiEnabled must be a boolean");
 		}
 		const observerMemberIds = hasObserverUpdate ? parseObserverMemberIds(body.observerMemberIds, store) : undefined;
 		if (hasObserverUpdate && !observerMemberIds) {
-			sendError(res, 400, "observerMemberIds must be an array of member IDs");
-			return true;
+			throw new HttpRequestError(400, "observerMemberIds must be an array of member IDs");
 		}
 		const collaboratorIds = hasCollaboratorUpdate ? parseCollaboratorIds(body.collaboratorIds, store) : undefined;
 		if (hasCollaboratorUpdate && !collaboratorIds) {
-			sendError(res, 400, "collaboratorIds must be an array of collaborator IDs");
-			return true;
+			throw new HttpRequestError(400, "collaboratorIds must be an array of collaborator IDs");
 		}
 		const modelSelection = hasModelSelectionUpdate
 			? await validateModelSelection(ctx, body.modelSelection)
@@ -176,12 +157,10 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 		if (hasModelSelectionUpdate) {
 			const current = store.getMatter(matterId);
 			if (current?.orgId !== existing.orgId || current?.createdByUserId !== existing.createdByUserId) {
-				sendError(res, 409, "事项归属已变化，请刷新后再配置模型");
-				return true;
+				throw new HttpRequestError(409, "事项归属已变化，请刷新后再配置模型");
 			}
 			if (!canDispatchAiInOrg(store, actor, existing.orgId) || !current || !canAccessMatter(store, actor, current)) {
-				sendError(res, 403, "无权为此事项配置模型");
-				return true;
+				throw new HttpRequestError(403, "无权为此事项配置模型");
 			}
 		}
 		if (
@@ -193,16 +172,13 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 				hasCoordinatorUpdate) &&
 			orchestrator.isMatterRunning(matterId)
 		) {
-			sendError(
-				res,
+			throw new HttpRequestError(
 				409,
 				"Stop the active turn before switching workspaces, organizations, lead member, collaboration mode, or model",
 			);
-			return true;
 		}
 		if (nextStatus === "archived" && orchestrator.isMatterRunning(matterId)) {
-			sendError(res, 409, "请先停止当前正在运行的事项再归档");
-			return true;
+			throw new HttpRequestError(409, "请先停止当前正在运行的事项再归档");
 		}
 		const rosterOrgId = targetWorkspace ? targetWorkspace.orgId : hasOrgUpdate ? nextOrgId : existing.orgId;
 		if (
@@ -212,7 +188,7 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 				...(observerMemberIds ?? []),
 			])
 		) {
-			return true;
+			return c.body(null);
 		}
 		let updated = existing;
 		if (modelSelection !== undefined) {
@@ -325,9 +301,6 @@ export async function handleMatterSettingsRoutes(ctx: ServerRouteContext, r: Rou
 			updated = store.updateMatterStatus(matterId, nextStatus);
 			broadcast("matter_updated", { matterId, status: updated.status }, { matterId });
 		}
-		sendJson(res, 200, { matter: updated });
-		return true;
-	}
-
-	return false;
+		return c.json({ matter: updated });
+	});
 }

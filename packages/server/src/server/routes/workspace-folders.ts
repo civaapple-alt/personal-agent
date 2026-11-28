@@ -1,5 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { UpdateWorkspaceFolderSchema, UpdateWorkspacePiTrustSchema } from "@pa/contracts/schemas";
+import type { Hono } from "hono";
 import {
 	readPiProjectTrustState,
 	writePiProjectTrustDecision,
@@ -12,19 +14,18 @@ import {
 	validateLocalWorkspaceBindingPath,
 } from "../acl.ts";
 import { isSuperAdminActor, requireActiveActor } from "../auth.ts";
-import { readJsonBody, sendError, sendJson } from "../http.ts";
-import type { RouteRequest, ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import { type ApiRouterEnv, parseJsonBody } from "../router.ts";
 
-/** Handle multi-folder workspace attachments and cross-folder Rules/Skills customizations breakdown. */
-export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	const { store, broadcast, dataDir, defaultWorkspacesRoot } = ctx;
-	const { actor, req, res, method, pathname } = r;
-
-	if (method === "GET" && pathname === "/api/workspaces/directory-browser") {
-		if (!requireActiveActor(res, actor)) return true;
-		const url = new URL(req.url ?? "/", "http://127.0.0.1");
-		const workspaceId = url.searchParams.get("workspaceId");
-		const orgId = url.searchParams.get("orgId");
+/** Register multi-folder workspace attachment, customizations breakdown, and Pi trust routes. */
+export function registerWorkspaceFolderRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/workspaces/directory-browser", async (c) => {
+		const { store, dataDir, defaultWorkspacesRoot } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.query("workspaceId");
+		const orgId = c.req.query("orgId");
 		if (workspaceId) {
 			const workspace = store.getWorkspace(workspaceId);
 			if (
@@ -32,16 +33,14 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 				!canAccessWorkspace(store, actor, workspace) ||
 				(!isSuperAdminActor(actor) && !canManageOrganization(store, actor, workspace.orgId))
 			) {
-				sendError(res, 403, "无权管理该工作区目录");
-				return true;
+				throw new HttpRequestError(403, "无权管理该工作区目录");
 			}
 		} else if (!isSuperAdminActor(actor) && (!orgId || !canManageOrganization(store, actor, orgId))) {
-			sendError(res, 403, "仅组织管理员可浏览服务器目录");
-			return true;
+			throw new HttpRequestError(403, "仅组织管理员可浏览服务器目录");
 		}
 		const settings = store.getPlatformSettings(defaultWorkspacesRoot);
 		const validate = (rawPath: string) => validateLocalWorkspaceBindingPath({ rawPath, settings, actor, dataDir });
-		const requested = url.searchParams.get("path")?.trim();
+		const requested = c.req.query("path")?.trim();
 		try {
 			if (requested && !isAbsolute(requested)) throw new Error("请输入服务器上的绝对路径");
 			const candidates = requested
@@ -89,28 +88,26 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 					/* The parent is outside the permitted scope. */
 				}
 			}
-			sendJson(res, 200, { path: current, parent, roots, directories });
+			return c.json({ path: current, parent, roots, directories });
 		} catch (error) {
-			sendError(res, 403, error instanceof Error ? error.message : "无法读取目录");
+			throw new HttpRequestError(403, error instanceof Error ? error.message : "无法读取目录");
 		}
-		return true;
-	}
+	});
 
-	const customizationsMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/customizations$/);
-	if (customizationsMatch && method === "GET") {
-		if (!requireActiveActor(res, actor)) return true;
-		const workspaceId = decodeURIComponent(customizationsMatch[1]!);
+	app.get("/api/workspaces/:workspaceId/customizations", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
 		const workspace = store.getWorkspace(workspaceId);
 		if (!workspace) {
-			sendError(res, 404, "工作区不存在");
-			return true;
+			throw new HttpRequestError(404, "工作区不存在");
 		}
 		if (!canAccessWorkspace(store, actor, workspace)) {
-			sendError(res, 403, "无权访问该工作区");
-			return true;
+			throw new HttpRequestError(403, "无权访问该工作区");
 		}
-		const url = new URL(req.url ?? "/", "http://127.0.0.1");
-		const folderIdFilter = url.searchParams.get("folderId")?.trim() || null;
+		const folderIdFilter = c.req.query("folderId")?.trim() || null;
 		const allFolders = store.workspaceFolders.listFolders(workspaceId);
 		const scopedFolders = folderIdFilter ? allFolders.filter((f) => f.id === folderIdFilter) : allFolders;
 		const report = buildWorkspaceCustomizations(scopedFolders);
@@ -134,7 +131,7 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 							canEdit: canEditPiTrust,
 						};
 					})();
-		sendJson(res, 200, {
+		return c.json({
 			workspaceId,
 			folders: allFolders,
 			piTrust,
@@ -144,34 +141,28 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 				rules: report.rules.map(({ content: _content, ...rest }) => rest),
 			},
 		});
-		return true;
-	}
+	});
 
-	const piTrustMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/pi-trust$/);
-	if (piTrustMatch && method === "PATCH") {
-		if (!requireActiveActor(res, actor)) return true;
-		const workspaceId = decodeURIComponent(piTrustMatch[1]!);
+	app.patch("/api/workspaces/:workspaceId/pi-trust", async (c) => {
+		const { store, broadcast } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
 		const workspace = store.getWorkspace(workspaceId);
 		if (!workspace) {
-			sendError(res, 404, "工作区不存在");
-			return true;
+			throw new HttpRequestError(404, "工作区不存在");
 		}
 		if (!isGlobalUnscopedActor(actor) && !isSuperAdminActor(actor)) {
-			sendError(res, 403, "仅本机所有者或超级管理员可调整 Pi 目录信任状态");
-			return true;
+			throw new HttpRequestError(403, "仅本机所有者或超级管理员可调整 Pi 目录信任状态");
 		}
 		if (workspace.sourceType === "cloned") {
-			sendError(res, 400, "托管克隆仓固定保持隔离，不支持切换 Pi 目录信任");
-			return true;
+			throw new HttpRequestError(400, "托管克隆仓固定保持隔离，不支持切换 Pi 目录信任");
 		}
-		const body = await readJsonBody(req);
-		if (body.trusted !== true && body.trusted !== false && body.trusted !== null) {
-			sendError(res, 400, "trusted 字段必须为 true、false 或 null");
-			return true;
-		}
+		const body = await parseJsonBody(c, UpdateWorkspacePiTrustSchema);
 		const state = writePiProjectTrustDecision(workspace.repoPath, body.trusted);
 		broadcast("workspace_updated", { workspaceId });
-		sendJson(res, 200, {
+		return c.json({
 			workspaceId,
 			piTrust: {
 				eligible: true,
@@ -181,128 +172,139 @@ export async function handleWorkspaceFolderRoutes(ctx: ServerRouteContext, r: Ro
 				canEdit: true,
 			},
 		});
-		return true;
-	}
+	});
 
-	const folderItemMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/folders\/([^/]+)$/);
-	if (folderItemMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const workspaceId = decodeURIComponent(folderItemMatch[1]!);
-		const folderId = decodeURIComponent(folderItemMatch[2]!);
+	app.patch("/api/workspaces/:workspaceId/folders/:folderId", async (c) => {
+		const { store, broadcast } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
+		const folderId = c.req.param("folderId");
 		const workspace = store.getWorkspace(workspaceId);
 		if (!workspace) {
-			sendError(res, 404, "工作区不存在");
-			return true;
+			throw new HttpRequestError(404, "工作区不存在");
 		}
 		const canManage =
 			isGlobalUnscopedActor(actor) ||
 			isSuperAdminActor(actor) ||
 			canManageOrganization(store, actor, workspace.orgId);
 		if (!canManage) {
-			sendError(res, 403, "仅组织管理员或超级管理员可调整工作区目录");
-			return true;
+			throw new HttpRequestError(403, "仅组织管理员或超级管理员可调整工作区目录");
 		}
-
-		if (method === "PATCH") {
-			const body = await readJsonBody(req);
-			if (body.setPrimary === true) {
-				const updated = store.workspaceFolders.setPrimaryFolder(workspaceId, folderId);
-				if (!updated) {
-					sendError(res, 404, "目录不存在");
-					return true;
-				}
-				broadcast("workspace_updated", { workspaceId });
-				sendJson(res, 200, { folder: updated, folders: store.workspaceFolders.listFolders(workspaceId) });
-				return true;
-			}
-			const updated = store.workspaceFolders.updateFolder(folderId, {
-				label: typeof body.label === "string" ? body.label : undefined,
-				loadRules: typeof body.loadRules === "boolean" ? body.loadRules : undefined,
-				loadSkills: typeof body.loadSkills === "boolean" ? body.loadSkills : undefined,
-			});
+		const body = await parseJsonBody(c, UpdateWorkspaceFolderSchema);
+		if (body.setPrimary === true) {
+			const updated = store.workspaceFolders.setPrimaryFolder(workspaceId, folderId);
 			if (!updated) {
-				sendError(res, 404, "目录不存在");
-				return true;
+				throw new HttpRequestError(404, "目录不存在");
 			}
 			broadcast("workspace_updated", { workspaceId });
-			sendJson(res, 200, { folder: updated, folders: store.workspaceFolders.listFolders(workspaceId) });
-			return true;
+			return c.json({ folder: updated, folders: store.workspaceFolders.listFolders(workspaceId) });
 		}
-
-		if (method === "DELETE") {
-			try {
-				const removed = store.workspaceFolders.removeFolder(folderId);
-				if (!removed) {
-					sendError(res, 404, "目录不存在");
-					return true;
-				}
-				broadcast("workspace_updated", { workspaceId });
-				sendJson(res, 200, { folders: store.workspaceFolders.listFolders(workspaceId) });
-			} catch (error) {
-				sendError(res, 400, error instanceof Error ? error.message : String(error));
-			}
-			return true;
+		const updated = store.workspaceFolders.updateFolder(folderId, {
+			label: body.label,
+			loadRules: body.loadRules,
+			loadSkills: body.loadSkills,
+		});
+		if (!updated) {
+			throw new HttpRequestError(404, "目录不存在");
 		}
-		return false;
-	}
+		broadcast("workspace_updated", { workspaceId });
+		return c.json({ folder: updated, folders: store.workspaceFolders.listFolders(workspaceId) });
+	});
 
-	const foldersMatch = pathname.match(/^\/api\/workspaces\/([^/]+)\/folders$/);
-	if (foldersMatch) {
-		if (!requireActiveActor(res, actor)) return true;
-		const workspaceId = decodeURIComponent(foldersMatch[1]!);
+	app.delete("/api/workspaces/:workspaceId/folders/:folderId", (c) => {
+		const { store, broadcast } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
+		const folderId = c.req.param("folderId");
 		const workspace = store.getWorkspace(workspaceId);
 		if (!workspace) {
-			sendError(res, 404, "工作区不存在");
-			return true;
+			throw new HttpRequestError(404, "工作区不存在");
+		}
+		const canManage =
+			isGlobalUnscopedActor(actor) ||
+			isSuperAdminActor(actor) ||
+			canManageOrganization(store, actor, workspace.orgId);
+		if (!canManage) {
+			throw new HttpRequestError(403, "仅组织管理员或超级管理员可调整工作区目录");
+		}
+		try {
+			const removed = store.workspaceFolders.removeFolder(folderId);
+			if (!removed) {
+				throw new HttpRequestError(404, "目录不存在");
+			}
+			broadcast("workspace_updated", { workspaceId });
+			return c.json({ folders: store.workspaceFolders.listFolders(workspaceId) });
+		} catch (error) {
+			if (error instanceof HttpRequestError) throw error;
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+	});
+
+	app.get("/api/workspaces/:workspaceId/folders", (c) => {
+		const { store } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
+		const workspace = store.getWorkspace(workspaceId);
+		if (!workspace) {
+			throw new HttpRequestError(404, "工作区不存在");
 		}
 		if (!canAccessWorkspace(store, actor, workspace)) {
-			sendError(res, 403, "无权访问该工作区");
-			return true;
+			throw new HttpRequestError(403, "无权访问该工作区");
 		}
-		if (method === "GET") {
-			const folders = store.workspaceFolders.listFolders(workspaceId);
-			sendJson(res, 200, { folders });
-			return true;
-		}
-		if (method === "POST") {
-			const canManage =
-				isGlobalUnscopedActor(actor) ||
-				isSuperAdminActor(actor) ||
-				canManageOrganization(store, actor, workspace.orgId);
-			if (!canManage) {
-				sendError(res, 403, "仅组织管理员或超级管理员可向工作区添加目录");
-				return true;
-			}
-			const body = await readJsonBody(req);
-			const rawPath = typeof body.path === "string" ? body.path.trim() : "";
-			const label = typeof body.label === "string" ? body.label.trim() : undefined;
-			const loadRules = typeof body.loadRules === "boolean" ? body.loadRules : true;
-			const loadSkills = typeof body.loadSkills === "boolean" ? body.loadSkills : true;
-			try {
-				const settings = store.getPlatformSettings(defaultWorkspacesRoot);
-				const validatedPath = validateLocalWorkspaceBindingPath({
-					rawPath,
-					settings,
-					actor,
-					dataDir,
-				});
-				const folder = store.workspaceFolders.addFolder({
-					workspaceId,
-					label,
-					path: validatedPath,
-					sourceType: "local",
-					loadRules,
-					loadSkills,
-				});
-				broadcast("workspace_updated", { workspaceId });
-				sendJson(res, 201, { folder, folders: store.workspaceFolders.listFolders(workspaceId) });
-			} catch (error) {
-				sendError(res, 400, error instanceof Error ? error.message : String(error));
-			}
-			return true;
-		}
-		return false;
-	}
+		return c.json({ folders: store.workspaceFolders.listFolders(workspaceId) });
+	});
 
-	return false;
+	app.post("/api/workspaces/:workspaceId/folders", async (c) => {
+		const { store, broadcast, dataDir, defaultWorkspacesRoot } = c.var.routeCtx;
+		const actor = c.var.actor;
+		const res = c.var.nodeRes!;
+		if (!requireActiveActor(res, actor)) return c.body(null);
+		const workspaceId = c.req.param("workspaceId");
+		const workspace = store.getWorkspace(workspaceId);
+		if (!workspace) {
+			throw new HttpRequestError(404, "工作区不存在");
+		}
+		if (!canAccessWorkspace(store, actor, workspace)) {
+			throw new HttpRequestError(403, "无权访问该工作区");
+		}
+		const canManage =
+			isGlobalUnscopedActor(actor) ||
+			isSuperAdminActor(actor) ||
+			canManageOrganization(store, actor, workspace.orgId);
+		if (!canManage) {
+			throw new HttpRequestError(403, "仅组织管理员或超级管理员可向工作区添加目录");
+		}
+		const body = await parseJsonBody(c);
+		const rawPath = typeof body.path === "string" ? body.path.trim() : "";
+		const label = typeof body.label === "string" ? body.label.trim() : undefined;
+		const loadRules = typeof body.loadRules === "boolean" ? body.loadRules : true;
+		const loadSkills = typeof body.loadSkills === "boolean" ? body.loadSkills : true;
+		try {
+			const settings = store.getPlatformSettings(defaultWorkspacesRoot);
+			const validatedPath = validateLocalWorkspaceBindingPath({
+				rawPath,
+				settings,
+				actor,
+				dataDir,
+			});
+			const folder = store.workspaceFolders.addFolder({
+				workspaceId,
+				label,
+				path: validatedPath,
+				sourceType: "local",
+				loadRules,
+				loadSkills,
+			});
+			broadcast("workspace_updated", { workspaceId });
+			return c.json({ folder, folders: store.workspaceFolders.listFolders(workspaceId) }, 201);
+		} catch (error) {
+			throw new HttpRequestError(400, error instanceof Error ? error.message : String(error));
+		}
+	});
 }

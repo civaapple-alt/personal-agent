@@ -74,11 +74,12 @@ export const AddWorkspaceFolderSchema = v.object({
 });
 
 export const UpdateWorkspaceFolderSchema = v.object({
+	setPrimary: v.optional(v.boolean()),
 	label: v.optional(v.string()),
 	loadRules: v.optional(v.boolean()),
 	loadSkills: v.optional(v.boolean()),
 });
 
 export const UpdateWorkspacePiTrustSchema = v.object({
-	trusted: v.boolean("trusted 必须为布尔值"),
+	trusted: v.union([v.boolean(), v.null()], "trusted 字段必须为 true、false 或 null"),
 });

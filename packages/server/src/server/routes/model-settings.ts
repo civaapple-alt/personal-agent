@@ -1,6 +1,8 @@
+import type { Hono } from "hono";
 import { parseModelSelection } from "../../rpc/model-selection.ts";
-import { HttpRequestError, sendJson } from "../http.ts";
-import type { RouteRequest, ServerRouteContext } from "./context.ts";
+import { HttpRequestError } from "../http.ts";
+import type { ApiRouterEnv } from "../router.ts";
+import type { ServerRouteContext } from "./context.ts";
 
 export async function validateModelSelection(ctx: ServerRouteContext, value: unknown) {
 	let selection: ReturnType<typeof parseModelSelection>;
@@ -21,27 +23,29 @@ export async function validateModelSelection(ctx: ServerRouteContext, value: unk
 	return selection;
 }
 
-export async function handleModelSettingsRoutes(ctx: ServerRouteContext, r: RouteRequest): Promise<boolean> {
-	if (r.method !== "GET" || r.pathname !== "/api/models") return false;
-	const query = new URL(r.req.url ?? "/api/models", "http://localhost").searchParams;
-	const selection =
-		query.has("provider") || query.has("model")
-			? await validateModelSelection(ctx, { provider: query.get("provider"), model: query.get("model") })
-			: null;
-	const catalog = await ctx.orchestrator.getPiModels(selection ?? undefined).catch(() => {
-		throw new HttpRequestError(503, "读取 Pi 模型失败，请检查服务账号是否安装并配置了 Pi");
-	});
-	if (selection) {
-		const effective = catalog.defaultModel;
-		sendJson(r.res, 200, {
-			defaultModel:
-				effective?.provider === selection.provider && effective.model === selection.model ? effective : null,
+/** Register runtime model catalog and default selection routes. */
+export function registerModelSettingsRoutes(app: Hono<ApiRouterEnv>): void {
+	app.get("/api/models", async (c) => {
+		const ctx = c.var.routeCtx;
+		const provider = c.req.query("provider");
+		const model = c.req.query("model");
+		const selection =
+			provider !== undefined || model !== undefined
+				? await validateModelSelection(ctx, { provider: provider ?? null, model: model ?? null })
+				: null;
+		const catalog = await ctx.orchestrator.getPiModels(selection ?? undefined).catch(() => {
+			throw new HttpRequestError(503, "读取 Pi 模型失败，请检查服务账号是否安装并配置了 Pi");
 		});
-		return true;
-	}
-	sendJson(r.res, 200, {
-		...catalog,
-		platformDefault: ctx.store.getPlatformSettings().defaultModelSelection,
+		if (selection) {
+			const effective = catalog.defaultModel;
+			return c.json({
+				defaultModel:
+					effective?.provider === selection.provider && effective.model === selection.model ? effective : null,
+			});
+		}
+		return c.json({
+			...catalog,
+			platformDefault: ctx.store.getPlatformSettings().defaultModelSelection,
+		});
 	});
-	return true;
 }
