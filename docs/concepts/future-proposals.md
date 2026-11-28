@@ -103,6 +103,18 @@
   - PA 工作台的 `solo`（`Pi Default`）轨道默认保持零额外工具注入，避免干扰轻量单兵边界。
 - **完整设计**：见 [0.9.x 便携 Pi 协作扩展设计](v0.9-portable-pi-collaboration-design.md)（`board` / `delegation` / `roles` 双后端合流、单测与 P3 终端原生 `pi --extension` `cross-verify` 实机联调 `005` 均已验证通过）。
 
+### P-0908：8 万 → 15 万行规模拐点工程底座分阶段升级（优先级：P1/P2 分阶段）
+
+- **来源**：`0.9.x` 样式架构收敛复盘与代码规模盘点（生产源码 7.7 万行 / 含测试脚本 10.4 万行，面向 10–15 万行演进）
+- **背景**：0–3 万行阶段的“零依赖全部手写”在接近 8–15 万行及高频 AI 协作下，会因缺少高共识约束演化为“局部复制税”（如样式层面在迁移 Tailwind v4 前曾积累 11,185 行重复 CSS）。当前代码库中正逼近同样拐点的薄弱面依次为：前端 `App.tsx` 集中 26 个 `useState` 与 95 处 prop 透传、后端 18 个路由模块内 98 处手写路径分发与分散校验、以及 23 张 SQLite 表的手写 SQL 字符串映射。
+- **方案要点（已有前提：样式层 Tailwind v4 + Primitives 已完成；后续分四阶段渐进升级，不搞大爆炸重写）**：
+  - **阶段 A（P1）前端状态解耦**：引入轻量 **Zustand** 按域拆分 Store（工作台 UI、认证/组织、事项运行态与 Board 快照），SSE 增量直达 Store，逐步清退 `App.tsx` 多层 prop 透传（按需配合 TanStack Query 收敛接口缓存）；
+  - **阶段 B（P1/P2）后端路由与边界校验**：引入轻量 Web Standard Router（如 Hono）+ 基于 `@pa/contracts` 的运行时 Schema（Valibot/Zod），将 Auth → Org ACL → 入参校验 → 统一 `CodedError` 收口为声明式中间件链；
+  - **阶段 C（P2 · 按需触发）SQLite 类型安全查询**：当表规模达到 35–40+ 或字段频繁重构时，在原生 SQLite 之上引入薄层类型安全查询（Kysely/Drizzle Core），保留单文件 `user_version` 迁移与零运维嵌入形态；
+  - **阶段 D（P2 · 按需触发）前端 HMR 开发体验**：保持生产由 `apps/cli` 托管静态包不变，仅在 UI 迭代需要保态热更新时补充开发态 Vite。
+- **完整设计**：见 [0.10.x 规模拐点架构演进方案](v0.10-scale-architecture-evolution.md)。
+- **验收标准**：各阶段迁移均保持三环架构边界（`check:boundaries`）、`<1,000` 行零豁免（`check:sizes`）与本地可运行单测/E2E 门禁全绿，且每阶段落地即同步清理旧层与补齐防反弹校验。
+
 ---
 
 ## 3. `1.0+` 远期探索提案
