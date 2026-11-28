@@ -38,6 +38,9 @@ const ALLOWED_DYNAMIC_OR_SEMANTIC = new Set([
 	"is-alert",
 	"board-graph-node",
 	"board-graph-node-filters",
+	"sidebar-footer-bar",
+	"pill",
+	"live",
 ]);
 
 const TAILWIND_MARKER_RE = /^(?:group|peer)\/[a-zA-Z0-9_-]+$/;

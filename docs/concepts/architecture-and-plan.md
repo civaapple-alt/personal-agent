@@ -156,19 +156,19 @@ flowchart TB
 - [worker-runner.ts](../../packages/server/src/orchestrator/execution/worker-runner.ts)（拆出 `worker-setup.ts`、`worker-tool-handler.ts`、`worker-telemetry.ts`）
 - [space-repo.ts](../../packages/server/src/storage/repos/space-repo.ts)（拆出 `space-types.ts`）与 [board-repo.ts](../../packages/server/src/storage/repos/board-repo.ts)（拆出 `board-types.ts`）
 - [App.tsx](../../apps/web/src/App.tsx)（拆出 `AppStageRouter.tsx`）、[SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）与 [MatterBoardPane.tsx](../../apps/web/src/components/chat/MatterBoardPane.tsx)（拆出 `BoardMembersTab.tsx`、`BoardPostsTab.tsx`）
-- 样式表：[deliverables.css](../../apps/web/src/styles/deliverables.css)（拆出 `spaces.css`、`workspaces.css`）、[board.css](../../apps/web/src/styles/board.css)（拆出 `board-feed.css`）、[chat-cards.css](../../apps/web/src/styles/chat-cards.css)（拆出 `chat-docks.css`）、[shell.css](../../apps/web/src/styles/shell.css)（拆出 `shell-nav.css`）
+- 样式表（早期拆出，后续已统一迁移至 Tailwind v4 + `apps/web/src/primitives/`）：`deliverables.css`（拆出 `spaces.css`、`workspaces.css`）、`board.css`（拆出 `board-feed.css`）、`chat-cards.css`（拆出 `chat-docks.css`）、`shell.css`（拆出 `shell-nav.css`）
 
 | 原入口 | 调整前 | 调整后 |
 | --- | ---: | --- |
 | 网页根组件 | 1,659 | [App.tsx](../../apps/web/src/App.tsx) 966 行，移出认证、邀请、事项范围、草稿及面板数据 |
 | 网页 API | 1,570 | [api.ts](../../apps/web/src/api.ts) 11 行，业务模块最大 402 行 |
-| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 [role-architect.css](../../apps/web/src/styles/role-architect.css) 551 行 |
+| 视图样式 | 1,455 | 团队、角色架构师、设置、账号与管理样式，最大为 `role-architect.css` 551 行（现已收口为 Tailwind v4） |
 | 团队与记忆路由 | 1,417 | 团队成员、角色包、角色设计与经验路由，最大为 [role-packages.ts](../../packages/server/src/server/routes/role-packages.ts) 442 行 |
 | 团队编排 | 1,205 | [team-orchestrator.ts](../../packages/server/src/orchestrator/team-orchestrator.ts) 705 行，[matter-dispatch.ts](../../packages/server/src/orchestrator/execution/matter-dispatch.ts) 542 行 |
 | 事项路由 | 1,133 | [matters.ts](../../packages/server/src/server/routes/matters.ts) 112 行，消息与设置单独维护，最大为 [matter-messages.ts](../../packages/server/src/server/routes/matter-messages.ts) 743 行 |
-| 对话流样式 | 1,014 | [chat-stream.css](../../apps/web/src/styles/chat-stream.css) 745 行，[chat-cards.css](../../apps/web/src/styles/chat-cards.css) 269 行 |
+| 对话流样式 | 1,014 | `chat-stream.css` 745 行，`chat-cards.css` 269 行（现已收口为 Tailwind v4） |
 
-行数用于定位阅读和修改成本。[ChatStage.tsx](../../apps/web/src/views/ChatStage.tsx)（706 行）已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../apps/web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../apps/web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../apps/web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../apps/web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../apps/web/src/utils/formatters.ts)、[matterStream.ts](../../apps/web/src/utils/matterStream.ts)、[orgRoster.ts](../../apps/web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。后续对话样式改动可继续检查 [chat-composer.css](../../apps/web/src/styles/chat-composer.css)（945 行）。后端的 [pi-rpc-worker.ts](../../packages/server/src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
+行数用于定位阅读和修改成本。[ChatStage.tsx](../../apps/web/src/views/ChatStage.tsx) 已将滚动记忆、参与者/名册投影与附件预览弹窗拆至 [useChatScroll.ts](../../apps/web/src/hooks/useChatScroll.ts)、[useChatStageParticipants.ts](../../apps/web/src/hooks/useChatStageParticipants.ts) 和 [AttachmentPreviewModals.tsx](../../apps/web/src/components/chat/AttachmentPreviewModals.tsx)；[utils.ts](../../apps/web/src/utils.ts)（5 行）已收口为按域拆分的聚合出口（[formatters.ts](../../apps/web/src/utils/formatters.ts)、[matterStream.ts](../../apps/web/src/utils/matterStream.ts)、[orgRoster.ts](../../apps/web/src/utils/orgRoster.ts)），后续新增逻辑直接放到对应域或调用页附近。前端样式已统一收敛为 [app.css](../../apps/web/src/styles/app.css)（Tailwind v4）+[tokens.css](../../apps/web/src/styles/tokens.css) 与 [primitives](../../apps/web/src/primitives/index.ts)。后端的 [pi-rpc-worker.ts](../../packages/server/src/rpc/pi-rpc-worker.ts)（796 行）集中维护同一进程和请求生命周期，已补齐单实例重叠 `runPromptAndWait` 保护与非覆盖式对话拦截器。
 
 ### 领域模型与当前范围
 

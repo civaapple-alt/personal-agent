@@ -50,7 +50,7 @@
   - [App.tsx](../../apps/web/src/App.tsx)（1,049 → 805 行，拆出 `AppStageRouter.tsx`）
   - [SpacePages.tsx](../../apps/web/src/views/SpacePages.tsx)（1,002 → 697 行，拆出 `SpaceDocumentEditorForm.tsx`、`SpaceDocumentDetailPane.tsx`）
   - [MatterBoardPane.tsx](../../apps/web/src/components/chat/MatterBoardPane.tsx)（1,075 → 592 行，拆出 `BoardMembersTab.tsx`、`BoardPostsTab.tsx`）
-  - 样式表拆分：[deliverables.css](../../apps/web/src/styles/deliverables.css)（→ `spaces.css` / `workspaces.css`）、[board.css](../../apps/web/src/styles/board.css)（→ `board-feed.css`）、[chat-cards.css](../../apps/web/src/styles/chat-cards.css)（→ `chat-docks.css`）、[shell.css](../../apps/web/src/styles/shell.css)（→ `shell-nav.css`）
+  - 样式表拆分（随后已收口至 Tailwind v4 + Primitives）：`deliverables.css`（→ `spaces.css` / `workspaces.css`）、`board.css`（→ `board-feed.css`）、`chat-cards.css`（→ `chat-docks.css`）、`shell.css`（→ `shell-nav.css`）
 
 ### P-0903：多并发 Pi RPC 进程模型基准测试与天花板量化（优先级：P2）
 

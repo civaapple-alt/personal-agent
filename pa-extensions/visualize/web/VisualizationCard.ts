@@ -60,7 +60,7 @@ function MermaidCodeCard({ source, title }: { source: string; title?: string }) 
 			title ? h("strong", { className: "pa-viz-title" }, title) : null,
 			h(
 				"button",
-				{ type: "button", className: "btn-inline btn-xs", onClick: handleCopy },
+				{ type: "button", className: "pa-viz-copy-btn", onClick: handleCopy },
 				copied ? "已复制" : "复制源码",
 			),
 		),

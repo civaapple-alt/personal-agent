@@ -1,10 +1,10 @@
-@layer theme, base, legacy, components, utilities;
+@layer theme, base, components, utilities;
 @import "tailwindcss";
 @import "./tokens.css";
 @import "./markdown.css" layer(components);
 @import "./extensions.css" layer(components);
-@import "./primitives.css" layer(legacy);
-@import "./view-transitions.css" layer(legacy);
+@import "./bot-avatar.css" layer(components);
+@import "./view-transitions.css" layer(components);
 
 @source "../";
 @source "../../../../pa-extensions/*/web";

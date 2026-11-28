@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "./Button.tsx";
+import { Card } from "./Card.tsx";
 
 export interface ErrorBoundaryProps {
 	scope: string;
@@ -32,21 +34,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 	render(): ReactNode {
 		if (!this.state.error) return this.props.children;
 		return (
-			<div className="subpage-scroll" role="alert">
-				<div className="ui-card" style={{ maxWidth: 560, margin: "40px auto", padding: 20 }}>
-					<h3 style={{ margin: "0 0 8px" }}>当前视图渲染出现异常</h3>
-					<p style={{ margin: "0 0 12px", opacity: 0.85, fontSize: 13 }}>
-						模块：<code>{this.props.scope}</code> — {this.state.error.message || "未知错误"}
+			<div className="h-full overflow-y-auto px-6 py-10 bg-canvas" role="alert">
+				<Card className="max-w-xl mx-auto mt-10" padding="md">
+					<h3 className="m-0 mb-2 text-base font-semibold text-ink">当前视图渲染出现异常</h3>
+					<p className="m-0 mb-3 text-sm text-ink-secondary">
+						模块：<code className="font-mono text-xs">{this.props.scope}</code> —{" "}
+						{this.state.error.message || "未知错误"}
 					</p>
-					<div style={{ display: "flex", gap: 8 }}>
-						<button type="button" className="btn-pill-primary" onClick={this.handleRetry}>
+					<div className="flex items-center gap-2">
+						<Button variant="primary" size="sm" onClick={this.handleRetry}>
 							重试渲染
-						</button>
-						<button type="button" className="btn-pill-ghost" onClick={() => window.location.reload()}>
+						</Button>
+						<Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
 							刷新页面
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Card>
 			</div>
 		);
 	}

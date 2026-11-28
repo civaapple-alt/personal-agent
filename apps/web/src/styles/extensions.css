@@ -112,3 +112,22 @@
 .pa-viz-list.is-cons {
 	color: var(--danger-text);
 }
+
+.pa-viz-copy-btn {
+	margin-left: auto;
+	border: none;
+	background: transparent;
+	color: var(--accent);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: var(--radius-xs);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.pa-viz-copy-btn:hover {
+	background: var(--bg-accent-soft);
+	text-decoration: underline;
+}
