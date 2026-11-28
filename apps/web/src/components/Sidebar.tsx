@@ -2,7 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, isSoloMember } from "../architectApi.ts";
 import type { HashRoute, NavTab } from "../hashRouter.ts";
-import { BotFaceIcon } from "../primitives/BotFaceIcon.tsx";
+import { Badge, BotFaceIcon, IconButton, Input } from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
 
 type MatterViewMode = "time" | "grouped";
@@ -211,30 +212,53 @@ export const Sidebar = memo(function Sidebar({
 			: `${matter.title}\n组织：${orgLabel} · 仓库：${workspaceLabel}`;
 
 		return (
-			<div key={matter.id} className={`matter-row ${isActive ? "active" : ""} ${isArchived ? "is-archived" : ""}`}>
+			<div
+				key={matter.id}
+				className={cn(
+					"group relative flex items-center border rounded-md transition-colors [content-visibility:auto] [contain-intrinsic-size:auto_34px] focus-visible:[content-visibility:visible] focus-within:[content-visibility:visible]",
+					isActive ? "bg-stage border-line shadow-sm" : "border-transparent hover:bg-hover/70",
+					isArchived && "opacity-80",
+				)}
+			>
 				<button
 					type="button"
-					className="matter-item"
+					className="flex-1 min-w-0 border-0 bg-transparent rounded-md px-2 py-1.5 flex items-center gap-2 text-left cursor-pointer"
 					title={tooltip}
 					onClick={() => onNavigate({ tab: "chats", matterId: matter.id })}
 				>
 					<span
-						className={`matter-dot${prog ? " is-running" : isWaitingUser ? " is-waiting" : ""}`}
+						className={cn("size-2.5 rounded-full shrink-0 relative", isWaitingUser && "ring-2 ring-warn-border")}
 						style={{ background: theme.bg }}
 					>
-						{prog && <span className="matter-dot-pulse" style={{ borderColor: theme.bg }} />}
+						{prog && (
+							<span
+								className="absolute -inset-[3px] rounded-full border-[1.5px] animate-ping opacity-75 motion-reduce:animate-none"
+								style={{ borderColor: theme.bg }}
+							/>
+						)}
 					</span>
-					<span className="matter-title">{matter.title}</span>
+					<span
+						className={cn("flex-1 min-w-0 text-xs text-ink truncate", isActive ? "font-semibold" : "font-medium")}
+					>
+						{matter.title}
+					</span>
 					{prog ? (
-						<span className="matter-state-tag is-running">运行中</span>
+						<Badge tone="success" size="xs" className="shrink-0">
+							运行中
+						</Badge>
 					) : isWaitingUser ? (
-						<span className="matter-state-tag is-waiting">待确认</span>
+						<Badge tone="warn" size="xs" className="shrink-0">
+							待确认
+						</Badge>
 					) : null}
 				</button>
 				{onToggleArchiveMatter && (
 					<button
 						type="button"
-						className="matter-archive-btn"
+						className={cn(
+							"shrink-0 size-6 mr-1 border-0 rounded-sm bg-transparent text-ink-muted inline-flex items-center justify-center cursor-pointer transition-opacity hover:enabled:bg-subtle hover:enabled:text-ink disabled:opacity-35 disabled:cursor-not-allowed",
+							isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+						)}
 						disabled={busyArchiveId === matter.id || (!isArchived && Boolean(prog))}
 						aria-label={isArchived ? `取消归档：${matter.title}` : `归档事项：${matter.title}`}
 						title={
@@ -282,31 +306,51 @@ export const Sidebar = memo(function Sidebar({
 		onNavigate(route);
 	};
 
+	const footerMenuItemClass = (active: boolean) =>
+		cn(
+			"border-0 rounded-md px-2.5 py-1.5 flex items-center justify-between text-sm font-medium cursor-pointer text-left transition-colors",
+			active
+				? "bg-accent-soft text-accent font-semibold"
+				: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+		);
+
 	return (
-		<aside className={`bot-sidebar ${mobileOpen ? "mobile-open" : ""}`}>
-			<div className="sidebar-top">
-				<div className="sidebar-brand">
+		<aside
+			className={cn(
+				"bg-sidebar border-r border-line flex flex-col min-w-0 min-h-0 overflow-hidden",
+				"max-[960px]:fixed max-[960px]:inset-y-0 max-[960px]:left-0 max-[960px]:z-[60] max-[960px]:w-[min(338px,90vw)] max-[960px]:shadow-lg max-[960px]:transition-transform max-[960px]:duration-200 max-[960px]:ease-out",
+				mobileOpen ? "max-[960px]:translate-x-0" : "max-[960px]:-translate-x-[105%]",
+				"min-[961px]:w-[292px] min-[961px]:shrink-0",
+			)}
+		>
+			<div className="h-[52px] px-3 flex items-center justify-between gap-1.5 shrink-0">
+				<div className="flex items-center gap-1.5 min-w-0 flex-1">
 					<button
 						type="button"
-						className="brand-btn"
+						className="border-0 bg-transparent inline-flex items-center gap-1.5 min-w-0 text-sm font-semibold text-ink cursor-pointer px-0.5 py-1 rounded-sm hover:opacity-85"
 						onClick={() => onNavigate({ tab: "chats", matterId: selectedMatterId ?? undefined })}
 					>
-						<span className="brand-mark">PA</span>
-						<span className="brand-name">Personal Agent</span>
+						<span className="size-6 rounded-sm bg-cta text-stage grid place-items-center shrink-0 text-micro font-bold">
+							PA
+						</span>
+						<span className="truncate">Personal Agent</span>
 					</button>
 					{typeof requireAuth === "boolean" && (
-						<span
-							className={`edition-badge ${requireAuth ? "team" : "personal"}`}
+						<Badge
+							tone={requireAuth ? "accent" : "neutral"}
+							size="xs"
 							title={requireAuth ? "团队多成员版（PA_REQUIRE_AUTH=1）" : "个人本机版（未开启 PA_REQUIRE_AUTH）"}
 						>
 							{requireAuth ? "团队版" : "个人版"}
-						</span>
+						</Badge>
 					)}
 				</div>
-				<div className="sidebar-tools">
-					<button
-						type="button"
-						className={`icon-btn ${searchOpen ? "active" : ""}`}
+				<div className="flex items-center gap-1 shrink-0">
+					<IconButton
+						size="sm"
+						variant="secondary"
+						active={searchOpen}
+						className="rounded-full"
 						aria-label="搜索事项与交付"
 						onClick={() => {
 							const next = !searchOpen;
@@ -318,31 +362,38 @@ export const Sidebar = memo(function Sidebar({
 							<circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.7" />
 							<path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
 						</svg>
-					</button>
-					<button type="button" className="icon-btn" aria-label="新建事项" onClick={onNewMatter}>
+					</IconButton>
+					<IconButton
+						size="sm"
+						variant="secondary"
+						className="rounded-full"
+						aria-label="新建事项"
+						onClick={onNewMatter}
+					>
 						<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
 							<path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
 						</svg>
-					</button>
+					</IconButton>
 					{onCloseMobile && (
-						<button
-							type="button"
-							className="icon-btn mobile-close-btn"
+						<IconButton
+							size="sm"
+							variant="secondary"
+							className="min-[961px]:hidden rounded-full"
 							aria-label="收起侧栏"
 							onClick={onCloseMobile}
 						>
 							<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
 								<path d="M5.5 5.5l9 9m0-9l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
 							</svg>
-						</button>
+						</IconButton>
 					)}
 				</div>
 			</div>
 
 			{searchOpen && (
-				<div className="sidebar-search">
-					<input
-						className="input-field"
+				<div className="px-3 pb-2.5">
+					<Input
+						size="sm"
 						placeholder="搜索事项或交付标题…"
 						value={searchQuery}
 						onChange={(e) => onSearchQueryChange(e.target.value)}
@@ -357,7 +408,12 @@ export const Sidebar = memo(function Sidebar({
 					hasOverflow && !rosterExpanded ? businessMembers.slice(0, maxCollapsed - 1) : businessMembers;
 				const hiddenCount = businessMembers.length - displayedMembers.length;
 				return (
-					<div className={`roster-strip${rosterExpanded ? " is-expanded" : ""}`}>
+					<div
+						className={cn(
+							"px-2.5 pt-1 pb-2.5 grid grid-cols-4 gap-1 border-b border-line shrink-0",
+							rosterExpanded && "max-h-[260px] overflow-y-auto overscroll-contain",
+						)}
+					>
 						{displayedMembers.map((member) => {
 							const idx = allMembers.findIndex((m) => m.id === member.id);
 							const theme = getBotTheme(idx >= 0 ? idx : 0);
@@ -368,60 +424,100 @@ export const Sidebar = memo(function Sidebar({
 								<button
 									key={member.id}
 									type="button"
-									className={`roster-tile ${isSelected ? "active" : ""}`}
+									className={cn(
+										"border rounded-xl px-1 py-1.5 min-w-0 flex flex-col items-center gap-1 cursor-pointer transition-colors",
+										isSelected
+											? "bg-stage border-line shadow-sm"
+											: "border-transparent bg-transparent hover:bg-hover/70",
+									)}
 									onClick={() => onToggleMember(member.id)}
 									title={`${member.displayName} · ${member.roleTitle}（点击指定该角色发起新事项）`}
 								>
-									<span className="roster-avatar-wrap">
+									<span className="relative inline-flex">
 										<BotFaceIcon bg={theme.bg} tilt={theme.tilt} size="md" mood={workingMood} />
-										{isWorking && <span className="roster-working-dot" />}
+										{isWorking && (
+											<span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-success-text border-2 border-sidebar" />
+										)}
 									</span>
-									<span className="roster-name">{member.displayName}</span>
+									<span
+										className={cn(
+											"text-micro leading-tight max-w-full text-center line-clamp-2 break-normal",
+											isSelected ? "text-ink font-semibold" : "text-ink-secondary font-medium",
+										)}
+									>
+										{member.displayName}
+									</span>
 								</button>
 							);
 						})}
 						{hasOverflow && (
 							<button
 								type="button"
-								className="roster-tile roster-more-tile"
+								className="group border border-transparent bg-transparent rounded-xl px-1 py-1.5 min-w-0 flex flex-col items-center gap-1 cursor-pointer hover:bg-hover/70"
 								aria-expanded={rosterExpanded}
 								onClick={() => setRosterExpanded((open) => !open)}
 								title={rosterExpanded ? "收起角色列表" : `展开全部 ${businessMembers.length} 个角色`}
 							>
-								<span className="roster-more-circle">{rosterExpanded ? "收起" : `+${hiddenCount}`}</span>
-								<span className="roster-name">{rosterExpanded ? "收起列表" : "更多角色"}</span>
+								<span className="size-[42px] rounded-xl border border-dashed border-line bg-subtle text-ink-secondary text-xs font-semibold inline-flex items-center justify-center group-hover:border-accent-border group-hover:text-ink transition-colors">
+									{rosterExpanded ? "收起" : `+${hiddenCount}`}
+								</span>
+								<span className="text-micro leading-tight font-medium text-ink-secondary max-w-full text-center line-clamp-2 break-normal">
+									{rosterExpanded ? "收起列表" : "更多角色"}
+								</span>
 							</button>
 						)}
 					</div>
 				);
 			})()}
 
-			<div className="matter-scroll">
-				<div className="sidebar-matters-toolbar">
-					<div className="sidebar-matter-tabs" role="tablist" aria-label="事项范围">
+			<div className="flex-1 overflow-y-auto px-2.5 py-2.5 flex flex-col gap-1 min-h-0">
+				<div className="px-1 pb-1.5 flex items-center justify-between gap-1.5 shrink-0">
+					<div
+						className="inline-flex items-center gap-0.5 p-0.5 rounded-md bg-subtle"
+						role="tablist"
+						aria-label="事项范围"
+					>
 						<button
 							type="button"
 							role="tab"
 							aria-selected={!showArchived}
-							className={`sidebar-mini-tab ${!showArchived ? "active" : ""}`}
+							className={cn(
+								"border-0 rounded-xs px-1.5 py-0.5 text-micro cursor-pointer inline-flex items-center gap-1 transition-colors",
+								!showArchived
+									? "bg-stage text-ink font-semibold shadow-sm"
+									: "bg-transparent text-ink-secondary font-medium hover:text-ink",
+							)}
 							onClick={() => setShowArchived(false)}
 						>
-							最近 <span className="sidebar-mini-count">{activeMatters.length}</span>
+							最近 <span className="text-ink-muted font-medium">{activeMatters.length}</span>
 						</button>
 						<button
 							type="button"
 							role="tab"
 							aria-selected={showArchived}
-							className={`sidebar-mini-tab ${showArchived ? "active" : ""}`}
+							className={cn(
+								"border-0 rounded-xs px-1.5 py-0.5 text-micro cursor-pointer inline-flex items-center gap-1 transition-colors",
+								showArchived
+									? "bg-stage text-ink font-semibold shadow-sm"
+									: "bg-transparent text-ink-secondary font-medium hover:text-ink",
+							)}
 							onClick={() => setShowArchived(true)}
 						>
-							归档 <span className="sidebar-mini-count">{archivedMatters.length}</span>
+							归档 <span className="text-ink-muted font-medium">{archivedMatters.length}</span>
 						</button>
 					</div>
-					<fieldset className="sidebar-view-switch" aria-label="事项排列方式">
+					<fieldset
+						className="inline-flex items-center gap-0.5 p-0.5 m-0 border-0 rounded-md bg-subtle"
+						aria-label="事项排列方式"
+					>
 						<button
 							type="button"
-							className={`sidebar-view-btn ${viewMode === "time" ? "active" : ""}`}
+							className={cn(
+								"border-0 rounded-xs px-1.5 py-0.5 text-micro cursor-pointer inline-flex items-center gap-1 transition-colors",
+								viewMode === "time"
+									? "bg-stage text-ink font-semibold shadow-sm"
+									: "bg-transparent text-ink-secondary font-medium hover:text-ink",
+							)}
 							aria-pressed={viewMode === "time"}
 							title="按更新时间倒序"
 							onClick={() => setAndPersistViewMode("time")}
@@ -430,7 +526,12 @@ export const Sidebar = memo(function Sidebar({
 						</button>
 						<button
 							type="button"
-							className={`sidebar-view-btn ${viewMode === "grouped" ? "active" : ""}`}
+							className={cn(
+								"border-0 rounded-xs px-1.5 py-0.5 text-micro cursor-pointer inline-flex items-center gap-1 transition-colors",
+								viewMode === "grouped"
+									? "bg-stage text-ink font-semibold shadow-sm"
+									: "bg-transparent text-ink-secondary font-medium hover:text-ink",
+							)}
 							aria-pressed={viewMode === "grouped"}
 							title="按组织和仓库分类"
 							onClick={() => setAndPersistViewMode("grouped")}
@@ -441,17 +542,19 @@ export const Sidebar = memo(function Sidebar({
 				</div>
 
 				{visibleMatters.length === 0 ? (
-					<div className="sidebar-empty">{showArchived ? "暂无已归档事项" : "暂无事项，可在右侧直接布置任务"}</div>
+					<div className="px-2.5 py-4 text-xs text-ink-muted text-center">
+						{showArchived ? "暂无已归档事项" : "暂无事项，可在右侧直接布置任务"}
+					</div>
 				) : viewMode === "time" ? (
 					visibleMatters.map((matter) => renderMatterRow(matter))
 				) : (
 					groupedMatters.map((group) => {
 						const collapsed = Boolean(collapsedGroups[group.key]);
 						return (
-							<section key={group.key} className="matter-group">
+							<section key={group.key} className="flex flex-col gap-0.5 mb-1">
 								<button
 									type="button"
-									className="matter-group-header"
+									className="w-full border-0 bg-transparent rounded-md px-1.5 py-1 flex items-center gap-1 text-micro text-ink-secondary cursor-pointer text-left hover:bg-hover/70 hover:text-ink"
 									aria-expanded={!collapsed}
 									onClick={() =>
 										setCollapsedGroups((prev) => ({
@@ -460,20 +563,23 @@ export const Sidebar = memo(function Sidebar({
 										}))
 									}
 								>
-									<span className="matter-group-chevron" aria-hidden="true">
+									<span className="w-2.5 shrink-0 text-ink-muted" aria-hidden="true">
 										{collapsed ? "▸" : "▾"}
 									</span>
-									<span className="matter-group-labels" title={`${group.orgLabel} / ${group.workspaceLabel}`}>
-										<span className="matter-group-org">{group.orgLabel}</span>
-										<span className="matter-group-sep" aria-hidden="true">
+									<span
+										className="flex-1 min-w-0 inline-flex items-center gap-1 overflow-hidden"
+										title={`${group.orgLabel} / ${group.workspaceLabel}`}
+									>
+										<span className="text-accent font-semibold truncate">{group.orgLabel}</span>
+										<span className="text-ink-muted shrink-0" aria-hidden="true">
 											/
 										</span>
-										<span className="matter-group-repo">{group.workspaceLabel}</span>
+										<span className="text-ink font-semibold truncate">{group.workspaceLabel}</span>
 									</span>
-									<span className="matter-group-count">{group.items.length}</span>
+									<span className="shrink-0 text-micro text-ink-muted">{group.items.length}</span>
 								</button>
 								{!collapsed && (
-									<div className="matter-group-items">
+									<div className="flex flex-col gap-0.5 pl-1.5">
 										{group.items.map((matter) => renderMatterRow(matter))}
 									</div>
 								)}
@@ -483,13 +589,17 @@ export const Sidebar = memo(function Sidebar({
 				)}
 			</div>
 
-			<div className="sidebar-footer" ref={footerRef}>
+			<div className="relative border-t border-line px-2.5 py-2 shrink-0" ref={footerRef}>
 				{footerMenuOpen && (
-					<div className="sidebar-footer-popover" role="menu" aria-label="工作台菜单">
+					<div
+						className="absolute left-2.5 right-2.5 bottom-[calc(100%+6px)] z-40 p-1.5 border border-line rounded-lg bg-stage shadow-lg flex flex-col gap-0.5"
+						role="menu"
+						aria-label="工作台菜单"
+					>
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "deliverables" ? "active" : ""}`}
+							className={footerMenuItemClass(activeTab === "deliverables")}
 							onClick={() => navigateFromMenu({ tab: "deliverables" })}
 						>
 							<span>资料空间</span>
@@ -497,75 +607,89 @@ export const Sidebar = memo(function Sidebar({
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "materials" ? "active" : ""}`}
+							className={footerMenuItemClass(activeTab === "materials")}
 							onClick={() => navigateFromMenu({ tab: "materials" })}
 						>
 							<span>工作区</span>
-							<span className="pill">{bootstrap?.workspaces.length ?? 0}</span>
+							<Badge tone={activeTab === "materials" ? "accent" : "neutral"} size="xs">
+								{bootstrap?.workspaces.length ?? 0}
+							</Badge>
 						</button>
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "organizations" ? "active" : ""}`}
+							className={footerMenuItemClass(activeTab === "organizations")}
 							onClick={() => navigateFromMenu({ tab: "organizations" })}
 						>
 							<span>组织</span>
-							<span className="pill">{bootstrap?.organizations?.length ?? 0}</span>
+							<Badge tone={activeTab === "organizations" ? "accent" : "neutral"} size="xs">
+								{bootstrap?.organizations?.length ?? 0}
+							</Badge>
 						</button>
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "team" ? "active" : ""}`}
+							className={footerMenuItemClass(activeTab === "team")}
 							onClick={() => navigateFromMenu({ tab: "team" })}
 						>
 							<span>AI 团队</span>
-							<span className="pill">{businessMembers.length}</span>
+							<Badge tone={activeTab === "team" ? "accent" : "neutral"} size="xs">
+								{businessMembers.length}
+							</Badge>
 						</button>
 						<button
 							type="button"
 							role="menuitem"
-							className={`footer-nav-btn ${activeTab === "settings" ? "active" : ""}`}
+							className={footerMenuItemClass(activeTab === "settings")}
 							onClick={() => navigateFromMenu({ tab: "settings" })}
 						>
 							<span>设置</span>
-							<span className="pill">{runtimeBadge ?? "Pi RPC"}</span>
+							<Badge tone={activeTab === "settings" ? "accent" : "neutral"} size="xs">
+								{runtimeBadge ?? "Pi RPC"}
+							</Badge>
 						</button>
 						<button
 							type="button"
 							role="menuitem"
-							className="footer-nav-btn"
+							className={footerMenuItemClass(false)}
 							onClick={() => navigateFromMenu({ tab: "settings", settingsSection: "skills" })}
 						>
 							<span>技能与信任</span>
-							<span className="pill">四步</span>
+							<Badge tone="neutral" size="xs">
+								四步
+							</Badge>
 						</button>
 						<button
 							type="button"
 							role="menuitem"
-							className="footer-nav-btn"
+							className={footerMenuItemClass(false)}
 							onClick={() => navigateFromMenu({ tab: "settings", settingsSection: "insights" })}
 						>
 							<span>运行洞察</span>
-							<span className="pill">本地</span>
+							<Badge tone="neutral" size="xs">
+								本地
+							</Badge>
 						</button>
 						{isSuperAdmin && (
 							<button
 								type="button"
 								role="menuitem"
-								className={`footer-nav-btn ${activeTab === "admin" ? "active" : ""}`}
+								className={footerMenuItemClass(activeTab === "admin")}
 								onClick={() => navigateFromMenu({ tab: "admin" })}
 							>
 								<span>超管控制台</span>
-								<span className="pill">Admin</span>
+								<Badge tone={activeTab === "admin" ? "accent" : "neutral"} size="xs">
+									Admin
+								</Badge>
 							</button>
 						)}
 						{onSwitchOrLogout && (
 							<>
-								<div className="sidebar-footer-divider" />
+								<div className="h-px my-1 mx-1.5 bg-line" />
 								<button
 									type="button"
 									role="menuitem"
-									className="footer-nav-btn footer-nav-account"
+									className="border-0 bg-transparent rounded-md px-2.5 py-1.5 flex items-center justify-between text-xs font-medium text-ink-muted cursor-pointer text-left hover:bg-subtle hover:text-ink"
 									onClick={() => {
 										setFooterMenuOpen(false);
 										onSwitchOrLogout();
@@ -577,10 +701,15 @@ export const Sidebar = memo(function Sidebar({
 						)}
 					</div>
 				)}
-				<div className="sidebar-footer-bar">
+				<div className="sidebar-footer-bar flex items-center gap-1.5 min-w-0">
 					<button
 						type="button"
-						className={`sidebar-footer-user ${activeTab === "account" ? "active" : ""}`}
+						className={cn(
+							"flex-1 min-w-0 border-0 px-1.5 py-1 -my-1 -ml-1.5 rounded-sm text-left cursor-pointer text-micro truncate transition-colors",
+							activeTab === "account"
+								? "bg-hover text-ink font-semibold"
+								: "bg-transparent text-ink-secondary font-medium hover:bg-hover hover:text-ink",
+						)}
 						title={`${userLabel} · 点击进入个人账号`}
 						aria-current={activeTab === "account" ? "page" : undefined}
 						onClick={() => {
@@ -591,7 +720,7 @@ export const Sidebar = memo(function Sidebar({
 						{userLabel}
 					</button>
 					<span
-						className={`pill ${sseConnected ? "live" : ""}`}
+						className={cn("pill", sseConnected && "live")}
 						title={
 							!sseConnected
 								? "实时连接断开，正在重连"
@@ -604,7 +733,12 @@ export const Sidebar = memo(function Sidebar({
 					</span>
 					<button
 						type="button"
-						className={`sidebar-settings-trigger ${footerMenuOpen || hasSecondaryTabActive ? "active" : ""}`}
+						className={cn(
+							"shrink-0 inline-flex items-center gap-1 px-2 py-1 border rounded-md text-micro font-medium cursor-pointer transition-colors",
+							footerMenuOpen || hasSecondaryTabActive
+								? "text-accent border-accent-border bg-accent-soft"
+								: "border-line bg-stage text-ink-secondary hover:text-ink hover:border-accent-border",
+						)}
 						aria-haspopup="menu"
 						aria-expanded={footerMenuOpen}
 						aria-label="展开工作台与设置菜单"

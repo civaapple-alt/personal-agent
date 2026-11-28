@@ -30,6 +30,7 @@ import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useMatterScope } from "./hooks/useMatterScope.ts";
 import { useStableCallback } from "./hooks/useStableCallback.ts";
 import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
+import { Button, IconButton } from "./primitives/index.ts";
 import { getBotTheme } from "./utils.ts";
 import { AppArchiveConfirmModal, AppStageRouter } from "./views/AppStageRouter.tsx";
 import { AuthGateView } from "./views/AuthGateView.tsx";
@@ -519,6 +520,16 @@ export function App() {
 
 	// Stable handlers keep the memoized Sidebar from re-rendering on every streamed text delta.
 	const handleCloseMobileNav = useStableCallback(() => setMobileNavOpen(false));
+	useEffect(() => {
+		if (!mobileNavOpen) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setMobileNavOpen(false);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [mobileNavOpen]);
 	const handleSidebarNavigate = useStableCallback((route: HashRoute) => {
 		setMobileNavOpen(false);
 		navigateRoute(route);
@@ -642,11 +653,11 @@ export function App() {
 			: null;
 
 	const workbench = (
-		<div className="bot-shell">
+		<div className="flex flex-col min-[961px]:flex-row h-dvh w-full max-w-[100vw] overflow-hidden bg-stage">
 			{mobileNavOpen && (
 				<button
 					type="button"
-					className="mobile-sidebar-backdrop"
+					className="min-[961px]:hidden fixed inset-0 z-[55] border-0 p-0 bg-black/40 cursor-pointer"
 					aria-label="关闭导航抽屉"
 					onClick={() => setMobileNavOpen(false)}
 				/>
@@ -676,17 +687,17 @@ export function App() {
 				onSwitchOrLogout={handleSidebarSwitchOrLogout}
 			/>
 
-			<main className="main-stage">
+			<main className="relative flex-1 min-w-0 min-h-0 max-w-full flex flex-col overflow-hidden bg-stage">
 				<WorkbenchBanners
 					errorBanner={errorBanner}
 					noticeBanner={noticeBanner}
 					onDismissError={dismissError}
 					onDismissNotice={dismissNotice}
 				/>
-				<div className="mobile-topbar">
-					<button
-						type="button"
-						className="icon-btn mobile-nav-trigger"
+				<div className="min-[961px]:hidden flex items-center justify-between gap-2.5 h-[50px] px-3.5 border-b border-line bg-sidebar shrink-0">
+					<IconButton
+						size="md"
+						className="relative rounded-full"
 						aria-label="打开导航菜单"
 						onClick={() => setMobileNavOpen(true)}
 					>
@@ -698,19 +709,24 @@ export function App() {
 								strokeLinecap="round"
 							/>
 						</svg>
-						{hasRunningMatters && <span className="mobile-nav-dot" />}
-					</button>
-					<span className="mobile-topbar-title">{mobileViewTitle}</span>
-					<button
-						type="button"
-						className="btn-pill-outline btn-xs"
+						{hasRunningMatters && (
+							<span
+								className="absolute top-1 right-1 size-[7px] rounded-full bg-success-text"
+								aria-hidden="true"
+							/>
+						)}
+					</IconButton>
+					<span className="flex-1 min-w-0 text-sm font-semibold text-ink truncate">{mobileViewTitle}</span>
+					<Button
+						variant="secondary"
+						size="xs"
 						onClick={() => {
 							setMobileNavOpen(false);
 							startNewMatter();
 						}}
 					>
 						+ 新建事项
-					</button>
+					</Button>
 				</div>
 				<AppStageRouter
 					activeTab={activeTab}

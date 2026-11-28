@@ -4,8 +4,6 @@
 @import "./markdown.css" layer(components);
 @import "./primitives.css" layer(legacy);
 @import "./legacy-bridge.css" layer(legacy);
-@import "./shell.css" layer(legacy);
-@import "./shell-nav.css" layer(legacy);
 @import "./chat-stream.css" layer(legacy);
 @import "./matter-delegation.css" layer(legacy);
 @import "./chat-cards.css" layer(legacy);
@@ -15,7 +13,6 @@
 @import "./chat-roster.css" layer(legacy);
 @import "./role-architect.css" layer(legacy);
 @import "./view-transitions.css" layer(legacy);
-@import "./responsive.css" layer(legacy);
 
 @source "../";
 @source "../../../../pa-extensions/*/web";

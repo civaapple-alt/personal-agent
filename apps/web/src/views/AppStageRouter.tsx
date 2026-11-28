@@ -18,9 +18,7 @@ import type { HashRoute, NavTab, SettingsSection } from "../hashRouter.ts";
 import type { useMatterActions } from "../hooks/useMatterActions.ts";
 import type { useMatterInitiationState } from "../hooks/useMatterInitiationState.ts";
 import type { useWorkbenchPanels } from "../hooks/useWorkbenchPanels.ts";
-import { ErrorBoundary } from "../primitives/ErrorBoundary.tsx";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
-import { ViewFade } from "../primitives/ViewTransitions.tsx";
+import { Button, ErrorBoundary, ModalDialog, ViewFade } from "../primitives/index.ts";
 import { AccountView } from "./AccountView.tsx";
 import { AdminView } from "./AdminView.tsx";
 import { ChatStage } from "./ChatStage.tsx";
@@ -437,17 +435,17 @@ export function AppArchiveConfirmModal({
 			onClose={onClose}
 			footer={
 				<>
-					<button type="button" className="btn-pill-outline" disabled={archivingMatter} onClick={onClose}>
+					<Button variant="secondary" size="sm" disabled={archivingMatter} onClick={onClose}>
 						取消
-					</button>
-					<button type="button" className="btn-pill-dark" disabled={archivingMatter} onClick={onConfirm}>
+					</Button>
+					<Button variant="primary" size="sm" disabled={archivingMatter} onClick={onConfirm}>
 						{archivingMatter ? "处理中…" : pendingArchiveConfirm?.archived ? "确认归档" : "确认恢复"}
-					</button>
+					</Button>
 				</>
 			}
 		>
 			{pendingArchiveConfirm && (
-				<p className="muted-hint">
+				<p className="m-0 text-xs text-ink-muted leading-relaxed">
 					{pendingArchiveConfirm.archived
 						? `确定要归档「${pendingArchiveConfirm.title}」吗？归档后将不能继续发送消息，可随时恢复。`
 						: `确定要恢复「${pendingArchiveConfirm.title}」为活跃事项吗？`}
