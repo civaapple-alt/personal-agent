@@ -70,6 +70,7 @@
   "dependencies": {
     "@typesafe-ai/sdk": "0.7.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zustand": "^5.1.0"
   }
 }

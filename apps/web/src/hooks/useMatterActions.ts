@@ -31,23 +31,9 @@ import {
 import { ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute } from "../hashRouter.ts";
 
-/** Reads a string setting from localStorage, returning `fallback` on storage unavailability. */
-export function readStoredSetting(key: string, fallback = ""): string {
-	try {
-		return window.localStorage.getItem(key) ?? fallback;
-	} catch {
-		return fallback;
-	}
-}
+import { readStoredSetting, writeStoredSetting } from "../utils/storage.ts";
 
-/** Writes a string setting to localStorage, ignoring sandbox/private-mode storage errors. */
-export function writeStoredSetting(key: string, value: string): void {
-	try {
-		window.localStorage.setItem(key, value);
-	} catch {
-		// Ignore storage access errors.
-	}
-}
+export { readStoredSetting, writeStoredSetting };
 
 function conversationNotice(result: {
 	aiDiscussionTriggered?: boolean;
