@@ -1,6 +1,6 @@
 # 本地网页工作台
 
-前端是三环架构中的 **UI Client 环**（`@pa/web`），使用 React 19、Zustand、esbuild 与 Tailwind v4（通过 `app.css` + `@tailwindcss/cli` 编译，叠加轻量原语与 `tokens.css` 语义变量），通过可配置端点的 HTTP/SSE 传输层（默认同源，支持 `window.__PA_API_BASE__` / `setApiBaseUrl`）访问宿主，仅依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`（由 `npm run check:boundaries` 强制门禁校验）。[index.html](index.html) 是构建输入，`apps/web/dist/` 是生成资源，不直接修改。
+前端是三环架构中的 **UI Client 环**（`@pa/web`），使用 React 19、Zustand、TanStack Query、esbuild 与 Tailwind v4（通过 `app.css` + `@tailwindcss/cli` 编译，叠加轻量原语与 `tokens.css` 语义变量），通过可配置端点的 HTTP/SSE 传输层（默认同源，支持 `window.__PA_API_BASE__` / `setApiBaseUrl`）访问宿主，仅依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`（由 `npm run check:boundaries` 强制门禁校验）。[index.html](index.html) 是构建输入，`apps/web/dist/` 是生成资源，不直接修改。
 
 ```text
 apps/web/
@@ -8,10 +8,11 @@ apps/web/
 ├── tsconfig.json       # 前端独立 TypeScript 配置
 ├── dist/               # esbuild + Tailwind v4 构建产物（不直接编辑）
 └── src/                # 前端源码（详见 src/README.md）
-    ├── main.tsx        # 应用挂载与根级 ErrorBoundary
+    ├── main.tsx        # 应用挂载、QueryClientProvider 与根级 ErrorBoundary
     ├── App.tsx         # 顶层壳装配、Hash 路由与视图级 ErrorBoundary
     ├── api/            # 参数化 HTTP/SSE 传输层（client.ts）与按业务拆分的 DTO 请求模块
     ├── stores/         # 分域 Zustand Store（workbenchStore、sessionStore、matterRuntimeStore，单向依赖由 check:boundaries 强制校验）
+    ├── queries/        # TanStack Query 客户端与分层 Key（queryClient.ts、queryKeys.ts，服务 spaces/workspaces/team/org/admin/settings）
     ├── primitives/     # 零外部依赖的纯 React UI 原语（Button、Badge、Card、Tabs、Layout、Field、EmptyState、Banner、Drawer、Popover、ModalDialog、SettingsKit 等）
     ├── views/          # 顶层路由视图（ChatStage、DeliverablesView、SpacePages、TeamView、AccountView 等）
     ├── components/     # 可复用业务组件（Sidebar、ExploringStatus、ModelPicker、chat/、team/ 等）

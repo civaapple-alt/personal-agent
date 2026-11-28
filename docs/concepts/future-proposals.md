@@ -107,8 +107,10 @@
 
 - **来源**：`0.9.x` 样式架构收敛复盘与代码规模盘点（生产源码 7.7 万行 / 含测试脚本 10.4 万行，面向 10–15 万行演进）
 - **背景**：0–3 万行阶段的“零依赖全部手写”在接近 8–15 万行及高频 AI 协作下，会因缺少高共识约束演化为“局部复制税”（如样式层面在迁移 Tailwind v4 前曾积累 11,185 行重复 CSS）。当前代码库中正逼近同样拐点的薄弱面依次为：前端 `App.tsx` 集中 26 个 `useState` 与 95 处 prop 透传、后端 18 个路由模块内 98 处手写路径分发与分散校验、以及 23 张 SQLite 表的手写 SQL 字符串映射。
-- **方案要点（阶段 0 样式层 Tailwind v4 + Primitives 与阶段 A 核心 Zustand 分域解耦已完成；其余按需分阶段推进，不搞大爆炸重写）**：
-  - **阶段 A（P1 · 核心 Zustand 解耦已完成）前端状态解耦**：引入轻量 **Zustand** 按域拆分 Store（[workbenchStore](../../apps/web/src/stores/workbenchStore.ts)、[sessionStore](../../apps/web/src/stores/sessionStore.ts)、[matterRuntimeStore](../../apps/web/src/stores/matterRuntimeStore.ts)），[useMatterEventSync](../../apps/web/src/hooks/useMatterEventSync.ts) 增量直达 Store，`App.tsx` 由 `821` 行 / `26` 个 `useState` / `95` 处 prop 绑定收敛为 `698` 行 / `0` `useState` / `51` 处 prop 绑定，并补齐单向依赖门禁与 [Store 单元测试](../../test/web-stores.test.ts)（可选 TanStack Query 接口缓存待外围页请求继续增长时按需评估）；
+- **方案要点（阶段 0 样式层 Tailwind v4 + Primitives 与阶段 A 前端 3+1 状态/查询解耦已完成；阶段 B/C/D 按需推进，不搞大爆炸重写）**：
+  - **阶段 A（P1 · `A-1` 与 `A-2` 已完成）前端状态解耦与分层缓存**：
+    - `A-1`（Zustand 分域 Store）：引入轻量 **Zustand** 按域拆分 [workbenchStore](../../apps/web/src/stores/workbenchStore.ts)、[sessionStore](../../apps/web/src/stores/sessionStore.ts)、[matterRuntimeStore](../../apps/web/src/stores/matterRuntimeStore.ts)，[useMatterEventSync](../../apps/web/src/hooks/useMatterEventSync.ts) 增量直达 Store，`App.tsx` 由 `821` 行 / `26` 个 `useState` / `95` 处 prop 绑定收敛为 `698` 行 / `0` `useState` / `51` 处 prop 绑定，配套 [Store 单元测试](../../test/web-stores.test.ts)；
+    - `A-2`（TanStack Query 收口查询型页面）：引入 `@tanstack/react-query`（[queries/](../../apps/web/src/queries/index.ts)）统一接管 `spaces`、`workspaces`、`team`、`organizations`、`admin`、`settings` 请求缓存，由单一 SSE 通道按域触发 `invalidateQueries`（拆除 `SpacePages` 重复 `EventSource`），补齐单向依赖门禁与 [Query 单元测试](../../test/web-queries.test.ts)；URL 维持轻量 `hashRouter.ts`，高频流式态留在 Zustand（`3 + 1` 分层决策详述于演进文档）。
   - **阶段 B（P1/P2）后端路由与边界校验**：引入轻量 Web Standard Router（如 Hono）+ 基于 `@pa/contracts` 的运行时 Schema（Valibot/Zod），将 Auth → Org ACL → 入参校验 → 统一 `CodedError` 收口为声明式中间件链；
   - **阶段 C（P2 · 按需触发）SQLite 类型安全查询**：当表规模达到 35–40+ 或字段频繁重构时，在原生 SQLite 之上引入薄层类型安全查询（Kysely/Drizzle Core），保留单文件 `user_version` 迁移与零运维嵌入形态；
   - **阶段 D（P2 · 按需触发）前端 HMR 开发体验**：保持生产由 `apps/cli` 托管静态包不变，仅在 UI 迭代需要保态热更新时补充开发态 Vite。
