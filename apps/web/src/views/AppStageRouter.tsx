@@ -1,24 +1,21 @@
-import type { ComponentProps, Dispatch, RefObject, SetStateAction } from "react";
+import type { ComponentProps, RefObject } from "react";
 import { updateMatterModelSelection } from "../api/matters.ts";
 import type { ModelSelection } from "../api/models.ts";
-import type {
-	AccountUserDto,
-	BootstrapPayload,
-	CollaboratorDto,
-	MatterDetailPayload,
-	MatterDto,
-	MatterProgressDto,
-	MatterVisibility,
-	RoleTemplateDto,
-	WorkspaceDto,
-} from "../api.ts";
+import type { AccountUserDto, CollaboratorDto, MatterDto, RoleTemplateDto, WorkspaceDto } from "../api.ts";
 import { isArchitectMemberId, isSoloMemberId } from "../architectApi.ts";
 import { MatterModelControl } from "../components/ModelPicker.tsx";
-import type { HashRoute, NavTab, SettingsSection } from "../hashRouter.ts";
+import type { HashRoute } from "../hashRouter.ts";
 import type { useMatterActions } from "../hooks/useMatterActions.ts";
 import type { useMatterInitiationState } from "../hooks/useMatterInitiationState.ts";
 import type { useWorkbenchPanels } from "../hooks/useWorkbenchPanels.ts";
 import { Button, ErrorBoundary, ModalDialog, ViewFade } from "../primitives/index.ts";
+import {
+	selectMemberName,
+	selectOrganizationName,
+	useMatterRuntimeStore,
+	useSessionStore,
+	useWorkbenchStore,
+} from "../stores/index.ts";
 import { AccountView } from "./AccountView.tsx";
 import { AdminView } from "./AdminView.tsx";
 import { ChatStage } from "./ChatStage.tsx";
@@ -29,39 +26,23 @@ import { SettingsView } from "./SettingsView.tsx";
 import { TeamView } from "./TeamView.tsx";
 
 export interface AppStageRouterProps {
-	activeTab: NavTab;
-	settingsSection: SettingsSection;
-	spaceRoute: { pageId?: string };
-	bootstrap: BootstrapPayload | null;
 	currentUser: CollaboratorDto | null;
 	accountUser: AccountUserDto | null;
 	authKind: ComponentProps<typeof AccountView>["authKind"];
-	serverRequireAuth: boolean | null;
 	isSuperAdmin: boolean;
 	canDispatchAi: boolean;
 	canManageMatter: boolean;
 	orgEffectiveMemberIds: string[] | null;
 	selectedWorkspace: WorkspaceDto | null;
-	selectedWorkspaceId: string;
-	selectedOrgId: string;
 	effectiveOrgIdForScope: string | null;
-	selectedMemberId: string;
-	headerContact: BootstrapPayload["members"][number] | null;
+	headerContact: ComponentProps<typeof ChatStage>["headerContact"];
 	headerTheme: ComponentProps<typeof ChatStage>["headerTheme"];
-	selectedMatterId: string | null;
 	currentMatter: MatterDto | null;
-	matterDetail: MatterDetailPayload | null;
 	activeDialogs: ComponentProps<typeof ChatStage>["activeDialogs"];
-	activeMatterProgress: MatterProgressDto | null;
-	activeProgressStartedAt: number | null;
-	streamingDelta: string;
-	submitting: boolean;
 	templateByRoleId: Map<string, RoleTemplateDto>;
 	matterAiMemberIds: string[];
 	matterConsultMemberIds: string[] | null;
 	observersEnabled: boolean;
-	draftModelSelection: ModelSelection | null;
-	draftMatterVisibility: MatterVisibility;
 	orgLeadModel: ModelSelection | null;
 	currentLeadId: string | null | undefined;
 	composerRef: RefObject<HTMLTextAreaElement | null>;
@@ -70,8 +51,6 @@ export interface AppStageRouterProps {
 	actions: ReturnType<typeof useMatterActions>;
 	settingsProps: ReturnType<typeof useWorkbenchPanels>["settingsProps"];
 	adminProps: ReturnType<typeof useWorkbenchPanels>["adminProps"];
-	memberName: (id: string) => string;
-	organizationName: (id: string | null) => string | null;
 	navigateRoute: (route: HashRoute, options?: { replace?: boolean }) => void;
 	startNewMatter: (preferredLeadId?: string) => void;
 	startNewMatterFromCurrent: () => void;
@@ -80,51 +59,28 @@ export interface AppStageRouterProps {
 	handleSidebarToggleArchiveMatter: (matterId: string, archived: boolean) => void;
 	handleSidebarSwitchOrLogout: () => void;
 	refreshBootstrap: () => Promise<void>;
-	setDraftModelSelection: Dispatch<SetStateAction<ModelSelection | null>>;
-	setMatterDetail: Dispatch<SetStateAction<MatterDetailPayload | null>>;
-	setDraftAiMemberIds: Dispatch<SetStateAction<string[] | null>>;
-	setDraftMatterVisibility: Dispatch<SetStateAction<MatterVisibility>>;
-	setSelectedWorkspaceId: Dispatch<SetStateAction<string>>;
 	setComposerText: (text: string) => void;
-	setNoticeBanner: Dispatch<SetStateAction<string | null>>;
-	setErrorBanner: Dispatch<SetStateAction<string | null>>;
 }
 
 /** Routes top-level workbench tabs inside isolated ErrorBoundaries. */
 export function AppStageRouter({
-	activeTab,
-	settingsSection,
-	spaceRoute,
-	bootstrap,
 	currentUser,
 	accountUser,
 	authKind,
-	serverRequireAuth,
 	isSuperAdmin,
 	canDispatchAi,
 	canManageMatter,
 	orgEffectiveMemberIds,
 	selectedWorkspace,
-	selectedWorkspaceId,
-	selectedOrgId,
 	effectiveOrgIdForScope,
-	selectedMemberId,
 	headerContact,
 	headerTheme,
-	selectedMatterId,
 	currentMatter,
-	matterDetail,
 	activeDialogs,
-	activeMatterProgress,
-	activeProgressStartedAt,
-	streamingDelta,
-	submitting,
 	templateByRoleId,
 	matterAiMemberIds,
 	matterConsultMemberIds,
 	observersEnabled,
-	draftModelSelection,
-	draftMatterVisibility,
 	orgLeadModel,
 	currentLeadId,
 	composerRef,
@@ -133,8 +89,6 @@ export function AppStageRouter({
 	actions,
 	settingsProps,
 	adminProps,
-	memberName,
-	organizationName,
 	navigateRoute,
 	startNewMatter,
 	startNewMatterFromCurrent,
@@ -143,15 +97,41 @@ export function AppStageRouter({
 	handleSidebarToggleArchiveMatter,
 	handleSidebarSwitchOrLogout,
 	refreshBootstrap,
-	setDraftModelSelection,
-	setMatterDetail,
-	setDraftAiMemberIds,
-	setDraftMatterVisibility,
-	setSelectedWorkspaceId,
 	setComposerText,
-	setNoticeBanner,
-	setErrorBanner,
 }: AppStageRouterProps) {
+	const activeTab = useWorkbenchStore((s) => s.activeTab);
+	const settingsSection = useWorkbenchStore((s) => s.settingsSection);
+	const spaceRoute = useWorkbenchStore((s) => s.spaceRoute);
+	const setNoticeBanner = useWorkbenchStore((s) => s.setNoticeBanner);
+	const setErrorBanner = useWorkbenchStore((s) => s.setErrorBanner);
+
+	const bootstrap = useSessionStore((s) => s.bootstrap);
+	const serverRequireAuth = useSessionStore((s) => s.serverRequireAuth);
+	const selectedWorkspaceId = useSessionStore((s) => s.selectedWorkspaceId);
+	const selectedOrgId = useSessionStore((s) => s.selectedOrgId);
+	const selectedMemberId = useSessionStore((s) => s.selectedMemberId);
+	const setSelectedWorkspaceId = useSessionStore((s) => s.setSelectedWorkspaceId);
+
+	const selectedMatterId = useMatterRuntimeStore((s) => s.selectedMatterId);
+	const matterDetail = useMatterRuntimeStore((s) => s.matterDetail);
+	const setMatterDetail = useMatterRuntimeStore((s) => s.setMatterDetail);
+	const streamingDelta = useMatterRuntimeStore((s) => s.streamingDelta);
+	const submitting = useMatterRuntimeStore((s) => s.submitting);
+	const draftModelSelection = useMatterRuntimeStore((s) => s.draftModelSelection);
+	const setDraftModelSelection = useMatterRuntimeStore((s) => s.setDraftModelSelection);
+	const draftMatterVisibility = useMatterRuntimeStore((s) => s.draftMatterVisibility);
+	const setDraftMatterVisibility = useMatterRuntimeStore((s) => s.setDraftMatterVisibility);
+	const setDraftAiMemberIds = useMatterRuntimeStore((s) => s.setDraftAiMemberIds);
+	const activeMatterProgress = useMatterRuntimeStore((s) =>
+		s.selectedMatterId ? (s.progressByMatter[s.selectedMatterId] ?? null) : null,
+	);
+	const activeProgressStartedAt = useMatterRuntimeStore((s) =>
+		s.selectedMatterId ? (s.progressStartedAt[s.selectedMatterId] ?? null) : null,
+	);
+
+	const memberName = (id: string) => selectMemberName(bootstrap, id);
+	const organizationName = (id: string | null) => selectOrganizationName(bootstrap, id);
+
 	return (
 		<ErrorBoundary key={activeTab} scope={activeTab}>
 			{activeTab === "chats" && (
@@ -410,17 +390,14 @@ export function AppStageRouter({
 }
 
 /** Confirmation dialog for archiving or restoring a matter from the sidebar or chat header. */
-export function AppArchiveConfirmModal({
-	pendingArchiveConfirm,
-	archivingMatter,
-	onClose,
-	onConfirm,
-}: {
-	pendingArchiveConfirm: { matterId: string; title: string; archived: boolean } | null;
-	archivingMatter: boolean;
-	onClose: () => void;
-	onConfirm: () => void;
-}) {
+export function AppArchiveConfirmModal({ onConfirm }: { onConfirm: () => void }) {
+	const pendingArchiveConfirm = useWorkbenchStore((s) => s.pendingArchiveConfirm);
+	const archivingMatter = useWorkbenchStore((s) => s.archivingMatter);
+	const closeArchiveConfirm = useWorkbenchStore((s) => s.closeArchiveConfirm);
+	const onClose = () => {
+		if (!archivingMatter) closeArchiveConfirm();
+	};
+
 	return (
 		<ModalDialog
 			open={Boolean(pendingArchiveConfirm)}

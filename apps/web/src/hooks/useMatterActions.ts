@@ -30,7 +30,7 @@ import {
 } from "../api.ts";
 import { ROLE_ARCHITECT_MEMBER_ID } from "../architectApi.ts";
 import type { HashRoute } from "../hashRouter.ts";
-
+import { useMatterRuntimeStore, useSessionStore, useWorkbenchStore } from "../stores/index.ts";
 import { readStoredSetting, writeStoredSetting } from "../utils/storage.ts";
 
 export { readStoredSetting, writeStoredSetting };
@@ -80,19 +80,11 @@ interface UseMatterActionsParams {
 	memberName: (id: string) => string;
 	workspaceName: (id: string | null) => string | null;
 	organizationName: (id: string | null) => string | null;
-	setSubmitting: (v: boolean) => void;
 	clearSentComposer: () => void;
-	setSelectedMemberId: (v: string) => void;
-	setSelectedWorkspaceId: (v: string) => void;
-	setSelectedOrgId: (v: string) => void;
-	setDraftAiMemberIds: (v: string[] | null) => void;
 	setDraftConsultMemberIds?: (v: string[] | null) => void;
 	setDraftObserverMemberIds?: (v: string[]) => void;
-	setDraftObserversEnabled: (v: boolean) => void;
 	onSyncDraftPresetForObservers?: (hasObservers: boolean) => void;
 	onResetInitiation?: () => void;
-	setErrorBanner: (msg: string | null) => void;
-	setNoticeBanner: (msg: string | null) => void;
 	navigateRoute: (next: HashRoute, options?: { replace?: boolean }) => void;
 	refreshBootstrap: () => Promise<void>;
 	refreshDetail: (matterId: string | null) => Promise<void>;
@@ -125,23 +117,23 @@ export function useMatterActions({
 	memberName,
 	workspaceName,
 	organizationName,
-	setSubmitting,
 	clearSentComposer,
-	setSelectedMemberId,
-	setSelectedWorkspaceId,
-	setSelectedOrgId,
-	setDraftAiMemberIds,
 	setDraftConsultMemberIds,
 	setDraftObserverMemberIds,
-	setDraftObserversEnabled,
 	onSyncDraftPresetForObservers,
 	onResetInitiation,
-	setErrorBanner,
-	setNoticeBanner,
 	navigateRoute,
 	refreshBootstrap,
 	refreshDetail,
 }: UseMatterActionsParams) {
+	const setErrorBanner = (msg: string | null) => useWorkbenchStore.getState().setErrorBanner(msg);
+	const setNoticeBanner = (msg: string | null) => useWorkbenchStore.getState().setNoticeBanner(msg);
+	const setSubmitting = (v: boolean) => useMatterRuntimeStore.getState().setSubmitting(v);
+	const setDraftAiMemberIds = (v: string[] | null) => useMatterRuntimeStore.getState().setDraftAiMemberIds(v);
+	const setDraftObserversEnabled = (v: boolean) => useMatterRuntimeStore.getState().setDraftObserversEnabled(v);
+	const setSelectedMemberId = (v: string) => useSessionStore.getState().setSelectedMemberId(v);
+	const setSelectedWorkspaceId = (v: string) => useSessionStore.getState().setSelectedWorkspaceId(v);
+	const setSelectedOrgId = (v: string) => useSessionStore.getState().setSelectedOrgId(v);
 	const sendPromptInternal = async (
 		rawText: string,
 		imagesPayload: Array<{ data: string; mimeType: string; name?: string }>,

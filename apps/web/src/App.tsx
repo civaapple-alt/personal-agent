@@ -42,24 +42,16 @@ const NEW_ARCHITECT_DRAFT = "new:architect";
 export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
 
-	// Domain stores (Phase A-2)
+	// Scoped Zustand selectors (streamingDelta and high-frequency run timers stay inside AppStageRouter/leaf timers)
 	const activeTab = useWorkbenchStore((s) => s.activeTab);
 	const settingsSection = useWorkbenchStore((s) => s.settingsSection);
-	const spaceRoute = useWorkbenchStore((s) => s.spaceRoute);
-	const searchQuery = useWorkbenchStore((s) => s.searchQuery);
-	const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
 	const mobileNavOpen = useWorkbenchStore((s) => s.mobileNavOpen);
 	const setMobileNavOpen = useWorkbenchStore((s) => s.setMobileNavOpen);
 	const setErrorBanner = useWorkbenchStore((s) => s.setErrorBanner);
 	const setNoticeBanner = useWorkbenchStore((s) => s.setNoticeBanner);
-	const pendingArchiveConfirm = useWorkbenchStore((s) => s.pendingArchiveConfirm);
 	const openArchiveConfirm = useWorkbenchStore((s) => s.openArchiveConfirm);
-	const closeArchiveConfirm = useWorkbenchStore((s) => s.closeArchiveConfirm);
-	const archivingMatter = useWorkbenchStore((s) => s.archivingMatter);
-	const setArchivingMatter = useWorkbenchStore((s) => s.setArchivingMatter);
 
 	const bootstrap = useSessionStore((s) => s.bootstrap);
-	const serverRequireAuth = useSessionStore((s) => s.serverRequireAuth);
 	const selectedOrgId = useSessionStore((s) => s.selectedOrgId);
 	const setSelectedOrgId = useSessionStore((s) => s.setSelectedOrgId);
 	const selectedWorkspaceId = useSessionStore((s) => s.selectedWorkspaceId);
@@ -70,14 +62,9 @@ export function App() {
 
 	const selectedMatterId = useMatterRuntimeStore((s) => s.selectedMatterId);
 	const matterDetail = useMatterRuntimeStore((s) => s.matterDetail);
-	const setMatterDetail = useMatterRuntimeStore((s) => s.setMatterDetail);
-	const sseConnected = useMatterRuntimeStore((s) => s.sseConnected);
 	const submitting = useMatterRuntimeStore((s) => s.submitting);
-	const setSubmitting = useMatterRuntimeStore((s) => s.setSubmitting);
-	const streamingDelta = useMatterRuntimeStore((s) => s.streamingDelta);
+	const hasRunningMatters = useMatterRuntimeStore((s) => Object.keys(s.progressByMatter).length > 0);
 	const setStreamingDelta = useMatterRuntimeStore((s) => s.setStreamingDelta);
-	const progressByMatter = useMatterRuntimeStore((s) => s.progressByMatter);
-	const progressStartedAt = useMatterRuntimeStore((s) => s.progressStartedAt);
 	const draftModelSelection = useMatterRuntimeStore((s) => s.draftModelSelection);
 	const setDraftModelSelection = useMatterRuntimeStore((s) => s.setDraftModelSelection);
 	const draftMatterVisibility = useMatterRuntimeStore((s) => s.draftMatterVisibility);
@@ -236,13 +223,6 @@ export function App() {
 		selectedOrgId,
 		selectedWorkspaceId,
 	});
-
-	const filteredMatters = useMemo(() => {
-		const list = bootstrap?.matters ?? [];
-		const q = searchQuery.trim().toLowerCase();
-		if (!q) return list;
-		return list.filter((m) => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
-	}, [bootstrap, searchQuery]);
 
 	const memberName = (id: string) => selectMemberName(bootstrap, id);
 	const workspaceName = (id: string | null) => selectWorkspaceName(bootstrap, id);
@@ -448,15 +428,9 @@ export function App() {
 		memberName,
 		workspaceName,
 		organizationName,
-		setSubmitting,
 		clearSentComposer,
-		setSelectedMemberId,
-		setSelectedWorkspaceId,
-		setSelectedOrgId,
-		setDraftAiMemberIds,
 		setDraftConsultMemberIds: initiation.setDraftConsultMemberIds,
 		setDraftObserverMemberIds: initiation.setDraftObserverMemberIds,
-		setDraftObserversEnabled,
 		onSyncDraftPresetForObservers: (hasObservers: boolean) => {
 			initiation.setDraftPresetMode((prev) =>
 				hasObservers ? "lead_review" : prev === "lead_review" ? "lead_consult" : prev,
@@ -466,19 +440,14 @@ export function App() {
 			setDraftModelSelection(null);
 			initiation.resetInitiationState();
 		},
-		setErrorBanner,
-		setNoticeBanner,
 		navigateRoute,
 		refreshBootstrap,
 		refreshDetail,
 	});
 
-	const activeMatterProgress = selectedMatterId ? (progressByMatter[selectedMatterId] ?? null) : null;
 	const headerTheme = headerContact ? (memberThemeMap.get(headerContact.id) ?? getBotTheme(0)) : getBotTheme(0);
-	const activeProgressStartedAt = selectedMatterId ? (progressStartedAt[selectedMatterId] ?? null) : null;
 
-	// Stable handlers keep the memoized Sidebar from re-rendering on every streamed text delta.
-	const handleCloseMobileNav = useStableCallback(() => setMobileNavOpen(false));
+	// Stable handlers keep the memoized Sidebar from re-rendering on unrelated updates.
 	useEffect(() => {
 		if (!mobileNavOpen) return;
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -488,7 +457,7 @@ export function App() {
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [mobileNavOpen]);
+	}, [mobileNavOpen, setMobileNavOpen]);
 	const handleSidebarNavigate = useStableCallback((route: HashRoute) => {
 		setMobileNavOpen(false);
 		navigateRoute(route);
@@ -535,6 +504,8 @@ export function App() {
 	});
 
 	const handleConfirmArchiveMatter = async () => {
+		const { pendingArchiveConfirm, archivingMatter, closeArchiveConfirm, setArchivingMatter } =
+			useWorkbenchStore.getState();
 		if (!pendingArchiveConfirm || archivingMatter) return;
 		const { matterId, archived } = pendingArchiveConfirm;
 		setArchivingMatter(true);
@@ -587,7 +558,6 @@ export function App() {
 			? `Pi ${runtimeOverview.base.version}`
 			: "Pi 未就绪"
 		: "Pi RPC";
-	const hasRunningMatters = Object.keys(progressByMatter).length > 0;
 	const currentMatter = matterDetail?.matter.id === selectedMatterId ? matterDetail.matter : null;
 	const currentLeadId = selectedMatterId
 		? currentMatter?.leadMemberId
@@ -615,23 +585,12 @@ export function App() {
 				/>
 			)}
 			<Sidebar
-				activeTab={activeTab}
-				bootstrap={bootstrap}
 				currentUser={currentUser}
 				authKind={bootstrap?.authKind ?? authKind}
-				requireAuth={serverRequireAuth}
+				requireAuth={useSessionStore.getState().serverRequireAuth}
 				isSuperAdmin={isSuperAdmin}
 				orgEffectiveMemberIds={orgEffectiveMemberIds}
 				runtimeBadge={runtimeBadge}
-				filteredMatters={filteredMatters}
-				selectedMatterId={selectedMatterId}
-				selectedMemberId={selectedMemberId}
-				progressByMatter={progressByMatter}
-				sseConnected={sseConnected}
-				searchQuery={searchQuery}
-				mobileOpen={mobileNavOpen}
-				onCloseMobile={handleCloseMobileNav}
-				onSearchQueryChange={setSearchQuery}
 				onNavigate={handleSidebarNavigate}
 				onToggleMember={handleSidebarToggleMember}
 				onNewMatter={handleSidebarNewMatter}
@@ -676,39 +635,23 @@ export function App() {
 					</Button>
 				</div>
 				<AppStageRouter
-					activeTab={activeTab}
-					settingsSection={settingsSection}
-					spaceRoute={spaceRoute}
-					bootstrap={bootstrap}
 					currentUser={currentUser}
 					accountUser={accountUser}
 					authKind={bootstrap?.authKind ?? authKind}
-					serverRequireAuth={serverRequireAuth}
 					isSuperAdmin={isSuperAdmin}
 					canDispatchAi={canDispatchAi}
 					canManageMatter={canManageMatter}
 					orgEffectiveMemberIds={orgEffectiveMemberIds}
 					selectedWorkspace={selectedWorkspace}
-					selectedWorkspaceId={selectedWorkspaceId}
-					selectedOrgId={selectedOrgId}
 					effectiveOrgIdForScope={effectiveOrgIdForScope}
-					selectedMemberId={selectedMemberId}
 					headerContact={headerContact}
 					headerTheme={headerTheme}
-					selectedMatterId={selectedMatterId}
 					currentMatter={currentMatter}
-					matterDetail={matterDetail}
 					activeDialogs={activeDialogs}
-					activeMatterProgress={activeMatterProgress}
-					activeProgressStartedAt={activeProgressStartedAt}
-					streamingDelta={streamingDelta}
-					submitting={submitting}
 					templateByRoleId={templateByRoleId}
 					matterAiMemberIds={matterAiMemberIds}
 					matterConsultMemberIds={matterConsultMemberIds}
 					observersEnabled={observersEnabled}
-					draftModelSelection={draftModelSelection}
-					draftMatterVisibility={draftMatterVisibility}
 					orgLeadModel={orgLeadModel}
 					currentLeadId={currentLeadId}
 					composerRef={composerRef}
@@ -728,8 +671,6 @@ export function App() {
 					actions={actions}
 					settingsProps={settingsProps}
 					adminProps={adminProps}
-					memberName={memberName}
-					organizationName={organizationName}
 					navigateRoute={navigateRoute}
 					startNewMatter={startNewMatter}
 					startNewMatterFromCurrent={startNewMatterFromCurrent}
@@ -738,14 +679,7 @@ export function App() {
 					handleSidebarToggleArchiveMatter={handleSidebarToggleArchiveMatter}
 					handleSidebarSwitchOrLogout={handleSidebarSwitchOrLogout}
 					refreshBootstrap={refreshBootstrap}
-					setDraftModelSelection={setDraftModelSelection}
-					setMatterDetail={setMatterDetail}
-					setDraftAiMemberIds={setDraftAiMemberIds}
-					setDraftMatterVisibility={setDraftMatterVisibility}
-					setSelectedWorkspaceId={setSelectedWorkspaceId}
 					setComposerText={setComposerText}
-					setNoticeBanner={setNoticeBanner}
-					setErrorBanner={setErrorBanner}
 				/>
 			</main>
 
@@ -756,12 +690,7 @@ export function App() {
 				currentUser={currentUser}
 			/>
 
-			<AppArchiveConfirmModal
-				pendingArchiveConfirm={pendingArchiveConfirm}
-				archivingMatter={archivingMatter}
-				onClose={() => !archivingMatter && closeArchiveConfirm()}
-				onConfirm={() => void handleConfirmArchiveMatter()}
-			/>
+			<AppArchiveConfirmModal onConfirm={() => void handleConfirmArchiveMatter()} />
 		</div>
 	);
 	return <ModelCatalogProvider>{workbench}</ModelCatalogProvider>;

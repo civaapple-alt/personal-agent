@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { BootstrapPayload, CollaboratorDto, MatterDto, MatterProgressDto } from "../api.ts";
+import type { CollaboratorDto, MatterDto } from "../api.ts";
 import { filterBusinessMembers, isArchitectMember, isSoloMember } from "../architectApi.ts";
-import type { HashRoute, NavTab } from "../hashRouter.ts";
+import type { HashRoute } from "../hashRouter.ts";
 import { Badge, BotFaceIcon, IconButton, Input } from "../primitives/index.ts";
+import { useMatterRuntimeStore, useSessionStore, useWorkbenchStore } from "../stores/index.ts";
 import { cn } from "../utils/cn.ts";
 import { getBotTheme, inferDelegationMood, type RoleMood, stripMarkdownFormatting } from "../utils.ts";
 
@@ -19,23 +20,12 @@ function readInitialViewMode(): MatterViewMode {
 }
 
 interface SidebarProps {
-	activeTab: NavTab;
-	bootstrap: BootstrapPayload | null;
 	currentUser?: CollaboratorDto | null;
 	authKind?: "session" | "loopback" | null;
 	requireAuth?: boolean | null;
 	isSuperAdmin?: boolean;
 	orgEffectiveMemberIds?: string[] | null;
 	runtimeBadge?: string | null;
-	filteredMatters: MatterDto[];
-	selectedMatterId: string | null;
-	selectedMemberId: string;
-	progressByMatter: Record<string, MatterProgressDto>;
-	sseConnected: boolean;
-	searchQuery: string;
-	mobileOpen?: boolean;
-	onCloseMobile?: () => void;
-	onSearchQueryChange: (q: string) => void;
 	onNavigate: (route: HashRoute) => void;
 	onToggleMember: (memberId: string) => void;
 	onNewMatter: () => void;
@@ -45,29 +35,38 @@ interface SidebarProps {
 
 /** Memoized so streamed text deltas and run timers in the workbench do not re-render the navigation tree. */
 export const Sidebar = memo(function Sidebar({
-	activeTab,
-	bootstrap,
 	currentUser,
 	authKind = null,
 	requireAuth = null,
 	isSuperAdmin = false,
 	orgEffectiveMemberIds = null,
 	runtimeBadge,
-	filteredMatters,
-	selectedMatterId,
-	selectedMemberId,
-	progressByMatter,
-	sseConnected,
-	searchQuery,
-	mobileOpen = false,
-	onCloseMobile,
-	onSearchQueryChange,
 	onNavigate,
 	onToggleMember,
 	onNewMatter,
 	onToggleArchiveMatter,
 	onSwitchOrLogout,
 }: SidebarProps) {
+	const activeTab = useWorkbenchStore((s) => s.activeTab);
+	const searchQuery = useWorkbenchStore((s) => s.searchQuery);
+	const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
+	const mobileOpen = useWorkbenchStore((s) => s.mobileNavOpen);
+	const setMobileNavOpen = useWorkbenchStore((s) => s.setMobileNavOpen);
+
+	const bootstrap = useSessionStore((s) => s.bootstrap);
+	const selectedMemberId = useSessionStore((s) => s.selectedMemberId);
+
+	const selectedMatterId = useMatterRuntimeStore((s) => s.selectedMatterId);
+	const progressByMatter = useMatterRuntimeStore((s) => s.progressByMatter);
+	const sseConnected = useMatterRuntimeStore((s) => s.sseConnected);
+
+	const filteredMatters = useMemo(() => {
+		const list = bootstrap?.matters ?? [];
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return list;
+		return list.filter((m) => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
+	}, [bootstrap?.matters, searchQuery]);
+
 	const [searchOpen, setSearchOpen] = useState(false);
 	const [viewMode, setViewMode] = useState<MatterViewMode>(readInitialViewMode);
 	const [showArchived, setShowArchived] = useState(false);
@@ -355,7 +354,7 @@ export const Sidebar = memo(function Sidebar({
 						onClick={() => {
 							const next = !searchOpen;
 							setSearchOpen(next);
-							if (!next) onSearchQueryChange("");
+							if (!next) setSearchQuery("");
 						}}
 					>
 						<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
@@ -374,19 +373,17 @@ export const Sidebar = memo(function Sidebar({
 							<path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
 						</svg>
 					</IconButton>
-					{onCloseMobile && (
-						<IconButton
-							size="sm"
-							variant="secondary"
-							className="min-[961px]:hidden rounded-full"
-							aria-label="收起侧栏"
-							onClick={onCloseMobile}
-						>
-							<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
-								<path d="M5.5 5.5l9 9m0-9l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-							</svg>
-						</IconButton>
-					)}
+					<IconButton
+						size="sm"
+						variant="secondary"
+						className="min-[961px]:hidden rounded-full"
+						aria-label="收起侧栏"
+						onClick={() => setMobileNavOpen(false)}
+					>
+						<svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+							<path d="M5.5 5.5l9 9m0-9l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+						</svg>
+					</IconButton>
 				</div>
 			</div>
 
@@ -396,7 +393,7 @@ export const Sidebar = memo(function Sidebar({
 						size="sm"
 						placeholder="搜索事项或交付标题…"
 						value={searchQuery}
-						onChange={(e) => onSearchQueryChange(e.target.value)}
+						onChange={(e) => setSearchQuery(e.target.value)}
 					/>
 				</div>
 			)}
