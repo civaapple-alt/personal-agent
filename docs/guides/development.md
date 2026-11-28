@@ -46,12 +46,12 @@ npm run start:team:sandbox
 | 事项主责、委托、上下文、取消与成果收尾 | [编排核](../../packages/server/src/orchestrator/README.md) |
 | Pi RPC、事件、扩展桥接与工具能力 | [RPC](../../packages/server/src/rpc/README.md) |
 | 数据模式、历史记录、资料空间与信任策略 | [存储](../../packages/server/src/storage/README.md) |
-| HTTP、SSE、邀请、文件/图片与预览 | [服务](../../packages/server/src/server/README.md) |
+| HTTP 路由（Hono）与边界校验、SSE、邀请、文件/图片与预览 | [服务](../../packages/server/src/server/README.md)、[router.ts](../../packages/server/src/server/router.ts)、[契约 Schema](../../packages/contracts/src/schemas/index.ts) |
 | 页面与 API 消费 | [网页](../../apps/web/README.md) → [源码](../../apps/web/src/README.md) |
 | 岗位及方法资产 | [roles](../../roles/README.md)、[role-skills](../../pi-extensions/role-skills/README.md) |
 | 定义解析、序列化与能力目录 | [角色解析](../../packages/server/src/roles/README.md) |
 
-后端使用 TypeScript 和 Node.js 自带的 SQLite，前端用 React 和 esbuild 构建。修改源码后重新构建。`apps/cli/dist/main.js` 和 `apps/web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。
+后端使用 TypeScript、Node.js 自带的 SQLite 与 Hono 路由（入参由 `@pa/contracts/schemas` 的 Valibot Schema 校验），前端用 React、Tailwind v4、Zustand、TanStack Query 和 esbuild 构建。修改源码后重新构建。`apps/cli/dist/main.js` 和 `apps/web/dist/` 会由构建生成。命令和依赖见 [package.json](../../package.json)。
 
 从维护该行为的模块开始。修改 HTTP 接口时，同时检查服务端返回值和前端调用。调整数据库结构时，验证已有数据可以升级。跨模块的数据流见[架构说明](../concepts/architecture-and-plan.md)。
 
@@ -62,7 +62,7 @@ npm run start:team:sandbox
 | 改动 | 运行或核对 |
 | --- | --- |
 | 仅修改文档 | `npm run check:docs`，核对本地链接、章节锚点、命令名和导航可达性 |
-| 修改代码 | 依次运行 `npm run check`、`npm run build` 和 `npm test`。先构建网页资源，再运行依赖网页资源的测试 |
+| 修改代码 | 依次运行 `npm run check`（含 `lint`、`typecheck`、`check:boundaries`、`check:css` 与 `check:sizes`）、`npm run build` 和 `npm test`。先构建网页资源，再运行依赖网页资源的测试 |
 | 修改服务入口或打包 | 构建后运行 `npm run check:startup`，用临时数据检查源码和编译后的入口 |
 | 修改工作台交互 | 先运行 `npm run e2e` 完成[无模型真实浏览器端到端检查](../../e2e/README.md)；如需人工逐页排查，启动上面的团队沙盒实际走一遍受影响的页面和角色权限 |
 | 修改 Pi、工具调用或协作行为 | 先运行相关离线测试。需要验证真实模型调用时，再按下一节选择演示 |

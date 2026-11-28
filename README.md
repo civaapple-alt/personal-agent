@@ -54,13 +54,13 @@ npm run start:web
 personal-agent/
 ├── apps/
 │   ├── cli/        # 薄启动器（调用 @pa/server/boot，构建自包含 apps/cli/dist/main.js）
-│   └── web/        # React 网页工作台（UI Client 环，esbuild 构建至 apps/web/dist/）
+│   └── web/        # React 网页工作台（UI Client 环，Tailwind v4 + Zustand + TanStack Query，esbuild 构建至 apps/web/dist/）
 ├── packages/
-│   ├── contracts/      # Wire 共享契约环（纯 DTO 与运行时校验，零 Node/宿主依赖）
+│   ├── contracts/      # Wire 共享契约环（纯 DTO 与 Valibot 运行时 Schema `@pa/contracts/schemas`，零 Node/宿主依赖）
 │   ├── pi-rpc/         # 纯 Pi RPC 子进程会话原语底座（零业务/数据库耦合）
 │   ├── extension-api/  # 内部扩展全量契约（严格分离 ./server 与 ./web）
 │   ├── extension-sdk/  # 对外精选稳定扩展 SDK（隐藏宿主内部保留字段）
-│   └── server/         # Engine Host 引擎宿主（编排核、SQLite/Git 空间、HTTP/SSE）
+│   └── server/         # Engine Host 引擎宿主（编排核、SQLite/Git 空间、Hono HTTP 路由/SSE）
 ├── pa-extensions/  # PA 宿主扩展（双半边 ./server + ./web，含宿主专有 workflow 技能包）
 ├── pi-extensions/  # 便携 Pi 扩展与标准 Pi 包（role-skills、skill-catalog、human-question、team-extension）
 ├── roles/          # 内置可分享 AI 岗位角色定义（Markdown）
