@@ -11,5 +11,6 @@
 - [organization.ts](src/organization.ts)、[workspace.ts](src/workspace.ts)：平台账号、组织、RBAC、审计与工作区目录定制 DTO
 - [team.ts](src/team.ts)、[space.ts](src/space.ts)、[runtime.ts](src/runtime.ts)：团队成员/角色设计、资料空间、运行时概览与启动装配 DTO
 - [sse-events.ts](src/sse-events.ts)：HTTP SSE 事件名与载荷契约（含 `0.9.0` 公告板增量事件）
+- [schemas/](src/schemas/index.ts)（导出子路径 `@pa/contracts/schemas`）：基于 `valibot` 的运行时入参 Schema（`common`、`board`、`matter`、`space`、`organization`、`admin`、`skill-trust`）与 `InferSchemaOutput`
 
 约束：本包禁止引入 `node:*`、React 或任何宿主内部模块，由 `npm run check:boundaries` 强制校验。

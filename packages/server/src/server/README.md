@@ -4,7 +4,7 @@
 默认端口 4310、`PA_HOST` 默认 `127.0.0.1`，`PORT`、`PA_HOST`、`PA_DB_PATH`、`PA_PI_EXTENSIONS` 读取以此文件为准；
 启动时探测 Pi CLI 并记录版本或失败原因。日常启动会接触用户数据库，绑定 `0.0.0.0` 时打印局域网地址供同事通过邀请链接加入。
 
-[app.ts](app.ts) 装配 HTTP 服务，并由 [auth.ts](auth.ts)、[acl.ts](acl.ts)、[git-clone.ts](git-clone.ts)、[sse.ts](sse.ts)、[uploads.ts](uploads.ts)、[dispatch-runner.ts](dispatch-runner.ts) 与 [routes/](routes/context.ts) 分担鉴权与 CSRF/限流、组织/工作区/事项 ACL、Git 地址协议安全检验与组织主目录克隆、作用域隔离 SSE 推送、上传权限索引、后台派发与超级管理员/认证/业务路由。消息异步派发，事件交给 [web/src](../../../../apps/web/src/README.md) 消费。
+[app.ts](app.ts) 装配 HTTP 服务，通过 [router.ts](router.ts)（基于 `hono` 的 `/api/*` 声明式路由、Node `dispatchHonoRequest` 适配、`requireAuthMiddleware`、`requireSuperAdminMiddleware`、`parseJsonBody` 与 `@pa/contracts/schemas` 边界校验）及 [http.ts](http.ts)（`HttpRequestError` 与 `WeakMap` 记忆化 `readRawBody`）挂载全部 15 个 `register*Routes` 路由模块；并由 [auth.ts](auth.ts)、[acl.ts](acl.ts)、[git-clone.ts](git-clone.ts)、[sse.ts](sse.ts)、[uploads.ts](uploads.ts)、[dispatch-runner.ts](dispatch-runner.ts) 与 [routes/](routes/context.ts) 分担鉴权与 CSRF/限流、组织/工作区/事项 ACL、Git 地址协议安全检验与组织主目录克隆、作用域隔离 SSE 推送、上传权限索引、后台派发与超级管理员/认证/业务路由。消息异步派发，事件交给 [web/src](../../../../apps/web/src/README.md) 消费。
 
 ## 业务路由
 
