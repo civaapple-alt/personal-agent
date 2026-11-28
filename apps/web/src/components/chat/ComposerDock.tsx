@@ -702,7 +702,7 @@ export function ComposerDock({
 							onPaste={handleComposerPaste}
 							placeholder={placeholder}
 						/>
-						<div className="flex items-center justify-between gap-2.5 min-w-0">
+						<div className="@container flex items-center justify-between gap-2.5 min-w-0">
 							<div className="inline-flex items-center gap-2 min-w-0">
 								<IconButton
 									size="sm"
@@ -732,7 +732,7 @@ export function ComposerDock({
 										@成员
 									</Button>
 								)}
-								<span className="text-xs text-ink-muted truncate">
+								<span className="hidden @[480px]:inline text-xs text-ink-muted whitespace-nowrap">
 									{isMultiline ? "Shift+Enter 换行" : "支持文件和图片"}
 								</span>
 							</div>

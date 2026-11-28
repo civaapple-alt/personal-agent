@@ -649,298 +649,300 @@ export function ChatStage(props: ChatStageProps) {
 					</section>
 				)}
 
-				{rosterOpen && (
-					<ViewFade type="panel">
-						<MatterRosterPopover
-							panelRef={rosterPanelRef}
-							rosterMode={rosterMode}
-							rosterSearch={rosterSearch}
-							isOwner={isOwner && canManageMatter}
-							isTurnRunning={isTurnRunning}
-							selectedMatterId={selectedMatterId}
-							currentUser={currentUser}
-							ownerCollab={ownerCollab}
-							nonOwnerCollaborators={humanPeerCandidates}
-							matterHumanParticipants={matterHumanParticipants}
-							assignedCollabIds={assignedCollabIds}
-							members={scopedMembers}
-							inGroupAiMembers={inGroupAiMembers}
-							nonLeadGroupAiMembers={nonLeadGroupAiMembers}
-							removedAiMembers={removedAiMembers}
-							leadAi={leadAi}
-							observersEnabled={observersEnabled}
-							observerAis={observerAis}
-							matterAiMemberIds={matterAiMemberIds}
-							matterConsultMemberIds={props.matterConsultMemberIds ?? null}
-							onSearchChange={setRosterSearch}
-							onModeChange={setRosterMode}
-							onClose={closeRoster}
-							onOpenTeam={props.onOpenTeam}
-							onChangeLeadMember={onChangeLeadMember}
-							onUpdateMatterAiMembers={props.onUpdateMatterAiMembers}
-							onUpdateMatterConsultMembers={props.onUpdateMatterConsultMembers}
-							onToggleObserversEnabled={props.onToggleObserversEnabled}
-							onUpdateMatterObservers={onUpdateMatterObservers}
-							onUpdateMatterCollaborators={props.onUpdateMatterCollaborators}
-							onConsultArchitect={props.onConsultArchitect}
-						/>
-					</ViewFade>
-				)}
-
-				{collabOpen && activeLoadedId && matterDetail && (
-					<ViewFade type="panel">
-						<MatterCollabDrawer
-							panelRef={collabPanelRef}
-							collabTab={collabTab}
-							matterDetail={matterDetail}
-							onOpenDeliverable={(targetId) => {
-								if (targetId && (targetId.startsWith("doc_") || targetId.startsWith("page_"))) {
-									sideDocs.openDoc(targetId);
-								} else {
-									onOpenDeliverables(targetId);
-								}
-							}}
-							delegationPanel={
-								<MatterDelegationPanel
-									delegations={delegations}
-									messages={matterDetail.userMessages}
-									progress={activeMatterProgress}
-									scope={delegationScope}
-									view={delegationView}
-									memberName={memberName}
-									onSelectScope={setDelegationScope}
-									onSelectView={setDelegationView}
-									onLocateTurn={(id) => {
-										setCollabMatterId(null);
-										collabTriggerRef.current = null;
-										requestAnimationFrame(() => {
-											const message = document.getElementById(`matter-message-${id}`);
-											message?.focus({ preventScroll: true });
-											message?.scrollIntoView({ block: "center" });
-										});
-									}}
-								/>
-							}
-							memberName={memberName}
-							onSelectTab={setCollabTab}
-							onClose={() => transitionView("panel", closeCollab)}
-						/>
-					</ViewFade>
-				)}
-
-				{pendingDecisions.length > 0 && (
-					<details className="px-4 py-1 border-b border-line bg-stage" key={selectedMatterId}>
-						<summary className="cursor-pointer w-fit py-1 text-sm font-semibold text-ink">
-							待人类决定 · {pendingDecisions.length}
-						</summary>
-						<ul className="list-none p-0 m-0 mb-1.5 max-h-40 overflow-y-auto">
-							{pendingDecisions.map(({ id, label }) => (
-								<li key={id}>
-									<Button
-										variant="inline"
-										size="xs"
-										className="text-left"
-										onClick={() => {
-											const target = document.getElementById(`matter-message-${id}`);
-											target?.focus({ preventScroll: true });
-											target?.scrollIntoView({ block: "start" });
-										}}
-									>
-										{label}
-									</Button>
-								</li>
-							))}
-						</ul>
-					</details>
-				)}
-
-				<MessageFeed
-					chatScrollRef={chatScrollRef}
-					chatStreamInnerRef={chatStreamInnerRef}
-					messagesEndRef={messagesEndRef}
-					onScroll={handleStreamScroll}
-					selectedMatterId={selectedMatterId}
-					selectedMemberId={selectedMemberId}
-					headerContact={headerContact}
-					headerTheme={props.headerTheme}
-					selectedOrganization={selectedOrganization}
-					selectedWorkspace={selectedWorkspace}
-					templateByRoleId={templateByRoleId}
-					matterDetail={matterDetail}
-					activeMatterProgress={activeMatterProgress}
-					activeDialogs={props.activeDialogs}
-					floatingClarificationMessageId={activeFloatingClarification?.messageId ?? null}
-					progressStartedAt={props.progressStartedAt}
-					streamingDelta={props.streamingDelta}
-					isNewMatter={isNewMatter}
-					isOwner={isOwner}
-					canManageMatter={canManageMatter}
-					decisionAssignees={decisionAssignees}
-					isSuperAdmin={isSuperAdmin}
-					accountUser={accountUser}
-					currentUser={currentUser}
-					organizations={organizations}
-					isTurnRunning={isTurnRunning}
-					members={members}
-					memberName={memberName}
-					delegations={delegations}
-					onOpenDelegations={openDelegations}
-					onOpenLightbox={setLightboxImage}
-					onPreviewFile={openFilePreview}
-					onOpenDeliverables={onOpenDeliverables}
-					onOpenSideDoc={sideDocs.openDoc}
-					onApproveAiRequest={isArchived ? undefined : props.onApproveAiRequest}
-					onDismissAiRequest={isArchived ? undefined : props.onDismissAiRequest}
-					onApplyRoleProposals={isArchived ? undefined : props.onApplyRoleProposals}
-					onDismissRoleProposals={isArchived ? undefined : props.onDismissRoleProposals}
-					onSendQuickPrompt={isArchived ? undefined : onSendQuickPrompt}
-					onFillComposer={(text) => {
-						dockDraft.onComposerTextChange(text);
-						dockDraft.composerRef.current?.focus();
-					}}
-					onLaunchWithNewRoles={props.onLaunchWithNewRoles}
-					onSkillProposalDone={() => void onRefresh()}
-					onOpenSkillTrust={props.onOpenSkillTrust}
-					onNotice={props.onNotice}
-					onAbortMatter={props.onAbortMatter}
-				/>
-
-				{isArchived && matterDetail ? (
-					<div className="w-[min(760px,calc(100%-32px))] mx-auto mb-4 px-4 py-3 border border-line rounded-lg bg-subtle flex items-center justify-between gap-3 flex-wrap shrink-0">
-						<div className="inline-flex items-center gap-2.5 text-xs text-ink-secondary">
-							<Badge tone="neutral" size="sm">
-								已归档
-							</Badge>
-							<span>该事项已归档，当前为只读状态，不能继续发送消息。</span>
-						</div>
-						<div className="inline-flex items-center gap-2 shrink-0">
-							{props.onToggleArchiveMatter && (
-								<Button
-									variant="primary"
-									size="xs"
-									className="rounded-pill"
-									onClick={() => props.onToggleArchiveMatter?.(matterDetail.matter.id, false)}
-								>
-									恢复事项
-								</Button>
-							)}
-							<Button variant="secondary" size="xs" className="rounded-pill" onClick={props.onNewMatter}>
-								+ 新建事项
-							</Button>
-						</div>
-					</div>
-				) : (
-					<>
-						{activeFloatingClarification && matterDetail && (
-							<FloatingClarificationDock
-								key={`${activeFloatingClarification.messageId}:${activeFloatingClarification.decision.revision}`}
-								matter={matterDetail.matter}
-								messageId={activeFloatingClarification.messageId}
-								decision={activeFloatingClarification.decision}
-								requestedBy={activeFloatingClarification.requestedBy}
-								isRunning={isTurnRunning}
-								onAnswered={() => void onRefresh()}
+				<div className="relative flex-1 min-h-0 flex flex-col">
+					{rosterOpen && (
+						<ViewFade type="panel">
+							<MatterRosterPopover
+								panelRef={rosterPanelRef}
+								rosterMode={rosterMode}
+								rosterSearch={rosterSearch}
+								isOwner={isOwner && canManageMatter}
+								isTurnRunning={isTurnRunning}
+								selectedMatterId={selectedMatterId}
+								currentUser={currentUser}
+								ownerCollab={ownerCollab}
+								nonOwnerCollaborators={humanPeerCandidates}
+								matterHumanParticipants={matterHumanParticipants}
+								assignedCollabIds={assignedCollabIds}
+								members={scopedMembers}
+								inGroupAiMembers={inGroupAiMembers}
+								nonLeadGroupAiMembers={nonLeadGroupAiMembers}
+								removedAiMembers={removedAiMembers}
+								leadAi={leadAi}
+								observersEnabled={observersEnabled}
+								observerAis={observerAis}
+								matterAiMemberIds={matterAiMemberIds}
+								matterConsultMemberIds={props.matterConsultMemberIds ?? null}
+								onSearchChange={setRosterSearch}
+								onModeChange={setRosterMode}
+								onClose={closeRoster}
+								onOpenTeam={props.onOpenTeam}
+								onChangeLeadMember={onChangeLeadMember}
+								onUpdateMatterAiMembers={props.onUpdateMatterAiMembers}
+								onUpdateMatterConsultMembers={props.onUpdateMatterConsultMembers}
+								onToggleObserversEnabled={props.onToggleObserversEnabled}
+								onUpdateMatterObservers={onUpdateMatterObservers}
+								onUpdateMatterCollaborators={props.onUpdateMatterCollaborators}
+								onConsultArchitect={props.onConsultArchitect}
 							/>
-						)}
+						</ViewFade>
+					)}
 
-						{nextSteps.length > 0 && (
-							<section
-								className="flex items-center gap-2 flex-wrap max-w-[820px] w-full mx-auto mb-2 px-3"
-								aria-label="建议的下一步"
-							>
-								<span className="text-micro font-semibold text-ink-muted whitespace-nowrap">下一步</span>
-								<div className="flex items-center gap-1.5 flex-wrap">
-									{nextSteps.map((item) => (
-										<button
-											key={item.prompt}
-											type="button"
-											className={cn(
-												NEXT_STEP_CHIP_BASE_CLASSES,
-												item.kind === "capture"
-													? "border-success-border"
-													: item.kind === "verify"
-														? "border-observer-border"
-														: "border-line",
-											)}
-											title={`${item.prompt}\n（点击直接发送，Shift+点击填入输入框编辑）`}
-											disabled={props.submitting}
-											onClick={(ev) => {
-												if (ev.shiftKey || !onSendQuickPrompt) {
-													dockDraft.onComposerTextChange(item.prompt);
-													dockDraft.composerRef.current?.focus();
-													return;
-												}
-												void onSendQuickPrompt(item.prompt);
+					{collabOpen && activeLoadedId && matterDetail && (
+						<ViewFade type="panel">
+							<MatterCollabDrawer
+								panelRef={collabPanelRef}
+								collabTab={collabTab}
+								matterDetail={matterDetail}
+								onOpenDeliverable={(targetId) => {
+									if (targetId && (targetId.startsWith("doc_") || targetId.startsWith("page_"))) {
+										sideDocs.openDoc(targetId);
+									} else {
+										onOpenDeliverables(targetId);
+									}
+								}}
+								delegationPanel={
+									<MatterDelegationPanel
+										delegations={delegations}
+										messages={matterDetail.userMessages}
+										progress={activeMatterProgress}
+										scope={delegationScope}
+										view={delegationView}
+										memberName={memberName}
+										onSelectScope={setDelegationScope}
+										onSelectView={setDelegationView}
+										onLocateTurn={(id) => {
+											setCollabMatterId(null);
+											collabTriggerRef.current = null;
+											requestAnimationFrame(() => {
+												const message = document.getElementById(`matter-message-${id}`);
+												message?.focus({ preventScroll: true });
+												message?.scrollIntoView({ block: "center" });
+											});
+										}}
+									/>
+								}
+								memberName={memberName}
+								onSelectTab={setCollabTab}
+								onClose={() => transitionView("panel", closeCollab)}
+							/>
+						</ViewFade>
+					)}
+
+					{pendingDecisions.length > 0 && (
+						<details className="px-4 py-1 border-b border-line bg-stage" key={selectedMatterId}>
+							<summary className="cursor-pointer w-fit py-1 text-sm font-semibold text-ink">
+								待人类决定 · {pendingDecisions.length}
+							</summary>
+							<ul className="list-none p-0 m-0 mb-1.5 max-h-40 overflow-y-auto">
+								{pendingDecisions.map(({ id, label }) => (
+									<li key={id}>
+										<Button
+											variant="inline"
+											size="xs"
+											className="text-left"
+											onClick={() => {
+												const target = document.getElementById(`matter-message-${id}`);
+												target?.focus({ preventScroll: true });
+												target?.scrollIntoView({ block: "start" });
 											}}
 										>
-											{item.label}
-										</button>
-									))}
-								</div>
-							</section>
-						)}
+											{label}
+										</Button>
+									</li>
+								))}
+							</ul>
+						</details>
+					)}
 
-						<ComposerDock
-							{...dockDraft}
-							modelControl={props.modelControl}
-							initiationPanel={
-								!selectedMatterId ? (
-									<MatterInitiationPanel
-										{...initiation}
-										isOwner={isOwner}
-										observersEnabled={observersEnabled}
-										hasWorkspace={Boolean(selectedWorkspaceId)}
-										hasPromptText={Boolean(
-											composerText.trim() || pendingFiles.some((file) => file.content.trim()),
-										)}
-										members={scopedMembers}
-										orgMembers={orgMembers}
-										initiatorId={accountUser?.id ?? currentUser?.id}
-										initiatorName={accountUser?.displayName ?? currentUser?.name}
-										templateByRoleId={templateByRoleId}
-										selectedMemberId={selectedMemberId}
-										draftObserverMemberIds={observerMemberIds}
-										onSelectLeadMember={onChangeLeadMember}
-										onUpdateDraftObserverIds={onUpdateMatterObservers}
-									/>
-								) : undefined
-							}
-							composerDockRef={composerDockRef}
-							isOwner={isOwner}
-							mentionMembers={mentionMembers}
-							leadMemberId={leadAi?.id ?? null}
-							observerMemberIds={observerAis.map(({ id }) => id)}
-							allowUnboundOrg={isSuperAdmin || organizations.length === 0}
-							isArchitectMode={isArchitectMode}
-							isTurnRunning={isTurnRunning}
-							submitting={props.submitting}
-							effectiveOrgId={effectiveOrgId}
-							selectedWorkspaceId={selectedWorkspaceId}
-							selectedMatterId={selectedMatterId}
-							activeMatterProgress={activeMatterProgress}
-							progressStartedAt={props.progressStartedAt}
-							organizations={organizations}
-							orgFilteredWorkspaces={orgFilteredWorkspaces}
-							onCloseRoster={closeRoster}
-							onSelectOrganization={props.onSelectOrganization}
-							onSelectWorkspace={props.onSelectWorkspace}
-							onNewMatter={props.onNewMatter}
-							onSendPrompt={props.onSendPrompt}
-							onAbortMatter={props.onAbortMatter}
-							onOpenLightbox={setLightboxImage}
-							onPreviewFile={openFilePreview}
-						/>
-					</>
-				)}
+					<MessageFeed
+						chatScrollRef={chatScrollRef}
+						chatStreamInnerRef={chatStreamInnerRef}
+						messagesEndRef={messagesEndRef}
+						onScroll={handleStreamScroll}
+						selectedMatterId={selectedMatterId}
+						selectedMemberId={selectedMemberId}
+						headerContact={headerContact}
+						headerTheme={props.headerTheme}
+						selectedOrganization={selectedOrganization}
+						selectedWorkspace={selectedWorkspace}
+						templateByRoleId={templateByRoleId}
+						matterDetail={matterDetail}
+						activeMatterProgress={activeMatterProgress}
+						activeDialogs={props.activeDialogs}
+						floatingClarificationMessageId={activeFloatingClarification?.messageId ?? null}
+						progressStartedAt={props.progressStartedAt}
+						streamingDelta={props.streamingDelta}
+						isNewMatter={isNewMatter}
+						isOwner={isOwner}
+						canManageMatter={canManageMatter}
+						decisionAssignees={decisionAssignees}
+						isSuperAdmin={isSuperAdmin}
+						accountUser={accountUser}
+						currentUser={currentUser}
+						organizations={organizations}
+						isTurnRunning={isTurnRunning}
+						members={members}
+						memberName={memberName}
+						delegations={delegations}
+						onOpenDelegations={openDelegations}
+						onOpenLightbox={setLightboxImage}
+						onPreviewFile={openFilePreview}
+						onOpenDeliverables={onOpenDeliverables}
+						onOpenSideDoc={sideDocs.openDoc}
+						onApproveAiRequest={isArchived ? undefined : props.onApproveAiRequest}
+						onDismissAiRequest={isArchived ? undefined : props.onDismissAiRequest}
+						onApplyRoleProposals={isArchived ? undefined : props.onApplyRoleProposals}
+						onDismissRoleProposals={isArchived ? undefined : props.onDismissRoleProposals}
+						onSendQuickPrompt={isArchived ? undefined : onSendQuickPrompt}
+						onFillComposer={(text) => {
+							dockDraft.onComposerTextChange(text);
+							dockDraft.composerRef.current?.focus();
+						}}
+						onLaunchWithNewRoles={props.onLaunchWithNewRoles}
+						onSkillProposalDone={() => void onRefresh()}
+						onOpenSkillTrust={props.onOpenSkillTrust}
+						onNotice={props.onNotice}
+						onAbortMatter={props.onAbortMatter}
+					/>
 
-				<AttachmentPreviewModals
-					lightboxImage={lightboxImage}
-					previewFile={previewFile}
-					onCloseLightbox={() => setLightboxImage(null)}
-					onCloseFilePreview={closeFilePreview}
-					onExpandPastedFile={onExpandPastedFile}
-					onNotice={props.onNotice}
-				/>
+					{isArchived && matterDetail ? (
+						<div className="w-[min(760px,calc(100%-32px))] mx-auto mb-4 px-4 py-3 border border-line rounded-lg bg-subtle flex items-center justify-between gap-3 flex-wrap shrink-0">
+							<div className="inline-flex items-center gap-2.5 text-xs text-ink-secondary">
+								<Badge tone="neutral" size="sm">
+									已归档
+								</Badge>
+								<span>该事项已归档，当前为只读状态，不能继续发送消息。</span>
+							</div>
+							<div className="inline-flex items-center gap-2 shrink-0">
+								{props.onToggleArchiveMatter && (
+									<Button
+										variant="primary"
+										size="xs"
+										className="rounded-pill"
+										onClick={() => props.onToggleArchiveMatter?.(matterDetail.matter.id, false)}
+									>
+										恢复事项
+									</Button>
+								)}
+								<Button variant="secondary" size="xs" className="rounded-pill" onClick={props.onNewMatter}>
+									+ 新建事项
+								</Button>
+							</div>
+						</div>
+					) : (
+						<>
+							{activeFloatingClarification && matterDetail && (
+								<FloatingClarificationDock
+									key={`${activeFloatingClarification.messageId}:${activeFloatingClarification.decision.revision}`}
+									matter={matterDetail.matter}
+									messageId={activeFloatingClarification.messageId}
+									decision={activeFloatingClarification.decision}
+									requestedBy={activeFloatingClarification.requestedBy}
+									isRunning={isTurnRunning}
+									onAnswered={() => void onRefresh()}
+								/>
+							)}
+
+							{nextSteps.length > 0 && (
+								<section
+									className="flex items-center gap-2 flex-wrap max-w-[820px] w-full mx-auto mb-2 px-3"
+									aria-label="建议的下一步"
+								>
+									<span className="text-micro font-semibold text-ink-muted whitespace-nowrap">下一步</span>
+									<div className="flex items-center gap-1.5 flex-wrap">
+										{nextSteps.map((item) => (
+											<button
+												key={item.prompt}
+												type="button"
+												className={cn(
+													NEXT_STEP_CHIP_BASE_CLASSES,
+													item.kind === "capture"
+														? "border-success-border"
+														: item.kind === "verify"
+															? "border-observer-border"
+															: "border-line",
+												)}
+												title={`${item.prompt}\n（点击直接发送，Shift+点击填入输入框编辑）`}
+												disabled={props.submitting}
+												onClick={(ev) => {
+													if (ev.shiftKey || !onSendQuickPrompt) {
+														dockDraft.onComposerTextChange(item.prompt);
+														dockDraft.composerRef.current?.focus();
+														return;
+													}
+													void onSendQuickPrompt(item.prompt);
+												}}
+											>
+												{item.label}
+											</button>
+										))}
+									</div>
+								</section>
+							)}
+
+							<ComposerDock
+								{...dockDraft}
+								modelControl={props.modelControl}
+								initiationPanel={
+									!selectedMatterId ? (
+										<MatterInitiationPanel
+											{...initiation}
+											isOwner={isOwner}
+											observersEnabled={observersEnabled}
+											hasWorkspace={Boolean(selectedWorkspaceId)}
+											hasPromptText={Boolean(
+												composerText.trim() || pendingFiles.some((file) => file.content.trim()),
+											)}
+											members={scopedMembers}
+											orgMembers={orgMembers}
+											initiatorId={accountUser?.id ?? currentUser?.id}
+											initiatorName={accountUser?.displayName ?? currentUser?.name}
+											templateByRoleId={templateByRoleId}
+											selectedMemberId={selectedMemberId}
+											draftObserverMemberIds={observerMemberIds}
+											onSelectLeadMember={onChangeLeadMember}
+											onUpdateDraftObserverIds={onUpdateMatterObservers}
+										/>
+									) : undefined
+								}
+								composerDockRef={composerDockRef}
+								isOwner={isOwner}
+								mentionMembers={mentionMembers}
+								leadMemberId={leadAi?.id ?? null}
+								observerMemberIds={observerAis.map(({ id }) => id)}
+								allowUnboundOrg={isSuperAdmin || organizations.length === 0}
+								isArchitectMode={isArchitectMode}
+								isTurnRunning={isTurnRunning}
+								submitting={props.submitting}
+								effectiveOrgId={effectiveOrgId}
+								selectedWorkspaceId={selectedWorkspaceId}
+								selectedMatterId={selectedMatterId}
+								activeMatterProgress={activeMatterProgress}
+								progressStartedAt={props.progressStartedAt}
+								organizations={organizations}
+								orgFilteredWorkspaces={orgFilteredWorkspaces}
+								onCloseRoster={closeRoster}
+								onSelectOrganization={props.onSelectOrganization}
+								onSelectWorkspace={props.onSelectWorkspace}
+								onNewMatter={props.onNewMatter}
+								onSendPrompt={props.onSendPrompt}
+								onAbortMatter={props.onAbortMatter}
+								onOpenLightbox={setLightboxImage}
+								onPreviewFile={openFilePreview}
+							/>
+						</>
+					)}
+
+					<AttachmentPreviewModals
+						lightboxImage={lightboxImage}
+						previewFile={previewFile}
+						onCloseLightbox={() => setLightboxImage(null)}
+						onCloseFilePreview={closeFilePreview}
+						onExpandPastedFile={onExpandPastedFile}
+						onNotice={props.onNotice}
+					/>
+				</div>
 			</div>
 			{showBoardPane && activeLoadedId && matterDetail && (
 				<MatterBoardPane

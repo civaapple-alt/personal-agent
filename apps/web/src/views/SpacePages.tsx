@@ -608,7 +608,7 @@ export function SpacePages({
 							value={docTypeFilter}
 							onChange={(id) => setDocTypeFilter(id as "all" | SpaceDocumentType)}
 							items={docTypeTabs}
-							className="w-full"
+							className="w-full flex-wrap"
 						/>
 
 						<div className="flex flex-col gap-1">

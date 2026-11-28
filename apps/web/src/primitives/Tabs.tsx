@@ -69,8 +69,8 @@ export function Tabs({ items, value, onChange, variant = "underline", size = "md
 
 	const listClass =
 		variant === "pill"
-			? "inline-flex items-center gap-1 p-0.5 bg-subtle border border-line rounded-md max-w-full overflow-x-auto"
-			: "flex items-center gap-1 border-b border-line overflow-x-auto";
+			? "inline-flex items-center gap-1 p-0.5 bg-subtle border border-line rounded-md max-w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+			: "flex items-center gap-1 border-b border-line overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 	const sizeClass =
 		variant === "pill"
@@ -91,8 +91,8 @@ export function Tabs({ items, value, onChange, variant = "underline", size = "md
 							? "bg-stage text-ink font-medium shadow-sm rounded-sm"
 							: "text-ink-secondary hover:text-ink rounded-sm"
 						: active
-							? "-mb-px border-b-2 border-accent text-ink font-medium"
-							: "-mb-px border-b-2 border-transparent text-ink-secondary hover:text-ink";
+							? "border-b-2 border-accent text-ink font-medium"
+							: "border-b-2 border-transparent text-ink-secondary hover:text-ink";
 
 				return (
 					<button

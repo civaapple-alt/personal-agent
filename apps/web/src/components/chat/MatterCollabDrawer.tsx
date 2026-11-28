@@ -50,7 +50,7 @@ export function MatterCollabDrawer({
 			role="dialog"
 			tabIndex={-1}
 			aria-label="事项协作面板"
-			className="absolute top-16 right-6 max-lg:right-4 max-lg:w-[calc(100%-32px)] w-[min(740px,calc(100%-48px))] max-h-[min(76vh,calc(100%-88px))] z-30 flex flex-col border border-line rounded-xl bg-stage shadow-lg p-3.5 outline-none"
+			className="absolute top-2 right-6 max-lg:right-4 max-lg:w-[calc(100%-32px)] w-[min(740px,calc(100%-48px))] max-h-[calc(100%-16px)] z-30 flex flex-col border border-line rounded-xl bg-stage shadow-lg p-3.5 outline-none"
 		>
 			<div className="w-full min-h-0 flex flex-col text-xs">
 				<div className="flex items-center justify-between gap-3 shrink-0">

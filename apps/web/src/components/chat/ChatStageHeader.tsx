@@ -70,11 +70,11 @@ export function ChatStageHeader({
 	const hasContext = Boolean(matterDetail);
 
 	return (
-		<header className="min-h-12 md:h-12 px-3.5 md:px-5 py-1.5 md:py-0 border-b border-line bg-stage flex flex-wrap md:flex-nowrap items-center justify-between gap-x-3 gap-y-1.5 min-w-0 shrink-0">
+		<header className="@container min-h-12 px-3.5 md:px-5 py-1.5 border-b border-line bg-stage flex flex-wrap @[640px]:flex-nowrap items-center justify-between gap-x-2.5 gap-y-1 min-w-0 shrink-0">
 			<div
 				className={cn(
-					"flex items-center gap-1.5 min-w-0 overflow-hidden flex-wrap md:flex-nowrap",
-					hasContext ? "flex-1 md:flex-initial" : "flex-1",
+					"flex items-center gap-1.5 min-w-0 overflow-hidden flex-wrap @[640px]:flex-nowrap",
+					hasContext ? "flex-1 @[640px]:flex-initial" : "flex-1",
 				)}
 			>
 				{matterDetail && (
@@ -115,7 +115,7 @@ export function ChatStageHeader({
 			</div>
 			<div
 				className={cn(
-					"hidden md:inline-flex items-center gap-2 py-1 pr-3 pl-1.5 rounded-pill bg-subtle border border-line text-sm flex-initial min-w-0 overflow-hidden",
+					"hidden @[580px]:inline-flex items-center gap-2 py-1 pr-3 pl-1.5 rounded-pill bg-subtle border border-line text-sm flex-initial min-w-0 overflow-hidden",
 					hasContext ? "min-w-[80px] max-w-[38%]" : "max-w-[44%]",
 				)}
 			>
@@ -129,8 +129,8 @@ export function ChatStageHeader({
 			</div>
 			<div
 				className={cn(
-					"flex items-center justify-end gap-2 min-w-0 ml-auto md:ml-0",
-					hasContext ? "flex-none md:flex-initial" : "flex-none md:flex-1",
+					"flex items-center justify-end gap-2 min-w-0 ml-auto @[640px]:ml-0",
+					hasContext ? "flex-none @[640px]:flex-initial" : "flex-none @[640px]:flex-1",
 				)}
 			>
 				<Button

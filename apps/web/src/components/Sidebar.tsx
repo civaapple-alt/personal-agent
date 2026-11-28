@@ -410,7 +410,7 @@ export const Sidebar = memo(function Sidebar({
 				return (
 					<div
 						className={cn(
-							"px-2.5 pt-1 pb-2.5 grid grid-cols-4 gap-1 border-b border-line shrink-0",
+							"px-2 pt-1 pb-2.5 grid grid-cols-4 gap-0.5 border-b border-line shrink-0",
 							rosterExpanded && "max-h-[260px] overflow-y-auto overscroll-contain",
 						)}
 					>
@@ -441,7 +441,7 @@ export const Sidebar = memo(function Sidebar({
 									</span>
 									<span
 										className={cn(
-											"text-micro leading-tight max-w-full text-center line-clamp-2 break-normal",
+											"text-[10px] leading-tight max-w-full text-center line-clamp-2 break-normal",
 											isSelected ? "text-ink font-semibold" : "text-ink-secondary font-medium",
 										)}
 									>
@@ -720,7 +720,10 @@ export const Sidebar = memo(function Sidebar({
 						{userLabel}
 					</button>
 					<span
-						className={cn("pill", sseConnected && "live")}
+						className={cn(
+							"pill inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-subtle text-xs text-ink-secondary shrink-0 whitespace-nowrap",
+							sseConnected && "live",
+						)}
 						title={
 							!sseConnected
 								? "实时连接断开，正在重连"
@@ -729,6 +732,10 @@ export const Sidebar = memo(function Sidebar({
 									: "实时已连接"
 						}
 					>
+						<span
+							className={cn("size-1.5 rounded-full shrink-0", sseConnected ? "bg-success-text" : "bg-warn-text")}
+							aria-hidden="true"
+						/>
 						{!sseConnected ? "重连" : runningCount > 0 ? `运行 ${runningCount}` : "实时"}
 					</span>
 					<button

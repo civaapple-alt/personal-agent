@@ -101,7 +101,7 @@ export function MatterRosterPopover({
 			ref={panelRef}
 			role="dialog"
 			aria-label="协作成员"
-			className="absolute top-16 right-6 max-lg:right-4 max-lg:w-[calc(100%-32px)] w-[min(348px,calc(100%-48px))] max-h-[min(76vh,calc(100%-88px))] z-30 flex flex-col gap-3 border border-line rounded-xl bg-stage shadow-lg p-3.5 overflow-hidden"
+			className="absolute top-2 right-6 max-lg:right-4 max-lg:w-[calc(100%-32px)] w-[min(348px,calc(100%-48px))] max-h-[calc(100%-16px)] z-30 flex flex-col gap-3 border border-line rounded-xl bg-stage shadow-lg p-3.5 overflow-hidden"
 		>
 			{rosterMode === "add" && isOwner ? (
 				<>
