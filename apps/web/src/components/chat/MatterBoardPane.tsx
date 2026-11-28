@@ -19,7 +19,19 @@ import {
 	groupBoardMembers,
 	summarizeBoardStatus,
 } from "../../hooks/useMatterBoard.ts";
-import { ModalDialog } from "../../primitives/ModalDialog.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	EmptyState,
+	FieldGroup,
+	ModalDialog,
+	Select,
+	type TabItem,
+	Tabs,
+} from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { useModelCatalog } from "../ModelPicker.tsx";
 import { BoardMembersTab } from "./BoardMembersTab.tsx";
 import { BoardMentionGraph } from "./BoardMentionGraph.tsx";
@@ -88,6 +100,25 @@ function eventTypeLabel(eventType: MatterEventType): string {
 		case "turn_summary":
 			return "轮次摘要";
 	}
+}
+
+function eventTypeTone(eventType: MatterEventType): BadgeTone {
+	switch (eventType) {
+		case "monitor_alert":
+			return "danger";
+		case "tool_start":
+		case "tool_end":
+			return "info";
+		case "capability_ready":
+		case "turn_summary":
+			return "success";
+	}
+}
+
+function summaryBadgeTone(tone: "working" | "blocked" | "idle"): BadgeTone {
+	if (tone === "working") return "success";
+	if (tone === "blocked") return "warn";
+	return "neutral";
 }
 
 /** Right-side split pane / drawer for 0.9.0 Board observability (Members, Board posts, and Events). */
@@ -167,6 +198,30 @@ export function MatterBoardPane({
 		const model = rest.join("::");
 		return modelOptions.find((item) => item.provider === provider && item.model === model) ?? null;
 	}, [modelOptions, swapModelKey]);
+
+	const tabItems = useMemo<TabItem[]>(
+		() => [
+			{
+				id: "members",
+				label:
+					retiredCount > 0 ? (
+						<span className="inline-flex items-center gap-1.5">
+							<span>成员</span>
+							<span className="px-1.5 py-0.5 text-micro rounded-pill bg-subtle text-ink-muted leading-none tabular-nums">
+								{activeMemberCount}/{members.length}
+							</span>
+						</span>
+					) : (
+						"成员"
+					),
+				count: retiredCount > 0 ? undefined : members.length,
+			},
+			{ id: "board", label: "公告板", count: posts.length },
+			{ id: "graph", label: "关系图" },
+			{ id: "events", label: "事件轨迹" },
+		],
+		[activeMemberCount, members.length, posts.length, retiredCount],
+	);
 
 	const openSwapModal = (member: BoardMemberDto) => {
 		reloadModels();
@@ -277,80 +332,58 @@ export function MatterBoardPane({
 	};
 
 	return (
-		<aside className="board-side-pane" aria-label="团队公告板面板">
-			<div className="board-pane-header">
-				<div className="board-pane-title-group">
-					<div className="board-pane-title-row">
-						<h2 className="board-pane-title">团队公告板</h2>
-						<span className={`board-pill-badge is-${statusSummary.tone}`}>{statusSummary.label}</span>
+		<aside
+			aria-label="团队公告板面板"
+			className="flex flex-col min-w-0 min-h-0 h-full border-l border-line bg-stage overflow-hidden max-[960px]:absolute max-[960px]:inset-0 max-[960px]:z-25 max-[960px]:border-l-0 max-[960px]:shadow-lg"
+		>
+			<header className="flex items-start justify-between gap-2.5 px-3.5 pt-3 pb-2.5 border-b border-line bg-stage shrink-0">
+				<div className="flex flex-col gap-0.5 min-w-0">
+					<div className="flex items-center gap-2 flex-wrap">
+						<h2 className="m-0 text-md font-semibold text-ink leading-snug">团队公告板</h2>
+						<Badge tone={summaryBadgeTone(statusSummary.tone)} dot size="xs">
+							{statusSummary.label}
+						</Badge>
 					</div>
-					<span className="board-pane-subtitle" title={matterTitle}>
+					<span className="text-xs text-ink-muted truncate" title={matterTitle}>
 						{collaborationMode === "board" ? "Board 异步协作" : "Lead 模式（只读看板）"} · {matterTitle}
 					</span>
 				</div>
-				<div className="board-pane-header-actions">
-					<button type="button" className="btn-pill-outline btn-xs" disabled={loading} onClick={onRefreshBoard}>
+				<div className="flex items-center gap-1.5 shrink-0">
+					<Button variant="secondary" size="xs" disabled={loading} onClick={onRefreshBoard}>
 						{loading ? "刷新中…" : "刷新"}
-					</button>
-					<button type="button" className="btn-inline" onClick={onClose}>
+					</Button>
+					<Button variant="inline" size="xs" onClick={onClose}>
 						关闭
-					</button>
+					</Button>
 				</div>
-			</div>
+			</header>
 
-			<div className="board-pane-tabs" role="tablist" aria-label="看板视图">
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeTab === "members"}
-					className={`board-pane-tab${activeTab === "members" ? " active" : ""}`}
-					onClick={() => onSelectTab("members")}
-				>
-					<span>成员</span>
-					<span className="board-tab-count">
-						{retiredCount > 0 ? `${activeMemberCount}/${members.length}` : members.length}
-					</span>
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeTab === "board"}
-					className={`board-pane-tab${activeTab === "board" ? " active" : ""}`}
-					onClick={() => onSelectTab("board")}
-				>
-					<span>公告板</span>
-					<span className="board-tab-count">{posts.length}</span>
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeTab === "graph"}
-					className={`board-pane-tab${activeTab === "graph" ? " active" : ""}`}
-					onClick={() => onSelectTab("graph")}
-				>
-					<span>关系图</span>
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeTab === "events"}
-					className={`board-pane-tab${activeTab === "events" ? " active" : ""}`}
-					onClick={() => onSelectTab("events")}
-				>
-					<span>事件轨迹</span>
-				</button>
-			</div>
+			<Tabs
+				items={tabItems}
+				value={activeTab}
+				onChange={(tabId) => onSelectTab(tabId as BoardPaneTab)}
+				variant="underline"
+				size="sm"
+				ariaLabel="看板视图"
+				className="px-3 bg-surface shrink-0"
+			/>
 
 			{error && (
-				<div className="board-inline-error" role="alert">
-					<span>加载看板失败：{error}</span>
-					<button type="button" className="btn-inline" onClick={onRefreshBoard}>
-						重试
-					</button>
+				<div className="px-3.5 pt-2.5 shrink-0">
+					<Banner
+						tone="danger"
+						actions={
+							<Button variant="inline" size="xs" onClick={onRefreshBoard}>
+								重试
+							</Button>
+						}
+					>
+						加载看板失败：{error}
+					</Banner>
 				</div>
 			)}
 
-			<div className="board-pane-body">
+			<div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-4 flex flex-col gap-3">
 				{activeTab === "members" && (
 					<BoardMembersTab
 						coordinator={coordinator}
@@ -420,13 +453,14 @@ export function MatterBoardPane({
 				)}
 
 				{activeTab === "events" && (
-					<div className="board-events-tab">
-						<div className="board-events-toolbar">
-							<select
-								className="select-sm"
+					<div className="flex flex-col gap-2.5">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<Select
+								size="sm"
 								aria-label="按成员筛选事件"
 								value={eventFilterAgentId}
 								onChange={(event) => onChangeEventFilterAgentId(event.target.value)}
+								className="flex-1 min-w-0"
 							>
 								<option value="">全部成员</option>
 								{members.map((member) => (
@@ -434,77 +468,93 @@ export function MatterBoardPane({
 										{member.displayName} (@{member.agentId})
 									</option>
 								))}
-							</select>
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
-								disabled={eventsLoading}
-								onClick={onRefreshEvents}
-							>
+							</Select>
+							<Button variant="secondary" size="xs" disabled={eventsLoading} onClick={onRefreshEvents}>
 								{eventsLoading ? "加载中…" : "刷新事件"}
-							</button>
+							</Button>
 						</div>
 
-						<fieldset className="board-filter-pills" aria-label="按事件类型筛选">
-							{EVENT_TYPE_FILTERS.map((item) => (
-								<button
-									key={item.value}
-									type="button"
-									className={`board-filter-pill${eventFilterType === item.value ? " active" : ""}`}
-									aria-pressed={eventFilterType === item.value}
-									onClick={() => onChangeEventFilterType(item.value)}
-								>
-									{item.label}
-								</button>
-							))}
+						<fieldset className="flex flex-wrap gap-1 m-0 p-0 border-0" aria-label="按事件类型筛选">
+							{EVENT_TYPE_FILTERS.map((item) => {
+								const active = eventFilterType === item.value;
+								return (
+									<button
+										key={item.value}
+										type="button"
+										aria-pressed={active}
+										onClick={() => onChangeEventFilterType(item.value)}
+										className={cn(
+											"px-2.5 py-0.5 rounded-pill text-micro border transition-colors cursor-pointer",
+											active
+												? "border-accent bg-accent-soft text-accent font-semibold"
+												: "border-line bg-stage text-ink-secondary font-medium hover:border-line-strong hover:text-ink",
+										)}
+									>
+										{item.label}
+									</button>
+								);
+							})}
 						</fieldset>
 
 						{eventsError && (
-							<div className="board-inline-error" role="alert">
-								<span>加载事件失败：{eventsError}</span>
-								<button type="button" className="btn-inline" onClick={onRefreshEvents}>
-									重试
-								</button>
-							</div>
+							<Banner
+								tone="danger"
+								actions={
+									<Button variant="inline" size="xs" onClick={onRefreshEvents}>
+										重试
+									</Button>
+								}
+							>
+								加载事件失败：{eventsError}
+							</Banner>
 						)}
 
-						<div className="board-events-list">
+						<div className="flex flex-col gap-1.5">
 							{events.length === 0 && !eventsLoading ? (
-								<div className="board-empty-state">
-									<p>暂无匹配的事件轨迹。</p>
-								</div>
+								<EmptyState compact title="暂无匹配的事件轨迹。" />
 							) : (
-								events.map((event) => (
-									<div
-										key={event.id}
-										className={`board-event-row${event.eventType === "monitor_alert" ? " is-alert" : ""}`}
-									>
-										<div className="board-event-head">
-											<span className={`board-event-type is-${event.eventType}`}>
-												{eventTypeLabel(event.eventType)}
-											</span>
-											{event.agentId && <span className="board-event-agent">@{event.agentId}</span>}
-											{event.boardPostNo !== null && (
-												<span className="board-post-no">#{event.boardPostNo}</span>
+								events.map((event) => {
+									const isAlert = event.eventType === "monitor_alert";
+									return (
+										<div
+											key={event.id}
+											className={cn(
+												"board-event-row flex flex-col gap-1 px-2.5 py-2 border rounded-sm",
+												isAlert ? "is-alert border-warn-border bg-warn-bg" : "border-line bg-card",
 											)}
-											<span className="board-post-time">{formatTime(event.createdAt)}</span>
+										>
+											<div className="flex items-center gap-1.5 flex-wrap">
+												<Badge tone={eventTypeTone(event.eventType)} size="xs" className="rounded-xs">
+													{eventTypeLabel(event.eventType)}
+												</Badge>
+												{event.agentId && (
+													<span className="font-mono text-micro text-accent font-semibold">
+														@{event.agentId}
+													</span>
+												)}
+												{event.boardPostNo !== null && (
+													<span className="font-mono text-xs font-semibold text-ink">
+														#{event.boardPostNo}
+													</span>
+												)}
+												<span className="text-micro text-ink-muted ml-auto tabular-nums">
+													{formatTime(event.createdAt)}
+												</span>
+											</div>
+											<p className="m-0 text-xs text-ink leading-normal break-words">
+												{formatBoardEventPayload(event)}
+											</p>
 										</div>
-										<p className="board-event-summary">{formatBoardEventPayload(event)}</p>
-									</div>
-								))
+									);
+								})
 							)}
 						</div>
 
 						{eventsHasMore && (
-							<div className="board-events-more">
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
-									disabled={eventsLoading}
-									onClick={onLoadMoreEvents}
-								>
+							<div className="flex justify-center py-1">
+								<Button variant="secondary" size="xs" disabled={eventsLoading} onClick={onLoadMoreEvents}>
 									{eventsLoading ? "加载中…" : "加载更多"}
-								</button>
+								</Button>
 							</div>
 						)}
 					</div>
@@ -520,30 +570,20 @@ export function MatterBoardPane({
 				onClose={() => !swapSaving && setSwapTargetMember(null)}
 				footer={
 					<>
-						<button
-							type="button"
-							className="btn-pill-outline"
-							disabled={swapSaving}
-							onClick={() => setSwapTargetMember(null)}
-						>
+						<Button variant="secondary" size="sm" disabled={swapSaving} onClick={() => setSwapTargetMember(null)}>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={swapSaving}
-							onClick={() => void handleSaveModelSwap()}
-						>
+						</Button>
+						<Button variant="primary" size="sm" disabled={swapSaving} onClick={() => void handleSaveModelSwap()}>
 							{swapSaving ? "保存中…" : "确认切换"}
-						</button>
+						</Button>
 					</>
 				}
 			>
-				<div className="board-swap-form">
-					<label className="board-swap-field">
-						<span>模型选择</span>
-						<select
-							className="input-field"
+				<div className="flex flex-col gap-3">
+					<FieldGroup label="模型选择" htmlFor="board-swap-model-select">
+						<Select
+							id="board-swap-model-select"
+							size="md"
 							value={swapModelKey}
 							disabled={swapSaving}
 							onChange={(event) => {
@@ -560,13 +600,13 @@ export function MatterBoardPane({
 									</option>
 								);
 							})}
-						</select>
-					</label>
+						</Select>
+					</FieldGroup>
 					{swapModelKey && selectedSwapModelOption && selectedSwapModelOption.thinkingLevels.length > 0 && (
-						<label className="board-swap-field">
-							<span>思考等级（可选）</span>
-							<select
-								className="input-field"
+						<FieldGroup label="思考等级（可选）" htmlFor="board-swap-thinking-select">
+							<Select
+								id="board-swap-thinking-select"
+								size="md"
 								value={swapThinking}
 								disabled={swapSaving}
 								onChange={(event) => setSwapThinking(event.target.value as ModelThinkingLevel | "")}
@@ -577,14 +617,10 @@ export function MatterBoardPane({
 										{level}
 									</option>
 								))}
-							</select>
-						</label>
+							</Select>
+						</FieldGroup>
 					)}
-					{swapError && (
-						<div className="board-inline-error" role="alert">
-							<span>{swapError}</span>
-						</div>
-					)}
+					{swapError && <Banner tone="danger">{swapError}</Banner>}
 				</div>
 			</ModalDialog>
 		</aside>

@@ -2,13 +2,20 @@ import type { ModelSelection } from "../../api/models.ts";
 import type { BoardMemberDto, BoardMemberStatus, BoardPostSummaryDto, BoardRole } from "../../api.ts";
 import type { BoardMemberGroup } from "../../hooks/useMatterBoard.ts";
 import { canSwapBoardMemberModel } from "../../hooks/useMatterBoard.ts";
-import { BotFaceIcon } from "../../primitives/BotFaceIcon.tsx";
+import { Badge, type BadgeTone, Banner, BotFaceIcon, Button, Card, EmptyState } from "../../primitives/index.ts";
+import { cn } from "../../utils/cn.ts";
 import { getBotTheme, type RoleMood } from "../../utils.ts";
 
 function boardRoleLabel(role: BoardRole): string {
 	if (role === "coordinator") return "Coordinator";
 	if (role === "verifier") return "Verifier";
 	return "Builder";
+}
+
+function boardRoleTone(role: BoardRole): BadgeTone {
+	if (role === "coordinator") return "accent";
+	if (role === "verifier") return "observer";
+	return "info";
 }
 
 function boardStatusLabel(status: BoardMemberStatus): string {
@@ -23,6 +30,20 @@ function boardStatusLabel(status: BoardMemberStatus): string {
 			return "已暂停";
 		case "retired":
 			return "已退场";
+	}
+}
+
+function boardStatusTone(status: BoardMemberStatus): BadgeTone {
+	switch (status) {
+		case "working":
+			return "success";
+		case "blocked_human":
+			return "warn";
+		case "stopped":
+			return "danger";
+		case "waiting":
+		case "retired":
+			return "neutral";
 	}
 }
 
@@ -82,79 +103,101 @@ export function BoardMembersTab({
 		const isBusy = busyAgentId === member.agentId;
 		const modelLabel = formatModelBadge(member.modelOverride);
 		const metrics = member.metrics;
+		const cardSurfaceClass =
+			member.status === "blocked_human"
+				? "border-warn-border bg-warn-bg"
+				: member.boardRole === "coordinator"
+					? "border-accent-border bg-surface-accent"
+					: member.status === "working"
+						? "border-accent-border"
+						: "border-line";
+
 		return (
-			<article
+			<Card
 				key={member.agentId}
-				className={`board-member-card is-${member.status}${member.boardRole === "coordinator" ? " is-coordinator" : ""}`}
+				padding="sm"
+				className={cn(
+					"board-member-card flex flex-col gap-2 transition-colors",
+					cardSurfaceClass,
+					(member.status === "stopped" || member.status === "retired") && "opacity-75",
+				)}
 			>
-				<div className="board-member-head">
-					<div className="board-member-identity">
+				<div className="flex items-start justify-between gap-2">
+					<div className="flex items-center gap-2 min-w-0">
 						<BotFaceIcon bg={theme.bg} size="sm" mood={boardStatusMood(member.status)} />
-						<div className="board-member-titles">
-							<div className="board-member-name-row">
-								<strong className="board-member-name">{member.displayName}</strong>
-								<span className={`board-role-badge is-${member.boardRole}`}>
+						<div className="flex flex-col gap-0.5 min-w-0">
+							<div className="flex items-center gap-1.5 flex-wrap">
+								<strong className="text-sm font-semibold text-ink">{member.displayName}</strong>
+								<Badge tone={boardRoleTone(member.boardRole)} size="xs">
 									{boardRoleLabel(member.boardRole)}
-								</span>
+								</Badge>
 							</div>
-							<span className="board-member-id">@{member.agentId}</span>
+							<span className="font-mono text-micro text-ink-muted">@{member.agentId}</span>
 						</div>
 					</div>
-					<span className={`board-status-badge is-${member.status}`}>
-						<span className={`board-status-dot is-${member.status}`} aria-hidden="true" />
+					<Badge tone={boardStatusTone(member.status)} dot size="xs" className="shrink-0">
 						{boardStatusLabel(member.status)}
-					</span>
+					</Badge>
 				</div>
 
 				{member.ownedScope.length > 0 && (
-					<div className="board-scope-chips">
+					<div className="flex flex-wrap gap-1">
 						{member.ownedScope.map((scope) => (
-							<span key={scope} className="board-scope-chip" title={scope}>
+							<span
+								key={scope}
+								title={scope}
+								className="inline-flex items-center max-w-full px-1.5 py-0.5 rounded-xs border border-line bg-surface text-ink-secondary font-mono text-micro truncate"
+							>
 								{scope}
 							</span>
 						))}
 					</div>
 				)}
 
-				<div className="board-member-metrics">
-					<span className="board-metric-chip">已读 #{member.lastReadPostNo}</span>
+				<div className="flex flex-wrap gap-1">
+					<Badge tone="neutral" size="xs">
+						已读 #{member.lastReadPostNo}
+					</Badge>
 					{member.activePostNo !== null && (
-						<span className="board-metric-chip is-active">处理中 #{member.activePostNo}</span>
+						<Badge tone="info" size="xs">
+							处理中 #{member.activePostNo}
+						</Badge>
 					)}
 					{metrics?.linesAdded !== undefined && (
-						<span className="board-metric-chip is-positive">+{metrics.linesAdded} 行</span>
+						<Badge tone="success" size="xs">
+							+{metrics.linesAdded} 行
+						</Badge>
 					)}
 					{metrics?.linesDeleted !== undefined && metrics.linesDeleted > 0 && (
-						<span className="board-metric-chip">-{metrics.linesDeleted} 行</span>
+						<Badge tone="neutral" size="xs">
+							-{metrics.linesDeleted} 行
+						</Badge>
 					)}
 					{metrics?.testsPassed !== undefined && (
-						<span className="board-metric-chip is-positive">
+						<Badge tone="success" size="xs">
 							测试 {metrics.testsPassed}
 							{metrics.testsTotal !== undefined ? `/${metrics.testsTotal}` : ""} 通过
-						</span>
+						</Badge>
 					)}
 					{modelLabel && (
-						<span className="board-metric-chip is-model" title={`模型覆盖：${modelLabel}`}>
+						<Badge tone="observer" size="xs" className="font-mono" title={`模型覆盖：${modelLabel}`}>
 							{modelLabel}
-						</span>
+						</Badge>
 					)}
 				</div>
 
-				{metrics?.lastAction && <p className="board-member-last-action">{metrics.lastAction}</p>}
+				{metrics?.lastAction && (
+					<p className="m-0 text-xs text-ink-secondary leading-normal">{metrics.lastAction}</p>
+				)}
 
 				{canControlMembers && member.status !== "retired" && (
-					<div className="board-member-actions">
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							disabled={isBusy}
-							onClick={() => onTogglePause(member)}
-						>
+					<div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-dashed border-line">
+						<Button variant="secondary" size="xs" disabled={isBusy} onClick={() => onTogglePause(member)}>
 							{isBusy ? "处理中…" : member.status === "stopped" ? "恢复" : "暂停"}
-						</button>
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
+						</Button>
+						<Button
+							variant="secondary"
+							size="xs"
 							disabled={!isWaiting || isBusy}
 							title={
 								isWaiting
@@ -164,84 +207,85 @@ export function BoardMembersTab({
 							onClick={() => onOpenSwapModal(member)}
 						>
 							切换模型
-						</button>
+						</Button>
 						{member.boardRole !== "coordinator" && member.status !== "working" && (
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
+							<Button
+								variant="secondary"
+								size="xs"
 								disabled={isBusy}
 								title="将该成员标记为退场，保留历史记录并默认折叠"
 								onClick={() => onRetireMember(member)}
 							>
 								退场
-							</button>
+							</Button>
 						)}
-						{member.status === "working" && <span className="board-swap-hint">执行中不可换模型</span>}
+						{member.status === "working" && <span className="text-micro text-ink-muted">执行中不可换模型</span>}
 					</div>
 				)}
-			</article>
+			</Card>
 		);
 	};
 
 	return (
-		<div className="board-members-tab">
+		<div className="flex flex-col gap-3.5">
 			{memberActionError && (
-				<div className="board-inline-error" role="alert">
-					<span>{memberActionError}</span>
-					<button type="button" className="btn-inline" onClick={onClearMemberActionError}>
-						关闭
-					</button>
-				</div>
+				<Banner tone="danger" onDismiss={onClearMemberActionError}>
+					{memberActionError}
+				</Banner>
 			)}
 
 			{!coordinator && groups.length === 0 ? (
-				<div className="board-empty-state">
-					<p>当前尚未组建公告板成员。</p>
-					<p className="board-empty-hint">
-						在 Board 模式下发送目标后，Coordinator 会自动按任务切片组建 Builder 与 Verifier。
-					</p>
-				</div>
+				<EmptyState
+					compact
+					title="当前尚未组建公告板成员。"
+					description="在 Board 模式下发送目标后，Coordinator 会自动按任务切片组建 Builder 与 Verifier。"
+				/>
 			) : (
 				<>
-					<div className="board-members-toolbar">
-						<span className="board-pane-subtitle">
+					<div className="flex items-center justify-between gap-2">
+						<span className="text-xs text-ink-muted truncate">
 							活跃 {activeMemberCount} 人{retiredCount > 0 ? ` · 已退场 ${retiredCount} 人` : ""}
 						</span>
 						<button
 							type="button"
-							className={`board-filter-pill${hideInactive ? " active" : ""}`}
 							aria-pressed={hideInactive}
 							onClick={onToggleHideInactive}
+							className={cn(
+								"px-2.5 py-0.5 rounded-pill text-micro border transition-colors cursor-pointer shrink-0",
+								hideInactive
+									? "border-accent bg-accent-soft text-accent font-semibold"
+									: "border-line bg-stage text-ink-secondary font-medium hover:border-line-strong hover:text-ink",
+							)}
 						>
 							{hideInactive ? "已隐藏非活跃成员" : "隐藏非活跃"}
 						</button>
 					</div>
 					{coordinator && (
-						<section className="board-member-group" aria-label="交付总控">
-							<header className="board-group-header">
+						<section className="flex flex-col gap-2" aria-label="交付总控">
+							<header className="flex items-center justify-between text-xs font-semibold text-ink-secondary px-0.5">
 								<span>交付总控 · Coordinator（常驻）</span>
 							</header>
-							<div className="board-member-grid">{renderMemberCard(coordinator, 0)}</div>
+							<div className="flex flex-col gap-2">{renderMemberCard(coordinator, 0)}</div>
 						</section>
 					)}
 					{groups.map((group) => {
 						const isRetiredGroup = group.status === "retired";
 						const collapsed = isRetiredGroup && !showRetiredGroup && activeMemberCount > 1;
 						return (
-							<section key={group.status} className="board-member-group" aria-label={group.label}>
-								<header className="board-group-header">
+							<section key={group.status} className="flex flex-col gap-2" aria-label={group.label}>
+								<header className="flex items-center justify-between text-xs font-semibold text-ink-secondary px-0.5">
 									<span>{group.label}</span>
-									<div className="board-group-header-right">
-										<span className="board-group-count">{group.members.length}</span>
+									<div className="inline-flex items-center gap-2">
+										<span className="text-micro text-ink-muted tabular-nums">{group.members.length}</span>
 										{isRetiredGroup && activeMemberCount > 1 && (
-											<button type="button" className="btn-inline" onClick={onToggleRetiredGroup}>
+											<Button variant="inline" size="xs" onClick={onToggleRetiredGroup}>
 												{collapsed ? "展开" : "收起"}
-											</button>
+											</Button>
 										)}
 									</div>
 								</header>
 								{!collapsed && (
-									<div className="board-member-grid">
+									<div className="flex flex-col gap-2">
 										{group.members.map((member, idx) => renderMemberCard(member, idx + 1))}
 									</div>
 								)}
@@ -252,14 +296,19 @@ export function BoardMembersTab({
 			)}
 
 			{posts.length > 0 && (
-				<section className="board-shared-strip" aria-label="最新公告板交接">
-					<div className="board-shared-strip-head">
-						<span className="board-shared-strip-label">SHARED BOARD · 最新动态</span>
-						<button type="button" className="btn-inline" onClick={onOpenBoardTab}>
+				<section
+					aria-label="最新公告板交接"
+					className="flex flex-col gap-1.5 px-3 py-2.5 rounded-md border border-line bg-surface"
+				>
+					<div className="flex items-center justify-between gap-2">
+						<span className="text-micro font-semibold tracking-wider text-ink-muted">
+							SHARED BOARD · 最新动态
+						</span>
+						<Button variant="inline" size="xs" onClick={onOpenBoardTab}>
 							查看全部 ({posts.length})
-						</button>
+						</Button>
 					</div>
-					<div className="board-shared-strip-list">
+					<div className="flex flex-col gap-1">
 						{posts
 							.slice(-3)
 							.reverse()
@@ -267,12 +316,12 @@ export function BoardMembersTab({
 								<button
 									key={post.postNo}
 									type="button"
-									className="board-shared-strip-item"
 									onClick={onOpenBoardTab}
+									className="flex items-baseline gap-1.5 w-full px-1.5 py-1 border-0 rounded-xs bg-transparent text-ink text-xs text-left cursor-pointer hover:bg-hover transition-colors"
 								>
-									<span className="board-post-no">#{post.postNo}</span>
-									<span className="board-strip-author">@{post.authorId}</span>
-									<span className="board-strip-summary">{post.summary}</span>
+									<span className="font-mono text-xs font-semibold text-ink shrink-0">#{post.postNo}</span>
+									<span className="font-mono text-micro text-accent shrink-0">@{post.authorId}</span>
+									<span className="min-w-0 truncate text-ink-secondary">{post.summary}</span>
 								</button>
 							))}
 					</div>
