@@ -1,6 +1,7 @@
 import { SSE_SYNC_EVENT_NAMES, type SseEventPayloadMap } from "@pa/contracts/sse-events";
 import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto, resolveApiUrl } from "../api.ts";
+import { useMatterRuntimeStore, useWorkbenchStore } from "../stores/index.ts";
 
 export interface BoardSseSubscriber {
 	onBoardPostCreated?: (event: SseEventPayloadMap["board_post_created"]) => void;
@@ -22,28 +23,18 @@ interface UseMatterEventSyncParams {
 	authStatus: "checking" | "authenticated" | "unauthenticated";
 	selectedMatterIdRef: MutableRefObject<string | null>;
 	matterStreamRevision: MutableRefObject<{ total: number; byMatter: Map<string, number> }>;
-	setProgressByMatter: React.Dispatch<React.SetStateAction<Record<string, MatterProgressDto>>>;
-	setProgressStartedAt: React.Dispatch<React.SetStateAction<Record<string, number>>>;
-	setStreamingDelta: React.Dispatch<React.SetStateAction<string>>;
-	setSseConnected: React.Dispatch<React.SetStateAction<boolean>>;
 	setPermissionRequired: React.Dispatch<React.SetStateAction<boolean>>;
-	setErrorBanner: React.Dispatch<React.SetStateAction<string | null>>;
 	refreshBootstrap: () => Promise<void>;
 	refreshDetail: (matterId: string | null) => Promise<void>;
 	applyRevokedSession: (message?: string) => void;
 }
 
-/** Subscribes to `/api/events` SSE notifications, tracks active turn start times, and handles auth revocation. */
+/** Subscribes to `/api/events` SSE notifications, tracks active turn start times in Zustand, and handles auth revocation. */
 export function useMatterEventSync({
 	authStatus,
 	selectedMatterIdRef,
 	matterStreamRevision,
-	setProgressByMatter,
-	setProgressStartedAt,
-	setStreamingDelta,
-	setSseConnected,
 	setPermissionRequired,
-	setErrorBanner,
 	refreshBootstrap,
 	refreshDetail,
 	applyRevokedSession,
@@ -54,21 +45,13 @@ export function useMatterEventSync({
 			const revision = matterStreamRevision.current;
 			revision.byMatter.set(matterId, ++revision.total);
 		};
-		const clearMatterProgress = (matterId: string) => {
+		const clearProgressAndRefresh = (matterId: string) => {
 			markStreamUpdate(matterId);
+			const runtime = useMatterRuntimeStore.getState();
 			if (selectedMatterIdRef.current === matterId) {
-				setStreamingDelta("");
+				runtime.setStreamingDelta("");
 			}
-			setProgressByMatter((prev) => {
-				const next = { ...prev };
-				delete next[matterId];
-				return next;
-			});
-			setProgressStartedAt((prev) => {
-				const next = { ...prev };
-				delete next[matterId];
-				return next;
-			});
+			runtime.clearMatterProgress(matterId);
 			void refreshBootstrap();
 			if (selectedMatterIdRef.current === matterId) {
 				void refreshDetail(matterId);
@@ -78,7 +61,7 @@ export function useMatterEventSync({
 		const es = new EventSource(resolveApiUrl("/api/events"));
 		let hasConnected = false;
 		es.addEventListener("connected", () => {
-			setSseConnected(true);
+			useMatterRuntimeStore.getState().setSseConnected(true);
 			if (hasConnected) handleSync();
 			hasConnected = true;
 		});
@@ -86,14 +69,13 @@ export function useMatterEventSync({
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["text_delta"];
 			if (data.matterId === selectedMatterIdRef.current) {
 				markStreamUpdate(data.matterId);
-				setStreamingDelta((prev) => prev + data.delta);
+				useMatterRuntimeStore.getState().appendStreamingDelta(data.delta);
 			}
 		});
 		es.addEventListener("matter_progress", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as MatterProgressDto;
 			markStreamUpdate(data.matterId);
-			setProgressByMatter((prev) => ({ ...prev, [data.matterId]: data }));
-			setProgressStartedAt((prev) => (prev[data.matterId] ? prev : { ...prev, [data.matterId]: Date.now() }));
+			useMatterRuntimeStore.getState().upsertMatterProgress(data.matterId, data);
 			if (data.stage === "starting" || data.collabUpdated) {
 				if (data.stage === "starting") {
 					void refreshBootstrap();
@@ -105,18 +87,18 @@ export function useMatterEventSync({
 		});
 		es.addEventListener("matter_settled", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_settled"];
-			clearMatterProgress(data.matterId);
+			clearProgressAndRefresh(data.matterId);
 		});
 		es.addEventListener("matter_failed", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_failed"];
 			if (data.error) {
-				setErrorBanner(`执行未完成：${data.error}`);
+				useWorkbenchStore.getState().setErrorBanner(`执行未完成：${data.error}`);
 			}
-			clearMatterProgress(data.matterId);
+			clearProgressAndRefresh(data.matterId);
 		});
 		es.addEventListener("matter_aborted", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_aborted"];
-			clearMatterProgress(data.matterId);
+			clearProgressAndRefresh(data.matterId);
 		});
 
 		const handleSync = () => {
@@ -157,7 +139,7 @@ export function useMatterEventSync({
 			applyRevokedSession("当前账号会话已失效，请重新登录或联系管理员");
 		});
 		es.onerror = () => {
-			setSseConnected(false);
+			useMatterRuntimeStore.getState().setSseConnected(false);
 			if (es.readyState === EventSource.CLOSED) {
 				void fetchAuthSession()
 					.then((session) => {
@@ -174,12 +156,7 @@ export function useMatterEventSync({
 		authStatus,
 		selectedMatterIdRef,
 		matterStreamRevision,
-		setProgressByMatter,
-		setProgressStartedAt,
-		setStreamingDelta,
-		setSseConnected,
 		setPermissionRequired,
-		setErrorBanner,
 		refreshBootstrap,
 		refreshDetail,
 		applyRevokedSession,

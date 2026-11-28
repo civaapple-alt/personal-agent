@@ -1,27 +1,15 @@
 import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
-import { formatHashRoute, type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "../hashRouter.ts";
+import { formatHashRoute, type HashRoute, parseHashRoute } from "../hashRouter.ts";
+import { useMatterRuntimeStore, useSessionStore, useWorkbenchStore } from "../stores/index.ts";
 import { transitionView } from "../viewTransitions.ts";
 
 interface UseHashRouteNavParams {
 	initialRoute: HashRoute;
 	explicitNewMatterRef: MutableRefObject<boolean>;
-	setActiveTab: React.Dispatch<React.SetStateAction<NavTab>>;
-	setSpaceRoute: React.Dispatch<React.SetStateAction<{ pageId?: string }>>;
-	setSelectedMatterId: React.Dispatch<React.SetStateAction<string | null>>;
-	setSelectedMemberId: React.Dispatch<React.SetStateAction<string>>;
-	setSettingsSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
 }
 
-/** Synchronizes browser hash URLs with active tab, matter selection, and deliverable selection. */
-export function useHashRouteNav({
-	initialRoute,
-	explicitNewMatterRef,
-	setActiveTab,
-	setSpaceRoute,
-	setSelectedMatterId,
-	setSelectedMemberId,
-	setSettingsSection,
-}: UseHashRouteNavParams) {
+/** Synchronizes browser hash URLs with Zustand navigation and active matter/member stores. */
+export function useHashRouteNav({ initialRoute, explicitNewMatterRef }: UseHashRouteNavParams) {
 	const lastTab = useRef(initialRoute.tab);
 	const applyRoute = useCallback(
 		(next: HashRoute) => {
@@ -29,19 +17,20 @@ export function useHashRouteNav({
 			lastTab.current = next.tab;
 			explicitNewMatterRef.current = Boolean(next.isNewMatter);
 			const update = () => {
-				setActiveTab(next.tab);
+				const workbench = useWorkbenchStore.getState();
+				workbench.setActiveTab(next.tab);
 				if (next.tab === "deliverables") {
-					setSpaceRoute({ pageId: next.spacePageId });
+					workbench.setSpaceRoute({ pageId: next.spacePageId });
 				} else if (next.tab === "chats") {
 					if (next.isNewMatter) {
-						setSelectedMatterId(null);
-						setSelectedMemberId(next.newMatterLeadId || "auto");
+						useMatterRuntimeStore.getState().setSelectedMatterId(null);
+						useSessionStore.getState().setSelectedMemberId(next.newMatterLeadId || "auto");
 					} else if (next.matterId !== undefined) {
-						setSelectedMemberId("auto");
-						setSelectedMatterId(next.matterId || null);
+						useSessionStore.getState().setSelectedMemberId("auto");
+						useMatterRuntimeStore.getState().setSelectedMatterId(next.matterId || null);
 					}
 				} else if (next.tab === "settings") {
-					setSettingsSection(next.settingsSection ?? "all");
+					workbench.setSettingsSection(next.settingsSection ?? "all");
 				}
 			};
 			if (tabChanged) {
@@ -52,7 +41,7 @@ export function useHashRouteNav({
 				update();
 			}
 		},
-		[explicitNewMatterRef, setActiveTab, setSpaceRoute, setSelectedMatterId, setSelectedMemberId, setSettingsSection],
+		[explicitNewMatterRef],
 	);
 
 	const navigateRoute = useCallback(

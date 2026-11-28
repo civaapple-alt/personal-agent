@@ -1,30 +1,23 @@
 import { useEffect, useState } from "react";
 import { Banner, Button } from "../primitives/index.ts";
-
-type WorkbenchBannersProps = {
-	errorBanner: string | null;
-	noticeBanner: string | null;
-	onDismissError: () => void;
-	onDismissNotice: () => void;
-};
+import { useWorkbenchStore } from "../stores/index.ts";
 
 /** Floating workbench alert and auto-dismissing status notice stack. */
-export function WorkbenchBanners({
-	errorBanner,
-	noticeBanner,
-	onDismissError,
-	onDismissNotice,
-}: WorkbenchBannersProps) {
+export function WorkbenchBanners() {
+	const errorBanner = useWorkbenchStore((s) => s.errorBanner);
+	const noticeBanner = useWorkbenchStore((s) => s.noticeBanner);
+	const dismissError = useWorkbenchStore((s) => s.dismissError);
+	const dismissNotice = useWorkbenchStore((s) => s.dismissNotice);
 	const [noticePaused, setNoticePaused] = useState(false);
 
 	useEffect(() => {
 		if (!noticeBanner || noticePaused) return;
 		const timer = window.setTimeout(() => {
-			onDismissNotice();
+			dismissNotice();
 			setNoticePaused(false);
 		}, 4500);
 		return () => window.clearTimeout(timer);
-	}, [noticeBanner, noticePaused, onDismissNotice]);
+	}, [noticeBanner, noticePaused, dismissNotice]);
 
 	useEffect(() => {
 		if (!noticeBanner) {
@@ -40,7 +33,7 @@ export function WorkbenchBanners({
 					tone="warn"
 					className="pointer-events-auto shadow-md"
 					actions={
-						<Button variant="inline" size="xs" onClick={onDismissError} aria-label="关闭操作提示">
+						<Button variant="inline" size="xs" onClick={dismissError} aria-label="关闭操作提示">
 							关闭
 						</Button>
 					}
@@ -68,7 +61,7 @@ export function WorkbenchBanners({
 								size="xs"
 								onClick={() => {
 									setNoticePaused(false);
-									onDismissNotice();
+									dismissNotice();
 								}}
 							>
 								知道了

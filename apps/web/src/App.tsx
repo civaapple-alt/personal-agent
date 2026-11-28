@@ -1,15 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { updateMatterStatus } from "./api/matters.ts";
-import type { ModelSelection } from "./api/models.ts";
 import { organizationRoleModel } from "./api/organizations.ts";
-import {
-	type BootstrapPayload,
-	fetchBootstrap,
-	fetchMatterDetail,
-	type MatterDetailPayload,
-	type MatterProgressDto,
-	type MatterVisibility,
-} from "./api.ts";
+import { fetchBootstrap, fetchMatterDetail } from "./api.ts";
 import {
 	filterBusinessMembers,
 	isArchitectMemberId,
@@ -20,25 +12,28 @@ import { ModelCatalogProvider } from "./components/ModelPicker.tsx";
 import { OrgInviteModal } from "./components/OrgInviteModal.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { WorkbenchBanners } from "./components/WorkbenchBanners.tsx";
-import { type HashRoute, type NavTab, parseHashRoute, type SettingsSection } from "./hashRouter.ts";
+import { type HashRoute, parseHashRoute } from "./hashRouter.ts";
 import { useAuthSession } from "./hooks/useAuthSession.ts";
 import { useComposerDraft } from "./hooks/useComposerDraft.ts";
 import { useHashRouteNav } from "./hooks/useHashRouteNav.ts";
-import { readStoredSetting, useMatterActions } from "./hooks/useMatterActions.ts";
+import { useMatterActions } from "./hooks/useMatterActions.ts";
 import { useMatterEventSync } from "./hooks/useMatterEventSync.ts";
 import { useMatterInitiationState } from "./hooks/useMatterInitiationState.ts";
 import { useMatterScope } from "./hooks/useMatterScope.ts";
 import { useStableCallback } from "./hooks/useStableCallback.ts";
 import { useWorkbenchPanels } from "./hooks/useWorkbenchPanels.ts";
 import { Button, IconButton } from "./primitives/index.ts";
+import {
+	selectMemberName,
+	selectOrganizationName,
+	selectWorkspaceName,
+	useMatterRuntimeStore,
+	useSessionStore,
+	useWorkbenchStore,
+} from "./stores/index.ts";
 import { getBotTheme } from "./utils.ts";
 import { AppArchiveConfirmModal, AppStageRouter } from "./views/AppStageRouter.tsx";
 import { AuthGateView } from "./views/AuthGateView.tsx";
-
-function syncEditionDocumentTitle(requireAuth: boolean | undefined): void {
-	if (typeof requireAuth !== "boolean") return;
-	document.title = requireAuth ? "Personal Agent · 团队版" : "Personal Agent · 个人版";
-}
 
 const NEW_MATTER_DRAFT = "new:matter";
 const NEW_ARCHITECT_DRAFT = "new:architect";
@@ -46,39 +41,51 @@ const NEW_ARCHITECT_DRAFT = "new:architect";
 /** Root application shell coordinating authentication, SSE state sync, hash routing, and workspace tabs. */
 export function App() {
 	const initialRoute = useMemo(() => parseHashRoute(window.location.hash), []);
-	const [serverRequireAuth, setServerRequireAuth] = useState<boolean | null>(null);
-	const [draftModelSelection, setDraftModelSelection] = useState<ModelSelection | null>(null);
-	const [draftMatterVisibility, setDraftMatterVisibility] = useState<MatterVisibility>("org");
-	const [activeTab, setActiveTab] = useState<NavTab>(initialRoute.tab);
-	const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settingsSection ?? "all");
-	const [searchQuery, setSearchQuery] = useState("");
-	const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
-	const [selectedMatterId, setSelectedMatterId] = useState<string | null>(
-		initialRoute.isNewMatter ? null : (initialRoute.matterId ?? null),
-	);
-	const [matterDetail, setMatterDetail] = useState<MatterDetailPayload | null>(null);
-	const [spaceRoute, setSpaceRoute] = useState<{ pageId?: string }>({
-		pageId: initialRoute.spacePageId,
-	});
-	const [selectedMemberId, setSelectedMemberId] = useState<string>(
-		initialRoute.isNewMatter && initialRoute.newMatterLeadId ? initialRoute.newMatterLeadId : "auto",
-	);
-	const [selectedOrgId, setSelectedOrgId] = useState<string>(() => readStoredSetting("pa.defaultOrgId"));
-	const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(() =>
-		readStoredSetting("pa.defaultWorkspaceId"),
-	);
-	const [defaultDraftAiMemberIds, setDraftAiMemberIds] = useState<string[] | null>(null);
-	const [draftObserversEnabled, setDraftObserversEnabled] = useState<boolean>(false);
-	const [streamingDelta, setStreamingDelta] = useState("");
-	const [sseConnected, setSseConnected] = useState(false);
-	const [submitting, setSubmitting] = useState(false);
-	const [errorBanner, setErrorBanner] = useState<string | null>(null);
-	const [noticeBanner, setNoticeBanner] = useState<string | null>(null);
-	const dismissError = useCallback(() => setErrorBanner(null), []);
-	const dismissNotice = useCallback(() => setNoticeBanner(null), []);
-	const [mobileNavOpen, setMobileNavOpen] = useState(false);
-	const [progressByMatter, setProgressByMatter] = useState<Record<string, MatterProgressDto>>({});
-	const [progressStartedAt, setProgressStartedAt] = useState<Record<string, number>>({});
+
+	// Domain stores (Phase A-2)
+	const activeTab = useWorkbenchStore((s) => s.activeTab);
+	const settingsSection = useWorkbenchStore((s) => s.settingsSection);
+	const spaceRoute = useWorkbenchStore((s) => s.spaceRoute);
+	const searchQuery = useWorkbenchStore((s) => s.searchQuery);
+	const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
+	const mobileNavOpen = useWorkbenchStore((s) => s.mobileNavOpen);
+	const setMobileNavOpen = useWorkbenchStore((s) => s.setMobileNavOpen);
+	const setErrorBanner = useWorkbenchStore((s) => s.setErrorBanner);
+	const setNoticeBanner = useWorkbenchStore((s) => s.setNoticeBanner);
+	const pendingArchiveConfirm = useWorkbenchStore((s) => s.pendingArchiveConfirm);
+	const openArchiveConfirm = useWorkbenchStore((s) => s.openArchiveConfirm);
+	const closeArchiveConfirm = useWorkbenchStore((s) => s.closeArchiveConfirm);
+	const archivingMatter = useWorkbenchStore((s) => s.archivingMatter);
+	const setArchivingMatter = useWorkbenchStore((s) => s.setArchivingMatter);
+
+	const bootstrap = useSessionStore((s) => s.bootstrap);
+	const serverRequireAuth = useSessionStore((s) => s.serverRequireAuth);
+	const selectedOrgId = useSessionStore((s) => s.selectedOrgId);
+	const setSelectedOrgId = useSessionStore((s) => s.setSelectedOrgId);
+	const selectedWorkspaceId = useSessionStore((s) => s.selectedWorkspaceId);
+	const setSelectedWorkspaceId = useSessionStore((s) => s.setSelectedWorkspaceId);
+	const selectedMemberId = useSessionStore((s) => s.selectedMemberId);
+	const setSelectedMemberId = useSessionStore((s) => s.setSelectedMemberId);
+	const applyEditionState = useSessionStore((s) => s.applyEditionState);
+
+	const selectedMatterId = useMatterRuntimeStore((s) => s.selectedMatterId);
+	const matterDetail = useMatterRuntimeStore((s) => s.matterDetail);
+	const setMatterDetail = useMatterRuntimeStore((s) => s.setMatterDetail);
+	const sseConnected = useMatterRuntimeStore((s) => s.sseConnected);
+	const submitting = useMatterRuntimeStore((s) => s.submitting);
+	const setSubmitting = useMatterRuntimeStore((s) => s.setSubmitting);
+	const streamingDelta = useMatterRuntimeStore((s) => s.streamingDelta);
+	const setStreamingDelta = useMatterRuntimeStore((s) => s.setStreamingDelta);
+	const progressByMatter = useMatterRuntimeStore((s) => s.progressByMatter);
+	const progressStartedAt = useMatterRuntimeStore((s) => s.progressStartedAt);
+	const draftModelSelection = useMatterRuntimeStore((s) => s.draftModelSelection);
+	const setDraftModelSelection = useMatterRuntimeStore((s) => s.setDraftModelSelection);
+	const draftMatterVisibility = useMatterRuntimeStore((s) => s.draftMatterVisibility);
+	const setDraftMatterVisibility = useMatterRuntimeStore((s) => s.setDraftMatterVisibility);
+	const defaultDraftAiMemberIds = useMatterRuntimeStore((s) => s.defaultDraftAiMemberIds);
+	const setDraftAiMemberIds = useMatterRuntimeStore((s) => s.setDraftAiMemberIds);
+	const draftObserversEnabled = useMatterRuntimeStore((s) => s.draftObserversEnabled);
+	const setDraftObserversEnabled = useMatterRuntimeStore((s) => s.setDraftObserversEnabled);
 
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	const composerDraftKey =
@@ -107,84 +114,43 @@ export function App() {
 	const navigateRoute = useHashRouteNav({
 		initialRoute,
 		explicitNewMatterRef,
-		setActiveTab,
-		setSpaceRoute,
-		setSelectedMatterId,
-		setSelectedMemberId,
-		setSettingsSection,
 	});
-
-	const applyEditionState = useCallback((requireAuthValue: boolean | undefined) => {
-		if (typeof requireAuthValue !== "boolean") return;
-		syncEditionDocumentTitle(requireAuthValue);
-		setServerRequireAuth(requireAuthValue);
-	}, []);
 
 	const refreshBootstrap = useCallback(async () => {
 		const revision = matterStreamRevision.current.total;
 		const data = await fetchBootstrap();
-		setBootstrap(data);
-		applyEditionState(data.platformPolicy?.requireAuth);
+		const sessionStore = useSessionStore.getState();
+		const runtimeStore = useMatterRuntimeStore.getState();
+		sessionStore.setBootstrap(data);
+		sessionStore.applyEditionState(data.platformPolicy?.requireAuth);
 		if (data.activeRuns && revision === matterStreamRevision.current.total) {
-			const nextProgress: Record<string, MatterProgressDto> = {};
-			const nextStartedAt: Record<string, number> = {};
-			for (const [id, snapshot] of Object.entries(data.activeRuns)) {
-				nextProgress[id] = snapshot;
-				nextStartedAt[id] = snapshot.startedAt;
-			}
-			setProgressByMatter(nextProgress);
-			setProgressStartedAt(nextStartedAt);
+			runtimeStore.applyActiveRuns(data.activeRuns);
 		}
-		setSelectedMatterId((prev) => (explicitNewMatterRef.current ? null : (prev ?? data.matters[0]?.id ?? null)));
-		let resolvedWorkspaceId = "";
-		setSelectedWorkspaceId((prev) => {
-			if (prev && data.workspaces.some((w) => w.id === prev)) {
-				resolvedWorkspaceId = prev;
-				return prev;
-			}
-			const saved = readStoredSetting("pa.defaultWorkspaceId", "__unset__");
-			if (saved !== "__unset__") {
-				resolvedWorkspaceId = saved && data.workspaces.some((w) => w.id === saved) ? saved : "";
-				return resolvedWorkspaceId;
-			}
-			resolvedWorkspaceId = data.workspaces[0]?.id || "";
-			return resolvedWorkspaceId;
-		});
-		const resolvedWs = resolvedWorkspaceId
-			? (data.workspaces.find((w) => w.id === resolvedWorkspaceId) ?? null)
-			: null;
-		setSelectedOrgId((prev) => {
-			if (prev && data.organizations.some((o) => o.id === prev)) return prev;
-			if (resolvedWs?.orgId) return resolvedWs.orgId;
-			const savedOrg = readStoredSetting("pa.defaultOrgId", "__unset__");
-			const canLeaveOrgUnbound = data.authKind !== "session" || data.accountUser?.platformRole === "super_admin";
-			if (savedOrg !== "__unset__") {
-				if (savedOrg && data.organizations.some((o) => o.id === savedOrg)) return savedOrg;
-				if (savedOrg === "" && canLeaveOrgUnbound) return "";
-			}
-			return (data.organizations.find((o) => o.isDefault) ?? data.organizations[0])?.id ?? "";
-		});
-	}, [applyEditionState]);
+		runtimeStore.setSelectedMatterId((prev) =>
+			explicitNewMatterRef.current ? null : (prev ?? data.matters[0]?.id ?? null),
+		);
+		sessionStore.syncScopeFromBootstrap(data);
+	}, []);
 
 	const refreshDetail = useCallback(async (matterId: string | null) => {
 		if (matterId !== selectedMatterIdRef.current) return;
 		const request = ++detailRequest.current;
+		const runtimeStore = useMatterRuntimeStore.getState();
+		const sessionStore = useSessionStore.getState();
 		if (!matterId) {
-			setMatterDetail(null);
+			runtimeStore.setMatterDetail(null);
 			return;
 		}
 		const revision = matterStreamRevision.current.byMatter.get(matterId);
 		const detail = await fetchMatterDetail(matterId);
 		if (request !== detailRequest.current || matterId !== selectedMatterIdRef.current) return;
-		setMatterDetail(detail);
-		setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
-		setSelectedOrgId(detail.matter.orgId ?? "");
+		runtimeStore.setMatterDetail(detail);
+		sessionStore.setSelectedWorkspaceId(detail.matter.workspaceId ?? "");
+		sessionStore.setSelectedOrgId(detail.matter.orgId ?? "");
 		if (revision !== matterStreamRevision.current.byMatter.get(matterId)) return;
 		const snapshot = detail.activeRun;
 		if (!snapshot) return;
-		setProgressByMatter((prev) => ({ ...prev, [matterId]: snapshot }));
-		setProgressStartedAt((prev) => ({ ...prev, [matterId]: snapshot.startedAt }));
-		if (snapshot.streamingDelta !== undefined) setStreamingDelta(snapshot.streamingDelta);
+		runtimeStore.upsertMatterProgress(matterId, snapshot, snapshot.startedAt, snapshot.streamingDelta);
 	}, []);
 
 	const {
@@ -198,11 +164,9 @@ export function App() {
 	} = useWorkbenchPanels(refreshBootstrap);
 
 	const resetRevokedWorkspace = useCallback(() => {
-		setBootstrap(null);
-		setMatterDetail(null);
+		useSessionStore.getState().resetSessionData();
+		useMatterRuntimeStore.getState().resetRuntimeOnRevoke();
 		clearPanels();
-		setProgressByMatter({});
-		setSseConnected(false);
 	}, [clearPanels]);
 
 	const auth = useAuthSession({
@@ -214,9 +178,11 @@ export function App() {
 		onRevoked: resetRevokedWorkspace,
 		onResetDrafts: resetComposerDrafts,
 		onResetAdmin: clearAdminOverview,
-		onClearBootstrap: () => setBootstrap(null),
+		onClearBootstrap: () => useSessionStore.getState().resetSessionData(),
 		onExitAdmin: () => {
-			if (activeTab === "admin") navigateRoute({ tab: "chats" }, { replace: true });
+			if (useWorkbenchStore.getState().activeTab === "admin") {
+				navigateRoute({ tab: "chats" }, { replace: true });
+			}
 		},
 	});
 	const {
@@ -239,18 +205,13 @@ export function App() {
 		if (authStatus !== "authenticated") return;
 		setStreamingDelta("");
 		void refreshDetail(selectedMatterId).catch(() => {});
-	}, [authStatus, selectedMatterId, refreshDetail]);
+	}, [authStatus, selectedMatterId, refreshDetail, setStreamingDelta]);
 
 	useMatterEventSync({
 		authStatus,
 		selectedMatterIdRef,
 		matterStreamRevision,
-		setProgressByMatter,
-		setProgressStartedAt,
-		setStreamingDelta,
-		setSseConnected,
 		setPermissionRequired,
-		setErrorBanner,
 		refreshBootstrap,
 		refreshDetail,
 		applyRevokedSession,
@@ -283,11 +244,9 @@ export function App() {
 		return list.filter((m) => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
 	}, [bootstrap, searchQuery]);
 
-	const memberName = (id: string) => bootstrap?.members.find((m) => m.id === id)?.displayName ?? id;
-	const workspaceName = (id: string | null) =>
-		id ? (bootstrap?.workspaces.find((w) => w.id === id)?.name ?? id) : null;
-	const organizationName = (id: string | null) =>
-		id ? (bootstrap?.organizations.find((o) => o.id === id)?.name ?? id) : null;
+	const memberName = (id: string) => selectMemberName(bootstrap, id);
+	const workspaceName = (id: string | null) => selectWorkspaceName(bootstrap, id);
+	const organizationName = (id: string | null) => selectOrganizationName(bootstrap, id);
 
 	const initiation = useMatterInitiationState({
 		selectedMatterId,
@@ -564,18 +523,11 @@ export function App() {
 		setMobileNavOpen(false);
 		void handleLogoutOrRestore();
 	});
-	const [pendingArchiveConfirm, setPendingArchiveConfirm] = useState<{
-		matterId: string;
-		title: string;
-		archived: boolean;
-	} | null>(null);
-	const [archivingMatter, setArchivingMatter] = useState(false);
-
 	const handleSidebarToggleArchiveMatter = useStableCallback((matterId: string, archived: boolean) => {
 		const target =
 			bootstrap?.matters.find((m) => m.id === matterId) ??
 			(matterDetail?.matter.id === matterId ? matterDetail.matter : null);
-		setPendingArchiveConfirm({
+		openArchiveConfirm({
 			matterId,
 			title: target?.title ?? matterId,
 			archived,
@@ -589,7 +541,7 @@ export function App() {
 		setErrorBanner(null);
 		try {
 			await updateMatterStatus(matterId, archived ? "archived" : "open");
-			setPendingArchiveConfirm(null);
+			closeArchiveConfirm();
 			await refreshBootstrap();
 			if (selectedMatterId === matterId) await refreshDetail(matterId);
 			setNoticeBanner(archived ? "事项已归档，可在左侧「已归档」中查看" : "事项已恢复至最近事项");
@@ -688,12 +640,7 @@ export function App() {
 			/>
 
 			<main className="relative flex-1 min-w-0 min-h-0 max-w-full flex flex-col overflow-hidden bg-stage">
-				<WorkbenchBanners
-					errorBanner={errorBanner}
-					noticeBanner={noticeBanner}
-					onDismissError={dismissError}
-					onDismissNotice={dismissNotice}
-				/>
+				<WorkbenchBanners />
 				<div className="min-[961px]:hidden flex items-center justify-between gap-2.5 h-[50px] px-3.5 border-b border-line bg-sidebar shrink-0">
 					<IconButton
 						size="md"
@@ -812,7 +759,7 @@ export function App() {
 			<AppArchiveConfirmModal
 				pendingArchiveConfirm={pendingArchiveConfirm}
 				archivingMatter={archivingMatter}
-				onClose={() => !archivingMatter && setPendingArchiveConfirm(null)}
+				onClose={() => !archivingMatter && closeArchiveConfirm()}
 				onConfirm={() => void handleConfirmArchiveMatter()}
 			/>
 		</div>
