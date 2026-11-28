@@ -31,6 +31,13 @@ const ALLOWED_DYNAMIC_OR_SEMANTIC = new Set([
 	"adjustment",
 	"group",
 	"peer",
+	// E2E structural marker classes preserved on migrated components
+	"board-member-card",
+	"board-post-card",
+	"board-event-row",
+	"is-alert",
+	"board-graph-node",
+	"board-graph-node-filters",
 ]);
 
 const TAILWIND_MARKER_RE = /^(?:group|peer)\/[a-zA-Z0-9_-]+$/;
