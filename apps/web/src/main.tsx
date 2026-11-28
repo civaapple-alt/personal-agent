@@ -1,7 +1,9 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { ErrorBoundary } from "./primitives/ErrorBoundary.tsx";
+import { workbenchQueryClient } from "./queries/index.ts";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -11,7 +13,9 @@ if (!container) {
 createRoot(container).render(
 	<StrictMode>
 		<ErrorBoundary scope="workbench">
-			<App />
+			<QueryClientProvider client={workbenchQueryClient}>
+				<App />
+			</QueryClientProvider>
 		</ErrorBoundary>
 	</StrictMode>,
 );

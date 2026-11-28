@@ -148,24 +148,33 @@ export function checkImportEdge(rootDir, fileRel, specifier) {
 			if (fromSeg !== toSeg) {
 				if (
 					fromSeg === "primitives" &&
-					["components", "views", "hooks", "api", "extensions", "stores", "App.tsx"].includes(toSeg)
+					["components", "views", "hooks", "api", "extensions", "stores", "queries", "App.tsx"].includes(toSeg)
 				) {
 					return `apps/web/src/primitives must stay business-agnostic (cannot import ${target})`;
 				}
 				if (
 					fromSeg === "api" &&
-					["components", "views", "hooks", "primitives", "stores", "App.tsx"].includes(toSeg)
+					["components", "views", "hooks", "primitives", "stores", "queries", "App.tsx"].includes(toSeg)
 				) {
 					return `apps/web/src/api must not depend on UI layer (${target})`;
 				}
 				if (
 					fromSeg === "utils" &&
-					["components", "views", "hooks", "primitives", "stores", "App.tsx"].includes(toSeg)
+					["components", "views", "hooks", "primitives", "stores", "queries", "App.tsx"].includes(toSeg)
 				) {
 					return `apps/web/src/utils must not depend on UI/hook layer (${target})`;
 				}
-				if (fromSeg === "stores" && ["components", "views", "hooks", "primitives", "App.tsx"].includes(toSeg)) {
+				if (
+					fromSeg === "stores" &&
+					["components", "views", "hooks", "primitives", "queries", "App.tsx"].includes(toSeg)
+				) {
 					return `apps/web/src/stores must not depend on UI/hook layer (${target})`;
+				}
+				if (
+					fromSeg === "queries" &&
+					["components", "views", "hooks", "primitives", "stores", "App.tsx"].includes(toSeg)
+				) {
+					return `apps/web/src/queries must not depend on UI/hook/store layer (${target})`;
 				}
 			}
 		}

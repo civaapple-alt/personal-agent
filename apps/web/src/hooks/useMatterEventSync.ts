@@ -1,6 +1,7 @@
 import { SSE_SYNC_EVENT_NAMES, type SseEventPayloadMap } from "@pa/contracts/sse-events";
 import { type MutableRefObject, useEffect } from "react";
 import { fetchAuthSession, type MatterProgressDto, resolveApiUrl } from "../api.ts";
+import { queryKeys, workbenchQueryClient } from "../queries/index.ts";
 import { useMatterRuntimeStore, useWorkbenchStore } from "../stores/index.ts";
 
 export interface BoardSseSubscriber {
@@ -62,7 +63,10 @@ export function useMatterEventSync({
 		let hasConnected = false;
 		es.addEventListener("connected", () => {
 			useMatterRuntimeStore.getState().setSseConnected(true);
-			if (hasConnected) handleSync();
+			if (hasConnected) {
+				handleSync();
+				void workbenchQueryClient.invalidateQueries();
+			}
 			hasConnected = true;
 		});
 		es.addEventListener("text_delta", (ev) => {
@@ -88,6 +92,7 @@ export function useMatterEventSync({
 		es.addEventListener("matter_settled", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_settled"];
 			clearProgressAndRefresh(data.matterId);
+			void workbenchQueryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
 		});
 		es.addEventListener("matter_failed", (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as SseEventPayloadMap["matter_failed"];
@@ -107,8 +112,28 @@ export function useMatterEventSync({
 				void refreshDetail(selectedMatterIdRef.current);
 			}
 		};
+		const invalidateDomainQueries = (evtName: string) => {
+			if (evtName === "space_updated" || evtName === "space_page_updated") {
+				void workbenchQueryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
+				return;
+			}
+			if (evtName === "workspace_updated") {
+				void workbenchQueryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all });
+				return;
+			}
+			if (evtName === "team_updated") {
+				void workbenchQueryClient.invalidateQueries({ queryKey: queryKeys.team.all });
+				return;
+			}
+			if (evtName === "organization_updated") {
+				void workbenchQueryClient.invalidateQueries({ queryKey: queryKeys.organizations.all });
+			}
+		};
 		for (const evtName of SSE_SYNC_EVENT_NAMES) {
-			es.addEventListener(evtName, handleSync);
+			es.addEventListener(evtName, () => {
+				handleSync();
+				invalidateDomainQueries(evtName);
+			});
 		}
 		es.addEventListener("board_post_created", (ev) => {
 			try {
