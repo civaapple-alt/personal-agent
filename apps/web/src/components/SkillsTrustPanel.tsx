@@ -16,7 +16,19 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	Card,
+	EmptyState,
+	Input,
+	ModalDialog,
+	SplitPane,
+	Tabs,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 interface SkillsTrustPanelProps {
 	organizations?: OrganizationDto[];
@@ -33,10 +45,10 @@ type SkillsNavSelection =
 	| { kind: "pi_all" }
 	| { kind: "pi_source"; source: string };
 
-const TRUST_BADGE_CLASS: Record<SkillTrustLevel, string> = {
-	confirm: "rsi-status-candidate",
-	autonomous: "rsi-status-verified",
-	disabled: "rsi-status-rejected",
+const TRUST_BADGE_TONES: Record<SkillTrustLevel, BadgeTone> = {
+	confirm: "warn",
+	autonomous: "success",
+	disabled: "danger",
 };
 
 function formatPiSourceLabel(source: string): string {
@@ -85,6 +97,11 @@ function splitFrontmatterForMarkdown(raw: string): { frontmatter: string | null;
 function skillKey(skill: Pick<ManagedSkillEntryDto, "scope" | "scopeId" | "name">): string {
 	return `${skill.scope}:${skill.scopeId}:${skill.name}`;
 }
+
+const NAV_ITEM_BASE =
+	"flex items-center justify-between gap-2 w-full px-2.5 py-1.5 rounded-sm text-xs text-left cursor-pointer transition-colors border-l-2 focus-visible:outline-2 focus-visible:outline-accent";
+const NAV_ITEM_ACTIVE = "bg-subtle text-ink font-semibold border-accent";
+const NAV_ITEM_IDLE = "bg-transparent text-ink-secondary border-transparent hover:bg-subtle hover:text-ink";
 
 /** Settings → 技能与信任 split-pane panel for PA-managed Skills (Four-Step Trust) and Pi natively discovered Skills. */
 export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice, onError }: SkillsTrustPanelProps) {
@@ -409,226 +426,238 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 		return true;
 	};
 
-	return (
-		<section className="ui-section">
-			<div className="ui-section-head">
-				<div>
-					<h2 className="ui-section-title">技能与信任（信任四步）</h2>
-					<p className="ui-section-desc">
-						左栏按 PA 作用域与 Pi 原生来源分栏浏览；所有 Skill 本体保存在磁盘，点击任意 PA 托管技能可浮窗预览{" "}
-						<code>SKILL.md</code> 与脚本并管理信任策略。
-					</p>
-				</div>
+	const navSidebar = (
+		<nav
+			aria-label="技能范围与来源导航"
+			className="lg:sticky lg:top-3 flex flex-col gap-3 pb-3 lg:pb-0 lg:pr-3 border-b lg:border-b-0 lg:border-r border-line lg:max-h-[calc(100vh-180px)] overflow-y-auto"
+		>
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">PA 托管 · 信任四步</div>
 				<button
 					type="button"
-					className="btn-pill-outline btn-xs"
-					onClick={() => void load(true)}
-					disabled={loading}
+					className={cn(NAV_ITEM_BASE, isSelected({ kind: "managed_all" }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE)}
+					onClick={() => setSelection({ kind: "managed_all" })}
 				>
-					{loading ? "扫描中…" : "重新扫描"}
+					<span className="min-w-0 truncate">全部托管技能</span>
+					<span className="shrink-0 text-micro text-ink-muted tabular-nums">{skills.length}</span>
 				</button>
 			</div>
 
-			{error && (
-				<div className="approval-card" role="alert">
-					读取 Skill 列表失败：{error}
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">工作区技能</div>
+				{groupedManaged.workspaces.length === 0 ? (
+					<div className="px-2.5 py-1 text-micro text-ink-muted">暂无可见工作区</div>
+				) : (
+					groupedManaged.workspaces.map((ws) => (
+						<button
+							key={ws.scopeId}
+							type="button"
+							className={cn(
+								NAV_ITEM_BASE,
+								isSelected({ kind: "managed_scope", scope: "workspace", scopeId: ws.scopeId })
+									? NAV_ITEM_ACTIVE
+									: NAV_ITEM_IDLE,
+							)}
+							onClick={() => setSelection({ kind: "managed_scope", scope: "workspace", scopeId: ws.scopeId })}
+							title={ws.label}
+						>
+							<span className="min-w-0 truncate">{ws.label}</span>
+							<span className="shrink-0 text-micro text-ink-muted tabular-nums">{ws.count}</span>
+						</button>
+					))
+				)}
+			</div>
+
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">组织技能</div>
+				{groupedManaged.orgs.length === 0 ? (
+					<div className="px-2.5 py-1 text-micro text-ink-muted">暂无可见组织</div>
+				) : (
+					groupedManaged.orgs.map((org) => (
+						<button
+							key={org.scopeId}
+							type="button"
+							className={cn(
+								NAV_ITEM_BASE,
+								isSelected({ kind: "managed_scope", scope: "org", scopeId: org.scopeId })
+									? NAV_ITEM_ACTIVE
+									: NAV_ITEM_IDLE,
+							)}
+							onClick={() => setSelection({ kind: "managed_scope", scope: "org", scopeId: org.scopeId })}
+							title={org.label}
+						>
+							<span className="min-w-0 truncate">{org.label}</span>
+							<span className="shrink-0 text-micro text-ink-muted tabular-nums">{org.count}</span>
+						</button>
+					))
+				)}
+			</div>
+
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">个人 / 全局</div>
+				<button
+					type="button"
+					className={cn(
+						NAV_ITEM_BASE,
+						isSelected({ kind: "managed_scope", scope: "personal" }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE,
+					)}
+					onClick={() => setSelection({ kind: "managed_scope", scope: "personal" })}
+				>
+					<span className="min-w-0 truncate">个人技能</span>
+					<span className="shrink-0 text-micro text-ink-muted tabular-nums">{groupedManaged.personalCount}</span>
+				</button>
+				<button
+					type="button"
+					className={cn(
+						NAV_ITEM_BASE,
+						isSelected({ kind: "managed_scope", scope: "global" }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE,
+					)}
+					onClick={() => setSelection({ kind: "managed_scope", scope: "global" })}
+				>
+					<span className="min-w-0 truncate">平台全局</span>
+					<span className="shrink-0 text-micro text-ink-muted tabular-nums">{groupedManaged.globalCount}</span>
+				</button>
+			</div>
+
+			<div className="h-px bg-line mx-1" />
+
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">PA 内置技能（只读）</div>
+				<button
+					type="button"
+					className={cn(NAV_ITEM_BASE, isSelected({ kind: "builtin_all" }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE)}
+					onClick={() => setSelection({ kind: "builtin_all" })}
+				>
+					<span className="min-w-0 truncate">全部内置技能</span>
+					<span className="shrink-0 text-micro text-ink-muted tabular-nums">{builtinSkills.length}</span>
+				</button>
+				{builtinSources.map(([src, count]) => (
+					<button
+						key={src}
+						type="button"
+						className={cn(
+							NAV_ITEM_BASE,
+							isSelected({ kind: "builtin_source", source: src }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE,
+						)}
+						onClick={() => setSelection({ kind: "builtin_source", source: src })}
+						title={src}
+					>
+						<span className="min-w-0 truncate">{formatPiSourceLabel(src)}</span>
+						<span className="shrink-0 text-micro text-ink-muted tabular-nums">{count}</span>
+					</button>
+				))}
+			</div>
+
+			<div className="h-px bg-line mx-1" />
+
+			<div className="flex flex-col gap-0.5">
+				<div className="text-micro font-semibold text-ink-muted px-2 pt-0.5 pb-1">Pi 原生发现（只读）</div>
+				<button
+					type="button"
+					className={cn(NAV_ITEM_BASE, isSelected({ kind: "pi_all" }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE)}
+					onClick={() => setSelection({ kind: "pi_all" })}
+				>
+					<span className="min-w-0 truncate">全部 Pi 原生</span>
+					<span className="shrink-0 text-micro text-ink-muted tabular-nums">{hostPiSkills.length}</span>
+				</button>
+				{piSources.map(([src, count]) => (
+					<button
+						key={src}
+						type="button"
+						className={cn(
+							NAV_ITEM_BASE,
+							isSelected({ kind: "pi_source", source: src }) ? NAV_ITEM_ACTIVE : NAV_ITEM_IDLE,
+						)}
+						onClick={() => setSelection({ kind: "pi_source", source: src })}
+						title={src}
+					>
+						<span className="min-w-0 truncate">{formatPiSourceLabel(src)}</span>
+						<span className="shrink-0 text-micro text-ink-muted tabular-nums">{count}</span>
+					</button>
+				))}
+			</div>
+		</nav>
+	);
+
+	return (
+		<section className="flex flex-col gap-3">
+			<div className="flex items-start justify-between gap-3 flex-wrap">
+				<div className="min-w-0 flex-1">
+					<h2 className="m-0 text-md font-semibold text-ink">技能与信任（信任四步）</h2>
+					<p className="mt-1 mb-0 text-xs text-ink-muted leading-normal">
+						左栏按 PA 作用域与 Pi 原生来源分栏浏览；所有 Skill 本体保存在磁盘，点击任意 PA 托管技能可浮窗预览{" "}
+						<code className="font-mono text-xs bg-subtle px-1 py-0.5 rounded-xs">SKILL.md</code>{" "}
+						与脚本并管理信任策略。
+					</p>
 				</div>
-			)}
+				<Button variant="secondary" size="xs" onClick={() => void load(true)} disabled={loading}>
+					{loading ? "扫描中…" : "重新扫描"}
+				</Button>
+			</div>
 
-			<div className="skills-split-layout">
-				<aside className="skills-split-nav" aria-label="技能范围与来源导航">
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">PA 托管 · 信任四步</div>
-						<button
-							type="button"
-							className={`skills-nav-item ${isSelected({ kind: "managed_all" }) ? "active" : ""}`}
-							onClick={() => setSelection({ kind: "managed_all" })}
-						>
-							<span className="skills-nav-item-name">全部托管技能</span>
-							<span className="skills-nav-count">{skills.length}</span>
-						</button>
-					</div>
+			{error && <Banner tone="danger">读取 Skill 列表失败：{error}</Banner>}
 
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">工作区技能</div>
-						{groupedManaged.workspaces.length === 0 ? (
-							<div className="skills-nav-empty">暂无可见工作区</div>
-						) : (
-							groupedManaged.workspaces.map((ws) => (
-								<button
-									key={ws.scopeId}
-									type="button"
-									className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "workspace", scopeId: ws.scopeId }) ? "active" : ""}`}
-									onClick={() =>
-										setSelection({ kind: "managed_scope", scope: "workspace", scopeId: ws.scopeId })
-									}
-									title={ws.label}
-								>
-									<span className="skills-nav-item-name">{ws.label}</span>
-									<span className="skills-nav-count">{ws.count}</span>
-								</button>
-							))
-						)}
-					</div>
-
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">组织技能</div>
-						{groupedManaged.orgs.length === 0 ? (
-							<div className="skills-nav-empty">暂无可见组织</div>
-						) : (
-							groupedManaged.orgs.map((org) => (
-								<button
-									key={org.scopeId}
-									type="button"
-									className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "org", scopeId: org.scopeId }) ? "active" : ""}`}
-									onClick={() => setSelection({ kind: "managed_scope", scope: "org", scopeId: org.scopeId })}
-									title={org.label}
-								>
-									<span className="skills-nav-item-name">{org.label}</span>
-									<span className="skills-nav-count">{org.count}</span>
-								</button>
-							))
-						)}
-					</div>
-
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">个人 / 全局</div>
-						<button
-							type="button"
-							className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "personal" }) ? "active" : ""}`}
-							onClick={() => setSelection({ kind: "managed_scope", scope: "personal" })}
-						>
-							<span className="skills-nav-item-name">个人技能</span>
-							<span className="skills-nav-count">{groupedManaged.personalCount}</span>
-						</button>
-						<button
-							type="button"
-							className={`skills-nav-item ${isSelected({ kind: "managed_scope", scope: "global" }) ? "active" : ""}`}
-							onClick={() => setSelection({ kind: "managed_scope", scope: "global" })}
-						>
-							<span className="skills-nav-item-name">平台全局</span>
-							<span className="skills-nav-count">{groupedManaged.globalCount}</span>
-						</button>
-					</div>
-
-					<div className="skills-nav-divider" />
-
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">PA 内置技能（只读）</div>
-						<button
-							type="button"
-							className={`skills-nav-item ${isSelected({ kind: "builtin_all" }) ? "active" : ""}`}
-							onClick={() => setSelection({ kind: "builtin_all" })}
-						>
-							<span className="skills-nav-item-name">全部内置技能</span>
-							<span className="skills-nav-count">{builtinSkills.length}</span>
-						</button>
-						{builtinSources.map(([src, count]) => (
-							<button
-								key={src}
-								type="button"
-								className={`skills-nav-item ${isSelected({ kind: "builtin_source", source: src }) ? "active" : ""}`}
-								onClick={() => setSelection({ kind: "builtin_source", source: src })}
-								title={src}
-							>
-								<span className="skills-nav-item-name">{formatPiSourceLabel(src)}</span>
-								<span className="skills-nav-count">{count}</span>
-							</button>
-						))}
-					</div>
-
-					<div className="skills-nav-divider" />
-
-					<div className="skills-nav-group">
-						<div className="skills-nav-group-label">Pi 原生发现（只读）</div>
-						<button
-							type="button"
-							className={`skills-nav-item ${isSelected({ kind: "pi_all" }) ? "active" : ""}`}
-							onClick={() => setSelection({ kind: "pi_all" })}
-						>
-							<span className="skills-nav-item-name">全部 Pi 原生</span>
-							<span className="skills-nav-count">{hostPiSkills.length}</span>
-						</button>
-						{piSources.map(([src, count]) => (
-							<button
-								key={src}
-								type="button"
-								className={`skills-nav-item ${isSelected({ kind: "pi_source", source: src }) ? "active" : ""}`}
-								onClick={() => setSelection({ kind: "pi_source", source: src })}
-								title={src}
-							>
-								<span className="skills-nav-item-name">{formatPiSourceLabel(src)}</span>
-								<span className="skills-nav-count">{count}</span>
-							</button>
-						))}
-					</div>
-				</aside>
-
-				<div className="skills-split-main">
-					<div className="skills-main-toolbar">
+			<SplitPane sidebar={navSidebar} sidebarWidth="240px">
+				<div className="flex flex-col gap-3 min-w-0">
+					<div className="flex flex-col gap-2.5 pb-2.5 border-b border-line">
 						<div>
-							<h3 className="skills-main-title">{activeHeading.title}</h3>
-							<p className="muted-tiny" style={{ margin: "2px 0 0" }}>
-								{activeHeading.subtitle}
-							</p>
+							<h3 className="m-0 text-md font-semibold text-ink">{activeHeading.title}</h3>
+							<p className="mt-0.5 mb-0 text-micro text-ink-muted leading-normal">{activeHeading.subtitle}</p>
 						</div>
-						<div className="skills-main-filters">
-							<input
+						<div className="flex items-center gap-2.5 flex-wrap">
+							<Input
 								type="search"
-								className="input-field skills-search-input"
+								size="sm"
+								className="flex-1 min-w-[200px] max-w-[280px]"
 								placeholder="搜索技能名称或描述…"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
 							{!isReadOnlyPiView && (
-								<div className="actions-row compact">
-									{(
-										[
-											["all", "全部"],
-											["confirm", "步骤 3 · 确认"],
-											["autonomous", "步骤 4 · 自主"],
-											["disabled", "已停用"],
-										] as const
-									).map(([id, label]) => (
-										<button
-											key={id}
-											type="button"
-											className={`choice-chip ${trustFilter === id ? "active" : ""}`}
-											onClick={() => setTrustFilter(id)}
-										>
-											{label}
-										</button>
-									))}
-								</div>
+								<Tabs
+									variant="pill"
+									size="sm"
+									ariaLabel="信任级别筛选"
+									value={trustFilter}
+									onChange={(id) => setTrustFilter(id as "all" | SkillTrustLevel)}
+									items={[
+										{ id: "all", label: "全部" },
+										{ id: "confirm", label: "步骤 3 · 确认" },
+										{ id: "autonomous", label: "步骤 4 · 自主" },
+										{ id: "disabled", label: "已停用" },
+									]}
+								/>
 							)}
 						</div>
 					</div>
 
 					{isReadOnlyPiView ? (
 						<>
-							{piNativeSkillsError && (
-								<div className="approval-card" role="alert">
-									查询 Pi 原生技能失败：{piNativeSkillsError}
-								</div>
-							)}
+							{piNativeSkillsError && <Banner tone="danger">查询 Pi 原生技能失败：{piNativeSkillsError}</Banner>}
 							{!loading && !piNativeSkillsError && visiblePiSkills.length === 0 ? (
-								<div className="ui-card">
-									<p className="muted-tiny">
-										{piNativeSkills.length === 0
-											? "当前 Pi 运行环境未回报原生 Skill（团队模式需设置 PA_LOCAL_PI_RESOURCES=1 才会加载宿主机 Pi 安装包）。"
-											: "没有匹配搜索条件的 Pi 原生技能。"}
-									</p>
-								</div>
+								<EmptyState
+									compact
+									title={
+										piNativeSkills.length === 0
+											? "当前 Pi 运行环境未回报原生 Skill"
+											: "没有匹配搜索条件的 Pi 原生技能"
+									}
+									description={
+										piNativeSkills.length === 0
+											? "团队模式需设置 PA_LOCAL_PI_RESOURCES=1 才会加载宿主机 Pi 安装包。"
+											: undefined
+									}
+								/>
 							) : (
-								<div className="skills-card-list">
+								<div className="flex flex-col gap-2">
 									{visiblePiSkills.map((item) => (
-										<div key={`${item.source}:${item.name}`} className="ui-card compact skills-item-card">
-											<div className="banner-row">
-												<div className="row-wrap-gap">
-													<strong>{item.name}</strong>
-													<span className="pill">{formatPiSourceLabel(item.source)}</span>
+										<Card key={`${item.source}:${item.name}`} padding="sm" className="flex flex-col gap-1.5">
+											<div className="flex items-center justify-between gap-2 flex-wrap">
+												<div className="flex items-center gap-2 flex-wrap min-w-0">
+													<strong className="text-sm font-semibold text-ink">{item.name}</strong>
+													<Badge tone="neutral">{formatPiSourceLabel(item.source)}</Badge>
 												</div>
-												<span className="muted-tiny">
+												<span className="text-micro text-ink-muted">
 													{item.source.startsWith("pa-builtin:")
 														? "PA 内置"
 														: item.origin === "package"
@@ -636,118 +665,122 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 															: "用户级"}
 												</span>
 											</div>
-											{item.description && <p className="muted-tiny skills-item-desc">{item.description}</p>}
-											<div className="skills-item-footer">
-												<span className="skills-item-path mono-wrap" title={item.filePath ?? ""}>
+											{item.description && (
+												<p className="m-0 text-xs text-ink-secondary line-clamp-2 leading-normal">
+													{item.description}
+												</p>
+											)}
+											<div className="flex items-center justify-between gap-3 mt-0.5">
+												<span
+													className="flex-1 min-w-0 font-mono text-micro text-ink-muted truncate"
+													title={item.filePath ?? ""}
+												>
 													{item.filePath ?? ""}
 												</span>
 												{item.filePath && (
-													<div className="skills-item-actions">
-														<button
-															type="button"
-															className="btn-pill-outline btn-xs"
-															onClick={() => void handleOpenNativePreview(item)}
-														>
-															查看内容
-														</button>
-													</div>
+													<Button
+														variant="secondary"
+														size="xs"
+														onClick={() => void handleOpenNativePreview(item)}
+													>
+														查看内容
+													</Button>
 												)}
 											</div>
-										</div>
+										</Card>
 									))}
 								</div>
 							)}
 						</>
 					) : !loading && visibleManagedSkills.length === 0 ? (
-						<div className="ui-card">
-							<p className="muted-tiny">
-								当前筛选条件下暂无已沉淀的 PA 托管 Skill。在事项对话中完成可复用流程后，可让角色调用{" "}
-								<code>propose_skill</code> 生成确认卡并落盘；也可以点击左栏「Pi 原生发现（只读）」查看宿主机 Pi
-								已发现的 {piNativeSkills.length} 个技能。
-							</p>
-						</div>
+						<EmptyState
+							compact
+							title="当前筛选条件下暂无已沉淀的 PA 托管 Skill"
+							description={`在事项对话中完成可复用流程后，可让角色调用 propose_skill 生成确认卡并落盘；也可以点击左栏「Pi 原生发现（只读）」查看宿主机 Pi 已发现的 ${piNativeSkills.length} 个技能。`}
+						/>
 					) : (
-						<div className="skills-card-list">
+						<div className="flex flex-col gap-2">
 							{visibleManagedSkills.map((skill) => {
 								const key = skillKey(skill);
 								const busy = updatingKey === key;
 								return (
-									<div key={key} className="ui-card compact skills-item-card">
-										<div className="banner-row">
-											<div className="row-wrap-gap">
-												<strong>{skill.name}</strong>
-												<span className="pill">{skill.scopeLabel}</span>
-												<span className={`pill ${TRUST_BADGE_CLASS[skill.trustLevel]}`}>
+									<Card key={key} padding="sm" className="flex flex-col gap-1.5">
+										<div className="flex items-center justify-between gap-2 flex-wrap">
+											<div className="flex items-center gap-2 flex-wrap min-w-0">
+												<strong className="text-sm font-semibold text-ink">{skill.name}</strong>
+												<Badge tone="neutral">{skill.scopeLabel}</Badge>
+												<Badge tone={TRUST_BADGE_TONES[skill.trustLevel]} dot>
 													{SKILL_TRUST_LEVEL_LABELS[skill.trustLevel]}
-												</span>
+												</Badge>
 											</div>
-											<span className="muted-tiny">
+											<span className="text-micro text-ink-muted">
 												{skill.runCount > 0 ? `已执行 ${skill.runCount} 次` : "尚未触发脚本"}
 											</span>
 										</div>
-										<p className="muted-tiny skills-item-desc">{skill.description}</p>
+										<p className="m-0 text-xs text-ink-secondary line-clamp-2 leading-normal">
+											{skill.description}
+										</p>
 										{skill.scripts.length > 0 && (
-											<div className="tag-list">
+											<div className="flex items-center gap-1.5 flex-wrap">
 												{skill.scripts.map((script) => (
-													<span key={script} className="tag-chip skill">
+													<Badge key={script} tone="accent">
 														{script}
-													</span>
+													</Badge>
 												))}
 											</div>
 										)}
-										<div className="skills-item-footer">
-											<span className="skills-item-path mono-wrap" title={skill.filePath}>
+										<div className="flex items-center justify-between gap-3 mt-0.5 flex-wrap">
+											<span
+												className="flex-1 min-w-0 font-mono text-micro text-ink-muted truncate"
+												title={skill.filePath}
+											>
 												{skill.filePath}
 											</span>
-											<div className="skills-item-actions">
-												<button
-													type="button"
-													className="btn-pill-outline btn-xs"
-													onClick={() => void handleOpenPreview(skill)}
-												>
+											<div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+												<Button variant="secondary" size="xs" onClick={() => void handleOpenPreview(skill)}>
 													{skill.scripts.length > 0
 														? `查看内容 (${skill.scripts.length + 1})`
 														: "查看 SKILL.md"}
-												</button>
+												</Button>
 												{skill.canManage && skill.trustLevel !== "autonomous" && (
-													<button
-														type="button"
-														className="btn-pill-dark btn-xs"
+													<Button
+														variant="primary"
+														size="xs"
 														disabled={busy}
 														onClick={() => void handleSetTrust(skill, "autonomous")}
 													>
 														升级为自主执行
-													</button>
+													</Button>
 												)}
 												{skill.canManage && skill.trustLevel !== "confirm" && (
-													<button
-														type="button"
-														className="btn-pill-outline btn-xs"
+													<Button
+														variant="secondary"
+														size="xs"
 														disabled={busy}
 														onClick={() => void handleSetTrust(skill, "confirm")}
 													>
 														设为执行前确认
-													</button>
+													</Button>
 												)}
 												{skill.canManage && skill.trustLevel !== "disabled" && (
-													<button
-														type="button"
-														className="btn-inline"
+													<Button
+														variant="inline"
+														size="xs"
 														disabled={busy}
 														onClick={() => void handleSetTrust(skill, "disabled")}
 													>
 														停用脚本
-													</button>
+													</Button>
 												)}
 											</div>
 										</div>
-									</div>
+									</Card>
 								);
 							})}
 						</div>
 					)}
 				</div>
-			</div>
+			</SplitPane>
 
 			<ModalDialog
 				open={Boolean(previewTarget)}
@@ -762,11 +795,11 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 				size="lg"
 				headerExtra={
 					activePreviewManaged ? (
-						<span className={`pill ${TRUST_BADGE_CLASS[activePreviewManaged.trustLevel]}`}>
+						<Badge tone={TRUST_BADGE_TONES[activePreviewManaged.trustLevel]} dot>
 							{SKILL_TRUST_LEVEL_LABELS[activePreviewManaged.trustLevel]}
-						</span>
+						</Badge>
 					) : previewTarget?.kind === "native" ? (
-						<span className="pill">只读预览</span>
+						<Badge tone="neutral">只读预览</Badge>
 					) : null
 				}
 				onClose={() => setPreviewTarget(null)}
@@ -774,65 +807,71 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 					previewTarget ? (
 						<>
 							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "autonomous" && (
-								<button
-									type="button"
-									className="btn-pill-dark btn-xs"
+								<Button
+									variant="primary"
+									size="xs"
 									disabled={activePreviewBusy}
 									onClick={() => void handleSetTrust(activePreviewManaged, "autonomous")}
 								>
 									升级为自主执行
-								</button>
+								</Button>
 							)}
 							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "confirm" && (
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
+								<Button
+									variant="secondary"
+									size="xs"
 									disabled={activePreviewBusy}
 									onClick={() => void handleSetTrust(activePreviewManaged, "confirm")}
 								>
 									设为执行前确认
-								</button>
+								</Button>
 							)}
 							{activePreviewManaged?.canManage && activePreviewManaged.trustLevel !== "disabled" && (
-								<button
-									type="button"
-									className="btn-inline"
+								<Button
+									variant="inline"
+									size="xs"
 									disabled={activePreviewBusy}
 									onClick={() => void handleSetTrust(activePreviewManaged, "disabled")}
 								>
 									停用脚本
-								</button>
+								</Button>
 							)}
-							<button type="button" className="btn-pill-outline btn-xs" onClick={() => setPreviewTarget(null)}>
+							<Button variant="secondary" size="xs" onClick={() => setPreviewTarget(null)}>
 								关闭
-							</button>
+							</Button>
 						</>
 					) : undefined
 				}
 			>
 				{loadingDetailKey === activePreviewKey ? (
-					<p className="muted-sm">正在读取 Skill 目录与文件内容…</p>
+					<p className="m-0 text-xs text-ink-muted">正在读取 Skill 目录与文件内容…</p>
 				) : detailError ? (
-					<div className="approval-card" role="alert">
-						读取失败：{detailError}
-					</div>
+					<Banner tone="danger">读取失败：{detailError}</Banner>
 				) : activePreviewDetail ? (
-					<div className="skills-preview-split">
-						<aside className="skills-preview-nav" aria-label="Skill 目录文件">
-							<div className="skills-preview-group">
-								<span className="skills-preview-group-label">入口定义</span>
+					<div className="grid grid-cols-1 md:grid-cols-[204px_minmax(0,1fr)] gap-3.5 items-start min-h-[360px]">
+						<aside
+							aria-label="Skill 目录文件"
+							className="flex flex-col gap-2.5 pb-2.5 md:pb-0 md:pr-3 border-b md:border-b-0 md:border-r border-line max-h-[180px] md:max-h-[62vh] overflow-y-auto"
+						>
+							<div className="flex flex-col gap-0.5">
+								<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">入口定义</span>
 								<button
 									type="button"
-									className={`skills-preview-file-btn ${previewFileTab === "SKILL.md" ? "active" : ""}`}
+									className={cn(
+										"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors",
+										previewFileTab === "SKILL.md"
+											? "bg-accent-soft text-accent font-semibold"
+											: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+									)}
 									onClick={() => setPreviewFileTab("SKILL.md")}
 									title="SKILL.md"
 								>
-									<span>SKILL.md</span>
+									<span className="truncate">SKILL.md</span>
 								</button>
 							</div>
 							{activePreviewFileGroups.map(({ group, items }) => (
-								<div key={group} className="skills-preview-group">
-									<span className="skills-preview-group-label">
+								<div key={group} className="flex flex-col gap-0.5">
+									<span className="text-micro font-semibold text-ink-muted px-1.5 py-0.5">
 										{group} ({items.length})
 									</span>
 									{items.map((file) => {
@@ -843,54 +882,52 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 											<button
 												key={file.path}
 												type="button"
-												className={`skills-preview-file-btn ${previewFileTab === file.path ? "active" : ""}`}
+												className={cn(
+													"border-0 text-left px-2 py-1.5 rounded-sm text-xs cursor-pointer flex items-center min-w-0 transition-colors",
+													previewFileTab === file.path
+														? "bg-accent-soft text-accent font-semibold"
+														: "bg-transparent text-ink-secondary hover:bg-subtle hover:text-ink",
+												)}
 												onClick={() => setPreviewFileTab(file.path)}
 												title={file.path}
 											>
-												<span>{displayName}</span>
+												<span className="truncate">{displayName}</span>
 											</button>
 										);
 									})}
 								</div>
 							))}
 						</aside>
-						<div className="skills-preview-content">
-							<div className="skills-preview-filebar">
-								<div className="row-wrap-gap">
-									<code className="skills-preview-filepath">{activeFileEntry?.path ?? previewFileTab}</code>
-									{activeFileEntry?.truncated && <span className="pill">已截断至 64KB</span>}
+						<div className="flex flex-col gap-2 min-w-0">
+							<div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-line">
+								<div className="flex items-center gap-2 flex-wrap">
+									<code className="font-mono text-xs text-ink bg-subtle px-2 py-0.5 rounded-sm">
+										{activeFileEntry?.path ?? previewFileTab}
+									</code>
+									{activeFileEntry?.truncated && <Badge tone="warn">已截断至 64KB</Badge>}
 								</div>
 								{activeFileIsMarkdown && (
-									<div className="skills-preview-mode-toggle" role="tablist" aria-label="查看模式">
-										<button
-											type="button"
-											role="tab"
-											aria-selected={previewMdMode === "rendered"}
-											className={`choice-chip ${previewMdMode === "rendered" ? "active" : ""}`}
-											onClick={() => setPreviewMdMode("rendered")}
-										>
-											渲染
-										</button>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={previewMdMode === "raw"}
-											className={`choice-chip ${previewMdMode === "raw" ? "active" : ""}`}
-											onClick={() => setPreviewMdMode("raw")}
-										>
-											源码
-										</button>
-									</div>
+									<Tabs
+										variant="pill"
+										size="sm"
+										ariaLabel="查看模式"
+										value={previewMdMode}
+										onChange={(id) => setPreviewMdMode(id as "rendered" | "raw")}
+										items={[
+											{ id: "rendered", label: "渲染" },
+											{ id: "raw", label: "源码" },
+										]}
+									/>
 								)}
 							</div>
-							<div className="skills-preview-viewer">
+							<div className="max-h-[58vh] overflow-y-auto min-w-0">
 								{activeFileIsMarkdown && previewMdMode === "rendered" ? (
 									(() => {
 										const split = splitFrontmatterForMarkdown(activeFileEntry?.content ?? "");
 										return (
-											<div className="skills-preview-markdown">
+											<div className="px-1.5 pb-3 text-sm leading-relaxed text-ink">
 												{split.frontmatter && (
-													<pre className="pa-viz-code skills-modal-code" style={{ marginBottom: 14 }}>
+													<pre className="bg-sidebar border border-line rounded-md p-3 font-mono text-xs text-ink leading-relaxed max-h-[58vh] overflow-auto m-0 mb-3.5 whitespace-pre-wrap break-words">
 														<code>{split.frontmatter}</code>
 													</pre>
 												)}
@@ -899,7 +936,7 @@ export function SkillsTrustPanel({ organizations = [], workspaces = [], onNotice
 										);
 									})()
 								) : (
-									<pre className="pa-viz-code skills-modal-code">
+									<pre className="bg-sidebar border border-line rounded-md p-3 font-mono text-xs text-ink leading-relaxed max-h-[58vh] overflow-auto m-0 whitespace-pre-wrap break-words">
 										<code>{activeFileEntry?.content ?? ""}</code>
 									</pre>
 								)}

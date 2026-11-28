@@ -20,6 +20,7 @@ import {
 	type WorkspaceDto,
 } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
+import { Badge, Button, Card, EmptyState, Input, Select, Tabs } from "../primitives/index.ts";
 import { formatMemberGitIdentity } from "../utils.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
 
@@ -231,15 +232,19 @@ export function OrganizationDetailPanel({
 	const enabledCount = orgAiRoles ? orgAiRoles.effectiveMemberIds.length : eligibleAiMembers.length;
 
 	return (
-		<div className="ws-detail-panel">
-			<div className="ws-detail-header">
-				<div>
-					<div className="ws-detail-title-row">
-						<h2>{organization.name}</h2>
-						{organization.isDefault && <span className="pill live">默认组织</span>}
-						{organization.orgRole && <span className="pill">{ORG_ROLE_LABEL[organization.orgRole]}</span>}
+		<div className="flex flex-col gap-4 min-w-0">
+			<div className="flex items-start justify-between gap-3 flex-wrap pb-3 border-b border-line">
+				<div className="min-w-0 flex-1">
+					<div className="flex items-center gap-2 flex-wrap">
+						<h2 className="m-0 text-lg font-semibold text-ink leading-tight">{organization.name}</h2>
+						{organization.isDefault && (
+							<Badge tone="success" dot>
+								默认组织
+							</Badge>
+						)}
+						{organization.orgRole && <Badge tone="neutral">{ORG_ROLE_LABEL[organization.orgRole]}</Badge>}
 					</div>
-					<div className="ws-detail-sub">
+					<div className="mt-1 text-xs text-ink-secondary leading-normal">
 						{organization.description || "同组织工作区与事项共享组织级资料空间与经验记忆"}
 						{" · "}
 						Git 署名：
@@ -248,90 +253,73 @@ export function OrganizationDetailPanel({
 							: "默认使用仓库本地配置"}
 					</div>
 				</div>
-				<div className="ws-detail-actions">
+				<div className="flex items-center gap-2 flex-wrap shrink-0">
 					{onOpenSpace && (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => onOpenSpace(`spc_org_${organization.id}`)}
-						>
+						<Button variant="secondary" size="xs" onClick={() => onOpenSpace(`spc_org_${organization.id}`)}>
 							打开组织空间 ↗
-						</button>
+						</Button>
 					)}
 					{canManageOrg && (
-						<button type="button" className="btn-pill-outline btn-xs" onClick={() => onEditOrg(organization)}>
+						<Button variant="secondary" size="xs" onClick={() => onEditOrg(organization)}>
 							编辑组织
-						</button>
+						</Button>
 					)}
 					{canSetDefault && !organization.isDefault && (
-						<button type="button" className="btn-pill-dark btn-xs" onClick={() => void handleSetDefault()}>
+						<Button variant="primary" size="xs" onClick={() => void handleSetDefault()}>
 							设为默认
-						</button>
+						</Button>
 					)}
 				</div>
 			</div>
 
-			<div className="ws-detail-toolbar">
-				<div className="ws-subtabs" role="tablist" aria-label="组织内容标签">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={subTab === "members"}
-						className={subTab === "members" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-						onClick={() => setSubTab("members")}
-					>
-						成员与邀请（{orgMembers.length}）
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={subTab === "roles"}
-						className={subTab === "roles" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-						onClick={() => setSubTab("roles")}
-					>
-						AI 角色与主联系人（{enabledCount}）
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={subTab === "workspaces"}
-						className={subTab === "workspaces" ? "btn-pill-dark btn-xs" : "btn-pill-outline btn-xs"}
-						onClick={() => setSubTab("workspaces")}
-					>
-						关联工作区（{orgWorkspaces.length}）
-					</button>
-				</div>
-			</div>
+			<Tabs
+				variant="underline"
+				size="sm"
+				ariaLabel="组织内容标签"
+				value={subTab}
+				onChange={(id) => setSubTab(id as "members" | "roles" | "workspaces")}
+				items={[
+					{ id: "members", label: `成员与邀请（${orgMembers.length}）` },
+					{ id: "roles", label: `AI 角色与主联系人（${enabledCount}）` },
+					{ id: "workspaces", label: `关联工作区（${orgWorkspaces.length}）` },
+				]}
+			/>
 
 			{subTab === "members" && (
-				<div className="ws-custom-modal">
-					<section>
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">组织成员（{orgMembers.length}）</h3>
-							<span className="ws-section-hint">按组织成员角色控制工作区、AI 调度与管理权限</span>
+				<div className="flex flex-col gap-4">
+					<section className="flex flex-col gap-2">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<h3 className="m-0 text-sm font-semibold text-ink">组织成员（{orgMembers.length}）</h3>
+							<span className="text-xs text-ink-muted">按组织成员角色控制工作区、AI 调度与管理权限</span>
 						</div>
 						{orgMembers.length === 0 ? (
-							<div className="ui-card">
-								<p className="ui-empty-note compact">
-									当前组织暂无已登记账号成员；可通过下方邮箱添加或生成邀请码。
-								</p>
-							</div>
+							<EmptyState
+								compact
+								title="当前组织暂无已登记账号成员"
+								description="可通过下方邮箱添加或生成邀请码。"
+							/>
 						) : (
-							<div className="ws-folders-list">
+							<div className="flex flex-col gap-2">
 								{orgMembers.map((m) => (
-									<div key={m.userId} className="ws-folder-row">
-										<div className="ws-folder-main">
-											<div className="ws-folder-title">
-												<strong>{m.displayName ?? m.email ?? m.userId}</strong>
-												<span className="ws-role-pill">{ORG_ROLE_LABEL[m.orgRole]}</span>
-												{m.roleTitle && <span className="pill">{m.roleTitle}</span>}
+									<div
+										key={m.userId}
+										className="flex items-center justify-between gap-3 flex-wrap px-3 py-2 border border-line rounded-md bg-stage"
+									>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-2 flex-wrap">
+												<strong className="text-sm font-medium text-ink">
+													{m.displayName ?? m.email ?? m.userId}
+												</strong>
+												<Badge tone="neutral">{ORG_ROLE_LABEL[m.orgRole]}</Badge>
+												{m.roleTitle && <Badge tone="neutral">{m.roleTitle}</Badge>}
 											</div>
-											{m.email && <div className="ws-folder-path">{m.email}</div>}
+											{m.email && <div className="mt-0.5 text-xs text-ink-muted font-mono">{m.email}</div>}
 										</div>
 										{canManageOrg && m.userId !== accountUser?.id && (
-											<div className="ws-folder-controls">
-												<select
-													className="select-sm select-control"
+											<div className="flex items-center gap-2 shrink-0">
+												<Select
+													size="sm"
+													className="w-auto"
 													aria-label={`修改 ${m.displayName ?? m.email ?? m.userId} 的组织角色`}
 													value={m.orgRole}
 													onChange={async (e) => {
@@ -350,10 +338,11 @@ export function OrganizationDetailPanel({
 													<option value="org_admin">组织管理员</option>
 													<option value="org_member">普通成员</option>
 													<option value="org_viewer">只读访客</option>
-												</select>
-												<button
-													type="button"
-													className="btn-inline btn-danger-inline"
+												</Select>
+												<Button
+													variant="inline"
+													size="xs"
+													className="text-danger-text"
 													onClick={async () => {
 														try {
 															await removeOrgMember(organization.id, m.userId);
@@ -365,7 +354,7 @@ export function OrganizationDetailPanel({
 													}}
 												>
 													移除
-												</button>
+												</Button>
 											</div>
 										)}
 									</div>
@@ -375,31 +364,30 @@ export function OrganizationDetailPanel({
 					</section>
 
 					{canManageOrg && (
-						<section>
-							<div className="ws-section-head-row">
-								<h3 className="ws-section-title">添加成员与邀请码</h3>
-								<span className="ws-section-hint">
+						<section className="flex flex-col gap-2">
+							<div className="flex items-center justify-between gap-2 flex-wrap">
+								<h3 className="m-0 text-sm font-semibold text-ink">添加成员与邀请码</h3>
+								<span className="text-xs text-ink-muted">
 									已注册用户可直接按邮箱加入，未注册同事可使用邀请码注册并自动入组
 								</span>
 							</div>
-							<div className="ws-budget-card">
-								<div className="org-inline-form-row">
-									<input
-										className="input-field"
-										style={{ flex: 2 }}
+							<Card padding="sm" className="flex flex-col gap-3">
+								<div className="grid grid-cols-1 md:grid-cols-[minmax(170px,1.4fr)_minmax(110px,1fr)_auto_auto] gap-2 items-center">
+									<Input
+										size="sm"
 										placeholder="已注册用户邮箱，如 alice@company.com"
 										value={addMemberEmail}
 										onChange={(e) => setAddMemberEmail(e.target.value)}
 									/>
-									<input
-										className="input-field"
-										style={{ flex: 1 }}
+									<Input
+										size="sm"
 										placeholder="职位头衔（可选）"
 										value={addMemberTitle}
 										onChange={(e) => setAddMemberTitle(e.target.value)}
 									/>
-									<select
-										className="select-sm select-control"
+									<Select
+										size="sm"
+										className="w-auto whitespace-nowrap"
 										aria-label="新成员角色"
 										value={addMemberRole}
 										onChange={(e) => setAddMemberRole(e.target.value as OrgMemberRole)}
@@ -407,23 +395,24 @@ export function OrganizationDetailPanel({
 										<option value="org_admin">组织管理员</option>
 										<option value="org_member">普通成员</option>
 										<option value="org_viewer">只读访客</option>
-									</select>
-									<button
-										type="button"
-										className="btn-pill-dark btn-xs"
+									</Select>
+									<Button
+										variant="primary"
+										size="xs"
 										disabled={!addMemberEmail.trim() || memberBusy}
 										onClick={() => void handleAddMember()}
 									>
 										添加成员
-									</button>
+									</Button>
 								</div>
 
-								<div className="ws-breakdown-group">
-									<div className="ws-breakdown-row">
-										<span className="ws-breakdown-title">组织邀请码（7 天有效，最多 10 次）</span>
-										<div className="ws-folder-controls">
-											<select
-												className="select-sm select-control"
+								<div className="pt-2.5 border-t border-dashed border-line flex flex-col gap-2.5">
+									<div className="flex items-center justify-between gap-2 flex-wrap">
+										<span className="text-xs font-medium text-ink">组织邀请码（7 天有效，最多 10 次）</span>
+										<div className="flex items-center gap-2">
+											<Select
+												size="sm"
+												className="w-auto"
 												aria-label="邀请默认角色"
 												value={newInviteRole}
 												onChange={(e) => setNewInviteRole(e.target.value as OrgMemberRole)}
@@ -431,35 +420,35 @@ export function OrganizationDetailPanel({
 												<option value="org_member">加入为普通成员</option>
 												<option value="org_admin">加入为管理员</option>
 												<option value="org_viewer">加入为只读访客</option>
-											</select>
-											<button
-												type="button"
-												className="btn-pill-outline btn-xs"
+											</Select>
+											<Button
+												variant="secondary"
+												size="xs"
 												disabled={memberBusy}
 												onClick={() => void handleCreateInvite()}
 											>
 												生成邀请码
-											</button>
+											</Button>
 										</div>
 									</div>
 
 									{latestInviteToken && (
-										<div className="ws-rule-card">
-											<div className="ws-rule-card-head">
-												<strong className="ws-rule-card-title">新生成邀请码（仅本次明文展示）</strong>
-												<div className="ws-rule-card-right">
-													<button
-														type="button"
-														className="btn-inline"
+										<div className="bg-sidebar border border-line-strong rounded-md p-2.5 flex flex-col gap-1.5">
+											<div className="flex items-center justify-between gap-2 flex-wrap">
+												<strong className="text-xs text-ink">新生成邀请码（仅本次明文展示）</strong>
+												<div className="flex items-center gap-2">
+													<Button
+														variant="inline"
+														size="xs"
 														onClick={() =>
 															void copyTextToClipboard(latestInviteToken, "组织邀请码", onNotice)
 														}
 													>
 														复制邀请码
-													</button>
-													<button
-														type="button"
-														className="btn-inline"
+													</Button>
+													<Button
+														variant="inline"
+														size="xs"
 														onClick={() =>
 															void copyTextToClipboard(
 																`${window.location.origin}/?invite=${encodeURIComponent(latestInviteToken)}`,
@@ -469,29 +458,35 @@ export function OrganizationDetailPanel({
 														}
 													>
 														复制注册链接
-													</button>
+													</Button>
 												</div>
 											</div>
-											<div className="ws-rule-path">{latestInviteToken}</div>
+											<div className="font-mono text-xs text-ink-secondary break-all">
+												{latestInviteToken}
+											</div>
 										</div>
 									)}
 
 									{invites.length > 0 && (
-										<div className="ws-breakdown-items">
+										<div className="flex flex-col gap-1.5">
 											{invites.map((inv) => (
-												<div key={inv.id} className="ws-skill-row">
-													<span className="ws-skill-main">
-														<strong>{inv.id.slice(0, 12)}…</strong>
-														<span className="ws-muted-pill">{ORG_ROLE_LABEL[inv.orgRole]}</span>
-														<span className="muted-tiny">
+												<div
+													key={inv.id}
+													className="flex items-center justify-between gap-2 flex-wrap px-2.5 py-1.5 rounded-sm bg-sidebar border border-line text-xs"
+												>
+													<span className="flex items-center gap-2 flex-wrap">
+														<strong className="font-mono text-ink">{inv.id.slice(0, 12)}…</strong>
+														<Badge tone="neutral">{ORG_ROLE_LABEL[inv.orgRole]}</Badge>
+														<span className="text-micro text-ink-muted">
 															已用 {inv.usedCount}/{inv.maxUses}
 															{inv.revokedAt ? " · 已吊销" : ""}
 														</span>
 													</span>
 													{!inv.revokedAt && (
-														<button
-															type="button"
-															className="btn-inline btn-danger-inline"
+														<Button
+															variant="inline"
+															size="xs"
+															className="text-danger-text"
 															onClick={async () => {
 																try {
 																	await revokeOrgInvite(organization.id, inv.id);
@@ -504,32 +499,33 @@ export function OrganizationDetailPanel({
 															}}
 														>
 															吊销
-														</button>
+														</Button>
 													)}
 												</div>
 											))}
 										</div>
 									)}
 								</div>
-							</div>
+							</Card>
 						</section>
 					)}
 				</div>
 			)}
 
 			{subTab === "roles" && (
-				<div className="ws-custom-modal">
-					<section>
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">主联系人与启用角色</h3>
-							<span className="ws-section-hint">新事项或未点名对话默认由本组织主联系人首接响应</span>
+				<div className="flex flex-col gap-4">
+					<section className="flex flex-col gap-2">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<h3 className="m-0 text-sm font-semibold text-ink">主联系人与启用角色</h3>
+							<span className="text-xs text-ink-muted">新事项或未点名对话默认由本组织主联系人首接响应</span>
 						</div>
-						<div className="ws-budget-card">
-							<div className="ws-breakdown-row">
-								<span className="ws-breakdown-title">组织默认主联系人</span>
-								<select
+						<Card padding="sm" className="flex flex-col gap-2.5">
+							<div className="flex items-center justify-between gap-3 flex-wrap">
+								<span className="text-xs font-medium text-ink">组织默认主联系人</span>
+								<Select
 									aria-label="选择组织默认主联系人"
-									className="select-sm select-control"
+									size="sm"
+									className="w-auto min-w-[200px]"
 									disabled={!canManageOrg}
 									value={draftPrimaryAiId}
 									onChange={(e) => {
@@ -544,11 +540,12 @@ export function OrganizationDetailPanel({
 												{m.displayName}（{m.roleTitle}）
 											</option>
 										))}
-								</select>
+								</Select>
 							</div>
-							<label className="org-git-toggle-row">
+							<label className="inline-flex items-start gap-2 text-xs text-ink cursor-pointer leading-normal">
 								<input
 									type="checkbox"
+									className="mt-0.5 accent-accent"
 									disabled={!canManageOrg}
 									checked={draftUseRoleGitIdentity}
 									onChange={(e) => {
@@ -560,26 +557,26 @@ export function OrganizationDetailPanel({
 									在本组织仓库执行 Git 提交时启用 AI 角色署名（Author），同时保留真实仓库用户作 Committer
 								</span>
 							</label>
-						</div>
+						</Card>
 					</section>
 
-					<section>
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">
+					<section className="flex flex-col gap-2">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<h3 className="m-0 text-sm font-semibold text-ink">
 								AI 角色名册（已启用 {draftEnabledAiIds.length} / {eligibleAiMembers.length}）
 							</h3>
 							{canManageOrg && (
-								<button
-									type="button"
-									className="btn-pill-dark btn-xs"
+								<Button
+									variant="primary"
+									size="xs"
 									disabled={savingAiRoles || !dirtyAiRoles}
 									onClick={() => void handleSaveAiRoles()}
 								>
 									{savingAiRoles ? "保存中…" : dirtyAiRoles ? "保存角色配置" : "已同步"}
-								</button>
+								</Button>
 							)}
 						</div>
-						<div className="ws-folders-list">
+						<div className="flex flex-col gap-2">
 							{eligibleAiMembers.map((member) => {
 								const enabled = draftEnabledAiIds.includes(member.id);
 								const isPrimary = enabled && draftPrimaryAiId === member.id;
@@ -589,11 +586,15 @@ export function OrganizationDetailPanel({
 								const gitIdentity = formatMemberGitIdentity(member, organization);
 								const gitDraft = draftGitByMemberId[member.id] ?? { gitName: "", gitEmail: "" };
 								return (
-									<div key={member.id} className="ws-folder-row org-ai-role-row">
-										<div className="ws-folder-main">
-											<div className="ws-folder-title">
+									<div
+										key={member.id}
+										className="flex items-start justify-between gap-3 flex-wrap px-3 py-2.5 border border-line rounded-md bg-stage"
+									>
+										<div className="min-w-0 flex-1 flex flex-col gap-2">
+											<div className="flex items-center gap-2 flex-wrap">
 												<input
 													type="checkbox"
+													className="accent-accent cursor-pointer"
 													disabled={!canManageOrg}
 													checked={enabled}
 													onChange={(e) => {
@@ -612,16 +613,20 @@ export function OrganizationDetailPanel({
 														setDirtyAiRoles(true);
 													}}
 												/>
-												<strong>{member.displayName}</strong>
+												<strong className="text-sm font-medium text-ink">{member.displayName}</strong>
 												{member.roleTitle !== member.displayName && (
-													<span className="muted-tiny">{member.roleTitle}</span>
+													<span className="text-micro text-ink-muted">{member.roleTitle}</span>
 												)}
-												{isPrimary && <span className="pill live">主联系人</span>}
+												{isPrimary && (
+													<Badge tone="accent" dot>
+														主联系人
+													</Badge>
+												)}
 											</div>
 											{enabled && draftUseRoleGitIdentity && canManageOrg && (
-												<div className="org-role-git-inputs">
-													<input
-														className="input-field input-sm"
+												<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+													<Input
+														size="sm"
 														placeholder={`Git Name（默认 ${gitIdentity.gitName}）`}
 														value={gitDraft.gitName}
 														onChange={(e) => {
@@ -632,8 +637,8 @@ export function OrganizationDetailPanel({
 															setDirtyAiRoles(true);
 														}}
 													/>
-													<input
-														className="input-field input-sm"
+													<Input
+														size="sm"
 														placeholder={`Git Email（默认 ${gitIdentity.gitEmail}）`}
 														value={gitDraft.gitEmail}
 														onChange={(e) => {
@@ -648,7 +653,7 @@ export function OrganizationDetailPanel({
 											)}
 										</div>
 										{enabled && canManageOrg && (
-											<div className="ws-folder-controls">
+											<div className="shrink-0">
 												<ModelPicker
 													value={resolvedModel ?? null}
 													inheritLabel="沿用角色默认模型"
@@ -668,38 +673,41 @@ export function OrganizationDetailPanel({
 			)}
 
 			{subTab === "workspaces" && (
-				<div className="ws-custom-modal">
-					<section>
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">关联工作区（{orgWorkspaces.length}）</h3>
+				<div className="flex flex-col gap-3">
+					<section className="flex flex-col gap-2">
+						<div className="flex items-center justify-between gap-2 flex-wrap">
+							<h3 className="m-0 text-sm font-semibold text-ink">关联工作区（{orgWorkspaces.length}）</h3>
 							{onOpenWorkspaces && (
-								<button type="button" className="btn-inline" onClick={onOpenWorkspaces}>
+								<Button variant="inline" size="xs" onClick={onOpenWorkspaces}>
 									前往工作区管理 →
-								</button>
+								</Button>
 							)}
 						</div>
 						{orgWorkspaces.length === 0 ? (
-							<div className="ui-card">
-								<p className="ui-empty-note compact">
-									该组织暂未关联工作区，可在「工作区」页创建或切换所属组织。
-								</p>
-							</div>
+							<EmptyState
+								compact
+								title="该组织暂未关联工作区"
+								description="可在「工作区」页创建或切换所属组织。"
+							/>
 						) : (
-							<div className="ws-folders-list">
+							<div className="flex flex-col gap-2">
 								{orgWorkspaces.map((ws) => (
-									<div key={ws.id} className="ws-folder-row">
-										<div className="ws-folder-main">
-											<div className="ws-folder-title">
-												<strong>{ws.name}</strong>
-												<span className="ws-role-pill">{ws.defaultBranch}</span>
-												{ws.visibility === "restricted" && <span className="pill">仅授权成员</span>}
+									<div
+										key={ws.id}
+										className="flex items-center justify-between gap-3 flex-wrap px-3 py-2 border border-line rounded-md bg-stage"
+									>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-2 flex-wrap">
+												<strong className="text-sm font-medium text-ink">{ws.name}</strong>
+												<Badge tone="neutral">{ws.defaultBranch}</Badge>
+												{ws.visibility === "restricted" && <Badge tone="warn">仅授权成员</Badge>}
 											</div>
-											<div className="ws-folder-path">{ws.repoPath}</div>
+											<div className="mt-0.5 font-mono text-xs text-ink-muted truncate">{ws.repoPath}</div>
 										</div>
 										{onOpenWorkspaces && (
-											<button type="button" className="btn-pill-outline btn-xs" onClick={onOpenWorkspaces}>
+											<Button variant="secondary" size="xs" onClick={onOpenWorkspaces}>
 												查看工作区
-											</button>
+											</Button>
 										)}
 									</div>
 								))}

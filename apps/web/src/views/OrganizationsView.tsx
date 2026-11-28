@@ -14,7 +14,17 @@ import {
 } from "../api.ts";
 import { filterBusinessMembers } from "../architectApi.ts";
 import { ORG_ROLE_LABEL, OrganizationDetailPanel } from "../components/OrganizationDetailPanel.tsx";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
+import {
+	Button,
+	EmptyState,
+	FieldGroup,
+	Input,
+	ModalDialog,
+	PageShell,
+	PaneHeader,
+	SplitPane,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 interface OrganizationsViewProps {
 	currentUser?: CollaboratorDto | null;
@@ -165,105 +175,102 @@ export function OrganizationsView({
 		}
 	};
 
-	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
-				<div className="pane-header">
-					<h1>组织</h1>
-					<p>管理组织权限边界、人类成员与邀请、组织启用的 AI 角色名册与默认主联系人。</p>
-				</div>
-
-				<div className="ws-two-col">
-					<aside className="space-nav-col" aria-label="组织列表">
-						<div className="space-nav-head">
-							<span className="space-nav-title">全部组织（{organizations.length}）</span>
-							{canCreateOrg && (
-								<button type="button" className="btn-inline" onClick={openCreateOrgForm}>
-									+ 新建组织
-								</button>
-							)}
-						</div>
-						{organizations.length === 0 ? (
-							<p className="space-empty-hint">尚未加入任何组织，可新建组织或使用邀请码加入。</p>
-						) : (
-							<div className="space-nav-group">
-								{organizations.map((org) => {
-									const isSelected = activeOrg?.id === org.id;
-									const memberCount = orgMembersByOrgId[org.id]?.length ?? 0;
-									return (
-										<button
-											key={org.id}
-											type="button"
-											className={isSelected ? "space-nav-item active" : "space-nav-item"}
-											onClick={() => setActiveOrgId(org.id)}
-										>
-											<span className="space-nav-item-label">
-												{org.name}
-												{org.isDefault ? " · 默认" : ""}
-											</span>
-											{memberCount > 0 && <span className="space-nav-item-count">{memberCount}</span>}
-										</button>
-									);
-								})}
-							</div>
-						)}
-						{accountUser && (
-							<div className="org-nav-footer">
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
-									onClick={() => setShowJoinModal(true)}
-								>
-									+ 邀请码加入组织
-								</button>
-							</div>
-						)}
-					</aside>
-
-					<div className="ws-main-col">
-						{activeOrg ? (
-							<OrganizationDetailPanel
-								organization={activeOrg}
-								workspaces={workspaces}
-								businessMembers={businessMembers}
-								orgMembers={orgMembersByOrgId[activeOrg.id] ?? []}
-								orgAiRoles={orgAiRolesByOrgId[activeOrg.id]}
-								isOwner={isOwner}
-								isSuperAdmin={isSuperAdmin}
-								accountUser={accountUser}
-								onEditOrg={openEditOrgForm}
-								onOpenSpace={onOpenSpace}
-								onOpenWorkspaces={onOpenWorkspaces}
-								onRefresh={onRefresh}
-								onNotice={onNotice}
-								onError={onError}
-							/>
-						) : (
-							<div className="ui-card">
-								<p className="ui-empty-note compact">
-									暂无组织。新建组织后即可统一管理人类成员权限、工作区归属与 AI 角色装配。
-								</p>
-								<div className="actions-row compact">
-									{canCreateOrg && (
-										<button type="button" className="btn-pill-dark btn-xs" onClick={openCreateOrgForm}>
-											+ 新建组织
-										</button>
-									)}
-									{accountUser && (
-										<button
-											type="button"
-											className="btn-pill-outline btn-xs"
-											onClick={() => setShowJoinModal(true)}
-										>
-											邀请码加入组织
-										</button>
-									)}
-								</div>
-							</div>
-						)}
-					</div>
-				</div>
+	const sidebar = (
+		<nav aria-label="组织列表" className="bg-sidebar border border-line rounded-lg p-2.5 flex flex-col gap-2">
+			<div className="flex items-center justify-between gap-2 px-1">
+				<span className="text-xs font-semibold text-ink-secondary">全部组织（{organizations.length}）</span>
+				{canCreateOrg && (
+					<Button variant="inline" size="xs" onClick={openCreateOrgForm}>
+						+ 新建组织
+					</Button>
+				)}
 			</div>
+			{organizations.length === 0 ? (
+				<p className="m-0 px-1.5 py-2 text-xs text-ink-muted leading-normal">
+					尚未加入任何组织，可新建组织或使用邀请码加入。
+				</p>
+			) : (
+				<div className="flex flex-col gap-0.5">
+					{organizations.map((org) => {
+						const isSelected = activeOrg?.id === org.id;
+						const memberCount = orgMembersByOrgId[org.id]?.length ?? 0;
+						return (
+							<button
+								key={org.id}
+								type="button"
+								className={cn(
+									"w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-sm text-xs text-left cursor-pointer transition-colors border-l-2 focus-visible:outline-2 focus-visible:outline-accent",
+									isSelected
+										? "bg-stage text-ink font-semibold border-accent shadow-sm"
+										: "bg-transparent text-ink-secondary border-transparent hover:bg-hover hover:text-ink",
+								)}
+								onClick={() => setActiveOrgId(org.id)}
+							>
+								<span className="min-w-0 truncate">
+									{org.name}
+									{org.isDefault ? " · 默认" : ""}
+								</span>
+								{memberCount > 0 && (
+									<span className="shrink-0 text-micro text-ink-muted tabular-nums">{memberCount}</span>
+								)}
+							</button>
+						);
+					})}
+				</div>
+			)}
+			{accountUser && (
+				<div className="pt-2 border-t border-line">
+					<Button variant="secondary" size="xs" className="w-full" onClick={() => setShowJoinModal(true)}>
+						+ 邀请码加入组织
+					</Button>
+				</div>
+			)}
+		</nav>
+	);
+
+	return (
+		<PageShell maxWidth="wide">
+			<PaneHeader title="组织" subtitle="管理组织权限边界、人类成员与邀请、组织启用的 AI 角色名册与默认主联系人。" />
+
+			<SplitPane className="mt-4" sidebar={sidebar} sidebarWidth="248px">
+				{activeOrg ? (
+					<OrganizationDetailPanel
+						organization={activeOrg}
+						workspaces={workspaces}
+						businessMembers={businessMembers}
+						orgMembers={orgMembersByOrgId[activeOrg.id] ?? []}
+						orgAiRoles={orgAiRolesByOrgId[activeOrg.id]}
+						isOwner={isOwner}
+						isSuperAdmin={isSuperAdmin}
+						accountUser={accountUser}
+						onEditOrg={openEditOrgForm}
+						onOpenSpace={onOpenSpace}
+						onOpenWorkspaces={onOpenWorkspaces}
+						onRefresh={onRefresh}
+						onNotice={onNotice}
+						onError={onError}
+					/>
+				) : (
+					<EmptyState
+						title="暂无组织"
+						description="新建组织后即可统一管理人类成员权限、工作区归属与 AI 角色装配。"
+						action={
+							<>
+								{canCreateOrg && (
+									<Button variant="primary" size="xs" onClick={openCreateOrgForm}>
+										+ 新建组织
+									</Button>
+								)}
+								{accountUser && (
+									<Button variant="secondary" size="xs" onClick={() => setShowJoinModal(true)}>
+										邀请码加入组织
+									</Button>
+								)}
+							</>
+						}
+					/>
+				)}
+			</SplitPane>
 
 			<ModalDialog
 				open={showOrgForm}
@@ -274,51 +281,49 @@ export function OrganizationsView({
 				onClose={closeOrgModal}
 				footer={
 					<>
-						<button type="button" className="btn-pill-outline" disabled={saving} onClick={closeOrgModal}>
+						<Button variant="secondary" size="sm" disabled={saving} onClick={closeOrgModal}>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
+						</Button>
+						<Button
+							variant="primary"
+							size="sm"
 							disabled={!orgNameInput.trim() || saving}
 							onClick={() => void handleSaveOrg()}
 						>
 							{saving ? "保存中…" : editingOrgId ? "保存修改" : "创建组织"}
-						</button>
+						</Button>
 					</>
 				}
 			>
-				<div className="modal-field-stack">
-					<label className="modal-field">
-						<span>组织名称</span>
-						<input
-							className="input-field"
+				<div className="flex flex-col gap-3">
+					<FieldGroup label="组织名称" htmlFor="org-form-name">
+						<Input
+							id="org-form-name"
 							placeholder="如：研发一部、产品团队"
 							value={orgNameInput}
 							onChange={(e) => setOrgNameInput(e.target.value)}
 						/>
-					</label>
-					<label className="modal-field">
-						<span>组织说明（可选）</span>
-						<input
-							className="input-field"
+					</FieldGroup>
+					<FieldGroup label="组织说明（可选）" htmlFor="org-form-desc">
+						<Input
+							id="org-form-desc"
 							placeholder="简要说明该组织的业务范围"
 							value={orgDescInput}
 							onChange={(e) => setOrgDescInput(e.target.value)}
 						/>
-					</label>
-					<label className="modal-field">
-						<span>AI 角色 Git 邮箱域名（可选）</span>
-						<input
-							className="input-field"
+					</FieldGroup>
+					<FieldGroup label="AI 角色 Git 邮箱域名（可选）" htmlFor="org-form-domain">
+						<Input
+							id="org-form-domain"
 							placeholder="如 company.com（留空则使用默认域名）"
 							value={orgDomainInput}
 							onChange={(e) => setOrgDomainInput(e.target.value)}
 						/>
-					</label>
-					<label className="org-git-toggle-row">
+					</FieldGroup>
+					<label className="inline-flex items-center gap-2 text-xs text-ink cursor-pointer">
 						<input
 							type="checkbox"
+							className="accent-accent"
 							checked={orgUseRoleGitInput}
 							onChange={(e) => setOrgUseRoleGitInput(e.target.checked)}
 						/>
@@ -336,37 +341,31 @@ export function OrganizationsView({
 				onClose={() => !joining && setShowJoinModal(false)}
 				footer={
 					<>
-						<button
-							type="button"
-							className="btn-pill-outline"
-							disabled={joining}
-							onClick={() => setShowJoinModal(false)}
-						>
+						<Button variant="secondary" size="sm" disabled={joining} onClick={() => setShowJoinModal(false)}>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
+						</Button>
+						<Button
+							variant="primary"
+							size="sm"
 							disabled={!joinTokenInput.trim() || joining}
 							onClick={() => void handleJoinOrg()}
 						>
 							{joining ? "加入中…" : "确认加入"}
-						</button>
+						</Button>
 					</>
 				}
 			>
-				<div className="modal-field-stack">
-					<label className="modal-field">
-						<span>组织邀请码</span>
-						<input
-							className="input-field"
+				<div className="flex flex-col gap-3">
+					<FieldGroup label="组织邀请码" htmlFor="org-join-token">
+						<Input
+							id="org-join-token"
 							placeholder="粘贴 orginv_ 开头的邀请码"
 							value={joinTokenInput}
 							onChange={(e) => setJoinTokenInput(e.target.value)}
 						/>
-					</label>
+					</FieldGroup>
 				</div>
 			</ModalDialog>
-		</div>
+		</PageShell>
 	);
 }

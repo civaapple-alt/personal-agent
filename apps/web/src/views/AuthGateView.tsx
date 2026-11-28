@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AccountUserDto, OrgInvitePreviewDto, OrgMemberRole, RegistrationMode } from "../api.ts";
+import { Banner, Button, Card, FieldGroup, Input, Tabs } from "../primitives/index.ts";
 
 export interface AuthGateViewProps {
 	status: "checking" | "unauthenticated";
@@ -33,6 +34,9 @@ const ORG_ROLE_LABEL: Record<OrgMemberRole, string> = {
 	org_member: "普通成员",
 	org_viewer: "只读访客",
 };
+
+const BRAND_MARK_CLASS =
+	"size-7 rounded-sm bg-cta text-stage grid place-items-center shrink-0 text-micro font-bold tracking-tight";
 
 /** Fullscreen gate shown for account setup, login/registration, admin review wait, or organization invitations. */
 export function AuthGateView({
@@ -81,32 +85,36 @@ export function AuthGateView({
 
 	if (status === "checking") {
 		return (
-			<div className="auth-gate-shell">
-				<div className="auth-gate-card">
-					<div className="brand-mark">PA</div>
-					<h1>正在连接团队协同工作台…</h1>
-					<p className="muted-hint">正在校验访问身份与工作台状态</p>
-				</div>
+			<div className="min-h-screen flex items-center justify-center bg-canvas p-6">
+				<Card padding="none" className="w-full max-w-[440px] p-6 shadow-md flex flex-col gap-3">
+					<div className={BRAND_MARK_CLASS}>PA</div>
+					<h1 className="m-0 text-lg font-semibold tracking-tight text-ink leading-snug">
+						正在连接团队协同工作台…
+					</h1>
+					<p className="m-0 text-xs text-ink-muted">正在校验访问身份与工作台状态</p>
+				</Card>
 			</div>
 		);
 	}
 
 	if (needsAdminSetup) {
 		return (
-			<div className="auth-gate-shell">
-				<div className="auth-gate-card">
-					<div className="auth-gate-head">
-						<span className="brand-mark">PA</span>
-						<div>
-							<h1>初始化超级管理员账号</h1>
-							<p className="muted-hint">
+			<div className="min-h-screen flex items-center justify-center bg-canvas p-6">
+				<Card padding="none" className="w-full max-w-[440px] p-6 shadow-md flex flex-col gap-3.5">
+					<div className="flex items-start gap-3">
+						<span className={BRAND_MARK_CLASS}>PA</span>
+						<div className="min-w-0 flex-1">
+							<h1 className="m-0 mb-1 text-lg font-semibold tracking-tight text-ink leading-snug">
+								初始化超级管理员账号
+							</h1>
+							<p className="m-0 text-xs text-ink-muted leading-normal">
 								当前服务首次启用团队权限模式，请先创建平台超级管理员账号以管理注册策略、组织配额与安全边界。
 							</p>
 						</div>
 					</div>
-					{authError && <div className="approval-card">{authError}</div>}
+					{authError && <Banner tone="danger">{authError}</Banner>}
 					<form
-						className="auth-gate-form"
+						className="flex flex-col gap-3"
 						onSubmit={(e) => {
 							e.preventDefault();
 							if (submitting) return;
@@ -114,10 +122,9 @@ export function AuthGateView({
 							void onSetupAdmin({ email, password, displayName }).finally(() => setSubmitting(false));
 						}}
 					>
-						<label className="auth-field-label">
-							<span>管理员显示名称</span>
-							<input
-								className="input-field"
+						<FieldGroup label="管理员显示名称" htmlFor="auth-setup-name">
+							<Input
+								id="auth-setup-name"
 								name="name"
 								autoComplete="name"
 								value={displayName}
@@ -125,11 +132,10 @@ export function AuthGateView({
 								placeholder="例如：Alice（平台管理员）"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>管理员邮箱</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="管理员邮箱" htmlFor="auth-setup-email">
+							<Input
+								id="auth-setup-email"
 								type="email"
 								name="email"
 								autoComplete="email"
@@ -139,11 +145,10 @@ export function AuthGateView({
 								placeholder="admin@company.com"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>登录密码（至少 8 位）</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="登录密码（至少 8 位）" htmlFor="auth-setup-password">
+							<Input
+								id="auth-setup-password"
 								type="password"
 								name="new-password"
 								autoComplete="new-password"
@@ -153,29 +158,33 @@ export function AuthGateView({
 								placeholder="输入至少 8 位密码…"
 								required
 							/>
-						</label>
-						<button
+						</FieldGroup>
+						<Button
 							type="submit"
-							className="btn-pill-dark"
+							variant="primary"
+							size="md"
+							className="w-full mt-1"
 							disabled={submitting || !email.trim() || password.length < 8 || !displayName.trim()}
 						>
 							{submitting ? "正在初始化…" : "创建超级管理员并进入工作台"}
-						</button>
+						</Button>
 					</form>
-				</div>
+				</Card>
 			</div>
 		);
 	}
 
 	if (pendingApproval) {
 		return (
-			<div className="auth-gate-shell">
-				<div className="auth-gate-card">
-					<div className="auth-gate-head">
-						<span className="brand-mark">PA</span>
-						<div>
-							<h1>账号待超级管理员审核</h1>
-							<p className="muted-hint">
+			<div className="min-h-screen flex items-center justify-center bg-canvas p-6">
+				<Card padding="none" className="w-full max-w-[440px] p-6 shadow-md flex flex-col gap-3.5">
+					<div className="flex items-start gap-3">
+						<span className={BRAND_MARK_CLASS}>PA</span>
+						<div className="min-w-0 flex-1">
+							<h1 className="m-0 mb-1 text-lg font-semibold tracking-tight text-ink leading-snug">
+								账号待超级管理员审核
+							</h1>
+							<p className="m-0 text-xs text-ink-muted leading-normal">
 								账号 {accountUser?.email ?? ""} 已注册成功
 								{invitePreview?.valid && invitePreview.orgName
 									? `并已绑定受邀组织「${invitePreview.orgName}」`
@@ -184,28 +193,30 @@ export function AuthGateView({
 							</p>
 						</div>
 					</div>
-					{authError && <div className="approval-card">{authError}</div>}
-					<div className="auth-actions-row">
-						<button type="button" className="btn-pill-dark" onClick={() => void onRefreshSession()}>
+					{authError && <Banner tone="danger">{authError}</Banner>}
+					<div className="flex items-center gap-2.5 flex-wrap">
+						<Button variant="primary" size="md" onClick={() => void onRefreshSession()}>
 							刷新审核状态
-						</button>
-						<button type="button" className="btn-inline" onClick={() => void onLogoutPending()}>
+						</Button>
+						<Button variant="inline" size="sm" onClick={() => void onLogoutPending()}>
 							退出当前账号
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Card>
 			</div>
 		);
 	}
 
 	return (
-		<div className="auth-gate-shell">
-			<div className="auth-gate-card">
-				<div className="auth-gate-head">
-					<span className="brand-mark">PA</span>
-					<div>
-						<h1>Personal Agent 团队工作台</h1>
-						<p className="muted-hint">
+		<div className="min-h-screen flex items-center justify-center bg-canvas p-6">
+			<Card padding="none" className="w-full max-w-[440px] p-6 shadow-md flex flex-col gap-3.5">
+				<div className="flex items-start gap-3">
+					<span className={BRAND_MARK_CLASS}>PA</span>
+					<div className="min-w-0 flex-1">
+						<h1 className="m-0 mb-1 text-lg font-semibold tracking-tight text-ink leading-snug">
+							Personal Agent 团队工作台
+						</h1>
+						<p className="m-0 text-xs text-ink-muted leading-normal">
 							{activeTab === "register"
 								? registrationMode === "open_review"
 									? "使用邮箱密码注册，注册后需超级管理员审核开通并分配配额。"
@@ -217,41 +228,34 @@ export function AuthGateView({
 					</div>
 				</div>
 
-				<div className="auth-tab-strip" role="tablist" aria-label="认证方式">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "login"}
-						className={activeTab === "login" ? "auth-tab active" : "auth-tab"}
-						onClick={() => setActiveTab("login")}
-					>
-						邮箱登录
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "register"}
-						className={activeTab === "register" ? "auth-tab active" : "auth-tab"}
-						onClick={() => setActiveTab("register")}
-					>
-						注册账号
-					</button>
-				</div>
+				<Tabs
+					variant="underline"
+					size="md"
+					ariaLabel="认证方式"
+					value={activeTab}
+					onChange={(id) => setActiveTab(id as AuthTab)}
+					items={[
+						{ id: "login", label: "邮箱登录" },
+						{ id: "register", label: "注册账号" },
+					]}
+				/>
 
 				{inviteInput && (
-					<output className="notice-banner" aria-live="polite">
-						{invitePreview
-							? invitePreview.valid
-								? `受邀以「${ORG_ROLE_LABEL[invitePreview.orgRole ?? "org_member"]}」身份加入组织「${invitePreview.orgName}」，${activeTab === "register" ? "完成注册" : "登录"}后自动生效。`
-								: `邀请提示：${invitePreview.reason ?? "该组织邀请链接无效或已过期"}`
-							: `检测到组织邀请码，${activeTab === "register" ? "完成注册" : "登录"}后将自动加入对应组织。`}
-					</output>
+					<Banner tone={invitePreview?.valid === false ? "warn" : "info"}>
+						<output aria-live="polite">
+							{invitePreview
+								? invitePreview.valid
+									? `受邀以「${ORG_ROLE_LABEL[invitePreview.orgRole ?? "org_member"]}」身份加入组织「${invitePreview.orgName}」，${activeTab === "register" ? "完成注册" : "登录"}后自动生效。`
+									: `邀请提示：${invitePreview.reason ?? "该组织邀请链接无效或已过期"}`
+								: `检测到组织邀请码，${activeTab === "register" ? "完成注册" : "登录"}后将自动加入对应组织。`}
+						</output>
+					</Banner>
 				)}
-				{authError && <div className="approval-card">{authError}</div>}
+				{authError && <Banner tone="danger">{authError}</Banner>}
 
 				{activeTab === "login" && (
 					<form
-						className="auth-gate-form"
+						className="flex flex-col gap-3"
 						onSubmit={(e) => {
 							e.preventDefault();
 							if (submitting) return;
@@ -263,10 +267,9 @@ export function AuthGateView({
 							}).finally(() => setSubmitting(false));
 						}}
 					>
-						<label className="auth-field-label">
-							<span>邮箱</span>
-							<input
-								className="input-field"
+						<FieldGroup label="邮箱" htmlFor="auth-login-email">
+							<Input
+								id="auth-login-email"
 								type="email"
 								name="email"
 								autoComplete="username"
@@ -276,11 +279,10 @@ export function AuthGateView({
 								placeholder="member@company.com"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>密码</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="密码" htmlFor="auth-login-password">
+							<Input
+								id="auth-login-password"
 								type="password"
 								name="password"
 								autoComplete="current-password"
@@ -289,16 +291,22 @@ export function AuthGateView({
 								placeholder="输入密码…"
 								required
 							/>
-						</label>
-						<button type="submit" className="btn-pill-dark" disabled={submitting || !email.trim() || !password}>
+						</FieldGroup>
+						<Button
+							type="submit"
+							variant="primary"
+							size="md"
+							className="w-full mt-1"
+							disabled={submitting || !email.trim() || !password}
+						>
 							{submitting ? "正在登录…" : "登录进入工作台"}
-						</button>
+						</Button>
 					</form>
 				)}
 
 				{activeTab === "register" && (
 					<form
-						className="auth-gate-form"
+						className="flex flex-col gap-3"
 						onSubmit={(e) => {
 							e.preventDefault();
 							if (submitting) return;
@@ -311,10 +319,9 @@ export function AuthGateView({
 							}).finally(() => setSubmitting(false));
 						}}
 					>
-						<label className="auth-field-label">
-							<span>显示名称</span>
-							<input
-								className="input-field"
+						<FieldGroup label="显示名称" htmlFor="auth-register-name">
+							<Input
+								id="auth-register-name"
 								name="name"
 								autoComplete="name"
 								value={displayName}
@@ -322,11 +329,10 @@ export function AuthGateView({
 								placeholder="例如：张工 / Leo"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>邮箱</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="邮箱" htmlFor="auth-register-email">
+							<Input
+								id="auth-register-email"
 								type="email"
 								name="email"
 								autoComplete="email"
@@ -336,11 +342,10 @@ export function AuthGateView({
 								placeholder="member@company.com"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>密码（至少 8 位）</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="密码（至少 8 位）" htmlFor="auth-register-password">
+							<Input
+								id="auth-register-password"
 								type="password"
 								name="new-password"
 								autoComplete="new-password"
@@ -350,11 +355,13 @@ export function AuthGateView({
 								placeholder="至少 8 位密码…"
 								required
 							/>
-						</label>
-						<label className="auth-field-label">
-							<span>组织邀请码（{registrationMode === "invite_only" ? "必填" : "选填"}）</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup
+							label={`组织邀请码（${registrationMode === "invite_only" ? "必填" : "选填"}）`}
+							htmlFor="auth-register-invite"
+						>
+							<Input
+								id="auth-register-invite"
 								name="invite"
 								autoComplete="off"
 								spellCheck={false}
@@ -363,10 +370,12 @@ export function AuthGateView({
 								placeholder="orginv_…"
 								required={registrationMode === "invite_only"}
 							/>
-						</label>
-						<button
+						</FieldGroup>
+						<Button
 							type="submit"
-							className="btn-pill-dark"
+							variant="primary"
+							size="md"
+							className="w-full mt-1"
 							disabled={
 								submitting ||
 								!displayName.trim() ||
@@ -376,16 +385,16 @@ export function AuthGateView({
 							}
 						>
 							{submitting ? "正在提交…" : "创建账号"}
-						</button>
+						</Button>
 					</form>
 				)}
 
 				{!permissionRequired && (
-					<button type="button" className="btn-inline" onClick={onRestoreOwner}>
+					<Button variant="inline" size="sm" className="self-start" onClick={onRestoreOwner}>
 						返回本机免密所有者视图
-					</button>
+					</Button>
 				)}
-			</div>
+			</Card>
 		</div>
 	);
 }

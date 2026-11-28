@@ -15,8 +15,6 @@
 @import "./spaces.css" layer(legacy);
 @import "./workspaces.css" layer(legacy);
 @import "./role-architect.css" layer(legacy);
-@import "./settings.css" layer(legacy);
-@import "./account-admin.css" layer(legacy);
 @import "./view-transitions.css" layer(legacy);
 @import "./responsive.css" layer(legacy);
 

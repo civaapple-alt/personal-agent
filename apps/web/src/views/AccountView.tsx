@@ -11,7 +11,21 @@ import {
 	revokeAccessToken,
 	type WorkspaceDto,
 } from "../api.ts";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Button,
+	Card,
+	EmptyState,
+	FieldGroup,
+	Input,
+	ModalDialog,
+	PageShell,
+	PaneHeader,
+	Select,
+	SettingsDisclosure,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 function formatDateTime(iso: string): string {
 	const parsed = Date.parse(iso);
@@ -37,12 +51,12 @@ export interface AccountViewProps {
 	onError: (message: string) => void;
 }
 
-function tokenStatus(token: AccessTokenDto): { label: string; badgeClass: string; active: boolean } {
-	if (token.revokedAt) return { label: "已吊销", badgeClass: "rsi-status-superseded", active: false };
+function tokenStatus(token: AccessTokenDto): { label: string; tone: BadgeTone; active: boolean } {
+	if (token.revokedAt) return { label: "已吊销", tone: "neutral", active: false };
 	if (token.expiresAt && Date.parse(token.expiresAt) <= Date.now()) {
-		return { label: "已过期", badgeClass: "rsi-status-rejected", active: false };
+		return { label: "已过期", tone: "danger", active: false };
 	}
-	return { label: "有效", badgeClass: "rsi-status-verified", active: true };
+	return { label: "有效", tone: "success", active: true };
 }
 
 export function AccountView({
@@ -255,19 +269,25 @@ export function AccountView({
 	const renderTokenRow = (token: AccessTokenDto) => {
 		const st = tokenStatus(token);
 		return (
-			<div key={token.id} className={`token-row ${st.active ? "" : "is-inactive"}`}>
-				<div className="token-row-main">
-					<div className="ui-inline-head">
-						<strong>{token.name}</strong>
-						<code className="token-prefix">{token.tokenPrefix}…</code>
-						<span
-							className={`rsi-badge ${token.scope === "read" ? "rsi-status-verified" : "rsi-status-candidate"}`}
-						>
+			<div
+				key={token.id}
+				className={cn(
+					"flex items-center justify-between gap-3 px-3 py-2.5 border border-line rounded-md bg-sidebar flex-wrap",
+					!st.active && "opacity-65",
+				)}
+			>
+				<div className="min-w-0 flex-1 flex flex-col gap-1">
+					<div className="flex items-center gap-2 flex-wrap">
+						<strong className="text-sm font-semibold text-ink">{token.name}</strong>
+						<code className="font-mono text-xs text-ink-muted">{token.tokenPrefix}…</code>
+						<Badge tone={token.scope === "read" ? "success" : "warn"}>
 							{token.scope === "read" ? "只读" : "完整"}
-						</span>
-						<span className={`rsi-badge ${st.badgeClass}`}>{st.label}</span>
+						</Badge>
+						<Badge tone={st.tone} dot>
+							{st.label}
+						</Badge>
 					</div>
-					<div className="token-row-meta">
+					<div className="flex items-center flex-wrap gap-1.5 text-micro text-ink-muted">
 						<span>
 							组织：
 							{token.allowedOrgIds?.length
@@ -282,7 +302,7 @@ export function AccountView({
 								: "继承账号范围"}
 						</span>
 					</div>
-					<div className="token-row-meta">
+					<div className="flex items-center flex-wrap gap-1.5 text-micro text-ink-muted">
 						<span>创建于 {formatDateTime(token.createdAt)}</span>
 						<span>·</span>
 						<span>{token.expiresAt ? `过期于 ${formatDateTime(token.expiresAt)}` : "永不过期"}</span>
@@ -291,15 +311,15 @@ export function AccountView({
 					</div>
 				</div>
 				{st.active && (
-					<div className="actions-row compact">
-						<button
-							type="button"
-							className="btn-pill-outline"
+					<div className="flex items-center gap-2 shrink-0">
+						<Button
+							variant="secondary"
+							size="xs"
 							disabled={revokingId === token.id}
 							onClick={() => void handleRevokeToken(token)}
 						>
 							{revokingId === token.id ? "吊销中…" : "吊销"}
-						</button>
+						</Button>
 					</div>
 				)}
 			</div>
@@ -307,211 +327,204 @@ export function AccountView({
 	};
 
 	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
-				<div className="pane-header-row">
-					<div className="pane-header">
-						<h1>个人账号</h1>
-						<p>当前登录身份、个人访问令牌（Access Token）与账号安全</p>
+		<PageShell maxWidth="wide">
+			<PaneHeader
+				title="个人账号"
+				subtitle="当前登录身份、个人访问令牌（Access Token）与账号安全"
+				actions={
+					onSwitchOrLogout && (
+						<Button variant="secondary" size="sm" onClick={onSwitchOrLogout}>
+							{authKind === "loopback" ? "切换账号" : "退出登录"}
+						</Button>
+					)
+				}
+			/>
+
+			<div className="mt-4 flex flex-col gap-5">
+				<section className="flex flex-col gap-2.5" aria-label="账号信息">
+					<div className="flex items-center justify-between gap-2 flex-wrap">
+						<h2 className="m-0 text-md font-semibold text-ink">账号信息</h2>
+						<Badge tone="success" dot>
+							{roleLabel}
+						</Badge>
 					</div>
-					{onSwitchOrLogout && (
-						<div className="actions-row compact">
-							<button type="button" className="btn-pill-outline" onClick={onSwitchOrLogout}>
-								{authKind === "loopback" ? "切换账号" : "退出登录"}
-							</button>
-						</div>
-					)}
-				</div>
-
-				<div className="ui-sections-stack">
-					<section className="ui-section" aria-label="账号信息">
-						<div className="ui-section-head">
-							<h2 className="ui-section-title">账号信息</h2>
-							<span className="rsi-badge rsi-status-verified">{roleLabel}</span>
-						</div>
-						<div className="ui-card settings-base-card">
-							<div className="account-kv-grid">
-								<div className="settings-kv-item">
-									<span className="settings-kv-label">显示名称</span>
-									<span className="settings-kv-value">{displayName}</span>
-								</div>
-								<div className="settings-kv-item">
-									<span className="settings-kv-label">账号邮箱</span>
-									<span className="settings-kv-value mono-wrap">{email}</span>
-								</div>
-								<div className="settings-kv-item">
-									<span className="settings-kv-label">当前认证方式</span>
-									<span className="settings-kv-value">{authModeLabel}</span>
-								</div>
-								{accountUser && (
-									<div className="settings-kv-item">
-										<span className="settings-kv-label">配额与能力</span>
-										<span className="settings-kv-value">
-											组织 {accountUser.maxOrgs} · 并发 {accountUser.maxActiveDispatches} · 个人角色{" "}
-											{accountUser.maxPersonalRoles} · {accountUser.canDispatchAi ? "可调度 AI" : "只读协作"}
-										</span>
-									</div>
-								)}
+					<Card padding="md">
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+							<div className="bg-sidebar border border-line rounded-md px-3 py-2 flex flex-col gap-0.5 min-w-0">
+								<span className="text-micro font-semibold text-ink-muted">显示名称</span>
+								<span className="text-xs text-ink leading-normal break-words">{displayName}</span>
 							</div>
-						</div>
-					</section>
-
-					<section className="ui-section" aria-label="访问令牌">
-						<div className="ui-section-head">
-							<h2 className="ui-section-title">访问令牌（Access Token）</h2>
-							<div className="actions-row compact">
-								<button
-									type="button"
-									className="btn-pill-outline"
-									onClick={() => void loadTokens()}
-									disabled={loadingTokens}
-								>
-									{loadingTokens ? "刷新中…" : "刷新"}
-								</button>
-								<button
-									type="button"
-									className="btn-pill-dark"
-									onClick={() => {
-										resetCreateForm();
-										setShowCreateModal(true);
-									}}
-								>
-									+ 新建访问令牌
-								</button>
+							<div className="bg-sidebar border border-line rounded-md px-3 py-2 flex flex-col gap-0.5 min-w-0">
+								<span className="text-micro font-semibold text-ink-muted">账号邮箱</span>
+								<span className="text-xs text-ink font-mono leading-normal break-all">{email}</span>
 							</div>
-						</div>
-
-						<div className="ui-card account-token-card">
-							<p className="muted-hint">
-								用于 CLI 或复盘脚本通过 <code>Authorization: Bearer &lt;token&gt;</code>{" "}
-								访问接口。默认继承当前账号的组织与工作区权限，也可在新建时按需收窄范围。
-							</p>
-
-							{createdSecret && (
-								<output className="token-secret-box">
-									<div className="token-secret-head">
-										<div className="ui-inline-head">
-											<strong>新令牌「{createdSecret.token.name}」已生成</strong>
-											<span
-												className={`rsi-badge ${createdSecret.token.scope === "read" ? "rsi-status-verified" : "rsi-status-candidate"}`}
-											>
-												{createdSecret.token.scope === "read" ? "只读" : "完整权限"}
-											</span>
-										</div>
-										<button type="button" className="btn-pill-outline" onClick={() => setCreatedSecret(null)}>
-											我已保存
-										</button>
-									</div>
-									<p className="muted-hint">明文仅展示这一次，刷新或关闭后将无法再次查看。</p>
-									<div className="token-secret-row">
-										<code className="token-secret-value">{createdSecret.rawToken}</code>
-										<button
-											type="button"
-											className="btn-pill-dark"
-											onClick={() => void copyText(createdSecret.rawToken, " Access Token")}
-										>
-											复制 Token
-										</button>
-									</div>
-									<div className="token-secret-row">
-										<code className="token-secret-cmd">{exampleCliCommand}</code>
-										<button
-											type="button"
-											className="btn-pill-outline"
-											onClick={() => void copyText(exampleCliCommand, "复盘命令")}
-										>
-											复制复盘命令
-										</button>
-									</div>
-								</output>
+							<div className="bg-sidebar border border-line rounded-md px-3 py-2 flex flex-col gap-0.5 min-w-0">
+								<span className="text-micro font-semibold text-ink-muted">当前认证方式</span>
+								<span className="text-xs text-ink leading-normal break-words">{authModeLabel}</span>
+							</div>
+							{accountUser && (
+								<div className="bg-sidebar border border-line rounded-md px-3 py-2 flex flex-col gap-0.5 min-w-0">
+									<span className="text-micro font-semibold text-ink-muted">配额与能力</span>
+									<span className="text-xs text-ink leading-normal break-words">
+										组织 {accountUser.maxOrgs} · 并发 {accountUser.maxActiveDispatches} · 个人角色{" "}
+										{accountUser.maxPersonalRoles} · {accountUser.canDispatchAi ? "可调度 AI" : "只读协作"}
+									</span>
+								</div>
 							)}
+						</div>
+					</Card>
+				</section>
 
-							<div className="token-list">
-								{loadingTokens ? (
-									<p className="ui-empty-note compact">正在加载访问令牌…</p>
-								) : activeTokens.length === 0 ? (
-									<p className="ui-empty-note compact">
-										暂无有效访问令牌。点击右上角「+ 新建访问令牌」生成一个只读令牌即可用于复盘与查询。
+				<section className="flex flex-col gap-2.5" aria-label="访问令牌">
+					<div className="flex items-center justify-between gap-2 flex-wrap">
+						<h2 className="m-0 text-md font-semibold text-ink">访问令牌（Access Token）</h2>
+						<div className="flex items-center gap-2">
+							<Button variant="secondary" size="sm" onClick={() => void loadTokens()} disabled={loadingTokens}>
+								{loadingTokens ? "刷新中…" : "刷新"}
+							</Button>
+							<Button
+								variant="primary"
+								size="sm"
+								onClick={() => {
+									resetCreateForm();
+									setShowCreateModal(true);
+								}}
+							>
+								+ 新建访问令牌
+							</Button>
+						</div>
+					</div>
+
+					<Card padding="md" className="flex flex-col gap-3.5">
+						<p className="m-0 text-xs text-ink-muted leading-normal">
+							用于 CLI 或复盘脚本通过{" "}
+							<code className="font-mono text-xs bg-subtle px-1 py-0.5 rounded-xs">
+								Authorization: Bearer &lt;token&gt;
+							</code>{" "}
+							访问接口。默认继承当前账号的组织与工作区权限，也可在新建时按需收窄范围。
+						</p>
+
+						{createdSecret && (
+							<output className="border border-line-strong bg-sidebar rounded-md p-3 flex flex-col gap-2">
+								<div className="flex items-center justify-between gap-2.5 flex-wrap">
+									<div className="flex items-center gap-2 flex-wrap">
+										<strong className="text-sm text-ink">新令牌「{createdSecret.token.name}」已生成</strong>
+										<Badge tone={createdSecret.token.scope === "read" ? "success" : "warn"}>
+											{createdSecret.token.scope === "read" ? "只读" : "完整权限"}
+										</Badge>
+									</div>
+									<Button variant="secondary" size="xs" onClick={() => setCreatedSecret(null)}>
+										我已保存
+									</Button>
+								</div>
+								<p className="m-0 text-xs text-ink-muted">明文仅展示这一次，刷新或关闭后将无法再次查看。</p>
+								<div className="flex flex-col sm:flex-row sm:items-center gap-2">
+									<code className="flex-1 min-w-0 px-2.5 py-1.5 rounded-sm border border-line bg-surface font-mono text-xs overflow-x-auto whitespace-nowrap">
+										{createdSecret.rawToken}
+									</code>
+									<Button
+										variant="primary"
+										size="xs"
+										onClick={() => void copyText(createdSecret.rawToken, " Access Token")}
+									>
+										复制 Token
+									</Button>
+								</div>
+								<div className="flex flex-col sm:flex-row sm:items-center gap-2">
+									<code className="flex-1 min-w-0 px-2.5 py-1.5 rounded-sm border border-line bg-surface font-mono text-xs overflow-x-auto whitespace-nowrap">
+										{exampleCliCommand}
+									</code>
+									<Button
+										variant="secondary"
+										size="xs"
+										onClick={() => void copyText(exampleCliCommand, "复盘命令")}
+									>
+										复制复盘命令
+									</Button>
+								</div>
+							</output>
+						)}
+
+						<div className="flex flex-col gap-2 pt-2 border-t border-line">
+							{loadingTokens ? (
+								<p className="m-0 py-2 text-xs text-ink-muted">正在加载访问令牌…</p>
+							) : activeTokens.length === 0 ? (
+								<EmptyState
+									compact
+									title="暂无有效访问令牌"
+									description="点击右上角「+ 新建访问令牌」生成一个只读令牌即可用于复盘与查询。"
+								/>
+							) : (
+								activeTokens.map(renderTokenRow)
+							)}
+						</div>
+
+						{inactiveTokens.length > 0 && (
+							<SettingsDisclosure summary={`查看已吊销或已过期的令牌（${inactiveTokens.length}）`}>
+								<div className="flex flex-col gap-2">{inactiveTokens.map(renderTokenRow)}</div>
+							</SettingsDisclosure>
+						)}
+					</Card>
+				</section>
+
+				{authKind === "session" && accountUser && (
+					<section className="flex flex-col gap-2.5" aria-label="账号安全">
+						<h2 className="m-0 text-md font-semibold text-ink">账号安全</h2>
+						<Card padding="md">
+							<SettingsDisclosure summary="修改登录密码" className="border-t-0 pt-0">
+								<div className="mt-1 flex flex-col gap-3">
+									<p className="m-0 text-xs text-ink-muted leading-normal">
+										修改密码后，其他设备上的网页会话会被自动登出；已创建的访问令牌不受影响，可按需在上方单独吊销。
 									</p>
-								) : (
-									activeTokens.map(renderTokenRow)
-								)}
-							</div>
-
-							{inactiveTokens.length > 0 && (
-								<details className="settings-details">
-									<summary>查看已吊销或已过期的令牌（{inactiveTokens.length}）</summary>
-									<div className="token-list-nested">{inactiveTokens.map(renderTokenRow)}</div>
-								</details>
-							)}
-						</div>
+									<form className="flex flex-col gap-3" onSubmit={(e) => void handleChangePassword(e)}>
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+											<FieldGroup label="当前密码" htmlFor="account-pwd-current">
+												<Input
+													id="account-pwd-current"
+													type="password"
+													name="currentPassword"
+													autoComplete="current-password"
+													value={currentPassword}
+													onChange={(e) => setCurrentPassword(e.target.value)}
+													required
+												/>
+											</FieldGroup>
+											<FieldGroup label="新密码（至少 8 位）" htmlFor="account-pwd-new">
+												<Input
+													id="account-pwd-new"
+													type="password"
+													name="newPassword"
+													autoComplete="new-password"
+													minLength={8}
+													value={newPassword}
+													onChange={(e) => setNewPassword(e.target.value)}
+													required
+												/>
+											</FieldGroup>
+											<FieldGroup label="确认新密码" htmlFor="account-pwd-confirm">
+												<Input
+													id="account-pwd-confirm"
+													type="password"
+													name="confirmPassword"
+													autoComplete="new-password"
+													minLength={8}
+													value={confirmPassword}
+													onChange={(e) => setConfirmPassword(e.target.value)}
+													required
+												/>
+											</FieldGroup>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button type="submit" variant="primary" size="sm" disabled={changingPassword}>
+												{changingPassword ? "更新中…" : "更新密码"}
+											</Button>
+										</div>
+									</form>
+								</div>
+							</SettingsDisclosure>
+						</Card>
 					</section>
-
-					{authKind === "session" && accountUser && (
-						<section className="ui-section" aria-label="账号安全">
-							<div className="ui-section-head">
-								<h2 className="ui-section-title">账号安全</h2>
-							</div>
-							<div className="ui-card account-token-card">
-								<details className="settings-details account-details-plain">
-									<summary>修改登录密码</summary>
-									<div className="account-details-body">
-										<p className="muted-hint">
-											修改密码后，其他设备上的网页会话会被自动登出；已创建的访问令牌不受影响，可按需在上方单独吊销。
-										</p>
-										<form className="account-token-form" onSubmit={(e) => void handleChangePassword(e)}>
-											<div className="account-password-grid">
-												<label className="auth-field-label">
-													<span>当前密码</span>
-													<input
-														type="password"
-														name="currentPassword"
-														className="input-field"
-														autoComplete="current-password"
-														value={currentPassword}
-														onChange={(e) => setCurrentPassword(e.target.value)}
-														required
-													/>
-												</label>
-												<label className="auth-field-label">
-													<span>新密码（至少 8 位）</span>
-													<input
-														type="password"
-														name="newPassword"
-														className="input-field"
-														autoComplete="new-password"
-														minLength={8}
-														value={newPassword}
-														onChange={(e) => setNewPassword(e.target.value)}
-														required
-													/>
-												</label>
-												<label className="auth-field-label">
-													<span>确认新密码</span>
-													<input
-														type="password"
-														name="confirmPassword"
-														className="input-field"
-														autoComplete="new-password"
-														minLength={8}
-														value={confirmPassword}
-														onChange={(e) => setConfirmPassword(e.target.value)}
-														required
-													/>
-												</label>
-											</div>
-											<div className="actions-row compact">
-												<button type="submit" className="btn-pill-dark" disabled={changingPassword}>
-													{changingPassword ? "更新中…" : "更新密码"}
-												</button>
-											</div>
-										</form>
-									</div>
-								</details>
-							</div>
-						</section>
-					)}
-				</div>
+				)}
 			</div>
 
 			<ModalDialog
@@ -522,37 +535,32 @@ export function AccountView({
 				closeDisabled={creatingToken}
 				onClose={closeCreateModal}
 				footer={
-					<div className="actions-row compact">
-						<button
-							type="button"
-							className="btn-pill-outline"
-							onClick={closeCreateModal}
-							disabled={creatingToken}
-						>
+					<div className="flex items-center gap-2">
+						<Button variant="secondary" size="sm" onClick={closeCreateModal} disabled={creatingToken}>
 							取消
-						</button>
-						<button
+						</Button>
+						<Button
 							type="submit"
 							form="create-access-token-form"
-							className="btn-pill-dark"
+							variant="primary"
+							size="sm"
 							disabled={creatingToken}
 						>
 							{creatingToken ? "生成中…" : "生成 Access Token"}
-						</button>
+						</Button>
 					</div>
 				}
 			>
 				<form
 					id="create-access-token-form"
-					className="account-token-form"
+					className="flex flex-col gap-3"
 					onSubmit={(e) => void handleCreateToken(e)}
 				>
-					<label className="auth-field-label">
-						<span>令牌名称</span>
-						<input
+					<FieldGroup label="令牌名称" htmlFor="create-token-name">
+						<Input
+							id="create-token-name"
 							type="text"
 							name="tokenName"
-							className="input-field"
 							autoComplete="off"
 							placeholder="例如：复盘脚本 / 本机 CLI"
 							maxLength={80}
@@ -560,24 +568,22 @@ export function AccountView({
 							onChange={(e) => setTokenName(e.target.value)}
 							required
 						/>
-					</label>
+					</FieldGroup>
 
-					<div className="token-modal-pair">
-						<label className="auth-field-label">
-							<span>权限范围</span>
-							<select
-								className="input-field"
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+						<FieldGroup label="权限范围" htmlFor="create-token-scope">
+							<Select
+								id="create-token-scope"
 								value={tokenScope}
 								onChange={(e) => setTokenScope(e.target.value as AccessTokenScope)}
 							>
 								<option value="read">只读（推荐：仅允许 GET 查询）</option>
 								<option value="full">完整权限（与当前账号一致）</option>
-							</select>
-						</label>
-						<label className="auth-field-label">
-							<span>有效期</span>
-							<select
-								className="input-field"
+							</Select>
+						</FieldGroup>
+						<FieldGroup label="有效期" htmlFor="create-token-expiry">
+							<Select
+								id="create-token-expiry"
 								value={expiresPreset}
 								onChange={(e) => setExpiresPreset(e.target.value)}
 							>
@@ -586,97 +592,102 @@ export function AccountView({
 								<option value="90">90 天</option>
 								<option value="365">365 天</option>
 								<option value="never">永不过期</option>
-							</select>
-						</label>
+							</Select>
+						</FieldGroup>
 					</div>
 
-					<details className="settings-details">
-						<summary>组织与工作区访问范围（{scopeSummary}）</summary>
-						<div className="token-scope-box">
-							<div className="token-scope-row">
-								<span className="settings-kv-label">组织访问范围</span>
-								<div className="actions-row compact">
-									<button
-										type="button"
-										className={`choice-chip ${orgScopeMode === "inherit" ? "active" : ""}`}
+					<SettingsDisclosure summary={`组织与工作区访问范围（${scopeSummary}）`}>
+						<div className="mt-1 p-3 border border-line rounded-md bg-sidebar flex flex-col gap-2.5">
+							<div className="flex flex-col gap-1.5">
+								<span className="text-micro font-semibold text-ink-muted">组织访问范围</span>
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<Button
+										variant={orgScopeMode === "inherit" ? "primary" : "secondary"}
+										size="xs"
+										aria-pressed={orgScopeMode === "inherit"}
 										onClick={() => {
 											setOrgScopeMode("inherit");
 											setSelectedOrgIds([]);
 										}}
 									>
 										默认（继承当前账号）
-									</button>
+									</Button>
 									{organizations.length > 0 && (
-										<button
-											type="button"
-											className={`choice-chip ${orgScopeMode === "custom" ? "active" : ""}`}
+										<Button
+											variant={orgScopeMode === "custom" ? "primary" : "secondary"}
+											size="xs"
+											aria-pressed={orgScopeMode === "custom"}
 											onClick={() => setOrgScopeMode("custom")}
 										>
 											指定组织
-										</button>
+										</Button>
 									)}
 								</div>
 								{orgScopeMode === "custom" && (
-									<div className="actions-row compact">
+									<div className="flex items-center gap-1.5 flex-wrap">
 										{organizations.map((org) => {
 											const checked = selectedOrgIds.includes(org.id);
 											return (
-												<button
+												<Button
 													key={org.id}
-													type="button"
-													className={`choice-chip ${checked ? "active" : ""}`}
+													variant={checked ? "primary" : "secondary"}
+													size="xs"
+													aria-pressed={checked}
 													onClick={() => toggleOrgSelection(org.id)}
 												>
 													{checked ? "✓ " : ""}
 													{org.name}
-												</button>
+												</Button>
 											);
 										})}
 									</div>
 								)}
 							</div>
 
-							<div className="token-scope-row">
-								<span className="settings-kv-label">工作区访问范围</span>
-								<div className="actions-row compact">
-									<button
-										type="button"
-										className={`choice-chip ${workspaceScopeMode === "inherit" ? "active" : ""}`}
+							<div className="flex flex-col gap-1.5">
+								<span className="text-micro font-semibold text-ink-muted">工作区访问范围</span>
+								<div className="flex items-center gap-1.5 flex-wrap">
+									<Button
+										variant={workspaceScopeMode === "inherit" ? "primary" : "secondary"}
+										size="xs"
+										aria-pressed={workspaceScopeMode === "inherit"}
 										onClick={() => {
 											setWorkspaceScopeMode("inherit");
 											setSelectedWorkspaceIds([]);
 										}}
 									>
 										默认（继承当前账号）
-									</button>
+									</Button>
 									{selectableWorkspaces.length > 0 && (
-										<button
-											type="button"
-											className={`choice-chip ${workspaceScopeMode === "custom" ? "active" : ""}`}
+										<Button
+											variant={workspaceScopeMode === "custom" ? "primary" : "secondary"}
+											size="xs"
+											aria-pressed={workspaceScopeMode === "custom"}
 											onClick={() => setWorkspaceScopeMode("custom")}
 										>
 											指定工作区
-										</button>
+										</Button>
 									)}
 								</div>
 								{workspaceScopeMode === "custom" && (
-									<div className="actions-row compact">
+									<div className="flex items-center gap-1.5 flex-wrap">
 										{selectableWorkspaces.length === 0 ? (
-											<span className="muted-hint">所选组织下暂无可见工作区</span>
+											<span className="text-xs text-ink-muted">所选组织下暂无可见工作区</span>
 										) : (
 											selectableWorkspaces.map((ws) => {
 												const checked = selectedWorkspaceIds.includes(ws.id);
 												const orgLabel = ws.orgId ? orgNameById.get(ws.orgId) : undefined;
 												return (
-													<button
+													<Button
 														key={ws.id}
-														type="button"
-														className={`choice-chip ${checked ? "active" : ""}`}
+														variant={checked ? "primary" : "secondary"}
+														size="xs"
+														aria-pressed={checked}
 														onClick={() => toggleWorkspaceSelection(ws.id)}
 													>
 														{checked ? "✓ " : ""}
 														{orgLabel ? `${orgLabel} / ${ws.name}` : ws.name}
-													</button>
+													</Button>
 												);
 											})
 										)}
@@ -684,9 +695,9 @@ export function AccountView({
 								)}
 							</div>
 						</div>
-					</details>
+					</SettingsDisclosure>
 				</form>
 			</ModalDialog>
-		</div>
+		</PageShell>
 	);
 }

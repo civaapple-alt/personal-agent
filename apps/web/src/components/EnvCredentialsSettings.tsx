@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { type ManagedEnvStatusDto, type RuntimeOverviewDto, updateRuntimeEnvCredentials } from "../api/runtime.ts";
+import { Badge, Button, Card, Input } from "../primitives/index.ts";
 
 interface EnvCredentialsSettingsProps {
 	items: ManagedEnvStatusDto[];
@@ -46,34 +47,35 @@ export function EnvCredentialsSettings({
 		}
 	};
 
-	return (
-		<div className={embedded ? "settings-env-embedded" : "ui-card compact settings-env-card"}>
-			<div className="settings-env-head">
-				<div>
-					<strong>{title}</strong>
-					<p className="muted-hint">{subtitle}</p>
-				</div>
+	const content = (
+		<>
+			<div className="flex flex-col gap-0.5">
+				<strong className="text-sm font-semibold text-ink">{title}</strong>
+				<p className="m-0 text-xs text-ink-muted leading-normal">{subtitle}</p>
 			</div>
-			<div className="settings-env-list">
+			<div className="flex flex-col gap-2.5">
 				{items.map((item) => {
 					const draft = drafts[item.key] ?? "";
 					const isBusy = busyKey === item.key;
 					return (
-						<div key={item.key} className="settings-env-row">
-							<div className="settings-env-meta">
-								<div className="settings-env-title-line">
-									<code>{item.key}</code>
+						<div
+							key={item.key}
+							className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 pt-2.5 border-t border-dashed border-line"
+						>
+							<div className="flex-1 min-w-[260px]">
+								<div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+									<code className="font-mono text-xs bg-subtle px-1.5 py-0.5 rounded-xs break-words">
+										{item.key}
+									</code>
 									<span>{item.label}</span>
-									<span
-										className={`rsi-badge ${item.configured ? "rsi-status-verified" : "rsi-status-superseded"}`}
-									>
+									<Badge tone={item.configured ? "success" : "neutral"} dot>
 										{SOURCE_TEXT[item.source]}
-									</span>
+									</Badge>
 								</div>
-								<p className="muted-hint">{item.description}</p>
+								<p className="mt-1 mb-0 text-xs text-ink-muted leading-normal">{item.description}</p>
 							</div>
 							<form
-								className="settings-env-form"
+								className="flex items-center gap-2 flex-1 min-w-[260px] max-w-[420px]"
 								onSubmit={(event) => {
 									event.preventDefault();
 									const trimmed = draft.trim();
@@ -81,9 +83,10 @@ export function EnvCredentialsSettings({
 									void submit(item.key, trimmed);
 								}}
 							>
-								<input
+								<Input
 									type="password"
-									className="input-field"
+									size="sm"
+									className="flex-1"
 									autoComplete="off"
 									spellCheck={false}
 									name={`env-${item.key}`}
@@ -98,24 +101,36 @@ export function EnvCredentialsSettings({
 										}))
 									}
 								/>
-								<button type="submit" className="btn-pill-dark btn-xs" disabled={!draft.trim() || isBusy}>
+								<Button type="submit" variant="primary" size="xs" disabled={!draft.trim() || isBusy}>
 									{isBusy ? "保存中…" : "保存"}
-								</button>
+								</Button>
 								{item.source === "dotenv" && (
-									<button
-										type="button"
-										className="btn-pill-outline btn-xs"
+									<Button
+										variant="secondary"
+										size="xs"
 										disabled={isBusy}
 										onClick={() => void submit(item.key, null)}
 									>
 										清除
-									</button>
+									</Button>
 								)}
 							</form>
 						</div>
 					);
 				})}
 			</div>
-		</div>
+		</>
+	);
+
+	if (embedded) {
+		return (
+			<div className="mt-3 pt-3 border-t border-dashed border-line flex flex-col gap-2.5 min-w-0">{content}</div>
+		);
+	}
+
+	return (
+		<Card padding="sm" className="flex flex-col gap-3 mb-3">
+			{content}
+		</Card>
 	);
 }

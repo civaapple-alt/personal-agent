@@ -1,6 +1,6 @@
 import type { AccountUserDto, AuthSessionPayload, OrgInvitePreviewDto } from "../api/auth.ts";
 import type { CollaboratorDto } from "../api/organizations.ts";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
+import { Button, ModalDialog } from "../primitives/index.ts";
 
 interface OrgInviteModalProps {
 	open: boolean;
@@ -49,72 +49,67 @@ export function OrgInviteModal({
 			onClose={onClose}
 			footer={
 				invitePreview?.valid === false ? (
-					<button type="button" className="btn-pill-dark" onClick={onClose}>
+					<Button variant="primary" size="sm" onClick={onClose}>
 						知道了
-					</button>
+					</Button>
 				) : authKind === "loopback" ? (
 					<>
-						<button type="button" className="btn-pill-outline" disabled={inviteActionBusy} onClick={onClose}>
+						<Button variant="secondary" size="sm" disabled={inviteActionBusy} onClick={onClose}>
 							暂不处理
-						</button>
-						<button
-							type="button"
-							className="btn-inline"
+						</Button>
+						<Button
+							variant="inline"
+							size="sm"
 							disabled={inviteActionBusy}
 							onClick={() => void onSwitchAccount("login")}
 						>
 							登录已有账号
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
+						</Button>
+						<Button
+							variant="primary"
+							size="sm"
 							disabled={inviteActionBusy}
 							onClick={() => void onSwitchAccount("register")}
 						>
 							注册新账号并加入
-						</button>
+						</Button>
 					</>
 				) : invitePreview?.alreadyMember ? (
 					<>
-						<button type="button" className="btn-pill-outline" disabled={inviteActionBusy} onClick={onClose}>
+						<Button variant="secondary" size="sm" disabled={inviteActionBusy} onClick={onClose}>
 							留在当前账号
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
+						</Button>
+						<Button
+							variant="primary"
+							size="sm"
 							disabled={inviteActionBusy}
 							onClick={() => void onSwitchAccount("register")}
 						>
 							退出并注册新成员
-						</button>
+						</Button>
 					</>
 				) : (
 					<>
-						<button type="button" className="btn-pill-outline" disabled={inviteActionBusy} onClick={onClose}>
+						<Button variant="secondary" size="sm" disabled={inviteActionBusy} onClick={onClose}>
 							暂不加入
-						</button>
-						<button
-							type="button"
-							className="btn-inline"
+						</Button>
+						<Button
+							variant="inline"
+							size="sm"
 							disabled={inviteActionBusy}
 							onClick={() => void onSwitchAccount("register")}
 						>
 							退出并注册新账号
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={inviteActionBusy}
-							onClick={() => void onAccept()}
-						>
+						</Button>
+						<Button variant="primary" size="sm" disabled={inviteActionBusy} onClick={() => void onAccept()}>
 							用当前账号加入
-						</button>
+						</Button>
 					</>
 				)
 			}
 		>
 			{invitePreview?.valid && !invitePreview.alreadyMember && accountUser && (
-				<div className="muted-hint">
+				<div className="text-xs text-ink-muted">
 					当前账号：{accountUser.displayName}（{accountUser.email}）
 				</div>
 			)}

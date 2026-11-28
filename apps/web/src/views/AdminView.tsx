@@ -2,6 +2,21 @@ import { useEffect, useState } from "react";
 import type { ModelSelection } from "../api/models.ts";
 import type { AdminOverviewPayload, AdminUserRowDto, PlatformRole, RegistrationMode, UserStatus } from "../api.ts";
 import { ModelPicker, useModelCatalog } from "../components/ModelPicker.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	Card,
+	EmptyState,
+	FieldGroup,
+	Input,
+	PageShell,
+	PaneHeader,
+	Tabs,
+	Textarea,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 interface AdminViewProps {
 	overview: AdminOverviewPayload | null;
@@ -46,10 +61,10 @@ const USER_STATUS_LABEL: Record<UserStatus, string> = {
 	disabled: "已禁用",
 };
 
-const USER_STATUS_BADGE: Record<UserStatus, string> = {
-	active: "rsi-status-verified",
-	pending_review: "rsi-status-candidate",
-	disabled: "rsi-status-rejected",
+const USER_STATUS_TONE: Record<UserStatus, BadgeTone> = {
+	active: "success",
+	pending_review: "warn",
+	disabled: "danger",
 };
 
 const REGISTRATION_LABELS: Array<{ value: RegistrationMode; label: string; desc: string }> = [
@@ -187,315 +202,292 @@ export function AdminView({
 	};
 
 	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
-				<div className="pane-header-row">
-					<div className="pane-header">
-						<h1>超级管理员控制台</h1>
-						<p>统一管理用户审核与配额、代码库克隆主目录、注册策略、运行中 AI 任务与安全审计日志</p>
-					</div>
-					<div className="actions-row compact">
-						<button
-							type="button"
-							className="btn-pill-outline"
-							onClick={() => void onRefresh()}
-							disabled={loading}
-						>
-							{loading ? "刷新中…" : "刷新总览"}
-						</button>
-					</div>
-				</div>
+		<PageShell maxWidth="wide">
+			<PaneHeader
+				title="超级管理员控制台"
+				subtitle="统一管理用户审核与配额、代码库克隆主目录、注册策略、运行中 AI 任务与安全审计日志"
+				actions={
+					<Button variant="secondary" size="sm" onClick={() => void onRefresh()} disabled={loading}>
+						{loading ? "刷新中…" : "刷新总览"}
+					</Button>
+				}
+			/>
 
-				<div className="settings-category-tabs" role="tablist" aria-label="管理员控制台模块">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "users"}
-						className={`choice-chip ${activeTab === "users" ? "active" : ""}`}
-						onClick={() => setActiveTab("users")}
-					>
-						用户审核与配额（{users.length}
-						{pendingCount > 0 ? ` · ${pendingCount} 待审` : ""}）
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "settings"}
-						className={`choice-chip ${activeTab === "settings" ? "active" : ""}`}
-						onClick={() => setActiveTab("settings")}
-					>
-						平台安全边界
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "orgs"}
-						className={`choice-chip ${activeTab === "orgs" ? "active" : ""}`}
-						onClick={() => setActiveTab("orgs")}
-					>
-						组织与运行任务（{overview?.activeRuns.length ?? 0}）
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={activeTab === "audit"}
-						className={`choice-chip ${activeTab === "audit" ? "active" : ""}`}
-						onClick={() => setActiveTab("audit")}
-					>
-						安全审计日志
-					</button>
-				</div>
+			<Tabs
+				variant="underline"
+				className="mt-3"
+				ariaLabel="管理员控制台模块"
+				value={activeTab}
+				onChange={(id) => setActiveTab(id as AdminSectionTab)}
+				items={[
+					{
+						id: "users",
+						label: `用户审核与配额（${users.length}${pendingCount > 0 ? ` · ${pendingCount} 待审` : ""}）`,
+					},
+					{ id: "settings", label: "平台安全边界" },
+					{ id: "orgs", label: `组织与运行任务（${overview?.activeRuns.length ?? 0}）` },
+					{ id: "audit", label: "安全审计日志" },
+				]}
+			/>
 
-				{error && (
-					<div className="approval-card" role="alert">
-						{error}
-					</div>
-				)}
+			{error && (
+				<Banner tone="danger" className="mt-3">
+					{error}
+				</Banner>
+			)}
 
-				{!overview && loading ? (
-					<div className="ui-card">
-						<p className="ui-empty-note compact">正在加载管理员总览...</p>
-					</div>
-				) : overview ? (
-					<div className="ui-sections-stack">
-						{activeTab === "users" && (
-							<section className="ui-section" aria-label="用户审核与配额">
-								<div className="ui-section-head">
-									<h2 className="ui-section-title">平台账号与配额</h2>
-									<div className="actions-row compact">
-										{(["all", "pending_review", "active", "disabled"] as UserStatusFilter[]).map((f) => (
-											<button
-												key={f}
-												type="button"
-												className={`choice-chip ${userFilter === f ? "active" : ""}`}
-												onClick={() => setUserFilter(f)}
-											>
-												{f === "all" ? "全部" : USER_STATUS_LABEL[f]}
-											</button>
-										))}
-									</div>
-								</div>
+			{!overview && loading ? (
+				<Card padding="md" className="mt-4">
+					<p className="m-0 text-xs text-ink-muted">正在加载管理员总览...</p>
+				</Card>
+			) : overview ? (
+				<div className="mt-4 flex flex-col gap-4">
+					{activeTab === "users" && (
+						<section className="flex flex-col gap-3" aria-label="用户审核与配额">
+							<div className="flex items-center justify-between gap-3 flex-wrap">
+								<h2 className="m-0 text-md font-semibold text-ink">平台账号与配额</h2>
+								<Tabs
+									variant="pill"
+									size="sm"
+									ariaLabel="账号状态筛选"
+									value={userFilter}
+									onChange={(id) => setUserFilter(id as UserStatusFilter)}
+									items={[
+										{ id: "all", label: "全部" },
+										{ id: "pending_review", label: USER_STATUS_LABEL.pending_review },
+										{ id: "active", label: USER_STATUS_LABEL.active },
+										{ id: "disabled", label: USER_STATUS_LABEL.disabled },
+									]}
+								/>
+							</div>
 
-								<div className="admin-user-list">
-									{visibleUsers.length === 0 ? (
-										<div className="ui-card">
-											<p className="ui-empty-note compact">当前筛选条件下暂无账号</p>
-										</div>
-									) : (
-										visibleUsers.map((user) => {
-											const draft = userDrafts[user.id] ?? {
-												maxOrgs: user.maxOrgs,
-												maxActiveDispatches: user.maxActiveDispatches,
-												maxPersonalRoles: user.maxPersonalRoles ?? 5,
-												canDispatchAi: user.canDispatchAi,
-											};
-											const isSelf = user.id === currentUserId;
-											const isBusy = busyUserId === user.id;
-											return (
-												<div key={user.id} className="ui-card admin-user-card">
-													<div className="admin-user-top">
-														<div>
-															<div className="ui-inline-head">
-																<strong>{user.displayName}</strong>
-																<span className="muted-hint">{user.email}</span>
-																<span className={`rsi-badge ${USER_STATUS_BADGE[user.status]}`}>
-																	{USER_STATUS_LABEL[user.status]}
-																</span>
-																{user.platformRole === "super_admin" && (
-																	<span className="rsi-badge rsi-status-verified">超级管理员</span>
-																)}
-																{isSelf && <span className="roster-me">当前我</span>}
-															</div>
-															<div className="muted-hint admin-user-meta">
-																已创建组织 {user.ownedOrgCount} 个 · 所属组织{" "}
-																{user.orgMemberships.length} 个
-																{user.lastLoginAt
-																	? ` · 最近登录 ${new Date(user.lastLoginAt).toLocaleString()}`
-																	: ""}
-															</div>
+							<div className="flex flex-col gap-2.5">
+								{visibleUsers.length === 0 ? (
+									<EmptyState compact title="当前筛选条件下暂无账号" />
+								) : (
+									visibleUsers.map((user) => {
+										const draft = userDrafts[user.id] ?? {
+											maxOrgs: user.maxOrgs,
+											maxActiveDispatches: user.maxActiveDispatches,
+											maxPersonalRoles: user.maxPersonalRoles ?? 5,
+											canDispatchAi: user.canDispatchAi,
+										};
+										const isSelf = user.id === currentUserId;
+										const isBusy = busyUserId === user.id;
+										return (
+											<Card key={user.id} padding="md" className="flex flex-col gap-2.5">
+												<div className="flex items-start justify-between gap-2.5 flex-wrap">
+													<div className="min-w-0">
+														<div className="flex items-center gap-2 flex-wrap">
+															<strong className="text-sm font-semibold text-ink">
+																{user.displayName}
+															</strong>
+															<span className="text-xs text-ink-muted">{user.email}</span>
+															<Badge tone={USER_STATUS_TONE[user.status]} dot>
+																{USER_STATUS_LABEL[user.status]}
+															</Badge>
+															{user.platformRole === "super_admin" && (
+																<Badge tone="accent">超级管理员</Badge>
+															)}
+															{isSelf && <Badge tone="info">当前我</Badge>}
 														</div>
-														<div className="actions-row compact">
-															{user.status === "pending_review" && (
-																<button
-																	type="button"
-																	className="btn-pill-dark"
-																	disabled={isBusy}
-																	onClick={() =>
-																		void handleUserAction(
-																			user,
-																			{
-																				status: "active",
-																				maxOrgs: draft.maxOrgs,
-																				maxActiveDispatches: draft.maxActiveDispatches,
-																				maxPersonalRoles: draft.maxPersonalRoles,
-																				canDispatchAi: draft.canDispatchAi,
-																			},
-																			`已审核通过 ${user.displayName}`,
-																		)
-																	}
-																>
-																	审核通过
-																</button>
-															)}
-															{user.status === "disabled" && (
-																<button
-																	type="button"
-																	className="btn-pill-dark"
-																	disabled={isBusy}
-																	onClick={() =>
-																		void handleUserAction(
-																			user,
-																			{ status: "active" },
-																			`已重新启用 ${user.displayName}`,
-																		)
-																	}
-																>
-																	重新启用
-																</button>
-															)}
-															{user.status !== "disabled" && !isSelf && (
-																<button
-																	type="button"
-																	className="btn-inline"
-																	disabled={isBusy}
-																	onClick={() =>
-																		void handleUserAction(
-																			user,
-																			{ status: "disabled" },
-																			`已禁用账号 ${user.displayName} 并注销其所有会话`,
-																		)
-																	}
-																>
-																	禁用
-																</button>
-															)}
-															{!isSelf && (
-																<button
-																	type="button"
-																	className="btn-inline"
-																	disabled={isBusy}
-																	onClick={() =>
-																		void handleUserAction(
-																			user,
-																			{
-																				platformRole:
-																					user.platformRole === "super_admin"
-																						? "user"
-																						: "super_admin",
-																			},
-																			user.platformRole === "super_admin"
-																				? `已将 ${user.displayName} 降为普通用户`
-																				: `已授予 ${user.displayName} 超级管理员权限`,
-																		)
-																	}
-																>
-																	{user.platformRole === "super_admin" ? "取消超管" : "设为超管"}
-																</button>
-															)}
+														<div className="mt-1 text-xs text-ink-muted">
+															已创建组织 {user.ownedOrgCount} 个 · 所属组织 {user.orgMemberships.length}{" "}
+															个
+															{user.lastLoginAt
+																? ` · 最近登录 ${new Date(user.lastLoginAt).toLocaleString()}`
+																: ""}
 														</div>
 													</div>
-
-													<div className="admin-quota-row">
-														<label className="admin-quota-field">
-															<span>最多建组织数</span>
-															<input
-																type="number"
-																min={0}
-																max={100}
-																className="input-field compact-number"
-																value={draft.maxOrgs}
-																onChange={(e) =>
-																	setUserDrafts((prev) => ({
-																		...prev,
-																		[user.id]: { ...draft, maxOrgs: Number(e.target.value) || 0 },
-																	}))
-																}
-															/>
-														</label>
-														<label className="admin-quota-field">
-															<span>并发 AI 上限</span>
-															<input
-																type="number"
-																min={0}
-																max={20}
-																className="input-field compact-number"
-																value={draft.maxActiveDispatches}
-																onChange={(e) =>
-																	setUserDrafts((prev) => ({
-																		...prev,
-																		[user.id]: {
-																			...draft,
-																			maxActiveDispatches: Number(e.target.value) || 0,
+													<div className="flex items-center gap-2 flex-wrap shrink-0">
+														{user.status === "pending_review" && (
+															<Button
+																variant="primary"
+																size="xs"
+																disabled={isBusy}
+																onClick={() =>
+																	void handleUserAction(
+																		user,
+																		{
+																			status: "active",
+																			maxOrgs: draft.maxOrgs,
+																			maxActiveDispatches: draft.maxActiveDispatches,
+																			maxPersonalRoles: draft.maxPersonalRoles,
+																			canDispatchAi: draft.canDispatchAi,
 																		},
-																	}))
+																		`已审核通过 ${user.displayName}`,
+																	)
 																}
-															/>
-														</label>
-														<label className="admin-quota-field">
-															<span>私有角色上限</span>
-															<input
-																type="number"
-																min={0}
-																max={100}
-																className="input-field compact-number"
-																value={draft.maxPersonalRoles}
-																onChange={(e) =>
-																	setUserDrafts((prev) => ({
-																		...prev,
-																		[user.id]: {
-																			...draft,
-																			maxPersonalRoles: Number(e.target.value) || 0,
+															>
+																审核通过
+															</Button>
+														)}
+														{user.status === "disabled" && (
+															<Button
+																variant="primary"
+																size="xs"
+																disabled={isBusy}
+																onClick={() =>
+																	void handleUserAction(
+																		user,
+																		{ status: "active" },
+																		`已重新启用 ${user.displayName}`,
+																	)
+																}
+															>
+																重新启用
+															</Button>
+														)}
+														{user.status !== "disabled" && !isSelf && (
+															<Button
+																variant="inline"
+																size="xs"
+																className="text-danger-text"
+																disabled={isBusy}
+																onClick={() =>
+																	void handleUserAction(
+																		user,
+																		{ status: "disabled" },
+																		`已禁用账号 ${user.displayName} 并注销其所有会话`,
+																	)
+																}
+															>
+																禁用
+															</Button>
+														)}
+														{!isSelf && (
+															<Button
+																variant="inline"
+																size="xs"
+																disabled={isBusy}
+																onClick={() =>
+																	void handleUserAction(
+																		user,
+																		{
+																			platformRole:
+																				user.platformRole === "super_admin"
+																					? "user"
+																					: "super_admin",
 																		},
-																	}))
+																		user.platformRole === "super_admin"
+																			? `已将 ${user.displayName} 降为普通用户`
+																			: `已授予 ${user.displayName} 超级管理员权限`,
+																	)
 																}
-															/>
-														</label>
-														<label className="admin-check-field">
-															<input
-																type="checkbox"
-																checked={draft.canDispatchAi}
-																onChange={(e) =>
-																	setUserDrafts((prev) => ({
-																		...prev,
-																		[user.id]: { ...draft, canDispatchAi: e.target.checked },
-																	}))
-																}
-															/>
-															<span>允许直接派发 AI 执行</span>
-														</label>
-														<button
-															type="button"
-															className="btn-inline"
-															disabled={isBusy}
-															onClick={() =>
-																void handleUserAction(
-																	user,
-																	{
-																		maxOrgs: draft.maxOrgs,
-																		maxActiveDispatches: draft.maxActiveDispatches,
-																		maxPersonalRoles: draft.maxPersonalRoles,
-																		canDispatchAi: draft.canDispatchAi,
-																	},
-																	`已保存 ${user.displayName} 的配额设置`,
-																)
-															}
-														>
-															保存配额
-														</button>
+															>
+																{user.platformRole === "super_admin" ? "取消超管" : "设为超管"}
+															</Button>
+														)}
 													</div>
 												</div>
-											);
-										})
-									)}
-								</div>
-							</section>
-						)}
 
-						{activeTab === "settings" && (
-							<section className="ui-section" aria-label="平台安全边界">
-								<form className="ui-card admin-settings-form" onSubmit={(e) => void handleSaveSettings(e)}>
-									<div>
-										<h3 className="ui-card-title">全局默认模型</h3>
+												<div className="flex items-end gap-3 flex-wrap pt-2.5 border-t border-dashed border-line">
+													<FieldGroup label="最多建组织数" htmlFor={`quota-orgs-${user.id}`}>
+														<Input
+															id={`quota-orgs-${user.id}`}
+															type="number"
+															size="sm"
+															min={0}
+															max={100}
+															className="w-24"
+															value={draft.maxOrgs}
+															onChange={(e) =>
+																setUserDrafts((prev) => ({
+																	...prev,
+																	[user.id]: { ...draft, maxOrgs: Number(e.target.value) || 0 },
+																}))
+															}
+														/>
+													</FieldGroup>
+													<FieldGroup label="并发 AI 上限" htmlFor={`quota-dispatches-${user.id}`}>
+														<Input
+															id={`quota-dispatches-${user.id}`}
+															type="number"
+															size="sm"
+															min={0}
+															max={20}
+															className="w-24"
+															value={draft.maxActiveDispatches}
+															onChange={(e) =>
+																setUserDrafts((prev) => ({
+																	...prev,
+																	[user.id]: {
+																		...draft,
+																		maxActiveDispatches: Number(e.target.value) || 0,
+																	},
+																}))
+															}
+														/>
+													</FieldGroup>
+													<FieldGroup label="私有角色上限" htmlFor={`quota-roles-${user.id}`}>
+														<Input
+															id={`quota-roles-${user.id}`}
+															type="number"
+															size="sm"
+															min={0}
+															max={100}
+															className="w-24"
+															value={draft.maxPersonalRoles}
+															onChange={(e) =>
+																setUserDrafts((prev) => ({
+																	...prev,
+																	[user.id]: {
+																		...draft,
+																		maxPersonalRoles: Number(e.target.value) || 0,
+																	},
+																}))
+															}
+														/>
+													</FieldGroup>
+													<label className="inline-flex items-center gap-1.5 text-xs text-ink cursor-pointer h-7">
+														<input
+															type="checkbox"
+															className="accent-accent"
+															checked={draft.canDispatchAi}
+															onChange={(e) =>
+																setUserDrafts((prev) => ({
+																	...prev,
+																	[user.id]: { ...draft, canDispatchAi: e.target.checked },
+																}))
+															}
+														/>
+														<span>允许直接派发 AI 执行</span>
+													</label>
+													<Button
+														variant="inline"
+														size="xs"
+														className="h-7"
+														disabled={isBusy}
+														onClick={() =>
+															void handleUserAction(
+																user,
+																{
+																	maxOrgs: draft.maxOrgs,
+																	maxActiveDispatches: draft.maxActiveDispatches,
+																	maxPersonalRoles: draft.maxPersonalRoles,
+																	canDispatchAi: draft.canDispatchAi,
+																},
+																`已保存 ${user.displayName} 的配额设置`,
+															)
+														}
+													>
+														保存配额
+													</Button>
+												</div>
+											</Card>
+										);
+									})
+								)}
+							</div>
+						</section>
+					)}
+
+					{activeTab === "settings" && (
+						<section aria-label="平台安全边界">
+							<Card padding="md">
+								<form className="flex flex-col gap-3.5" onSubmit={(e) => void handleSaveSettings(e)}>
+									<div className="flex flex-col gap-2">
+										<h3 className="m-0 text-sm font-semibold text-ink">全局默认模型</h3>
 										<ModelPicker
 											value={
 												modelEdit === undefined
@@ -508,71 +500,87 @@ export function AdminView({
 											disabled={savingSettings}
 										/>
 									</div>
-									<h2 className="ui-section-title">注册策略与多团队仓库边界</h2>
-									<div className="admin-radio-group">
+									<h2 className="m-0 pt-2 border-t border-line text-md font-semibold text-ink">
+										注册策略与多团队仓库边界
+									</h2>
+									<div className="flex flex-col gap-2">
 										{REGISTRATION_LABELS.map((item) => (
-											<label key={item.value} className="admin-radio-card">
+											<label
+												key={item.value}
+												className={cn(
+													"flex items-start gap-2.5 px-3 py-2.5 rounded-md border cursor-pointer transition-colors",
+													registrationMode === item.value
+														? "border-accent bg-accent-soft/40"
+														: "border-line bg-sidebar hover:bg-hover/60",
+												)}
+											>
 												<input
 													type="radio"
 													name="registrationMode"
+													className="mt-0.5 accent-accent"
 													checked={registrationMode === item.value}
 													onChange={() => setRegistrationMode(item.value)}
 												/>
-												<div>
-													<strong>{item.label}</strong>
-													<div className="muted-hint">{item.desc}</div>
+												<div className="min-w-0">
+													<strong className="text-sm text-ink font-semibold">{item.label}</strong>
+													<div className="mt-0.5 text-xs text-ink-muted leading-normal">{item.desc}</div>
 												</div>
 											</label>
 										))}
 									</div>
 
-									<label className="auth-field-label">
-										<span>多团队代码库克隆主目录（workspacesRoot）</span>
-										<input
-											className="input-field"
+									<FieldGroup
+										label="多团队代码库克隆主目录（workspacesRoot）"
+										htmlFor="admin-workspaces-root"
+										hint={`各组织通过 Git 地址克隆的项目将自动落盘至 <主目录>/<组织Slug>/<仓库>，避免跨组织目录越界。`}
+									>
+										<Input
+											id="admin-workspaces-root"
 											value={workspacesRoot}
 											onChange={(e) => setWorkspacesRoot(e.target.value)}
 											placeholder="/var/pa-workspaces"
 											required
 										/>
-										<span className="muted-hint">
-											各组织通过 Git 地址克隆的项目将自动落盘至 `{"<主目录>/<组织Slug>/<仓库>"}
-											`，避免跨组织目录越界。
-										</span>
-									</label>
+									</FieldGroup>
 
-									<label className="admin-check-field">
+									<label className="inline-flex items-center gap-2 text-xs text-ink cursor-pointer">
 										<input
 											type="checkbox"
+											className="accent-accent"
 											checked={allowLocalWorkspacePath}
 											onChange={(e) => setAllowLocalWorkspacePath(e.target.checked)}
 										/>
 										<span>允许普通团队直接绑定服务器本地目录（始终拒绝 .data 与敏感运行目录）</span>
 									</label>
 
-									<label className="auth-field-label">
-										<span>本地目录绑定白名单前缀（每行一个绝对路径，留空仅禁止内部敏感目录）</span>
-										<textarea
-											className="input-field admin-textarea"
+									<FieldGroup
+										label="本地目录绑定白名单前缀（每行一个绝对路径，留空仅禁止内部敏感目录）"
+										htmlFor="admin-workspace-allowlist"
+									>
+										<Textarea
+											id="admin-workspace-allowlist"
 											rows={3}
+											mono
 											value={allowlistText}
 											onChange={(e) => setAllowlistText(e.target.value)}
-											placeholder="/srv/repos&#10;/opt/team-projects"
+											placeholder={"/srv/repos\n/opt/team-projects"}
 										/>
-									</label>
+									</FieldGroup>
 
-									<label className="admin-check-field">
+									<label className="inline-flex items-center gap-2 text-xs text-ink cursor-pointer">
 										<input
 											type="checkbox"
+											className="accent-accent"
 											checked={allowCommandPreviews}
 											onChange={(e) => setAllowCommandPreviews(e.target.checked)}
 										/>
 										<span>允许组织管理员/成员执行命令型本地预览（生产多租户部署建议保持关闭）</span>
 									</label>
 
-									<label className="admin-check-field">
+									<label className="inline-flex items-start gap-2 text-xs text-ink cursor-pointer leading-normal">
 										<input
 											type="checkbox"
+											className="mt-0.5 accent-accent"
 											checked={systemOneEnabled}
 											onChange={(e) => setSystemOneEnabled(e.target.checked)}
 										/>
@@ -583,139 +591,156 @@ export function AdminView({
 										</span>
 									</label>
 
-									<div className="admin-quota-row">
-										<label className="admin-quota-field">
-											<span>新用户默认建组织上限</span>
-											<input
+									<div className="flex items-end gap-3 flex-wrap pt-2.5 border-t border-dashed border-line">
+										<FieldGroup label="新用户默认建组织上限" htmlFor="admin-default-orgs">
+											<Input
+												id="admin-default-orgs"
 												type="number"
+												size="sm"
 												min={0}
 												max={100}
-												className="input-field compact-number"
+												className="w-24"
 												value={defaultMaxOrgs}
 												onChange={(e) => setDefaultMaxOrgs(Number(e.target.value) || 0)}
 											/>
-										</label>
-										<label className="admin-quota-field">
-											<span>新用户默认并发 AI 上限</span>
-											<input
+										</FieldGroup>
+										<FieldGroup label="新用户默认并发 AI 上限" htmlFor="admin-default-dispatches">
+											<Input
+												id="admin-default-dispatches"
 												type="number"
+												size="sm"
 												min={0}
 												max={20}
-												className="input-field compact-number"
+												className="w-24"
 												value={defaultMaxActiveDispatches}
 												onChange={(e) => setDefaultMaxActiveDispatches(Number(e.target.value) || 0)}
 											/>
-										</label>
-										<label className="admin-quota-field">
-											<span>新用户默认私有角色上限</span>
-											<input
+										</FieldGroup>
+										<FieldGroup label="新用户默认私有角色上限" htmlFor="admin-default-roles">
+											<Input
+												id="admin-default-roles"
 												type="number"
+												size="sm"
 												min={0}
 												max={100}
-												className="input-field compact-number"
+												className="w-24"
 												value={defaultMaxPersonalRoles}
 												onChange={(e) => setDefaultMaxPersonalRoles(Number(e.target.value) || 0)}
 											/>
-										</label>
+										</FieldGroup>
 									</div>
 
-									<div className="actions-row compact">
-										<button type="submit" className="btn-pill-dark" disabled={savingSettings}>
+									<div className="flex items-center gap-2 pt-1">
+										<Button type="submit" variant="primary" size="sm" disabled={savingSettings}>
 											{savingSettings ? "保存中…" : "保存平台配置"}
-										</button>
+										</Button>
 									</div>
 								</form>
-							</section>
-						)}
+							</Card>
+						</section>
+					)}
 
-						{activeTab === "orgs" && (
-							<section className="ui-section" aria-label="组织与运行中任务">
-								<div className="ui-card">
-									<h2 className="ui-section-title">运行中的 AI 任务（{overview.activeRuns.length}）</h2>
-									{overview.activeRuns.length === 0 ? (
-										<p className="ui-empty-note compact">当前没有正在执行的 AI 事项</p>
-									) : (
-										<div className="admin-user-list">
-											{overview.activeRuns.map((run) => (
-												<div key={run.matterId} className="admin-run-row">
-													<div>
-														<strong>{run.title}</strong>
-														<div className="muted-hint">
-															{run.label} · 始于 {new Date(run.startedAt).toLocaleTimeString()}
-														</div>
+					{activeTab === "orgs" && (
+						<section className="flex flex-col gap-3.5" aria-label="组织与运行中任务">
+							<Card padding="md" className="flex flex-col gap-3">
+								<h2 className="m-0 text-md font-semibold text-ink">
+									运行中的 AI 任务（{overview.activeRuns.length}）
+								</h2>
+								{overview.activeRuns.length === 0 ? (
+									<EmptyState compact title="当前没有正在执行的 AI 事项" />
+								) : (
+									<div className="flex flex-col gap-2">
+										{overview.activeRuns.map((run) => (
+											<div
+												key={run.matterId}
+												className="flex items-center justify-between gap-2.5 flex-wrap px-3 py-2 rounded-sm border border-line bg-sidebar"
+											>
+												<div className="min-w-0">
+													<strong className="text-sm text-ink">{run.title}</strong>
+													<div className="mt-0.5 text-xs text-ink-muted">
+														{run.label} · 始于 {new Date(run.startedAt).toLocaleTimeString()}
 													</div>
-													<button
-														type="button"
-														className="btn-inline"
-														onClick={() =>
-															void onAbortMatter(run.matterId).then(
-																() => onNotice("已请求中止任务"),
-																(error: unknown) =>
-																	onError(error instanceof Error ? error.message : String(error)),
-															)
-														}
-													>
-														紧急中止
-													</button>
 												</div>
-											))}
-										</div>
-									)}
-								</div>
+												<Button
+													variant="danger"
+													size="xs"
+													onClick={() =>
+														void onAbortMatter(run.matterId).then(
+															() => onNotice("已请求中止任务"),
+															(error: unknown) =>
+																onError(error instanceof Error ? error.message : String(error)),
+														)
+													}
+												>
+													紧急中止
+												</Button>
+											</div>
+										))}
+									</div>
+								)}
+							</Card>
 
-								<div className="ui-card">
-									<h2 className="ui-section-title">全部组织（{overview.organizations.length}）</h2>
-									<div className="admin-user-list">
-										{overview.organizations.map((org) => (
-											<div key={org.id} className="admin-run-row">
-												<div>
-													<strong>{org.name}</strong>{" "}
-													{org.isDefault && <span className="rsi-badge rsi-status-verified">默认</span>}
-													<div className="muted-hint">
-														Slug: {org.slug ?? org.id} · 主目录: {org.workspacesDir ?? "未设置"}
-													</div>
+							<Card padding="md" className="flex flex-col gap-3">
+								<h2 className="m-0 text-md font-semibold text-ink">
+									全部组织（{overview.organizations.length}）
+								</h2>
+								<div className="flex flex-col gap-2">
+									{overview.organizations.map((org) => (
+										<div
+											key={org.id}
+											className="flex items-center justify-between gap-2.5 flex-wrap px-3 py-2 rounded-sm border border-line bg-sidebar"
+										>
+											<div className="min-w-0">
+												<div className="flex items-center gap-2 flex-wrap">
+													<strong className="text-sm text-ink">{org.name}</strong>
+													{org.isDefault && <Badge tone="success">默认</Badge>}
+												</div>
+												<div className="mt-0.5 text-xs text-ink-muted font-mono break-all">
+													Slug: {org.slug ?? org.id} · 主目录: {org.workspacesDir ?? "未设置"}
+												</div>
+											</div>
+										</div>
+									))}
+								</div>
+							</Card>
+						</section>
+					)}
+
+					{activeTab === "audit" && (
+						<section aria-label="安全审计日志">
+							<Card padding="md" className="flex flex-col gap-3">
+								<h2 className="m-0 text-md font-semibold text-ink">
+									最近安全审计记录（{overview.auditLogs.length}）
+								</h2>
+								{overview.auditLogs.length === 0 ? (
+									<EmptyState compact title="暂无审计记录" />
+								) : (
+									<div className="flex flex-col gap-2">
+										{overview.auditLogs.map((entry) => (
+											<div key={entry.id} className="px-3 py-2 rounded-sm border border-line bg-sidebar">
+												<div className="flex items-center justify-between gap-2.5 flex-wrap text-xs">
+													<strong className="font-mono text-ink">{entry.action}</strong>
+													<span className="text-ink-muted">
+														{entry.actorEmail ?? entry.actorUserId ?? "system"} ·{" "}
+														{new Date(entry.createdAt).toLocaleString()}
+														{entry.ipAddress ? ` · ${entry.ipAddress}` : ""}
+													</span>
+												</div>
+												<div className="mt-1 text-micro font-mono text-ink-muted break-words">
+													target={entry.targetType}
+													{entry.targetId ? `:${entry.targetId}` : ""}
+													{entry.orgId ? ` · org=${entry.orgId}` : ""}
+													{entry.detail ? ` · ${JSON.stringify(entry.detail)}` : ""}
 												</div>
 											</div>
 										))}
 									</div>
-								</div>
-							</section>
-						)}
-
-						{activeTab === "audit" && (
-							<section className="ui-section" aria-label="安全审计日志">
-								<div className="ui-card">
-									<h2 className="ui-section-title">最近安全审计记录（{overview.auditLogs.length}）</h2>
-									{overview.auditLogs.length === 0 ? (
-										<p className="ui-empty-note compact">暂无审计记录</p>
-									) : (
-										<div className="admin-audit-list">
-											{overview.auditLogs.map((entry) => (
-												<div key={entry.id} className="admin-audit-row">
-													<div className="admin-audit-head">
-														<strong>{entry.action}</strong>
-														<span className="muted-hint">
-															{entry.actorEmail ?? entry.actorUserId ?? "system"} ·{" "}
-															{new Date(entry.createdAt).toLocaleString()}
-															{entry.ipAddress ? ` · ${entry.ipAddress}` : ""}
-														</span>
-													</div>
-													<div className="muted-hint admin-audit-detail">
-														target={entry.targetType}
-														{entry.targetId ? `:${entry.targetId}` : ""}
-														{entry.orgId ? ` · org=${entry.orgId}` : ""}
-														{entry.detail ? ` · ${JSON.stringify(entry.detail)}` : ""}
-													</div>
-												</div>
-											))}
-										</div>
-									)}
-								</div>
-							</section>
-						)}
-					</div>
-				) : null}
-			</div>
-		</div>
+								)}
+							</Card>
+						</section>
+					)}
+				</div>
+			) : null}
+		</PageShell>
 	);
 }
