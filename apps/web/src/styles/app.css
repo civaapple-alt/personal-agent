@@ -11,9 +11,6 @@
 @import "./chat-composer.css" layer(legacy);
 @import "./model-picker.css" layer(legacy);
 @import "./chat-roster.css" layer(legacy);
-@import "./deliverables.css" layer(legacy);
-@import "./spaces.css" layer(legacy);
-@import "./workspaces.css" layer(legacy);
 @import "./role-architect.css" layer(legacy);
 @import "./view-transitions.css" layer(legacy);
 @import "./responsive.css" layer(legacy);

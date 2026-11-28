@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
 	addWorkspace,
 	type MatterDto,
@@ -11,7 +11,19 @@ import {
 } from "../api.ts";
 import { ServerDirectoryPicker } from "../components/ServerDirectoryPicker.tsx";
 import { WorkspaceDetailPanel } from "../components/WorkspaceDetailPanel.tsx";
-import { ModalDialog } from "../primitives/ModalDialog.tsx";
+import {
+	Button,
+	EmptyState,
+	FieldGroup,
+	Input,
+	ModalDialog,
+	PageShell,
+	PaneHeader,
+	Select,
+	SplitPane,
+	Tabs,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 interface MaterialsViewProps {
 	workspaces: WorkspaceDto[];
@@ -67,6 +79,13 @@ export function MaterialsView({
 	const [editVisibility, setEditVisibility] = useState<WorkspaceVisibility>("org");
 	const [editAllowedUserIds, setEditAllowedUserIds] = useState<string[]>([]);
 	const [savingAccess, setSavingAccess] = useState(false);
+
+	const wsNameId = useId();
+	const wsOrgId = useId();
+	const wsCloneUrlId = useId();
+	const wsBranchId = useId();
+	const wsVisibilityId = useId();
+	const editVisibilityId = useId();
 
 	useEffect(() => {
 		if (!workspaces.some((w) => w.id === activeWsId)) {
@@ -204,27 +223,34 @@ export function MaterialsView({
 	);
 
 	return (
-		<div className="subpage-scroll">
-			<div className="subpage-inner wide">
-				<div className="pane-header">
-					<h1>工作区</h1>
-					<p>统一查看工作区、配置多目录与 Rules / Skills 预算，以及追踪事项与资料空间动态。</p>
-				</div>
+		<PageShell maxWidth="wide">
+			<PaneHeader
+				title="工作区"
+				subtitle="统一查看工作区、配置多目录与 Rules / Skills 预算，以及追踪事项与资料空间动态。"
+			/>
 
-				<div className="ws-two-col">
-					<aside className="space-nav-col" aria-label="工作区列表">
-						<div className="space-nav-head">
-							<span className="space-nav-title">全部工作区（{workspaces.length}）</span>
-							<button type="button" className="btn-inline" onClick={openAddModal}>
+			<SplitPane
+				sidebarWidth="244px"
+				className="mt-5 gap-6 lg:gap-8"
+				sidebar={
+					<nav
+						className="flex flex-col gap-3.5 border-b border-line pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-5 lg:min-h-[440px]"
+						aria-label="工作区列表"
+					>
+						<div className="flex items-center justify-between gap-2 text-sm">
+							<span className="text-xs font-semibold text-ink-secondary">全部工作区（{workspaces.length}）</span>
+							<Button variant="inline" size="xs" onClick={openAddModal}>
 								+ 新建工作区
-							</button>
+							</Button>
 						</div>
 						{workspaces.length === 0 ? (
-							<p className="space-empty-hint">暂无已登记工作区，点击右上角添加。</p>
+							<p className="m-0 px-2.5 py-2 text-xs text-ink-muted">暂无已登记工作区，点击右上角添加。</p>
 						) : (
 							groupedWorkspaces.map((group) => (
-								<div key={group.key} className="space-nav-group">
-									<div className="space-nav-group-label">{group.label}</div>
+								<div key={group.key} className="flex flex-col gap-0.5">
+									<div className="px-2.5 py-1 text-micro font-semibold text-ink-muted uppercase tracking-wider">
+										{group.label}
+									</div>
 									{group.items.map((ws) => {
 										const isSelected = activeWorkspace?.id === ws.id;
 										const matterCount = matters.filter(
@@ -234,51 +260,60 @@ export function MaterialsView({
 											<button
 												key={ws.id}
 												type="button"
-												className={isSelected ? "space-nav-item active" : "space-nav-item"}
+												className={cn(
+													"flex items-center justify-between gap-2 w-full px-2.5 py-1.5 border-0 rounded-md text-left text-sm cursor-pointer transition-colors",
+													isSelected
+														? "bg-subtle text-ink font-semibold"
+														: "bg-transparent text-ink-secondary hover:bg-hover/60 hover:text-ink",
+												)}
 												onClick={() => setActiveWsId(ws.id)}
 											>
-												<span className="space-nav-item-label">{ws.name}</span>
-												{matterCount > 0 && <span className="space-nav-item-count">{matterCount}</span>}
+												<span className="min-w-0 truncate">{ws.name}</span>
+												{matterCount > 0 && (
+													<span className="text-micro text-ink-muted tabular-nums shrink-0">
+														{matterCount}
+													</span>
+												)}
 											</button>
 										);
 									})}
 								</div>
 							))
 						)}
-					</aside>
-
-					<div className="ws-main-col">
-						{activeWorkspace ? (
-							<WorkspaceDetailPanel
-								workspace={activeWorkspace}
-								allWorkspaces={workspaces}
-								organizations={organizations}
-								matters={matters}
-								canManage={activeCanManage}
-								canEditAccess={activeCanEditAccess}
-								isAccountMode={isAccountMode}
-								memberName={memberName}
-								onChangeOrg={handleChangeWorkspaceOrg}
-								onOpenAccess={openEditAccessModal}
-								onUseWorkspace={onUseWorkspace}
-								onOpenMatter={onOpenMatter}
-								onOpenSpace={onOpenSpace}
-								onNotice={onNotice}
-								onChanged={onRefresh}
-							/>
-						) : (
-							<div className="ui-card">
-								<p className="ui-empty-note compact">暂无可访问的工作区，可点击左侧「+ 新建工作区」添加。</p>
-								<div className="actions-row compact">
-									<button type="button" className="btn-pill-outline btn-xs" onClick={openAddModal}>
-										+ 新建工作区
-									</button>
-								</div>
-							</div>
-						)}
-					</div>
-				</div>
-			</div>
+					</nav>
+				}
+			>
+				{activeWorkspace ? (
+					<WorkspaceDetailPanel
+						workspace={activeWorkspace}
+						allWorkspaces={workspaces}
+						organizations={organizations}
+						matters={matters}
+						canManage={activeCanManage}
+						canEditAccess={activeCanEditAccess}
+						isAccountMode={isAccountMode}
+						memberName={memberName}
+						onChangeOrg={handleChangeWorkspaceOrg}
+						onOpenAccess={openEditAccessModal}
+						onUseWorkspace={onUseWorkspace}
+						onOpenMatter={onOpenMatter}
+						onOpenSpace={onOpenSpace}
+						onNotice={onNotice}
+						onChanged={onRefresh}
+					/>
+				) : (
+					<EmptyState
+						compact
+						title="暂无可访问的工作区"
+						description="可点击左侧「+ 新建工作区」添加。"
+						action={
+							<Button variant="secondary" size="xs" onClick={openAddModal}>
+								+ 新建工作区
+							</Button>
+						}
+					/>
+				)}
+			</SplitPane>
 
 			<ModalDialog
 				open={showAddModal}
@@ -289,15 +324,10 @@ export function MaterialsView({
 				onClose={closeAddModal}
 				footer={
 					<>
-						<button type="button" className="btn-pill-outline" disabled={submitting} onClick={closeAddModal}>
+						<Button variant="secondary" size="sm" disabled={submitting} onClick={closeAddModal}>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={addDisabled}
-							onClick={() => void handleAddWorkspace()}
-						>
+						</Button>
+						<Button variant="primary" size="sm" disabled={addDisabled} onClick={() => void handleAddWorkspace()}>
 							{submitting
 								? newWsSourceType === "cloned"
 									? "正在克隆并绑定…"
@@ -305,47 +335,37 @@ export function MaterialsView({
 								: newWsSourceType === "cloned"
 									? "克隆并绑定"
 									: "绑定工作区"}
-						</button>
+						</Button>
 					</>
 				}
 			>
 				{allowLocalWorkspacePath && (
-					<div className="auth-tab-strip" role="tablist" aria-label="仓库接入方式">
-						<button
-							type="button"
-							role="tab"
-							aria-selected={newWsSourceType === "cloned"}
-							className={newWsSourceType === "cloned" ? "auth-tab active" : "auth-tab"}
-							onClick={() => setNewWsSourceType("cloned")}
-						>
-							从 Git 地址克隆到组织主目录
-						</button>
-						<button
-							type="button"
-							role="tab"
-							aria-selected={newWsSourceType === "local"}
-							className={newWsSourceType === "local" ? "auth-tab active" : "auth-tab"}
-							onClick={() => setNewWsSourceType("local")}
-						>
-							指定服务器本地目录
-						</button>
-					</div>
+					<Tabs
+						variant="pill"
+						size="sm"
+						ariaLabel="仓库接入方式"
+						value={newWsSourceType}
+						onChange={(id) => setNewWsSourceType(id as WorkspaceSourceType)}
+						items={[
+							{ id: "cloned", label: "从 Git 地址克隆到组织主目录" },
+							{ id: "local", label: "指定服务器本地目录" },
+						]}
+					/>
 				)}
 
-				<div className="form-grid">
-					<label className="identity-field">
-						<span className="identity-field-label">项目名称</span>
-						<input
-							className="input-field"
+				<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<FieldGroup label="项目名称" htmlFor={wsNameId}>
+						<Input
+							id={wsNameId}
 							placeholder="如：order-service"
 							value={newWsName}
 							onChange={(e) => setNewWsName(e.target.value)}
 						/>
-					</label>
-					<label className="identity-field">
-						<span className="identity-field-label">所属组织</span>
-						<select
-							className="select-sm select-control"
+					</FieldGroup>
+					<FieldGroup label="所属组织" htmlFor={wsOrgId}>
+						<Select
+							id={wsOrgId}
+							size="sm"
 							aria-label="新仓库所属组织"
 							value={newWsOrgChoice === "__standalone__" ? "__standalone__" : (resolvedNewOrgId ?? "")}
 							onChange={(e) => setNewWsOrgChoice(e.target.value)}
@@ -361,51 +381,45 @@ export function MaterialsView({
 								))
 							)}
 							{!isAccountMode && <option value="__standalone__">不归属组织（独立仓库）</option>}
-						</select>
-					</label>
+						</Select>
+					</FieldGroup>
 				</div>
 
 				{newWsSourceType === "cloned" ? (
-					<div className="form-grid">
-						<label className="identity-field">
-							<span className="identity-field-label">Git 克隆地址（HTTPS / SSH）</span>
-							<input
-								className="input-field"
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+						<FieldGroup label="Git 克隆地址（HTTPS / SSH）" htmlFor={wsCloneUrlId}>
+							<Input
+								id={wsCloneUrlId}
+								mono
 								placeholder="https://github.com/org/repo.git 或 git@github.com:org/repo.git"
 								value={newWsCloneUrl}
 								onChange={(e) => setNewWsCloneUrl(e.target.value)}
 							/>
-						</label>
-						<label className="identity-field">
-							<span className="identity-field-label">分支（可选）</span>
-							<input
-								className="input-field"
+						</FieldGroup>
+						<FieldGroup label="分支（可选）" htmlFor={wsBranchId}>
+							<Input
+								id={wsBranchId}
+								mono
 								placeholder="main"
 								value={newWsBranch}
 								onChange={(e) => setNewWsBranch(e.target.value)}
 							/>
-						</label>
+						</FieldGroup>
 					</div>
 				) : (
-					<div className="identity-field">
-						<label className="identity-field-label" htmlFor="workspace-local-path">
-							本地仓库绝对路径
-						</label>
-						<div className="server-directory-input">
-							<input
+					<FieldGroup label="本地仓库绝对路径" htmlFor="workspace-local-path">
+						<div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0">
+							<Input
 								id="workspace-local-path"
-								className="input-field"
+								mono
+								className="flex-1 min-w-0"
 								placeholder="/Users/you/code/order-service"
 								value={newWsPath}
 								onChange={(e) => setNewWsPath(e.target.value)}
 							/>
-							<button
-								type="button"
-								className="btn-secondary"
-								onClick={() => setBrowsingDirectory(!browsingDirectory)}
-							>
+							<Button variant="secondary" size="md" onClick={() => setBrowsingDirectory(!browsingDirectory)}>
 								选择目录
-							</button>
+							</Button>
 						</div>
 						{browsingDirectory && (
 							<ServerDirectoryPicker
@@ -419,24 +433,27 @@ export function MaterialsView({
 								}}
 							/>
 						)}
-					</div>
+					</FieldGroup>
 				)}
 
 				{resolvedNewOrgId && (
-					<div className="identity-field">
-						<span className="identity-field-label">项目可见范围</span>
-						<select
-							className="select-sm select-control"
+					<FieldGroup label="项目可见范围" htmlFor={wsVisibilityId}>
+						<Select
+							id={wsVisibilityId}
+							size="sm"
 							value={newWsVisibility}
 							onChange={(e) => setNewWsVisibility(e.target.value as WorkspaceVisibility)}
 						>
 							<option value="org">组织全员可见（org）</option>
 							<option value="restricted">仅勾选的组织成员可见（restricted）</option>
-						</select>
+						</Select>
 						{newWsVisibility === "restricted" && targetOrgMembers.length > 0 && (
-							<div className="org-ai-checklist">
+							<div className="mt-1.5 max-h-40 overflow-y-auto border border-line rounded-md p-2 flex flex-col gap-1 bg-surface">
 								{targetOrgMembers.map((m) => (
-									<label key={m.userId} className="org-ai-check-item">
+									<label
+										key={m.userId}
+										className="flex items-center gap-2 px-2 py-1 rounded-xs text-xs text-ink hover:bg-hover/60 cursor-pointer"
+									>
 										<input
 											type="checkbox"
 											checked={newWsAllowedUserIds.includes(m.userId)}
@@ -451,7 +468,7 @@ export function MaterialsView({
 								))}
 							</div>
 						)}
-					</div>
+					</FieldGroup>
 				)}
 			</ModalDialog>
 
@@ -463,42 +480,38 @@ export function MaterialsView({
 				onClose={() => !savingAccess && setEditingAccessWs(null)}
 				footer={
 					<>
-						<button
-							type="button"
-							className="btn-pill-outline"
+						<Button
+							variant="secondary"
+							size="sm"
 							disabled={savingAccess}
 							onClick={() => setEditingAccessWs(null)}
 						>
 							取消
-						</button>
-						<button
-							type="button"
-							className="btn-pill-dark"
-							disabled={savingAccess}
-							onClick={() => void handleSaveAccess()}
-						>
+						</Button>
+						<Button variant="primary" size="sm" disabled={savingAccess} onClick={() => void handleSaveAccess()}>
 							{savingAccess ? "保存中…" : "保存权限"}
-						</button>
+						</Button>
 					</>
 				}
 			>
 				{editingAccessWs && (
-					<div className="identity-field">
-						<label className="identity-field">
-							<span className="identity-field-label">项目可见范围</span>
-							<select
-								className="select-sm select-control"
-								value={editVisibility}
-								onChange={(e) => setEditVisibility(e.target.value as WorkspaceVisibility)}
-							>
-								<option value="org">组织内全部成员可见</option>
-								<option value="restricted">仅指定组织成员可见</option>
-							</select>
-						</label>
+					<FieldGroup label="项目可见范围" htmlFor={editVisibilityId}>
+						<Select
+							id={editVisibilityId}
+							size="sm"
+							value={editVisibility}
+							onChange={(e) => setEditVisibility(e.target.value as WorkspaceVisibility)}
+						>
+							<option value="org">组织内全部成员可见</option>
+							<option value="restricted">仅指定组织成员可见</option>
+						</Select>
 						{editVisibility === "restricted" && editingAccessWs.orgId && (
-							<div className="org-ai-checklist">
+							<div className="mt-1.5 max-h-40 overflow-y-auto border border-line rounded-md p-2 flex flex-col gap-1 bg-surface">
 								{(orgMembersByOrgId[editingAccessWs.orgId] ?? []).map((m) => (
-									<label key={m.userId} className="org-ai-check-item">
+									<label
+										key={m.userId}
+										className="flex items-center gap-2 px-2 py-1 rounded-xs text-xs text-ink hover:bg-hover/60 cursor-pointer"
+									>
 										<input
 											type="checkbox"
 											checked={editAllowedUserIds.includes(m.userId)}
@@ -513,9 +526,9 @@ export function MaterialsView({
 								))}
 							</div>
 						)}
-					</div>
+					</FieldGroup>
 				)}
 			</ModalDialog>
-		</div>
+		</PageShell>
 	);
 }

@@ -27,6 +27,18 @@ import {
 import type { BootstrapPayload } from "../api.ts";
 import { SpaceDocumentDetailPane } from "../components/spaces/SpaceDocumentDetailPane.tsx";
 import { SpaceDocumentEditorForm } from "../components/spaces/SpaceDocumentEditorForm.tsx";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	EmptyState,
+	Input,
+	Select,
+	type TabItem,
+	Tabs,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 
 const RECENT_SPACE_ID = "__recent__";
 
@@ -37,6 +49,14 @@ const SPACE_KIND_SECTIONS: Array<{ kind: SpaceKind; label: string }> = [
 	{ kind: "member", label: "AI 角色空间" },
 	{ kind: "custom", label: "自定义空间" },
 ];
+
+const DOC_TYPE_TONE: Record<SpaceDocumentType, BadgeTone> = {
+	plan: "accent",
+	spec: "info",
+	decision: "warn",
+	rule: "observer",
+	note: "neutral",
+};
 
 export function SpacePages({
 	bootstrap,
@@ -371,63 +391,86 @@ export function SpacePages({
 		return counts;
 	}, [documents]);
 
+	const docTypeTabs = useMemo<TabItem[]>(
+		() => [
+			{ id: "all", label: "全部", count: documents.length },
+			...SPACE_DOC_TYPE_OPTIONS.map((opt) => ({
+				id: opt.value,
+				label: opt.label,
+				count: docTypeCounts[opt.value] > 0 ? docTypeCounts[opt.value] : undefined,
+			})),
+		],
+		[documents.length, docTypeCounts],
+	);
+
 	const canWriteCurrentSpace = Boolean(selectedSpace?.canWrite);
 
 	return (
-		<section className="space-shell">
+		<section className="mt-4">
 			{error && (
-				<p role="alert" className="space-error">
+				<Banner tone="danger" className="mb-3">
 					{error}
-				</p>
+				</Banner>
 			)}
 
-			<div className={`space-three-col ${navCollapsed ? "is-nav-collapsed" : ""}`}>
+			<div
+				className={cn(
+					"grid grid-cols-1 gap-4 items-start min-w-0",
+					navCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[minmax(190px,228px)_minmax(220px,276px)_minmax(0,1fr)]",
+				)}
+			>
 				{/* Column 1: 5 Space Kinds */}
 				{!navCollapsed && (
-					<aside className="space-nav-col" aria-label="空间列表">
-						<div className="space-nav-head">
-							<strong>全部空间 ({spaces.length})</strong>
-							<button
-								type="button"
-								className="btn-inline"
+					<aside
+						className="min-w-0 flex flex-col gap-3 border-b border-line pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3.5"
+						aria-label="空间列表"
+					>
+						<div className="flex items-center justify-between gap-2 text-sm">
+							<strong className="text-xs font-semibold text-ink">全部空间 ({spaces.length})</strong>
+							<Button
+								variant="inline"
+								size="xs"
 								onClick={() => {
 									setCreatingSpace((v) => !v);
 									setNewSpaceOrgId(bootstrap?.organizations[0]?.id ?? "");
 								}}
 							>
 								{creatingSpace ? "取消" : "+ 新建空间"}
-							</button>
+							</Button>
 						</div>
 
 						{creatingSpace && (
-							<form className="space-create-form" onSubmit={(e) => void handleCreateCustomSpace(e)}>
-								<input
-									className="input-field"
+							<form
+								className="flex flex-col gap-2 p-2.5 border border-line rounded-lg bg-card shadow-sm"
+								onSubmit={(e) => void handleCreateCustomSpace(e)}
+							>
+								<Input
+									size="sm"
 									placeholder="空间名称"
 									value={newSpaceName}
 									onChange={(e) => setNewSpaceName(e.target.value)}
 									maxLength={100}
 									required
 								/>
-								<input
-									className="input-field"
+								<Input
+									size="sm"
 									placeholder="简要说明（可选）"
 									value={newSpaceDesc}
 									onChange={(e) => setNewSpaceDesc(e.target.value)}
 									maxLength={200}
 								/>
-								<div className="space-create-row">
-									<select
-										className="input-field"
+								<div className="flex items-center gap-1.5">
+									<Select
+										size="sm"
 										value={newSpaceVisibility}
 										onChange={(e) => setNewSpaceVisibility(e.target.value as SpaceVisibility)}
 									>
 										<option value="org">组织共享</option>
 										<option value="private">仅自己私密</option>
-									</select>
+									</Select>
 									{newSpaceVisibility === "org" && (bootstrap?.organizations.length ?? 0) > 1 && (
-										<select
-											className="input-field"
+										<Select
+											size="sm"
 											value={newSpaceOrgId}
 											onChange={(e) => setNewSpaceOrgId(e.target.value)}
 										>
@@ -436,20 +479,25 @@ export function SpacePages({
 													{org.name}
 												</option>
 											))}
-										</select>
+										</Select>
 									)}
 								</div>
-								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+								<Button type="submit" variant="primary" size="xs" disabled={busy}>
 									创建 Git 空间
-								</button>
+								</Button>
 							</form>
 						)}
 
-						<div className="space-nav-groups">
-							<div className="space-nav-group">
+						<div className="flex flex-col gap-3.5">
+							<div className="flex flex-col gap-0.5">
 								<button
 									type="button"
-									className={`space-nav-item ${isRecentView ? "active" : ""}`}
+									className={cn(
+										"flex items-center justify-between gap-2 w-full px-2.5 py-1.5 border-0 rounded-md text-left text-sm cursor-pointer transition-colors",
+										isRecentView
+											? "bg-subtle text-ink font-semibold"
+											: "bg-transparent text-ink-secondary hover:bg-hover/60 hover:text-ink",
+									)}
 									onClick={() => {
 										setSelectedSpaceId(RECENT_SPACE_ID);
 										setEditing(false);
@@ -457,8 +505,8 @@ export function SpacePages({
 										setCommitDetail(null);
 									}}
 								>
-									<span className="space-nav-item-name">最近修改</span>
-									<span className="space-nav-item-count">跨空间</span>
+									<span className="min-w-0 truncate">最近修改</span>
+									<span className="text-micro text-ink-muted shrink-0">跨空间</span>
 								</button>
 							</div>
 							{SPACE_KIND_SECTIONS.map(({ kind, label }) => {
@@ -477,13 +525,20 @@ export function SpacePages({
 									: group;
 								const hiddenCount = group.length - shown.length;
 								return (
-									<div key={kind} className="space-nav-group">
-										<div className="space-nav-group-label">{label}</div>
+									<div key={kind} className="flex flex-col gap-0.5">
+										<div className="px-2.5 py-1 text-micro font-semibold text-ink-muted uppercase tracking-wider">
+											{label}
+										</div>
 										{shown.map((space) => (
 											<button
 												type="button"
 												key={space.id}
-												className={`space-nav-item ${selectedSpaceId === space.id ? "active" : ""}`}
+												className={cn(
+													"flex items-center justify-between gap-2 w-full px-2.5 py-1.5 border-0 rounded-md text-left text-sm cursor-pointer transition-colors",
+													selectedSpaceId === space.id
+														? "bg-subtle text-ink font-semibold"
+														: "bg-transparent text-ink-secondary hover:bg-hover/60 hover:text-ink",
+												)}
 												onClick={() => {
 													setSelectedSpaceId(space.id);
 													setEditing(false);
@@ -491,16 +546,18 @@ export function SpacePages({
 													setCommitDetail(null);
 												}}
 											>
-												<span className="space-nav-item-name">{space.name}</span>
-												<span className="space-nav-item-count">
-													{space.documentCount > 0 ? space.documentCount : ""}
-												</span>
+												<span className="min-w-0 truncate">{space.name}</span>
+												{space.documentCount > 0 && (
+													<span className="text-micro text-ink-muted tabular-nums shrink-0">
+														{space.documentCount}
+													</span>
+												)}
 											</button>
 										))}
 										{hiddenCount > 0 && (
 											<button
 												type="button"
-												className="space-nav-more"
+												className="border-0 bg-transparent text-ink-muted text-micro text-left px-2.5 py-1 cursor-pointer hover:text-ink transition-colors"
 												onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: true }))}
 											>
 												展开其余 {hiddenCount} 个空空间
@@ -512,7 +569,7 @@ export function SpacePages({
 											expandedEmptyGroups[kind] && (
 												<button
 													type="button"
-													className="space-nav-more"
+													className="border-0 bg-transparent text-ink-muted text-micro text-left px-2.5 py-1 cursor-pointer hover:text-ink transition-colors"
 													onClick={() => setExpandedEmptyGroups((prev) => ({ ...prev, [kind]: false }))}
 												>
 													收起空空间
@@ -527,77 +584,75 @@ export function SpacePages({
 
 				{/* Column 2: Documents + Business Repo Refs */}
 				{!navCollapsed && (
-					<div className="space-docs-col">
-						<div className="space-pages-toolbar">
-							<input
-								className="input-field"
+					<div className="min-w-0 flex flex-col gap-3 border-b border-line pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+						<div className="flex items-center justify-between gap-2">
+							<Input
+								size="sm"
+								className="flex-1 min-w-0"
 								aria-label={isRecentView ? "搜索最近修改资料" : "搜索当前空间资料"}
 								placeholder={isRecentView ? "搜索全部空间的最近资料…" : "搜索资料标题或路径…"}
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
 							/>
 							{canWriteCurrentSpace && (
-								<button type="button" className="btn-pill-dark btn-xs" onClick={startNewDocument}>
+								<Button variant="primary" size="xs" onClick={startNewDocument}>
 									+ 新建资料
-								</button>
+								</Button>
 							)}
 						</div>
 
-						<div className="space-type-filter-bar" role="tablist" aria-label="按内容类型筛选">
-							<button
-								type="button"
-								role="tab"
-								aria-selected={docTypeFilter === "all"}
-								className={`space-type-chip ${docTypeFilter === "all" ? "active" : ""}`}
-								onClick={() => setDocTypeFilter("all")}
-							>
-								全部{documents.length > 0 ? ` (${documents.length})` : ""}
-							</button>
-							{SPACE_DOC_TYPE_OPTIONS.map((opt) => (
-								<button
-									key={opt.value}
-									type="button"
-									role="tab"
-									aria-selected={docTypeFilter === opt.value}
-									className={`space-type-chip ${docTypeFilter === opt.value ? "active" : ""}`}
-									title={opt.hint}
-									onClick={() => setDocTypeFilter(opt.value)}
-								>
-									{opt.label}
-									{docTypeCounts[opt.value] > 0 ? ` (${docTypeCounts[opt.value]})` : ""}
-								</button>
-							))}
-						</div>
+						<Tabs
+							variant="pill"
+							size="sm"
+							ariaLabel="按内容类型筛选"
+							value={docTypeFilter}
+							onChange={(id) => setDocTypeFilter(id as "all" | SpaceDocumentType)}
+							items={docTypeTabs}
+							className="w-full"
+						/>
 
-						<div className="space-pages-list">
+						<div className="flex flex-col gap-1">
 							{filteredDocs.length === 0 ? (
-								<p className="muted-hint">
-									{documents.length
-										? "没有匹配当前筛选条件的资料"
-										: isRecentView
-											? "暂无最近修改的资料。"
-											: "当前空间还没有资料。可点击上方新建，或在对话中由 AI 保存。"}
-								</p>
+								<EmptyState
+									compact
+									title={
+										documents.length
+											? "没有匹配当前筛选条件的资料"
+											: isRecentView
+												? "暂无最近修改的资料。"
+												: "当前空间还没有资料。"
+									}
+									description={
+										!documents.length && !isRecentView ? "可点击上方新建，或在对话中由 AI 保存。" : undefined
+									}
+								/>
 							) : (
 								filteredDocs.map((doc) => (
 									<button
 										type="button"
 										key={doc.id}
-										className={`space-page-row ${selectedDoc?.id === doc.id && !editing ? "active" : ""}`}
+										className={cn(
+											"flex flex-col items-start gap-1 w-full px-2.5 py-2 text-left border rounded-md cursor-pointer transition-colors",
+											selectedDoc?.id === doc.id && !editing
+												? "bg-subtle border-line-strong text-ink"
+												: "bg-transparent border-transparent text-ink hover:bg-hover/60",
+										)}
 										onClick={() => void openDocument(doc.id)}
 									>
-										<div className="space-page-row-head">
-											<span className={`space-doc-type-pill is-${doc.docType}`}>
+										<div className="flex items-center gap-1.5 w-full min-w-0">
+											<Badge tone={DOC_TYPE_TONE[doc.docType]} dot size="xs">
 												{spaceDocTypeLabel(doc.docType)}
-											</span>
+											</Badge>
 											{doc.entryKind === "folder" && (
-												<span className="space-folder-badge" title="目录条目（支持多文件与 .gitignore）">
+												<span className="text-xs shrink-0" title="目录条目（支持多文件与 .gitignore）">
 													📁
 												</span>
 											)}
-											<strong>{doc.title}</strong>
+											<strong className="min-w-0 truncate text-xs font-semibold text-ink">
+												{doc.title}
+											</strong>
 										</div>
-										<span>
+										<span className="text-micro text-ink-muted truncate w-full font-mono">
 											{isRecentView ? `${spaceNameById.get(doc.spaceId) ?? doc.spaceId} · ` : ""}
 											rev {doc.revision} · {doc.headCommit.slice(0, 7)} ·{" "}
 											{new Date(doc.updatedAt).toLocaleDateString()}
@@ -610,17 +665,24 @@ export function SpacePages({
 				)}
 
 				{/* Column 3: Document Viewer / Editor + Git Commits & Diff */}
-				<div className="space-page-detail">
-					<div className="space-detail-topbar">
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
+				<div className="min-w-0 flex flex-col">
+					<div className="flex items-center gap-2.5 mb-3.5">
+						<Button
+							variant="secondary"
+							size="xs"
 							aria-expanded={!navCollapsed}
 							onClick={() => setNavCollapsed((v) => !v)}
 						>
 							{navCollapsed ? "展开导航目录" : "收起导航目录"}
-						</button>
-						{navCollapsed && selectedSpace && <span className="muted-tiny">当前空间：{selectedSpace.name}</span>}
+						</Button>
+						{navCollapsed && selectedSpace && (
+							<div className="flex items-center gap-2 min-w-0">
+								<span className="text-xs text-ink-muted truncate">当前空间：{selectedSpace.name}</span>
+								<Badge tone={selectedSpace.visibility === "private" ? "warn" : "accent"} dot size="xs">
+									{selectedSpace.visibility === "private" ? "私密" : "共享"}
+								</Badge>
+							</div>
+						)}
 					</div>
 					{editing ? (
 						<SpaceDocumentEditorForm
@@ -680,15 +742,36 @@ export function SpacePages({
 							onToggleCommit={(hash) => void handleToggleCommit(hash)}
 						/>
 					) : (
-						<div className="space-empty-detail">
-							<h3>{selectedSpace?.name ?? "资料空间"}</h3>
-							{selectedSpace?.description && <p className="muted-hint">{selectedSpace.description}</p>}
-							<p className="muted-hint">
-								{documents.length > 0
-									? "从左侧选择一篇资料查看，或点击「新建资料」。"
-									: "该空间目前还没有资料文档。所有新建和编辑都会自动记录为独立 Git 仓库中的标准提交。"}
-							</p>
-						</div>
+						<EmptyState
+							className="items-start text-left"
+							title={
+								<div className="flex items-center gap-2 flex-wrap">
+									<h3 className="m-0 text-base font-semibold text-ink">{selectedSpace?.name ?? "资料空间"}</h3>
+									{selectedSpace && (
+										<Badge tone={selectedSpace.visibility === "private" ? "warn" : "accent"} dot size="xs">
+											{selectedSpace.visibility === "private" ? "私密" : "共享"}
+										</Badge>
+									)}
+								</div>
+							}
+							description={
+								<>
+									{selectedSpace?.description && (
+										<span className="block mb-1 text-ink-secondary">{selectedSpace.description}</span>
+									)}
+									{documents.length > 0
+										? "从左侧选择一篇资料查看，或点击「新建资料」。"
+										: "该空间目前还没有资料文档。所有新建和编辑都会自动记录为独立 Git 仓库中的标准提交。"}
+								</>
+							}
+							action={
+								canWriteCurrentSpace ? (
+									<Button variant="primary" size="xs" onClick={startNewDocument}>
+										+ 新建资料
+									</Button>
+								) : undefined
+							}
+						/>
 					)}
 				</div>
 			</div>

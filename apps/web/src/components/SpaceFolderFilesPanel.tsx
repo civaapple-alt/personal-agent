@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
 	deleteSpaceDocumentFile,
 	readSpaceDocumentFile,
@@ -8,6 +8,8 @@ import {
 	writeSpaceDocumentFiles,
 } from "../api/space.ts";
 import { MarkdownView } from "../MarkdownView.tsx";
+import { Banner, Button, Card, FieldGroup, Input, Textarea } from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 import { formatByteSize } from "../utils.ts";
 
 interface SpaceFolderFilesPanelProps {
@@ -112,6 +114,10 @@ export function SpaceFolderFilesPanel({
 	const [batchCommitMsg, setBatchCommitMsg] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
+
+	const newDirInputId = useId();
+	const batchCommitInputId = useId();
+	const editSubFileId = useId();
 
 	useEffect(() => {
 		void docId;
@@ -248,11 +254,14 @@ export function SpaceFolderFilesPanel({
 			if (node.kind === "dir") {
 				const isCollapsed = Boolean(collapsedDirs[node.fullPath]);
 				return (
-					<div key={`dir:${node.fullPath}`} className="space-folder-tree-branch">
-						<div className="space-folder-tree-dir-row" style={{ paddingLeft: `${depth * 14 + 4}px` }}>
+					<div key={`dir:${node.fullPath}`} className="flex flex-col gap-0.5">
+						<div
+							className="flex items-center justify-between gap-1"
+							style={{ paddingLeft: `${depth * 14 + 4}px` }}
+						>
 							<button
 								type="button"
-								className="space-folder-tree-dir-btn"
+								className="flex-1 min-w-0 inline-flex items-center gap-1 px-1 py-1 border-0 rounded-sm bg-transparent text-ink-secondary text-xs font-semibold text-left cursor-pointer hover:bg-hover/60 hover:text-ink transition-colors"
 								aria-expanded={!isCollapsed}
 								onClick={() =>
 									setCollapsedDirs((prev) => ({
@@ -261,15 +270,15 @@ export function SpaceFolderFilesPanel({
 									}))
 								}
 							>
-								<span className="space-folder-chevron" aria-hidden="true">
+								<span className="w-2.5 text-[10px] text-ink-muted shrink-0" aria-hidden="true">
 									{isCollapsed ? "▸" : "▾"}
 								</span>
-								<span className="space-folder-tree-name">📁 {node.name}/</span>
+								<span className="min-w-0 truncate">📁 {node.name}/</span>
 							</button>
 							{canWrite && (
 								<button
 									type="button"
-									className="space-folder-dir-add"
+									className="size-5.5 inline-grid place-items-center border-0 rounded-sm bg-transparent text-ink-muted text-sm leading-none cursor-pointer shrink-0 hover:bg-hover hover:text-accent transition-colors"
 									title={`在 ${node.fullPath}/ 下新建文件`}
 									aria-label={`在 ${node.fullPath}/ 下新建文件`}
 									onClick={() => openAddFileInDir(node.fullPath)}
@@ -282,7 +291,10 @@ export function SpaceFolderFilesPanel({
 							(node.children.length > 0 ? (
 								renderTreeNodes(node.children, depth + 1)
 							) : (
-								<div className="space-folder-tree-empty" style={{ paddingLeft: `${(depth + 1) * 14 + 12}px` }}>
+								<div
+									className="text-micro text-ink-muted py-0.5"
+									style={{ paddingLeft: `${(depth + 1) * 14 + 12}px` }}
+								>
 									（空目录）
 								</div>
 							))}
@@ -294,13 +306,16 @@ export function SpaceFolderFilesPanel({
 				<button
 					key={`file:${node.fullPath}`}
 					type="button"
-					className={`space-folder-tree-item ${isSelected ? "active" : ""}`}
+					className={cn(
+						"flex items-center justify-between gap-2 w-full py-1.5 pr-2 border-0 rounded-sm text-left text-xs cursor-pointer transition-colors",
+						isSelected ? "bg-subtle text-accent font-semibold" : "bg-transparent text-ink hover:bg-hover/60",
+					)}
 					style={{ paddingLeft: `${depth * 14 + 10}px` }}
 					title={`${node.fullPath} (${formatByteSize(node.sizeBytes)})`}
 					onClick={() => void loadSubFile(node.fullPath)}
 				>
-					<span className="space-folder-tree-name">{node.name}</span>
-					<span className="space-folder-tree-size">{formatByteSize(node.sizeBytes)}</span>
+					<span className="min-w-0 truncate">{node.name}</span>
+					<span className="text-[10px] font-mono text-ink-muted shrink-0">{formatByteSize(node.sizeBytes)}</span>
 				</button>
 			);
 		});
@@ -309,25 +324,20 @@ export function SpaceFolderFilesPanel({
 	const displayedContent = activePath === "README.md" ? readmeContent : subContent;
 
 	return (
-		<div className="space-folder-panel">
-			<div className="space-folder-bar">
-				<div className="space-folder-bar-left">
-					<button
-						type="button"
-						className="btn-pill-outline btn-xs"
-						aria-expanded={treeOpen}
-						onClick={() => setTreeOpen((v) => !v)}
-					>
+		<div className="mt-4 flex flex-col gap-3.5">
+			<div className="flex items-center justify-between gap-2.5 flex-wrap px-3 py-2 border border-line rounded-lg bg-sidebar">
+				<div className="flex items-center gap-2.5 min-w-0">
+					<Button variant="secondary" size="xs" aria-expanded={treeOpen} onClick={() => setTreeOpen((v) => !v)}>
 						{treeOpen ? `收起文件树 (${visibleFileCount})` : `展开文件树 (${visibleFileCount})`}
-					</button>
-					<code className="space-folder-active-path">
+					</Button>
+					<code className="font-mono text-xs text-ink-secondary truncate">
 						{addingDir ? "新建子目录" : addingFiles ? "批量添加子文件" : activePath}
 					</code>
 				</div>
-				<div className="space-folder-bar-actions">
+				<div className="flex items-center flex-wrap gap-2">
 					{previewEntryPath && (
 						<a
-							className="btn-pill-dark btn-xs"
+							className="inline-flex items-center justify-center h-6 px-2 text-xs font-medium whitespace-nowrap rounded-xs bg-cta text-stage hover:opacity-90 no-underline shrink-0"
 							href={spaceDocumentPreviewUrl(docId, previewEntryPath)}
 							target="_blank"
 							rel="noreferrer"
@@ -337,9 +347,9 @@ export function SpaceFolderFilesPanel({
 					)}
 					{canWrite && (
 						<>
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
+							<Button
+								variant="secondary"
+								size="xs"
 								onClick={() => {
 									setAddingDir((v) => !v);
 									setAddingFiles(false);
@@ -348,10 +358,10 @@ export function SpaceFolderFilesPanel({
 								}}
 							>
 								{addingDir ? "取消建目录" : "+ 新建子目录"}
-							</button>
-							<button
-								type="button"
-								className="btn-pill-outline btn-xs"
+							</Button>
+							<Button
+								variant="secondary"
+								size="xs"
 								onClick={() => {
 									setAddingFiles((v) => !v);
 									setAddingDir(false);
@@ -360,78 +370,75 @@ export function SpaceFolderFilesPanel({
 								}}
 							>
 								{addingFiles ? "取消添加" : "+ 添加子文件"}
-							</button>
+							</Button>
 						</>
 					)}
 				</div>
 			</div>
 
-			{error && (
-				<p role="alert" className="space-error">
-					{error}
-				</p>
-			)}
+			{error && <Banner tone="danger">{error}</Banner>}
 
-			<div className={`space-folder-split ${treeOpen ? "" : "is-collapsed"}`}>
+			<div
+				className={cn(
+					"grid grid-cols-1 gap-4 items-start",
+					treeOpen && "md:grid-cols-[minmax(175px,215px)_minmax(0,1fr)]",
+				)}
+			>
 				{treeOpen && (
-					<aside className="space-folder-tree" aria-label="目录文件树">
+					<aside
+						className="flex flex-col gap-1.5 min-h-0 md:min-h-[220px] border-b border-line pb-3 md:border-b-0 md:border-r md:pb-0 md:pr-3"
+						aria-label="目录文件树"
+					>
 						{renderTreeNodes(treeNodes)}
 					</aside>
 				)}
 
-				<div className="space-folder-viewer">
+				<div className="min-w-0">
 					{addingDir ? (
-						<form className="space-editor-form space-subfile-form" onSubmit={(e) => void handleCreateSubDir(e)}>
-							<label>
-								子目录相对路径（支持多级目录）
-								<input
-									className="input-field"
+						<form
+							className="flex flex-col gap-3 p-3.5 border border-line rounded-lg bg-surface"
+							onSubmit={(e) => void handleCreateSubDir(e)}
+						>
+							<FieldGroup label="子目录相对路径（支持多级目录）" htmlFor={newDirInputId}>
+								<Input
+									id={newDirInputId}
+									mono
 									placeholder="如 demo/assets 或 refs/benchmarks"
 									value={newDirPath}
 									onChange={(e) => setNewDirPath(e.target.value)}
 									required
 								/>
-							</label>
-							<div className="space-folder-presets">
-								<span className="muted-tiny">常用目录：</span>
+							</FieldGroup>
+							<div className="flex items-center flex-wrap gap-2">
+								<span className="text-micro text-ink-muted">常用目录：</span>
 								{["refs", "demo", "demo/assets", "docs/api"].map((preset) => (
-									<button
-										key={preset}
-										type="button"
-										className="btn-inline"
-										onClick={() => setNewDirPath(preset)}
-									>
+									<Button key={preset} variant="inline" size="xs" onClick={() => setNewDirPath(preset)}>
 										{preset}/
-									</button>
+									</Button>
 								))}
 							</div>
-							<div className="space-page-actions">
-								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+							<div className="flex items-center gap-2">
+								<Button variant="primary" size="xs" type="submit" disabled={busy}>
 									{busy ? "创建中…" : "创建子目录"}
-								</button>
-								<button
-									type="button"
-									className="btn-secondary btn-xs"
-									disabled={busy}
-									onClick={() => setAddingDir(false)}
-								>
+								</Button>
+								<Button variant="secondary" size="xs" disabled={busy} onClick={() => setAddingDir(false)}>
 									取消
-								</button>
+								</Button>
 							</div>
 						</form>
 					) : addingFiles ? (
 						<form
-							className="space-editor-form space-subfile-form"
+							className="flex flex-col gap-3 p-3.5 border border-line rounded-lg bg-surface"
 							onSubmit={(e) => void handleCreateBatchFiles(e)}
 						>
-							<div className="space-folder-presets">
-								<span className="muted-tiny">快捷追加（路径含 / 自动建多级子目录）：</span>
+							<div className="flex items-center flex-wrap gap-2">
+								<span className="text-micro text-ink-muted">快捷追加（路径含 / 自动建多级子目录）：</span>
 								{["notes.md", "refs/option-a.md", "demo/index.html", "demo/assets/app.js", ".gitignore"].map(
 									(preset) => (
-										<button
+										<Button
 											key={preset}
-											type="button"
-											className="btn-inline"
+											variant="inline"
+											size="xs"
 											onClick={() =>
 												setDraftRows((prev) => {
 													if (prev.length === 1 && !prev[0]!.path.trim() && !prev[0]!.content) {
@@ -442,16 +449,18 @@ export function SpaceFolderFilesPanel({
 											}
 										>
 											+ {preset}
-										</button>
+										</Button>
 									),
 								)}
 							</div>
 
 							{draftRows.map((row, index) => (
-								<div key={row.id} className="space-extra-file-card">
-									<div className="space-extra-file-head">
-										<input
-											className="input-field"
+								<Card key={row.id} padding="sm" className="flex flex-col gap-2">
+									<div className="flex items-center gap-2.5">
+										<Input
+											size="sm"
+											mono
+											className="flex-1"
 											placeholder={`文件 ${index + 1} 相对路径，如 refs/option-a.md 或 demo/assets/app.js`}
 											value={row.path}
 											onChange={(e) =>
@@ -464,17 +473,19 @@ export function SpaceFolderFilesPanel({
 											required
 										/>
 										{draftRows.length > 1 && (
-											<button
-												type="button"
-												className="btn-inline btn-danger-inline"
+											<Button
+												variant="inline"
+												size="xs"
+												className="text-danger-text"
 												onClick={() => setDraftRows((prev) => prev.filter((item) => item.id !== row.id))}
 											>
 												移除
-											</button>
+											</Button>
 										)}
 									</div>
-									<textarea
-										className="input-field space-extra-file-editor"
+									<Textarea
+										mono
+										className="min-h-[110px]"
 										placeholder="输入文件内容（Markdown / HTML / JS / CSS / 配置）"
 										value={row.content}
 										onChange={(e) =>
@@ -485,105 +496,108 @@ export function SpaceFolderFilesPanel({
 											)
 										}
 									/>
-								</div>
+								</Card>
 							))}
 
-							<div className="space-page-actions">
-								<button
-									type="button"
-									className="btn-pill-outline btn-xs"
+							<div className="flex items-center gap-2">
+								<Button
+									variant="secondary"
+									size="xs"
 									onClick={() => setDraftRows((prev) => [...prev, createDraftRow()])}
 								>
 									+ 再加一个文件
-								</button>
+								</Button>
 							</div>
 
-							<label>
-								提交说明（可选）
-								<input
-									className="input-field"
+							<FieldGroup label="提交说明（可选）" htmlFor={batchCommitInputId}>
+								<Input
+									id={batchCommitInputId}
 									value={batchCommitMsg}
 									onChange={(e) => setBatchCommitMsg(e.target.value)}
 									placeholder={`一次提交 ${draftRows.length} 个子文件`}
 									maxLength={200}
 								/>
-							</label>
+							</FieldGroup>
 
-							<div className="space-page-actions">
-								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+							<div className="flex items-center gap-2">
+								<Button variant="primary" size="xs" type="submit" disabled={busy}>
 									{busy ? "提交中…" : `保存 ${draftRows.length} 个文件并提交 Git`}
-								</button>
-								<button
-									type="button"
-									className="btn-secondary btn-xs"
-									disabled={busy}
-									onClick={() => setAddingFiles(false)}
-								>
+								</Button>
+								<Button variant="secondary" size="xs" disabled={busy} onClick={() => setAddingFiles(false)}>
 									取消
-								</button>
+								</Button>
 							</div>
 						</form>
 					) : editingSubFile ? (
-						<form className="space-editor-form space-subfile-form" onSubmit={(e) => void handleSaveSubFile(e)}>
-							<label>
-								编辑文件：<code>{activePath}</code>
-								<textarea
-									className="input-field space-page-editor"
+						<form
+							className="flex flex-col gap-3 p-3.5 border border-line rounded-lg bg-surface"
+							onSubmit={(e) => void handleSaveSubFile(e)}
+						>
+							<FieldGroup
+								label={
+									<>
+										编辑文件：<code className="font-mono">{activePath}</code>
+									</>
+								}
+								htmlFor={editSubFileId}
+							>
+								<Textarea
+									id={editSubFileId}
+									mono
+									className="min-h-[300px]"
 									value={draftContent}
 									onChange={(e) => setDraftContent(e.target.value)}
 								/>
-							</label>
-							<div className="space-page-actions">
-								<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+							</FieldGroup>
+							<div className="flex items-center gap-2">
+								<Button variant="primary" size="xs" type="submit" disabled={busy}>
 									{busy ? "提交中…" : "保存并提交 Git"}
-								</button>
-								<button
-									type="button"
-									className="btn-secondary btn-xs"
-									disabled={busy}
-									onClick={() => setEditingSubFile(false)}
-								>
+								</Button>
+								<Button variant="secondary" size="xs" disabled={busy} onClick={() => setEditingSubFile(false)}>
 									取消
-								</button>
+								</Button>
 							</div>
 						</form>
 					) : (
 						<>
-							<div className="space-subfile-head">
-								<code>{activePath}</code>
+							<div className="flex items-center justify-between gap-2.5 pb-2.5 border-b border-dashed border-line text-xs">
+								<code className="font-mono text-ink">{activePath}</code>
 								{canWrite && (
-									<div className="space-folder-bar-actions">
-										<button
-											type="button"
-											className="btn-inline"
+									<div className="flex items-center gap-2">
+										<Button
+											variant="inline"
+											size="xs"
 											onClick={() => {
 												setDraftContent(displayedContent);
 												setEditingSubFile(true);
 											}}
 										>
 											编辑此文件
-										</button>
+										</Button>
 										{activePath !== "README.md" && (
-											<button
-												type="button"
-												className="btn-inline btn-danger-inline"
+											<Button
+												variant="inline"
+												size="xs"
+												className="text-danger-text"
 												disabled={busy}
 												onClick={() => void handleDeleteSubFile(activePath)}
 											>
 												删除
-											</button>
+											</Button>
 										)}
 									</div>
 								)}
 							</div>
 							{loadingFile ? (
-								<p className="muted-hint">正在读取文件…</p>
+								<p className="m-0 py-3 text-xs text-ink-muted">正在读取文件…</p>
 							) : isMarkdown ? (
-								<div className="space-page-content compact">
+								<div className="mt-3">
 									<MarkdownView content={displayedContent || "（空白）"} />
 								</div>
 							) : (
-								<pre className="space-subfile-pre">{displayedContent || "（空文件）"}</pre>
+								<pre className="mt-3 p-3.5 border border-line rounded-lg bg-sidebar font-mono text-xs leading-relaxed text-ink overflow-x-auto whitespace-pre-wrap break-words">
+									{displayedContent || "（空文件）"}
+								</pre>
 							)}
 						</>
 					)}

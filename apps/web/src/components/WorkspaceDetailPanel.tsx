@@ -12,6 +12,19 @@ import {
 } from "../api/workspaceFolders.ts";
 import type { MatterDto, OrganizationDto, WorkspaceDto } from "../api.ts";
 import { copyTextToClipboard } from "../clipboard.ts";
+import {
+	Badge,
+	type BadgeTone,
+	Banner,
+	Button,
+	Card,
+	EmptyState,
+	IconButton,
+	Input,
+	Select,
+	Tabs,
+} from "../primitives/index.ts";
+import { cn } from "../utils/cn.ts";
 import { formatClockTime, stripMarkdownFormatting } from "../utils.ts";
 import { ServerDirectoryPicker } from "./ServerDirectoryPicker.tsx";
 
@@ -41,7 +54,7 @@ function formatPercent(used: number, budget: number): string {
 function FolderGlyph() {
 	return (
 		<svg
-			className="ws-folder-icon"
+			className="text-ink-secondary shrink-0"
 			width="15"
 			height="15"
 			viewBox="0 0 24 24"
@@ -62,6 +75,17 @@ const MATTER_STATUS_LABEL: Record<MatterDto["status"], string> = {
 	waiting_user: "待确认",
 	archived: "已归档",
 };
+
+const MATTER_STATUS_TONE: Record<MatterDto["status"], BadgeTone> = {
+	open: "accent",
+	waiting_user: "warn",
+	archived: "neutral",
+};
+
+const TOGGLE_PILL_BASE =
+	"inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill border text-xs font-medium cursor-pointer transition-colors disabled:opacity-45";
+const TOGGLE_PILL_ON = "bg-accent-soft border-accent-border text-accent font-semibold";
+const TOGGLE_PILL_OFF = "bg-transparent border-line text-ink-muted hover:border-line-strong hover:text-ink";
 
 /** Right-hand detail pane for the unified Workspaces view: header config, inline Folders & Customizations, and live workspace activity. */
 export function WorkspaceDetailPanel({
@@ -226,24 +250,32 @@ export function WorkspaceDetailPanel({
 	const skillsPct = report ? Math.min(100, (report.skillsTokensUsed / report.skillsBudgetTokens) * 100) : 0;
 
 	return (
-		<div className="ws-detail-panel">
-			<div className="ws-detail-header">
-				<div className="ws-detail-title-col">
-					<div className="ws-detail-title-row">
-						<h2>{workspace.name}</h2>
-						<span className="ws-role-pill">{workspace.defaultBranch}</span>
-						{workspace.visibility === "restricted" && <span className="ws-warn-pill">受限访问</span>}
+		<div className="flex flex-col gap-5 min-w-0">
+			<div className="flex items-start justify-between gap-4 flex-wrap">
+				<div className="flex flex-col gap-1 min-w-0 flex-1">
+					<div className="flex items-center flex-wrap gap-2">
+						<h2 className="m-0 text-lg font-semibold text-ink leading-snug">{workspace.name}</h2>
+						<Badge tone="neutral" size="xs" className="font-mono">
+							{workspace.defaultBranch}
+						</Badge>
+						{workspace.visibility === "restricted" && (
+							<Badge tone="warn" dot size="xs">
+								受限访问
+							</Badge>
+						)}
 						{piTrust?.eligible && !piTrust.effectiveTrusted && (
-							<span
-								className="ws-warn-pill"
+							<Badge
+								tone="warn"
+								dot
+								size="xs"
 								title="~/.pi/agent/trust.json 中已拒绝该目录，可在下方点击切换为信任"
 							>
 								Pi 未信任
-							</span>
+							</Badge>
 						)}
 					</div>
-					<div className="ws-detail-sub">
-						<code>{workspace.repoPath}</code>
+					<div className="mt-0.5 text-xs text-ink-muted leading-normal break-all">
+						<code className="font-mono text-ink-secondary">{workspace.repoPath}</code>
 						{workspace.repoGitUser && (
 							<span>
 								{" "}
@@ -252,60 +284,48 @@ export function WorkspaceDetailPanel({
 						)}
 					</div>
 				</div>
-				<div className="ws-detail-actions">
+				<div className="inline-flex items-center gap-2 shrink-0">
 					{onOpenSpace && (
-						<button
-							type="button"
-							className="btn-pill-outline btn-xs"
-							onClick={() => onOpenSpace(workspaceSpaceId)}
-						>
+						<Button variant="secondary" size="xs" onClick={() => onOpenSpace(workspaceSpaceId)}>
 							打开工作区空间 ↗
-						</button>
+						</Button>
 					)}
-					<button type="button" className="btn-pill-dark btn-xs" onClick={() => onUseWorkspace(workspace.id)}>
+					<Button variant="primary" size="xs" onClick={() => onUseWorkspace(workspace.id)}>
 						+ 在此新建事项
-					</button>
+					</Button>
 				</div>
 			</div>
 
-			<div className="ws-detail-toolbar">
-				<div className="ws-subtabs" role="tablist" aria-label="工作区视图">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={subTab === "config"}
-						className={`choice-chip ${subTab === "config" ? "active" : ""}`}
-						onClick={() => setSubTab("config")}
-					>
-						目录与规则 ({folders.length})
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={subTab === "activity"}
-						className={`choice-chip ${subTab === "activity" ? "active" : ""}`}
-						onClick={() => setSubTab("activity")}
-					>
-						工作区动态 ({workspaceMatters.length + spaceDocs.length})
-					</button>
-				</div>
+			<div className="flex items-center justify-between gap-4 flex-wrap pb-3.5 border-b border-line">
+				<Tabs
+					variant="pill"
+					size="sm"
+					ariaLabel="工作区视图"
+					value={subTab}
+					onChange={(id) => setSubTab(id as "config" | "activity")}
+					items={[
+						{ id: "config", label: "目录与规则", count: folders.length },
+						{ id: "activity", label: "工作区动态", count: workspaceMatters.length + spaceDocs.length },
+					]}
+				/>
 
-				<div className="ws-detail-meta-controls">
-					<button
-						type="button"
-						className="btn-inline"
+				<div className="inline-flex items-center gap-3 flex-wrap">
+					<Button
+						variant="inline"
+						size="xs"
 						onClick={() => void copyTextToClipboard(workspace.repoPath, "主目录路径", onNotice)}
 					>
 						复制路径
-					</button>
+					</Button>
 					{canEditAccess && (
-						<button type="button" className="btn-inline" onClick={() => onOpenAccess(workspace)}>
+						<Button variant="inline" size="xs" onClick={() => onOpenAccess(workspace)}>
 							权限范围
-						</button>
+						</Button>
 					)}
 					{organizations.length > 0 && canManage && (
-						<select
-							className="select-sm select-control"
+						<Select
+							size="sm"
+							className="w-auto"
 							aria-label={`设置 ${workspace.name} 的所属组织`}
 							value={workspace.orgId ?? ""}
 							onChange={(e) => void onChangeOrg(workspace.id, e.target.value)}
@@ -316,47 +336,57 @@ export function WorkspaceDetailPanel({
 									组织：{item.name}
 								</option>
 							))}
-						</select>
+						</Select>
 					)}
 				</div>
 			</div>
 
-			{error && (
-				<p role="alert" className="space-error">
-					{error}
-				</p>
-			)}
+			{error && <Banner tone="danger">{error}</Banner>}
 
 			{subTab === "config" ? (
-				<div className="ws-custom-modal">
-					<section className="ws-folders-section">
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">挂载目录 ({folders.length})</h3>
-							<span className="ws-section-hint">主目录作为 Pi 默认工作目录，附加目录共享 Rules 与 Skills</span>
+				<div className="flex flex-col gap-6">
+					<section className="flex flex-col gap-2.5">
+						<div className="flex items-baseline justify-between gap-3 flex-wrap">
+							<h3 className="m-0 text-sm font-semibold text-ink">挂载目录 ({folders.length})</h3>
+							<span className="text-micro text-ink-muted">
+								主目录作为 Pi 默认工作目录，附加目录共享 Rules 与 Skills
+							</span>
 						</div>
-						<div className="ws-folders-list">
+						<Card padding="none" className="overflow-hidden">
 							{folders.map((folder) => (
-								<div key={folder.id} className="ws-folder-row">
-									<div className="ws-folder-main">
-										<div className="ws-folder-title">
+								<div
+									key={folder.id}
+									className="flex items-center justify-between gap-4 px-4 py-3 border-b border-line last:border-b-0 flex-wrap sm:flex-nowrap"
+								>
+									<div className="min-w-0">
+										<div className="flex items-center gap-2 text-sm text-ink">
 											<FolderGlyph />
 											<strong>{folder.label}/</strong>
-											{folder.role === "primary" && <span className="ws-role-pill">主目录</span>}
+											{folder.role === "primary" && (
+												<Badge tone="neutral" size="xs">
+													主目录
+												</Badge>
+											)}
 										</div>
-										<div className="ws-folder-path">{folder.path}</div>
+										<div className="mt-1 pl-[23px] font-mono text-micro text-ink-muted break-all">
+											{folder.path}
+										</div>
 									</div>
-									<div className="ws-folder-controls">
+									<div className="inline-flex items-center gap-2 shrink-0 flex-wrap">
 										{canManage && (
 											<>
 												<button
 													type="button"
 													aria-pressed={folder.loadRules}
-													className={`ws-toggle-pill ${folder.loadRules ? "is-on" : ""}`}
+													className={cn(
+														TOGGLE_PILL_BASE,
+														folder.loadRules ? TOGGLE_PILL_ON : TOGGLE_PILL_OFF,
+													)}
 													disabled={busy}
 													title="是否加载该目录的 AGENTS.md / CLAUDE.md"
 													onClick={() => void handleToggleFlag(folder, "loadRules")}
 												>
-													<span className="ws-toggle-check" aria-hidden="true">
+													<span className="text-micro leading-none" aria-hidden="true">
 														{folder.loadRules ? "✓" : ""}
 													</span>
 													Rules
@@ -364,12 +394,15 @@ export function WorkspaceDetailPanel({
 												<button
 													type="button"
 													aria-pressed={folder.loadSkills}
-													className={`ws-toggle-pill ${folder.loadSkills ? "is-on" : ""}`}
+													className={cn(
+														TOGGLE_PILL_BASE,
+														folder.loadSkills ? TOGGLE_PILL_ON : TOGGLE_PILL_OFF,
+													)}
 													disabled={busy}
 													title="是否加载该目录的 .agents/skills 与 .pi/skills"
 													onClick={() => void handleToggleFlag(folder, "loadSkills")}
 												>
-													<span className="ws-toggle-check" aria-hidden="true">
+													<span className="text-micro leading-none" aria-hidden="true">
 														{folder.loadSkills ? "✓" : ""}
 													</span>
 													Skills
@@ -378,7 +411,10 @@ export function WorkspaceDetailPanel({
 													<button
 														type="button"
 														aria-pressed={piTrust.effectiveTrusted}
-														className={`ws-toggle-pill ${piTrust.effectiveTrusted ? "is-on" : ""}`}
+														className={cn(
+															TOGGLE_PILL_BASE,
+															piTrust.effectiveTrusted ? TOGGLE_PILL_ON : TOGGLE_PILL_OFF,
+														)}
 														disabled={busy}
 														title={
 															piTrust.effectiveTrusted
@@ -387,24 +423,24 @@ export function WorkspaceDetailPanel({
 														}
 														onClick={() => void handleTogglePiTrust()}
 													>
-														<span className="ws-toggle-check" aria-hidden="true">
+														<span className="text-micro leading-none" aria-hidden="true">
 															{piTrust.effectiveTrusted ? "✓" : ""}
 														</span>
 														Pi 信任
 													</button>
 												)}
-												<span className="ws-folder-remove-slot">
+												<span className="inline-flex items-center justify-center size-7 shrink-0">
 													{folder.role === "attached" && (
-														<button
-															type="button"
-															className="btn-icon-ghost"
+														<IconButton
+															variant="ghost"
+															size="xs"
 															aria-label={`移除目录 ${folder.label}`}
 															title="移除附加目录"
 															disabled={busy}
 															onClick={() => void handleRemoveFolder(folder)}
 														>
 															×
-														</button>
+														</IconButton>
 													)}
 												</span>
 											</>
@@ -415,26 +451,28 @@ export function WorkspaceDetailPanel({
 
 							{canManage &&
 								(addingFolder ? (
-									<form className="ws-add-folder-form" onSubmit={(e) => void handleAddFolder(e)}>
-										<div className="space-create-row">
-											<input
-												className="input-field"
-												style={{ flex: 2 }}
+									<form
+										className="p-3.5 bg-surface flex flex-col gap-3"
+										onSubmit={(e) => void handleAddFolder(e)}
+									>
+										<div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+											<Input
+												mono
+												className="flex-[2]"
 												placeholder="输入本地目录绝对路径，例如 /Users/.../pi"
 												value={newPath}
 												onChange={(e) => setNewPath(e.target.value)}
 												required
 											/>
-											<button
-												type="button"
-												className="btn-secondary"
+											<Button
+												variant="secondary"
+												size="md"
 												onClick={() => setBrowsingDirectory(!browsingDirectory)}
 											>
 												选择目录
-											</button>
-											<input
-												className="input-field"
-												style={{ flex: 1 }}
+											</Button>
+											<Input
+												className="flex-1"
 												placeholder="短名称（可选）"
 												value={newLabel}
 												onChange={(e) => setNewLabel(e.target.value)}
@@ -453,55 +491,57 @@ export function WorkspaceDetailPanel({
 											/>
 										)}
 										{quickAddCandidates.length > 0 && (
-											<div className="ws-quick-candidates">
-												<span className="muted-hint">快速选择已有工作区：</span>
+											<div className="flex flex-wrap items-center gap-1.5">
+												<span className="text-xs text-ink-muted">快速选择已有工作区：</span>
 												{quickAddCandidates.slice(0, 6).map((cand) => (
-													<button
+													<Button
 														key={cand.id}
-														type="button"
-														className="choice-chip"
+														variant="secondary"
+														size="xs"
+														className="rounded-pill"
 														onClick={() => {
 															setNewPath(cand.repoPath);
 															setNewLabel(cand.name);
 														}}
 													>
 														+ {cand.name}
-													</button>
+													</Button>
 												))}
 											</div>
 										)}
-										<div className="space-page-actions">
-											<button type="submit" className="btn-pill-dark btn-xs" disabled={busy}>
+										<div className="flex items-center gap-2">
+											<Button type="submit" variant="primary" size="xs" disabled={busy}>
 												{busy ? "添加中…" : "确认添加"}
-											</button>
-											<button
-												type="button"
-												className="btn-secondary btn-xs"
+											</Button>
+											<Button
+												variant="secondary"
+												size="xs"
 												onClick={() => setAddingFolder(false)}
 												disabled={busy}
 											>
 												取消
-											</button>
+											</Button>
 										</div>
 									</form>
 								) : (
 									<button
 										type="button"
-										className="ws-add-folder-btn"
+										className="w-full border-0 bg-surface hover:bg-hover text-ink px-4 py-2.5 text-sm font-medium cursor-pointer transition-colors text-center disabled:opacity-45"
 										onClick={() => setAddingFolder(true)}
 										disabled={busy}
 									>
 										+ 添加目录
 									</button>
 								))}
-						</div>
+						</Card>
 					</section>
 
-					<section className="ws-customizations-section">
-						<div className="ws-customizations-head">
-							<h3 className="ws-section-title">上下文规则与技能预算</h3>
-							<select
-								className="select-sm select-control"
+					<section className="flex flex-col gap-2.5">
+						<div className="flex items-center justify-between gap-3">
+							<h3 className="m-0 text-sm font-semibold text-ink">上下文规则与技能预算</h3>
+							<Select
+								size="sm"
+								className="w-auto"
 								aria-label="按目录筛选上下文规则与技能"
 								value={folderFilter}
 								onChange={(e) => handleFilterChange(e.target.value)}
@@ -512,105 +552,117 @@ export function WorkspaceDetailPanel({
 										{f.label}/
 									</option>
 								))}
-							</select>
+							</Select>
 						</div>
 
 						{loading && !report ? (
-							<p className="muted-hint">正在扫描目录规则与 Skills…</p>
+							<p className="m-0 text-xs text-ink-muted">正在扫描目录规则与 Skills…</p>
 						) : report ? (
-							<div className="ws-budget-card">
-								<p className="ws-budget-desc">
+							<Card className="flex flex-col gap-4">
+								<p className="m-0 text-xs text-ink-secondary leading-relaxed">
 									统计已启用目录中 Rules（AGENTS.md / CLAUDE.md）与 Skills 的估算 Token
 									占用；超出预算时，较大的附加目录规则将自动降级为路径指针。
 								</p>
 
-								<div className="ws-budget-bars">
-									<div className="ws-budget-bar-block">
-										<div className="ws-budget-bar-label">
-											<strong>Rules 规则</strong>
-											<span className="ws-budget-metric">
+								<div className="flex flex-col gap-3.5">
+									<div className="flex flex-col gap-1.5">
+										<div className="flex items-center justify-between text-xs">
+											<strong className="text-ink">Rules 规则</strong>
+											<span className="text-ink-secondary tabular-nums font-mono">
 												{report.rulesTokensUsed.toLocaleString()} /{" "}
 												{report.rulesBudgetTokens.toLocaleString()} tokens (
 												{formatPercent(report.rulesTokensUsed, report.rulesBudgetTokens)})
 											</span>
 										</div>
-										<div className="ws-budget-track">
+										<div className="h-2 rounded-pill bg-subtle overflow-hidden">
 											<div
-												className="ws-budget-fill is-rules"
+												className="h-full rounded-pill bg-info-text transition-[width] duration-200"
 												style={{ width: `${rulesPct > 0 ? Math.max(2, rulesPct) : 0}%` }}
 											/>
 										</div>
 									</div>
 
-									<div className="ws-budget-bar-block">
-										<div className="ws-budget-bar-label">
-											<strong>Skills 技能</strong>
-											<span className="ws-budget-metric">
+									<div className="flex flex-col gap-1.5">
+										<div className="flex items-center justify-between text-xs">
+											<strong className="text-ink">Skills 技能</strong>
+											<span className="text-ink-secondary tabular-nums font-mono">
 												{report.skillsTokensUsed.toLocaleString()} /{" "}
 												{report.skillsBudgetTokens.toLocaleString()} tokens (
 												{formatPercent(report.skillsTokensUsed, report.skillsBudgetTokens)})
 											</span>
 										</div>
-										<div className="ws-budget-track">
+										<div className="h-2 rounded-pill bg-subtle overflow-hidden">
 											<div
-												className="ws-budget-fill is-skills"
+												className="h-full rounded-pill bg-accent transition-[width] duration-200"
 												style={{ width: `${skillsPct > 0 ? Math.max(2, skillsPct) : 0}%` }}
 											/>
 										</div>
 									</div>
 								</div>
 
-								<div className="ws-breakdown-group">
-									<div className="ws-breakdown-row">
-										<span className="ws-breakdown-title">
-											<span className="ws-dot is-rules" />
+								<div className="flex flex-col gap-2.5 pt-3.5 border-t border-dashed border-line">
+									<div className="flex items-center justify-between gap-3 text-xs">
+										<span className="inline-flex items-center gap-2 font-semibold text-ink">
+											<span className="size-2 rounded-full bg-info-text shrink-0" aria-hidden="true" />
 											Rules（{report.rules.length} 项 · {report.rulesTokensUsed.toLocaleString()} tokens）
 										</span>
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => setShowRulesBreakdown((v) => !v)}
-										>
+										<Button variant="inline" size="xs" onClick={() => setShowRulesBreakdown((v) => !v)}>
 											{showRulesBreakdown ? "收起明细" : "展开明细"}
-										</button>
+										</Button>
 									</div>
 									{showRulesBreakdown && (
-										<div className="ws-breakdown-items">
+										<div className="flex flex-col gap-2">
 											{report.rules.length === 0 ? (
-												<p className="muted-hint">未发现 AGENTS.md / CLAUDE.md 规则文件。</p>
+												<p className="m-0 text-xs text-ink-muted">
+													未发现 AGENTS.md / CLAUDE.md 规则文件。
+												</p>
 											) : (
 												report.rules.map((rule) => (
-													<div key={rule.id} className="ws-rule-card">
-														<div className="ws-rule-card-head">
-															<div className="ws-rule-card-title">
-																<strong>{rule.fileName}</strong>
-																<span className="ws-source-pill">{rule.folderLabel}</span>
+													<div
+														key={rule.id}
+														className="border border-line rounded-md p-3 bg-surface flex flex-col gap-1.5"
+													>
+														<div className="flex items-center justify-between gap-2.5">
+															<div className="flex items-center flex-wrap gap-1.5 text-xs">
+																<strong className="text-ink">{rule.fileName}</strong>
+																<Badge tone="accent" size="xs">
+																	{rule.folderLabel}
+																</Badge>
 																{rule.mode === "pointer" && (
-																	<span className="ws-warn-pill">已降级为路径指针</span>
+																	<Badge tone="warn" dot size="xs">
+																		已降级为路径指针
+																	</Badge>
 																)}
 																{rule.mode === "disabled" && (
-																	<span className="ws-muted-pill">已停用</span>
+																	<Badge tone="neutral" size="xs">
+																		已停用
+																	</Badge>
 																)}
 															</div>
-															<div className="ws-rule-card-right">
-																<span className="ws-token-num">
+															<div className="inline-flex items-center gap-2 shrink-0">
+																<span className="font-mono text-xs text-ink-muted tabular-nums">
 																	{rule.tokens.toLocaleString()} tokens
 																</span>
-																<button
-																	type="button"
-																	className="btn-icon-ghost"
+																<IconButton
+																	variant="ghost"
+																	size="xs"
+																	aria-label={`复制规则文件路径 ${rule.fileName}`}
 																	title="复制规则文件路径"
 																	onClick={() =>
 																		void copyTextToClipboard(rule.filePath, "规则路径", onNotice)
 																	}
 																>
 																	⧉
-																</button>
+																</IconButton>
 															</div>
 														</div>
-														<div className="ws-rule-path">{rule.filePath}</div>
+														<div className="font-mono text-micro text-ink-muted break-all">
+															{rule.filePath}
+														</div>
 														{rule.preview && (
-															<p className="ws-rule-preview">{stripMarkdownFormatting(rule.preview)}</p>
+															<p className="m-0 text-xs text-ink-secondary leading-relaxed line-clamp-2">
+																{stripMarkdownFormatting(rule.preview)}
+															</p>
 														)}
 													</div>
 												))
@@ -619,69 +671,85 @@ export function WorkspaceDetailPanel({
 									)}
 								</div>
 
-								<div className="ws-breakdown-group">
-									<div className="ws-breakdown-row">
-										<span className="ws-breakdown-title">
-											<span className="ws-dot is-skills" />
+								<div className="flex flex-col gap-2.5 pt-3.5 border-t border-dashed border-line">
+									<div className="flex items-center justify-between gap-3 text-xs">
+										<span className="inline-flex items-center gap-2 font-semibold text-ink">
+											<span className="size-2 rounded-full bg-accent shrink-0" aria-hidden="true" />
 											Skills（{report.skills.length} 项 · {report.skillsTokensUsed.toLocaleString()} tokens）
 										</span>
-										<button
-											type="button"
-											className="btn-inline"
-											onClick={() => setShowSkillsBreakdown((v) => !v)}
-										>
+										<Button variant="inline" size="xs" onClick={() => setShowSkillsBreakdown((v) => !v)}>
 											{showSkillsBreakdown ? "收起明细" : "展开明细"}
-										</button>
+										</Button>
 									</div>
 									{showSkillsBreakdown && (
-										<div className="ws-breakdown-items">
+										<div className="flex flex-col gap-2">
 											{report.skills.length === 0 ? (
-												<p className="muted-hint">未在 .agents/skills 或 .pi/skills 中发现目录级 Skill。</p>
+												<p className="m-0 text-xs text-ink-muted">
+													未在 .agents/skills 或 .pi/skills 中发现目录级 Skill。
+												</p>
 											) : (
 												report.skills.map((skill) => (
-													<div key={skill.id} className="ws-skill-row">
-														<div className="ws-skill-main">
-															<span className="ws-dot is-skills" />
-															<strong>{skill.name}</strong>
-															<span className="ws-source-pill">{skill.folderLabel}</span>
-															{skill.excluded && <span className="ws-muted-pill">已跳过</span>}
+													<div
+														key={skill.id}
+														className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-md bg-surface border border-line-subtle text-xs"
+													>
+														<div className="inline-flex items-center gap-2 min-w-0 flex-wrap">
+															<span
+																className="size-2 rounded-full bg-accent shrink-0"
+																aria-hidden="true"
+															/>
+															<strong className="text-ink">{skill.name}</strong>
+															<Badge tone="accent" size="xs">
+																{skill.folderLabel}
+															</Badge>
+															{skill.excluded && (
+																<Badge tone="neutral" size="xs">
+																	已跳过
+																</Badge>
+															)}
 														</div>
-														<span className="ws-token-num">{skill.tokens.toLocaleString()} tokens</span>
+														<span className="font-mono text-xs text-ink-muted tabular-nums shrink-0">
+															{skill.tokens.toLocaleString()} tokens
+														</span>
 													</div>
 												))
 											)}
 										</div>
 									)}
 								</div>
-							</div>
+							</Card>
 						) : null}
 					</section>
 				</div>
 			) : (
-				<div className="ws-activity-grid">
-					<section className="ws-activity-block">
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">关联事项动态 ({workspaceMatters.length})</h3>
+				<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+					<section className="flex flex-col gap-3">
+						<div className="flex items-baseline justify-between gap-3">
+							<h3 className="m-0 text-sm font-semibold text-ink">关联事项动态 ({workspaceMatters.length})</h3>
 						</div>
 						{workspaceMatters.length === 0 ? (
-							<p className="muted-hint">该工作区暂无活跃事项。</p>
+							<EmptyState compact title="该工作区暂无活跃事项。" />
 						) : (
-							<div className="ws-activity-list">
+							<div className="flex flex-col gap-2">
 								{workspaceMatters.slice(0, 15).map((matter) => (
 									<button
 										type="button"
 										key={matter.id}
-										className="ws-activity-card"
+										className="flex flex-col gap-1.5 w-full p-3 border border-line rounded-lg bg-card text-left cursor-pointer transition-colors hover:border-line-strong hover:bg-hover/40"
 										onClick={() => onOpenMatter?.(matter.id)}
 									>
-										<div className="ws-activity-card-head">
-											<strong>{matter.title}</strong>
-											<span className="ws-role-pill">{MATTER_STATUS_LABEL[matter.status]}</span>
+										<div className="flex items-center justify-between gap-2.5 text-sm text-ink">
+											<strong className="min-w-0 truncate">{matter.title}</strong>
+											<Badge tone={MATTER_STATUS_TONE[matter.status]} dot size="xs">
+												{MATTER_STATUS_LABEL[matter.status]}
+											</Badge>
 										</div>
 										{matter.summary && (
-											<p className="ws-rule-preview">{stripMarkdownFormatting(matter.summary)}</p>
+											<p className="m-0 text-xs text-ink-secondary leading-relaxed line-clamp-2">
+												{stripMarkdownFormatting(matter.summary)}
+											</p>
 										)}
-										<div className="ws-activity-card-meta">
+										<div className="flex items-center justify-between gap-2.5 text-micro text-ink-muted">
 											<span>{matter.leadMemberId ? memberName(matter.leadMemberId) : "待分配"}</span>
 											<span>更新于 {formatClockTime(matter.updatedAt)}</span>
 										</div>
@@ -691,33 +759,33 @@ export function WorkspaceDetailPanel({
 						)}
 					</section>
 
-					<section className="ws-activity-block">
-						<div className="ws-section-head-row">
-							<h3 className="ws-section-title">工作区空间资料 ({spaceDocs.length})</h3>
+					<section className="flex flex-col gap-3">
+						<div className="flex items-baseline justify-between gap-3">
+							<h3 className="m-0 text-sm font-semibold text-ink">工作区空间资料 ({spaceDocs.length})</h3>
 							{onOpenSpace && (
-								<button type="button" className="btn-inline" onClick={() => onOpenSpace(workspaceSpaceId)}>
+								<Button variant="inline" size="xs" onClick={() => onOpenSpace(workspaceSpaceId)}>
 									全部资料 →
-								</button>
+								</Button>
 							)}
 						</div>
 						{spaceDocs.length === 0 ? (
-							<p className="muted-hint">工作区空间中还没有资料文档。</p>
+							<EmptyState compact title="工作区空间中还没有资料文档。" />
 						) : (
-							<div className="ws-activity-list">
+							<div className="flex flex-col gap-2">
 								{spaceDocs.slice(0, 12).map((doc) => (
 									<button
 										type="button"
 										key={doc.id}
-										className="ws-activity-card"
+										className="flex flex-col gap-1.5 w-full p-3 border border-line rounded-lg bg-card text-left cursor-pointer transition-colors hover:border-line-strong hover:bg-hover/40"
 										onClick={() => onOpenSpace?.(doc.id)}
 									>
-										<div className="ws-activity-card-head">
-											<strong>{doc.title}</strong>
-											<span className="ws-token-num">
+										<div className="flex items-center justify-between gap-2.5 text-sm text-ink">
+											<strong className="min-w-0 truncate">{doc.title}</strong>
+											<span className="font-mono text-xs text-ink-muted shrink-0">
 												rev {doc.revision} · {doc.headCommit.slice(0, 7)}
 											</span>
 										</div>
-										<div className="ws-activity-card-meta">
+										<div className="flex items-center justify-between gap-2.5 text-micro text-ink-muted">
 											<span>{memberName(doc.updatedBy)}</span>
 											<span>{new Date(doc.updatedAt).toLocaleString()}</span>
 										</div>

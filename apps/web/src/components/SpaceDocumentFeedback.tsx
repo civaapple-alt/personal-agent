@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { listSpaceDocumentFeedback, type SpaceDocumentFeedbackDto, saveSpaceDocumentFeedback } from "../api/space.ts";
+import { Badge, Banner, Button, FieldGroup, Select, SettingsDisclosure, Textarea } from "../primitives/index.ts";
 
 export function SpaceDocumentFeedback({
 	documentId,
@@ -15,6 +16,8 @@ export function SpaceDocumentFeedback({
 	const [rating, setRating] = useState<SpaceDocumentFeedbackDto["rating"]>(null);
 	const [error, setError] = useState("");
 	const [saving, setSaving] = useState(false);
+	const ratingId = useId();
+	const feedbackId = useId();
 
 	useEffect(() => {
 		let cancelled = false;
@@ -48,24 +51,30 @@ export function SpaceDocumentFeedback({
 	};
 
 	return (
-		<details className="space-commits-panel">
-			<summary>
-				版本反馈（{entries.length}） · {commitHash.slice(0, 7)}
-			</summary>
+		<SettingsDisclosure summary={`版本反馈（${entries.length}） · ${commitHash.slice(0, 7)}`} className="mt-4 pt-3">
 			{entries.map((entry) => (
-				<div key={entry.actorId} className="space-feedback-entry">
-					<strong>{entry.actorName}</strong>
-					{" · "}
-					{entry.rating === "positive" ? "认可" : entry.rating === "negative" ? "需修改" : "反馈"}
-					{entry.feedback && <p>{entry.feedback}</p>}
+				<div key={entry.actorId} className="py-2 border-b border-line-subtle text-xs">
+					<div className="flex items-center gap-1.5 flex-wrap">
+						<strong className="text-ink">{entry.actorName}</strong>
+						<Badge
+							tone={entry.rating === "positive" ? "success" : entry.rating === "negative" ? "danger" : "neutral"}
+							dot
+							size="xs"
+						>
+							{entry.rating === "positive" ? "认可" : entry.rating === "negative" ? "需修改" : "反馈"}
+						</Badge>
+					</div>
+					{entry.feedback && (
+						<p className="mt-1 mb-0 whitespace-pre-wrap text-ink-secondary leading-relaxed">{entry.feedback}</p>
+					)}
 				</div>
 			))}
 			{canWrite && (
-				<form className="space-feedback-form" onSubmit={(event) => void submit(event)}>
-					<label>
-						评价
-						<select
-							className="input-field"
+				<form className="flex flex-col gap-2.5 py-3" onSubmit={(event) => void submit(event)}>
+					<FieldGroup label="评价" htmlFor={ratingId}>
+						<Select
+							id={ratingId}
+							size="sm"
 							value={rating ?? ""}
 							onChange={(event) => {
 								const value = event.target.value;
@@ -76,28 +85,29 @@ export function SpaceDocumentFeedback({
 							<option value="positive">认可</option>
 							<option value="negative">需修改</option>
 							<option value="neutral">中立</option>
-						</select>
-					</label>
-					<label>
-						反馈意见
-						<textarea
-							className="input-field"
+						</Select>
+					</FieldGroup>
+					<FieldGroup label="反馈意见" htmlFor={feedbackId} hint="再次保存会更新你对该版本的反馈。">
+						<Textarea
+							id={feedbackId}
 							value={feedback}
 							maxLength={5000}
 							onChange={(event) => setFeedback(event.target.value)}
 						/>
-					</label>
-					<button
-						className="btn-secondary btn-xs"
-						type="submit"
-						disabled={saving || (!feedback.trim() && !rating)}
-					>
-						{saving ? "保存中…" : "保存反馈"}
-					</button>
-					<span className="muted-hint">再次保存会更新你对该版本的反馈。</span>
+					</FieldGroup>
+					<div className="flex items-center">
+						<Button
+							variant="secondary"
+							size="xs"
+							type="submit"
+							disabled={saving || (!feedback.trim() && !rating)}
+						>
+							{saving ? "保存中…" : "保存反馈"}
+						</Button>
+					</div>
 				</form>
 			)}
-			{error && <p role="alert">{error}</p>}
-		</details>
+			{error && <Banner tone="danger">{error}</Banner>}
+		</SettingsDisclosure>
 	);
 }
