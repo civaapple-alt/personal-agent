@@ -1,6 +1,6 @@
 # 本地网页工作台
 
-前端是三环架构中的 **UI Client 环**（`@pa/web`），使用 React 19、esbuild 与 Tailwind v4（通过 `app.css` + `@tailwindcss/cli` 编译，叠加轻量原语与 `tokens.css` 语义变量），通过可配置端点的 HTTP/SSE 传输层（默认同源，支持 `window.__PA_API_BASE__` / `setApiBaseUrl`）访问宿主，仅依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`（由 `npm run check:boundaries` 强制门禁校验）。[index.html](index.html) 是构建输入，`apps/web/dist/` 是生成资源，不直接修改。
+前端是三环架构中的 **UI Client 环**（`@pa/web`），使用 React 19、Zustand、esbuild 与 Tailwind v4（通过 `app.css` + `@tailwindcss/cli` 编译，叠加轻量原语与 `tokens.css` 语义变量），通过可配置端点的 HTTP/SSE 传输层（默认同源，支持 `window.__PA_API_BASE__` / `setApiBaseUrl`）访问宿主，仅依赖 `@pa/contracts`、`@pa/extension-api/web` 与 `@pa/ext-*/web`（由 `npm run check:boundaries` 强制门禁校验）。[index.html](index.html) 是构建输入，`apps/web/dist/` 是生成资源，不直接修改。
 
 ```text
 apps/web/
@@ -9,14 +9,15 @@ apps/web/
 ├── dist/               # esbuild + Tailwind v4 构建产物（不直接编辑）
 └── src/                # 前端源码（详见 src/README.md）
     ├── main.tsx        # 应用挂载与根级 ErrorBoundary
-    ├── App.tsx         # 顶层壳装配、Hash 路由、视图级 ErrorBoundary 与全局 SSE 同步
+    ├── App.tsx         # 顶层壳装配、Hash 路由与视图级 ErrorBoundary
     ├── api/            # 参数化 HTTP/SSE 传输层（client.ts）与按业务拆分的 DTO 请求模块
+    ├── stores/         # 分域 Zustand Store（workbenchStore、sessionStore、matterRuntimeStore，单向依赖由 check:boundaries 强制校验）
     ├── primitives/     # 零外部依赖的纯 React UI 原语（Button、Badge、Card、Tabs、Layout、Field、EmptyState、Banner、Drawer、Popover、ModalDialog、SettingsKit 等）
     ├── views/          # 顶层路由视图（ChatStage、DeliverablesView、SpacePages、TeamView、AccountView 等）
     ├── components/     # 可复用业务组件（Sidebar、ExploringStatus、ModelPicker、chat/、team/ 等）
     ├── extensions/     # 前端静态扩展注册表（registry.ts，消费 @pa/ext-*/web）
-    ├── hooks/          # 会话认证、事项范围、滚动、右侧分屏文档与澄清状态等 hooks
-    ├── utils/          # 领域纯函数（cn、委托投影、消息流解析、组织名册等）
+    ├── hooks/          # 会话认证、事项范围、SSE 同步、滚动、右侧分屏文档与澄清状态等 hooks
+    ├── utils/          # 领域纯函数（cn、storage、委托投影、消息流解析、组织名册等）
     └── styles/         # Tailwind v4 入口（app.css）、语义 Token（tokens.css，含暗黑预留）与少量全局排版/动画（markdown.css、extensions.css、bot-avatar.css、view-transitions.css）
 ```
 

@@ -1,18 +1,19 @@
 # 前端状态与组件
 
-[main.tsx](main.tsx) 挂载应用并排列样式加载顺序。[App.tsx](App.tsx) 装配页面、导航、bootstrap/事项详情刷新与 SSE 同步。认证、草稿、事项范围和面板加载分别由下表中的 hooks 维护，页面内的临时状态留在所属组件。
+[main.tsx](main.tsx) 挂载应用并排列样式加载顺序。[App.tsx](App.tsx) 专注顶层壳装配、Hash 路由分发与核心数据刷新；全局 UI 交互态、会话组织态与事项运行态下沉到 [stores/](stores/index.ts) 中的三个分域 Zustand Store，认证同步、草稿与局部交互仍由下表 hooks 与所属组件维护。
 
-[WorkbenchBanners](components/WorkbenchBanners.tsx) 以悬浮层显示工作台操作错误与通知，不挤压页面内容（管理员操作反馈也使用同一入口），支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](views/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
+[WorkbenchBanners](components/WorkbenchBanners.tsx) 直接订阅 Store（无 props），以悬浮层显示工作台操作错误与通知，不挤压页面内容（管理员操作反馈也使用同一入口），支持手动关闭、辅助技术播报，并在顶部轻量通知空闲 4.5 秒后自动隐藏（鼠标悬停或聚焦时暂停倒计时）；团队、资料及成果页不必跳回聊天查看结果。[TeamView](views/TeamView.tsx) 捕获主联系人设置及导出失败并上报；[MemberCard](components/team/MemberCard.tsx) 菜单打开后聚焦首项，支持方向键、Home/End、Escape 返回触发按钮及 Tab 离开。无经验时「详情与经验」先展示职责和身份，组织的编辑/设为默认入口仅供所有者显示，服务端权限校验仍是实际约束。
 
 | 修改目标 | 入口 |
 | --- | --- |
+| 分域状态 Store（UI / 会话组织 / 事项运行态） | [stores/index.ts](stores/index.ts) 聚合导出 [workbenchStore.ts](stores/workbenchStore.ts)（`useWorkbenchStore`：路由、侧栏折叠/搜索、横幅通知、归档/移除确认弹窗等）、[sessionStore.ts](stores/sessionStore.ts)（`useSessionStore`：bootstrap、认证态、组织列表与当前选中组织/工作区）与 [matterRuntimeStore.ts](stores/matterRuntimeStore.ts)（`useMatterRuntimeStore`：事项列表/详情、`progressByMatter`、`progressStartedAt`、`streamingDelta` 与活跃 run 快照）；SSE 与异步 actions 直接调用 `.getState()` 更新 Store，各视图经细粒度 selector 订阅（`streamingDelta` 仅由 [AppStageRouter](views/AppStageRouter.tsx) / [ChatStage](views/ChatStage.tsx) 消费，不触发 `App` 或 `Sidebar` 重渲染）；单向依赖边界由 `check:boundaries` 强制校验（`stores/` 禁止反向依赖组件/视图/hooks，`api/`、`utils/`、`primitives/` 禁止依赖 `stores/`） |
 | HTTP DTO 和请求 | [api.ts](api.ts) 集中导出。[client.ts](api/client.ts) 处理请求错误和会话吊销。[matters.ts](api/matters.ts)、[team.ts](api/team.ts)、[organizations.ts](api/organizations.ts)、[deliverables.ts](api/deliverables.ts) 按业务维护契约，与各自服务响应一起核对 |
 | 会话、注册和邀请 | [useAuthSession](hooks/useAuthSession.ts)、[OrgInviteModal](components/OrgInviteModal.tsx) |
 | 当前事项有效工作区、组织与成员 | [useMatterScope](hooks/useMatterScope.ts) |
 | 设置及超管页面加载与刷新 | [useWorkbenchPanels](hooks/useWorkbenchPanels.ts) |
 | Hash 路由、浏览器前进后退和视图切换 | [hashRouter.ts](hashRouter.ts)、[useHashRouteNav](hooks/useHashRouteNav.ts)、[ViewFade](primitives/ViewTransitions.tsx) |
 | Markdown 展示 | [MarkdownView.tsx](MarkdownView.tsx)；保持无 `dangerouslySetInnerHTML` 的渲染边界 |
-| 布局与共用样式/格式 | [app.css](styles/app.css)（Tailwind v4 `@layer theme, base, components, utilities;`）、[tokens.css](styles/tokens.css)（Geist 亮色与 Linear 紧凑密度 `@theme inline` 语义变量及 `[data-theme="dark"]` 预留）、[markdown.css](styles/markdown.css)、[extensions.css](styles/extensions.css)、[bot-avatar.css](styles/bot-avatar.css)、[primitives/](primitives/index.ts)（`Button`、`IconButton`、`Badge`、`Card`、`Tabs`、`PageShell`、`PaneHeader`、`SplitPane`、`FieldGroup`、`Input`、`Select`、`Textarea`、`EmptyState`、`Banner`、`Drawer`、`Popover`、`ModalDialog`、`SettingsKit`）及 [utils.ts](utils.ts)（聚合导出 [cn.ts](utils/cn.ts)、[formatters.ts](utils/formatters.ts)、[matterStream.ts](utils/matterStream.ts)、[orgRoster.ts](utils/orgRoster.ts)） |
+| 布局与共用样式/格式 | [app.css](styles/app.css)（Tailwind v4 `@layer theme, base, components, utilities;`）、[tokens.css](styles/tokens.css)（Geist 亮色与 Linear 紧凑密度 `@theme inline` 语义变量及 `[data-theme="dark"]` 预留）、[markdown.css](styles/markdown.css)、[extensions.css](styles/extensions.css)、[bot-avatar.css](styles/bot-avatar.css)、[primitives/](primitives/index.ts)（`Button`、`IconButton`、`Badge`、`Card`、`Tabs`、`PageShell`、`PaneHeader`、`SplitPane`、`FieldGroup`、`Input`、`Select`、`Textarea`、`EmptyState`、`Banner`、`Drawer`、`Popover`、`ModalDialog`、`SettingsKit`）及 [utils.ts](utils.ts)（聚合导出 [cn.ts](utils/cn.ts)、[storage.ts](utils/storage.ts)、[formatters.ts](utils/formatters.ts)、[matterStream.ts](utils/matterStream.ts)、[orgRoster.ts](utils/orgRoster.ts)） |
 | 输入和附件草稿、附件预处理与粘贴折叠 | [useComposerDraft](hooks/useComposerDraft.ts) 管理草稿和数量限制。[imageAttachments.ts](imageAttachments.ts)（图片缩放压缩与 DOM 文件读取）与 [textAttachments.ts](textAttachments.ts)（UTF-8 文本/代码文件校验与长粘贴折叠判断）；附件灯箱与可取消远程预览位于 [AttachmentPreviewModals](components/chat/AttachmentPreviewModals.tsx) |
 | 事项导航、会话、运行状态 | [Sidebar](components/Sidebar.tsx)（`memo` 包裹，传入的回调须保持引用稳定，用 [useStableCallback](hooks/useStableCallback.ts)）、[ElapsedTimer](primitives/ElapsedTimer.tsx)（运行耗时由该叶子组件自行每秒计时，根组件不再随计时器整树重渲染）、[ChatStage](views/ChatStage.tsx)（滚动吸底由 [useChatScroll](hooks/useChatScroll.ts) 维护，参与者/组织/名册投影由 [useChatStageParticipants](hooks/useChatStageParticipants.ts) 维护，右侧分屏文档由 [useMatterSideDocs](hooks/useMatterSideDocs.ts) 与 [MatterDocSidePane](components/chat/MatterDocSidePane.tsx) 维护，右侧 3 层协作看板由 [useMatterBoard](hooks/useMatterBoard.ts)、[MatterBoardPane](components/chat/MatterBoardPane.tsx)、[BoardMentionGraph](components/chat/BoardMentionGraph.tsx) 与 [board API](api/board.ts) 维护，复用 [useMatterEventSync](hooks/useMatterEventSync.ts) 单一 `/api/events` SSE 通道接收 `board_*` / `matter_event_appended` 增量更新，支持成员退场折叠/去噪与 `@mention` 关系图联动筛选，底部吸附澄清由 [useActiveClarification](hooks/useActiveClarification.ts) 与 [FloatingClarificationDock](components/chat/FloatingClarificationDock.tsx) 维护，对话空间文档卡位于 [SpaceDocumentCard](components/chat/SpaceDocumentCard.tsx)）、[ExploringStatus](components/ExploringStatus.tsx) |
 | 资料空间（五类 Git 空间、五类内容类型筛选、单文件/目录条目与静态预览、跨空间最近修改、关联仓库路径与 Diff） | [DeliverablesView](views/DeliverablesView.tsx)、[SpacePages](views/SpacePages.tsx)、[SpaceFolderFilesPanel](components/SpaceFolderFilesPanel.tsx)、[space API](api/space.ts) |
@@ -33,9 +34,9 @@
 
 - 运行耗时只向下传递开始时间 `progressStartedAt`，不要在 `App` 或 `ChatStage` 重新引入每秒更新的状态。
 - `matter_settled` 可没有成果，仍须结束运行状态并刷新对话；不能把事件或“修改”前缀当作自动发布信号。
-- `fetchBootstrap` 与 `fetchMatterDetail` 消费服务端返回的 `organizations` 与 `activeRuns` / `activeRun`，保证页面刷新（F5）后立即恢复进行中进度、计时与停止按钮。
-- 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`matter_message`、
-  `collaborator_updated` 等 SSE 事件完成实时同步。
+- `fetchBootstrap` 与 `fetchMatterDetail` 消费服务端返回的 `organizations` 与 `activeRuns` / `activeRun`，并直接同步到 [sessionStore](stores/sessionStore.ts) 与 [matterRuntimeStore](stores/matterRuntimeStore.ts)，保证页面刷新（F5）后立即恢复进行中进度、计时与停止按钮。
+- [useMatterEventSync](hooks/useMatterEventSync.ts) 订阅 `organization_updated`、`workspace_updated`、`team_updated`、`matter_message`、
+  `collaborator_updated` 等 SSE 事件后直接调用 Store actions 完成局部增量同步，不经 `App.tsx` 整包回调中转。
 - `matter_progress` 附带 `collabUpdated` 时刷新事项详情（主负责人回复或旁听同事主动插话后即时同步）；`matter_updated` 同步旁听成员列表。
 - 工作区或旁听变更失败/409 需呈现错误，不能只乐观改变选项而忽略后端状态；取消、错误和等待用户状态都要有对应刷新路径。
 
